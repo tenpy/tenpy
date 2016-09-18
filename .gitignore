@@ -1,0 +1,8 @@
+*.swp
+./*.py
+*.dat
+.DS_Store
+!version.py
+._*
+algorithms/linalg/cblas.h
+algorithms/linalg/npc_helper.cpp

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Access to version of this library.
 
+Before updating a version, make sure nosetest runs *all* tests in test successfully!
 To update a version, change `version` in this module and create a git tag ::
     git tag -a "v1.0.2"
 Make shure to push your tag into the shared git repo with `git push origin [tagname]`.
@@ -11,7 +12,7 @@ import scipy
 import subprocess
 import os
 
-version = 'v0.1.0'
+version = 'v0.0.0'
 
 
 def git_version():
