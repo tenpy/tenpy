@@ -9,7 +9,7 @@ DEF COLLECT_MKN_STATS = 0 #Collect stats and timing on gemm calls. Appends (M*K*
 DEF USE_DRESDEN = 1 #Direct calls to BLAS
 
 import numpy as np
-import np_conserved as npc
+from . import np_conserved as npc
 import time
 import itertools
 import sys
@@ -21,7 +21,7 @@ cimport numpy as np
 cimport cython
 np.import_array()
 
-from algorithms.linalg.cblas cimport *
+from .cblas cimport *
 
 from cython.parallel import parallel, prange, threadid
 IF PARALLEL_TDOT:
@@ -84,7 +84,7 @@ cdef inline np.ndarray empty(np.PyArray_Dims dims, int type):
 
 cdef inline np.ndarray zeros(np.PyArray_Dims dims, int type):
 	return <np.ndarray>np.PyArray_ZEROS(dims.len, dims.ptr, type, 0 )
-			
+
 ################################################################################
 ################################################################################
 
@@ -111,7 +111,7 @@ def tensordot(a, b, axes = 2):
 
 	if TENSORDOT_TIMING:
 		t0 = time.time()
-	
+
 	cdef c_intp na, nb
 	cdef list axes_a, axes_b
 
@@ -151,7 +151,7 @@ def tensordot(a, b, axes = 2):
 	cdef c_intp nda = a.rank
 	cdef np.ndarray[c_intp, ndim=1] bs = b.shape #SHAPE
 	cdef c_intp ndb = b.rank
-	
+
 	cdef int equal = 1
 	cdef c_uint k
 	if (na != nb):
@@ -159,7 +159,7 @@ def tensordot(a, b, axes = 2):
 	else:
 		for k in range(na):
 			axes_a[k] = axes_a[k]%nda
-			axes_b[k] = axes_b[k]%ndb			
+			axes_b[k] = axes_b[k]%ndb
 			if as_[axes_a[k]] != bs[axes_b[k]]:
 				equal = 0
 				break
@@ -178,20 +178,20 @@ def tensordot(a, b, axes = 2):
 	cdef list newaxes_a = notin_a + axes_a
 	cdef list olda = [as_[axis] for axis in notin_a]
 	nao = nda - nin
-	
+
 	cdef list notin_b = [k for k in range(ndb) if k not in axes_b]
 	cdef list newaxes_b = axes_b + notin_b
 	cdef list oldb = [bs[axis] for axis in notin_b]
-	nbo = ndb - nin	
+	nbo = ndb - nin
 	ndc = nao + nbo
-	
+
 	if TENSORDOT_TIMING:
 		print "Axes", time.time() - t0
 		t0 = time.time()
-		
+
 	if nao == 0 and nbo == 0:
 		return npc.inner(a, b, [ axes_a, axes_b])
-		
+
 #	print a.q_dat, "original a.q_dat"
 #	print b.q_dat, "original b.q_dat"
 
@@ -217,11 +217,11 @@ def tensordot(a, b, axes = 2):
 	cdef np.PyArray_Dims dims1
 	dims1.len = 1
 	dims1.ptr = [ndc]
-		
+
 	cdef np.PyArray_Dims dims2
 	dims2.len = 2
 	dims2.ptr = [0, 0]
-	
+
 	cdef list dat_a = a.dat
 	cdef list dat_b = b.dat
 	cdef list q_ind_a = a.q_ind
@@ -234,7 +234,7 @@ def tensordot(a, b, axes = 2):
 	cdef np.ndarray[c_int, ndim=1, mode = "c"] q_conj_c = empty(dims1, np.NPY_LONG)
 
 	cdef c_intp num_q = a.num_q
-	
+
 	cdef c_intp l_dat_a = q_dat_a.shape[0]
 	cdef c_intp l_dat_b = q_dat_b.shape[0]
 
@@ -246,9 +246,9 @@ def tensordot(a, b, axes = 2):
 	c.q_ind = a.q_ind[:nao] + b.q_ind[nin:]
 
 
-	"""Make new labels for c	
+	"""Make new labels for c
 		No labels made if either a or b doesnt have labels
-		
+
 		Any labels that would be duplicates are dropped
 	"""
 	cdef dict alab = a.labels
@@ -280,7 +280,7 @@ def tensordot(a, b, axes = 2):
 		q_conj_c[i + nao] = q_conj_b[i + nin]
 	c.q_conj = q_conj_c
 	c.sorted = False
-	
+
 	if TENSORDOT_VERBOSE > 0:
 		print "c.shape", c.shape
 
@@ -292,7 +292,7 @@ def tensordot(a, b, axes = 2):
 		c.dat = []
 		c.dtype = np.dtype(float)
 		return c
-	
+
 	cdef np.ndarray[c_uint, ndim=2, mode="c"] q_dat_c
 	cdef np.PyArray_Dims shpA, shpB, shpC
 	shpA.len = shpB.len = 2
@@ -302,15 +302,15 @@ def tensordot(a, b, axes = 2):
 	# Only one block in each. Usual case for num_q = 0 (unless fractured!)
 	if l_dat_a == 1 and l_dat_b == 1:
 		equal = 1
-		
+
 		for k in range(nin): #check if entries match on inner
 			if q_dat_a[0, nao + k]!=q_dat_b[0, k]:
 				equal = 0
 				break
-		if equal: #So contract inner				
+		if equal: #So contract inner
 			ta = dat_a[0]
 			tb = dat_b[0]
-			
+
 			shpC.ptr = <np.npy_intp*>PyMem_Malloc(ndc * sizeof(np.npy_intp))
 			if not shpC.ptr:
 				raise MemoryError
@@ -318,26 +318,26 @@ def tensordot(a, b, axes = 2):
 			dims2.ptr = [1, ndc]
 			c.q_dat = q_dat_c = empty(dims2, np.NPY_ULONG) #make q_dat entry
 
-			for k in range(nao):			
+			for k in range(nao):
 				q_dat_c[0, k] = q_dat_a[0, k]
 				shpC.ptr[k] = ta.shape[k]
 			for k in range(nbo):
 				q_dat_c[0, nao + k] = q_dat_b[0, k + nin]
 				shpC.ptr[nao + k] = tb.shape[k + nin]
-						
+
 			r = 1
 			for k in range(nin): #inner dimension
-				r *= tb.shape[k]  
-			
+				r *= tb.shape[k]
+
 			shpA.ptr[1] = r
 			shpB.ptr[0] = r
 
 			ta = np.PyArray_Newshape(ta, &shpA, np.NPY_CORDER)
 			tb = np.PyArray_Newshape(tb, &shpB, np.NPY_CORDER)
 			tc = dot(ta, tb)
-			
-			c.dat = [np.PyArray_Newshape(tc, &shpC, np.NPY_CORDER)] 
-			c.dtype = c.dat[0].dtype			
+
+			c.dat = [np.PyArray_Newshape(tc, &shpC, np.NPY_CORDER)]
+			c.dtype = c.dat[0].dtype
 			PyMem_Free(shpC.ptr)
 			return c
 		else:
@@ -345,43 +345,43 @@ def tensordot(a, b, axes = 2):
 			c.dat = []
 			c.dtype = np.dtype(float)
 			return c
-	
+
 	if TENSORDOT_TIMING:
 		print "C+SC", time.time() - t0
 		t0 = time.time()
-					
+
 
 	#print "q_dat [leg, block]:\n", q_dat_a, "= q_dat_a\n", q_dat_b, "= q_dat_b"
-	
+
 	"""
 	Pre-compute conventient data for a & b: the "Keys"
 
 	Key structure:
-	       width=  | nin     | n(a/b)o  | num_q | 1 
+	       width=  | nin     | n(a/b)o  | num_q | 1
 	     encodes=  | in inds | out inds | Q_tot | perm
-		
+
 		sorted by (lex order)
-		1. total charge of the inner indices, 
+		1. total charge of the inner indices,
 		2. the outer indices
 		3. the inner indices
 	"""
-	
+
 	cdef c_int wa = nda + num_q + 1 #width of keys
 	cdef c_int wb = ndb + num_q + 1
-	
-	#First I create a tranposed key, *_key_t, ommitting the perm column 		
-	
+
+	#First I create a tranposed key, *_key_t, ommitting the perm column
+
 	#NOTE: memview style is slower
 	dims2.ptr[0] = wa-1
 	dims2.ptr[1] = l_dat_a
 	cdef np.ndarray[c_int, ndim=2, mode="c"] a_key_t = empty(dims2, np.NPY_LONG)
 	#cdef c_int[:,::1] a_key_t = empty(dims2, np.NPY_LONG)
-	
+
 	dims2.ptr[0] = wb - 1
 	dims2.ptr[1] = l_dat_b
 	cdef np.ndarray[c_int, ndim=2, mode="c"] b_key_t = empty(dims2, np.NPY_LONG)
 	#cdef c_int[:, ::1] b_key_t = empty(dims2, np.NPY_LONG)
-	
+
 	# Now fill in total charge over contracted legs
 	cdef np.ndarray[c_int, ndim = 2, mode = "c"] q_sum_res
 	#cdef c_int[:, ::1] q_sum_res
@@ -390,7 +390,7 @@ def tensordot(a, b, axes = 2):
 		for r in range(l_dat_a): #copy
 			for i in range(num_q):
 				a_key_t[nda + i, r] = q_sum_res[r, i]
-		
+
 		q_sum_res = q_sum(q_dat_b, q_ind_b, -1*q_conj_b, 0, nin, mod_q)
 		for r in range(l_dat_b): #copy
 			for i in range(num_q):
@@ -399,13 +399,13 @@ def tensordot(a, b, axes = 2):
 		for r in range(l_dat_a):
 			for i in range(num_q):
 				a_key_t[nda + i, r] = 0
-		
+
 		for r in range(l_dat_b):
 			for i in range(num_q):
 				b_key_t[ndb + i, r] = 0
 
 	#Now fill in index info (need to reverse order in w.r.t. q_dat for a)
-			
+
 	for r in range(l_dat_a):
 		for i in range(nin):
 			a_key_t[i, r] = q_dat_a[r, nao + i]
@@ -419,11 +419,11 @@ def tensordot(a, b, axes = 2):
 	if TENSORDOT_VERBOSE > 0:
 		print a_key_t.T[:, :nda+num_q], "= unsorted a_key"
 		print b_key_t.T[:, :ndb+num_q], "= unsorted b_key"
-	
-	#Sort by Qt > out ind > in ind 
+
+	#Sort by Qt > out ind > in ind
 	cdef np.ndarray[c_intp, ndim=1, mode="c"] perma = np.PyArray_LexSort( a_key_t, 0 )
 	cdef np.ndarray[c_intp, ndim=1, mode="c"] permb = np.PyArray_LexSort( b_key_t, 0 )
-	
+
 	dims2.ptr[0] = l_dat_a
 	dims2.ptr[1] = wa
 	cdef np.ndarray[c_int, ndim=2, mode="c"] a_key = empty(dims2, np.NPY_LONG)
@@ -440,25 +440,25 @@ def tensordot(a, b, axes = 2):
 		for i in range(wa - 1):
 			a_key[r, i] = a_key_t[i, perma[r]]
 		a_key[r, wa-1] = perma[r]
-	
+
 	for r in range(l_dat_b):
 		for i in range(wb - 1):
 			b_key[r, i] = b_key_t[i, permb[r]]
 		b_key[r, wb-1] = permb[r]
-	
+
 	# now a_key is sorted and is shaped (nda + num_q + 1, num_block a), ditto for b_key
-	
+
 	#print "perma", perma, "permb", permb
 
 	if TENSORDOT_VERBOSE > 0:
 		print a_key, "= sorted a_key"
 		print b_key, "= sorted b_key"
-	
+
 	if TENSORDOT_TIMING:
 		print "Keys", time.time() - t0
 		t0 = time.time()
 	# tensordot_guts will process the keys and dats, calling np.dot to generate the output.  The code is in npc_helper.pyx
-	
+
 	#tensordot_colinitis(c, nao, nbo, nin, a_key, b_key, q_ind_a, q_ind_b, dat_a, dat_b)
 	tensordot_guts(c, nao, nbo, nin, a_key, b_key, q_ind_a, q_ind_b, dat_a, dat_b)
 
@@ -471,11 +471,11 @@ def tensordot(a, b, axes = 2):
 	if TENSORDOT_TIMING:
 		print "Gut", time.time() - t0
 		t0 = time.time()
-		
+
 
 	return c
-	
-	
+
+
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.nonecheck(False)
@@ -496,7 +496,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 
 
 	cdef c_int type = dat_a[0].dtype.num
-	
+
 	#For double and cdouble types, we will call BLAS directly.
 	if dat_b[0].dtype.num!=type:
 		type = -1
@@ -520,8 +520,8 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 
 	cdef c_int[::1] qta_bnds = find_differences_contiguous2( a_key, nda, nda + num_q )
 	cdef c_int[::1] qtb_bnds = find_differences_contiguous2( b_key, ndb, ndb + num_q )
-	
-	
+
+
 #	print qta_bnds, "qta"
 #	print qtb_bnds, "qtb"
 
@@ -530,7 +530,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 	cdef c_int[::1] qob_bnds = find_differences_contiguous2( b_key, nin, ndb )
 #	print qoa_bnds, "qoa"
 #	print qob_bnds, "qob"
-	
+
 	cdef c_uint Nqta = qta_bnds.shape[0] - 1	# number total charge sector in a
 	cdef c_uint Nqtb = qtb_bnds.shape[0] - 1	# number total charge sector in b
 	cdef c_uint i1, i2, i3	# 1: total q sectors, 2: outer sectors, 3: actual rows
@@ -540,14 +540,14 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 	cdef c_uint curQtA, nxtQtA, curQtB, nxtQtB
 	i1 = i2 = i3 = 0
 	j1 = j2 = j3 = 0
-	
+
 	#First bound the maximum number of possible entries (so we can abort if 0)
 	#This is allows us to preallocate q_dat, as well as abort if no valid contractions.
 	cdef c_uint max_size = 0
 	cdef c_uint i20, j20
 
 	while i1 < Nqta and j1 < Nqtb:
-		
+
 		curQtA = qta_bnds[i1]
 		nxtQtA = qta_bnds[i1 + 1]
 		curQtB = qtb_bnds[j1]
@@ -564,14 +564,14 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 			j1 += 1
 			continue
 		elif lexcomp < 0:		# b_key[j1] is bigger
-			i1 += 1	
+			i1 += 1
 			continue
-	
+
 		while qoa_bnds[i2] < curQtA:
 			i2 += 1
 		while qob_bnds[j2] < curQtB:
 			j2 += 1
-	
+
 		i20 = i2
 		j20 = j2
 		while qoa_bnds[i2] < nxtQtA:
@@ -580,7 +580,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 			j2 += 1
 
 		max_size+= (i2 - i20)*(j2 - j20)
-		i1 += 1	
+		i1 += 1
 		j1 += 1
 
 	#Preallocate dat_c and q_dat_c
@@ -597,8 +597,8 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 		c.dat = dat
 		return c
 
-	#Cache outer leg shapes in 2-arrays (corresponding to qo*_bnds)	
-	dims2.ptr = [qoa_bnds.shape[0]-1, nao]	
+	#Cache outer leg shapes in 2-arrays (corresponding to qo*_bnds)
+	dims2.ptr = [qoa_bnds.shape[0]-1, nao]
 	cdef c_intp[:, ::1] qoa_shapes = empty(dims2, np.NPY_INTP)
 	#cdef np.ndarray[c_intp, ndim=2, mode="c"] qoa_shapes = empty(dims2, np.NPY_INTP)
 
@@ -615,17 +615,17 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 	cdef c_intp r
 	cdef c_int p
 	# fill in qoa_shapes
-	cdef np.ndarray[c_int, ndim=2] qi	
+	cdef np.ndarray[c_int, ndim=2] qi
 	for l in range(nao):
 		qi = q_ind_a[l]
 		i1 = nin+l
 		for r in range(qoa_shapes.shape[0]):
 			p =  a_key[qoa_bnds[r], i1]
 			qoa_shapes[r, l] = qi[p, 1] - qi[p, 0]
-				
+
 	#print qoa_shapes, "qoa shapes"
 
-	# fill in qob_shapes	
+	# fill in qob_shapes
 	for l in range(nbo):
 		i1 = nin+l
 		qi = q_ind_b[i1]
@@ -633,7 +633,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 			p = b_key[qob_bnds[r], i1]
 			qob_shapes[r, l] = qi[p, 1] - qi[p, 0]
 	#print qob_shapes, "qob shapes"
-	
+
 	# calculate 'SM', the inner charge dimension. For simplicty, we make one for every row of a_key
 	for l in range(nin):
 		qi = q_ind_a[l + nao]
@@ -647,7 +647,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 	if TENSORDOT_TIMING:
 		print "A", time.time() - t0
 		t0 = time.time()
-	
+
 	#Placeholders for submatrices ta, tb, tc and their shapes
 	cdef np.ndarray ta, tb, tc
 
@@ -661,16 +661,16 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 
 	shpC.ptr = <np.npy_intp*>PyMem_Malloc(ndc * sizeof(np.npy_intp))
 	if not shpC.ptr:
-		raise MemoryError	
+		raise MemoryError
 	shpC.len = ndc
-		
+
 	cdef np.npy_intp oa_size, ob_size, in_size  #size of combined outer legs / inner leg
 	cdef c_uint used_aobo = 0 #Is there any entry for this outer combination?
 	cdef c_uint start_b = 0
 	cdef c_uint dat_len = 0 # Number of entries in dat_c so far
 	i1 = i2 = i3 = 0
 	j1 = j2 = j3 = 0
-	cdef c_int num_dot = 0 
+	cdef c_int num_dot = 0
 	cdef c_uint a_key_shift = nda+num_q
 	cdef c_uint b_key_shift = ndb+num_q
 	while i1 < Nqta and j1 < Nqtb: #For all charge sectors
@@ -678,7 +678,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 		nxtQtA = qta_bnds[i1 + 1]
 		curQtB = qtb_bnds[j1]
 		nxtQtB = qtb_bnds[j1 + 1]
-		
+
 		lexcomp = 0		# check if a[i1] > b[j1]
 		for lex_i in range(num_q-1, -1, -1):
 			if a_key[curQtA, lex_i + nda] > b_key[curQtB, lex_i + ndb]:
@@ -692,43 +692,43 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 			j1 += 1
 			continue
 		elif lexcomp < 0:		# b_key[j1] is bigger
-			i1 += 1	
+			i1 += 1
 			continue
-		
+
 		# product Loop over Outer Charge Sectors
 		while qoa_bnds[i2] < curQtA:
 			i2 += 1
 		while qob_bnds[j2] < curQtB:
 			j2 += 1
-			
+
 		start_b = j2	# mark the start of this total charge sector
 
 		# double loop over aouter and bouter, bouter will go through multiple passes, while aouter only goes through one
 		while  qoa_bnds[i2] < nxtQtA: 	# For each entry in A sector of current Qtot
-		
+
 			oa_size = 1
 			for l in range(nao):
 				shpC.ptr[l] = qoa_shapes[i2,l] #Store oa size
 				oa_size*=qoa_shapes[i2,l]
-				
+
 			j2 = start_b #Put B counter at start of current QT, start_b
 			while qob_bnds[j2] < nxtQtB: 	# Loop through entries in B sector
-				
+
 				ob_size = 1
 				for r in range(nbo):
 					shpC.ptr[nao+r] = qob_shapes[j2,r] #Store ob size
 					ob_size*=qob_shapes[j2,r]
-					
+
 				i3 = qoa_bnds[i2] #i3 denotes rows in a_key,
-				j3 = qob_bnds[j2] #j3 denotes rows in b_key, 
-				
+				j3 = qob_bnds[j2] #j3 denotes rows in b_key,
+
 				used_aobo = 0 # mark if this combination of aobo has any entries in it
 				# print "aobo:", a_key[i3,nin:nda], b_key[j3,nin:ndb], aobo
-				
+
 				# inner loop, match by inner indices
 				while i3 < qoa_bnds[i2 + 1] and j3 < qob_bnds[j2 + 1]: #Stop when you hit next outer sector
 					# compare inner
-					lexcomp = 0	
+					lexcomp = 0
 					for lex_i in range(nin-1, -1, -1):
 						if a_key[i3, lex_i] > b_key[j3, lex_i]:
 							lexcomp = 1
@@ -736,7 +736,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 						elif a_key[i3, lex_i] < b_key[j3, lex_i]:
 							lexcomp = -1
 							break
-							
+
 					if lexcomp > 0:
 						j3 += 1
 					elif lexcomp < 0:
@@ -750,7 +750,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 						#ta = np.PyArray_GETCONTIGUOUS(ta)
 						tb = dat_b[b_key[j3, b_key_shift]]
 						#tb = np.PyArray_GETCONTIGUOUS(tb)
-						
+
 						if type == -1: #If using np.dot, actually have to reshape matrices
 							shpA.ptr = [oa_size, <np.npy_intp>in_size]
 							ta = np.PyArray_Newshape(dat_a[a_key[i3, a_key_shift]], &shpA, np.NPY_CORDER)
@@ -759,9 +759,9 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 
 
 
-						if used_aobo: #We've already initialized this sector, so accumulate	
+						if used_aobo: #We've already initialized this sector, so accumulate
 							#GEMM: c -> a A.B + b C , so let a = b = 1
-							
+
 							if type==np.NPY_DOUBLE:
 								"""
 								if oa_size==1 and in_size==1:
@@ -771,8 +771,8 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 								else:
 								"""
 								lib_dgemm( CblasRowMajor, CblasNoTrans,CblasNoTrans, oa_size, ob_size, in_size, 1., <double*>np.PyArray_DATA(ta), in_size, <double*>np.PyArray_DATA(tb), ob_size, 1., <double*>np.PyArray_DATA(tc), ob_size )
-									
-									
+
+
 							elif type==np.NPY_CDOUBLE:
 								"""
 								if oa_size==1 and in_size==1:
@@ -799,7 +799,7 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 								lib_zgemm( CblasRowMajor, CblasNoTrans,CblasNoTrans, oa_size, ob_size, in_size, &cone, <void*>np.PyArray_DATA(ta), in_size, <void*>np.PyArray_DATA(tb), ob_size, &czero, <void*>np.PyArray_DATA(tc), ob_size )
 							else:
 								tc=dot(ta, tb)
-									
+
 							dat_len += 1
 							used_aobo = 1
 
@@ -814,24 +814,24 @@ def  tensordot_guts(object c, c_intp nao, c_intp nbo, c_intp nin, \
 
 						j3 += 1		# increment both rows
 						i3 += 1
-				
+
 				if used_aobo:
 					if type==-1:
 						dat[dat_len-1] = np.PyArray_Newshape(tc, &shpC, np.NPY_CORDER)
 					else:
 						dat[dat_len-1] = tc
-					
+
 				j2+=1 # advances to next B outer sector
-				
+
 			i2+=1 # advance to next A outer sector
 		# advance to the next charge sector
-		i1 += 1	
+		i1 += 1
 		j1 += 1
-	
+
 	if TENSORDOT_TIMING:
 		print "B", time.time() - t0
 		t0 = time.time()
-				
+
 	PyMem_Free(shpC.ptr)
 
 	if max_size != dat_len: #Usually not the case
@@ -850,7 +850,7 @@ cpdef tensordot2(a, b, axes = 2):
 	""" Tensor contraction of npc arrays a, b. Identical usage as numpy.
 
 	"""
-	
+
 	cdef list dat_a = a.dat
 	cdef list dat_b = b.dat
 
@@ -877,7 +877,7 @@ cpdef tensordot2(a, b, axes = 2):
 
 	if TENSORDOT_TIMING:
 		t0 = time.time()
-	
+
 	cdef c_intp na, nb
 	cdef list axes_a, axes_b
 
@@ -917,7 +917,7 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef c_intp nda = a.rank
 	cdef np.ndarray[c_intp, ndim=1] bs = b.shape #SHAPE
 	cdef c_intp ndb = b.rank
-	
+
 	cdef int equal = 1
 	cdef c_uint k
 	if (na != nb):
@@ -925,7 +925,7 @@ cpdef tensordot2(a, b, axes = 2):
 	else:
 		for k in range(na):
 			axes_a[k] = axes_a[k]%nda
-			axes_b[k] = axes_b[k]%ndb			
+			axes_b[k] = axes_b[k]%ndb
 			if as_[axes_a[k]] != bs[axes_b[k]]:
 				equal = 0
 				break
@@ -944,17 +944,17 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef list newaxes_a = notin_a + axes_a
 	cdef list olda = [as_[axis] for axis in notin_a]
 	nao = nda - nin
-	
+
 	cdef list notin_b = [k for k in range(ndb) if k not in axes_b]
 	cdef list newaxes_b = axes_b + notin_b
 	cdef list oldb = [bs[axis] for axis in notin_b]
-	nbo = ndb - nin	
+	nbo = ndb - nin
 	ndc = nao + nbo
-	
+
 	if TENSORDOT_TIMING:
 		print "Axes", time.time() - t0
 		t0 = time.time()
-		
+
 	if nao == 0 and nbo == 0:
 		return npc.inner(a, b, [ axes_a, axes_b])
 
@@ -980,7 +980,7 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef np.PyArray_Dims dims1
 	dims1.len = 1
 	dims1.ptr = [ndc]
-		
+
 	cdef np.PyArray_Dims dims2
 	dims2.len = 2
 	dims2.ptr = [0, 0]
@@ -995,7 +995,7 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef np.ndarray[c_int, ndim=1, mode = "c"] q_conj_c = empty(dims1, np.NPY_LONG)
 
 	cdef c_intp num_q = a.num_q
-	
+
 	cdef c_intp l_dat_a = q_dat_a.shape[0]
 	cdef c_intp l_dat_b = q_dat_b.shape[0]
 
@@ -1007,9 +1007,9 @@ cpdef tensordot2(a, b, axes = 2):
 	c.q_ind = a.q_ind[:nao] + b.q_ind[nin:]
 
 
-	"""Make new labels for c	
+	"""Make new labels for c
 		No labels made if either a or b doesnt have labels
-		
+
 		Any labels that would be duplicates are dropped
 	"""
 	cdef dict alab = a.labels
@@ -1059,7 +1059,7 @@ cpdef tensordot2(a, b, axes = 2):
 		c.dat = []
 		c.dtype = np.dtype(np.float)
 		return c
-	
+
 	cdef np.ndarray[c_uint, ndim=2, mode="c"] q_dat_c
 	cdef np.PyArray_Dims shpA, shpB, shpC
 	shpA.len = shpB.len = 2
@@ -1071,15 +1071,15 @@ cpdef tensordot2(a, b, axes = 2):
 		if TENSORDOT_VERBOSE > 0:
 			print "One block"
 		equal = 1
-		
+
 		for k in range(nin): #check if entries match on inner
 			if q_dat_a[0, nao + k]!=q_dat_b[0, k]:
 				equal = 0
 				break
-		if equal: #So contract inner				
+		if equal: #So contract inner
 			ta = dat_a[0]
 			tb = dat_b[0]
-			
+
 			shpC.ptr = <np.npy_intp*>PyMem_Malloc(ndc * sizeof(np.npy_intp))
 			if not shpC.ptr:
 				raise MemoryError
@@ -1087,26 +1087,26 @@ cpdef tensordot2(a, b, axes = 2):
 			dims2.ptr = [1, ndc]
 			c.q_dat = q_dat_c = empty(dims2, np.NPY_ULONG) #make q_dat entry
 
-			for k in range(nao):			
+			for k in range(nao):
 				q_dat_c[0, k] = q_dat_a[0, k]
 				shpC.ptr[k] = ta.shape[k]
 			for k in range(nbo):
 				q_dat_c[0, nao + k] = q_dat_b[0, k + nin]
 				shpC.ptr[nao + k] = tb.shape[k + nin]
-						
+
 			r = 1
 			for k in range(nin): #inner dimension
-				r *= tb.shape[k]  
-			
+				r *= tb.shape[k]
+
 			shpA.ptr[1] = r
 			shpB.ptr[0] = r
 
 			ta = np.PyArray_Newshape(ta, &shpA, np.NPY_CORDER)
 			tb = np.PyArray_Newshape(tb, &shpB, np.NPY_CORDER)
 			tc = dot(ta, tb)
-			
-			c.dat = [np.PyArray_Newshape(tc, &shpC, np.NPY_CORDER)] 
-			c.dtype = c.dat[0].dtype			
+
+			c.dat = [np.PyArray_Newshape(tc, &shpC, np.NPY_CORDER)]
+			c.dtype = c.dat[0].dtype
 			PyMem_Free(shpC.ptr)
 			return c
 		else:
@@ -1119,31 +1119,31 @@ cpdef tensordot2(a, b, axes = 2):
 	Pre-compute conventient data for a & b: the "Keys"
 
 	Key structure:
-	       width=  | nin     | n(a/b)o  | num_q | 1 
+	       width=  | nin     | n(a/b)o  | num_q | 1
 	     encodes=  | in inds | out inds | Q_tot | perm
-		
+
 		sorted by (lex order)
-		1. total charge of the inner indices, 
+		1. total charge of the inner indices,
 		2. the outer indices
 		3. the inner indices
 	"""
-	
+
 	cdef c_int wa = nda + num_q + 1 #width of keys
 	cdef c_int wb = ndb + num_q + 1
-	
-	#First I create a tranposed key, *_key_t, ommitting the perm column 		
-	
+
+	#First I create a tranposed key, *_key_t, ommitting the perm column
+
 	#NOTE: memview style is slower
 	dims2.ptr[0] = wa-1
 	dims2.ptr[1] = l_dat_a
 	#cdef np.ndarray[c_int, ndim=2, mode="c"] a_key_t = empty(dims2, np.NPY_LONG)
 	cdef c_int[:,::1] a_key_t = empty(dims2, np.NPY_LONG)
-	
+
 	dims2.ptr[0] = wb - 1
 	dims2.ptr[1] = l_dat_b
 	#cdef np.ndarray[c_int, ndim=2, mode="c"] b_key_t = empty(dims2, np.NPY_LONG)
 	cdef c_int[:, ::1] b_key_t = empty(dims2, np.NPY_LONG)
-	
+
 	# Now fill in total charge over contracted legs
 	cdef np.ndarray[c_int, ndim = 2, mode = "c"] q_sum_res
 	#cdef c_int[:, ::1] q_sum_res
@@ -1152,7 +1152,7 @@ cpdef tensordot2(a, b, axes = 2):
 		for r in range(l_dat_a): #copy
 			for i in range(num_q):
 				a_key_t[nda + i, r] = q_sum_res[r, i]
-		
+
 		q_sum_res = q_sum(q_dat_b, q_ind_b, -1*q_conj_b, 0, nin, mod_q)
 		for r in range(l_dat_b): #copy
 			for i in range(num_q):
@@ -1161,13 +1161,13 @@ cpdef tensordot2(a, b, axes = 2):
 		for r in range(l_dat_a):
 			for i in range(num_q):
 				a_key_t[nda + i, r] = 0
-		
+
 		for r in range(l_dat_b):
 			for i in range(num_q):
 				b_key_t[ndb + i, r] = 0
 
 	#Now fill in index info (need to reverse order in w.r.t. q_dat for a)
-			
+
 	for r in range(l_dat_a):
 		for i in range(nin):
 			a_key_t[i, r] = q_dat_a[r, nao + i]
@@ -1181,13 +1181,13 @@ cpdef tensordot2(a, b, axes = 2):
 	if TENSORDOT_VERBOSE > 1:
 		print a_key_t.T[:, :nda+num_q], "= unsorted a_key"
 		print b_key_t.T[:, :ndb+num_q], "= unsorted b_key"
-	
-	#Sort by Qt > out ind > in ind 
+
+	#Sort by Qt > out ind > in ind
 	#cdef np.ndarray[c_intp, ndim=1, mode="c"] perma = np.PyArray_LexSort( a_key_t, 0 )
 	#cdef np.ndarray[c_intp, ndim=1, mode="c"] permb = np.PyArray_LexSort( b_key_t, 0 )
 	cdef c_intp[::1] perma = np.PyArray_LexSort( a_key_t, 0 )
 	cdef c_intp[::1] permb = np.PyArray_LexSort( b_key_t, 0 )
-	
+
 	dims2.ptr[0] = l_dat_a
 	dims2.ptr[1] = wa
 	#cdef np.ndarray[c_int, ndim=2, mode="c"] a_key = empty(dims2, np.NPY_LONG)
@@ -1205,20 +1205,20 @@ cpdef tensordot2(a, b, axes = 2):
 		for i in range(wa - 1):
 			a_key[r, i] = a_key_t[i, p]
 		a_key[r, wa-1] = p
-	
+
 	for r in range(l_dat_b):
 		p = permb[r]
 		for i in range(wb - 1):
 			b_key[r, i] = b_key_t[i, p]
 		b_key[r, wb-1] = p
-	
+
 	# now a_key is sorted and is shaped (nda + num_q + 1, num_block a), ditto for b_key
-	
+
 
 	if TENSORDOT_VERBOSE > 1:
 		print a_key, "= sorted a_key"
 		print b_key, "= sorted b_key"
-	
+
 	if TENSORDOT_TIMING:
 		print "Keys", time.time() - t0
 		t0 = time.time()
@@ -1249,7 +1249,7 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef c_int[::1] qoa_bnds = find_differences_contiguous2( a_key, nin, nda )
 	cdef c_int[::1] qob_bnds = find_differences_contiguous2( b_key, nin, ndb )
 
-	
+
 	cdef c_int Nqta = qta_bnds.shape[0] - 1	# number total charge sector in a
 	cdef c_int Nqtb = qtb_bnds.shape[0] - 1	# number total charge sector in b
 	cdef c_int i1, i2, i3	# 1: total q sectors, 2: outer sectors, 3: actual rows
@@ -1259,14 +1259,14 @@ cpdef tensordot2(a, b, axes = 2):
 	cdef c_int curQtA, nxtQtA, curQtB, nxtQtB
 	i1 = i2 = i3 = 0
 	j1 = j2 = j3 = 0
-	
+
 	#First bound the maximum number of possible entries (so we can abort if 0)
 	#This is allows us to preallocate q_dat, as well as abort if no valid contractions.
 	cdef c_int max_size = 0
 	cdef c_int i20, j20
 
 	while i1 < Nqta and j1 < Nqtb:
-		
+
 		curQtA = qta_bnds[i1]
 		nxtQtA = qta_bnds[i1 + 1]
 		curQtB = qtb_bnds[j1]
@@ -1283,7 +1283,7 @@ cpdef tensordot2(a, b, axes = 2):
 			j1 += 1
 			continue
 		elif lexcomp < 0:		# b_key[j1] is bigger
-			i1 += 1	
+			i1 += 1
 			continue
 
 		while qoa_bnds[i2] < curQtA:
@@ -1299,7 +1299,7 @@ cpdef tensordot2(a, b, axes = 2):
 			j2 += 1
 
 		max_size+= (i2 - i20)*(j2 - j20)
-		i1 += 1	
+		i1 += 1
 		j1 += 1
 
 	#Preallocate dat_c and q_dat_c
@@ -1315,7 +1315,7 @@ cpdef tensordot2(a, b, axes = 2):
 		c.dat = dat
 		return c
 
-	#Cache outer leg shapes in 2-arrays (corresponding to qo*_bnds)	
+	#Cache outer leg shapes in 2-arrays (corresponding to qo*_bnds)
 	dims2.ptr[0] = qoa_bnds.shape[0]-1
 	dims2.ptr[1] =  nao
 	cdef c_intp[:, ::1] qoa_shapes = empty(dims2, np.NPY_INTP)
@@ -1331,16 +1331,16 @@ cpdef tensordot2(a, b, axes = 2):
 	#cdef c_int[::1] m_size = np.ones( a_key.shape[0], dtype = np.int)
 
 	# fill in qoa_shapes
-	cdef np.ndarray[c_int, ndim=2] qi	
+	cdef np.ndarray[c_int, ndim=2] qi
 	for l in range(nao):
 		qi = q_ind_a[l]
 		i1 = nin+l
 		for r in range(qoa_shapes.shape[0]):
 			p =  a_key[qoa_bnds[r], i1]
 			qoa_shapes[r, l] = qi[p, 1] - qi[p, 0]
-				
 
-	# fill in qob_shapes	
+
+	# fill in qob_shapes
 	for l in range(nbo):
 		i1 = nin+l
 		qi = q_ind_b[i1]
@@ -1374,7 +1374,7 @@ cpdef tensordot2(a, b, axes = 2):
 
 
 	################# Outer Loop over Total Charge ##############
-	
+
 	#Placeholders for submatrices ta, tb, tc and their shapes
 	cdef np.PyArray_Dims shptC #the dims of submats for dot
 	shptC.len = 2
@@ -1384,16 +1384,16 @@ cpdef tensordot2(a, b, axes = 2):
 
 	shpC.ptr = <np.npy_intp*>PyMem_Malloc(ndc * sizeof(np.npy_intp))
 	if not shpC.ptr:
-		raise MemoryError	
+		raise MemoryError
 	shpC.len = ndc
-		
+
 	cdef c_intp oa_size, ob_size, in_size  #size of combined outer legs / inner leg
 	cdef c_int used_aobo = 0 #Is there any entry for this outer combination?
 	cdef c_int start_b = 0
 	cdef c_int dat_len = 0 # Number of entries in dat_c so far
 	i1 = i2 = i3 = 0
 	j1 = j2 = j3 = 0
-	cdef c_int num_dot = 0 
+	cdef c_int num_dot = 0
 	cdef c_uint a_key_shift = nda+num_q
 	cdef c_uint b_key_shift = ndb+num_q
 
@@ -1409,7 +1409,7 @@ cpdef tensordot2(a, b, axes = 2):
 		nxtQtA = qta_bnds[i1 + 1]
 		curQtB = qtb_bnds[j1]
 		nxtQtB = qtb_bnds[j1 + 1]
-		
+
 		lexcomp = 0		# check if a[i1] > b[j1]
 		for lex_i in range(num_q-1, -1, -1):
 			if a_key[curQtA, lex_i + nda] > b_key[curQtB, lex_i + ndb]:
@@ -1423,42 +1423,42 @@ cpdef tensordot2(a, b, axes = 2):
 			j1 += 1
 			continue
 		elif lexcomp < 0:		# b_key[j1] is bigger
-			i1 += 1	
+			i1 += 1
 			continue
-		
+
 		# product Loop over Outer Charge Sectors
 		while qoa_bnds[i2] < curQtA:
 			i2 += 1
 		while qob_bnds[j2] < curQtB:
 			j2 += 1
-			
+
 		start_b = j2	# mark the start of this total charge sector
 
 		# double loop over aouter and bouter, bouter will go through multiple passes, while aouter only goes through one
 		while  qoa_bnds[i2] < nxtQtA: 	# For each entry in A sector of current Qtot
-		
+
 			oa_size = 1
 			for l in range(nao):
 				shpC.ptr[l] = qoa_shapes[i2,l] #Store oa size
 				oa_size*=qoa_shapes[i2,l]
-				
+
 			j2 = start_b #Put B counter at start of current QT, start_b
 			while qob_bnds[j2] < nxtQtB: 	# Loop through entries in B sector
-				
+
 				ob_size = 1
 				for r in range(nbo):
 					shpC.ptr[nao+r] = qob_shapes[j2,r] #Store ob size
 					ob_size*=qob_shapes[j2,r]
-					
+
 				i3 = qoa_bnds[i2] #i3 denotes rows in a_key,
-				j3 = qob_bnds[j2] #j3 denotes rows in b_key, 
-				
+				j3 = qob_bnds[j2] #j3 denotes rows in b_key,
+
 				used_aobo = 0 # mark if this combination of aobo has any entries in it
 
 				# inner loop, match by inner indices
 				while i3 < qoa_bnds[i2 + 1] and j3 < qob_bnds[j2 + 1]: #Stop when you hit next outer sector
 					# compare inner
-					lexcomp = 0	
+					lexcomp = 0
 					for lex_i in range(nin-1, -1, -1):
 						if a_key[i3, lex_i] > b_key[j3, lex_i]:
 							lexcomp = 1
@@ -1466,7 +1466,7 @@ cpdef tensordot2(a, b, axes = 2):
 						elif a_key[i3, lex_i] < b_key[j3, lex_i]:
 							lexcomp = -1
 							break
-							
+
 					if lexcomp > 0:
 						j3 += 1
 					elif lexcomp < 0:
@@ -1497,15 +1497,15 @@ cpdef tensordot2(a, b, axes = 2):
 
 						j3 += 1		# increment both rows
 						i3 += 1
-				
+
 				if used_aobo:
 					G.push_back(used_aobo)
-					
+
 				j2+=1 # advances to next B outer sector
-				
+
 			i2+=1 # advance to next A outer sector
 		# advance to the next charge sector
-		i1 += 1	
+		i1 += 1
 		j1 += 1
 
 	PyMem_Free(shpC.ptr)
@@ -1571,7 +1571,7 @@ cdef void batch_dgemm_accumulate( vector[int] M, vector[int] K, vector[int] N, v
 
 	cdef vector[int].iterator g = G.begin()
 	cdef int i
-	
+
 	while g != G.end():
 		lib_dgemm( CblasRowMajor, CblasNoTrans,CblasNoTrans, deref(m), deref(n), deref(k), 1., <double*>deref(a), deref(k), <double*>deref(b), deref(n), 0., <double*>deref(c), deref(n))
 		inc(a)
@@ -1650,7 +1650,7 @@ cdef void batch_zgemm_accumulate_parallel( vector[int] M, vector[int] K, vector[
 
 	cdef double complex cone = 1. + 0j
 	cdef double complex czero = 0. + 0j
-	
+
 	cdef int i,j, x, size = G.size()
 	cdef vector[int] starts
 	x = 0
@@ -1679,19 +1679,19 @@ cdef void batch_zgemm_accumulate_parallel( vector[int] M, vector[int] K, vector[
 @cython.wraparound(False)
 @cython.boundscheck(False)
 cpdef combine_legs(self, list axes, pipes_i, qt_conj_i, bint block_single_legs, bint inplace = False):
-	"""	Combine legs together. 
-		
-		For now, assumes axes = [ [0, 1, . . ., j_1 ], [i_2, . . . , j_2] , [. . . , d]] , a python list of lists enumerating indices to be grouped, 	
+	"""	Combine legs together.
+
+		For now, assumes axes = [ [0, 1, . . ., j_1 ], [i_2, . . . , j_2] , [. . . , d]] , a python list of lists enumerating indices to be grouped,
 			So T_ijkl ---> T_i(jk)l would have axes =  [[0],[1, 2], [3]]
 			The length of axes is the rank of the combined tensor.
-			
+
 		If pipes = None, the code will make the pipes (and if you haven't stored them elsewhere, you won't be able to split back.)
 		Otherwise, pipes = [ pipe0, None, . .. ], with pipes being calculated for positions None. The length of pipes is the rank of the combined tensor.
-		
+
 		Optionally, one may provide qt_conj = [1, -1, . . .]. The length of qt_conj it the rank of the combined tensor. However, the entries are ignored except where pipes[j] is None. If pipes[j] is not None, then when constructing the pipe for the new leg, it is constructed such that qt_conj[j]  = 1 / -1 on the new leg.
-		
+
 		TODO - would be nice to allow [ [2], [0, 3], [1]], with combine legs carrying out the required transposition first. Tricky what convention to use if leg pipes are involved though.
-		
+
 		Example:
 		>>>	pipeL = oldarray.make_pipe([0, 1])
 		>>>	pipeR = oldarray.make_pipe([3, 4], qt_conj = -1)
@@ -1702,27 +1702,27 @@ cpdef combine_legs(self, list axes, pipes_i, qt_conj_i, bint block_single_legs, 
 	axes = [ np.array(a, np.intp) for a in axes] #useful for index tricks
 
 	cdef int c_ndim = len(axes)
-	
+
 	##	set defaults
 	if qt_conj_i is None:
 		qt_conj_i = np.ones(self.rank, dtype = np.int)
 	else:
 		qt_conj_i = np.array(qt_conj_i)
-		
+
 	if pipes_i is None:
 		pipes_i = [None]*c_ndim
-	
+
 	cdef list pipes = pipes_i
 	cdef np.ndarray[c_int, ndim=1, mode="c"] qt_conj = qt_conj_i
-	cdef np.ndarray[c_int, ndim=1, mode="c"] cq_conj = np.empty(c_ndim, dtype = np.int)	
+	cdef np.ndarray[c_int, ndim=1, mode="c"] cq_conj = np.empty(c_ndim, dtype = np.int)
 	cdef np.ndarray[c_int, ndim=1, mode="c"] q_conj = self.q_conj
 	cdef np.ndarray[c_int, ndim=1, mode="c"] qc1
 	cdef np.ndarray[c_int, ndim=1, mode="c"] qc2
-	
+
 	cdef c_int match
 	cdef c_int t_conj
 	cdef Py_ssize_t i, j, n
-	
+
 	cdef dict rec
 	cdef str s
 	cdef dict c_labels
@@ -1757,39 +1757,39 @@ cpdef combine_legs(self, list axes, pipes_i, qt_conj_i, bint block_single_legs, 
 
 	#Make pipes as needed, and check the validity of those provided
 	for i in range(c_ndim):	#for each new leg
-		
+
 		if pipes[i] is None:
 			pipes[i] = self.make_pipe( axes[i], qt_conj=qt_conj[i] , block_single_legs=block_single_legs )
-				
+
 		pipe = pipes[i]
-				
+
 		qc1 = q_conj[axes[i]]
 		qc2 = pipe.q_conj
 		n = qc1.shape[0]
-		
+
 		#First we check if the pipe has same q_conj as legs, or if we need to flip (or neither - then we have error)
-		
+
 		t_conj = pipe.qt_conj	#This is pipe's convention for total leg
-		match = 1		
+		match = 1
 		for j in range(n):
-			if qc1[j] != (qc2[j]*t_conj): 
+			if qc1[j] != (qc2[j]*t_conj):
 				match = 0
-				break				
-		if match:	
-			cq_conj[i] = 1			
+				break
+		if match:
+			cq_conj[i] = 1
 		else:
-			t_conj*=-1		
-			match = 1		
+			t_conj*=-1
+			match = 1
 			for j in range(n):
-				if qc1[j] != (qc2[j]*t_conj): 
+				if qc1[j] != (qc2[j]*t_conj):
 					match = 0
 					break
 			if match:
-				cq_conj[i] = -1			
+				cq_conj[i] = -1
 			else:
 				print "Pipe", i, " conj data:", qc1, qc2*t_conj
 				raise ValueError, "Conj tags don't match pipe!"
-				
+
 	if inplace:
 		c = self
 		c.rank = c_ndim
@@ -1802,52 +1802,52 @@ cpdef combine_legs(self, list axes, pipes_i, qt_conj_i, bint block_single_legs, 
 
 	c.labels = c_labels
 	c.q_conj = cq_conj
-	c.q_ind = [ pipe.qt_ind for pipe in pipes]	
+	c.q_ind = [ pipe.qt_ind for pipe in pipes]
 	c.shape = np.array([pipe.t_shape for pipe in pipes])#SHAPE
 	if len(self.dat) == 0:
 		c.q_dat = np.zeros( (0, c_ndim), dtype = np.uint)
 		c.sorted = True
 		return c
-	
+
 	cdef np.ndarray[c_uint, ndim=2, mode="c"] q_dat = self.q_dat
 	cdef list dat = self.dat
 	cdef list q_maps = [ p.get_q_map() for p in pipes ]
-	
+
 	if inplace:
 		self.dat = []
 		self.q_dat = None
-	 
+
 	#npc_helper.combine_legs_colinitis(c, q_dat, dat, axes,  pipes,  q_maps)
 	combine_legs_guts(c, q_dat, dat, axes,  pipes,  q_maps, inplace)
 
 	return c
-		
+
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.nonecheck(False)
 cdef void combine_legs_guts(c, np.ndarray[c_uint, ndim=2, mode="c"] q_dat, list dat, list axes, list pipes, list q_maps, bint inplace):
 	#Perform the actual shuffling; c is the combined tensor.
-	
+
 	cdef c_intp numrow = q_dat.shape[0]
 	cdef c_intp a_ndim = q_dat.shape[1]
 	cdef c_intp c_ndim = len(pipes)
-	
+
 	cdef np.ndarray[c_uint, ndim=2] qm
 	cdef np.ndarray[c_int, ndim=2] qt_ind #TODO should be "c" but isn't with MKL?!?
 	cdef np.ndarray[c_intp, ndim=1, mode="c"] stride
 	cdef np.ndarray[c_intp, ndim=1, mode="c"] axesi
-	
+
 	cdef c_uint i, row, iT
-	cdef c_uint ind, numa, a	
+	cdef c_uint ind, numa, a
 
 	#temps for reshaping info
 	cdef np.PyArray_Dims dims2
 	dims2.len = 2
 	dims2.ptr = [numrow, c_ndim]
-	
-	# For each incoming dat (the 'rows'), we store the Q_ind of the destination, and the reshaped dimensions:	
+
+	# For each incoming dat (the 'rows'), we store the Q_ind of the destination, and the reshaped dimensions:
 	# Qt = [c_ndim x rows], the total Q_ind
-	
+
 	# In slicing language we have c_out[m0:m0+l0, m1:m1+l1, . . . ] = c_in
 	# dest_0 =  [rows x c_ndim], the top left location [m0, m1 ...] of the incoming block in the target
 	# lengths = [rows x c_ndim], the lengths of the block, [l0,l1, . . . ]
@@ -1855,69 +1855,69 @@ cdef void combine_legs_guts(c, np.ndarray[c_uint, ndim=2, mode="c"] q_dat, list 
 	cdef np.ndarray[c_int, ndim=2, mode="c"] Qt = empty(dims2, np.NPY_LONG)
 	cdef np.ndarray[c_intp, ndim=2, mode="c"] dest_0 = empty(dims2, np.NPY_INTP)
 	cdef np.ndarray[c_intp, ndim=2, mode="c"] lengths = empty(dims2, np.NPY_INTP)
-	
+
 
 	for i in range(c_ndim): #For each outgoing axis
 		qm = q_maps[i]
 		stride = pipes[i].strides
 		axesi = axes[i]
 		numa = axesi.shape[0]
-				
+
 		for row in range(numrow):
 			ind = q_dat[row, axesi[0]]*stride[0]
 			for a in range(1, numa): #convert multi-index to flat index
 				ind+=q_dat[row, axesi[a]]*stride[a]
-				
+
 			lengths[row, i] = qm[ind, 1] - qm[ind, 0]
 			dest_0[row, i] = qm[ind, 0]
-			Qt[row, i] = qm[ind, 2]		
+			Qt[row, i] = qm[ind, 2]
 
 	cdef np.ndarray[c_intp, ndim=1, mode="c"] sort
 	if numrow > 0:
 		sort = np.PyArray_LexSort(Qt.T, 0 )
-			
+
 		Qt = np.take(Qt, sort, axis = 0, mode = 'wrap')
 		lengths = np.take(lengths, sort, axis = 0, mode = 'wrap')
 		dest_0 = np.take(dest_0, sort, axis = 0, mode = 'wrap')
-		
+
 		#Qt = np.PyArray_Take(Qt, sort, 0)
 		#lengths = np.PyArray_Take(lengths, sort, 0)
 		#dest_0 = np.PyArray_Take(dest_0, sort, 0)
-	
+
 	cdef c_int[::1] bounds = find_differences_contiguous2(Qt, 0, c_ndim) #Boundaries of each QT-ind
 
 	cdef c_intp num_dat = bounds.shape[0] - 1 #number of outgoing data blocks
-	
-	dims2.ptr = [num_dat, c_ndim]	
-	
+
+	dims2.ptr = [num_dat, c_ndim]
+
 	cdef np.ndarray[c_uint, ndim=2, mode="c"] c_q_dat = empty(dims2, np.NPY_ULONG)
 	cdef np.ndarray[c_intp, ndim=2, mode="c"] c_sh = empty(dims2, np.NPY_INTP)
-	
+
 	for i in range(c_ndim): #compute the q_dat entry and shape of each out going block
 		qt_ind = pipes[i].qt_ind
-		
+
 		for iT in range(num_dat):
 			row = Qt[bounds[iT], i]
 			c_q_dat[iT, i] = row
 			c_sh[iT, i] = qt_ind[row, 1] - qt_ind[row, 0]
-		
+
 	cdef list c_dat = [None]*num_dat
-	
+
 	cdef list sl
 	cdef np.ndarray t, ct
-	
+
 	cdef np.PyArray_Dims shpC
 	shpC.len = c_ndim
-	
+
 	cdef int ctype = c.dtype.num
-		
+
 	cdef np.ndarray src
 	cdef np.npy_intp* src_strides = <np.npy_intp*>PyMem_Malloc(c_ndim * sizeof(np.npy_intp))
 	cdef np.npy_intp* ct_strides
-	
+
 	cdef c_uint sort_row
 	for iT in range(num_dat):
-		shpC.ptr = &c_sh[iT, 0]	
+		shpC.ptr = &c_sh[iT, 0]
 		ct = zeros(shpC, ctype)
 		c_dat[iT] = ct
 		ct_strides = np.PyArray_STRIDES(ct)
@@ -1926,36 +1926,36 @@ cdef void combine_legs_guts(c, np.ndarray[c_uint, ndim=2, mode="c"] q_dat, list 
 		for row in range(bounds[iT], bounds[iT+1]):
 			sort_row = sort[row]
 			src = np.PyArray_GETCONTIGUOUS(dat[sort_row])
-				
+
 			#src_strides[c_ndim-1] = src.strides[a_ndim-1]
 			src_strides[c_ndim-1] = np.PyArray_ITEMSIZE(src) #src.strides[a_ndim-1]
 			for i in range(c_ndim - 1, 0, -1):
 				src_strides[i - 1]=lengths[row, i]*src_strides[i]
 			copy_strided(<char*>ct.data, &dest_0[row, 0], ct.strides, <char*>src.data, NULL, src_strides, &lengths[row, 0], c_ndim)
-			
+
 			if inplace:
 				dat[sort_row] = 0
-	
-	PyMem_Free(src_strides)						
+
+	PyMem_Free(src_strides)
 	c.q_dat = c_q_dat
 	c.dat = c_dat
 	c.sorted = True
-	return 
-		
+	return
+
 #########################
 ##########################
 @cython.wraparound(False)
 @cython.boundscheck(False)
 def itranspose_fast(self, np.ndarray[np.npy_intp, ndim=1, mode="c"] axes):
-	"""	IN PLACE. self = np.transpose(self), np-style tranposition. 
-		
-		Same as itranspose, but assumes axes is an np.npy_intp ndarray	
+	"""	IN PLACE. self = np.transpose(self), np-style tranposition.
+
+		Same as itranspose, but assumes axes is an np.npy_intp ndarray
 	"""
 
 	cdef np.PyArray_Dims perm
 	perm.len = axes.shape[0]
 	perm.ptr = <np.npy_intp*>axes.data
-	
+
 	cdef list dat = self.dat
 	cdef np.ndarray m
 	self.dat = [np.PyArray_Transpose(m, &perm) for m in dat]
@@ -1965,13 +1965,13 @@ def itranspose_fast(self, np.ndarray[np.npy_intp, ndim=1, mode="c"] axes):
 	self.q_ind = [ self.q_ind[i] for i in axes]
 	self.q_dat = np.take(self.q_dat, axes, axis = 1)
 	self.sorted = False
-	
+
 	cdef dict labels = self.labels
 	cdef np.ndarray[np.npy_intp, ndim=1, mode="c"] order
 	if labels is not None:
 		order = np.argsort(axes)
 		self.labels = { k : order[ labels[k] ] for k in labels.keys() }
-		
+
 	return self
 
 @cython.wraparound(False)
@@ -1986,7 +1986,7 @@ cpdef transpose_fast(self, np.ndarray[np.npy_intp, ndim=1, mode="c"] axes):
 	cdef np.PyArray_Dims perm
 	perm.len = axes.shape[0]
 	perm.ptr = <np.npy_intp*>axes.data
-	
+
 	a = npc.array(self.rank, dtype = self.dtype)
 	#a.shape = np.take(self.shape, axes)
 	a.shape = self.shape[axes] #SHAPE
@@ -1996,12 +1996,12 @@ cpdef transpose_fast(self, np.ndarray[np.npy_intp, ndim=1, mode="c"] axes):
 	a.q_ind = [ self.q_ind[i] for i in axes] #DOESN'T copy
 	a.charge = self.charge.copy()
 	self.sorted = False
-	
+
 	cdef list dat = self.dat
 	cdef np.ndarray m
 	a.dat = [ np.PyArray_NewCopy(np.PyArray_Transpose(m, &perm), np.NPY_CORDER) for m in dat]
 	a.q_dat = np.take(self.q_dat, axes, axis = 1)
-	
+
 	cdef dict labels = self.labels
 	cdef np.ndarray[np.npy_intp, ndim=1, mode="c"] order
 	if labels is not None:
@@ -2012,7 +2012,7 @@ cpdef transpose_fast(self, np.ndarray[np.npy_intp, ndim=1, mode="c"] axes):
 
 
 @cython.nonecheck(False)
-def idaxpy(double alpha, np.ndarray x, np.ndarray y):		
+def idaxpy(double alpha, np.ndarray x, np.ndarray y):
 	""" y -> y + alpha*x"""
 	#cdef double alphaD = alpha
 	cdef int nd
@@ -2025,7 +2025,7 @@ def idaxpy(double alpha, np.ndarray x, np.ndarray y):
 		return y
 
 @cython.nonecheck(False)
-def izaxpy(double complex alpha, np.ndarray x, np.ndarray y):			
+def izaxpy(double complex alpha, np.ndarray x, np.ndarray y):
 	#cdef double complex alphaDC = alpha
 	cdef int nd
 	if (np.PyArray_ISCONTIGUOUS(x) and np.PyArray_ISCONTIGUOUS(y)) or (np.PyArray_ISFORTRAN(x) and np.PyArray_ISFORTRAN(y)):
@@ -2044,7 +2044,7 @@ cdef extern from "math.h":
 cpdef two_norm(a):
 	"""Computes 2nrm (Frobenius) of tensor
 		Calls BLAS directly for doubles, cdoubles
-	
+
 	"""
 	cdef double c = 0.
 	cdef double n = 0.
@@ -2055,7 +2055,7 @@ cpdef two_norm(a):
 	if len(dat)==0:
 		return 0.
 	cdef c_int type = dat[0].dtype.num
-	
+
 	if type==np.NPY_DOUBLE:
 		for i in range(num):
 			t = dat[i]
@@ -2080,17 +2080,17 @@ cpdef two_norm(a):
 def iscal(double alpha, a):
 	"""Scales a inplace by real double 'alpha'
 		Calls BLAS directly for doubles, cdoubles
-	
+
 	"""
 	if alpha == 0.:
 		a.dat = []
 		a.q_dat = np.empty( (0, a.rank), np.uint)
 		a.sorted = True
-		
+
 	cdef c_int i = 0
-	cdef np.ndarray t	
+	cdef np.ndarray t
 	cdef c_int type = a.dat[0].dtype.num
-	
+
 	if type==np.NPY_DOUBLE:
 		for i in range(len(a.dat)):
 			t = a.dat[i]
@@ -2119,7 +2119,7 @@ def iaxpy(alpha, a, b):
 	alpha = np.array(alpha)
 	a.sort_q_dat()
 	b.sort_q_dat()
-		
+
 	cdef list adat = a.dat
 	cdef list bdat = b.dat
 	cdef np.ndarray[c_uint, ndim=2, mode = "c"] aq = a.q_dat
@@ -2142,7 +2142,7 @@ def iaxpy(alpha, a, b):
 		b.q_dat = aq.copy()
 		return b
 
-	cdef c_uint ndim = aq.shape[1]	
+	cdef c_uint ndim = aq.shape[1]
 	#pre allocate q_dat - probably too big
 	cdef np.PyArray_Dims shp
 	shp.len = 2
@@ -2204,7 +2204,7 @@ def iaxpy(alpha, a, b):
 						break
 					if aq[i, k] < bq[j, k]:
 						break
-					
+
 			if is_zero: #a is 0
 				dat.append(bdat[j])
 				for k in range(ndim):
@@ -2222,15 +2222,15 @@ def iaxpy(alpha, a, b):
 				else:
 					tb = tb+mul(ta, alpha)
 				dat.append(tb)
-				
+
 				for k in range(ndim):
 					cq[num_dat, k] = bq[j, k]
 				num_dat+=1
 				#q_dat.append(bq[j])
-				
+
 				i+=1
 				j+=1
-	
+
 
 	b.dat = dat
 	cdef np.ndarray[c_uint, ndim=2] q_dat
@@ -2248,7 +2248,7 @@ def iaxpy(alpha, a, b):
 
 	if len(b.dat) > 0:
 		b.dtype = b.dat[0].dtype
-	
+
 	return b
 
 @cython.wraparound(False)
@@ -2259,18 +2259,18 @@ def inner(a, b, axes = None, bint do_conj = False):
 		If axes is None, contracts all axes in matching order
 		Otherwise, axes = [ [i1, i2 , . . . ] , [j1, j2, . . . ] ],
 		 	contracting i1j1, i2j2, etc.
-		
+
 		If do_conj = True, a is conjugated before contraction (giving hermitian inner product)
 		"""
-	
+
 	if TENSORDOT_TIMING:
 		t0 = time.time()
-	
+
 	if id(a) == id(b):
 		#raise NotImplementedError, "Use npc.norm for identical arrays"
 		print "making copy for inner"
 		b = b.copy()
-	
+
 	cdef list axes_a
 	cdef list axes_b
 	if axes is None:
@@ -2279,14 +2279,14 @@ def inner(a, b, axes = None, bint do_conj = False):
 	else:
 		axes_a = list(axes[0])
 		axes_b = list(axes[1])
-	
+
 	cdef c_uint nda = len(axes_a)
 	cdef c_uint ndb = len(axes_b)
 	if nda!=a.rank or ndb!=b.rank:
 		raise ValueError, "Incomplete contraction requested."
 	if nda!=ndb:
 		raise ValueError, "Tensors to be contracted have different dimensions."
-		
+
 	cdef c_uint ndim = nda
 	# axes_a,b are now each list (same len) of indices to contract (na,b are the number of indices)
 
@@ -2351,7 +2351,7 @@ def inner(a, b, axes = None, bint do_conj = False):
 	cdef c_uint i = 0
 	cdef c_uint j = 0
 	cdef c_int lex_i
-	
+
 
 	cdef c_int comp
 
@@ -2434,8 +2434,8 @@ def inner(a, b, axes = None, bint do_conj = False):
 					c+=np_inner( ta.reshape(triv), tb.reshape(triv) )
 				i+=1
 				j+=1
-	
-		
+
+
 	return c
 
 ################################################################################
@@ -2453,10 +2453,10 @@ cpdef bint is_blocked_by_charge(np.ndarray[c_int, ndim=2] q_ind):
 
 	if length < 2:
 		return 1
-		
+
 	if num_q == 0: #Then should have length 1 if blocked
 		return 0
-	
+
 	#So num_q > 0 and more that 1 entry
 	cdef np.ndarray[c_intp, ndim=1, mode='c'] sort = np.lexsort( q_ind[:, 2:].T)
 	cdef c_uint i
@@ -2468,10 +2468,10 @@ cpdef bint is_blocked_by_charge(np.ndarray[c_int, ndim=2] q_ind):
 		same = ( q_ind[sort[i], 2] == q_ind[sort[i + 1], 2] ) #I
 		for j in range(3, num_q + 2):
 			same = same and ( q_ind[sort[i], j] == q_ind[sort[i + 1], j])
-			
+
 		if same:
 			return 0
-	
+
 	return 1
 
 
@@ -2482,13 +2482,13 @@ cpdef bint array_equiv_mod_q(np.ndarray[c_int, ndim=1] a1, np.ndarray[c_int, ndi
 	"""	Check if a1 == a2 (mod mod_q). """
 
 	cdef c_uint len = a2.shape[0]
-	
+
 	cdef c_uint i
-	
+
 	for i in range(len):
 		if (a1[i] - a2[i]) %  mod_q[i] + (mod_q[i] == 1)*(a1[i] - a2[i]):
 			return 0
-		
+
 	return 1
 
 @cython.wraparound(False)
@@ -2499,9 +2499,9 @@ cpdef np.ndarray[c_int, ndim=1] mod_onetoinf1D(np.ndarray[c_int, ndim=1] a, np.n
 
 	cdef c_intp num_q = a.shape[0]
 	cdef np.ndarray[c_int, ndim=1] b = np.empty_like(a)
-	
+
 	cdef c_uint i
-	
+
 	#Annoying - must correct for C-style modulo (versus python)
 	for i in range(num_q):
 		if mod_q[i]!=1:
@@ -2524,7 +2524,7 @@ cpdef np.ndarray[c_int, ndim=2] mod_onetoinf2D(np.ndarray[c_int, ndim=2] a, np.n
 	cdef c_intp lenR = a.shape[0]
 	cdef c_intp num_q = a.shape[1]
 	cdef np.ndarray[c_int, ndim=2] b = np.empty_like(a)
-	
+
 	cdef c_uint i, j
 	for j in range(num_q):
 		if mod_q[j] == 1:
@@ -2535,7 +2535,7 @@ cpdef np.ndarray[c_int, ndim=2] mod_onetoinf2D(np.ndarray[c_int, ndim=2] a, np.n
 				b[i, j] = a[i, j]%mod_q[j]
 				if b[i, j] < 0:
 					b[i, j]+=mod_q[j]
-						
+
 	return b
 
 @cython.wraparound(False)
@@ -2543,12 +2543,12 @@ cpdef np.ndarray[c_int, ndim=2] mod_onetoinf2D(np.ndarray[c_int, ndim=2] a, np.n
 @cython.cdivision(True)
 cpdef np.ndarray[c_int, ndim=1] block_charge(self, np.ndarray[c_uint, ndim=1] ind):
 	"""	Returns charge of a block (as ndarray)"""
-	
+
 	cdef list q_ind = self.q_ind
 	cdef np.ndarray[c_int, ndim=1] q_conj = self.q_conj
 	cdef np.ndarray[c_int, ndim=1] mod_q = self.mod_q
 	cdef np.ndarray[c_int, ndim=1] charge = np.empty_like(mod_q)
-		
+
 	cdef c_int rank = ind.shape[0]
 	cdef np.ndarray[c_int, ndim=2] q_i
 	cdef c_int r, i, q_c, c
@@ -2556,24 +2556,24 @@ cpdef np.ndarray[c_int, ndim=1] block_charge(self, np.ndarray[c_uint, ndim=1] in
 	q_i = q_ind[0]
 	q_c = q_conj[0]
 	r = ind[0]
-	
+
 	cdef c_intp num_q = q_i.shape[1]-2
-	
+
 	for c in range(num_q):
 		charge[c] = q_i[r, 2+c] * q_c
-	
+
 	for i in range(1, rank):
 		q_i = q_ind[i]
 		r = ind[i]
 		q_c = q_conj[i]
 		for c in range(num_q):
 			charge[c] += q_i[r, 2+c] * q_c
-	
+
 	for i in range(num_q):
 		charge[i] = charge[i]%mod_q[i] + (mod_q[i] == 1)*charge[i]
-		
+
 	return charge		## mod q
-	
+
 ################################################################################
 ################################################################################
 @cython.wraparound(False)
@@ -2581,7 +2581,7 @@ cpdef np.ndarray[c_int, ndim=1] block_charge(self, np.ndarray[c_uint, ndim=1] in
 @cython.nonecheck(False)
 cpdef c_int find_row_uint(np.ndarray[c_uint, ndim=2] t, np.ndarray[c_uint, ndim=1] r):
 	"""	Find the first row of t which matches r.
-		
+
 		Returns:
 			The first index i such that t[i, :] = r,
 			Return -1 if none of them match.
@@ -2599,7 +2599,7 @@ cpdef c_int find_row_uint(np.ndarray[c_uint, ndim=2] t, np.ndarray[c_uint, ndim=
 				break
 		if match == 1:
 			return i
-	
+
 	return -1
 
 
@@ -2620,12 +2620,12 @@ cdef np.ndarray[c_int, ndim=1, mode='c'] find_differences_contiguous(np.ndarray[
 	dims1.len = 1
 	dims1.ptr = [a.shape[0] + 1]
 	cdef np.ndarray[c_int, ndim=1, mode='c'] indices = empty(dims1, np.NPY_LONG)
-	
+
 	indices[0] = 0
 	cdef c_uint num = 1	# pointer to current row of indices
 	cdef c_uint i	# row loop index
 	cdef c_uint j	# column loop index
-	
+
 	for i in range(1, a.shape[0]):
 		for j in range(startc, stopc):
 			if a[i, j]!= a[i-1, j]:
@@ -2633,7 +2633,7 @@ cdef np.ndarray[c_int, ndim=1, mode='c'] find_differences_contiguous(np.ndarray[
 				num = num + 1
 				break
 	indices[num] = a.shape[0]
-	
+
 	return indices[0:num+1]
 
 @cython.wraparound(False)
@@ -2650,12 +2650,12 @@ cdef c_int[::1] find_differences_contiguous2(c_int[:, ::1] a, c_uint startc, c_u
 	dims1.len = 1
 	dims1.ptr = [a.shape[0] + 1]
 	cdef c_int[::1] indices = empty(dims1, np.NPY_LONG)
-	
+
 	indices[0] = 0
 	cdef c_intp num = 1	# pointer to current row of indices
 	cdef c_intp i	# row loop index
 	cdef c_intp j	# column loop index
-	
+
 	for i in range(1, a.shape[0]):
 		for j in range(startc, stopc):
 			if a[i, j]!= a[i-1, j]:
@@ -2663,7 +2663,7 @@ cdef c_int[::1] find_differences_contiguous2(c_int[:, ::1] a, c_uint startc, c_u
 				num = num + 1
 				break
 	indices[num] = a.shape[0]
-	
+
 	return indices[0:num+1]
 
 ################################################################################
@@ -2683,7 +2683,7 @@ cpdef np.ndarray[c_int, ndim=1, mode='c'] find_differences(np.ndarray[c_int, ndi
 	cdef c_uint num = 1	# pointer to current row of indices
 	cdef c_uint i	# row loop index
 	cdef c_uint j	# column loop index
-	
+
 	cdef c_uint stopc = a.shape[1]
 	for i in range(1, a.shape[0]):
 		for j in range(stopc):
@@ -2692,7 +2692,7 @@ cpdef np.ndarray[c_int, ndim=1, mode='c'] find_differences(np.ndarray[c_int, ndi
 				num = num + 1
 				break
 	indices[num] = a.shape[0]
-	
+
 	return indices[0:num+1]
 
 
@@ -2709,31 +2709,31 @@ cpdef np.ndarray[c_int, ndim=2, mode='c'] q_sum( \
 			int startc, int stopc, \
 			np.ndarray[c_int, ndim=1, mode='c'] mod_q ):
 	"""	Accumulates the total charge in each entry of q_dat for a subset of legs specified by startc, stopc.
-	
+
 		charge[r] = sum_{start <= l < stop} q_ind[l][ q_dat[r, l], -num_q:] * q_conj[l]
 		mod_q is an nparray shaped (num_q,), must be all positive int
-		
+
 		Returns
 			A 2D nparray shaped (len(q_dat),num_q), list of total charges
 	"""
-	
+
 	cdef c_uint r, c, l
 	cdef c_int length = q_dat.shape[0]
-	
-	cdef np.ndarray[c_int, ndim=2] qi = q_ind[startc] 
+
+	cdef np.ndarray[c_int, ndim=2] qi = q_ind[startc]
 	cdef c_intp num_q = qi.shape[1] - 2
-	
+
 	cdef np.PyArray_Dims dims2
 	dims2.len = 2
-	dims2.ptr = [length, num_q]	
+	dims2.ptr = [length, num_q]
 	cdef np.ndarray[c_int, ndim=2, mode='c'] charges = empty(dims2, np.NPY_LONG)
-	
+
 	#for first leg, we directly initialize
 	cdef c_int qconj = q_conj[startc]
 	for r in range(length):
 		for c in range(num_q):
 			charges[r, c] = qconj*qi[ q_dat[r, startc], 2 + c ]
-	
+
 	#for remaining legs, we accumulate
 	for l in range(startc + 1, stopc):
 		qi = q_ind[l]		# deref leg variables
@@ -2741,7 +2741,7 @@ cpdef np.ndarray[c_int, ndim=2, mode='c'] q_sum( \
 		for r in range(length):		#i for each entry in q_dat
 			for c in range(num_q):		#i vectorize across charge
 				charges[r, c] += qconj*qi[ q_dat[r, l], 2 + c ]
-	
+
 	cdef c_int mod_by
 	cdef c_int q
 	for c in range(num_q):
@@ -2752,46 +2752,46 @@ cpdef np.ndarray[c_int, ndim=2, mode='c'] q_sum( \
 				while q < 0:
 					q+= mod_by
 				charges[r, c] = q
-	
+
 	return charges
-	
+
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.nonecheck(False)
 cdef void copy_strided(char* dest, np.npy_intp* dest_0, np.npy_intp* dest_strides, char* src, np.npy_intp* src_0, np.npy_intp* src_strides, np.npy_intp* len, int nd ) nogil:
 	""" This is a strided copy function in order to accomplish
-	
+
 			a[sl1, sl2 . . . ] = b[sl1', sl2', . . . ]
-		
+
 		for slices sl*.
-		
+
 		CAUTION: it is assumed that both a and b are C-contiguous.
-		
+
 		As an example, consider a[1:3, 0:3] = b[4:6, 1:4]
-		
+
 		dest: a.data (pointers to the underlying data)
 		src: b.data
-		
+
 		dest_0: an intp array designating the top left of the block to be copied, ie, [1, 0]
 		src_0: an intp array designating the top left of the block to be copied, ie, [4, 1]		If either of *_0 == NULL, it is assumed to be [0, 0]
-		
+
 		dest_strides: the strides of a, ie, a.strides
 		src_strices: the strides of b, ie, b.strides
-		
+
 		len: an intp array designating the lenght of each slice, ie, [2, 3]
 		nd : the number of dimensions.
-		
+
 		NOTE: *_0 can also be accomplished by letting dest, src point to the top of the block, ie,
-		
+
 		copy_strided(a.data, [1, 1], . . . ) = copy_strided(<char*>&a.data[1,1], NULL, . . . )
-		
+
 	"""
-	
+
 	cdef np.npy_intp i, j, d0, s0, d1, s1, width
-	
+
 	if nd<1:
 		return
-	
+
 	#Offset data to top left entry
 	if dest_0!=NULL:
 		j = 0
@@ -2803,7 +2803,7 @@ cdef void copy_strided(char* dest, np.npy_intp* dest_0, np.npy_intp* dest_stride
 		for i in range(nd):
 			j+=src_0[i]*src_strides[i]
 		src = &src[j]
-	
+
 	#explicitly unroll first 3 levels
 	if nd==1:
 		width = len[0]*dest_strides[0]
@@ -2814,27 +2814,27 @@ cdef void copy_strided(char* dest, np.npy_intp* dest_0, np.npy_intp* dest_stride
 		width = len[1]*dest_strides[1]
 		d0 = dest_strides[0]
 		s0 = src_strides[0]
-				
+
 		for i in range(len[0]):
 			memcpy(&dest[i*d0] , &src[i*s0], width)
 		return
-			
+
 	if nd==3:
 		width = len[2]*dest_strides[2]
 		d1 = dest_strides[1]
 		d0 = dest_strides[0]
 		s1 = src_strides[1]
 		s0 = src_strides[0]
-		
+
 		for i in range(len[0]):
 			for j in range(len[1]):
 				memcpy(&dest[i*d0 + j*d1] , &src[i*s0 + j*s1], width)
 		return
-		
+
 	else: #From here out, define recursively.
 		d0 = dest_strides[0]
 		s0 = src_strides[0]
-		
+
 		for j in range(len[0]):
 			copy_strided(&dest[j*d0], NULL, &dest_strides[1], &src[j*s0], NULL, &src_strides[1], &len[1], nd-1)
 
@@ -2856,7 +2856,7 @@ cpdef int lex_comp_gt(np.ndarray[c_uint, ndim=1] a, np.ndarray[c_uint, ndim=1] b
 			return 1
 		elif a[i] < b[i]:
 			return -1
-		
+
 	return 0
 
 
@@ -2872,12 +2872,12 @@ def packVmk(list Vmk_list, np.ndarray[c_float, ndim=6] vmk, np.ndarray[np.uint8_
 ### COMMENTS COMMENTS COMMENTS!!
 ### COMMENTS COMMENTS COMMENTS!!
 ### COMMENTS COMMENTS COMMENTS!!
-	
+
 	cdef c_int a, b, c, d, m, k, sa, sb, sc, sd
 	cdef c_float v
 	cdef c_int n_mu = vmk.shape[0]
 	cdef c_int n_nu = vmk.shape[2]
-	
+
 	for a in range(n_mu):
 		sa = spec1[a]
 		for b in range(n_mu):
@@ -2888,7 +2888,7 @@ def packVmk(list Vmk_list, np.ndarray[c_float, ndim=6] vmk, np.ndarray[np.uint8_
 					sd = spec2[d]
 					for m in range(0, 2*maxM+1):
 						m_loc = m-maxM
-						for k in range(0, 2*maxK+1):		
+						for k in range(0, 2*maxK+1):
 							v = vmk[a, b, c, d, m, k]
 							if abs(v) > tol:
 								Vmk_list.append([ m_loc, k-maxK, sa, sc, sd, sb, v, mask[a, b, c, d, m, k] ])

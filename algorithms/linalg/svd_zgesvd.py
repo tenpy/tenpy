@@ -6,57 +6,65 @@ import ctypes
 from ctypes import CDLL, POINTER, c_int, byref, c_char, c_double
 import sys
 from numpy.core import array, asarray, zeros, empty, transpose, \
-        intc, single, double, csingle, cdouble, inexact, complexfloating, \
-        newaxis, ravel, all, Inf, dot, add, multiply, identity, sqrt, \
-        maximum, flatnonzero, diagonal, arange, fastCopyAndTranspose, sum, \
-        isfinite, size
+    intc, single, double, csingle, cdouble, inexact, complexfloating, \
+    newaxis, ravel, all, Inf, dot, add, multiply, identity, sqrt, \
+    maximum, flatnonzero, diagonal, arange, fastCopyAndTranspose, sum, \
+    isfinite, size
 
-libs = ["libLAPACK.dylib","libmkl_rt.so","libmkl_intel_lp64.so","liblapack.so", "libopenblas.dll"]
+libs = ["libLAPACK.dylib", "libmkl_rt.so",
+        "libmkl_intel_lp64.so", "liblapack.so", "libopenblas.dll"]
 
 lib = None
 for l in libs:
-	try:
-		lib = CDLL(l)
-		print "Loaded " + l +  " for zgesvd"
-		break
-	except OSError:
-		pass
+    try:
+        lib = CDLL(l)
+        print "Loaded " + l + " for zgesvd"
+        break
+    except OSError:
+        pass
 
-if lib==None:
-	raise OSError, "Couldn't find lapack library for GESVD patch"
+if lib == None:
+    raise OSError, "Couldn't find lapack library for GESVD patch"
+
 
 def _makearray(a):
     new = asarray(a)
     wrap = getattr(a, "__array_wrap__", new.__array_wrap__)
     return new, wrap
 
+
 def isComplexType(t):
     return issubclass(t, complexfloating)
 
-_real_types_map = {single : single,
-                   double : double,
-                   csingle : single,
-                   cdouble : double}
+_real_types_map = {single: single,
+                   double: double,
+                   csingle: single,
+                   cdouble: double}
 
-_complex_types_map = {single : csingle,
-                      double : cdouble,
-                      csingle : csingle,
-                      cdouble : cdouble}
+_complex_types_map = {single: csingle,
+                      double: cdouble,
+                      csingle: csingle,
+                      cdouble: cdouble}
+
 
 def _realType(t, default=double):
     return _real_types_map.get(t, default)
 
+
 def _complexType(t, default=cdouble):
     return _complex_types_map.get(t, default)
+
 
 def _linalgRealType(t):
     """Cast the type t to either double or cdouble."""
     return double
 
-_complex_types_map = {single : csingle,
-                      double : cdouble,
-                      csingle : csingle,
-                      cdouble : cdouble}
+_complex_types_map = {single: csingle,
+                      double: cdouble,
+                      csingle: csingle,
+                      cdouble: cdouble}
+
+
 def _commonType(*arrays):
     # in lite version, use higher precision (always double or cdouble)
     result_type = single
@@ -69,7 +77,7 @@ def _commonType(*arrays):
             if rt is None:
                 # unsupported inexact scalar
                 raise TypeError("array type %s is unsupported in linalg" %
-                        (a.dtype.name,))
+                                (a.dtype.name,))
         else:
             rt = double
         if rt is double:
@@ -85,6 +93,7 @@ def _commonType(*arrays):
 
 _fastCT = fastCopyAndTranspose
 
+
 def _fastCopyAndTranspose(type, *arrays):
     cast_arrays = ()
     for a in arrays:
@@ -97,21 +106,26 @@ def _fastCopyAndTranspose(type, *arrays):
     else:
         return cast_arrays
 
+
 def _assertRank2(*arrays):
     for a in arrays:
         if len(a.shape) != 2:
             raise LinAlgError, '%d-dimensional array given. Array must be \
             two-dimensional' % len(a.shape)
 
+
 def _assertSquareness(*arrays):
     for a in arrays:
         if max(a.shape) != min(a.shape):
             raise LinAlgError, 'Array must be square'
 
+
 def _assertFinite(*arrays):
     for a in arrays:
         if not (isfinite(a).all()):
             raise LinAlgError, "Array must not contain infs or NaNs"
+
+
 def _assertNonEmpty(*arrays):
     for a in arrays:
         if size(a) == 0:
@@ -123,9 +137,11 @@ dbl_arr = np.ctypeslib.ndpointer(dtype=np.complex128, ndim=1)
 dbl_2_arr = np.ctypeslib.ndpointer(dtype=np.complex128, ndim=2)
 
 
-lib.zgesvd_.argtypes = [POINTER(c_char), POINTER(c_char), POINTER(c_int), 
-  POINTER(c_int), dbl_2_arr, POINTER(c_int), dbl_arr_real, dbl_2_arr, POINTER(c_int), 
-  dbl_2_arr, POINTER(c_int), dbl_arr, POINTER(c_int), dbl_arr_real,POINTER(c_int)]
+lib.zgesvd_.argtypes = [POINTER(c_char), POINTER(c_char), POINTER(c_int),
+                        POINTER(c_int), dbl_2_arr, POINTER(
+                            c_int), dbl_arr_real, dbl_2_arr, POINTER(c_int),
+                        dbl_2_arr, POINTER(c_int), dbl_arr, POINTER(c_int), dbl_arr_real, POINTER(c_int)]
+
 
 def svd_zgesvd(a, full_matrices=1, compute_uv=1):
     """
@@ -200,20 +216,20 @@ def svd_zgesvd(a, full_matrices=1, compute_uv=1):
     n = c_int(n)
     nvt = c_int(nvt)
     lwork = c_int(-1)
-    K = min(a.shape) 
-    rwork = zeros((5*K,), real_t)
+    K = min(a.shape)
+    rwork = zeros((5 * K,), real_t)
     lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt,
-                                work, lwork, rwork, INFO)
+                   work, lwork, rwork, INFO)
     if INFO.value < 0:
         raise Exception('%d-th argument had an illegal value' % INFO.value)
 
     lwork = int(work[0].real)
     work = zeros((lwork,), t)
     lwork = c_int(lwork)
-    rwork = zeros((5*K,), real_t)
+    rwork = zeros((5 * K,), real_t)
 
     lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt,
-                                work, lwork, rwork,INFO)
+                   work, lwork, rwork, INFO)
 
     if INFO.value > 0:
         raise Exception('Error during factorization: %d' % INFO.value)
@@ -226,4 +242,3 @@ def svd_zgesvd(a, full_matrices=1, compute_uv=1):
         return wrap(u), s, wrap(vt)
     else:
         return s
-
