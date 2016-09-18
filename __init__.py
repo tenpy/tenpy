@@ -11,8 +11,8 @@ This fork of TenPy tries getting back to a simple version of TenPy.
 
 from . import version
 
-__version__ = version.__version__
-__full_version = version.__full_version__
+__version__ = version.version
+__full_version__ = version.full_version
 
-__all__ = ["algorithms", "models", "mps", "tools"]
 # TODO: set __all__, include some parts of the library?
+# __all__ = ["algorithms", "models", "mps", "tools"]

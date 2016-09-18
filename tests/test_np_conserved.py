@@ -3,16 +3,16 @@
 import numpy as np
 import scipy as sp
 import scipy.linalg
-from algorithms.linalg import np_conserved as npc
-from algorithms.linalg import npc_helper
-from algorithms.linalg import LA_tools
+from TenPyLight.algorithms.linalg import np_conserved as npc
+from TenPyLight.algorithms.linalg import npc_helper
+from TenPyLight.algorithms.linalg import LA_tools
 import functools
 import itertools
 import timeit
 import time
 import random
 import sys
-from tools.string import joinstr
+from TenPyLight.tools.string import joinstr
 
 
 Q_p = np.array( [ -1, -1, 1, 1] ).reshape( (-1, 1))
@@ -22,9 +22,9 @@ Q_p = np.array( [ -1, -1, 1, 1] ).reshape( (-1, 1))
 
 #chi = 61, 62
 
-#Not sorted 
+#Not sorted
 Q_0 = np.array([-7, -5, -5, -5, -5, -5, -5, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7]).reshape( (-1, 1))
-#Sorted 
+#Sorted
 Q_1 = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 6, 6]).reshape( (-1, 1))
 
 
@@ -34,7 +34,7 @@ Q_1 = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2
 
 def test_lanczos():
 	print "------ lanczos eigh -------"
-	
+
 	Q = np.sort(np.concatenate((Q_0, Q_0)), axis = None).reshape((-1, 1))
 	l = len(Q)
 	rTh = sp.linalg.toeplitz(np.arange(l))
@@ -48,7 +48,7 @@ def test_lanczos():
 		ndTh = Th.to_ndarray()
 		t0 = time.time()
 		A, B = npc.eigh(Th)
-		
+
 		print "Time with conservation", time.time() - t0
 		t0 = time.time()
 		ndA, ndB = np.linalg.eigh(ndTh)
@@ -56,11 +56,11 @@ def test_lanczos():
 		A = np.sort(A)
 		perm = np.argsort(ndA)
 		ndA = ndA[perm]
-		ndB = ndB[:, perm]	
+		ndB = ndB[:, perm]
 		eigs_err = np.linalg.norm(A - ndA)
 		print "npc.eigh err:", eigs_err
 		assert abs(eigs_err) < 5e-13
-		
+
 		Es = []
 		Vs = []
 		for q in np.sort(Th.q_ind[0][:, 2]): #all charge sectors
@@ -68,7 +68,7 @@ def test_lanczos():
 			LANCZOS_PAR = {'N_min': 5, 'N_max': 25, 'e_tol': 1*10**(-15), 'cache_v':4}
 			v0 = npc.array.from_npfunc( np.random.random, [npc.q_ind_from_q_flat(Q)], q_conj = [1], charge = [q] )
 			psinorm = v0.norm()
-			
+
 			Th.check_sanity()
 			v0 *= (1./psinorm)
 			v0.check_sanity()
@@ -81,8 +81,8 @@ def test_lanczos():
 			#print time.time() - t0
 			Vs.append(v0)
 			Es.append(E)
-			
-		#NOTE: I have checked that first four eigs are from different charge sectors, so this works. 
+
+		#NOTE: I have checked that first four eigs are from different charge sectors, so this works.
 
 		Es = np.array(Es)
 		perm = np.argsort(Es)
@@ -133,17 +133,17 @@ def test_reshape():
 	c1 = len(Q_1)
 	c0 = len(Q_0)
 	rep = 10
-	
+
 	print "------ combine_legs, split_legs ------"
 	print "Theta construction:"
 	B0 = npc.array.from_npfunc(np.random.standard_normal, npc.q_ind_from_q_flat([Q_p, Q_1, Q_0]), q_conj = [1, -1, 1] )
 	B1 = npc.array.from_npfunc(np.random.standard_normal, npc.q_ind_from_q_flat([Q_p, Q_0, Q_1]), q_conj = [1, -1, 1] )
-	
+
 	t0 = time.time()
 	for i in range(rep):
-		Th = npc.tensordot(B0, B1, axes = ((2,), (1,)), timing = False)		
+		Th = npc.tensordot(B0, B1, axes = ((2,), (1,)), timing = False)
 	print "tensordot time with conservation", (time.time() - t0)/rep
-	
+
 	Th.check_sanity()
 	ndB0 =  B0.to_ndarray()
 	ndB1 =  B1.to_ndarray()
@@ -152,19 +152,19 @@ def test_reshape():
 	for i in range(rep):
 		ndTh2 = np.tensordot(ndB0, ndB1, axes = ((2,), (1,)))
 	print "tensordot time without conservation", (time.time() - t0)/rep
-	
+
 	tensordot_err = np.linalg.norm(ndTh2 - ndTh)
 	print "tensordot error", tensordot_err
 	assert (tensordot_err) < 7e-14
-	
+
 	sca_mul_err = np.linalg.norm((2.*B0 + B0) - ndB0*3.)
 	print "Sca mul err", sca_mul_err
 	assert (sca_mul_err) < 1e-16
 	print "norm", npc.inner(2*B0, B0)
-	
+
 	#print "--------- reshape + SVD -----------"
 	t0 = time.time()
-	print "Making Left Pipe"	
+	print "Making Left Pipe"
 	pipe1 = Th.make_pipe([0, 1], qt_conj = -1)
 	print "Making Right Pipe"
 	pipe2 = Th.make_pipe([2, 3])
@@ -188,7 +188,7 @@ def test_reshape():
 	print "Time reshape and SVD1 without conservation", time.time() - t0
 
 	print "S err:", np.linalg.norm(np.sort(S) - np.sort(ndS))
-	
+
 	Th_dressed = Th_comb.copy()
 	t0 = time.time()
 	Th_resplit = Th_comb.split_legs( [0,1], [pipe1, pipe2], verbose=0 )
@@ -198,9 +198,9 @@ def test_reshape():
 	combine_resplit_err = np.linalg.norm(( Th.to_ndarray() - Th_resplit.to_ndarray() ).reshape(-1))
 	print "Resplitting error:", combine_resplit_err
 	assert abs(combine_resplit_err) < 1e-16
-	
-	
-def test_svd():	
+
+
+def test_svd():
 	print "--------- svd ---------"
 	Q = np.sort(np.concatenate((Q_0)), axis = None).reshape((-1, 1))
 #	Q = np.sort(np.concatenate((Q_0, Q_1, -Q_0, -Q_1)), axis = None).reshape((-1, 1))
@@ -231,7 +231,7 @@ def test_svd():
 	res = USV - Th
 	print "USV - Th err:", res.norm()
 	assert abs(res.norm()) < 1e-14
-	
+
 	print "Testing .iproject()"
 	for c in np.arange(0, 0.1, .025):
 		cut = S > c
@@ -240,13 +240,13 @@ def test_svd():
 		S = S[cut]
 		V.iproject(cut, 0)
 		V.check_sanity()
-		
+
 		USV2 = npc.tensordot( U.scale_axis(S), V, axes = ( (1,), (0,)))
 
 		a = npc.tensordot( USV2.transpose([1, 0]).conj(), USV2, [[1], [0]])
 		diff = USV - USV2
 		diff.check_sanity()
-	
+
 		print "Norms (should agree)", np.linalg.norm(S), USV2.norm(), "diff =", np.linalg.norm(S) - USV2.norm()
 		assert abs(np.linalg.norm(S) - USV2.norm()) < 1e-15
 		#print a.to_ndarray()
@@ -283,7 +283,7 @@ def test_eigh():
 	eigs_err_norm = np.linalg.norm(np.sort(A) - np.sort(ndA))
 	print "Eigs (fractured) err:", eigs_err_norm
 	assert eigs_err_norm < 1e-13
-	
+
 	res = npc.tensordot(B, B.conj().scale_axis(A, axis = 1), axes = [1, 1])
 	decomp_err = npc.norm(res - Th)/npc.norm(Th)
 	print "|T - U w U^d|", decomp_err
@@ -334,7 +334,7 @@ def rand_distinct_int(a, b, n):
 	if n < 0: raise ValueError
 	if n > b - a + 1: raise ValueError
 	return np.sort((np.random.random_integers(a, b-n+1, size=n))) + np.arange(n)
-		
+
 
 def rand_partitions(a, b, n):
 	""" returns an array length n+1 (if possible) """
@@ -472,7 +472,7 @@ def check_tensordot_basic(para, verbose=1, rep=1):
 	for i in range(rep):
 		c = npc.tensordot(a, b, axes=(axesa,axesb), verbose=verbose-2, timing=False)
 	tookNPC += time.time() - t0
-	
+
 	a.check_sanity()
 	b.check_sanity()
 	error_a = np.linalg.norm((nd_a - a.to_ndarray()).reshape(-1))
@@ -493,7 +493,7 @@ def check_tensordot_basic(para, verbose=1, rep=1):
 		if verbose > 2: print "c =", c
 		t0 = time.time()
 		for i in range(rep):
-			np_tensordot_c = np.tensordot(nd_a, nd_b, axes=[axesa, axesb])[()]	
+			np_tensordot_c = np.tensordot(nd_a, nd_b, axes=[axesa, axesb])[()]
 		tookNP += time.time() - t0
 		error_c = abs(np_tensordot_c - c)
 
@@ -513,7 +513,7 @@ def check_tensordot_basic(para, verbose=1, rep=1):
 	assert abs(error_a) < 1E-13
 	assert abs(error_b) < 1E-13
 	assert abs(error_c) < 1E-13
-	
+
 	return tookNP/rep, tookNPC/rep
 
 def tensordot_timing(para, verbose=1, rep=1, do_np = False):
@@ -595,7 +595,7 @@ def tensordot_timing(para, verbose=1, rep=1, do_np = False):
 		else:		# d_ao + d_bo == 0
 			t0 = time.time()
 			for i in range(rep):
-				np_tensordot_c = np.tensordot(nd_a, nd_b, axes=[axesa, axesb])[()]	
+				np_tensordot_c = np.tensordot(nd_a, nd_b, axes=[axesa, axesb])[()]
 			tookNP += time.time() - t0
 			error_c = abs(np_tensordot_c - c)
 	else:
@@ -609,18 +609,18 @@ def tensordot_timing(para, verbose=1, rep=1, do_np = False):
 		else:
 			print "()"
 		if verbose > 1: print
-	
+
 	if np.abs(error_c) > 1E-12:
 		print "error_c", error_c
-		
+
 	assert abs(error_c) < 1E-10
 	t0 = time.time()
 	for i in range(rep):
 		pass
 	loopt = time.time() - t0
-	return (tookNP - loopt)/rep, (tookNPC- loopt)/rep	
-	
-	
+	return (tookNP - loopt)/rep, (tookNPC- loopt)/rep
+
+
 def check_tensordot_0len(para, verbose=1):
 	""" para is a dictionary
 		"""
@@ -695,7 +695,7 @@ def check_tensordot_0len(para, verbose=1):
 	else:
 		if c != 0: raise ValueError, "c = %s != 0" % (c,)
 		if verbose > 0: print
-		
+
 
 
 
@@ -710,7 +710,7 @@ def test_tensordot_2(verbose=0, timing=False):
 	q_flat3 = repeat_ndarray(np.array([-2, -1, 0, 1, 2])	, q_mul).transpose()
 	q_flat4 = repeat_ndarray(np.array([-1, -1, 1, 1])	, q_mul).transpose()
 	q_flat5 = repeat_ndarray(np.array([-2, -2, 0, 0, 2, 2])	, q_mul).transpose()
-	
+
 	perm, a = npc.array.from_ndarray_flat( np.arange(3*4*5*4, dtype = float).reshape((3,4,5,4)),  [q_flat1, q_flat2, q_flat3, q_flat4], charge = [0]*num_q, sort=False)
 	a.check_sanity()
 	perm, b = npc.array.from_ndarray_flat( np.ones((5,4,6), dtype = float),  [-q_flat3, -q_flat4, q_flat5], charge = [0]*num_q, sort=False)
@@ -719,7 +719,7 @@ def test_tensordot_2(verbose=0, timing=False):
 	#print nd_a, "= a"
 	#a.print_q_dat()
 	nd_b = b.to_ndarray()
-	
+
 	#a.print_sparse_stats()
 	#b.print_sparse_stats()
 	c = npc.tensordot(a, b, axes = 2, verbose=0)
@@ -730,7 +730,7 @@ def test_tensordot_2(verbose=0, timing=False):
 	error_a = np.linalg.norm((nd_a - a.to_ndarray()).reshape(-1))
 	error_b = np.linalg.norm((nd_b - b.to_ndarray()).reshape(-1))
 	error_c = np.linalg.norm((np.tensordot(nd_a, nd_b, axes = 2) - nd_c).reshape(-1))
-		
+
 	if verbose:
 		print "A,B,C err:",
 		print error_a, error_b, error_c
@@ -746,7 +746,7 @@ def test_tensordot_2(verbose=0, timing=False):
 def run_tensordot_timing(verbose, do_np = False):
 	print "------ tensordot_timing ------"
 
-	
+
 	for num_q in range(0, 3):
 		print "num_q:", num_q
 		for size in range(5, 60, 5):
@@ -757,7 +757,7 @@ def run_tensordot_timing(verbose, do_np = False):
 					'num_q': num_q,
 					'd': (d_ao,d_bo,d_contract),
 					'seed': seed,
-					'size':size, 
+					'size':size,
 					'type': np.float
 				}
 				tookNP, tookNPC = tensordot_timing(para, verbose = verbose, rep = 3, do_np = do_np)
@@ -770,7 +770,7 @@ def run_tensordot_timing(verbose, do_np = False):
 			else:
 				print "NQ S", num_q, size, total_NPC/(size**0.)
 		print
-			
+
 def test_tensordot_basic():
 	for num_q,d_ao,d_bo,d_contract,seed in itertools.product(range(0,3), range(0,3), range(0,3), range(0,3), range(3)):
 		para = {
@@ -792,7 +792,7 @@ def run_tensordot_basic(verbose):
 		check_tensordot_basic(para, verbose = verbose)
 	#for test in test_tensordot_basic():
 	#	test[0](test[1])
-	
+
 
 def testtensordot_0len():
 	for d_ao,d_bo,d_contract,seed in itertools.product(range(0,3), range(0,3), range(0,3), range(3)):
@@ -812,7 +812,7 @@ def run_tensordot_0len(verbose):
 			'seed': seed,
 		}
 		check_tensordot_0len(para, verbose = verbose)
-	
+
 
 
 
