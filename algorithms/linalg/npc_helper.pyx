@@ -9,7 +9,7 @@ DEF COLLECT_MKN_STATS = 0 #Collect stats and timing on gemm calls. Appends (M*K*
 DEF USE_DRESDEN = 1 #Direct calls to BLAS
 
 import numpy as np
-from . import np_conserved as npc
+import np_conserved as npc
 import time
 import itertools
 import sys
