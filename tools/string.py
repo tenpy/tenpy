@@ -42,7 +42,7 @@ def joinstr(strlist, valign='c', delim=''):
             """
     # below are all lists, an item for each one in strlist
     numstr = len(strlist)
-    slist = []		# list of string in strlist[i]
+    slist = []  # list of string in strlist[i]
     numlines = []  # number of lines in strlist[i]
     # strwidth = []		# max width of strlist[i]
     # a string with only spaces and tabs, with strwidth number of characters
@@ -52,7 +52,7 @@ def joinstr(strlist, valign='c', delim=''):
         if isinstance(s, str):
             list_of_lines = s.split('\n')
         else:
-            list_of_lines = str(s).split('\n')		# convert to string
+            list_of_lines = str(s).split('\n')  # convert to string
         slist.append(list_of_lines)
         numlines.append(len(list_of_lines))
         list_of_str_lengths = list(len(l) for l in list_of_lines)
@@ -66,7 +66,8 @@ def joinstr(strlist, valign='c', delim=''):
     s = ""
     for i in range(maxlines):
         for t in range(numstr):
-            if i < int((maxlines - numlines[t]) / 2) or i >= int((maxlines - numlines[t]) / 2) + numlines[t]:
+            if i < int((maxlines - numlines[t]) / 2) or i >= int(
+                (maxlines - numlines[t]) / 2) + numlines[t]:
                 s += empty_str[t]
             else:
                 print_str = slist[t][i - int((maxlines - numlines[t]) / 2)]
@@ -80,7 +81,7 @@ def joinstr(strlist, valign='c', delim=''):
 
 def to_mathematica_lists(a):
     """ curly brackets """
-#	if not isinstance(a, np.ndarray): raise ValueError
+    #	if not isinstance(a, np.ndarray): raise ValueError
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:

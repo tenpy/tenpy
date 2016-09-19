@@ -10,8 +10,8 @@ from numpy.core import array, asarray, zeros, empty, transpose, \
     newaxis, ravel, all, Inf, dot, add, multiply, identity, sqrt, \
     maximum, flatnonzero, diagonal, arange, fastCopyAndTranspose, sum, \
     isfinite, size
-libs = ["libLAPACK.dylib", "libmkl_rt.so",
-        "libmkl_intel_lp64.so", "liblapack.so", "libopenblas.dll"]
+libs = ["libLAPACK.dylib", "libmkl_rt.so", "libmkl_intel_lp64.so", "liblapack.so",
+        "libopenblas.dll"]
 
 lib = None
 for l in libs:
@@ -35,15 +35,10 @@ def _makearray(a):
 def isComplexType(t):
     return issubclass(t, complexfloating)
 
-_real_types_map = {single: single,
-                   double: double,
-                   csingle: single,
-                   cdouble: double}
 
-_complex_types_map = {single: csingle,
-                      double: cdouble,
-                      csingle: csingle,
-                      cdouble: cdouble}
+_real_types_map = {single: single, double: double, csingle: single, cdouble: double}
+
+_complex_types_map = {single: csingle, double: cdouble, csingle: csingle, cdouble: cdouble}
 
 
 def _realType(t, default=double):
@@ -58,10 +53,8 @@ def _linalgRealType(t):
     """Cast the type t to either double or cdouble."""
     return double
 
-_complex_types_map = {single: csingle,
-                      double: cdouble,
-                      csingle: csingle,
-                      cdouble: cdouble}
+
+_complex_types_map = {single: csingle, double: cdouble, csingle: csingle, cdouble: cdouble}
 
 
 def _commonType(*arrays):
@@ -75,8 +68,7 @@ def _commonType(*arrays):
             rt = _realType(a.dtype.type, default=None)
             if rt is None:
                 # unsupported inexact scalar
-                raise TypeError("array type %s is unsupported in linalg" %
-                                (a.dtype.name,))
+                raise TypeError("array type %s is unsupported in linalg" % (a.dtype.name, ))
         else:
             rt = double
         if rt is double:
@@ -97,9 +89,9 @@ def _fastCopyAndTranspose(type, *arrays):
     cast_arrays = ()
     for a in arrays:
         if a.dtype.type is type:
-            cast_arrays = cast_arrays + (_fastCT(a),)
+            cast_arrays = cast_arrays + (_fastCT(a), )
         else:
-            cast_arrays = cast_arrays + (_fastCT(a.astype(type)),)
+            cast_arrays = cast_arrays + (_fastCT(a.astype(type)), )
     if len(cast_arrays) == 1:
         return cast_arrays[0]
     else:
@@ -134,10 +126,9 @@ def _assertNonEmpty(*arrays):
 dbl_arr = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1)
 dbl_2_arr = np.ctypeslib.ndpointer(dtype=np.float64, ndim=2)
 
-lib.dgesvd_.argtypes = [POINTER(c_char), POINTER(c_char), POINTER(c_int),
-                        POINTER(c_int), dbl_2_arr, POINTER(
-                            c_int), dbl_arr, dbl_2_arr, POINTER(c_int),
-                        dbl_2_arr, POINTER(c_int), dbl_arr, POINTER(c_int), POINTER(c_int)]
+lib.dgesvd_.argtypes = [POINTER(c_char), POINTER(c_char), POINTER(c_int), POINTER(c_int),
+                        dbl_2_arr, POINTER(c_int), dbl_arr, dbl_2_arr, POINTER(c_int), dbl_2_arr,
+                        POINTER(c_int), dbl_arr, POINTER(c_int), POINTER(c_int)]
 
 
 def svd_dgesvd(a, full_matrices=1, compute_uv=1):
@@ -183,7 +174,7 @@ def svd_dgesvd(a, full_matrices=1, compute_uv=1):
     t, result_t = _commonType(a)
     real_t = _linalgRealType(t)
     a = _fastCopyAndTranspose(t, a)
-    s = zeros((min(n, m),), real_t)
+    s = zeros((min(n, m), ), real_t)
 
     if compute_uv:
         if full_matrices:
@@ -206,23 +197,21 @@ def svd_dgesvd(a, full_matrices=1, compute_uv=1):
     lapack_routine = lib.dgesvd_
 
     lwork = 1
-    work = zeros((lwork,), t)
+    work = zeros((lwork, ), t)
     INFO = c_int(0)
     m = c_int(m)
     n = c_int(n)
     nvt = c_int(nvt)
     lwork = c_int(-1)
     print a.shape, a.dtype
-    lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt,
-                   work, lwork, INFO)
+    lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt, work, lwork, INFO)
     if INFO.value < 0:
         raise Exception('%d-th argument had an illegal value' % INFO.value)
 
     lwork = int(work[0])
-    work = zeros((lwork,), t)
+    work = zeros((lwork, ), t)
     lwork = c_int(lwork)
-    lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt,
-                   work, lwork, INFO)
+    lapack_routine(option, option, m, n, a, m, s, u, m, vt, nvt, work, lwork, INFO)
     if INFO.value > 0:
         raise Exception('Error during factorization: %d' % INFO.value)
 #        raise LinAlgError, 'SVD did not converge'

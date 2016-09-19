@@ -1,4 +1,3 @@
-
 """ conserved-charge tensor package (np_conserved or npc)
 
     it is designed to have similar interfaces as numpy.ndarray, so that one can almost reuse old code
@@ -17,7 +16,6 @@
     A "q-index" labels a block of a leg. Sometimes a 'block' and 'q-index' are used interchangeably.
     A "charge sector" of a leg is a charge and the set of all indices of that charge. The indices may be a single block, or may be split into several blocks.
 """
-
 """                 Introduction to the conserved-charge data structures.
 
     Each npc.array object (counterpart to np.ndarray) encodes a tensor in addition to information about the charges of the tensor. The charges are associated independently to each 'leg'.
@@ -162,7 +160,6 @@
         The routine sort_q_dat brings the data to sorted form.
 
 """
-
 """ Array Creation
 
     Making an npc.array requires both the tensor entries (data) and charge data.
@@ -172,8 +169,6 @@
     For the from_ndarray methods, the charge data is provided either by specifying q_flats (via from_ndarray_flat), or q_inds (from_ndarray)
         Note about q_ind: unlike q_conj, it is referenced and not copied - so it can be shared across many npc.arrays. Consequently, one must be careful not to alter q_ind after their creation, or something bad will happen! To be safe, you can always copy q_ind before passing to from_ndarray.
 """
-
-
 """ Implementation notes:
     q_ind is NOT copied when creating via from_ndarray (or similar functions).
         Hence they must not be altered after creation, this is done such that multiple npc.array can share q_ind's
@@ -187,7 +182,6 @@
         npc.array acts like a sparse array class and can selectively store subblocks.  This way of using the class is
         not recommended - unless the user really knows the ins and outs of this class.
 """
-
 """
                 Introduction to combine_legs, split_legs, and pipes.
 
@@ -210,7 +204,6 @@ b: If you want to combine legs, and for some subset of the new legs you will wan
 
 
 """
-
 """ Leg Labeling
 
         It's convenient to name the legs of a tensor: for instance, we can name legs 0, 1, 2   to be 'a', 'b', 'c':
@@ -313,9 +306,7 @@ class TracePrints(object):
 sys.stdout = TracePrints()
 """
 
-
 float64 = np.zeros(0).dtype
-
 
 mod_onetoinf1D = npc_helper.mod_onetoinf1D
 mod_onetoinf2D = npc_helper.mod_onetoinf2D
@@ -339,6 +330,7 @@ def check_invalid_charge(q, mod_q):
 
 
 array_equiv_mod_q = npc_helper.array_equiv_mod_q
+
 # def array_equiv_mod_q(a1, a2, mod_q):
 #   return npc_helper.array_equiv_mod_q(a1, a2, mod_q)
 
@@ -351,7 +343,6 @@ array_equiv_mod_q = npc_helper.array_equiv_mod_q
 
 
 class array:
-
     def __init__(self, rank, dtype=float64):
         if rank <= 0:
             raise ValueError, "d not positive: " + str(rank)
@@ -378,7 +369,7 @@ class array:
         # (refer to q_ind) associated with dat[]. Format: block#, leg; shape =
         # (num_blocks, d)
         self.q_dat = None
-        self.dat = []           # data that holds the tensors (list of d-tensors)
+        self.dat = []  # data that holds the tensors (list of d-tensors)
         self.dtype = np.dtype(dtype)
         # Is current .dat lex sorted? Responsibility of all funcs modifying
         # q_dat to flag appropriately (but not necessarily to sort)
@@ -391,7 +382,7 @@ class array:
 
                 Raise an exception if anything is wrong, do nothing if everything is right.
         """
-    # rank
+        # rank
         rank = self.rank
         if not (isinstance(rank, np.int) or isinstance(rank, np.long)):
             raise RuntimeError, "rank is not an int (type=" + str(type(rank)) + ")"
@@ -404,12 +395,13 @@ class array:
         if not (isinstance(shape, np.ndarray)):
             raise RuntimeError, "shape not an array: " + str(shape)
         if len(shape) != rank:
-            raise RuntimeError, "shape,rank mismatch: rank = " + str(rank) + ", shape = " + str(shape)
+            raise RuntimeError, "shape,rank mismatch: rank = " + str(rank) + ", shape = " + str(
+                shape)
         if np.any(np.array(shape) < 0):
             raise RuntimeError, "shape has negative dimensions: " + str(shape)
         if np.any(np.array(shape) == 0):
             warningMsg = "npc: shape %s has a zero-length leg, this feature has not been fully tested, use at your own risk." % (
-                shape,)
+                shape, )
             if not suppress_warning:
                 warnings.warn(warningMsg, RuntimeWarning)
     # num_q
@@ -422,23 +414,22 @@ class array:
         mod_q = self.mod_q
         if not isinstance(mod_q, np.ndarray):
             raise RuntimeError, "mod_q not a numpy.ndarray"
-        if mod_q.shape != (num_q,):
+        if mod_q.shape != (num_q, ):
             raise RuntimeError, "incorrect mod_q shape: " + str(mod_q.shape)
         if mod_q.dtype != int:
             raise RuntimeError, "mod_q.dtype not int (dtype=" + str(mod_q.dtype) + ")"
         if np.any(mod_q <= 0):
-            raise RuntimeError, "mod_q has non-positive values: mod_q = %s" % (mod_q,)
+            raise RuntimeError, "mod_q has non-positive values: mod_q = %s" % (mod_q, )
     # charge
         charge = self.charge
         if not isinstance(charge, np.ndarray):
             raise RuntimeError, "charge not a numpy.ndarray"
-        if charge.shape != (num_q,):
+        if charge.shape != (num_q, ):
             raise RuntimeError, "charge has incorrect shape:" + str(charge.shape)
         if charge.dtype != int:
             raise RuntimeError, "charge.dtype not int (dtype=" + str(charge.dtype) + ")"
         if check_invalid_charge(charge, mod_q):
-            warningMsg = "some charges out or range: mod_q = %s, charge = %s" % (
-                mod_q, charge)
+            warningMsg = "some charges out or range: mod_q = %s, charge = %s" % (mod_q, charge)
             if not suppress_warning:
                 warnings.warn(warningMsg, RuntimeWarning)
             raise RuntimeError, warningMsg
@@ -448,11 +439,13 @@ class array:
         if not isinstance(q_ind, list):
             raise RuntimeError, "q_ind type not list: " + str(type(q_ind))
         if len(q_ind) != rank:
-            raise RuntimeError, "q_ind has incorrect size: rank = " + str(rank) + ", q_ind = " + str(q_ind)
+            raise RuntimeError, "q_ind has incorrect size: rank = " + str(
+                rank) + ", q_ind = " + str(q_ind)
         if not isinstance(q_conj, np.ndarray):
             raise RuntimeError, "q_conj not an numpy.ndarray: " + str(type(q_conj))
-        if q_conj.shape != (rank,):
-            raise RuntimeError, "q_conj has incorrect size: (rank,) = " + str((rank,)) + ", q_conj.shape = " + str(q_conj.shape)
+        if q_conj.shape != (rank, ):
+            raise RuntimeError, "q_conj has incorrect size: (rank,) = " + str(
+                (rank, )) + ", q_conj.shape = " + str(q_conj.shape)
         if q_conj.dtype != int:
             raise RuntimeError, "q_conj not type int: " + str(q_conj.dtype)
         for l in range(rank):
@@ -466,25 +459,31 @@ class array:
         # Check shape - q_ind compatibility
             if shape[l] > 0:
                 if tbl.shape[0] == 0:
-                    raise RuntimeError, "shape[%s] is nonzero, but q_ind[%s] has zero rows" % (l, l)
+                    raise RuntimeError, "shape[%s] is nonzero, but q_ind[%s] has zero rows" % (l,
+                                                                                               l)
                 if tbl[0, 0] != 0 or tbl[-1, 1] != shape[l]:
-                    raise RuntimeError, "q_ind[" + str(l) + "] has inconsistent values: " + str(tbl)
+                    raise RuntimeError, "q_ind[" + str(l) + "] has inconsistent values: " + str(
+                        tbl)
             else:
                 if tbl.shape[0] != 0:
-                    raise RuntimeError, "shape[%s] is zero, but q_ind[%s] has %s rows" % (l, l, tbl.shape[0])
+                    raise RuntimeError, "shape[%s] is zero, but q_ind[%s] has %s rows" % (
+                        l, l, tbl.shape[0])
         # Check the entries of q_ind
             for r in range(tbl.shape[0] - 1):
                 if tbl[r, 1] != tbl[r + 1, 0]:
-                    raise RuntimeError, "q_ind[%s] has inconsistent values between rows %s and %s:\n%s" % (l, r, r + 1, tbl)
+                    raise RuntimeError, "q_ind[%s] has inconsistent values between rows %s and %s:\n%s" % (
+                        l, r, r + 1, tbl)
             for r in range(tbl.shape[0]):
                 if tbl[r, 0] >= tbl[r, 1]:
-                    raise RuntimeError, "q_ind[%s] has invalid start/stop indices: %s,%s " % (l, tbl[r, 0], tbl[r, 1])
+                    raise RuntimeError, "q_ind[%s] has invalid start/stop indices: %s,%s " % (
+                        l, tbl[r, 0], tbl[r, 1])
                 # for i in range(num_q):
                 # if check_invalid_charge(tbl[r, i+2], mod_q[i]): raise
                 # RuntimeError, "invalid charge at q_ind[%s][%s,%s], q_ind
                 # =\n%s" % (l, r, i, tbl)
             if q_conj[l] != 1 and q_conj[l] != -1:
-                raise RuntimeError, "q_conj contains values that are neither 1 or -1: " + str(q_conj)
+                raise RuntimeError, "q_conj contains values that are neither 1 or -1: " + str(
+                    q_conj)
     ##  q_dat & dat
         q_dat = self.q_dat
         dat = self.dat
@@ -496,11 +495,13 @@ class array:
         if q_dat.ndim != 2:
             raise RuntimeError, "q_dat not a 2d array: q_dat.shape = " + str(q_dat.shape)
         if q_dat.shape[1] != rank:
-            raise RuntimeError, "q_dat have " + str(q_dat.shape[1]) + " columns, where d = " + str(rank)
+            raise RuntimeError, "q_dat have " + str(q_dat.shape[1]) + " columns, where d = " + str(
+                rank)
         if not isinstance(dat, list):
             raise RuntimeError, "dat type not a list: " + str(type(dat))
         if len(q_dat) != len(dat):
-            raise RuntimeError, "q_dat and dat length mismatch: " + str(len(q_dat)) + " != " + str(len(dat))
+            raise RuntimeError, "q_dat and dat length mismatch: " + str(len(q_dat)) + " != " + str(
+                len(dat))
         q_dat_total_q = npc_helper.q_sum(q_dat, q_ind, q_conj, 0, rank, mod_q)
         for i in range(len(dat)):
             q_row = q_dat[i]
@@ -514,23 +515,29 @@ class array:
             if anynan(T_row):
                 raise RuntimeError, "Nans in dat[%s]" % (i, )
 
-            sh = []     # constructing the shape of T_row
+            sh = []  # constructing the shape of T_row
             for l in range(rank):
                 ql = q_row[l]
                 if ql < 0 or ql >= len(q_ind[l]):
-                    raise RuntimeError, "q_dat[" + str(i) + "," + str(l) + "] not in range [0," + str(len(q_ind[l])) + ")."
+                    raise RuntimeError, "q_dat[" + str(i) + "," + str(
+                        l) + "] not in range [0," + str(len(q_ind[l])) + ")."
                 sh.append(q_ind[l][ql, 1] - q_ind[l][ql, 0])
             if np.any(q_dat_total_q[i] != charge):
-                raise RuntimeError, "total charge mismatch: charge = %s, q_dat[%s] charge = %s" % (charge, i, q_dat_total_q[i])
+                raise RuntimeError, "total charge mismatch: charge = %s, q_dat[%s] charge = %s" % (
+                    charge, i, q_dat_total_q[i])
             if T_row.shape != tuple(sh):
-                raise RuntimeError, "dat[" + str(i) + "].shape different from q_ind spectification: " + str(T_row.shape) + " != " + str(sh)
+                raise RuntimeError, "dat[" + str(
+                    i) + "].shape different from q_ind spectification: " + str(
+                        T_row.shape) + " != " + str(sh)
     # sorted
         if len(q_dat) > 0:
             perm = np.lexsort(q_dat.transpose())
             for r in range(len(q_dat) - 1):
                 # look for duplicate entries
                 if np.array_equal(q_dat[perm[r]], q_dat[perm[r + 1]]):
-                    raise RuntimeError, "q_dat rows " + str(perm[r]) + " and " + str(perm[r + 1]) + " are identical.\n\t" + str(q_dat[perm[r]]) + "\n\t" + str(q_dat[perm[r + 1]])
+                    raise RuntimeError, "q_dat rows " + str(perm[r]) + " and " + str(perm[
+                        r + 1]) + " are identical.\n\t" + str(q_dat[perm[r]]) + "\n\t" + str(q_dat[
+                            perm[r + 1]])
             if self.sorted == True and np.array_equal(perm, np.arange(len(perm))) == False:
                 raise RuntimeError, "sorted = True, but q_dat is not sorted"
 
@@ -659,8 +666,7 @@ Modifies self (done in-place)
             else:
                 keywords['dtype'] = dtype
 
-        ac = zeros(q_ind, dtype=dtype, q_conj=q_conj,
-                   charge=charge, mod_q=mod_q)
+        ac = zeros(q_ind, dtype=dtype, q_conj=q_conj, charge=charge, mod_q=mod_q)
 
         d = ac.rank
         num_q = ac.num_q
@@ -681,7 +687,7 @@ Modifies self (done in-place)
 
             if array_equiv_mod_q(q_tot, charge, mod_q):
                 sh = tuple([s[1] - s[0] for s in sector])
-                ac.dat.append(func(*((sh,) + args), **keywords))
+                ac.dat.append(func(*((sh, ) + args), **keywords))
                 q_dat.append(np.array(inds, dtype=np.uint))
 
         if len(q_dat) > 0:
@@ -708,7 +714,7 @@ Modifies self (done in-place)
         for qs in itertools.product(*[xrange(len(q_ind[i])) for i in reversed(xrange(d))]):
             # loop over all charge sectors in lex order (last leg most
             # significant)
-            qs = qs[::-1]       # qs is now back in forward order
+            qs = qs[::-1]  # qs is now back in forward order
             # pick out rows of q_inds corresponding to qs
             sector = [q[j, :] for q, j in itertools.izip(q_ind, qs)]
 
@@ -748,8 +754,7 @@ Modifies self (done in-place)
         if q_ind is None:
             return array.from_ndarray_trivial(a, q_conj, name=name)
 
-        ac = zeros(q_ind, dtype=a.dtype, q_conj=q_conj,
-                   charge=charge, mod_q=mod_q)
+        ac = zeros(q_ind, dtype=a.dtype, q_conj=q_conj, charge=charge, mod_q=mod_q)
 
         d = ac.rank
         num_q = ac.num_q
@@ -766,10 +771,9 @@ Modifies self (done in-place)
             q_tot = npc_helper.block_charge(ac, inds)
             if npc_helper.array_equiv_mod_q(q_tot, charge, mod_q):
                 #sector = [ q[j, :] for q, j in itertools.izip(q_ind, inds) ]
-                sl = tuple([slice(q[j, 0], q[j, 1])
-                            for q, j in itertools.izip(q_ind, inds)])
+                sl = tuple([slice(q[j, 0], q[j, 1]) for q, j in itertools.izip(q_ind, inds)])
 
-                if np.linalg.norm(a[sl]) > cutoff:      # check if non-zero
+                if np.linalg.norm(a[sl]) > cutoff:  # check if non-zero
                     ac.dat.append(a[sl].copy())
                     q_dat.append(inds)
 
@@ -786,7 +790,15 @@ Modifies self (done in-place)
 # Bunch / Not bunch
 
     @classmethod
-    def from_ndarray_flat(cls, a, q_flat, q_conj=None, charge=None, mod_q=None, sort=True, bunch=True, cutoff=0.):
+    def from_ndarray_flat(cls,
+                          a,
+                          q_flat,
+                          q_conj=None,
+                          charge=None,
+                          mod_q=None,
+                          sort=True,
+                          bunch=True,
+                          cutoff=0.):
         """ Contruct array with charge info given in 'flat' form.
 
                 Two options can be passed to specify how q_ind is formed from q_flat.
@@ -852,7 +864,7 @@ Modifies self (done in-place)
                 q[:, 2:] = q_flat[i]
                 q_ind[i] = q
 
-        return perm, array.from_ndarray(a, q_ind,  q_conj, charge, mod_q, cutoff)
+        return perm, array.from_ndarray(a, q_ind, q_conj, charge, mod_q, cutoff)
 
     @classmethod
     def from_ndarray_trivial(cls, a, q_conj=None):
@@ -866,8 +878,8 @@ Modifies self (done in-place)
         # ac.shape = a.shape #SHAPE
         ac.shape = np.array(a.shape, dtype=np.intp)  # SHAPE
         ac.num_q = 0
-        ac.charge = np.empty((0,), np.int)
-        ac.mod_q = np.empty((0,), np.int)
+        ac.charge = np.empty((0, ), np.int)
+        ac.mod_q = np.empty((0, ), np.int)
 
         if q_conj is None:
             ac.q_conj = np.ones((rank), np.int)
@@ -932,9 +944,8 @@ Modifies self (done in-place)
             lb[v] = k
         return lb
 
-
 ##########################################################################
-    # Printing stuff & info
+# Printing stuff & info
 
     def __repr__(self):
         return "<npc.array shape:{0:s}>".format(self.shape.tolist())
@@ -995,7 +1006,9 @@ Modifies self (done in-place)
             legs = range(self.rank)
         if type(legs) == int:
             legs = [legs]
-        return joinstr([" (q_conj = {0:+d})\n".format(self.q_conj[i]) + str(self.q_ind[i]) for i in legs], delim=' ')
+        return joinstr(
+            [" (q_conj = {0:+d})\n".format(self.q_conj[i]) + str(self.q_ind[i]) for i in legs],
+            delim=' ')
 
     def stride_order(self):
         """ returns an array (len d) indicating the order of the tensor's strides
@@ -1015,7 +1028,8 @@ Modifies self (done in-place)
 
                 print_norm will also print the norms in addition, and it sets the ord of the norm.
                 """
-        print "\tq_conj " + str([self.q_conj[l] for l in range(self.rank)]) + ", mod_q " + str(self.mod_q),
+        print "\tq_conj " + str(
+            [self.q_conj[l] for l in range(self.rank)]) + ", mod_q " + str(self.mod_q),
         print "\tfull shape:", self.shape
         if len(self.q_dat) == 0:
             return
@@ -1045,8 +1059,7 @@ Modifies self (done in-place)
             line = [str(q_dat[i]), str([self.q_ind[l][q_dat[i, l], 2:].tolist()
                                         for l in range(self.rank)]), str(dat[i].shape)]
             if print_norm is not None:
-                line.append(
-                    str(np.linalg.norm(1. * dat[i].reshape((-1)), ord=print_norm)))
+                line.append(str(np.linalg.norm(1. * dat[i].reshape((-1)), ord=print_norm)))
             if print_trace:
                 line.append(str(np.trace(dat[i])))
             table.append(line)
@@ -1112,7 +1125,8 @@ Modifies self (done in-place)
 
     def block_shape(self, ind):
         """ Returns shape of a block (as tuple) given the q-indices """
-        return tuple([self.q_ind[i][ind[i], 1] - self.q_ind[i][ind[i], 0] for i in xrange(self.rank)])
+        return tuple(
+            [self.q_ind[i][ind[i], 1] - self.q_ind[i][ind[i], 0] for i in xrange(self.rank)])
 
     def block_i(self, qi):
         """ Returns location of a block in q_dat, or -1 if not present.
@@ -1154,7 +1168,8 @@ Modifies self (done in-place)
         if r < 0:  # Not there - make zeros
             shape = self.block_shape(ind)
             z = np.zeros(shape, dtype=self.dtype)
-            if write and npc_helper.array_equiv_mod_q(self.block_charge(ind), self.charge, self.mod_q):
+            if write and npc_helper.array_equiv_mod_q(
+                    self.block_charge(ind), self.charge, self.mod_q):
                 self.dat.append(z)
                 self.q_dat = np.vstack([self.q_dat, ind])
                 self.sorted = False
@@ -1171,8 +1186,7 @@ Modifies self (done in-place)
         """ a[i1, i2, . . . ] returns value of corresponding entry """
 
         inds = np.array(inds)
-        pos = np.array([self.get_q_index(i, inds[i])
-                        for i in range(self.rank)], dtype=np.uint)
+        pos = np.array([self.get_q_index(i, inds[i]) for i in range(self.rank)], dtype=np.uint)
         b = self.block_dat(pos[:, 0])
         if b is None:
             return 0.
@@ -1183,8 +1197,7 @@ Modifies self (done in-place)
         """ a[i1, i2, . . . ] = val sets value of corresponding entry """
 
         inds = np.array(inds)
-        pos = np.array([self.get_q_index(i, inds[i])
-                        for i in range(self.rank)], dtype=np.uint)
+        pos = np.array([self.get_q_index(i, inds[i]) for i in range(self.rank)], dtype=np.uint)
         b = self.get_block(pos[:, 0], write=True)
         b[tuple(pos[:, 1])] = val
 
@@ -1218,12 +1231,10 @@ Modifies self (done in-place)
             if i < qind[r, 1]:
                 qi = r
                 break
-        ri = i - qind[qi, 0]        # the relative i within the qi block
+        ri = i - qind[qi, 0]  # the relative i within the qi block
         not_axes = [a for a in range(self.rank) if a != axis]
-        slcharge = mod_onetoinf1D(
-            self.charge - qind[qi, 2:] * self.q_conj[axis], self.mod_q)
-        sl = zeros([self.q_ind[a] for a in not_axes],
-                   self.q_conj[not_axes], sl_charge, self.mod_q)
+        slcharge = mod_onetoinf1D(self.charge - qind[qi, 2:] * self.q_conj[axis], self.mod_q)
+        sl = zeros([self.q_ind[a] for a in not_axes], self.q_conj[not_axes], sl_charge, self.mod_q)
         q_dat = self.q_dat
         sl_q_dat = []
         for r in range(len(q_dat)):
@@ -1247,14 +1258,12 @@ Modifies self (done in-place)
         if axes is None:
             axes = np.arange(self.rank - 1, -1, -1, dtype=np.intp)
         elif self.labels is not None:
-            axes = np.fromiter([self.get_index(m)
-                                for m in axes], dtype=np.intp)
+            axes = np.fromiter([self.get_index(m) for m in axes], dtype=np.intp)
         else:
             axes = np.fromiter(axes, dtype=np.intp)
 
         npc_helper.itranspose_fast(self, axes)
         return self
-
         """
         tran = np.transpose
         self.dat = [ tran(m, axes) for m in self.dat]
@@ -1281,8 +1290,7 @@ Modifies self (done in-place)
         if axes is None:
             axes = np.arange(self.rank - 1, -1, -1, dtype=np.intp)
         elif self.labels is not None:
-            axes = np.fromiter([self.get_index(m)
-                                for m in axes], dtype=np.intp)
+            axes = np.fromiter([self.get_index(m) for m in axes], dtype=np.intp)
         else:
             axes = np.fromiter(axes, dtype=np.intp)
 
@@ -1326,8 +1334,9 @@ Modifies self (done in-place)
         self.q_ind.insert(axis, q_ind)
 
         # insert column of 1s
-        self.q_dat = np.insert(self.q_dat, axis, np.zeros(
-            self.q_dat.shape[0], dtype=np.uint),  axis=1)
+        self.q_dat = np.insert(
+            self.q_dat, axis, np.zeros(
+                self.q_dat.shape[0], dtype=np.uint), axis=1)
 
         return self
 
@@ -1355,8 +1364,7 @@ Modifies self (done in-place)
 
         if self.labels is not None:
             new_pos = {keep[i]: i for i in range(len(keep))}
-            self.labels = {k: new_pos[v]
-                           for k, v in self.labels.iteritems() if v in keep}
+            self.labels = {k: new_pos[v] for k, v in self.labels.iteritems() if v in keep}
 
         self.charge = mod_onetoinf1D(self.charge, self.mod_q)
         keep = np.array(keep)
@@ -1424,7 +1432,8 @@ Modifies self (done in-place)
                 >>> newarray = oldarray.combine_legs([[0, 1], [2], [3, 4]], pipes = [pipeL, None, pipeR])
                 """
 
-        return npc_helper.combine_legs(self, axes, pipes, qt_conj, block_single_legs, inplace=False)
+        return npc_helper.combine_legs(
+            self, axes, pipes, qt_conj, block_single_legs, inplace=False)
 
     def icombine_legs(self, axes, pipes=None, qt_conj=None, block_single_legs=False, timing=False):
         """ Combine legs together. IN PLACE. See combine_legs.
@@ -1450,7 +1459,7 @@ Modifies self (done in-place)
         nsplit = len(legs)
         legs = np.array(legs) % self.rank
         for l in range(nsplit):
-            if self.shape[legs[l]] != (leg_pipes[l].t_shape,):
+            if self.shape[legs[l]] != (leg_pipes[l].t_shape, ):
                 raise ValueError
         # make sures that the leg are sorted in increasing order
         perm = np.argsort(legs)
@@ -1467,25 +1476,22 @@ Modifies self (done in-place)
         # create u_map and s_map
         # list of legs that are unsplit [(src slice, dest slice), ...]
         u_map = []
-        s_map = []      # list of legs that are split [dest slice, ...]
-        last_unspleg = 0        # the previous unsplit leg in old shape
+        s_map = []  # list of legs that are split [dest slice, ...]
+        last_unspleg = 0  # the previous unsplit leg in old shape
         last_array_ptr = 0  # in the new shape
-        for i in range(nsplit):     # scan through sections that will be split
+        for i in range(nsplit):  # scan through sections that will be split
             cur_array_ptr = last_array_ptr + legs[i] - last_unspleg
             # save the section before the split (in to u_map)
             if legs[i] > last_unspleg:
-                u_map.append((slice(last_unspleg, legs[i]), slice(
-                    last_array_ptr, cur_array_ptr)))
+                u_map.append((slice(last_unspleg, legs[i]), slice(last_array_ptr, cur_array_ptr)))
             # save the current section (in to s_map)
-            s_map.append(
-                slice(cur_array_ptr, cur_array_ptr + leg_pipes[i].nlegs))
+            s_map.append(slice(cur_array_ptr, cur_array_ptr + leg_pipes[i].nlegs))
             cur_array_ptr += leg_pipes[i].nlegs
             last_unspleg = legs[i] + 1
             last_array_ptr = cur_array_ptr
         # take care of the trailing section (in to u_map)
         if last_unspleg < self.rank:
-            u_map.append((slice(last_unspleg, self.rank),
-                          slice(last_array_ptr, None)))
+            u_map.append((slice(last_unspleg, self.rank), slice(last_array_ptr, None)))
 
         a = self.empty_like(dup_q_dat=False, dup_q_ind=False)
         a.rank = self.rank + last_array_ptr - last_unspleg
@@ -1536,14 +1542,14 @@ Modifies self (done in-place)
         row = np.zeros(a.rank, np.uint)
         newshape = [0] * a.rank
         Tslice = [slice(None)] * self.rank
-        for r in xrange(len(self.q_dat)):       # scan q_dat's rows
+        for r in xrange(len(self.q_dat)):  # scan q_dat's rows
             oldrow = self.q_dat[r]
             oldT = self.dat[r]
-            for m in u_map:     # copy the unsplit parts
+            for m in u_map:  # copy the unsplit parts
                 row[m[1]] = oldrow[m[0]]
                 newshape[m[1]] = oldT.shape[m[0]]
             qt_map_startstop = [leg_pipes[l].qt_map_ind[oldrow[legs[l]], :]
-                                for l in range(nsplit)]     # list of pair start/stop (in qt_map)
+                                for l in range(nsplit)]  # list of pair start/stop (in qt_map)
             # list of ranges to iterate over (in qt_map)
             entry_xrange = [xrange(s[0], s[1]) for s in qt_map_startstop]
             if verbose > 0:
@@ -1553,11 +1559,13 @@ Modifies self (done in-place)
             for qs in itertools.product(*entry_xrange):
                 for l in range(nsplit):
                     pipe = leg_pipes[l]
-                    qt_map_row = pipe.qt_map[qs[l], :]      # new q-sub-indices
+                    qt_map_row = pipe.qt_map[qs[l], :]  # new q-sub-indices
                     # write in the new q_dat row
                     row[s_map[l]] = qt_map_row[2:-1]
-                    newshape[s_map[l]] = [pipe.q_ind[i][qt_map_row[
-                        2 + i], 1] - pipe.q_ind[i][qt_map_row[2 + i], 0] for i in range(pipe.nlegs)]
+                    newshape[s_map[l]] = [
+                        pipe.q_ind[i][qt_map_row[2 + i], 1] - pipe.q_ind[i][qt_map_row[2 + i], 0]
+                        for i in range(pipe.nlegs)
+                    ]
                     Tslice[legs[l]] = slice(qt_map_row[0], qt_map_row[1])
                     # print qs, l, qt_map_row
                 if verbose > 0:
@@ -1575,7 +1583,13 @@ Modifies self (done in-place)
         """
         legs = toiterable(legs)
 
-        return leg_pipe.make_pipe([self.q_ind[l] for l in legs], self.q_conj[legs], qt_conj=qt_conj, block_single_legs=block_single_legs, mod_q=self.mod_q, verbose=verbose)
+        return leg_pipe.make_pipe(
+            [self.q_ind[l] for l in legs],
+            self.q_conj[legs],
+            qt_conj=qt_conj,
+            block_single_legs=block_single_legs,
+            mod_q=self.mod_q,
+            verbose=verbose)
 
     ##########################################################################
     # Manipulating arrays -- playing with charges
@@ -1622,7 +1636,7 @@ Modifies self (done in-place)
         a.q_ind = [q.copy() for q in self.q_ind]
         for l in range(a.rank):
             a.q_ind[l][:, 2:] = func(a.q_ind[l][:, 2:], r)
-        a.charge = func(a.charge, r)    # charge is already copied in empty_like
+        a.charge = func(a.charge, r)  # charge is already copied in empty_like
 
         return a
 
@@ -1688,11 +1702,15 @@ Modifies self (done in-place)
             new_q_ind = q_ind_from_q_flat(q_flat)
             # print joinstr([l, self.q_ind[l], '-->', new_q_ind,
             # self.shape[l]], delim=' ')
-            I = array.from_ndarray(np.eye(self.shape[l]), [self.q_ind[l], new_q_ind], q_conj=np.array(
-                [-1, 1]) * self.q_conj[l], charge=None, mod_q=self.mod_q)
+            I = array.from_ndarray(
+                np.eye(self.shape[l]), [self.q_ind[l], new_q_ind],
+                q_conj=np.array([-1, 1]) * self.q_conj[l],
+                charge=None,
+                mod_q=self.mod_q)
             tensordot_compat(a, I, axes=([l], [0]))
-            a = npc_helper.tensordot(a, I, axes=([l], [0])).itranspose(
-                range(l) + [self.rank - 1] + range(l, self.rank - 1))
+            a = npc_helper.tensordot(
+                a, I, axes=([l],
+                            [0])).itranspose(range(l) + [self.rank - 1] + range(l, self.rank - 1))
         # a.check_sanity()
         return a
 
@@ -1725,7 +1743,7 @@ Modifies self (done in-place)
             args = ()
             keywords = {}
 
-        self.dat = [func(*((t,) + args), **keywords) for t in self.dat]
+        self.dat = [func(*((t, ) + args), **keywords) for t in self.dat]
         if len(self.dat) > 0:
             self.dtype = self.dat[0].dtype
 
@@ -1754,7 +1772,7 @@ Modifies self (done in-place)
             keywords = {}
 
         a = self.empty_like()
-        a.dat = [func(*((t,) + args), **keywords) for t in self.dat]
+        a.dat = [func(*((t, ) + args), **keywords) for t in self.dat]
         if len(a.dat) > 0:
             a.dtype = a.dat[0].dtype
 
@@ -1811,13 +1829,11 @@ Modifies self (done in-place)
             while i < Na or j < Nb:
                 # b is 0
                 if j >= Nb or ((i < Na) and (tuple(aq[i, ::-1]) < tuple(bq[j, ::-1]))):
-                    dat.append(
-                        func(*((adat[i], np.zeros_like(adat[i])) + args), **keywords))
+                    dat.append(func(*((adat[i], np.zeros_like(adat[i])) + args), **keywords))
                     q_dat.append(aq[i])
                     i += 1
                 elif i >= Na or tuple(aq[i, ::-1]) > tuple(bq[j, ::-1]):  # a is 0
-                    dat.append(
-                        func(*((np.zeros_like(bdat[j]), bdat[j]) + args), **keywords))
+                    dat.append(func(*((np.zeros_like(bdat[j]), bdat[j]) + args), **keywords))
                     q_dat.append(bq[j])
                     j += 1
                 else:  # both are non zero
@@ -1882,7 +1898,8 @@ Modifies self (done in-place)
         if axis == self.rank - 1:
             axis = -1
         if len(s) != self.shape[axis]:
-            raise ValueError, "incompatible lengths, len(s) = %i, self.shape[%i] = %i" % (len(s), axis, self.shape[axis])
+            raise ValueError, "incompatible lengths, len(s) = %i, self.shape[%i] = %i" % (
+                len(s), axis, self.shape[axis])
         b = self.empty_like()
         b.dtype = np.find_common_type([self.dtype], [s.dtype])
 
@@ -1948,23 +1965,25 @@ Modifies self (done in-place)
         if len(axes) != len(mask):
             raise ValueError
         naxes = len(axes)
-        list_q_mask = []        # list of q_mask's, each one being a list of slices/Nones
+        list_q_mask = []  # list of q_mask's, each one being a list of slices/Nones
         list_q_map = []
         for a, m in itertools.product(axes, mask):
             #           print self.q_ind[a]
             if len(m) != self.shape[a]:
-                raise ValueError, "mismatched size len(mask[axes " + str(a) + "]) (=" + str(len(m)) + ") != shape[" + str(a) + "] (=" + str(self.shape[a]) + ")"
+                raise ValueError, "mismatched size len(mask[axes " + str(a) + "]) (=" + str(len(
+                    m)) + ") != shape[" + str(a) + "] (=" + str(self.shape[a]) + ")"
             if m.dtype != bool:
                 raise ValueError, "mask[axes " + str(a) + "].dtype not bool"
             if not np.any(m):
-                raise NotImplementedError, "mask at axes " + str(a) + " have all False.  It'll get fixed eventually."
-            q_mask = []     # list of mask/Nones that qs maps to, tells you how to update dat
+                raise NotImplementedError, "mask at axes " + str(
+                    a) + " have all False.  It'll get fixed eventually."
+            q_mask = []  # list of mask/Nones that qs maps to, tells you how to update dat
             # list of where the new charge sector is (or None), tells you how
             # to update q_dat
             q_map = []
-            new_qs = 0      # qs will map to new_qs, new_qs <= qs as some of the old charge sectors might disappear
+            new_qs = 0  # qs will map to new_qs, new_qs <= qs as some of the old charge sectors might disappear
             for qs in range(self.q_ind[a].shape[0]):
-                qs_mask = m[self.q_ind[a][qs, 0]: self.q_ind[a][qs, 1]]
+                qs_mask = m[self.q_ind[a][qs, 0]:self.q_ind[a][qs, 1]]
                 if np.any(qs_mask):
                     q_mask.append(
                         tuple([slice(None)] * a + [qs_mask] + [slice(None)] * (self.rank - a - 1)))
@@ -1975,28 +1994,27 @@ Modifies self (done in-place)
                     q_map.append(None)
             list_q_mask.append(q_mask)
             list_q_map.append(q_map)
-            self.q_ind[a] = q_ind_from_q_flat(
-                q_flat_from_q_ind(self.q_ind[a])[m])
+            self.q_ind[a] = q_ind_from_q_flat(q_flat_from_q_ind(self.q_ind[a])[m])
 #           print self.q_ind[a]
         self.shape = shape_from_q_ind(self.q_ind)
-#       print list_q_mask
-#       print list_q_map
+        #       print list_q_mask
+        #       print list_q_map
 
         if naxes > 1:
             raise NotImplemented
-        targetr = 0         # q_dat[r] will be copied to q_dat[targetr]
+        targetr = 0  # q_dat[r] will be copied to q_dat[targetr]
         for r in range(len(self.q_dat)):
-            row_dat = self.q_dat[r]     # row_dat is a view
+            row_dat = self.q_dat[r]  # row_dat is a view
 
-#           print self.dat[r].shape, "= T.shape"
-            a = axes[0]         # would change if there are multiple axes
+            #           print self.dat[r].shape, "= T.shape"
+            a = axes[0]  # would change if there are multiple axes
             qs_mask = list_q_mask[0][row_dat[a]]
             qs_map = list_q_map[0][row_dat[a]]
             if qs_map is not None:
                 self.dat[targetr] = self.dat[r][qs_mask]
                 row_dat[a] = qs_map
-                self.q_dat[targetr, :] = row_dat            # this is a copy
-#               print self.dat[targetr].shape, "= target.shape (" + str(targetr) + ")"
+                self.q_dat[targetr, :] = row_dat  # this is a copy
+                #               print self.dat[targetr].shape, "= target.shape (" + str(targetr) + ")"
                 targetr += 1
 
         # eliminate trailing rows in q_dat (and dat)
@@ -2009,7 +2027,7 @@ Modifies self (done in-place)
             self.q_dat = self.q_dat[:targetr, :]
             self.dat = self.dat[:targetr]
         # self.sorted does not need to be changed
-#       self.print_q_dat()
+        #       self.print_q_dat()
 
         return self
 
@@ -2196,21 +2214,20 @@ Modifies self (done in-place)
                 list_norm = np.empty((len(dat)), complex)
                 for i in range(len(dat)):
                     list_norm[i] = np.linalg.norm(
-                        np.array(dat[i].reshape((-1,)), complex), ord=ord)
+                        np.array(dat[i].reshape((-1, )), complex), ord=ord)
             else:
                 list_norm = np.empty((len(dat)), float)
                 for i in range(len(dat)):
-                    list_norm[i] = np.linalg.norm(
-                        np.array(dat[i].reshape((-1,)), float), ord=ord)
+                    list_norm[i] = np.linalg.norm(np.array(dat[i].reshape((-1, )), float), ord=ord)
         else:
             list_norm = np.empty((len(dat)), self.dtype)
             for i in range(len(dat)):
-                list_norm[i] = np.linalg.norm(dat[i].reshape((-1,)), ord=ord)
+                list_norm[i] = np.linalg.norm(dat[i].reshape((-1, )), ord=ord)
         return np.linalg.norm(list_norm, ord=ord)
 
+##########################################################################
+##########################################################################
 
-##########################################################################
-##########################################################################
 
 class leg_pipe:
     """ This class holds the data required to combine or split a set of legs into a total ('t') leg.  I will speak of the multiple legs as "incoming" and the combined leg as "outgoing".
@@ -2231,7 +2248,7 @@ class leg_pipe:
             """
 
     def __init__(self, legs):
-        self.nlegs = legs       # number of legs to be contracted
+        self.nlegs = legs  # number of legs to be contracted
         self.mod_q = None
 
         # Number of blocks in each individual leg, represented as tuple (l1,
@@ -2250,9 +2267,9 @@ class leg_pipe:
 
         # list of q_ind for the constituents legs (each np.array)
         self.q_ind = []
-        self.qt_ind = None      # q_ind for the total leg (np.array)
+        self.qt_ind = None  # q_ind for the total leg (np.array)
 
-        self.q_map = None       # As below, but ordered by leg q-indices 'i_1, ..., i_d'
+        self.q_map = None  # As below, but ordered by leg q-indices 'i_1, ..., i_d'
         # 2-array (ordered by incoming q-indices) shape (# block, 2 + d + 1)
         self.qt_map = None
         # Entries:  [ m_i, m_{i+1},  i_1, . . . , i_d, I_s ] (lex) sorted by
@@ -2264,16 +2281,16 @@ class leg_pipe:
         # (t_qshape, 2)
         self.qt_map_ind = None
 
-        self.q_conj = None      # np.array shape (nlegs,) of +-1
-        self.qt_conj = None     # single number +-1
+        self.q_conj = None  # np.array shape (nlegs,) of +-1
+        self.qt_conj = None  # single number +-1
 
     def check_sanity(self):
         """ Checks if the internal structure of the array is consistent.
 
                 Raise an exception if anything is wrong, do nothing if everything is right.
                 """
-    # TODO do sanity check
-    # rank
+        # TODO do sanity check
+        # rank
         nlegs = self.nlegs
         if not isinstance(nlegs, int):
             raise ValueError, "nlegs is not an int (type=%s)" % str(type(rank))
@@ -2288,9 +2305,9 @@ class leg_pipe:
         if mod_q.dtype != int:
             raise ValueError, "mod_q.dtype not int (dtype=" + str(mod_q.dtype) + ")"
         if np.any(mod_q <= 0):
-            raise ValueError, "mod_q has non-positive values: mod_q = %s" % (mod_q,)
+            raise ValueError, "mod_q has non-positive values: mod_q = %s" % (mod_q, )
         num_q = mod_q.shape[0]
-    # shapes
+        # shapes
         qshape = self.qshape
         t_qshape = self.t_qshape
         shape = self.shape
@@ -2302,10 +2319,9 @@ class leg_pipe:
     # More....
 
     def __str__(self):
-        s = "leg_pipe (d=%s) with shape %s->%s\n" % (self.nlegs,
-                                                     self.shape, self.t_shape)
-        s += joinstr(["\tq_ind: "] + map(str, self.q_ind) +
-                     ["  ->  qt_ind: ", str(self.qt_ind)]) + "\n"
+        s = "leg_pipe (d=%s) with shape %s->%s\n" % (self.nlegs, self.shape, self.t_shape)
+        s += joinstr(["\tq_ind: "] + map(str, self.q_ind) + ["  ->  qt_ind: ", str(self.qt_ind)
+                                                             ]) + "\n"
         s += "\tq_conj: %s, qt_conj: %s\n" % (self.q_conj, self.qt_conj)
         s += joinstr(["\tqt_map: ", str(self.qt_map)])
         return s
@@ -2323,18 +2339,18 @@ class leg_pipe:
                         q_conj, an integer +-1
                         mod_q, an np.array shaped (num_q,)
                 """
-    #   if len(q_ind) > 1:
-    #       raise ValueError, "Trivial pipe called with multiple legs?"
-    #   q = q_ind[0]
+        #   if len(q_ind) > 1:
+        #       raise ValueError, "Trivial pipe called with multiple legs?"
+        #   q = q_ind[0]
         pipe = cls(1)
         pipe.q_ind = [q_ind]
 
-        length = len(q_ind)         # number of charge sectors
-        pipe.qshape = (length,)
+        length = len(q_ind)  # number of charge sectors
+        pipe.qshape = (length, )
         if length > 0:
-            pipe.shape = (shape_from_q_ind(q_ind),)
+            pipe.shape = (shape_from_q_ind(q_ind), )
         else:
-            pipe.shape = (0,)
+            pipe.shape = (0, )
         pipe.t_shape = pipe.shape[0]
         pipe.t_qshape = pipe.qshape
         pipe.strides = np.array([1], dtype=np.intp)
@@ -2364,6 +2380,7 @@ class leg_pipe:
         return pipe
 
     @classmethod
+
     #@profile
     def make_pipe(cls, q_ind, q_conj, qt_conj=1, block_single_legs=True, mod_q=None, verbose=0):
         # TODO more description, write a sample
@@ -2391,7 +2408,7 @@ class leg_pipe:
             return cls.trivial_pipe(q_ind[0], q_conj[0], mod_q=mod_q)
         t0 = time.time()
         pipe = cls(d)
-        pipe.q_ind = q_ind      # No need to copy?
+        pipe.q_ind = q_ind  # No need to copy?
         pipe.q_conj = q_conj.copy()
         pipe.qt_conj = qt_conj
         # number of charge sectors in each leg
@@ -2406,7 +2423,6 @@ class leg_pipe:
             pipe.mod_q = np.ones(num_q, dtype=np.int)
         else:
             pipe.mod_q = mod_q
-
         """ We enumerate over the outer product of each constituent leg's charge sectors, 'q_i', forming a temporaray table
             qt_map = [ [ s_q0=0 , s_q1=(n_i1 * n_i2 ...) , i1 , i2 , ... , QT ], . . . ]
             where n_i1 is the dimension of the charge sector q_i1 on leg 1, etc. QT = q_i1 + q_i2 + . . .
@@ -2419,7 +2435,7 @@ class leg_pipe:
 
         size = 2 + d + max(num_q, 1)
 
-        qt_map = np.empty((size,) + qshape, dtype=int)      # created transpose
+        qt_map = np.empty((size, ) + qshape, dtype=int)  # created transpose
         grid = np.mgrid[[slice(0, l) for l in qshape]]
         # mgrid gives a (d+1)-array shaped: (d,)+qshape
         qt_map[2:2 + d, ...] = grid
@@ -2429,13 +2445,13 @@ class leg_pipe:
 
         if num_q > 0:
             # Second initialize total charge
-            qt_map[:, 2 + d:] = npc_helper.q_sum(qt_map[:, 2:2 + d].astype(
-                np.uint), q_ind, q_conj * qt_conj, 0, d, pipe.mod_q)
+            qt_map[:, 2 + d:] = npc_helper.q_sum(qt_map[:, 2:2 + d].astype(np.uint), q_ind,
+                                                 q_conj * qt_conj, 0, d, pipe.mod_q)
         # Next, temporarily keep size of charge sector
         qt_map[:, 1] = q_ind[0][qt_map[:, 2], 1] - q_ind[0][qt_map[:, 2], 0]
         for k in range(1, d):
-            qt_map[:, 1] *= (q_ind[k][qt_map[:, 2 + k], 1] -
-                             q_ind[k][qt_map[:, 2 + k], 0])  # length
+            qt_map[:, 1] *= (
+                q_ind[k][qt_map[:, 2 + k], 1] - q_ind[k][qt_map[:, 2 + k], 0])  # length
 
         # Now sort by final charge
         revperm = np.lexsort(qt_map[:, 2:].transpose())
@@ -2446,7 +2462,7 @@ class leg_pipe:
         # Partition into sectors of final charge
         indices = npc_helper.find_differences(qt_map[:, 2 + d:])
         num_sec = len(indices) - 1
-        pipe.t_qshape = (num_sec,)
+        pipe.t_qshape = (num_sec, )
         qt_ind = np.empty((num_sec, num_q + 2), dtype=int)
 
         # compute the ranges (first two columns of qt_map)
@@ -2498,13 +2514,11 @@ class leg_pipe:
                                 which is the output.
                 """
         if qindex is None:
-            qt_ind_dict = {tuple(q[2:].tolist()): i for i,
-                           q in enumerate(self.qt_ind)}
+            qt_ind_dict = {tuple(q[2:].tolist()): i for i, q in enumerate(self.qt_ind)}
             # TODO, look up the qindex from a
             raise NotImplementedError
         else:
-            qt_map_slice = self.qt_map[self.qt_map_ind[
-                qindex][0]: self.qt_map_ind[qindex][1]]
+            qt_map_slice = self.qt_map[self.qt_map_ind[qindex][0]:self.qt_map_ind[qindex][1]]
             if len(qt_map_slice) == 0:
                 return np.zeros(0, dtype=a.dtype)
             a.sort_q_dat()
@@ -2514,7 +2528,7 @@ class leg_pipe:
                 if a_qdat_i >= len(a.q_dat):
                     break
                 if np.array_equiv(qrow[2:5], a.q_dat[a_qdat_i]):
-                    t[qrow[0]: qrow[1]] = a.dat[a_qdat_i].reshape(-1)
+                    t[qrow[0]:qrow[1]] = a.dat[a_qdat_i].reshape(-1)
                     a_qdat_i += 1
             return t
 
@@ -2525,8 +2539,7 @@ class leg_pipe:
                 """
         if qindex is None:
             raise ValueError
-        qt_map_slice = self.qt_map[self.qt_map_ind[
-            qindex][0]: self.qt_map_ind[qindex][1]]
+        qt_map_slice = self.qt_map[self.qt_map_ind[qindex][0]:self.qt_map_ind[qindex][1]]
         a = array(self.nlegs, dtype=t.dtype)
         a.shape = self.shape
         a.mod_q = self.mod_q
@@ -2538,7 +2551,7 @@ class leg_pipe:
         qdat = np.zeros((len(qt_map_slice), self.nlegs), dtype=np.uint)
         dat = [None] * len(qt_map_slice)
         qdim = [q[:, 1] - q[:, 0] for q in self.q_ind]
-        mat_shapes = qdat.copy()        # store list of shapes for each piece in qt_map_slice
+        mat_shapes = qdat.copy()  # store list of shapes for each piece in qt_map_slice
         for l in range(self.nlegs):
             mat_shapes[:, l] = qdim[l][qt_map_slice[:, 2 + l]]
         num_qdat = 0
@@ -2547,7 +2560,7 @@ class leg_pipe:
             if np.any(np.abs(v) >= cutoff):
                 qdat[num_qdat] = qrow[2:2 + a.rank]
                 dat[num_qdat] = v.reshape(mat_shapes[r])
-            #   print qrow, np.linalg.norm(v), mat_shapes[r]
+                #   print qrow, np.linalg.norm(v), mat_shapes[r]
                 num_qdat += 1
         a.q_dat = qdat[:num_qdat]
         a.dat = dat[:num_qdat]
@@ -2567,7 +2580,7 @@ class leg_pipe:
                 """
         t = tonparray(t)
         if qindex is None:
-            if t.shape != (self.t_shape,):
+            if t.shape != (self.t_shape, ):
                 raise ValueError
             a = np.zeros(self.shape, t.dtype)
             for r, qt_row in enumerate(self.qt_ind):
@@ -2576,7 +2589,7 @@ class leg_pipe:
         else:
             qt_map_slice = self.qt_map_ind[qindex, :]
             qt_map = self.qt_map[qt_map_slice[0]:qt_map_slice[1], :]
-            if t.shape != (shape_from_q_ind(qt_map),):
+            if t.shape != (shape_from_q_ind(qt_map), ):
                 raise ValueError, "incorrect length"
             if a is None:
                 a = np.zeros(self.shape, t.dtype)
@@ -2588,8 +2601,7 @@ class leg_pipe:
             for r in qt_map:
                 slices = [slice(q_ind[l][r[2 + l], 0], q_ind[l][r[2 + l], 1])
                           for l in range(self.nlegs)]
-                shape = [q_ind[l][r[2 + l], 1] - q_ind[l][r[2 + l], 0]
-                         for l in range(self.nlegs)]
+                shape = [q_ind[l][r[2 + l], 1] - q_ind[l][r[2 + l], 0] for l in range(self.nlegs)]
                 a[slices] = t[r[0]:r[1]].reshape(shape)
             return a
 
@@ -2606,7 +2618,6 @@ class leg_pipe:
     def shallow_map_Q(self, func, r):
         # TODO
         raise NotImplementedError
-
 
 ##########################################################################
 ##########################################################################
@@ -2649,8 +2660,7 @@ def q_ind_from_q_flat(q_flats):
 
         indices = npc_helper.find_differences(q_flat)
         indices = indices.reshape((-1, 1))
-        q_inds.append(
-            np.hstack((indices[0:-1, :], indices[1:, :], q_flat[indices[0:-1, 0], :])))
+        q_inds.append(np.hstack((indices[0:-1, :], indices[1:, :], q_flat[indices[0:-1, 0], :])))
 
     if strip:
         return q_inds[0]
@@ -2692,9 +2702,10 @@ def q_dict_from_q_ind(q_ind):
     # make a list of dictionaries (one for each leg) that takes charges to a
     # slice
     if type(q_ind) == list:
-        return [dict([(tuple(qsec[2:]),  slice(qsec[0], qsec[1])) for qsec in q_i]) for q_i in q_ind]
+        return [dict([(tuple(qsec[2:]), slice(qsec[0], qsec[1])) for qsec in q_i])
+                for q_i in q_ind]
     else:
-        return dict([(tuple(qsec[2:]),  slice(qsec[0], qsec[1])) for qsec in q_ind])
+        return dict([(tuple(qsec[2:]), slice(qsec[0], qsec[1])) for qsec in q_ind])
 
 #@profile
 
@@ -2711,8 +2722,9 @@ def q_dict_from_q_flat(q_flats):
         length, num_q = q_flat.shape
         #indices = find_differences_inline(q_flat)
         indices = npc_helper.find_differences(q_flat)
-        q_dicts.append(dict([(tuple(q_flat[indices[i], :]), slice(
-            indices[i], indices[i + 1])) for i in range(len(indices) - 1)]))
+        q_dicts.append(
+            dict([(tuple(q_flat[indices[i], :]), slice(indices[i], indices[i + 1]))
+                  for i in range(len(indices) - 1)]))
     if strip:
         return q_dicts[0]
     else:
@@ -2729,15 +2741,15 @@ def shape_from_q_ind(q_inds):
         return 0
     else:
         # SHAPE
-        return np.array([(0 if q_ind.shape[0] == 0 else q_ind[-1, 1]) for q_ind in q_inds], dtype=np.intp)
+        return np.array(
+            [(0 if q_ind.shape[0] == 0 else q_ind[-1, 1]) for q_ind in q_inds], dtype=np.intp)
 
 
 def q_ind_match_raw(qind1, qind2, qconj1, qconj2, mod_q):
     """ Return true if (qind1, qconj1) is the same as (qind2, qconj2).  I.e. interchangable. """
     if not np.array_equal(qind1[:, 0:1], qind2[:, 0:1]):
         return False
-    q_diff = mod_onetoinf2D(
-        qind1[:, 2:] * qconj1 - qind2[:, 2:] * qconj2, mod_q)
+    q_diff = mod_onetoinf2D(qind1[:, 2:] * qconj1 - qind2[:, 2:] * qconj2, mod_q)
     if np.any(q_diff != 0):
         return False
     return True
@@ -2747,7 +2759,8 @@ def q_ind_match(a1, leg1, a2, leg2):
     """ Return true if (a1.q_ind[leg1], a1.q_conj[leg1]) is the same as (a2.q_ind[leg2], a2.q_conj[leg2]).  I.e. interchangable. """
     if not np.array_equal(a1.mod_q, a2.mod_q):
         return False
-    return q_ind_match_raw(a1.q_ind[leg1], a2.q_ind[leg2], a1.q_conj[leg1], a2.q_conj[leg2], a1.mod_q)
+    return q_ind_match_raw(a1.q_ind[leg1], a2.q_ind[leg2], a1.q_conj[leg1], a2.q_conj[leg2],
+                           a1.mod_q)
 
 
 def q_ind_contractible(a1, leg1, a2, leg2, uncontractible_error_msg=None):
@@ -2756,19 +2769,19 @@ def q_ind_contractible(a1, leg1, a2, leg2, uncontractible_error_msg=None):
             """
     if not np.array_equal(a1.mod_q, a2.mod_q):
         return False
-    contractible = q_ind_match_raw(a1.q_ind[leg1], a2.q_ind[leg2], a1.q_conj[
-                                   leg1], -a2.q_conj[leg2], a1.mod_q)
+    contractible = q_ind_match_raw(a1.q_ind[leg1], a2.q_ind[leg2], a1.q_conj[leg1],
+                                   -a2.q_conj[leg2], a1.mod_q)
     if contractible:
         return True
     if uncontractible_error_msg is not None:
         print "npc.q_ind_contractible(): uncontractible legs."
-        print joinstr(["    ", "q_ind[0] = \n ({})".format(a1.q_conj[leg1]), a1.q_ind[leg1],
-                       ",  ", "q_ind[1] = \n ({})".format(a2.q_conj[leg2]), a2.q_ind[leg2]])
+        print joinstr(["    ", "q_ind[0] = \n ({})".format(a1.q_conj[leg1]), a1.q_ind[leg1], ",  ",
+                       "q_ind[1] = \n ({})".format(a2.q_conj[leg2]), a2.q_ind[leg2]])
         raise ValueError, uncontractible_error_msg
     return False
 
-
 ##########################################################################
+
 
 #@profile
 def eye_like(a, axis=0):
@@ -2796,8 +2809,7 @@ def diag(s, q_ind, q_conj=1, mod_q=None, dtype=None):
     else:
         scalar = False
 
-    a = zeros([q_ind, q_ind], s.dtype, q_conj=[
-              q_conj, -q_conj], charge=None, mod_q=mod_q)
+    a = zeros([q_ind, q_ind], s.dtype, q_conj=[q_conj, -q_conj], charge=None, mod_q=mod_q)
 
     q_dat = np.arange(len(a.q_ind[0]), dtype=np.uint).reshape((-1, 1))
     a.q_dat = np.tile(q_dat, (1, 2))  # q_dat = [ [0, 0], [1, 1], ... ]
@@ -2806,8 +2818,7 @@ def diag(s, q_ind, q_conj=1, mod_q=None, dtype=None):
     for i, q in enumerate(a.q_ind[0]):  # For each q_index
         size = q[1] - q[0]
         if scalar:
-            dat[i] = np.diag(s * np.ones(size, dtype=s.dtype)
-                             )  # make the diagonal block
+            dat[i] = np.diag(s * np.ones(size, dtype=s.dtype))  # make the diagonal block
         else:
             dat[i] = np.diag(s[at:at + size])
         at = at + size
@@ -2839,10 +2850,10 @@ def zeros(q_ind, dtype=float64, q_conj=None, charge=None, mod_q=None):
         mod_q = ac.mod_q = np.ones(num_q, dtype=np.int)
     else:
         ac.mod_q = mod_q
-    if ac.mod_q.shape != (num_q,):
-        raise ValueError, "mod_q is wrong length (mod_q.shape = %s)" % (ac.mod_q.shape,)
+    if ac.mod_q.shape != (num_q, ):
+        raise ValueError, "mod_q is wrong length (mod_q.shape = %s)" % (ac.mod_q.shape, )
     if np.any(ac.mod_q == 0):
-        raise ValueError, "mod_q = %s has a 0 in it" % (ac.mod_q,)
+        raise ValueError, "mod_q = %s has a 0 in it" % (ac.mod_q, )
 
     if charge is None:
         ac.charge = np.zeros(num_q, dtype=np.int)
@@ -2852,7 +2863,7 @@ def zeros(q_ind, dtype=float64, q_conj=None, charge=None, mod_q=None):
         ac.charge = np.array([charge])
     else:
         ac.charge = charge.copy()
-    if ac.charge.shape != (num_q,):
+    if ac.charge.shape != (num_q, ):
         raise ValueError, "Charge is wrong length"
 
     if q_conj is None:
@@ -2862,7 +2873,7 @@ def zeros(q_ind, dtype=float64, q_conj=None, charge=None, mod_q=None):
     else:
         ac.q_conj = q_conj.copy()
 
-    if ac.q_conj.shape != (d,):
+    if ac.q_conj.shape != (d, ):
         raise ValueError, "qconj is wrong length"
 
     ac.q_ind = [qi for qi in q_ind]  # not copied!
@@ -3007,8 +3018,7 @@ def binary_blockwise(func, a, b):
 
     if Na == Nb and np.array_equiv(a.q_dat, b.q_dat):
         c = a.empty_like()
-        c.dat = [func(*((at, bt) + args), **keywords)
-                 for at, bt in itertools.izip(a.dat, b.dat)]
+        c.dat = [func(*((at, bt) + args), **keywords) for at, bt in itertools.izip(a.dat, b.dat)]
     else:
         c = a.empty_like(dup_q_dat=False)
         aq = a.q_dat
@@ -3020,13 +3030,11 @@ def binary_blockwise(func, a, b):
         dat = []
         while i < Na or j < Nb:
             if j >= Nb or ((i < Na) and (tuple(aq[i, ::-1]) < tuple(bq[j, ::-1]))):
-                dat.append(
-                    func(*((adat[i], np.zeros_like(adat[i])) + args), **keywords))
+                dat.append(func(*((adat[i], np.zeros_like(adat[i])) + args), **keywords))
                 q_dat.append(aq[i])
                 i += 1
             elif i >= Na or tuple(aq[i, ::-1]) > tuple(bq[j, ::-1]):
-                dat.append(
-                    func(*((np.zeros_like(bdat[j]), bdat[j]) + args), **keywords))
+                dat.append(func(*((np.zeros_like(bdat[j]), bdat[j]) + args), **keywords))
                 q_dat.append(bq[j])
                 j += 1
             else:
@@ -3108,7 +3116,7 @@ def tensordot_compat(a, b, axes=2, suppress_warning=False, verbose=0):
         raise ValueError, "mod_q mismatch"
     mod_q = a.mod_q
 
-    for i in range(na):     # na = nb
+    for i in range(na):  # na = nb
         ai = a.q_ind[axes_a[i]]
         bi = b.q_ind[axes_b[i]]
         if not np.array_equal(ai[:, 0:1], bi[:, 0:1]):
@@ -3116,13 +3124,15 @@ def tensordot_compat(a, b, axes=2, suppress_warning=False, verbose=0):
             print joinstr(["a.qind[%s] = " % axes_a[i], ai])
             print joinstr(["b.qind[%s] = " % axes_b[i], bi])
             raise ValueError, "q_ind size mismatch"
-        q_diff = mod_onetoinf2D(
-            ai[:, 2:] * a.q_conj[axes_a[i]] + bi[:, 2:] * b.q_conj[axes_b[i]], mod_q)
+        q_diff = mod_onetoinf2D(ai[:, 2:] * a.q_conj[axes_a[i]] + bi[:, 2:] * b.q_conj[axes_b[i]],
+                                mod_q)
         if np.any(q_diff != 0):
             print "npc.tensordot_compat error:"
-            print "  mod_q = %s" % (mod_q,)
-            print joinstr(["  a.qind[%s] = " % axes_a[i], ai, ", q_conj = %i" % a.q_conj[axes_a[i]]])
-            print joinstr(["  b.qind[%s] = " % axes_b[i], bi, ", q_conj = %i" % b.q_conj[axes_b[i]]])
+            print "  mod_q = %s" % (mod_q, )
+            print joinstr(
+                ["  a.qind[%s] = " % axes_a[i], ai, ", q_conj = %i" % a.q_conj[axes_a[i]]])
+            print joinstr(
+                ["  b.qind[%s] = " % axes_b[i], bi, ", q_conj = %i" % b.q_conj[axes_b[i]]])
             raise ValueError, "q_ind charges mismatch"
 
 
@@ -3209,7 +3219,8 @@ def trace(a, axis1=0, axis2=1):
 
     if a.shape[axis1] != a.shape[axis2]:
         raise ValueError, "shape mismatch for traced legs"
-    if (np.array_equiv(a.q_ind[axis1], a.q_ind[axis2]) == False) or a.q_conj[axis1] != -a.q_conj[axis2]:
+    if (np.array_equiv(a.q_ind[axis1], a.q_ind[axis2]) == False
+        ) or a.q_conj[axis1] != -a.q_conj[axis2]:
         raise NotImplementedError, "Trace only supports charge-conjugate index structure at the moment"
 
     # mask = np.logical_and( np.not_equal( np.arange(a.rank), axis1),
@@ -3226,19 +3237,16 @@ def trace(a, axis1=0, axis2=1):
         c.q_conj = a.q_conj[mask]
         c.q_ind = [a.q_ind[i] for i in range(a.rank) if mask[i]]
         c.sorted = a.sorted
-        c.shape = np.array([a.shape[i]
-                            for i in range(a.rank) if mask[i]], dtype=np.intp)
+        c.shape = np.array([a.shape[i] for i in range(a.rank) if mask[i]], dtype=np.intp)
         # print a.q_dat
         if len(a.dat) > 0:
             cdat = {}
             for q, t in itertools.izip(a.q_dat, a.dat):
                 if np.array_equiv(q[axis1], q[axis2]):  # Are they on the "diagonal" ?
                     if tuple(q[mask]) in cdat:
-                        cdat[tuple(q[mask])] += np.trace(t,
-                                                         axis1=axis1, axis2=axis2)
+                        cdat[tuple(q[mask])] += np.trace(t, axis1=axis1, axis2=axis2)
                     else:
-                        cdat[tuple(q[mask])] = np.trace(
-                            t, axis1=axis1, axis2=axis2)
+                        cdat[tuple(q[mask])] = np.trace(t, axis1=axis1, axis2=axis2)
 
             c.dat = cdat.values()
             if len(c.dat) > 0:
@@ -3252,8 +3260,7 @@ def trace(a, axis1=0, axis2=1):
 
         # inherit labels
         if a.labels is not None:
-            c.labels = {k: v for k, v in a.labels.iteritems() if (
-                v != axis1 and v != axis2)}
+            c.labels = {k: v for k, v in a.labels.iteritems() if (v != axis1 and v != axis2)}
             for k, v in c.labels.iteritems():
                 if v > axis1:
                     c.labels[k] -= 1
@@ -3331,7 +3338,8 @@ def inner(a, b, axes=None, do_conj=False, verbose=0, timing=False):
     if axes_b != range(nd):
         b.itranspose(axes_b)
 
-    if (do_conj and npc_helper.array_equiv_mod_q(a.charge, b.charge, a.mod_q) == False) or (do_conj == 0 and npc_helper.array_equiv_mod_q(-a.charge, b.charge, a.mod_q) == False):
+    if (do_conj and npc_helper.array_equiv_mod_q(a.charge, b.charge, a.mod_q) == False) or (
+            do_conj == 0 and npc_helper.array_equiv_mod_q(-a.charge, b.charge, a.mod_q) == False):
         return 0.
 
     num_q = a.num_q
@@ -3372,7 +3380,7 @@ def inner(a, b, axes=None, do_conj=False, verbose=0, timing=False):
             elif comp == -1:
                 j += 1
             else:
-                c += np.inner(adat[i].reshape((-1,)), bdat[j].reshape((-1,)))
+                c += np.inner(adat[i].reshape((-1, )), bdat[j].reshape((-1, )))
                 i += 1
                 j += 1
 
@@ -3455,7 +3463,13 @@ def pinv(a, rcond=1e-15):
     return v
 
 
-def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, chargeR=None, inner_labels=[None, None]):
+def svd(a,
+        full_matrices=0,
+        compute_uv=1,
+        overwrite_a=False,
+        cutoff=None,
+        chargeR=None,
+        inner_labels=[None, None]):
     """ U, S, V = svd(a) ----> a = U diag(S) V
             U and V are npc.arrays, S is a normal numpy.array
 
@@ -3543,8 +3557,10 @@ def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, charge
 
         try:
             if compute_uv:
-                U_block, S_block, V_block = linalg.svd(
-                    t, full_matrices=0, compute_uv=1, overwrite_a=overwrite_a)
+                U_block, S_block, V_block = linalg.svd(t,
+                                                       full_matrices=0,
+                                                       compute_uv=1,
+                                                       overwrite_a=overwrite_a)
 
                 #eps = np.dot(np.dot(U_block.T, t), V_block.T)
                 #eps = eps*(S_block**(-0.5))
@@ -3558,8 +3574,7 @@ def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, charge
                     raise sp.linalg.LinAlgError
 
             else:
-                S_block = linalg.svd(t, full_matrices=0,
-                                     compute_uv=0, overwrite_a=overwrite_a)
+                S_block = linalg.svd(t, full_matrices=0, compute_uv=0, overwrite_a=overwrite_a)
         # Check for nan's
             if anynan(S_block):
                 print "S_block nansum(s):", np.nansum(S_block),
@@ -3579,8 +3594,7 @@ def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, charge
                     U_block, S_block, V_block = svd_dgesvd.svd_dgesvd(
                         t, full_matrices=0, compute_uv=1)
                 else:
-                    S_block = svd_dgesvd.svd_dgesvd(
-                        t, full_matrices=0, compute_uv=0)
+                    S_block = svd_dgesvd.svd_dgesvd(t, full_matrices=0, compute_uv=0)
 
             else:
                 print "[Appears SVD did not converge! Trying backup zGESVD for complex numbers.]"
@@ -3589,11 +3603,10 @@ def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, charge
                     U_block, S_block, V_block = svd_zgesvd.svd_zgesvd(
                         t, full_matrices=0, compute_uv=1)
                 else:
-                    S_block = svd_dgesvd.svd_zgesvd(
-                        t, full_matrices=0, compute_uv=0)
+                    S_block = svd_dgesvd.svd_zgesvd(t, full_matrices=0, compute_uv=0)
 
         if cutoff is not None:  # in case we want to discard tiny values
-            cut = S_block > cutoff      # a boolean array
+            cut = S_block > cutoff  # a boolean array
 
             S_block = S_block[cut]
 
@@ -3632,7 +3645,7 @@ def svd(a, full_matrices=0, compute_uv=1, overwrite_a=False, cutoff=None, charge
         U.q_conj[1] = a.q_conj[1]
 
         q_ir = q_il.copy()
-        V.q_ind = [q_ir,  a.q_ind[1]]
+        V.q_ind = [q_ir, a.q_ind[1]]
         V.q_conj[0] = -a.q_conj[1]
 
         U.q_dat = np.array(U.q_dat, dtype=np.uint)
@@ -3701,13 +3714,16 @@ def eigh(a, UPLO='L', sort=None, debug=False):
 
     if is_blocked == False:  # Make copy of a which is blocked by charge, and save permutation in 'pipe'
         pipe = a.make_pipe([0], block_single_legs=True)
-        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe]
-                           )  # executes permutation
+        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe])  # executes permutation
 
     num_q = a.num_q
     resw = np.zeros(a.shape[0], dtype=np.float)
-    resv = diag(np.array(1., dtype=np.promote_types(a.dtype, np.float)), a.q_ind[
-                0], q_conj=a.q_conj[0], mod_q=a.mod_q)
+    resv = diag(
+        np.array(
+            1., dtype=np.promote_types(a.dtype, np.float)),
+        a.q_ind[0],
+        q_conj=a.q_conj[0],
+        mod_q=a.mod_q)
     # w, v now default to 0 and the Identity
 
     for q, t in itertools.izip(a.q_dat, a.dat):  # For each non-zero entry
@@ -3736,7 +3752,7 @@ def eigh(a, UPLO='L', sort=None, debug=False):
 
         # By construction, resv is sorted and has all entries,
         resv.dat[q[0]] = rv
-        resw[a.q_ind[0][q[0], 0]: a.q_ind[0][q[0], 1]] = rw
+        resw[a.q_ind[0][q[0], 0]:a.q_ind[0][q[0], 1]] = rw
 
     if is_blocked == False:
         # The 'outer' facing leg is permuted back.
@@ -3777,13 +3793,16 @@ def eig(a, sort=None, debug=False):
 
     if is_blocked == False:  # Make copy of a which is blocked by charge, and save permutation in 'pipe'
         pipe = a.make_pipe([0], block_single_legs=True)
-        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe]
-                           )  # executes permutation
+        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe])  # executes permutation
 
     num_q = a.num_q
     resw = np.zeros(a.shape[0], dtype=np.complex)
-    resv = diag(np.array(1., dtype=np.promote_types(a.dtype, np.complex)), a.q_ind[
-                0], q_conj=a.q_conj[0], mod_q=a.mod_q)
+    resv = diag(
+        np.array(
+            1., dtype=np.promote_types(a.dtype, np.complex)),
+        a.q_ind[0],
+        q_conj=a.q_conj[0],
+        mod_q=a.mod_q)
     # w, v now default to 0 and the Identity
 
     for q, t in itertools.izip(a.q_dat, a.dat):  # For each non-zero entry
@@ -3807,7 +3826,7 @@ def eig(a, sort=None, debug=False):
 
         # By construction, resv is sorted and has all entries,
         resv.dat[q[0]] = rv
-        resw[a.q_ind[0][q[0], 0]: a.q_ind[0][q[0], 1]] = rw
+        resw[a.q_ind[0][q[0], 0]:a.q_ind[0][q[0], 1]] = rw
 
     if is_blocked == False:
         # The 'outer' facing leg is permuted back.
@@ -3838,8 +3857,7 @@ def eigvalsh(a, UPLO='L', sort=None, debug=False):
 
     if is_blocked == False:  # Make copy of a which is blocked by charge, and save permutation in 'pipe'
         pipe = a.make_pipe([0], block_single_legs=True)
-        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe]
-                           )  # executes permutation
+        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe])  # executes permutation
 
     num_q = a.num_q
     resw = np.zeros(a.shape[0], dtype=np.float)
@@ -3869,7 +3887,7 @@ def eigvalsh(a, UPLO='L', sort=None, debug=False):
                 raise ValueError, "Unrecognized eigh sorting option"
             rw = np.take(rw, piv)
 
-        resw[a.q_ind[0][q[0], 0]: a.q_ind[0][q[0], 1]] = rw
+        resw[a.q_ind[0][q[0], 0]:a.q_ind[0][q[0], 1]] = rw
 
     return resw, a.q_ind[0]
 
@@ -3894,8 +3912,7 @@ def eigvals(a, sort=None, debug=False):
 
     if is_blocked == False:  # Make copy of a which is blocked by charge, and save permutation in 'pipe'
         pipe = a.make_pipe([0], block_single_legs=True)
-        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe]
-                           )  # executes permutation
+        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe])  # executes permutation
 
     num_q = a.num_q
     resw = np.zeros(a.shape[0], dtype=np.complex)
@@ -3921,12 +3938,25 @@ def eigvals(a, sort=None, debug=False):
                 raise ValueError, "Unrecognized eigh sorting option"
             rw = np.take(rw, piv)
 
-        resw[a.q_ind[0][q[0], 0]: a.q_ind[0][q[0], 1]] = rw
+        resw[a.q_ind[0][q[0], 0]:a.q_ind[0][q[0], 1]] = rw
 
     return resw, a.q_ind[0]
 
 
-def speigs(a, charge_sector, k=6, M=None, sigma=None, which='LM', v0=None, ncv=None, maxiter=None, tol=0, return_eigenvectors=True, Minv=None, OPinv=None, OPpart=None):
+def speigs(a,
+           charge_sector,
+           k=6,
+           M=None,
+           sigma=None,
+           which='LM',
+           v0=None,
+           ncv=None,
+           maxiter=None,
+           tol=0,
+           return_eigenvectors=True,
+           Minv=None,
+           OPinv=None,
+           OPpart=None):
     """Sparse eigenvalue decomposition w, v of square npc.array A:
             A.v[i] = w[i] v[i]
 
@@ -3949,8 +3979,7 @@ def speigs(a, charge_sector, k=6, M=None, sigma=None, which='LM', v0=None, ncv=N
 
     if is_blocked == False:  # Make copy of a which is blocked by charge, and save permutation in 'pipe'
         pipe = a.make_pipe([0], block_single_legs=True)
-        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe]
-                           )  # executes permutation
+        a = a.combine_legs([[0], [1]], pipes=[pipe, pipe])  # executes permutation
 
     found = False
     for q, t in itertools.izip(a.q_dat, a.dat):  # Find relevant entry
@@ -3962,14 +3991,13 @@ def speigs(a, charge_sector, k=6, M=None, sigma=None, which='LM', v0=None, ncv=N
         if k > t.shape[0]:
             print "npc.speigs():  k > size, trimming k."
             k = t.shape[0]
-        w, np_v = sp_speigs(t, k, M, sigma, which, v0, ncv,
-                            maxiter, tol, return_eigenvectors, Minv, OPinv, OPpart)
+        w, np_v = sp_speigs(t, k, M, sigma, which, v0, ncv, maxiter, tol, return_eigenvectors,
+                            Minv, OPinv, OPpart)
 
         # turn into npc
         v = []
         for j in range(np_v.shape[1]):
-            u = zeros(a.q_ind[0:1], np_v.dtype, a.q_conj[
-                      0:1], charge_sector, a.mod_q)
+            u = zeros(a.q_ind[0:1], np_v.dtype, a.q_conj[0:1], charge_sector, a.mod_q)
             u.dat = [np_v[:, j]]
             u.q_dat = np.array([[q[0]]], dtype=np.uint)
             v.append(u)

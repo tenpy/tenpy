@@ -23,8 +23,7 @@ if PARALLEL_TDOT:  # really this should be based on compiler type but pain in as
         print "OpenMP not standard on OS-X, turning off PARALLEL_TDOT"
         PARALLEL_TDOT = 0
     if system == 'Windows':
-        extra_compile_args.extend(
-            ['/openmp', '/Ox', '/fp:fast', '/favor:INTEL64', '/Og'])
+        extra_compile_args.extend(['/openmp', '/Ox', '/fp:fast', '/favor:INTEL64', '/Og'])
     else:
         extra_compile_args.extend(["-v", "-fopenmp"])
         extra_link_args.extend(["-v", "-lgomp"])  # -gomp necessary for gcc
@@ -81,13 +80,11 @@ elif CANOPY_DIR is not None and MKL_DIR is not None:
 
     TKlibraries = ['mkl_rt', 'pthread', 'iomp5']
 
-
 elif CANOPY_DIR is not None:
     print "Using EPD-CANOPY"
     include_dirs.append('/usr/include')
     library_dirs.append(CANOPY_DIR + '/lib')
     TKlibraries = ['mkl_rt', 'pthread', 'm', 'iomp5']
-
 
 elif ATLAS_DIR is not None:
     print "Using ATLAS"
@@ -103,20 +100,21 @@ elif OPENBLAS_DIR is not None:
 
 else:
     include_dirs.append('/usr/include')
+    include_dirs.append('/System/Library/Frameworks/vecLib.framework/Headers/')  # < 10.9
     include_dirs.append(
-        '/System/Library/Frameworks/vecLib.framework/Headers/')  # < 10.9
-    include_dirs.append('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/System/Library/Frameworks/Accelerate.framework/Frameworks/vecLib.framework/Headers')  # 10.9
+        '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/System/Library/Frameworks/Accelerate.framework/Frameworks/vecLib.framework/Headers')  # 10.9
     library_dirs.append('/usr/lib')
     TKlibraries = ['blas', 'cblas']
 
-
-ext_modules = [	Extension("npc_helper", ["npc_helper.pyx"],
-                          extra_compile_args=extra_compile_args,
-                          extra_link_args=extra_link_args,
-                          include_dirs=include_dirs, libraries=libraries + TKlibraries, library_dirs=library_dirs,
-                          define_macros=[('CYTHON_TRACE', '0')],
-                          language='c++')
-                ]
+ext_modules = [Extension(
+    "npc_helper", ["npc_helper.pyx"],
+    extra_compile_args=extra_compile_args,
+    extra_link_args=extra_link_args,
+    include_dirs=include_dirs,
+    libraries=libraries + TKlibraries,
+    library_dirs=library_dirs,
+    define_macros=[('CYTHON_TRACE', '0')],
+    language='c++')]
 """
 setup(
   name = 'npc_helper',
@@ -124,5 +122,9 @@ setup(
   ext_modules = ext_modules
 )
 """
-setup(ext_modules=cythonize(ext_modules, compile_time_env={
-      'PARALLEL_TDOT': PARALLEL_TDOT, 'BLAS_COMPLEX_INNER': BLAS_COMPLEX_INNER}))
+setup(ext_modules=cythonize(
+    ext_modules,
+    compile_time_env={
+        'PARALLEL_TDOT': PARALLEL_TDOT,
+        'BLAS_COMPLEX_INNER': BLAS_COMPLEX_INNER
+    }))

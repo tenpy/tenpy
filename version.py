@@ -24,9 +24,9 @@ def git_version():
         pass
     return version + (' git=?')
 
+
 git_version = git_version()
-full_version = ''.join([git_version, ', using',
-                        'numpy ', numpy.version.full_version,
-                        ', scipy ', scipy.version.full_version])
+full_version = ''.join([git_version, ', using', 'numpy ', numpy.version.full_version, ', scipy ',
+                        scipy.version.full_version])
 
 __version__ = full_version

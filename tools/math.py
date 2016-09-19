@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.sparse.linalg                      # for the exception
+import scipy.sparse.linalg  # for the exception
 import scipy.sparse as sparse
 import scipy.optimize as optimize
 
@@ -18,7 +18,6 @@ try:
     has_bottleneck = True
 except:
     has_bottleneck = False
-
 
 int_I3 = np.eye(3, dtype=int)
 LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
@@ -223,10 +222,10 @@ def assert_np_match(a, b, tol=1e-15, name=''):
         print "{} mismatch:  {}  -  {}  >  {}".format(name, a, b, tol)
         raise ValueError, "{} not within tolerance {}".format(name, tol)
 
-
 ##########################################################################
 ##########################################################################
 # Actual Math functions
+
 
 def gcd(a, b):
     """Computes the greatest common divisor (GCD) of two numbers.  Retrun 0 if both a,b are zero, otherwise always return a non-negative number."""
@@ -256,22 +255,55 @@ def lcm(a, b):
     return a0 * (b0 // a)
 
 
-def speigs(A, k=6, M=None, sigma=None, which='LM', v0=None, ncv=None, maxiter=None, tol=0, return_eigenvectors=True, Minv=None, OPinv=None, OPpart=None):
+def speigs(A,
+           k=6,
+           M=None,
+           sigma=None,
+           which='LM',
+           v0=None,
+           ncv=None,
+           maxiter=None,
+           tol=0,
+           return_eigenvectors=True,
+           Minv=None,
+           OPinv=None,
+           OPpart=None):
     """ Compute the sparse eigenvalues(eigenvectors), without the restriction k < rank(A) - 1 """
-    d = A.shape[0]      # A should be a squre LinearOperator
+    d = A.shape[0]  # A should be a squre LinearOperator
     if k < d - 1:
         if True:  # sparse.sputils.getdtype(A) == float:
             # print 'crashing call for periodic bc or complex mps'
-            return sparse_eigen(A, k=k, M=M, sigma=sigma, which=which, v0=v0,
-                                ncv=ncv, maxiter=maxiter, tol=tol, return_eigenvectors=return_eigenvectors,
-                                Minv=Minv, OPinv=OPinv, OPpart=OPpart)
+            return sparse_eigen(
+                A,
+                k=k,
+                M=M,
+                sigma=sigma,
+                which=which,
+                v0=v0,
+                ncv=ncv,
+                maxiter=maxiter,
+                tol=tol,
+                return_eigenvectors=return_eigenvectors,
+                Minv=Minv,
+                OPinv=OPinv,
+                OPpart=OPpart)
             # print 'happy return'
         else:
-            Areal = sparse.csr_matrix(sparse.bmat(
-                [[A.real, -A.imag], [A.imag, A.real]]))
-            eigA = sparse_eigen(A, k=k, M=M, sigma=sigma, which=which, v0=v0,
-                                ncv=ncv, maxiter=maxiter, tol=tol, return_eigenvectors=return_eigenvectors,
-                                Minv=Minv, OPinv=OPinv, OPpart=OPpart)
+            Areal = sparse.csr_matrix(sparse.bmat([[A.real, -A.imag], [A.imag, A.real]]))
+            eigA = sparse_eigen(
+                A,
+                k=k,
+                M=M,
+                sigma=sigma,
+                which=which,
+                v0=v0,
+                ncv=ncv,
+                maxiter=maxiter,
+                tol=tol,
+                return_eigenvectors=return_eigenvectors,
+                Minv=Minv,
+                OPinv=OPinv,
+                OPpart=OPpart)
             if return_eigenvectors:
                 ind = np.argsort(eigA[0])
                 return (eigA[0][ind[0:-1:2]], eigA[1][:, ind[0:-1:2]])
@@ -320,9 +352,9 @@ def perm_sign(p):
         s = -s
     return s
 
-
 ##########################################################################
 # Stuff for fitting to an algebraic decay
+
 
 def alg_decay(x, a, b, c):
     return a * x**(-b) + c
@@ -349,7 +381,7 @@ def lin_fit_res(x, y):
 
 def alg_decay_fit_res(log_b, x, y):
     """Returns the residue of an algebraic decay fit of the form x ** (-np.exp(log_b))."""
-    return lin_fit_res(x ** (-np.exp(log_b)), y)
+    return lin_fit_res(x**(-np.exp(log_b)), y)
 
 
 def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
@@ -375,18 +407,16 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     for i in range(len(power_mesh)):
         # number of points inclusive
         brute_Ns = (power_mesh[i] if i == 0 else 2 * power_mesh[i]) + 1
-        log_power_step = (
-            log_power_range[1] - log_power_range[0]) / float(brute_Ns - 1)
+        log_power_step = (log_power_range[1] - log_power_range[0]) / float(brute_Ns - 1)
         # print 'iteration', i, ":", np.exp(np.arange(brute_Ns) *
         # log_power_step + log_power_range[0])
         brute_fit = optimize.brute(
             alg_decay_fit_res, [log_power_range], (x, y), Ns=brute_Ns, finish=None)
         if brute_fit <= global_log_power_range[0] + 1e-6:
-            return [0., 0., y[-1]]      # shit happened
-        log_power_range = (brute_fit - log_power_step,
-                           brute_fit + log_power_step)
+            return [0., 0., y[-1]]  # shit happened
+        log_power_range = (brute_fit - log_power_step, brute_fit + log_power_step)
         # print "-->", np.exp(brute_fit), "new range", np.exp(log_power_range)
-    l_fit = linear_fit(x ** (-np.exp(brute_fit)), y)
+    l_fit = linear_fit(x**(-np.exp(brute_fit)), y)
     return [l_fit[0], np.exp(brute_fit), l_fit[1]]
 
 
@@ -399,9 +429,10 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     ys = np.array(ys)
     y_shape = ys.shape
     assert y_shape[-1] == len(x)
-    abc_flat = np.array([alg_decay_fit(x, yyy, npts=npts, power_range=power_range,
-                                       power_mesh=power_mesh) for yyy in ys.reshape(-1, len(x))])
-    return abc_flat.reshape(y_shape[:-1] + (3,))
+    abc_flat = np.array([alg_decay_fit(
+        x, yyy, npts=npts, power_range=power_range, power_mesh=power_mesh)
+                         for yyy in ys.reshape(-1, len(x))])
+    return abc_flat.reshape(y_shape[:-1] + (3, ))
 
 
 def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_fit_args={}):
@@ -422,8 +453,7 @@ def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_f
         interp_x = np.arange(-0.03, 1.1, 1. / n_interp) * \
             (np.max(x) - np.min(x)) + np.min(x)
         if plot_fit_args.get('show_fit', True):
-            plot_module.plot(xfunc(interp_x), alg_decay(
-                interp_x, *fit_par), '-', **kwargs)
+            plot_module.plot(xfunc(interp_x), alg_decay(interp_x, *fit_par), '-', **kwargs)
         extrap_xrange = np.array([x[-2], np.max(interp_x)])
         if 'extrap_line_start' in plot_fit_args:
             try:
@@ -439,5 +469,4 @@ def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_f
             except IndexError:
                 extrap_xrange[1] = extrap_xrange[0]
         if extrap_xrange[0] < extrap_xrange[1]:
-            plot_module.plot(xfunc(extrap_xrange), [
-                             fit_par[2], fit_par[2]], '--', **kwargs)
+            plot_module.plot(xfunc(extrap_xrange), [fit_par[2], fit_par[2]], '--', **kwargs)
