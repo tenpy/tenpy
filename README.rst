@@ -47,6 +47,11 @@ You can install `sphinx`_ with::
 Afterwards, go to `docs` and run the following command::
 
     sphinx-build -b html -d sphinx_build/doctrees . sphinx_build/html
+    # alternatively, simply call `make html`
+
+This should generate the html documentation in `docs/sphinx_build/html`.
+Simply open this folder (to be precise: it's `index.html`) in your webbroser and enjoy this and other documentation 
+beatifully rendered and with cross links :-).
 
 
 Further documentation
