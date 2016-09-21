@@ -1,3 +1,6 @@
+"""compilation of npc_helper.pyx
+
+This file is used to compile the Cython-module npc_helper.pyx"""
 from distutils.extension import Extension
 from distutils.core import setup
 from Cython.Distutils import build_ext
@@ -38,9 +41,9 @@ else:
         extra_compile_args.append("-march=native")
 # Check for MKL or EPD by looking for these flags in environment variable
 MKL_DIR = os.getenv('MKL_DIR')
-if MKL_DIR == None:
+if MKL_DIR is None:
     MKL_DIR = os.getenv('MKLROOT')
-    if MKL_DIR == None:
+    if MKL_DIR is None:
         MKL_DIR = os.getenv('MKL_HOME')
 
 EPD_DIR = os.getenv('EPD_DIR')
@@ -106,25 +109,30 @@ else:
     library_dirs.append('/usr/lib')
     TKlibraries = ['blas', 'cblas']
 
-ext_modules = [Extension(
-    "npc_helper", ["npc_helper.pyx"],
-    extra_compile_args=extra_compile_args,
-    extra_link_args=extra_link_args,
-    include_dirs=include_dirs,
-    libraries=libraries + TKlibraries,
-    library_dirs=library_dirs,
-    define_macros=[('CYTHON_TRACE', '0')],
-    language='c++')]
-"""
-setup(
-  name = 'npc_helper',
-  cmdclass = {'build_ext': build_ext},
-  ext_modules = ext_modules
-)
-"""
-setup(ext_modules=cythonize(
-    ext_modules,
-    compile_time_env={
-        'PARALLEL_TDOT': PARALLEL_TDOT,
-        'BLAS_COMPLEX_INNER': BLAS_COMPLEX_INNER
-    }))
+def compile():
+    ext_modules = [Extension(
+        "npc_helper", ["npc_helper.pyx"],
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
+        include_dirs=include_dirs,
+        libraries=libraries + TKlibraries,
+        library_dirs=library_dirs,
+        define_macros=[('CYTHON_TRACE', '0')],
+        language='c++')]
+    """
+    setup(
+        name = 'npc_helper',
+        cmdclass = {'build_ext': build_ext},
+        ext_modules = ext_modules
+    )
+    """
+    setup(ext_modules=cythonize(
+        ext_modules,
+        compile_time_env={
+            'PARALLEL_TDOT': PARALLEL_TDOT,
+            'BLAS_COMPLEX_INNER': BLAS_COMPLEX_INNER
+        }))
+
+
+if __name__ == "__main__":  # safety clause for sphinx
+    compile()
