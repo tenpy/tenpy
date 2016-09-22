@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# TenPyLight documentation build configuration file, created by
+# TenPy documentation build configuration file, created by
 # sphinx-quickstart on Tue Sep 20 02:12:10 2016.
 #
 # This file is execfile()d with the current directory set to its
@@ -49,8 +49,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'TenPyLight'
-copyright = u'2016, Frank Pollmann et al.'
+project = u'TenPy'
+copyright = u'2016, TenPy community'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -182,7 +182,7 @@ html_static_path = ['sphinx_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'TenPyLightdoc'
+htmlhelp_basename = 'TenPydoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -202,8 +202,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('README', 'TenPyLight.tex', u'TenPyLight Documentation',
-   u'Frank Pollmann et al.', 'manual'),
+  ('README', 'TenPy.tex', u'TenPy Documentation',
+   u'TenPy community', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -232,8 +232,8 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('README', 'tenpylight', u'TenPyLight Documentation',
-     [u'Frank Pollmann et al.'], 1)
+    ('README', 'tenpylight', u'TenPy Documentation',
+     [u'TenPy community'], 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -246,8 +246,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('README', 'TenPyLight', u'TenPyLight Documentation',
-   u'Frank Pollmann et al.', 'TenPyLight', 'One line description of project.',
+  ('README', 'TenPy', u'TenPy Documentation',
+   u'TenPy community', 'TenPy', 'One line description of project.',
    'Miscellaneous'),
 ]
 
@@ -265,4 +265,4 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'http://docs.python.org/': None}
+intersphinx_mapping = {'https://docs.python.org/2.7': None }

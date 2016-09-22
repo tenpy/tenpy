@@ -1,8 +1,36 @@
 Installation instructions
 =========================
 
+How do I get set up? short summary
+----------------------------------
+Right now, this documentetion is only distributed with the code, so I guess you already have the code somehow.
+
+Minimal Requirements:
+Python 2.7 with fairly recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
+Further `Cython <http://www.cython.org>`_ and some kind of LaPack library (including the headers).
+
+In addition, some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting and visualization.
+However, this is not necessary for running simulations.
+
+If you want to run larger simulations, we recommend the use of Intels MKL and icc.
+It ships with a Lapack library, and uses optimization for Intel CPUs.
+Moreover, it uses parallelization of the Lapack routines, which makes execution much faster...
+However, that requires compiling python with the same icc, which is a bit complicated. 
+Details can be found in :doc:`docs/install.rst <install>`
+
+The python source is in the directory `tenpy`. 
+This folder `tenpy` should placed in (one of the folders of) the environment variable 
+`$PYTHONPATH <http://docs.python.org/2/using/cmdline.html#envvar-PYTHONPATH>`_.
+For example, if you have this library in `$HOME/path/to/TenPy/`, you can add the following line in your `~/.bashrc`::
+
+    export PYTHONPATH=$HOME/path/to/TenPy/
+
+You can then include the library in python::
+
+    >>> import tenpy
+
 .. NOTE:
-    This is a literal translation of TenPy's docs/setup.tex to rst. It might be outdated at some points.
+    The remainder is a literal translation of TenPy's docs/setup.tex to rst. It might be outdated at some points.
 
 These are instructions to get Roger and Mike's DMRG program, TenPy2, working on a computer. They also serve as instructions for installing any of the other programs on the following list, which are all required. There are some dependencies, so install these in the order given if you can. After the list, there are separate section for each of the items in the list.
 - Intel MKL

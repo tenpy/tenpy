@@ -1,14 +1,16 @@
 To-Do list
-===============
+==========
 Update docs/changes_TenPy.rst if you've done something.
 
 Primary goals for the coming release
-----------------------------------
+------------------------------------
 - convert TenPy2 code with autopep8, restrict to necessary parts. 
+
     - add files from old git repo without changes, git commit
     - run `$> yapf -r -i`. See docs/changes_TenPy.rst for detailed command
     - relative imports (except in tests)
     - git commit
+
 - run tests, extend tests
 - include minimal library with mps, mpo, model, 
 
@@ -18,16 +20,20 @@ Primary goals for the coming release
 Concrete things to be fixed in different files
 ----------------------------------------------
 - np_conserved:
+
   - documentation of general idea
   - simplify: remove translate_Q (?)
   - introduce new class leg_charge with charge data for a single leg
+
 - model:
+
   - separate class for nearest neighbour models.
   - every model should define Hmpo
   - generalize to non-uniform [d]
   - introduce basic lattice class;
     derive MPS-chain fixing index notation for accessing different sites
     How to handle different mappings lattice->chain?
+
 - docs/setup.tex: translate to reStructuredText
 - algorithms/linalg/npc_setup: document possible variables/setups in docs/setup.tex
 - which of algorithms/linalg/svd_* are necessary? np_conserved use svd_{d,z}gesvd.
@@ -40,7 +46,10 @@ To be done at some point for the next releases
 - update setup.tex
 - setup of the library
 - documentation on the idea of algorithms, references in doc strings.
+
   - np_conserved needs an introduction for newbies
+  - usage introduction with very simple (few-line) examples for newbies.
+
 
 Other
 -----
@@ -55,9 +64,9 @@ Wish-list
 - Open Source on GitHub? -> Licence?
 - possible to convert to python3 ? 
 
-
+.. _buglist:
 BUGS
-====
+----
 Here, you can report Bugs that need to be fixed.
 
 

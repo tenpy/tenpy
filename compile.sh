@@ -1,5 +1,5 @@
 #!/bin/bash
-cd algorithms/linalg
+cd tenpy/algorithms/linalg
 rm npc_helper.so
 #rm tokyo.so
 export ARCHFLAGS="-arch x86_64"

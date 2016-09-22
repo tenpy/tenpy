@@ -4,8 +4,13 @@
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
+SPHINXAPIDOC  = sphinx-apidoc
 PAPER         =
+# for generating the reference/*.rst files from the source
 BUILDDIR      = sphinx_build
+REFDIR        = reference
+SRC           = ../tenpy
+
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
@@ -45,6 +50,7 @@ help:
 	@echo "  pseudoxml  to make pseudoxml-XML files for display purposes"
 	@echo "  linkcheck  to check all external links for integrity"
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
+	@echo "  src2ref    to update the .rst files in reference/ from the source files with sphinx-api"
 
 clean:
 	rm -rf $(BUILDDIR)/*
@@ -165,6 +171,10 @@ doctest:
 	$(SPHINXBUILD) -b doctest $(ALLSPHINXOPTS) $(BUILDDIR)/doctest
 	@echo "Testing of doctests in the sources finished, look at the " \
 	      "results in $(BUILDDIR)/doctest/output.txt."
+
+src2ref:
+	# note: there seems to be a bug in sphinx-apidoc such that it ignores following 'excludedirs'
+	$(SPHINXAPIDOC) -d 3 -e -f -o $(REFDIR) $(SRC)
 
 xml:
 	$(SPHINXBUILD) -b xml $(ALLSPHINXOPTS) $(BUILDDIR)/xml
