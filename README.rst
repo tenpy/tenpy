@@ -21,9 +21,13 @@ If you like it simply, you can just use intective python `help()`, Python IDEs o
 
 Alternatively, you can also use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats including HTML or PDF.
-You can install `Sphinx`_ with::
+You can install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
 
-    pip install sphinx
+    sudo pip install --upgrade sphinx numpydoc
+
+.. Note ::
+   If you don't have super user rights, try ``pip install --upgrade --user sphinx numpydoc`` to 
+   install the packages to your home directory.
 
 Afterwards, go to the folder `docs` and run the following command::
 

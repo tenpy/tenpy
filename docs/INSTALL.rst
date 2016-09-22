@@ -11,6 +11,10 @@ Further `Cython <http://www.cython.org>`_ and some kind of LaPack library (inclu
 
 In addition, some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting and visualization.
 However, this is not necessary for running simulations.
+For building the documentation, you need
+`Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.
+If you plan to contribute to the code, you should use
+`yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
 
 If you want to run larger simulations, we recommend the use of Intels MKL and icc.
 It ships with a Lapack library, and uses optimization for Intel CPUs.
@@ -29,8 +33,13 @@ You can then include the library in python::
 
     >>> import tenpy
 
-.. NOTE:
+
+.. Note ::
     The remainder is a literal translation of TenPy's docs/setup.tex to rst. It might be outdated at some points.
+
+
+How to compile TenPy against MKL
+--------------------------------
 
 These are instructions to get Roger and Mike's DMRG program, TenPy2, working on a computer. They also serve as instructions for installing any of the other programs on the following list, which are all required. There are some dependencies, so install these in the order given if you can. After the list, there are separate section for each of the items in the list.
 - Intel MKL

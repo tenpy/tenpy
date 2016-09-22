@@ -8,7 +8,7 @@ This part of the documentation simply covers all the exta files in the documenta
 Here's a list of the important files
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    INSTALL
    contribution
