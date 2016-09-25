@@ -30,8 +30,10 @@ import os
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
+    'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'numpydoc',
@@ -102,7 +104,9 @@ pygments_style = 'sphinx'
 
 # Avoid a bunch of warnings when using properties with doc strings in classes.
 # see https://github.com/phn/pytpm/issues/3#issuecomment-12133978
-# numpydoc_show_class_members = False
+numpydoc_show_class_members = False
+
+autosummary_generate = True
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -208,7 +212,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('README', 'TenPy.tex', u'TenPy Documentation',
+  ('index', 'TenPy.tex', u'TenPy Documentation',
    u'TenPy community', 'manual'),
 ]
 
@@ -238,7 +242,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('README', 'tenpylight', u'TenPy Documentation',
+    ('index', 'tenpylight', u'TenPy Documentation',
      [u'TenPy community'], 1)
 ]
 
@@ -252,7 +256,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('README', 'TenPy', u'TenPy Documentation',
+  ('index', 'TenPy', u'TenPy Documentation',
    u'TenPy community', 'TenPy', 'One line description of project.',
    'Miscellaneous'),
 ]
@@ -268,7 +272,6 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
-
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'https://docs.python.org/2.7': None}

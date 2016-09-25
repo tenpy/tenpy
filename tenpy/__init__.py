@@ -25,7 +25,9 @@ This fork tries getting back to a simple version of TenPy.
 
 from . import version
 
+# hard-coded tuple of versions
 __version__ = version.version
+# full version from git description, and numpy/scipy versions
 __full_version__ = version.full_version
 
 # TODO: set __all__, include some parts of the library?

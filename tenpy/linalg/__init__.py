@@ -4,7 +4,7 @@ Most notably is the module :mod:`~tenpy.linalg.np_conserved`,
 which contains everything needed to make use of
 charge conservervation in the context of tensor networks.
 
-Relevant contenents of :mod:`~tenpy.linalg.charges` are
+Relevant contenents of :mod:`~tenpy.linalg.charges`
 are imported to :mod:`~tenpy.linalg.np_conserved`,
 so you propably won't need to import `charges` directly.
 """

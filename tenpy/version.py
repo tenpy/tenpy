@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Access to version of this library.
 
 Before updating a version, make sure nosetest runs *all* tests in test successfully!
@@ -14,7 +13,8 @@ import scipy
 import subprocess
 import os
 
-version = 'v0.0.0'
+# hard-coded version
+version = (0, 0, 0)
 
 
 def git_version():
@@ -24,11 +24,11 @@ def git_version():
         return subprocess.check_output(['git', 'describe'], cwd=lib_dir).strip()
     except:
         pass
-    return version + ' git=?'
+    return 'v' + '.'.join(map(str, version)) + ' git=?'
 
-
+# git descritpion of the version
 git_version = git_version()
-full_version = ''.join([git_version, ', using', 'numpy ', numpy.version.full_version, ', scipy ',
-                        scipy.version.full_version])
 
-__version__ = full_version
+# git version + numpy, scipy versions
+full_version = "{0:s} using numpy {1:s}, scipy {2:s}".format(
+    git_version, numpy.version.full_version, scipy.version.full_version)

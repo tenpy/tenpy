@@ -3,16 +3,16 @@
 import numpy as np
 import scipy as sp
 import scipy.linalg
-from TenPyLight.algorithms.linalg import np_conserved as npc
-from TenPyLight.algorithms.linalg import npc_helper
-from TenPyLight.algorithms.linalg import LA_tools
+from tenpy.algorithms.linalg import np_conserved as npc
+from tenpy.algorithms.linalg import npc_helper
+from tenpy.algorithms.linalg import LA_tools
 import functools
 import itertools
 import timeit
 import time
 import random
 import sys
-from TenPyLight.tools.string import joinstr
+from tenpy.tools.string import joinstr
 
 Q_p = np.array([-1, -1, 1, 1]).reshape((-1, 1))
 
