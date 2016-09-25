@@ -3,7 +3,9 @@
 
 Before updating a version, make sure nosetest runs *all* tests in test successfully!
 To update a version, change `version` in this module and create a git tag ::
+
     git tag -a "v1.0.2"
+
 Make shure to push your tag into the shared git repo with `git push origin [tagname]`.
 """
 
@@ -22,7 +24,7 @@ def git_version():
         return subprocess.check_output(['git', 'describe'], cwd=lib_dir).strip()
     except:
         pass
-    return version + (' git=?')
+    return version + ' git=?'
 
 
 git_version = git_version()

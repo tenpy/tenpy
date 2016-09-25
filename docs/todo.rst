@@ -11,19 +11,24 @@ Primary goals for the coming release
     - relative imports (except in tests)
     - git commit
 
+- CamelCase for classes
+- rewrite of np_conserved
 - run tests, extend tests
 - include minimal library with mps, mpo, model, 
+- update INSTALL.rst
 
 
+- setup of the library
 
 
 Concrete things to be fixed in different files
 ----------------------------------------------
 - np_conserved:
 
-  - documentation of general idea
-  - simplify: remove translate_Q (?)
+  - documentation of general idea -> docs/Intro
+  - simplify: remove translate_Q
   - introduce new class leg_charge with charge data for a single leg
+  - moved into tenpy/linalg
 
 - model:
 
@@ -32,9 +37,8 @@ Concrete things to be fixed in different files
   - generalize to non-uniform [d]
   - introduce basic lattice class;
     derive MPS-chain fixing index notation for accessing different sites
-    How to handle different mappings lattice->chain?
+    How to best handle different mappings lattice->chain?
 
-- docs/setup.tex: translate to reStructuredText
 - algorithms/linalg/npc_setup: document possible variables/setups in docs/setup.tex
 - which of algorithms/linalg/svd_* are necessary? np_conserved use svd_{d,z}gesvd.
   I also have a svd_robust.py in my TenPy; is that used anywhere?
@@ -43,26 +47,27 @@ Concrete things to be fixed in different files
 
 To be done at some point for the next releases
 ----------------------------------------------
-- update setup.tex
-- setup of the library
+- uniform way of handling truncation errors -> module tools/truncation with TruncError class and TruncError
 - documentation on the idea of algorithms, references in doc strings.
 
   - np_conserved needs an introduction for newbies
   - usage introduction with very simple (few-line) examples for newbies.
 
+- set __all__  in the __init__.py files.
+- properties might be useful for certain things, e.g. for dtype of npc.Array
 
 Other
 -----
-- Rename TenPyLight: too long?  TeNetLight?
+- Rename TenPy to distinguish from old version? TenPyLight is quite long...
 - how much speedup does npc_helper give? 
   Maybe, a portable (python-only) np_conserved without npc_helper would be possible?
 
 Wish-list
 ---------
 - ED code using the symmetries, including example/test
-- HTML documentation with sphinx
 - Open Source on GitHub? -> Licence?
 - possible to convert to python3 ? 
+- create a logo?
 
 .. _buglist:
 BUGS

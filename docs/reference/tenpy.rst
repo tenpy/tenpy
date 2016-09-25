@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
     tenpy.algorithms
+    tenpy.linalg
     tenpy.tools
 
 Submodules

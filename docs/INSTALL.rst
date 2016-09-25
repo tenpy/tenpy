@@ -20,7 +20,7 @@ If you want to run larger simulations, we recommend the use of Intels MKL and ic
 It ships with a Lapack library, and uses optimization for Intel CPUs.
 Moreover, it uses parallelization of the Lapack routines, which makes execution much faster...
 However, that requires compiling python with the same icc, which is a bit complicated. 
-Details can be found in :doc:`docs/install.rst <install>`
+Details can be found below.
 
 The python source is in the directory `tenpy`. 
 This folder `tenpy` should placed in (one of the folders of) the environment variable 
@@ -34,7 +34,7 @@ You can then include the library in python::
     >>> import tenpy
 
 
-.. Note ::
+.. note ::
     The remainder is a literal translation of TenPy's docs/setup.tex to rst. It might be outdated at some points.
 
 

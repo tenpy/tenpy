@@ -9,6 +9,7 @@ The code is intended to be easy readable for students new to the field,
 and yet powerful enough for day-to-day research.
 
 The library provides:
+
 - various predefined models with standard hamiltonians of the field, e.g., the XXZ spin chain
 - various algorithms, e.g., DMRG, TEBD, MPO time evolution
 - the necessary tools to perform this, including

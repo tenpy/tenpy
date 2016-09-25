@@ -109,6 +109,7 @@ else:
     library_dirs.append('/usr/lib')
     TKlibraries = ['blas', 'cblas']
 
+
 def compile():
     ext_modules = [Extension(
         "npc_helper", ["npc_helper.pyx"],

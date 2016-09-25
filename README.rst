@@ -1,9 +1,9 @@
-Welcome to TenPy's documentation!
-======================================
+Welcome to TenPy!
+=================================
 
 Introduction
 ------------
-This is a Python Library for simulation of strongly correlated quantum systems with tensor networks.
+TenPy is a Python Library for the simulation of strongly correlated quantum systems with tensor networks.
 It's based on TenPy2, but tries to be readable and easy to understand for new peoples.
 A detailed list of changes compared to the previous TenPy can be found in docs/changes_TenPy.rst
 
@@ -25,7 +25,7 @@ You can install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/py
 
     sudo pip install --upgrade sphinx numpydoc
 
-.. Note ::
+.. note ::
    If you don't have super user rights, try ``pip install --upgrade --user sphinx numpydoc`` to 
    install the packages to your home directory.
 
@@ -38,7 +38,7 @@ Simply open this folder (or to be precise: the file `index.html` in it) in your 
 and enjoy this and other documentation beautifully rendered, with cross links, Math forumulas
 and even a search function :-).
 
-.. Note ::
+.. note ::
    Building the html documentation requires loading the modules.
    Thus make sure that the folder tenpy is included in you `$PYTHONPATH`.
 

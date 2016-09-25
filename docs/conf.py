@@ -100,6 +100,9 @@ pygments_style = 'sphinx'
 # If true, keep warnings as "system message" paragraphs in the built documents.
 #keep_warnings = False
 
+# Avoid a bunch of warnings when using properties with doc strings in classes.
+# see https://github.com/phn/pytpm/issues/3#issuecomment-12133978
+# numpydoc_show_class_members = False
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -151,6 +154,8 @@ html_static_path = ['sphinx_static']
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
+html_sidebars = { '**': ['localtoc.html', 'relations.html',
+                         'searchbox.html', 'globaltoc.html'], }
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -266,4 +271,4 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'https://docs.python.org/2.7': None }
+intersphinx_mapping = {'https://docs.python.org/2.7': None}

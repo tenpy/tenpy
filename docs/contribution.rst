@@ -1,5 +1,6 @@
 Contributing
 ============
+
 The code is maintained in a git repository. You're welcome to contribute and push changes back.
 However, to keep consistency, we ask you to comply with the following guidelines:
 
@@ -10,7 +11,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
 
       yapf -r -i ./
 
-.. Note ::
+.. note ::
   Since no tool is perfect, you can format some regions of code manually and enclose them 
   with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
@@ -39,27 +40,35 @@ However, to keep consistency, we ask you to comply with the following guidelines
         To refer to variables within math, use `\mathtt{varname}`.
         """
 
-  Instructions for building the documentation are in the `README.rst <index>`.
+  Instructions for building the documentation are in :doc:`INSTALL`.
 
-- Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
-  Run it simply with `nosetest` in `tests`.
-- A To-Do list can be found in :doc:`docs/todo.rst <todo>`. It also contains a bug list.
-- During development, you can introduce `# TODO` comments. But also try to remove them again later!
-  During development, unfinished functions should raise a `NotImplementedError`.
-  Bugs may be marked with `# BUG`. Also add them to the bug list in docs/todo.rst
-- Use relative imports within TenPy, e.g. ::
+- Every file should (after the doc-string) include::
+
+      from __future__ import division
+
+  This reduces the ambiguity of the ``/`` operator to give floating points even for integer division.
+  If you want true integer division, make it explicit with the new ``//`` operator.
+  See :pep:`238` for details. Example::
+
+      >>> print 5 / 4    # without __future__ division, this would be 1
+      1.25
+      >>> print 5 // 4
+      1
+- Use relative imports within TenPy. Example::
 
       from ..algorithms.linalg import np_conserved as npc
+      # instead of `import tenpy.tools.strings `
 
+- If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``docs/`` folder
+  to update the documentation index for the reference.
+- Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
+  Run it simply with ``nosetest`` in `tests/`.
+- A To-Do list can be found in :doc:`docs/todo.rst <todo>`. It also contains a bug list.
+- During development, you can introduce `# TODO` comments. But also try to remove them again later!
+  Or at least add an entry in the todo list...
 
-
-  - Use `reStructuredText` for the doc strings and extra documentation files.
-
-  - For small functions just one-liner, else a one-liner summary followed by a blank line, followed by the description.
-  - document at most one argument per line. If appropriate, give expected type and default values.
-    I would suggest following numpys style, see this .
-    Useful tips on top of that:
-
+  During development, unfinished functions should ``raise NotImplementedError()``.
+  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in docs/todo.rst.
 
 
 Thank You for helping with the development!
