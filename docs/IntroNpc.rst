@@ -32,11 +32,20 @@ A **block** is a contiguous slice corresponding to the same charge(s) of the leg
 A **qindex** is an index in the list of blocks for a certain leg.
 A **charge sector** is for given charge(s) is the set of all qindices of that charge(s).
 A leg is **blocked** if all charge sectors are contiguous (i.e., consist only of a single qindex).
-Finally, a leg is **sorted**, if the charges are sorted lexiographically.  Note that `sorted` implies `blocked`.
-We can also speak of the complete array to be blocked (sorted), which means that all of its legs are blocked (or sorted,
-respectively).
-
+Finally, a leg is **sorted**, if the charges are sorted lexiographically.
+Note that a `sorted` leg is always `blocked`.
+We can also speak of the complete array to be blocked or **legcharge-sorted**,  which means that all of its legs are blocked or sorted, respectively.
 The charge data for a single leg is collected in the class :class:`~tenpy.linalg.charges.LegCharge`.
+
+For completeness, let us also summarize also the internal structure of an :class:`~tenpy.linalg.np_conserved.Array` here:
+The array saves only non-zero blocks, collected as a list of `np.array` in ``self._data``.
+The qindices necessary to map these blocks to the original leg indices are collected in ``self._qdat``
+An array is said to be **qdat-sorted** if its ``self._qdat`` is lexiographically sorted.
+More details on this follow later. However, note that you usually shouldn't access `_qdat` and `_data` directly - this
+is only necessary from within `tensordot`, `svd`, etc.
+
+Finally, a **leg pipe** (implemented in :class:`~tenpy.linalg.charges.LegPipe`)
+is used to formally combine multiple legs into one leg. Again, more details follow later.
 
 Physical Example
 ----------------

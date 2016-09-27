@@ -6,8 +6,7 @@ import numpy.testing as npt
 import nose.tools as nst
 import itertools as it
 
-# charges for comparison
-# unsorted
+# charges for comparison, unsorted (*_us) and sorted (*_s)
 qflat_us = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2,
                      -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2,
                      2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 6, 6]).reshape((-1, 1))
@@ -68,10 +67,18 @@ def test__find_row_differences():
 
 
 def test_LegCharge():
-    for (qflat, qind) in [(qflat_s, qind_s), (qflat_us, qind_us)]:
-        lc = charges.LegCharge.from_qflat(ch_1, qflat)
-        npt.assert_equal(lc.qind, qind)  # check qflat -> qind
-        npt.assert_equal(lc.to_qflat(), qflat)  # check qind -> qflat
+    lcs = charges.LegCharge.from_qflat(ch_1, qflat_s)
+    npt.assert_equal(lcs.qind, qind_s)  # check qflat_s -> qind_s
+    npt.assert_equal(lcs.to_qflat(), qflat_s)  # check qind_s -> qflat_s
+    lcus = charges.LegCharge.from_qflat(ch_1, qflat_us)
+    npt.assert_equal(lcus.qind, qind_us)  # check qflat_us -> qind_us
+    npt.assert_equal(lcus.to_qflat(), qflat_us)  # check qind_us -> qflat_us
+
     lc = charges.LegCharge.from_qdict(ch_1, qdict_s)
     npt.assert_equal(lc.qind, qind_s)  # qdict -> qflat
     npt.assert_equal(lc.to_qdict(), qdict_s)  # qflat -> qdict
+    nst.eq_(lcs.is_sorted(), True)
+    nst.eq_(lcs.is_blocked(), True)
+    nst.eq_(lcus.is_sorted(), False)
+    nst.eq_(lcus.is_blocked(), False)
+    # TODO test bunch and sort

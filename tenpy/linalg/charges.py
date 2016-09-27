@@ -156,7 +156,6 @@ class LegCharge(object):
         self.qind = np.array(qind, dtype=QDTYPE)
         self.qconj = qconj
         self.test_sanity()
-        # TODO attributes blocked, sorted
 
     @classmethod
     def from_trivial(cls, ind_len, qconj=1):
@@ -240,10 +239,59 @@ class LegCharge(object):
 
     def to_qdict(self):
         """return `self.qind` in `qdict` form. Raises ValueError, if not blocked."""
-        # TODO: needs self.blocked()
-        # if not self.blocked:
-        #     raise ValueError("can't convert qflat to qdict for non-blocked LegCharge")
-        return dict([(tuple(qsec[2:]), slice(qsec[0], qsec[1])) for qsec in self.qind])
+        res = dict([(tuple(qsec[2:]), slice(qsec[0], qsec[1])) for qsec in self.qind])
+        if len(res) < self.block_number:  # ensures self is blocked
+            raise ValueError("can't convert qflat to qdict for non-blocked LegCharge")
+        return res
+
+    def is_blocked(self):
+        """returns whether self is blocked, i.e. qindex map 1:1 to charge values."""
+        s = {tuple(c) for c in self.qind[:, 2:]}  # a set has unique elements
+        return (len(s) == self.block_number)
+
+    def is_sorted(self):
+        """returns whether the charge values in qind are sorted lexiographically"""
+        res = np.lexsort(self.qind[:, 2:].T)
+        return res == np.arange(len(res))
+
+    def sort(self):
+        """Return a copy of `self` sorted by charges.
+
+        Returns
+        -------
+        piv : array (ind_len,)
+            the mapping used for the sorting.
+            For a ndarray, ``sorted_array = unsorted_array[piv]``.
+        sorted_self : LegCharge
+            a shallow copy of self, sorted (and thus blocked) by charges
+
+        See also
+        --------
+        np.take : apply piv to a given axis
+        """
+        piv = np.lexsort(self.qind[:, 2:].T)
+        cp = copy.copy(self)
+        cp.qind = np.empty_like(self.qind)
+        cp.qind[:, 2:] = self.qind[piv, 2:]
+        # figure out the re-ordered slice boundaries
+        blocksizes = cp.qind[:, 1] - cp.qind[:, 0]
+        blocksizes = np.accumulate(blocksizes[piv])
+        cp.qind[0, 0] = 0
+        cp.qind[1:, 0] = blocksizes[:-1]
+        cp.qind[:, 0] = blocksizes
+        cp.bunch()
+        return piv, cp
+
+    def bunch(self):
+        """bunch self.qind: form blocks for contiguous equal charges.
+
+        See also
+        --------
+        sort : sorts by charges, thus enforcing complete blocking"""
+        idx = self._find_row_differences(self.qind[:, 2:])[:-1]
+        ind_len_cp = self.ind_len
+        self.qind = self.qind[idx[:-1]]
+        self.qind[-1, 1] = ind_len_cp
 
     def __str__(self):
         """return a string of qind"""
@@ -252,6 +300,12 @@ class LegCharge(object):
     def __repr__(self):
         """full string representation"""
         return "LegCharge({0:r},{1:s})".format(self.chinfo, self.qind)
+
+
+class LegPipe(object):
+    # TODO ....
+    def __init__(self):
+        raise NotImplementedError()
 
 
 def _find_row_differences(qflat):
@@ -273,3 +327,13 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
+
+def reverse_sort_piv(piv):
+    """reverse sorting indices.
+
+    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `piv` array,
+    such that ``sorted_array = old_array[piv]``.
+    This function reverses `piv`, such that ``old_array = sorted_array[reverse_sort_piv(piv)]``.
+    """
+    return np.arange(len(piv))[piv]

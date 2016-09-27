@@ -14,7 +14,7 @@ Primary goals for the coming release
 - CamelCase for classes
 - rewrite of np_conserved
 - run tests, extend tests
-- include minimal library with mps, mpo, model, 
+- include minimal library with mps, mpo, basic model (XXZ)
 - update INSTALL.rst
 
 
@@ -49,7 +49,7 @@ To be done at some point for the next releases
 ----------------------------------------------
 - uniform way of handling truncation errors -> module tools/truncation with TruncError class and TruncError
 - documentation on the idea of algorithms, references in doc strings.
-
+  - overview and usage introduction to the overall library
   - np_conserved needs an introduction for newbies
   - usage introduction with very simple (few-line) examples for newbies.
 
@@ -66,7 +66,10 @@ Wish-list
 ---------
 - ED code using the symmetries, including example/test
 - Open Source on GitHub? -> Licence?
-- possible to convert to python3 ? 
+- possible to convert to python3? 
+- dump of stack for lated inspection, when an error occurs while on the cluster?
+- logging mechanism?
+- extend simulation class: save standard variables?
 - create a logo?
 
 .. _buglist:
