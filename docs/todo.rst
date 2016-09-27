@@ -43,6 +43,7 @@ Concrete things to be fixed in different files
 - which of algorithms/linalg/svd_* are necessary? np_conserved use svd_{d,z}gesvd.
   I also have a svd_robust.py in my TenPy; is that used anywhere?
 - add doc strings in __init__.py for different folders, explaining the most important parts of the modules
+- The MPO class has no function for expectation value with MPS?
 
 
 To be done at some point for the next releases
@@ -64,17 +65,19 @@ Other
 
 Wish-list
 ---------
-- ED code using the symmetries, including example/test
-- Open Source on GitHub? -> Licence?
-- possible to convert to python3? 
+- Open Source on GitHub? -> Licence? Documentation on readthedocs.org?
 - dump of stack for lated inspection, when an error occurs while on the cluster?
 - logging mechanism?
-- extend simulation class: save standard variables?
 - create a logo?
+- Johannes Motruk: extend simulation class: save standard variables?
+- Ruben: extend MPS TransferMatrix class
+- Johannes H: possible to convert to python3? 
+- Johannes H: ED code using the symmetries, including example/test?
+
 
 .. _buglist:
 BUGS
-----
+====
 Here, you can report Bugs that need to be fixed.
 
 
