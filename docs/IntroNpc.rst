@@ -115,7 +115,7 @@ for each charge).
 
     Since the keys of a dictionary are unique, this includes all indices only if the leg is completely `blocked`.
 
-    
+
 The :class:`~tenpy.linalg.charges.LegCharge` uses saves the charge data of a leg internally in qind form.
 It also provides convenient functions for conversion between from and to the flat and dict form.
 
@@ -131,78 +131,110 @@ But how is this 'compatible' defined?
 Assume you have a tensor, call it :math:`T`, and the :class:`~tenpy.linalg.charges.LegCharge` for all of its legs, say :math:`a, b, c, ...`.
 
 Remeber that the LegCharge associates to each index of the leg a charge value (for each of the charges, if `qnumber` > 1).
-Let :math:`q_a[i_a]` denote the charge(s) of index :math:`i_a` for leg :math:`a`, and similar for other legs.
+Let ``a.to_qflat()[ia]`` denote the charge(s) of index ``ia`` for leg ``a``, and similar for other legs.
 
 In addition, the LegCharge has a flag :attr:`~tenpy.linalg.charges.LegCharge.qconj`. This flag **qconj** is only a sign,
 saved as +1 or -1, specifying whether the charges point inward (+1, default) or outward (-1) of the tensor.
 
-Then, the **total charge** of a single entry :math:`T[i_a, i_b, i_c, ...]` of the tensor is defined as:
+Then, the **total charge** of a single entry ``T[ia, ib, ic, ...]`` of the tensor is defined as::
 
-.. math ::
-   qtotal[i_a, i_b, i_c, ...] = q_a[i_a] * qconj_a + qb[i_b] * qconj_b + q_c[i_c] * qconj_c + ...  \quad (mod ~qmod)
+   qtotal[ia, ib, ic, ...] = a.to_qflat()[ia] * a.qconj + b.to_qflat()[ib] * b.qconj + c.to_qflat()[ic] * c.qconj + ...  modulo qmod
 
-In case of multiple charges, `qnumber` > 1, this equation holds for each of the different charges individually with the
-corresponding `qmod` of the charge.
+In case of multiple charges, ``qnumber`` > 1, this equation holds for each of the different charges individually with the
+corresponding ``qmod`` of the charge.
 
 The rule which entries of the a :class:`~tenpy.linalg.np_conserved.Array` can be non-zero
 (i.e., are 'compatible' with the charges), is then very simple:
 
-.. admonition:: Rule
+.. topic :: Rule for non-zero entries
 
-    An entry :math:`(i_a, i_b, i_c, ...)` of a :class:`~tenpy.linalg.np_conserved.Array` can only be non-zero,
-    if :math:`qtotal[i_a, i_b, i_c, ...]` matches the `qtotal` attribute of the class.
+    An entry ``ia, ib, ic, ...`` of a :class:`~tenpy.linalg.np_conserved.Array` can only be non-zero,
+    if ``qtotal[ia, ib, ic, ...]`` matches the :attr:`~tenpy.linalg.np_conserved.qtotal` attribute of the class.
 
-Again, this must hold for each of the charges in the case `qnumber` > 1.
+Again, this must hold for each of the charges seperately in the case ``qnumber`` > 1.
 
 The pesky qconj - contraction as an example
 -------------------------------------------
-Why did we introduce the `qconj` flag? Remember it's just a sign telling whether the charge points inward or outward.
+Why did we introduce the ``qconj`` flag? Remember it's just a sign telling whether the charge points inward or outward.
 So whats the reasoning?
 
 The short answer is, that LegCharges actually live on bonds (i.e., legs which are to be contracted) 
 rather than individual tensors. Thus, it is convenient to share the LegCharges between different legs and even tensors, 
 and just adjust the sign.
 
-For example, consider the contraction of two tensors, :math:`C_{a,c} = \sum_b A_{i_a,i_b} B_{i_b,i_c}`.
+As an example, consider the contraction of two tensors, :math:`C_{ia,ic} = \sum_{ib} A_{ia,ib} B_{ib,ic}`.
 For simplicity, say that the total charge of all three tensors is zero.
 What are the implications of the above rule for non-zero entries?
-Or rather, how can we ensure that :math:`C` complies with the above rule?
-An entry of :math:`C_{i_a,i_c}` will only be non-zero, if
-there is an :math:`i_b` such that both `A_{i_a,i_b}` and `B_{i_b,i_c}` are non-zero, i.e., both of the following equations are
-fullfilled:
+Or rather, how can we ensure that ``C`` complies with the above rule?
+An entry ``C[ia,ic]`` will only be non-zero, 
+if there is an ``ib`` such that both ``A[ia,ib]`` and ``B[ib,ic]`` are non-zero, i.e., both of the following equations are
+fullfilled::
 
-.. math ::
-   A.qtotal = A.q_a[i_a] A.qconj_a + A.q_b[i_b] A.qconj_b  \quad (mod ~qmod)
-   B.qtotal = B.q_b[i_b] B.qconj_b + B.q_c[i_c] B.qconj_c  \quad (mod ~qmod)
+   A.qtotal == A.a.to_qflat()[ia] A.a.qconj_a + A.b.to_qflat()[ib] A.b.qconj  modulo qmod
+   B.qtotal == B.b.to_qflat()[ib] B.b.qconj_b + B.c.to_qflat()[ic] B.c.qconj  modulo qmod
 
-Here, the `A.` and `B.` are use to distinguish the legs of the tensors :math:`A` and :math:`B`.
+Here, the ``A.a`` should denotes the LegCharges for leg ``a`` of the tensor -- it is not directly accessible as an
+attribute.
 
 For the uncontracted legs, we just keep the charges as they are::
 
-   C.q_a = A.q_a
-   C.qconj_a = A.qconj_a
-   C.q_c = B.q_c
-   C.qconj_c = C.qconj_c
+   C.a.qind = A.a.qind
+   C.a.qconj = A.a.qconj
+   C.c.qind = B.c.qind
+   C.c.qconj = B.c.qconj
 
-It is then straight-forward to check, that the rule is fullfilled for :math:`C`, if the following condition is met:
+It is then straight-forward to check, that the rule is fullfilled for :math:`C`, if the following condition is met::
 
-.. math ::
-   A.qtotal + B.qtotal - C.qtotal  = A.q_b[i_b] A.qconj_b + B.q_b[i_b] B.qconj_b \quad (mod ~qmod)
+   A.qtotal + B.qtotal - C.qtotal == A.b.to_qflat()[ib] A.b.qconj + B.b.to_qflat()[ib] B.b.qconj  modulo qmod
 
-
+The easiest way to meet this condition is, if ``A.b`` and ``B.b`` share the *same* charges ``b.to_qflat()``, but have
+opposite ``qconj``, and defining ``C.qtotal = A.qtotal + B.qtotal``.
+This justifies the introduction of ``qconj``:
+when you define the tensors, you have to define the :class:`~tenpy.linalg.charges.LegCharge` only once, say ``A.b``.
+For ``B.b`` you simply use ``A.b.conj()`` - this creates a copy with shared ``qind``, but opposite ``qconj``.
+Or, as a more impressive example, all 'physical' legs of an MPS can usually share the same
+:class:`~tenpy.linalg.charges.LegCharge`.
 
 
 Assigning charges to non-physical legs
 --------------------------------------
 From the above physical examples, it should be clear how you assign charges to physical legs.
-But what about other legs, e.g, the virtual bond of an MPS?
-The charge of these bonds must be derived by using the above
+But what about other legs, e.g, the virtual bond of an MPS? 
 
+The charge of these bonds must be derived by using the 'rule for non-zero entries', as far as they are not arbitrary.
+As a concrete example, consider an MPS on just two spin 1/2 sites::
 
+    |        _____         _____
+    |   x->- | A | ->-y->- | B | ->-z
+    |        -----         -----
+    |          ^             ^
+    |          |a            |b
 
-Consider the contraction of two tensors, 
+The legs ``a`` and ``b`` are physical, say with indices :math:`\uparrow = 0` and :math:`downarrow = 1`.
+As noted above, we can associate the charges 1 (up) and 0 (down), respectively.
 
-The reason for introducing `qconj` is, that in the charges actually live on certain bonds.
+The legs ``x`` and ``z`` are 'dummy' indices with just one index ``0``.
+The charge on one of them, as well as the total charge of both ``A`` and ``B`` is somewhat arbitrary, so we make a simple choice: 
+total charge 0 on both arrays, as well as charge 0 for `x` = 0.
+
+Finally, we also have to define ``qconj`` values. We stick to the convention used in our MPS code: physical
+legs incoming (qconj=1), and from left to right on the virtual bonds.
+
+The charges on the bonds `y` and `z` then depend on the state the MPS represents.
+Here, we consider a singlet as a the simplest non-trivial example.
+A possible MPS representation is given by::
+
+    A[up]   = [[1, 0]]     B[up]   = [[0], [-1]]
+    A[down] = [[0, 1]]     B[down] = [[1], [0]]
+
+There are two non-zero entries in ``A``, for the indices :math:`(a, x, y) = (\uparrow, 0, 0)` and :math:`(\downarrow, 0, 1)`.
+To comply with the rules for non-zero entries, we then have to assign the charge 1 to `y` = 0, and the charge 0 to `y` = 1.
+Again, we associate the same charge values of `y` to the ``A`` and ``B``, and just change the ``qconj``.
+The non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)` then implies the charge 0 for `z` = 0.
+Note, that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is then automatically fullfilled:
+this is an implication of the fact that the singlet has a well defined value for :math:`S^z_a + S^z_b`.
+For other states without fixed magnetization (e.g., :math:`|\uparrow \upparrow> + |\downarrow \downarrow>`)
+we could not use the charge conservation.
 
 
 See also
