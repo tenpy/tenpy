@@ -36,6 +36,8 @@ Finally, a leg is **sorted**, if the charges are sorted lexiographically.
 Note that a `sorted` leg is always `blocked`.
 We can also speak of the complete array to be blocked or **legcharge-sorted**,  which means that all of its legs are blocked or sorted, respectively.
 The charge data for a single leg is collected in the class :class:`~tenpy.linalg.charges.LegCharge`.
+A :class:`~tenpy.linalg.charges.LegCharge` has also a flag **qconj**, which tells whether the charges
+point *inward* (+1) or *outward* (-1). What that means, is explained later in :ref:`nonzero_entries`.
 
 For completeness, let us also summarize also the internal structure of an :class:`~tenpy.linalg.np_conserved.Array` here:
 The array saves only non-zero blocks, collected as a list of `np.array` in ``self._data``.
@@ -43,6 +45,7 @@ The qindices necessary to map these blocks to the original leg indices are colle
 An array is said to be **qdat-sorted** if its ``self._qdat`` is lexiographically sorted.
 More details on this follow later. However, note that you usually shouldn't access `_qdat` and `_data` directly - this
 is only necessary from within `tensordot`, `svd`, etc.
+Also, an array has a **total charge**, defining which entries can be non-zero - details in :ref`nonzero_entries`.
 
 Finally, a **leg pipe** (implemented in :class:`~tenpy.linalg.charges.LegPipe`)
 is used to formally combine multiple legs into one leg. Again, more details follow later.
@@ -116,13 +119,90 @@ for each charge).
 The :class:`~tenpy.linalg.charges.LegCharge` uses saves the charge data of a leg internally in qind form.
 It also provides convenient functions for conversion between from and to the flat and dict form.
 
-Assigning charges to non-physical legs and the pesky LegCharge.conj()
----------------------------------------------------------------------
-From the above physical charges, it should be clear how you assign charges to physical legs.
-But what about other legs?
-But what about the virtual bonds of an MPS? For simplicity, conside
+
+.. _nonzero_entries
+
+Which entries of the npc array can be non-zero?
+-----------------------------------------------
+The reason for the speedup with np_conserved lies in the fact
+that it saves only the blocks 'compatible' with the charges. 
+But how is this 'compatible' defined? 
+
+Assume you have a tensor, call it :math:`T`, and the :class:`~tenpy.linalg.charges.LegCharge` for all of its legs, say :math:`a, b, c, ...`.
+
+Remeber that the LegCharge associates to each index of the leg a charge value (for each of the charges, if `qnumber` > 1).
+Let :math:`q_a[i_a]` denote the charge(s) of index :math:`i_a` for leg :math:`a`, and similar for other legs.
+
+In addition, the LegCharge has a flag :attr:`~tenpy.linalg.charges.LegCharge.qconj`. This flag **qconj** is only a sign,
+saved as +1 or -1, specifying whether the charges point inward (+1, default) or outward (-1) of the tensor.
+
+Then, the **total charge** of a single entry :math:`T[i_a, i_b, i_c, ...]` of the tensor is defined as:
+
+.. math ::
+   qtotal[i_a, i_b, i_c, ...] = q_a[i_a] * qconj_a + qb[i_b] * qconj_b + q_c[i_c] * qconj_c + ...  \quad (mod ~qmod)
+
+In case of multiple charges, `qnumber` > 1, this equation holds for each of the different charges individually with the
+corresponding `qmod` of the charge.
+
+The rule which entries of the a :class:`~tenpy.linalg.np_conserved.Array` can be non-zero
+(i.e., are 'compatible' with the charges), is then very simple:
+
+.. admonition:: Rule
+
+    An entry :math:`(i_a, i_b, i_c, ...)` of a :class:`~tenpy.linalg.np_conserved.Array` can only be non-zero,
+    if :math:`qtotal[i_a, i_b, i_c, ...]` matches the `qtotal` attribute of the class.
+
+Again, this must hold for each of the charges in the case `qnumber` > 1.
+
+The pesky qconj - contraction as an example
+-------------------------------------------
+Why did we introduce the `qconj` flag? Remember it's just a sign telling whether the charge points inward or outward.
+So whats the reasoning?
+
+The short answer is, that LegCharges actually live on bonds (i.e., legs which are to be contracted) 
+rather than individual tensors. Thus, it is convenient to share the LegCharges between different legs and even tensors, 
+and just adjust the sign.
+
+For example, consider the contraction of two tensors, :math:`C_{a,c} = \sum_b A_{i_a,i_b} B_{i_b,i_c}`.
+For simplicity, say that the total charge of all three tensors is zero.
+What are the implications of the above rule for non-zero entries?
+Or rather, how can we ensure that :math:`C` complies with the above rule?
+An entry of :math:`C_{i_a,i_c}` will only be non-zero, if
+there is an :math:`i_b` such that both `A_{i_a,i_b}` and `B_{i_b,i_c}` are non-zero, i.e., both of the following equations are
+fullfilled:
+
+.. math ::
+   A.qtotal = A.q_a[i_a] A.qconj_a + A.q_b[i_b] A.qconj_b  \quad (mod ~qmod)
+   B.qtotal = B.q_b[i_b] B.qconj_b + B.q_c[i_c] B.qconj_c  \quad (mod ~qmod)
+
+Here, the `A.` and `B.` are use to distinguish the legs of the tensors :math:`A` and :math:`B`.
+
+For the uncontracted legs, we just keep the charges as they are::
+
+   C.q_a = A.q_a
+   C.qconj_a = A.qconj_a
+   C.q_c = B.q_c
+   C.qconj_c = C.qconj_c
+
+It is then straight-forward to check, that the rule is fullfilled for :math:`C`, if the following condition is met:
+
+.. math ::
+   A.qtotal + B.qtotal - C.qtotal  = A.q_b[i_b] A.qconj_b + B.q_b[i_b] B.qconj_b \quad (mod ~qmod)
 
 
+
+
+Assigning charges to non-physical legs
+--------------------------------------
+From the above physical examples, it should be clear how you assign charges to physical legs.
+But what about other legs, e.g, the virtual bond of an MPS?
+The charge of these bonds must be derived by using the above
+
+
+
+Consider the contraction of two tensors, 
+
+The reason for introducing `qconj` is, that in the charges actually live on certain bonds.
 
 
 See also
@@ -133,6 +213,8 @@ See also
   for working with them (creating and manipulating).
 - The module :mod:`tenpy.linalg.charges` contains the implementations of the classes 
   :class:`~tenpy.linalg.charges.ChargeInfo` and :class:`~tenpy.linalg.charges.LegCharge`.
+
+
 
 References
 ----------

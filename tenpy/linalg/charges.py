@@ -191,7 +191,7 @@ class LegCharge(object):
         """create a LegCharge from qdict form."""
         qind = [[sl.start, sl.stop] + list(ch) for (ch, sl) in qdict.iteritems()]
         qind = np.array(qind, dtype=QDTYPE)
-        sort = np.argsort(qind[:, 0])
+        sort = np.argsort(qind[:, 0]) # sort by slice start
         qind = qind[sort, :]
         # TODO: this is blocked...
         return cls(chargeinfo, qind, qconj)
@@ -263,7 +263,7 @@ class LegCharge(object):
             the mapping used for the sorting.
             For a ndarray, ``sorted_array = unsorted_array[piv]``.
         sorted_self : LegCharge
-            a shallow copy of self, sorted (and thus blocked) by charges
+            a shallow copy of self, with new qind sorted (and thus blocked) by charges.
 
         See also
         --------
@@ -279,6 +279,7 @@ class LegCharge(object):
         cp.qind[0, 0] = 0
         cp.qind[1:, 0] = blocksizes[:-1]
         cp.qind[:, 0] = blocksizes
+        # finally bunch: re-ordering can have brought together equal charges
         cp.bunch()
         return piv, cp
 
@@ -302,10 +303,21 @@ class LegCharge(object):
         return "LegCharge({0:r},{1:s})".format(self.chinfo, self.qind)
 
 
+
 class LegPipe(object):
     # TODO ....
     def __init__(self):
         raise NotImplementedError()
+
+
+def reverse_sort_piv(piv):
+    """reverse sorting indices.
+
+    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `piv` array,
+    such that ``sorted_array = old_array[piv]``.
+    This function reverses `piv`, such that ``old_array = sorted_array[reverse_sort_piv(piv)]``.
+    """
+    return np.arange(len(piv))[piv]
 
 
 def _find_row_differences(qflat):
@@ -327,13 +339,3 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
-
-
-def reverse_sort_piv(piv):
-    """reverse sorting indices.
-
-    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `piv` array,
-    such that ``sorted_array = old_array[piv]``.
-    This function reverses `piv`, such that ``old_array = sorted_array[reverse_sort_piv(piv)]``.
-    """
-    return np.arange(len(piv))[piv]
