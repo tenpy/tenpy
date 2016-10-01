@@ -68,19 +68,22 @@ class ChargeInfo(object):
         """the number of charges, also refered to as qnumber"""
         return len(self.mod)
 
-    def make_valid(self, charges):
+    def make_valid(self, charges=None):
         r"""Take charges modulo self.mod.
 
         Parameters
         ----------
-        charges: array_like
+        charges: array_like or None
             1D or 2D array of charges, last dimension `self.qnumber`
+            None defaults to np.zeros(qnumber).
 
         Returns
         -------
         charges:
             `charges` taken module self.mod, but with x % 1 := x
         """
+        if charges is None:
+            return np.zeros((self.qnumber,), dtype=QDTYPE)
         charges = np.asarray(charges, dtype=QDTYPE)
         return np.where(self._mod_1, charges, np.mod(charges, self.mod))
 
@@ -148,6 +151,7 @@ class LegCharge(object):
     Notes
     -----
     Instances of this class can be shared between different `npc.Array`s.
+    Thus, functions changing self.qind should always make copies!
     """
 
     def __init__(self, chargeinfo, qind, qconj=1):
@@ -191,9 +195,8 @@ class LegCharge(object):
         """create a LegCharge from qdict form."""
         qind = [[sl.start, sl.stop] + list(ch) for (ch, sl) in qdict.iteritems()]
         qind = np.array(qind, dtype=QDTYPE)
-        sort = np.argsort(qind[:, 0]) # sort by slice start
+        sort = np.argsort(qind[:, 0])  # sort by slice start
         qind = qind[sort, :]
-        # TODO: this is blocked...
         return cls(chargeinfo, qind, qconj)
 
     def test_sanity(self):
@@ -259,29 +262,30 @@ class LegCharge(object):
 
         Returns
         -------
-        piv : array (ind_len,)
+        perm : array (ind_len,)
             the mapping used for the sorting.
-            For a ndarray, ``sorted_array = unsorted_array[piv]``.
+            For a ndarray, ``sorted_array = unsorted_array[perm]``.
         sorted_self : LegCharge
             a shallow copy of self, with new qind sorted (and thus blocked) by charges.
 
         See also
         --------
-        np.take : apply piv to a given axis
+        np.take : can apply `perm` to a given axis
+        np.reverse_
         """
-        piv = np.lexsort(self.qind[:, 2:].T)
+        perm = np.lexsort(self.qind[:, 2:].T)
         cp = copy.copy(self)
         cp.qind = np.empty_like(self.qind)
-        cp.qind[:, 2:] = self.qind[piv, 2:]
+        cp.qind[:, 2:] = self.qind[perm, 2:]
         # figure out the re-ordered slice boundaries
         blocksizes = cp.qind[:, 1] - cp.qind[:, 0]
-        blocksizes = np.accumulate(blocksizes[piv])
+        blocksizes = np.accumulate(blocksizes[perm])
         cp.qind[0, 0] = 0
         cp.qind[1:, 0] = blocksizes[:-1]
         cp.qind[:, 0] = blocksizes
         # finally bunch: re-ordering can have brought together equal charges
         cp.bunch()
-        return piv, cp
+        return perm, cp
 
     def bunch(self):
         """bunch self.qind: form blocks for contiguous equal charges.
@@ -294,6 +298,49 @@ class LegCharge(object):
         self.qind = self.qind[idx[:-1]]
         self.qind[-1, 1] = ind_len_cp
 
+    def check_contractible(self, other):
+        """Raises a ValueError if charges are incompatible for contraction with other.
+
+        Parameters
+        ----------
+        other: :class:`LegCharge`
+            The LegCharge of the other leg condsidered for contraction.
+
+        Raises
+        ------
+        ValueError:
+            If the charges are incompatible for direct contraction.
+
+        Notes
+        -----
+        This function checks that two legs are `ready` for contraction.
+        This is the case, if all of the following conditions are met:
+        - the ChargeInfos are equal
+        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
+        - the charges are the same up to the signs ``qconj``::
+
+                self.qind[:, 2:] * self.qconj = other.qind[:, 2:] * other.qconj[:, 2:].
+
+        In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
+        This special case is not considered here - instead use
+        :meth:~tenpy.linalg.np_conserved.gauge_total_charge`, if a change of the charge is desired.
+
+        If you are sure that the legs should be contractable,
+        check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
+        or whether self and other are blocked or should be sorted.
+        """
+        if self.chinfo != other.chinfo:
+            raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
+                other.chinfo)]))
+        if self.qind is other.qind and self.qconj == -other.qconj:
+            return  # optimize: don't need to check all charges explicitly
+        if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
+            raise ValueError(''.join(["incomatible charge blocks. qind self, other=\n", str(self),
+                                      "\n", str(other)]))
+        if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * (-other.qconj)):
+            raise ValueError(''.join(["incompatible charges. qind:\n", str(self), "\n", str(other)
+                                      ]))
+
     def __str__(self):
         """return a string of qind"""
         return str(self.qind)
@@ -303,21 +350,29 @@ class LegCharge(object):
         return "LegCharge({0:r},{1:s})".format(self.chinfo, self.qind)
 
 
-
 class LegPipe(object):
-    # TODO ....
+    """A LegPipe combines multiple legs of a tensor to one.
+
+    .. todo ::
+        implement. Doesn't it make sense to derive this from LegCharge?!?"""
     def __init__(self):
         raise NotImplementedError()
 
 
-def reverse_sort_piv(piv):
+# ===== functions =====
+
+
+def reverse_sort_perm(perm):
     """reverse sorting indices.
 
-    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `piv` array,
-    such that ``sorted_array = old_array[piv]``.
-    This function reverses `piv`, such that ``old_array = sorted_array[reverse_sort_piv(piv)]``.
+    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `perm` array,
+    such that ``sorted_array = old_array[perm]``.
+    This function reverses `perm`, such that ``old_array = sorted_array[reverse_sort_perm(perm)]``.
+
+    .. todo ::
+        should we move this to another file? maybe tools/math
     """
-    return np.arange(len(piv))[piv]
+    return np.arange(len(perm))[perm]
 
 
 def _find_row_differences(qflat):

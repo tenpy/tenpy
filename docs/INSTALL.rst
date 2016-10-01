@@ -34,7 +34,7 @@ You can then include the library in python::
     >>> import tenpy
 
 
-.. note ::
+.. todo ::
     The remainder is a literal translation of TenPy's docs/setup.tex to rst. It might be outdated at some points.
 
 

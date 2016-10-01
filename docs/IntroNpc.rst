@@ -14,7 +14,7 @@ Lets fix the notation for this introduction and the doc-strings in np_conserved.
 A :class:`~tenpy.linalg.np_conserved.Array` is a multi-dimensional array representing a **tensor** with the entries:
 
 .. math ::
-   T_{a_0, a_1, ... a_{rank-1}} \quad with \quad a_i \in \lbrace 0, ..., n_i-1 \rbrace
+   T_{a_0, a_1, ... a_{rank-1}} \quad \text{ with } \quad a_i \in \lbrace 0, ..., n_i-1 \rbrace
 
 Each **leg** :math:`a_i` corresponds the a vector space of dimension `n_i`.
 
@@ -43,9 +43,10 @@ For completeness, let us also summarize also the internal structure of an :class
 The array saves only non-zero blocks, collected as a list of `np.array` in ``self._data``.
 The qindices necessary to map these blocks to the original leg indices are collected in ``self._qdat``
 An array is said to be **qdat-sorted** if its ``self._qdat`` is lexiographically sorted.
-More details on this follow later. However, note that you usually shouldn't access `_qdat` and `_data` directly - this
+More details on this follow :ref:`later <array_storage_schema>`.
+However, note that you usually shouldn't access `_qdat` and `_data` directly - this
 is only necessary from within `tensordot`, `svd`, etc.
-Also, an array has a **total charge**, defining which entries can be non-zero - details in :ref`nonzero_entries`.
+Also, an array has a **total charge**, defining which entries can be non-zero - details in :ref:`nonzero_entries`.
 
 Finally, a **leg pipe** (implemented in :class:`~tenpy.linalg.charges.LegPipe`)
 is used to formally combine multiple legs into one leg. Again, more details follow later.
@@ -80,7 +81,7 @@ When giving examples, we will restrict to one charge, but everything generalizes
 The different formats for LegCharge
 -----------------------------------
 As mentioned above, we assign charges to each index of each leg of a tensor.
-This can be done in three formats: **q_flat**, as **q_ind** and as **q_dict**.
+This can be done in three formats: **qflat**, as **qind** and as **qdict**.
 Let me explain them with examples, for simplicity considereing only a single charge (the most inner array has one entry
 for each charge).
 
@@ -193,7 +194,12 @@ This justifies the introduction of ``qconj``:
 when you define the tensors, you have to define the :class:`~tenpy.linalg.charges.LegCharge` only once, say ``A.b``.
 For ``B.b`` you simply use ``A.b.conj()`` - this creates a copy with shared ``qind``, but opposite ``qconj``.
 Or, as a more impressive example, all 'physical' legs of an MPS can usually share the same
-:class:`~tenpy.linalg.charges.LegCharge`.
+:class:`~tenpy.linalg.charges.LegCharge` (up to different ``qconj``). This leads to the following convention:
+
+.. topic :: Convention
+   When an npc algorithm makes tensors which share a bond (either with the input tensors, as for tensordot, or amongst the output tensors, as for SVD),
+   the algorithm is free, but not required, to use the **same** LegCharge for the tensors sharing the bond, without making a copy.
+   Thus, if you want to modify a LegCharge, you **must** make a copy first (e.g. by using methods of LegCharge for what you want to acchive).
 
 
 Assigning charges to non-physical legs
@@ -210,7 +216,7 @@ As a concrete example, consider an MPS on just two spin 1/2 sites::
     |          ^             ^
     |          |a            |b
 
-The legs ``a`` and ``b`` are physical, say with indices :math:`\uparrow = 0` and :math:`downarrow = 1`.
+The legs ``a`` and ``b`` are physical, say with indices :math:`\uparrow = 0` and :math:`\downarrow = 1`.
 As noted above, we can associate the charges 1 (up) and 0 (down), respectively.
 
 The legs ``x`` and ``z`` are 'dummy' indices with just one index ``0``.
@@ -233,21 +239,112 @@ Again, we associate the same charge values of `y` to the ``A`` and ``B``, and ju
 The non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)` then implies the charge 0 for `z` = 0.
 Note, that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is then automatically fullfilled:
 this is an implication of the fact that the singlet has a well defined value for :math:`S^z_a + S^z_b`.
-For other states without fixed magnetization (e.g., :math:`|\uparrow \upparrow> + |\downarrow \downarrow>`)
+For other states without fixed magnetization (e.g., :math:`|\uparrow \uparrow> + |\downarrow \downarrow>`)
 we could not use the charge conservation.
 
+Array creation
+--------------
+
+Making an npc.array requires both the tensor entries (data) and charge data.
+The data can be provided either as a dense `np.array` (:meth:`~tenpy.linalg.np_conserved.from_ndarray`) 
+or by providing a numpy function such as `np.random`, `np.ones` etc. (:meth:`~tenpy.linalg.np_conserved.from_npfunc`).
+
+In both cases, the charge data is provided by :class:`~tenpy.linalg.charges.ChargeInfo` and :class:`~tenpy.linalg.charges.LegCharge` instances.
+
+Again, note that the charge data is not copied, in order to allow it to be shared between different Tensors.
+Thus, one **must** make copies before changing the charge data.
+   
+Further, new Arrays are created by the various functions like `tensordot` or `svd` in :mod:`~tenpy.linalg.np_conserved`.
+
+Leg labeling
+------------
+
+.. todo ::
+
+    Introduction to leg labeling
+
+.. _array_storage_schema
+
+Internal Storage schema of npc Arrays
+-------------------------------------
+
+The actual data of the tensor is stored in ``_data``. Rather than keeping a single np.array (which would have many zeros in it),
+we store only the non-zero sub blocks. So ``_data`` is a python list of `np.array`'s.
+The order in which they are stored in the list is not physically meaningful, and so not guaranteed (more on this later).
+So to figure out where the sub block sits in the tensor, we need the ``_qdata`` structure (on top of the LegCharges in ``legs``).
+
+Consider a rank 3 tensor, with ``legs[0].qind`` something like::
+
+    qind = np.array([[0, 1, -2],  # and something else for legs[1].qind and legs[2].qind
+                     [1, 4,  1],
+                     ...        ])
+
+Each row of ``leg[i].qind`` is a *block* of leg[i], labeled by its *qindex* (which is just its row in ``qind``).
+Picking a block from each leg, we have a subblock of the tensor.
+
+For each non-zero subblock of the tensor, we put a np.array entry in the ``_data`` list.
+Since each subblock of the tensor is specified by `rank` qindices, 
+we put a corresponding entry in ``_qdata``, which is a 2D array of shape ``(#blocks, rank)``.
+Each row corresponds to a non-zero subblock, and there are rank columns giving the corresponding qindices.
+
+Example: for a rank 3 tensor we might have::
+
+    _data = [t1, t2, t3, t4, ...]
+    _qdata = np.array([[3, 2, 1],
+                       [1, 1, 1],
+                       [4, 2, 2],
+                       [3, 1, 2],
+                       ...       ])
+
+The 'third' subblock has an nd.array ``t3``, and qindices ``[4 2 2]``.
+Recall that each row of `qind` looks like ``[start, stop, charge]``. So:
+
+- To find  t3s position in the actual tensor, we would look at the data ::
+
+            legs[0].qind[4, 0:2], legs[1].qind[2, 0:2], legs[2].qind[2, 0:2]
+
+- To find the charge of t3, we would look at ::
+
+            legs[0].qind[4, 2:], legs[1].qind[2, 2:], legs[2].qind[2, 2:]
+
+.. note ::
+
+   Outside of `np_conserved`, you should use the API to access the entries. 
+   To iterate over all blocks of an array ``A``, try ``for (block, blockslices, charges, qdat) in A: do_something()``.
+
+
+Introduction to LegPipes
+------------------------
+.. todo ::
+
+   Implement LegPipes and write this chapter.
+
+Various Remarks
+---------------
+- ChargeInfo and LegCharges are **not** copied when creating an array via from_ndarray (or similar functions).
+  Hence they must not be altered after creation! This is done such that multiple Arrays can share `qind`
+  If somehow one wants to alter the array after the array is built, pass in a copy to from_ndarray()
+- While the code was designed in such a way that each charge sector has a different charge, most of the code
+  will still run correctly if multiple charge sectors (qindices) correspond to the same charge. 
+  In this sense npc.array acts like a sparse array class and can selectively store subblocks. 
+  Algorithms which need a full blocking should state that explicitly in their doc-strings.
+
+  If you expect the tensor to be dense subject to charge constraint (as for MPS), 
+  it will be most efficient to fully block by charge, so that work is done on large chunks.
+
+  However, if you expect the tensor to be sparser than required by charge (as for an MPO),
+  it may be convenient not to completely block, which forces smaller matrices to be stored, and hence many zeroes to be dropped.
+  Nevertheless, the algorithms were not designed with this in mind, so it is not recommended in general.
 
 See also
 --------
-- The module :mod:`tenpy.linalg.np_conserved` should contain all the API needed 
-  from the point of view of the algorithms.
-  It contians the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions
-  for working with them (creating and manipulating).
-- The module :mod:`tenpy.linalg.charges` contains the implementations of the classes 
-  :class:`~tenpy.linalg.charges.ChargeInfo` and :class:`~tenpy.linalg.charges.LegCharge`.
+- The module :mod:`tenpy.linalg.np_conserved` should contain all the API needed from the point of view of the algorithms.
+  It contians the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions for working with them (creating and manipulating).
+- The module :mod:`tenpy.linalg.charges` contains implementations of the classes 
+  :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and
+  :class:`~tenpy.linalg.charges.LegPipe`
 
 
 
-References
-----------
-[1] Schollwöck: DMRG in the age of MPS
+.. todo ::
+   Further References?!?

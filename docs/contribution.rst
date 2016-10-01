@@ -20,7 +20,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   The documentation uses `reStructuredText`. If you're new to `reStructuredText`, consider reading this
   `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
   We use the `numpydoc` extension to sphinx, so please read and follow these
-  `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_
+  `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
   In addition, you can take a look at the following
   `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
   Helpful hints on top of that::
@@ -28,16 +28,21 @@ However, to keep consistency, we ask you to comply with the following guidelines
         r"""<- this r makes me a raw string, thus '\' has no special meaning.
         Otherwise you would need to escape backslashes, e.g. in math formulas.
 
-        You can include cross references to classes, methods, functions etc, e.g., as
-        :class:`tenpy.algorithms.linalg.np_conserved.array` or :func:`tenpy.tools.math.tondarray`
+        You can include cross references to classes, methods, functions etc, like
+        :class:`~tenpy.linalg.np_conserved.Array`, :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray` or :func:`tenpy.tools.math.toiterable`.
+        Within the python docstrings, documents of the userguides can be references like :doc:`../IntroNpc`.
 
         Write inline formulas as :math:`H |\Psi\rangle = E |\Psi\rangle` or displayed equations as 
-
         .. math ::
-            e^{i\pi} + 1 = 0
+
+           e^{i\pi} + 1 = 0
 
         In doc-strings, math can only be used in the Notes section.
         To refer to variables within math, use `\mathtt{varname}`.
+
+        .. todo ::
+
+           This block can describe things which need to be done and is automatically included in a section of :doc:`todo`.
         """
 
   Instructions for building the documentation are in :doc:`INSTALL`.
@@ -64,10 +69,12 @@ However, to keep consistency, we ask you to comply with the following guidelines
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
 - A To-Do list can be found in :doc:`docs/todo.rst <todo>`. It also contains a bug list.
-- During development, you can introduce `# TODO` comments. But also try to remove them again later!
-  Or at least add an entry in the todo list...
+  Sphinx also extract blocks following ``.. todo ::`` from doc-strings, generating a list 
+- During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
+  If you're not completely sure that you will remove it soon, please add a doc-string with a 
+  ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
 
-  During development, unfinished functions should ``raise NotImplementedError()``.
+  Even during development, unfinished functions should ``raise NotImplementedError()``.
   Locations of bugs may be marked with `# BUG`. But also add them to the bug list in docs/todo.rst.
 
 
