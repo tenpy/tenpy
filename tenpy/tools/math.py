@@ -51,7 +51,7 @@ def tonparray(o, array_size=None):
         a = np.array(o)
     if array_size is not None:
         if array_size % len(a) != 0:
-            raise ValueError
+            raise ValueError("incomensurate len")
         a = np.tile(a, array_size // len(a))
     return a
 

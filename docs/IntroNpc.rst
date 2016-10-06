@@ -5,11 +5,12 @@ The basic idea is quickly summarized:
 By inspecting the Hamiltonian, you can identify symmetries, which correspond to conserved quantities, called **charges**.
 These charges divide the tensors into different sectors. This can be used to infer for example a block-diagonal structure
 of certain matrices, which in turn speeds up SVD or diagonalization a lot.
-
+Even for more general (non-square-matrix) tensors, charge conservation imposes restrictions which blocks of a tensor can
+be non-zero. Only those blocks need to be saved, and e.g. tensordot can be speeded up.
 
 Notations
 ---------
-Lets fix the notation for this introduction and the doc-strings in np_conserved.
+Lets fix the notation for this introduction and the doc-strings in :mod:`~tenpy.linalg.np_conserved`.
 
 A :class:`~tenpy.linalg.np_conserved.Array` is a multi-dimensional array representing a **tensor** with the entries:
 
@@ -41,15 +42,15 @@ point *inward* (+1) or *outward* (-1). What that means, is explained later in :r
 
 For completeness, let us also summarize also the internal structure of an :class:`~tenpy.linalg.np_conserved.Array` here:
 The array saves only non-zero blocks, collected as a list of `np.array` in ``self._data``.
-The qindices necessary to map these blocks to the original leg indices are collected in ``self._qdat``
-An array is said to be **qdat-sorted** if its ``self._qdat`` is lexiographically sorted.
+The qindices necessary to map these blocks to the original leg indices are collected in ``self._qdata``
+An array is said to be **qdata-sorted** if its ``self._qdata`` is lexiographically sorted.
 More details on this follow :ref:`later <array_storage_schema>`.
-However, note that you usually shouldn't access `_qdat` and `_data` directly - this
+However, note that you usually shouldn't access `_qdata` and `_data` directly - this
 is only necessary from within `tensordot`, `svd`, etc.
 Also, an array has a **total charge**, defining which entries can be non-zero - details in :ref:`nonzero_entries`.
 
 Finally, a **leg pipe** (implemented in :class:`~tenpy.linalg.charges.LegPipe`)
-is used to formally combine multiple legs into one leg. Again, more details follow later.
+is used to formally combine multiple legs into one leg. Again, more details follow :ref:`later <leg_pipes>`.
 
 Physical Example
 ----------------
@@ -121,7 +122,7 @@ The :class:`~tenpy.linalg.charges.LegCharge` uses saves the charge data of a leg
 It also provides convenient functions for conversion between from and to the flat and dict form.
 
 
-.. _nonzero_entries
+.. _nonzero_entries:
 
 Which entries of the npc array can be non-zero?
 -----------------------------------------------
@@ -197,6 +198,7 @@ Or, as a more impressive example, all 'physical' legs of an MPS can usually shar
 :class:`~tenpy.linalg.charges.LegCharge` (up to different ``qconj``). This leads to the following convention:
 
 .. topic :: Convention
+
    When an npc algorithm makes tensors which share a bond (either with the input tensors, as for tensordot, or amongst the output tensors, as for SVD),
    the algorithm is free, but not required, to use the **same** LegCharge for the tensors sharing the bond, without making a copy.
    Thus, if you want to modify a LegCharge, you **must** make a copy first (e.g. by using methods of LegCharge for what you want to acchive).
@@ -263,7 +265,7 @@ Leg labeling
 
     Introduction to leg labeling
 
-.. _array_storage_schema
+.. _array_storage_schema:
 
 Internal Storage schema of npc Arrays
 -------------------------------------
@@ -293,7 +295,7 @@ Example: for a rank 3 tensor we might have::
     _qdata = np.array([[3, 2, 1],
                        [1, 1, 1],
                        [4, 2, 2],
-                       [3, 1, 2],
+                       [2, 1, 2],
                        ...       ])
 
 The 'third' subblock has an nd.array ``t3``, and qindices ``[4 2 2]``.
@@ -312,12 +314,91 @@ Recall that each row of `qind` looks like ``[start, stop, charge]``. So:
    Outside of `np_conserved`, you should use the API to access the entries. 
    To iterate over all blocks of an array ``A``, try ``for (block, blockslices, charges, qdat) in A: do_something()``.
 
+The order in which the blocks stored in ``_data``/``_qdata`` is arbitrary (though of course ``_data`` and ``_qdata`` must be in correspondence).
+However, for many purposes it is useful to sort them according to some convention.  So we include a flag ``._qdata_sorted`` to the array.
+So, if sorted, the ``_qdata`` example above goes to ::
 
-Introduction to LegPipes
-------------------------
+    _qdata = np.array([[1, 1, 1],
+                       [3, 2, 1],
+                       [2, 1, 2],
+                       [4, 2, 2],
+                       ...       ])
+
+Note that `np.lexsort` chooses the right-most column to be the dominant key, a convention we follow throughout.
+
+If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexsorted. If ``_qdata_sorted == False``, there is no gaurantee.
+If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it gaurantees it is still sorted).
+The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
+
+
+.. _leg_pipes:
+
+Introduction to combine_legs, split_legs and LegPipes
+-----------------------------------------------------
+
+Unlike an np.array, the only sensible "reshape" operation on an npc.array is to combine multiple legs into one (**combine_legs**), or the reverse (**split_legs**).
+
+Each leg has a Hilbert space, and a representation of the symmetry on that Hilbert space.
+Combining legs corresponds to the tensor product operation, and for abelian groups, 
+the corresponding "fusion" of the representation is the simple addition of charge.
+
+Fusion is not a lossless process, so if we ever want to split the combined leg,
+we need some additional data to tell us how to reverse the tensor product.
+This data is called a **LegPipe**, which we implemented as a class :class:`~tenpy.linalg.charges.LegPipe`.
+Details of the information contained in the LegPipe are given in the class doc string.
+
+The rough usage idea is as follows:
+
+a) If you want to combine legs, and do **not** intend to  split any of the newly formed legs back, 
+   you can call :meth:`~tenpy.linalg.Array.combine_legs` without supplying any LegPipes, `combine_legs` will then make them for you.
+
+   Nevertheless, if you plan to perform the combination over and over again on sets of legs you know to be identical (ie, same charges etc.)
+   you might make a LegPipe anyway to save on the overhead of computing it each time.
+
+b) If you want to combine legs, and for some subset of the new legs you will want to split back
+   (either on the tensor in question, or progeny formed by `svd`, `tensordot`, etc.),
+   you *DO* need to compute a LegPipe for the legs in questions before combining them.
+   `split_legs` will then use the pipes to split the leg.
+
 .. todo ::
 
-   Implement LegPipes and write this chapter.
+   Implement LegPipes and (re-)write this chapter. By deriving LegPipe from LegCharge, we might not need to save it
+   separately?
+
+Leg labeling
+------------
+
+It's convenient to name the legs of a tensor: for instance, we can name legs 0, 1, 2 to be ``'a', 'b', 'c'``: :math:`T_{i_a,i_b,i_c}``.
+That way we don't have to remember the ordering! Under tensordot, we can then call ::
+
+    U = npc.tensordot(S, T, axes = [ [...],  ['b'] ] )
+
+without having to remember where exactly ``'b'`` is.
+Obviously ``U`` should then inherit the name of its legs from the uncontracted legs of `S` and `T`.
+So here is how it works:
+
+- Labels can *only* be strings. The labels should not include the characters ``.`` or ``?``.
+  Internally, the labels are stored as dict ``a.labels = {label: leg_position, ...}``. Not all legs need a label.
+- To set the labels, call ::
+
+        A.set_labels(['a', 'b', None, 'c', ... ])
+
+  which will set up the labeling ``{'a': 0, 'b': 1, 'c': 3 ...}``.
+
+- (Where implemented) the specification of axes can use either the labels **or** the index positions.
+  For instance, the call ``tensordot(A, B, [ ['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
+  (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
+  and 2 as 'the 2nd leg'. That's why we require labels to be strings!
+- Labels will be intelligently inherited through the various operations of `np_conserved`.
+    - Under `transpose`, labels are permuted.
+    - Under `conj`, `iconj`: takes  ``'a' -> 'a*'`` and ``'a*' -> 'a'``
+    - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
+    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter.  Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
+      Then if `b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'a.b': 0, 'c': 1}``.
+      If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
+    - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
+    - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
+    - Under `pinv`, the labels are transposed
 
 Various Remarks
 ---------------
@@ -340,11 +421,12 @@ See also
 --------
 - The module :mod:`tenpy.linalg.np_conserved` should contain all the API needed from the point of view of the algorithms.
   It contians the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions for working with them (creating and manipulating).
-- The module :mod:`tenpy.linalg.charges` contains implementations of the classes 
-  :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and
-  :class:`~tenpy.linalg.charges.LegPipe`
+- The module :mod:`tenpy.linalg.charges` contains implementations for the charge structure, for example the classes
+  :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and :class:`~tenpy.linalg.charges.LegPipe`.
+  As noted above, all 'public' API is imported in :mod:`~tenpy.linalg.np_conserved`.
 
 
 
 .. todo ::
+   Full example
    Further References?!?

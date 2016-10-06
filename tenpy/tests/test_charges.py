@@ -81,4 +81,31 @@ def test_LegCharge():
     nst.eq_(lcs.is_blocked(), True)
     nst.eq_(lcus.is_sorted(), False)
     nst.eq_(lcus.is_blocked(), False)
-    # TODO test bunch and sort
+
+    # test sort & bunch
+    lcus_qind = lcus.qind.copy()
+    pflat, pqind, lcus_s = lcus.sort(bunch=False)
+    lcus_s.test_sanity()
+    npt.assert_equal(lcus_qind, lcus.qind)      # don't change the old instance
+    npt.assert_equal(lcus_s.qind[:, 2:], lcus.qind[pqind, 2:])     # permutation ok?
+    nst.eq_(lcus_s.is_sorted(), True)
+    nst.eq_(lcus_s.is_bunched(), False)
+    nst.eq_(lcus_s.is_blocked(), False)
+    nst.eq_(lcus_s.ind_len, lcus.ind_len)
+    nst.eq_(lcus_s.block_number, lcus.block_number)
+    idx, lcus_sb = lcus_s.bunch()
+    lcus_sb.test_sanity()
+    lcus_sb.sorted = False  # to ensure that is_blocked really runs the check
+    nst.eq_(lcus_sb.is_sorted(), True)
+    nst.eq_(lcus_sb.is_bunched(), True)
+    nst.eq_(lcus_sb.is_blocked(), True)
+    nst.eq_(lcus_sb.ind_len, lcus.ind_len)
+
+
+def test_reverse_sort_perm(N=10):
+    x = np.random.random(N)
+    p = np.arange(N)
+    np.random.shuffle(np.arange(N))
+    xnew = x[p]
+    pinv = charges.reverse_sort_perm(p)
+    npt.assert_equal(x, xnew[pinv])

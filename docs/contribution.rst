@@ -75,7 +75,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
 
   Even during development, unfinished functions should ``raise NotImplementedError()``.
-  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in docs/todo.rst.
+  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`docs/todo.rst <todo>`
 
 
 Thank You for helping with the development!

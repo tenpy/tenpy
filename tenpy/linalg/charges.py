@@ -11,8 +11,10 @@ from __future__ import division
 
 import numpy as np
 import copy
+import itertools
 
-QDTYPE = np.int_  # the type of a single charge
+"""the dtype of a single charge"""
+QDTYPE = np.int_
 
 
 class ChargeInfo(object):
@@ -73,14 +75,14 @@ class ChargeInfo(object):
 
         Parameters
         ----------
-        charges: array_like or None
+        charges : array_like or None
             1D or 2D array of charges, last dimension `self.qnumber`
             None defaults to np.zeros(qnumber).
 
         Returns
         -------
-        charges:
-            `charges` taken module self.mod, but with x % 1 := x
+        charges :
+            `charges` taken modulo self.mod, but with x % 1 := x
         """
         if charges is None:
             return np.zeros((self.qnumber,), dtype=QDTYPE)
@@ -100,7 +102,7 @@ class ChargeInfo(object):
 
     def __repr__(self):
         """full string representation"""
-        return "ChargeInfo({0:s}, {1:s})".format(list(self.mod), self.names)
+        return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
 
     def __eq__(self, other):
         r"""compare self.mod and self.names for equality, ignoring missin names."""
@@ -108,7 +110,7 @@ class ChargeInfo(object):
             return True
         if not self.mod == other.mod:
             return False
-        for l, r in zip(self.names, other.names):
+        for l, r in itertools.izip(self.names, other.names):
             if r != l and l != '' and r != '':
                 return False
         return True
@@ -147,11 +149,16 @@ class LegCharge(object):
     qconj : {-1, 1}
         A flag telling whether the charge points inwards (+1) or outwards (-1).
         When charges are added, they are multiplied with their qconj value.
+    sorted : bool
+        whether the charges are guaranteed to be sorted
+    bunched : bool
+        whether the charges are guaranteed to be bunched
 
     Notes
     -----
     Instances of this class can be shared between different `npc.Array`s.
-    Thus, functions changing self.qind should always make copies!
+    Thus, functions changing self.qind *must* always make copies;
+    further they *must* set `sorted` and `bunched` to false, if not guaranteeing to preserve them.
     """
 
     def __init__(self, chargeinfo, qind, qconj=1):
@@ -159,13 +166,16 @@ class LegCharge(object):
         self.chinfo = chargeinfo
         self.qind = np.array(qind, dtype=QDTYPE)
         self.qconj = qconj
+        self.sorted = False
+        self.bunched = False
         self.test_sanity()
 
     @classmethod
-    def from_trivial(cls, ind_len, qconj=1):
+    def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
         """create trivial (qnumber=0) LegCharge for given len of indices `ind_len`"""
-        ci = ChargeInfo()
-        return cls(ci, [[0, ind_len]], qconj)
+        if chargeinfo is None:
+            chargeinfo = ChargeInfo()
+        return cls(chargeinfo, [[0, ind_len]], qconj)
 
     @classmethod
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
@@ -179,25 +189,47 @@ class LegCharge(object):
             `qnumber` charges for each index of the leg on entry
         qconj : {-1, 1}
             A flag telling whether the charge points inwards (+1) or outwards (-1).
+
+        See also
+        --------
+        sort : sorts by charges
+        block : blocks by charges
         """
         qflat = np.asarray(qflat, dtype=QDTYPE)
         indices = _find_row_differences(qflat).reshape(-1, 1)
         qind = np.hstack((indices[:-1], indices[1:], qflat[indices[:-1, 0]]))
-        return cls(chargeinfo, qind, qconj)
+        res = cls(chargeinfo, qind, qconj)
+        res.sorted = res.is_sorted()
+        res.bunched = res.is_bunched()
+        return res
 
     @classmethod
     def from_qind(cls, chargeinfo, qflat, qconj=1):
-        """just a wrapper around self.__init__"""
-        return cls(chargeinfo, qflat, qconj)
+        """just a wrapper around self.__init__(), see class doc-string for parameters.
+
+        See also
+        --------
+        sort : sorts by charges
+        block : blocks by charges
+        """
+        res = cls(chargeinfo, qflat, qconj)
+        res.sorted = res.is_sorted()
+        res.bunched = res.is_bunched()
+        return res
 
     @classmethod
     def from_qdict(cls, chargeinfo, qdict, qconj=1):
-        """create a LegCharge from qdict form."""
+        """create a LegCharge from qdict form.
+
+        """
         qind = [[sl.start, sl.stop] + list(ch) for (ch, sl) in qdict.iteritems()]
         qind = np.array(qind, dtype=QDTYPE)
         sort = np.argsort(qind[:, 0])  # sort by slice start
         qind = qind[sort, :]
-        return cls(chargeinfo, qind, qconj)
+        res = cls(chargeinfo, qind, qconj)
+        res.sorted = True
+        res.bunched = res.is_bunched()
+        return res
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -208,9 +240,9 @@ class LegCharge(object):
             raise ValueError("Invalid slice in qind: beg >= end:\n" + str(self))
         if np.any(qind[:-1, 1] != qind[1:, 0]):
             raise ValueError("The slices of qind are not contiguous.\n" + str(self))
-        if not self.chinfo.check_valid(qind[2:]):
+        if not self.chinfo.check_valid(qind[:, 2:]):
             raise ValueError("qind charges invalid for " + str(self.chinfo) + "\n" + str(self))
-        if self.qconj != -1 and self.qconj != 1:
+        if self.qconj not in [-1, 1]:
             raise ValueError("qconj has invalid value != +-1 :" + str(self.qconj))
 
     @property
@@ -249,73 +281,101 @@ class LegCharge(object):
 
     def is_blocked(self):
         """returns whether self is blocked, i.e. qindex map 1:1 to charge values."""
+        if self.sorted and self.bunched:
+            return True
         s = {tuple(c) for c in self.qind[:, 2:]}  # a set has unique elements
         return (len(s) == self.block_number)
 
     def is_sorted(self):
         """returns whether the charge values in qind are sorted lexiographically"""
         res = np.lexsort(self.qind[:, 2:].T)
-        return res == np.arange(len(res))
+        return np.all(res == np.arange(len(res)))
 
-    def sort(self):
-        """Return a copy of `self` sorted by charges.
+    def is_bunched(self):
+        """returns whether there are contiguous blocks"""
+        return len(_find_row_differences(self.qind[:, 2:])) == self.block_number + 1
+
+    def sort(self, bunch=True):
+        """Return a copy of `self` sorted by charges (but maybe not bunched).
+
+        If bunch=True, the returned copy is completely blocked by charge.
+
+        Parameters
+        ----------
+        bunch : bool
+            whether `self.bunch` is called after sorting.
+            If True, the leg is guaranteed to be fully blocked by charge.
 
         Returns
         -------
-        perm : array (ind_len,)
-            the mapping used for the sorting.
-            For a ndarray, ``sorted_array = unsorted_array[perm]``.
-        sorted_self : LegCharge
-            a shallow copy of self, with new qind sorted (and thus blocked) by charges.
+        perm_flat : array (ind_len,)
+            the permutation of the indices in flat form.
+            For a flat ndarray, ``sorted_array[..., :] = unsorted_array[..., perm]``.
+        perm_qind : array (self.block_len,)
+            the permutation of the qind (before bunching) used for the sorting.
+        sorted_copy : :class:`LegCharge`
+            a shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
 
         See also
         --------
-        np.take : can apply `perm` to a given axis
-        np.reverse_
+        bunch : enlarge blocks for contiguous qind of the same charges.
+        np.take : can apply `perm_flat` to a given axis
+        reverse_sort_perm : returns inverse of a permutation
         """
-        perm = np.lexsort(self.qind[:, 2:].T)
+        perm_qind = np.lexsort(self.qind[:, 2:].T)
         cp = copy.copy(self)
         cp.qind = np.empty_like(self.qind)
-        cp.qind[:, 2:] = self.qind[perm, 2:]
+        cp.qind[:, 2:] = self.qind[perm_qind, 2:]
         # figure out the re-ordered slice boundaries
-        blocksizes = cp.qind[:, 1] - cp.qind[:, 0]
-        blocksizes = np.accumulate(blocksizes[perm])
+        blocksizes = self.qind[:, 1] - self.qind[:, 0]
+        blocksizes = np.add.accumulate(blocksizes[perm_qind])
         cp.qind[0, 0] = 0
         cp.qind[1:, 0] = blocksizes[:-1]
-        cp.qind[:, 0] = blocksizes
+        cp.qind[:, 1] = blocksizes
         # finally bunch: re-ordering can have brought together equal charges
-        cp.bunch()
-        return perm, cp
+        if bunch:
+            _, cp = cp.bunch()
+        return _perm_flat_from_qind(perm_qind, self.qind), perm_qind, cp
 
     def bunch(self):
-        """bunch self.qind: form blocks for contiguous equal charges.
+        """Return a copy with bunched self.qind: form blocks for contiguous equal charges.
+
+        Returns
+        -------
+        idx : 1D array
+            the indices of the old qind which are kept
+        cp : :class:`LegCharge`
+            a copy of self, which is bunched
 
         See also
         --------
-        sort : sorts by charges, thus enforcing complete blocking"""
-        idx = self._find_row_differences(self.qind[:, 2:])[:-1]
-        ind_len_cp = self.ind_len
-        self.qind = self.qind[idx[:-1]]
-        self.qind[-1, 1] = ind_len_cp
+        sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
+        cp = copy.copy(self)
+        idx = _find_row_differences(self.qind[:, 2:])[:-1]
+        cp.qind = np.copy(cp.qind[idx])
+        cp.qind[:-1, 1] = cp.qind[1:, 0]
+        cp.qind[-1, 1] = self.ind_len
+        return idx, cp
 
     def check_contractible(self, other):
         """Raises a ValueError if charges are incompatible for contraction with other.
 
         Parameters
         ----------
-        other: :class:`LegCharge`
+        other : :class:`LegCharge`
             The LegCharge of the other leg condsidered for contraction.
 
         Raises
         ------
-        ValueError:
+        ValueError
             If the charges are incompatible for direct contraction.
 
         Notes
         -----
         This function checks that two legs are `ready` for contraction.
         This is the case, if all of the following conditions are met:
-        - the ChargeInfos are equal
+
+        - the ChargeInfo is equal
         - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
         - the charges are the same up to the signs ``qconj``::
 
@@ -347,7 +407,7 @@ class LegCharge(object):
 
     def __repr__(self):
         """full string representation"""
-        return "LegCharge({0:r},{1:s})".format(self.chinfo, self.qind)
+        return "LegCharge({0!r}, {1!r}, {2:d})".format(self.chinfo, self.qind, self.qconj)
 
 
 class LegPipe(object):
@@ -361,18 +421,18 @@ class LegPipe(object):
 
 # ===== functions =====
 
-
 def reverse_sort_perm(perm):
     """reverse sorting indices.
 
-    Sort functions (as :meth:`LegCharge.sort`) return a (1D) `perm` array,
+    Sort functions (as :meth:`LegCharge.sort`) return a (1D) permutation `perm` array,
     such that ``sorted_array = old_array[perm]``.
-    This function reverses `perm`, such that ``old_array = sorted_array[reverse_sort_perm(perm)]``.
+    This function reverses the permutation `perm`,
+    such that ``old_array = sorted_array[reverse_sort_perm(perm)]``.
 
     .. todo ::
-        should we move this to another file? maybe tools/math
+        should we move this to another file? maybe tools/math (also move the test!)
     """
-    return np.arange(len(perm))[perm]
+    return np.argsort(perm)
 
 
 def _find_row_differences(qflat):
@@ -385,7 +445,7 @@ def _find_row_differences(qflat):
 
     Returns
     -------
-    1D array:
+    diffs: 1D array
         The indices where rows change, including the first and last. Equivalent to:
         ``[0]+[i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])] + [len(qflat)]``
     """
@@ -394,3 +454,36 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
+
+def _perm_flat_from_qind(perm_qind, qind):
+    """translate a permutation of qind into a flat permutation"""
+    return np.concatenate([np.arange(b, e) for (b, e) in qind[perm_qind, :2]])
+
+
+def _perm_qind_from_perm_flat(perm_flat, qind):
+    """translate flat permutaiton into qind permutation.
+
+    Parameters
+    ----------
+    perm_flat : 1D array
+        a permutation, which doesn't mix the blocks of qind
+    qind : 2D array
+        a LegCharge.qind for which the permutation should be obtained
+
+    Returns
+    -------
+    perm_qind : 1D array
+        the permutation of qind described by perm_flat.
+
+    Raises
+    ------
+    ValueError
+        If perm_flat mixes blocks of different qind
+    """
+    perm_flat = np.asarray(perm_flat)
+    perm_qind = perm_flat[qind[:, 0]]
+    # check if perm_qind indeed resembles the permutation
+    if np.any(perm_flat != _perm_flat_from_qind(perm_qind, qind)):
+        raise ValueError("Permutation mixes qind")
+    return perm_qind
