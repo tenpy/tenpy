@@ -76,7 +76,6 @@ Wish-list
 - Open Source on GitHub? -> Licence? Documentation on readthedocs.org?
 - dump of stack for lated inspection, when an error occurs while on the cluster?
 - logging mechanism?
-- create a logo?
 - Johannes Motruk: extend simulation class: save standard variables?
 - Ruben: extend MPS TransferMatrix class
 - Johannes H: possible to convert to python3? 

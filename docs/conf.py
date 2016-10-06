@@ -15,6 +15,12 @@
 import sys
 import os
 
+try:
+    import tenpy.version
+except:
+    print "ERROR: can't import tenpy. Make sure you set $PYTHONPATH correctly!"
+    sys.exit(1)
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -59,7 +65,7 @@ copyright = u'2016, TenPy community'
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
-import tenpy.version
+
 # The short X.Y version.
 version = '{0:d}.{1:d}'.format(*tenpy.version.version)
 # The full version, including alpha/beta/rc tags.
@@ -137,12 +143,12 @@ html_theme = 'default'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-#html_logo = None
+html_logo = "logo.png"
 
 # The name of an image file (within the static path) to use as favicon of the
-# docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
+# docs. This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-#html_favicon = None
+html_favicon = "logo.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
