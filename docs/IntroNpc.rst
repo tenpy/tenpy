@@ -247,23 +247,53 @@ we could not use the charge conservation.
 Array creation
 --------------
 
-Making an npc.array requires both the tensor entries (data) and charge data.
-The data can be provided either as a dense `np.array` (:meth:`~tenpy.linalg.np_conserved.from_ndarray`) 
-or by providing a numpy function such as `np.random`, `np.ones` etc. (:meth:`~tenpy.linalg.np_conserved.from_npfunc`).
+Making an new :class:`~tenpy.linalg.np_conserved.Array` requires both the tensor entries (data) and charge data.
 
-In both cases, the charge data is provided by :class:`~tenpy.linalg.charges.ChargeInfo` and :class:`~tenpy.linalg.charges.LegCharge` instances.
+The default initialization ``a = Array(...)`` creates an empty Array, where all entries are zero
+(equivalent to :func:`~tenpy.linalg.np_conserved.zeros`).
+(Non-zero) data can be provided either as a dense `np.array` to :meth:`~tenpy.linalg.np_conserved.Array.from_ndarray`,
+or by providing a numpy function such as `np.random`, `np.ones` etc. to :meth:`~tenpy.linalg.np_conserved.Array.from_npfunc`.
 
-Again, note that the charge data is not copied, in order to allow it to be shared between different Tensors.
-Thus, one **must** make copies before changing the charge data.
-   
+In both cases, the charge data is provided by one :class:`~tenpy.linalg.charges.ChargeInfo`,
+and a :class:`~tenpy.linalg.charges.LegCharge` instance for each of the legs.
+
+.. note ::
+
+    The charge data instances are not copied, in order to allow it to be shared between different Arrays.
+    Consequently, you **must** make copies of the charge data, if you manipulate it directly.
+    (However, methods like :meth:`~tenpy.linalg.charges.LegCharge.sort` do that for you.)
+
+Of course, a new :class:`~tenpy.linalg.np_conserved.Array` can also created using the charge data from exisiting Arrays,
+for examples with :meth:`~tenpy.linalg.np_conserved.Array.zeros_like` or creating a (deep or shallow) :meth:`~tenpy.linalg.np_conserved.Array.copy`.
+Further, there are the higher level functions like :func:`~tenpy.linalg.np_conserved.tensordot` or :func:`~tenpy.linalg.np_conserved.svd`,
+which also return new Arrays.
+
 Further, new Arrays are created by the various functions like `tensordot` or `svd` in :mod:`~tenpy.linalg.np_conserved`.
 
-Leg labeling
-------------
+Complete blocking of Charges
+----------------------------
 
-.. todo ::
+While the code was designed in such a way that each charge sector has a different charge, most of the code
+will still run correctly if multiple charge sectors (qindices) correspond to the same charge. 
+In this sense :class:`~tenpy.linalg.np_conserved.Array` acts like a sparse array class and can selectively store subblocks. 
+Algorithms which need a full blocking should state that explicitly in their doc-strings.
 
-    Introduction to leg labeling
+If you expect the tensor to be dense subject to charge constraint (as for MPS), 
+it will be most efficient to fully block by charge, so that work is done on large chunks.
+
+However, if you expect the tensor to be sparser than required by charge (as for an MPO),
+it may be convenient not to completely block, which forces smaller matrices to be stored, and hence many zeroes to be dropped.
+Nevertheless, the algorithms were not designed with this in mind, so it is not recommended in general.
+
+If you haven't created the array yet, you can call :meth:`~tenpy.linalg.charges.LegCharge.sort` (with ``bunch=True``)
+on each :class:`~tenpy.linalg.charges.LegCharge` which you want to block.
+This sorts by charges and thus induces a permution of the indices, which is also returned as an 1D array ``perm``.
+For consistency, you have to apply this permutation to you flat data as well. 
+
+Alternatively, you can simply call :meth:`~tenpy.linalg.np_conserved.Array.sort` on a existing :class:`~tenpy.linalg.np_conserved.Array`.
+It calls :meth:`~tenpy.linalg.charges.LegCharge.sort` internally on the specified legs and performs the necessary
+permutations directly to (a copy of) `self`. Yet, you should keep in mind, that the axes are permuted afterwards.
+
 
 .. _array_storage_schema:
 
@@ -400,22 +430,6 @@ So here is how it works:
     - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
     - Under `pinv`, the labels are transposed
 
-Various Remarks
----------------
-- ChargeInfo and LegCharges are **not** copied when creating an array via from_ndarray (or similar functions).
-  Hence they must not be altered after creation! This is done such that multiple Arrays can share `qind`
-  If somehow one wants to alter the array after the array is built, pass in a copy to from_ndarray()
-- While the code was designed in such a way that each charge sector has a different charge, most of the code
-  will still run correctly if multiple charge sectors (qindices) correspond to the same charge. 
-  In this sense npc.array acts like a sparse array class and can selectively store subblocks. 
-  Algorithms which need a full blocking should state that explicitly in their doc-strings.
-
-  If you expect the tensor to be dense subject to charge constraint (as for MPS), 
-  it will be most efficient to fully block by charge, so that work is done on large chunks.
-
-  However, if you expect the tensor to be sparser than required by charge (as for an MPO),
-  it may be convenient not to completely block, which forces smaller matrices to be stored, and hence many zeroes to be dropped.
-  Nevertheless, the algorithms were not designed with this in mind, so it is not recommended in general.
 
 See also
 --------

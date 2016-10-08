@@ -159,6 +159,7 @@ class LegCharge(object):
     Instances of this class can be shared between different `npc.Array`s.
     Thus, functions changing self.qind *must* always make copies;
     further they *must* set `sorted` and `bunched` to false, if not guaranteeing to preserve them.
+
     """
 
     def __init__(self, chargeinfo, qind, qconj=1):
@@ -295,6 +296,10 @@ class LegCharge(object):
         """returns whether there are contiguous blocks"""
         return len(_find_row_differences(self.qind[:, 2:])) == self.block_number + 1
 
+    def get_slice(self, qindex):
+        """return slice selecting the block for a given `qindex`"""
+        return slice(*self.qind[qindex, :2])
+
     def sort(self, bunch=True):
         """Return a copy of `self` sorted by charges (but maybe not bunched).
 
@@ -327,11 +332,8 @@ class LegCharge(object):
         cp.qind = np.empty_like(self.qind)
         cp.qind[:, 2:] = self.qind[perm_qind, 2:]
         # figure out the re-ordered slice boundaries
-        blocksizes = self.qind[:, 1] - self.qind[:, 0]
-        blocksizes = np.add.accumulate(blocksizes[perm_qind])
-        cp.qind[0, 0] = 0
-        cp.qind[1:, 0] = blocksizes[:-1]
-        cp.qind[:, 1] = blocksizes
+        block_sizes = self._get_block_sizes()
+        cp._set_qind_block_sizes(block_sizes[perm_qind])
         # finally bunch: re-ordering can have brought together equal charges
         if bunch:
             _, cp = cp.bunch()
@@ -388,6 +390,10 @@ class LegCharge(object):
         If you are sure that the legs should be contractable,
         check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
         or whether self and other are blocked or should be sorted.
+
+        .. todo ::
+
+            should we allow a `bunch` before?
         """
         if self.chinfo != other.chinfo:
             raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
@@ -401,6 +407,37 @@ class LegCharge(object):
             raise ValueError(''.join(["incompatible charges. qind:\n", str(self), "\n", str(other)
                                       ]))
 
+    def project(self, mask):
+        """Return copy keeping only the indices specified by `mask`.
+
+        Parameters
+        ----------
+        mask : 1D array(bool)
+            the indices which you want to keep
+
+        Returns
+        -------
+        map_qind : 1D array
+            map of qindices, such that ``qind_new = map_qind[qind_old]``,
+            and ``map_qind[qind_old] = -1`` for qindices projected out.
+        block_masks : 1D array
+            the bool mask for each of the *remaining* blocks
+        projected_copy : :class:`LegCharge`
+            copy of self with the qind projected by `mask`
+        """
+        mask = np.asarray(mask, dtype=np.bool_)
+        cp = copy.copy(self)
+        cp.qind = cp.qind.copy()
+        block_masks = [mask[qi[0]:qi[1]] for qi in cp.qind]
+        new_block_lens = [np.sum(bm) for bm in block_masks]
+        keep = np.nonzero(new_block_lens)[0]
+        block_masks = [block_masks[i] for i in keep]
+        cp.qind = cp.qind[keep]
+        map_qind = - np.ones(self.block_number, np.int_)
+        map_qind[keep] = np.arange(len(keep))
+        cp._set_qind_block_sizes(np.array(new_block_lens)[keep])
+        return map_qind, block_masks, cp
+
     def __str__(self):
         """return a string of qind"""
         return str(self.qind)
@@ -408,6 +445,17 @@ class LegCharge(object):
     def __repr__(self):
         """full string representation"""
         return "LegCharge({0!r}, {1!r}, {2:d})".format(self.chinfo, self.qind, self.qconj)
+
+    def _set_qind_block_sizes(self, block_sizes):
+        """Set self.qind[:, :2] from an list of the blocksizes."""
+        block_sizes = np.asarray(block_sizes, np.int_)
+        self.qind[:, 1] = np.add.accumulate(block_sizes)
+        self.qind[0, 0] = 0
+        self.qind[1:, 0] = self.qind[:-1, 1]
+
+    def _get_block_sizes(self):
+        """return block sizes"""
+        return (self.qind[:, 1] - self.qind[:, 0])
 
 
 class LegPipe(object):

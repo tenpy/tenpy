@@ -9,7 +9,7 @@ PAPER         =
 # for generating the reference/*.rst files from the source
 BUILDDIR      = sphinx_build
 REFDIR        = reference
-SRC           = ../tenpy
+SRC           = ../tenpy/
 
 
 # User-friendly check for sphinx-build
@@ -172,10 +172,6 @@ doctest:
 	@echo "Testing of doctests in the sources finished, look at the " \
 	      "results in $(BUILDDIR)/doctest/output.txt."
 
-src2rst:
-	# note: there seems to be a bug in sphinx-apidoc such that it ignores following 'excludedirs'
-	$(SPHINXAPIDOC) -d 3 -e -f -o $(REFDIR) $(SRC)
-
 xml:
 	$(SPHINXBUILD) -b xml $(ALLSPHINXOPTS) $(BUILDDIR)/xml
 	@echo
@@ -185,3 +181,9 @@ pseudoxml:
 	$(SPHINXBUILD) -b pseudoxml $(ALLSPHINXOPTS) $(BUILDDIR)/pseudoxml
 	@echo
 	@echo "Build finished. The pseudo-XML files are in $(BUILDDIR)/pseudoxml."
+
+src2rst:
+	# note: there seems to be a bug in sphinx-apidoc such that it ignores following 'excludedirs'
+	$(SPHINXAPIDOC) -d 3 -e -f -o $(REFDIR) $(SRC)
+	rm $(REFDIR)/modules.rst  # this file does not contain useful information
+	# thus, I didn't include it to the :toctree:, but it's existence triggers a warning. So we just remove it...

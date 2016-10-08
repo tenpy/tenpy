@@ -27,6 +27,7 @@ Concrete things to be fixed in different files
   - documentation of general idea -> docs/IntroNpc
   - introduce new class leg_charge with charge data for a single leg -> linalg/charges.py
   - moved into tenpy/linalg
+  - add state labeling to LegCharge ?
 
 - model:
 

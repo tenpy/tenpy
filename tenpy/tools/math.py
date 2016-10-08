@@ -25,6 +25,8 @@ LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
 ##########################################################################
 ##########################################################################
 # Random useful stuff
+# TODO: this has nothing to do with `math`. Move this to tools/misc.py
+# TODO: rename toiterable -> to_iterable etc
 
 
 def toiterable(o):

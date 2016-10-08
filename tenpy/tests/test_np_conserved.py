@@ -59,8 +59,37 @@ def test_npc_Array_labels():
         a.set_leg_labels(t)
         nst.eq_(a.get_leg_labels(), t)
         axes = (0, 1, 1, 0, 1, 0)
-        axes_l = list(axes) # replace with labels, where available
+        axes_l = list(axes)  # replace with labels, where available
         for i, l in enumerate(axes[:4]):
             if t[l] is not None:
                 axes_l[i] = t[l]
         nst.eq_(tuple(a.get_leg_indices(axes_l)), axes)
+
+
+def test_npc_Array_project():
+    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    p1 = np.array([True, True, False, True, True])
+    p2 = np.array([0, 1, 3])
+
+    b = a.copy(True)
+    b.iproject([p1, p2], (0, 1))
+    b.test_sanity()
+    bflat = project_multiple_axes(a.to_ndarray(), [p1, p2], (0, 1))
+    npt.assert_equal(b.to_ndarray(), bflat)
+    # and again for a being blocked before: can we split the blocks
+    _, a = a.sort_legcharge()
+    b = a.copy(True)
+    b.iproject([p1, p2], (0, 1))
+    b.test_sanity()
+    bflat = project_multiple_axes(a.to_ndarray(), [p1, p2], (0, 1))
+    npt.assert_equal(b.to_ndarray(), bflat)
+
+
+def project_multiple_axes(flat_array, perms, axes):
+    for p, a in it.izip(perms, axes):
+        idx = [slice(None)]*flat_array.ndim
+        idx[a] = p
+        flat_array = flat_array[tuple(idx)]
+    return flat_array
+
+# TODO: enhance these test by using larger random arrays -> need Array.from_ndfunc.

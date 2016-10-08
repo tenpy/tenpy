@@ -51,6 +51,8 @@ from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe,
                       reverse_sort_perm)
 from . import charges   # for private functions
 
+from ..tools.math import toiterable
+
 """A cutoff to ignore machine precision rounding errors when determining charges"""
 QCUTOFF = np.finfo(np.float64).eps * 10
 
@@ -62,10 +64,10 @@ class Array(object):
     together with the charge structure of its legs (for abelian charges).
     Further information can be found in :doc:`../IntroNpc`.
 
-    ``Array(...)`` does not insert any data and thus yields an Array 'full' of zeros.
-    New array can be created with one of :meth:`from_ndarray_trivial`,
-    :meth:`from_ndarray`, or :meth:`from_npfunc`.
-    as :meth:`__init__` does not initialize any data.
+    The default :meth:`__init__` (i.e. ``Array(...)``) does not insert any data,
+    and thus yields an Array 'full' of zeros, equivalent to :func:`zeros()`.
+    Further, new arrays can be created with one of :meth:`from_ndarray_trivial`,
+    :meth:`from_ndarray`, or :meth:`from_npfunc`, and of course by copying/tensordot/svd etc.
 
     Parameters
     ----------
@@ -79,7 +81,6 @@ class Array(object):
 
     Attributes
     ----------
-    rank
     shape : tuple(int)
         the number of indices for each of the legs
     dtype : np.dtype
@@ -100,9 +101,14 @@ class Array(object):
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
 
+    Notes
+    -----
+    The Array
+
     .. todo ::
 
-        test everything
+        Somehow, including `rank` to the list of attributes breaks
+        the sphinx build for this class...
     """
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -132,7 +138,7 @@ class Array(object):
             cp.qtotal = cp.qtotal.copy()
         # even deep copies can share chargeinfo and legs, but they get
         cp.chinfo = self.chinfo
-        cp.legs = list(self.legs)
+        cp.legs = self.legs[:]
         return cp
 
     @classmethod
@@ -455,12 +461,7 @@ class Array(object):
                     # except ValueError:
                     #     cp = cp.permute(sort[li], axes=[li]) # implement...
                     #     continue
-                # entry ``b`` of of cp._qdata refers to old ``self.legs[li][b]``.
-                # since new ``cp.legs[li][i] == self.legs[li][p_qind[i]]``,
-                # we have new ``cp.legs[li][reverse_sort_perm(p_qind)[b]]``
-                p_qind = reverse_sort_perm(p_qind)
-                cp._qdata[:, li] = [p_qind[i] for i in cp._qdata[:, li]]
-                cp._qdata_sorted = False
+                cp._perm_qind(p_qind, li)
             else:
                 sort[li] = np.arange(cp.shape[li])
         if any(bunch):
@@ -481,6 +482,53 @@ class Array(object):
         self._qdata = self._qdata[perm, :]
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
+
+    def iproject(self, mask, axes):
+        """Applying masks to one or multiple axes. In place.
+
+        This function is similar as `np.compress` with boolean arrays
+        For each specified axis, a boolean 1D array `mask` can be given,
+        which chooses the indices to keep.
+
+        Parameters
+        ----------
+        mask: (list of) 1D array(bool|int)
+            for each axis specified by `axes` a mask, which indices of the axes should be kept.
+            If `mask` is a bool array, keep the indices where `mask` is True.
+            If `mask` is an int array, keep the indices listed in the mask (ignoring the order).
+        axes: (list of) int | string
+            The `i`th entry in this list specifies the axis for the `i`th entry of `mask`,
+            either as an int, or with a leg label.
+            If axes is just a single int/string, specify just one mask.
+        """
+        axes = self.get_leg_indices(toiterable(axes))
+        mask = [np.asarray(m) for m in toiterable(mask)]
+        if len(axes) != len(mask):
+            raise ValueError("len(axes) != len(mask)")
+        for i, m in enumerate(mask):
+            # convert integer masks to bool masks
+            if m.dtype != np.bool_:
+                mask[i] = np.zeros(self.shape[axes[i]], dtype=np.bool_)
+                np.put(mask[i], m, True)
+        block_masks = []
+        proj_data = np.arange(len(self._data))
+        for m, a in itertools.izip(mask, axes):
+            l = self.legs[a]
+            m_qind, bm, self.legs[a] = l.project(m)
+            block_masks.append(bm)
+            q = self._qdata[:, a] = m_qind[self._qdata[:, a]]
+            piv = (q >= 0)
+            self._qdata = self._qdata[piv]
+            proj_data = proj_data[piv]
+        self._set_shape()
+        # finally project out the blocks
+        data = []
+        for i, iold in enumerate(proj_data):
+            block = self._data[iold]
+            for m, a in itertools.izip(block_masks, axes):
+                block = np.compress(m[self._qdata[i, a]], block, axis=a)
+            data.append(block)
+        self._data = data
 
     def __repr__(self):
         return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
@@ -620,8 +668,19 @@ class Array(object):
         return tuple([(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
                       itertools.izip(self.legs, qindices)])
 
+    def _perm_qind(self, p_qind, leg):
+        """Apply a permutation `p_qind` of the qindices in leg `leg` to _qdata. In place."""
+        # entry ``b`` of of old old._qdata[:, leg] refers to old ``old.legs[leg][b]``.
+        # since new ``new.legs[leg][i] == old.legs[leg][p_qind[i]]``,
+        # we have new ``new.legs[leg][reverse_sort_perm(p_qind)[b]] == old.legs[leg][b]``
+        # thus we replace an entry `b` in ``_qdata[:, leg]``with reverse_sort_perm(q_ind)[b].
+        p_qind_r = reverse_sort_perm(p_qind)
+        self._qdata[:, leg] = p_qind_r[self._qdata[:, leg]]  # equivalent to
+        # self._qdata[:, leg] = [p_qind_r[i] for i in self._qdata[:, leg]]
+        self._qdata_sorted = False
 
-# functions ====================================================================
+# global functions ====================================================================
+
 
 def zeros(chargeinfo, legcharges, qtotal=None):
     """create a npc array full of zeros (with no _data).
