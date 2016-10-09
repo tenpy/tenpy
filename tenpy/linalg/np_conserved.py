@@ -109,6 +109,7 @@ class Array(object):
 
         Somehow, including `rank` to the list of attributes breaks
         the sphinx build for this class...
+        What about size and stored_blocks?
     """
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -300,6 +301,16 @@ class Array(object):
         """the number of legs"""
         return len(self.shape)
 
+    @property
+    def size(self):
+        """the number of dtype-objects stored"""
+        return np.sum([t.size for t in self._data], dtype=np.int_)
+
+    @property
+    def stored_blocks(self):
+        """the number of (non-zero) blocks stored in self._data"""
+        return len(self._data)
+
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
@@ -313,7 +324,7 @@ class Array(object):
             if l.chinfo != self.chinfo:
                 raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
                     l.chinfo, self.chinfo))
-        if self._qdata.shape != (len(self._data), self.rank):
+        if self._qdata.shape != (self.stored_blocks, self.rank):
             raise ValueError("_qdata shape wrong")
         if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
             raise ValueError("invalid qind in _qdata")
@@ -321,105 +332,6 @@ class Array(object):
             perm = np.lexsort(self._qdata.T)
             if np.any(perm != np.arange(len(perm))):
                 raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
-
-    def to_ndarray(self):
-        """convert self to a dense numpy ndarray."""
-        res = np.zeros(self.shape, self.dtype)
-        for block, slices, _, _ in self:  # that's elegant! :)
-            res[slices] = block
-        return res
-
-    def astype(self, dtype):
-        """Return (deep) copy with new dtype, upcasting all blocks in ``_data``.
-
-        Parameters
-        ----------
-        dtype : convertible to a np.dtype
-            the new data type.
-            If None, deduce the new dtype as common type of ``self._data``.
-
-        Returns
-        -------
-        copy : :class:`Array`
-            deep copy of self with new dtype
-        """
-        cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
-        cp._qdata = cp._qdata.copy()
-        if dtype is None:
-            dtype = np.common_dtype(*self._data)
-        cp.dtype = np.dtype(dtype)
-        cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
-        return cp
-
-    def get_leg_index(self, label):
-        """translate a leg-index or leg-label to a leg-index.
-
-        Parameters
-        ----------
-        label : int | string
-            eather the leg-index directly or a label (string) set before.
-
-        Returns
-        -------
-        leg_index : int
-            the index of the label
-
-        See also
-        --------
-        get_leg_indices : calls get_leg_index for a list of labels
-        set_leg_labels : set the labels of different legs.
-        """
-        return self.labels.get(label, label)
-
-    def get_leg_indices(self, labels):
-        """Translate a list of leg-indices or leg-labels to leg indices.
-
-        Parameters
-        ----------
-        labels : iterable of string/int
-            The leg-labels (or directly indices) to be translated in leg-indices
-
-        Returns
-        -------
-        leg_indices : list of int
-            the translated labels.
-
-        See also
-        --------
-        get_leg_index : used to translate each of the single entries.
-        set_leg_labels : set the labels of different legs.
-        """
-        return [self.get_leg_index(l) for l in labels]
-
-    def set_leg_labels(self, labels):
-        """Return labels for the legs.
-
-        Introduction to leg labeling can be found in :doc:`../IntroNpc`.
-
-        Parameters
-        ----------
-        labels : iterable (strings | None), len=self.rank
-            One label for each of the legs.
-            An entry can be None for an anonymous leg.
-
-        See also
-        --------
-        get_leg: translate the labels to indices
-        get_legs: calls get_legs for an iterable of labels
-        """
-        if len(labels) != self.rank:
-            raise ValueError("Need one leg label for each of the legs.")
-        self.labels = {}
-        for i, l in enumerate(labels):
-            if l is not None:
-                self.labels[l] = i
-
-    def get_leg_labels(self):
-        """Return tuple of the leg labels, with `None` for anonymous legs."""
-        lb = [None] * self.rank
-        for k, v in self.labels.iteritems():
-            lb[v] = k
-        return tuple(lb)
 
     def detect_ndarray_qtotal(self, flat_array, cutoff=None):
         """ Returns the total charge of first non-zero sector found in `a`.
@@ -547,6 +459,49 @@ class Array(object):
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
+    def __iter__(self):
+        """Allow to iterate over the non-zero blocks, giving all `_data`.
+
+        Yields
+        ------
+        block : ndarray
+            the actual entries of a charge block
+        blockslices : tuple of slices
+            a slice giving the range of the block in the original tensor for each of the legs
+        charges : list of charges
+            the charge value(s) for each of the legs
+        qdat : ndarray
+            the qind for each of the legs
+        """
+        for block, qdat in itertools.izip(self._data, self._qdata):
+            qind = [l.qind[qi] for (qi, l) in itertools.izip(qdat, self.legs)]
+            blockslices = tuple([slice(qi[0], qi[1]) for qi in qind])
+            qs = [qi[2:] for qi in qind]
+            yield block, blockslices, qs, qdat
+    # data manipulation =======================================================
+
+    def astype(self, dtype):
+        """Return (deep) copy with new dtype, upcasting all blocks in ``_data``.
+
+        Parameters
+        ----------
+        dtype : convertible to a np.dtype
+            the new data type.
+            If None, deduce the new dtype as common type of ``self._data``.
+
+        Returns
+        -------
+        copy : :class:`Array`
+            deep copy of self with new dtype
+        """
+        cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
+        cp._qdata = cp._qdata.copy()
+        if dtype is None:
+            dtype = np.common_dtype(*self._data)
+        cp.dtype = np.dtype(dtype)
+        cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
+        return cp
+
     def iproject(self, mask, axes):
         """Applying masks to one or multiple axes. In place.
 
@@ -575,7 +530,7 @@ class Array(object):
                 mask[i] = np.zeros(self.shape[axes[i]], dtype=np.bool_)
                 np.put(mask[i], m, True)
         block_masks = []
-        proj_data = np.arange(len(self._data))
+        proj_data = np.arange(self.stored_blocks)
         for m, a in itertools.izip(mask, axes):
             l = self.legs[a]
             m_qind, bm, self.legs[a] = l.project(m)
@@ -601,16 +556,12 @@ class Array(object):
         ----------
         axes: iterable (int|string), len ``rank`` | None
             the new order of the axes. By default (None), reverse axes.
-
-        .. todo ::
-
-            test this function. Did
         """
         if axes is None:
             axes = tuple(reversed(xrange(self.rank)))
         else:
             axes = tuple(self.get_leg_indices(axes))
-            if len(axes) != axes or len(set(axes)) != self.rank:
+            if len(axes) != self.rank or len(set(axes)) != self.rank:
                 raise ValueError("axes has wrong length: " + str(axes))
         axes_arr = np.array(axes)
         self.legs = [self.legs[a] for a in axes]
@@ -627,6 +578,88 @@ class Array(object):
         cp.itranspose(axes)
         return cp
 
+
+    # labels ==================================================================
+
+    def get_leg_index(self, label):
+        """translate a leg-index or leg-label to a leg-index.
+
+        Parameters
+        ----------
+        label : int | string
+            eather the leg-index directly or a label (string) set before.
+
+        Returns
+        -------
+        leg_index : int
+            the index of the label
+
+        See also
+        --------
+        get_leg_indices : calls get_leg_index for a list of labels
+        set_leg_labels : set the labels of different legs.
+        """
+        return self.labels.get(label, label)
+
+    def get_leg_indices(self, labels):
+        """Translate a list of leg-indices or leg-labels to leg indices.
+
+        Parameters
+        ----------
+        labels : iterable of string/int
+            The leg-labels (or directly indices) to be translated in leg-indices
+
+        Returns
+        -------
+        leg_indices : list of int
+            the translated labels.
+
+        See also
+        --------
+        get_leg_index : used to translate each of the single entries.
+        set_leg_labels : set the labels of different legs.
+        """
+        return [self.get_leg_index(l) for l in labels]
+
+    def set_leg_labels(self, labels):
+        """Return labels for the legs.
+
+        Introduction to leg labeling can be found in :doc:`../IntroNpc`.
+
+        Parameters
+        ----------
+        labels : iterable (strings | None), len=self.rank
+            One label for each of the legs.
+            An entry can be None for an anonymous leg.
+
+        See also
+        --------
+        get_leg: translate the labels to indices
+        get_legs: calls get_legs for an iterable of labels
+        """
+        if len(labels) != self.rank:
+            raise ValueError("Need one leg label for each of the legs.")
+        self.labels = {}
+        for i, l in enumerate(labels):
+            if l is not None:
+                self.labels[l] = i
+
+    def get_leg_labels(self):
+        """Return tuple of the leg labels, with `None` for anonymous legs."""
+        lb = [None] * self.rank
+        for k, v in self.labels.iteritems():
+            lb[v] = k
+        return tuple(lb)
+
+    # output ==================================================================
+
+    def to_ndarray(self):
+        """convert self to a dense numpy ndarray."""
+        res = np.zeros(self.shape, self.dtype)
+        for block, slices, _, _ in self:  # that's elegant! :)
+            res[slices] = block
+        return res
+
     def __repr__(self):
         return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
             self.shape, self.chinfo, self.get_leg_labels())
@@ -635,27 +668,31 @@ class Array(object):
         res = "\n".join([repr(self)[:-1], str(self.to_ndarray()), ">"])
         return res
 
-    def __iter__(self):
-        """Allow to iterate over the non-zero blocks, giving all `_data`.
+    def sparse_stats(self):
+        """Returns a string detailing the sparse statistics"""
+        total = np.prod(self.shape)
+        if total is 0:
+            return "Array without entries, one axis is empty."
+        nblocks = self.stored_blocks
+        stored = self.size
+        nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
+        bs = np.array([t.s for t in self._data], dtype=np.float)
+        if nblocks > 0:
+            bs1 = (np.sum(bs**0.5)/nblocks)**2
+            bs2 = np.sum(bs)/nblocks
+            bs3 = (np.sum(bs**2.0)/nblocks)**0.5
+            captsparse = float(nonzero) / stored
+        else:
+            captsparse = 1.
+            bs1, bs2, bs3 = 0, 0, 0
+        res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
+            "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
+            "Captured sparsity: {captsparse:g}\n"  \
+            "Effective block sizes (second entry=mean): [{bs1:.2f}, {bs2:.2f}, {bs3:.2f}]"
 
-        Yields
-        ------
-        block : ndarray
-            the actual entries of a charge block
-        blockslices : tuple of slices
-            a slice giving the range of the block in the original tensor for each of the legs
-        charges : list of charges
-            the charge value(s) for each of the legs
-        qdat : ndarray
-            the qind for each of the legs
-        """
-        for block, qdat in itertools.izip(self._data, self._qdata):
-            qind = [l.qind[qi] for (qi, l) in itertools.izip(qdat, self.legs)]
-            blockslices = tuple([slice(qi[0], qi[1]) for qi in qind])
-            qs = [qi[2:] for qi in qind]
-            yield block, blockslices, qs, qdat
-
-    # private functions ========================================================
+        return res.format(nonzero=nonzero, total=total, nztotal=nonzero/total, nblocks=nblocks,
+                          stored=stored, captspares=captsparse, bs1=bs1, bs2=bs2, bs3=bs3)
+    # private functions =======================================================
 
     def _set_shape(self):
         """deduce self.shape from self.legs"""
