@@ -1,4 +1,5 @@
 """A collection of tests for tenpy.linalg.np_conserved"""
+from __future__ import division
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -12,12 +13,52 @@ qflat = np.array([[0, 0], [1, 1], [2, 0], [-2, 0], [1, 1]])
 lc = npc.LegCharge.from_qflat(chinfo, qflat)
 arr = np.zeros((5, 5))
 arr[0, 0] = 1.
-arr[1, 1] = arr[4, 1] = arr[1, 4] = arr[4, 4] = 2.
+arr[1, 1] = arr[4, 1] = arr[1, 4] = 2.
 arr[2, 2] = 3.
-arr[3, 3] = 4.
+# don't fill all sectors compatible with charges: [3, 3] and [4, 4] are empty
+# arr[3, 3] = 4.
 
-qflat2 = qflat + np.array([[1, 0]])  # for checking non-zero total charge
-lc2 = npc.LegCharge.from_qflat(chinfo, qflat2)
+qflat_add = qflat + np.array([[1, 0]])  # for checking non-zero total charge
+lc_add = npc.LegCharge.from_qflat(chinfo, qflat_add)
+
+chinfo2 = npc.ChargeInfo([1, 3, 1, 2])  # more charges for better testing
+
+# fix the random number generator such that tests are reproducible
+np.random.seed(3141592)  # (it should work for any seed)
+
+
+def gen_random_legcharge(n, chinfo):
+    """returns a random legcharge with index len `n`"""
+    qflat = []
+    for mod in chinfo.mod:
+        if mod > 1:
+            qflat.append(np.random.randint(0, mod, size=n, dtype=npc.QDTYPE))
+        else:
+            r = max(3, n//3)
+            qflat.append(np.random.randint(-r, r, size=n, dtype=npc.QDTYPE))
+    qflat = np.array(qflat, dtype=npc.QDTYPE).T
+    qconj = np.random.randint(0, 1, 1) * 2 - 1
+    return npc.LegCharge.from_qflat(chinfo, qflat, qconj)
+
+
+def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):
+    """generates a random npc.Array of given shape with random legcharges and entries."""
+    legs = [gen_random_legcharge(s, chinfo) for s in shape]
+    a = npc.Array.from_func(func, chinfo, legs, qtotal=qtotal, shape_kw=shape_kw)
+    if sort:
+        _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
+    return a
+
+
+def project_multiple_axes(flat_array, perms, axes):
+    for p, a in it.izip(perms, axes):
+        idx = [slice(None)]*flat_array.ndim
+        idx[a] = p
+        flat_array = flat_array[tuple(idx)]
+    return flat_array
+
+
+# ------- test functions -------------------
 
 
 def test_npc_Array_conversion():
@@ -30,7 +71,7 @@ def test_npc_Array_conversion():
     npt.assert_equal(a.to_ndarray(), arr)
     npt.assert_equal(a.qtotal, np.array([0, 0], npc.QDTYPE))
     # check non-zero total charge
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc2.conj()])
+    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc_add.conj()])
     npt.assert_equal(a.qtotal, np.array([-1, 0], npc.QDTYPE))
     npt.assert_equal(a.to_ndarray(), arr)
     a.gauge_total_charge(1)
@@ -39,6 +80,16 @@ def test_npc_Array_conversion():
     a_clx = a.astype(np.complex128)
     nst.eq_(a_clx.dtype, np.complex128)
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
+    # from_ndfunc
+    a = npc.Array.from_func(np.ones, chinfo, [lc, lc.conj()])
+    a.test_sanity()
+    aflat = np.zeros((5, 5))
+    for ind in [(0, 0), (1, 1), (1, 4), (4, 1), (2, 2), (3, 3), (4, 4)]:
+        aflat[ind] = 1.
+    npt.assert_equal(a.to_ndarray(), aflat)
+    # random array
+    a = random_Array((20, 15, 10), chinfo2, sort=False)
+    a.test_sanity()
 
 
 def test_npc_Array_sort():
@@ -51,7 +102,16 @@ def test_npc_Array_sort():
     npt.assert_equal(a_sb._qdata_sorted, False)
     a_sb.sort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
-
+    # and for larger random array
+    a = random_Array((20, 15, 10), chinfo2, sort=False)
+    p_flat, a_s = a.sort_legcharge(True, False)
+    arr_s = a.to_ndarray()[np.ix_(*p_flat)]  # what a_s should be
+    npt.assert_equal(a_s.to_ndarray(), arr_s)  # sort without bunch
+    _, a_sb = a_s.sort_legcharge(False, True)
+    npt.assert_equal(a_sb.to_ndarray(), arr_s)  # bunch after sort
+    npt.assert_equal(a_sb._qdata_sorted, False)
+    a_sb.sort_qdata()
+    npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
 
 def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
@@ -85,11 +145,10 @@ def test_npc_Array_project():
     npt.assert_equal(b.to_ndarray(), bflat)
 
 
-def project_multiple_axes(flat_array, perms, axes):
-    for p, a in it.izip(perms, axes):
-        idx = [slice(None)]*flat_array.ndim
-        idx[a] = p
-        flat_array = flat_array[tuple(idx)]
-    return flat_array
+def test_npc_Array_transpose():
+    for tr in [None, [2, 1, 0], (1, 2, 0), (0, 2, 1)]:
+        a = random_Array((20, 15, 10), chinfo)
+        atr = a.transpose(tr)
+        atr.test_sanity()
+        npt.assert_equal(atr.to_ndarray(), a.to_ndarray().transpose(tr))
 
-# TODO: enhance these test by using larger random arrays -> need Array.from_ndfunc.

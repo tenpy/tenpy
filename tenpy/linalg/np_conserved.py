@@ -223,6 +223,70 @@ class Array(object):
         res.test_sanity()
         return res
 
+    @classmethod
+    def from_func(cls, func, chargeinfo, legcharges, dtype=np.float64, qtotal=None,
+                    func_args=(), func_kwargs={}, shape_kw=None):
+        """Create an Array from a numpy func.
+
+        This function creates an array and fills the blocks *compatible* with the charges
+        using `func`, where `func` is a function returning a `array_like` when given a shape,
+        e.g. one of ``np.ones`` or ``np.random.standard_normal``.
+
+        Parameters
+        ----------
+        func : callable
+            a function-like object which is called to generate the data blocks.
+            We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
+            If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
+            otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
+            `shape` is a tuple of int.
+        chargeinfo : ChargeInfo
+            the nature of the charge
+        legcharges : list of LegCharge
+            a LegCharge for each of the legs.
+        dtype : type | string
+            the data type of the output entries. Defaults to np.float64.
+            Note that this argument is not given to func, but rather a type conversion
+            is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
+        qtotal : None | charges
+            the total charge of the new array. Defaults to charge 0.
+        func_args : iterable
+            additional arguments given to `func`
+        func_kwargs : dict
+            additional keyword arguments given to `func`
+        shape_kw : None | str
+            If given, the keyword with which shape is given to `func`.
+
+        Returns
+        -------
+        res : :class:`Array`
+            an Array with blocks filled using `func`.
+        """
+        res = cls(chargeinfo, legcharges, dtype, qtotal)  # without any data yet.
+        data = []
+        qdata = []
+        for qindices in res._iter_all_blocks():
+            if np.any(res._get_block_charge(qindices) != res.qtotal):
+                continue
+            shape = res._get_block_shape(qindices)
+            if shape_kw is None:
+                block = func(shape, *func_args, **func_kwargs)
+            else:
+                kws = func_kwargs.copy()
+                kws[shape_kw] = shape
+                block = func(*func_args, **kws)
+            block = np.asarray(block, dtype=res.dtype)
+            data.append(block)
+            qdata.append(qindices)
+        res._data = data
+        if len(qdata) == 0:
+            res._qdata = np.empty((0, res.rank), QDTYPE)
+        else:
+            res._qdata = np.array(qdata, dtype=QDTYPE)
+        res._qdata_sorted = True  # _iter_all_blocks is in lexiographic order
+        res.test_sanity()
+        return res
+
     def zeros_like(self):
         """return a shallow copy of self with only zeros as entries, containing no `_data`"""
         res = self.copy(deep=False)
@@ -530,6 +594,39 @@ class Array(object):
             data.append(block)
         self._data = data
 
+    def itranspose(self, axes=None):
+        """Transpose axes like `np.transpose`. Yields in place view.
+
+        Parameters
+        ----------
+        axes: iterable (int|string), len ``rank`` | None
+            the new order of the axes. By default (None), reverse axes.
+
+        .. todo ::
+
+            test this function. Did
+        """
+        if axes is None:
+            axes = tuple(reversed(xrange(self.rank)))
+        else:
+            axes = tuple(self.get_leg_indices(axes))
+            if len(axes) != axes or len(set(axes)) != self.rank:
+                raise ValueError("axes has wrong length: " + str(axes))
+        axes_arr = np.array(axes)
+        self.legs = [self.legs[a] for a in axes]
+        self._set_shape()
+        labs = self.get_leg_labels()
+        self.set_leg_labels([labs[a] for a in axes])
+        self._qdata = self._qdata[:, axes_arr]
+        self._qdata_sorted = False
+        self._data = [np.transpose(block, axes) for block in self._data]
+
+    def transpose(self, axes=None):
+        """Like :meth:`itranspose`, but on a deep copy."""
+        cp = self.copy(deep=True)
+        cp.itranspose(axes)
+        return cp
+
     def __repr__(self):
         return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
             self.shape, self.chinfo, self.get_leg_labels())
@@ -593,6 +690,11 @@ class Array(object):
         return tuple([slice(l.qind[j, 0], l.qind[j, 1])
                       for l, j in itertools.izip(self.legs, qindices)])
 
+    def _get_block_shape(self, qindices):
+        """return shape for the block given by qindices"""
+        return tuple([(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
+                      itertools.izip(self.legs, qindices)])
+
     def _bunch(self, bunch_legs):
         """Return copy and bunch the qind for one or multiple legs
 
@@ -637,7 +739,7 @@ class Array(object):
                     # create enlarged block
                     bunched_blocks[new_qindices] = len(new_data)
                     # cp has new legs and thus gives the new shape
-                    new_block = np.zeros(cp._block_shape(new_qindices), dtype=cp.dtype)
+                    new_block = np.zeros(cp._get_block_shape(new_qindices), dtype=cp.dtype)
                     new_data.append(new_block)
                     new_qdata.append(new_qindices)
                 else:
@@ -658,16 +760,6 @@ class Array(object):
         cp._qsorted = False
         return cp
 
-    def _block_slices(self, qindices):
-        """return slices for the block specified by qindices"""
-        return tuple([slice(l.qind[qi, 0], l.qind[qi, 1]) for l, qi in
-                      itertools.izip(self.legs, qindices)])
-
-    def _block_shape(self, qindices):
-        """return shape for the block given by qindices"""
-        return tuple([(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
-                      itertools.izip(self.legs, qindices)])
-
     def _perm_qind(self, p_qind, leg):
         """Apply a permutation `p_qind` of the qindices in leg `leg` to _qdata. In place."""
         # entry ``b`` of of old old._qdata[:, leg] refers to old ``old.legs[leg][b]``.
@@ -679,7 +771,7 @@ class Array(object):
         # self._qdata[:, leg] = [p_qind_r[i] for i in self._qdata[:, leg]]
         self._qdata_sorted = False
 
-# global functions ====================================================================
+# functions ====================================================================
 
 
 def zeros(chargeinfo, legcharges, qtotal=None):

@@ -35,7 +35,7 @@ class ChargeInfo(object):
     Attributes
     ----------
     qnumber
-    qmod : 1D array_like of ints
+    mod : 1D array_like of ints
         The periodicity of the charges. One entry for each charge.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
