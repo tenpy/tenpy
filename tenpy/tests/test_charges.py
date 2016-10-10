@@ -101,6 +101,12 @@ def test_LegCharge():
     nst.eq_(lcus_sb.is_blocked(), True)
     nst.eq_(lcus_sb.ind_len, lcus.ind_len)
 
+    # test get_qindex
+    for i in xrange(lcs.ind_len):
+        qidx, idx_in_block = lcs.get_qindex(i)
+        assert(lcs.qind[qidx, 0] <= i < lcs.qind[qidx, 1])
+        assert(lcs.qind[qidx, 0] + idx_in_block == i)
+
 
 def test_reverse_sort_perm(N=10):
     x = np.random.random(N)

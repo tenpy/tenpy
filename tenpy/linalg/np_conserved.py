@@ -24,6 +24,7 @@ tenpy.linalg.charges : Implementation of :class:`~tenpy.linalg.charge.ChargeInfo
 .. todo ::
    usage and examples, Routine listing
    update ``from charges import``
+   write example section
 """
 # Examples
 # --------
@@ -226,7 +227,7 @@ class Array(object):
 
     @classmethod
     def from_func(cls, func, chargeinfo, legcharges, dtype=np.float64, qtotal=None,
-                    func_args=(), func_kwargs={}, shape_kw=None):
+                  func_args=(), func_kwargs={}, shape_kw=None):
         """Create an Array from a numpy func.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -296,21 +297,6 @@ class Array(object):
         res._qdata_sorted = True
         return res
 
-    @property
-    def rank(self):
-        """the number of legs"""
-        return len(self.shape)
-
-    @property
-    def size(self):
-        """the number of dtype-objects stored"""
-        return np.sum([t.size for t in self._data], dtype=np.int_)
-
-    @property
-    def stored_blocks(self):
-        """the number of (non-zero) blocks stored in self._data"""
-        return len(self._data)
-
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
@@ -332,6 +318,83 @@ class Array(object):
             perm = np.lexsort(self._qdata.T)
             if np.any(perm != np.arange(len(perm))):
                 raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
+
+    # properties ==============================================================
+
+    @property
+    def rank(self):
+        """the number of legs"""
+        return len(self.shape)
+
+    @property
+    def size(self):
+        """the number of dtype-objects stored"""
+        return np.sum([t.size for t in self._data], dtype=np.int_)
+
+    @property
+    def stored_blocks(self):
+        """the number of (non-zero) blocks stored in self._data"""
+        return len(self._data)
+
+    # accessing entries =======================================================
+
+    def to_ndarray(self):
+        """convert self to a dense numpy ndarray."""
+        res = np.zeros(self.shape, self.dtype)
+        for block, slices, _, _ in self:  # that's elegant! :)
+            res[slices] = block
+        return res
+
+    def __iter__(self):
+        """Allow to iterate over the non-zero blocks, giving all `_data`.
+
+        Yields
+        ------
+        block : ndarray
+            the actual entries of a charge block
+        blockslices : tuple of slices
+            a slice giving the range of the block in the original tensor for each of the legs
+        charges : list of charges
+            the charge value(s) for each of the legs
+        qdat : ndarray
+            the qind for each of the legs
+        """
+        for block, qdat in itertools.izip(self._data, self._qdata):
+            qind = [l.qind[qi] for (qi, l) in itertools.izip(qdat, self.legs)]
+            blockslices = tuple([slice(qi[0], qi[1]) for qi in qind])
+            qs = [qi[2:] for qi in qind]
+            yield block, blockslices, qs, qdat
+
+    def __getitem__(self, inds):
+        """``self[inds]`` returns the value of the corresponding entry.
+
+        .. todo ::
+            currently, we support only inds = (i1, i2, ..., irank)
+            return take_slice(...) if len(inds) < rank
+            slices (at least within blocks)?
+        """
+        if type(inds) != tuple:  # for rank 1
+            inds = tuple(inds)
+        if len(inds) != self.rank:
+            raise IndexError("wrong number of axes")
+        pos = np.array([l.get_qindex(i) for i, l in itertools.izip(inds, self.legs)])
+        block = self._get_block(pos[:, 0])
+        if block is None:
+            return 0.
+        else:
+            return block[tuple(pos[:, 1])]
+
+    def __setitem__(self, inds, val):
+        """``self[i1, i2, . . . ] = val`` sets value of corresponding entry"""
+        if type(inds) != tuple:  # for rank 1
+            inds = tuple(inds)
+        if len(inds) != self.rank:
+            raise IndexError("wrong number of axes")
+        pos = np.array([l.get_qindex(i) for i, l in itertools.izip(inds, self.legs)])
+        block = self._get_block(pos[:, 0], insert=True, raise_incomp_q=True)
+        block[tuple(pos[:, 1])] = val
+
+    # handling of charges =====================================================
 
     def detect_ndarray_qtotal(self, flat_array, cutoff=None):
         """ Returns the total charge of first non-zero sector found in `a`.
@@ -390,12 +453,16 @@ class Array(object):
         self.legs[leg] = newleg
         self.qtotal = newqtotal
 
+    def is_completely_blocked(self):
+        """returns bool wheter all legs are blocked by charge"""
+        return all([l.is_blocked() for l in self.legs])
+
     def sort_legcharge(self, sort=True, bunch=True):
         """Return a copy with one ore all legs sorted by charges.
 
         Sort/bunch one or multiple of the LegCharges.
-        Note that legs which are sorted and bunched
-        are guaranteed to be completely blocked by charge.
+        Note that legs which are sorted *and* bunched
+        are guaranteed to be blocked by charge.
 
         Parameters
         ----------
@@ -405,7 +472,7 @@ class Array(object):
             or a 1D array perm for a given permuation to apply to a leg.
         bunch : True | False | list of {True, False}
             A single bool holds for all legs, default=True.
-            whether or not to bunch at each leg, i.e. combine contiguous blocks with equal charges
+            whether or not to bunch at each leg, i.e. combine contiguous blocks with equal charges.
 
         Returns
         -------
@@ -459,25 +526,6 @@ class Array(object):
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
-    def __iter__(self):
-        """Allow to iterate over the non-zero blocks, giving all `_data`.
-
-        Yields
-        ------
-        block : ndarray
-            the actual entries of a charge block
-        blockslices : tuple of slices
-            a slice giving the range of the block in the original tensor for each of the legs
-        charges : list of charges
-            the charge value(s) for each of the legs
-        qdat : ndarray
-            the qind for each of the legs
-        """
-        for block, qdat in itertools.izip(self._data, self._qdata):
-            qind = [l.qind[qi] for (qi, l) in itertools.izip(qdat, self.legs)]
-            blockslices = tuple([slice(qi[0], qi[1]) for qi in qind])
-            qs = [qi[2:] for qi in qind]
-            yield block, blockslices, qs, qdat
     # data manipulation =======================================================
 
     def astype(self, dtype):
@@ -578,7 +626,6 @@ class Array(object):
         cp.itranspose(axes)
         return cp
 
-
     # labels ==================================================================
 
     def get_leg_index(self, label):
@@ -651,15 +698,7 @@ class Array(object):
             lb[v] = k
         return tuple(lb)
 
-    # output ==================================================================
-
-    def to_ndarray(self):
-        """convert self to a dense numpy ndarray."""
-        res = np.zeros(self.shape, self.dtype)
-        for block, slices, _, _ in self:  # that's elegant! :)
-            res[slices] = block
-        return res
-
+    # string output ===========================================================
     def __repr__(self):
         return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
             self.shape, self.chinfo, self.get_leg_labels())
@@ -731,6 +770,47 @@ class Array(object):
         """return shape for the block given by qindices"""
         return tuple([(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
                       itertools.izip(self.legs, qindices)])
+
+    def _get_block(self, qindices, insert=False, raise_incomp_q=False):
+        """return the ndarray in ``_data`` representing the block corresponding to `qindices`.
+
+        Parameters
+        ----------
+        qindices : 1D array of QDTYPE
+            the qindices, for which we need to look in _qdata
+        insert : bool
+            If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
+            Else: just return ``None`` in that case.
+        raise_incomp_q : bool
+            Raise an IndexError if the charge is incompatible.
+
+        Returns
+        -------
+        block: ndarray
+            the block in ``_data`` corresponding to qindices
+            If `insert`=False and there is not block with qindices, return ``False``
+
+        Raises
+        ------
+        IndexError
+            If qindices are incompatible with charge and `raise_incomp_q`
+        """
+        if not np.all(self._get_block_charge(qindices) == self.qtotal):
+            if raise_incomp_q:
+                raise IndexError("trying to get block for qindices incompatible with charges")
+            return None
+        # find qindices in self._qdata
+        match = np.argwhere(np.all(self._qdata == qindices, axis=1))[:, 0]
+        if len(match) == 0:
+            if insert:
+                res = np.zeros(self._get_block_shape(qindices), dtype=self.dtype)
+                self._data.append(res)
+                self._qdata = self._qdata.append(qindices)
+                self._qdata_sorted = False
+                return res
+            else:
+                return None
+        return self._data[match[0]]
 
     def _bunch(self, bunch_legs):
         """Return copy and bunch the qind for one or multiple legs

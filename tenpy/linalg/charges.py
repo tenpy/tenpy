@@ -12,6 +12,7 @@ from __future__ import division
 import numpy as np
 import copy
 import itertools
+import bisect
 
 """the dtype of a single charge"""
 QDTYPE = np.int_
@@ -299,6 +300,38 @@ class LegCharge(object):
     def get_slice(self, qindex):
         """return slice selecting the block for a given `qindex`"""
         return slice(*self.qind[qindex, :2])
+
+    def get_qindex(self, flat_index):
+        """find qindex containing a flat index.
+
+        Given a flat index, to find the corresponding entry in an Array, we need to determine the
+        block it is saved in. For example, if ``qind[:, 2] = [[0, 3], [3, 7], [7, 12]]``,
+        the flat index ``5`` corresponds to the second entry, ``qindex = 1`` (since 5 is in [3:7]),
+        and the index within the block would be ``5-3 =2``.
+
+        Parameters
+        ----------
+        flat_index : int
+            a flat index of the leg. Negative index counts from behind.
+
+        Returns
+        -------
+        qindex : int
+            the qindex, i.e. the index of the block containing `flat_index`
+        index_within_block : int
+            the index of `flat_index` within the block given by `qindex`.
+        """
+        if flat_index < 0:
+            flat_index += self.ind_len
+            if flat_index < 0:
+                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}"
+                                 .format(flat_index-self.ind_len, self.ind_len))
+        elif flat_index > self.ind_len:
+            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}"
+                             .format(flat_index, self.ind_len))
+        block_begin = self.qind[:, 0]
+        qind = bisect.bisect(block_begin, flat_index) - 1
+        return qind, flat_index - block_begin[qind]
 
     def sort(self, bunch=True):
         """Return a copy of `self` sorted by charges (but maybe not bunched).

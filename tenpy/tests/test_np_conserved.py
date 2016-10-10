@@ -22,6 +22,7 @@ qflat_add = qflat + np.array([[1, 0]])  # for checking non-zero total charge
 lc_add = npc.LegCharge.from_qflat(chinfo, qflat_add)
 
 chinfo2 = npc.ChargeInfo([1, 3, 1, 2])  # more charges for better testing
+chinfo3 = npc.ChargeInfo([3])  # for larger blocks with random arrays of the same shape
 
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
@@ -32,10 +33,10 @@ def gen_random_legcharge(n, chinfo):
     qflat = []
     for mod in chinfo.mod:
         if mod > 1:
-            qflat.append(np.random.randint(0, mod, size=n, dtype=npc.QDTYPE))
+            qflat.append(np.asarray(np.random.randint(0, mod, size=n), dtype=npc.QDTYPE))
         else:
             r = max(3, n//3)
-            qflat.append(np.random.randint(-r, r, size=n, dtype=npc.QDTYPE))
+            qflat.append(np.asarray(np.random.randint(-r, r, size=n), dtype=npc.QDTYPE))
     qflat = np.array(qflat, dtype=npc.QDTYPE).T
     qconj = np.random.randint(0, 1, 1) * 2 - 1
     return npc.LegCharge.from_qflat(chinfo, qflat, qconj)
@@ -95,6 +96,7 @@ def test_npc_Array_conversion():
 def test_npc_Array_sort():
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
     p_flat, a_s = a.sort_legcharge(True, False)
+    npt.assert_equal(p_flat[0], [3, 0, 2, 1, 4])
     arr_s = arr[np.ix_(*p_flat)]  # what a_s should be
     npt.assert_equal(a_s.to_ndarray(), arr_s)  # sort without bunch
     _, a_sb = a_s.sort_legcharge(False, True)
@@ -152,3 +154,19 @@ def test_npc_Array_transpose():
         atr.test_sanity()
         npt.assert_equal(atr.to_ndarray(), a.to_ndarray().transpose(tr))
 
+
+def test_npc_Array_itemacces():
+    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    aflat = a.to_ndarray().copy()
+    for i, j in it.product(xrange(5), xrange(5)):  # access all elements
+        nst.eq_(a[i, j], aflat[i, j])
+    for i, j in [(0, 0), (2, 2), (1, 4), (4, 1), (3, 3), (4, 4)]:  # sets also emtpy blocks
+        val = np.random.rand()
+        aflat[i, j] = val
+        a[i, j] = val
+    npt.assert_equal(a.to_ndarray(), aflat)
+    # again for array with larger blocks
+    a = random_Array((10, 10), chinfo3)
+    aflat = a.to_ndarray().copy()
+    for i, j in it.product(xrange(10), xrange(10)):  # access all elements
+        nst.eq_(a[i, j], aflat[i, j])
