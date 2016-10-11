@@ -446,7 +446,7 @@ class LegCharge(object):
         Parameters
         ----------
         mask : 1D array(bool)
-            the indices which you want to keep
+            whether to keep of the indices
 
         Returns
         -------

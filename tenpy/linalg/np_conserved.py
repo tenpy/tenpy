@@ -108,9 +108,11 @@ class Array(object):
 
     .. todo ::
 
-        Somehow, including `rank` to the list of attributes breaks
-        the sphinx build for this class...
-        What about size and stored_blocks?
+        - Somehow, including `rank` to the list of attributes breaks
+          the sphinx build for this class...
+        - What about size and stored_blocks?
+        - Methods section
+        - should _qdata be of type np.intp ?
     """
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -138,7 +140,7 @@ class Array(object):
             # some things should be copied even for shallow copies
             cp._set_shape()
             cp.qtotal = cp.qtotal.copy()
-        # even deep copies can share chargeinfo and legs, but they get
+        # even deep copies can share chargeinfo and legs
         cp.chinfo = self.chinfo
         cp.legs = self.legs[:]
         return cp
@@ -366,33 +368,110 @@ class Array(object):
             yield block, blockslices, qs, qdat
 
     def __getitem__(self, inds):
-        """``self[inds]`` returns the value of the corresponding entry.
+        """acces entries with ``self[inds]``
 
-        .. todo ::
-            currently, we support only inds = (i1, i2, ..., irank)
-            return take_slice(...) if len(inds) < rank
-            slices (at least within blocks)?
+        Parameters
+        ----------
+        inds : tuple
+            A tuple specifying the `index` for each leg.
+            An ``Ellipsis`` (written as ``...``) replaces ``slice(None)`` for missing axes.
+            For a single `index`, we currently support:
+
+            - A single integer, choosing an index of the axis.
+            - A ``slice(None)`` specifying the complete axis.
+            - A ``slice``
+
+        Returns
+        -------
+        res : `dtype`
+            only returned, if a single integer is given for all legs.
+            It is the entry specified by `inds`, giving ``0.`` for non-saved blocks.
+        sliced: :class:`Array`
+        an `Array` with some of the data removed by :meth:`take_slice` and/or :meth:`project`
+
+        Notes
+        -----
+        ``self[i]`` is equivalent to ``self[i, ...]``.
+        ``self[i, ..., j]`` is syntactic sugar for ``self[(i, Ellipsis, i2)]``
+
+        Raises
+        ------
+        IndexError
+            If the number of indices is too large, or
+            if an index is out of range.
+
         """
-        if type(inds) != tuple:  # for rank 1
-            inds = tuple(inds)
-        if len(inds) != self.rank:
-            raise IndexError("wrong number of axes")
-        pos = np.array([l.get_qindex(i) for i, l in itertools.izip(inds, self.legs)])
-        block = self._get_block(pos[:, 0])
-        if block is None:
-            return 0.
-        else:
-            return block[tuple(pos[:, 1])]
+        int_only, inds = self._pre_indexing(inds)
+        if int_only:
+            pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
+            block = self._get_block(pos[:, 0])
+            if block is None:
+                return self.dtype(0)
+            else:
+                return block[tuple(pos[:, 1])]
+        return self._advanced_getitem(inds)
 
     def __setitem__(self, inds, val):
-        """``self[i1, i2, . . . ] = val`` sets value of corresponding entry"""
-        if type(inds) != tuple:  # for rank 1
-            inds = tuple(inds)
-        if len(inds) != self.rank:
-            raise IndexError("wrong number of axes")
-        pos = np.array([l.get_qindex(i) for i, l in itertools.izip(inds, self.legs)])
-        block = self._get_block(pos[:, 0], insert=True, raise_incomp_q=True)
-        block[tuple(pos[:, 1])] = val
+        """``self[i1, i2, ... ,irank] = val`` sets value of corresponding entry"""
+        int_only, inds = self._pre_indexing(inds)
+        if int_only:
+            pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
+            block = self._get_block(pos[:, 0], insert=True, raise_incomp_q=True)
+            block[tuple(pos[:, 1])] = val
+        raise NotImplementedError("slicing for setitem not implemented")
+
+    def take_slice(self, indices, axes):
+        """Return a copy of self fixing `indices` along one or multiple `axes`.
+
+        For a rank-4 Array ``A.take_slice([i, j], [1,2])`` is equivalent to ``A[:, i, j, :]``.
+
+        Parameters
+        ----------
+        indices : (iterable of) int
+            the (flat) index for each of the legs specified by `axes`
+        axes : (iterable of) str/int
+            leg labels or indices to specify the legs for which the indices are given.
+
+        Returns
+        -------
+        slided_self : :class:`Array`
+            a copy of self, equivalent to taking slices with indices inserted in axes.
+        """
+        axes = self.get_leg_indices(toiterable(axes))
+        indices = np.asarray(toiterable(indices), dtype=np.intp)
+        if len(axes) != len(indices):
+            raise ValueError("len(axes) != len(indices)")
+        if indices.ndim != 1:
+            raise ValueError("indices may only contain ints")
+        res = self.copy(deep=True)
+        if len(axes) == 0:
+            return res  # nothing to do
+        # qindex and index_within_block for each of the axes
+        pos = np.array([self.legs[a].get_qindex(i) for a, i in zip(axes, indices)])
+        # which axes to keep
+        keep_axes = [a for a in xrange(self.rank) if a not in axes]
+        res.legs = [self.legs[a] for a in keep_axes]
+        res._set_shape()
+        labels = self.get_leg_labels()
+        res.set_leg_labels([labels[a] for a in keep_axes])
+        # calculate new total charge
+        for a, (qi, _) in zip(axes, pos):
+            res.qtotal -= self.legs[a].qind[qi, 2:] * self.legs[a].qconj
+        res.qtotal = self.chinfo.make_valid(res.qtotal)
+        # which blocks to keep
+        axes = np.array(axes, dtype=np.intp)
+        keep_axes = np.array(keep_axes, dtype=np.intp)
+        keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
+        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)].copy()
+        # res._qdata_sorted is not changed
+        # determine the slices to take on _data
+        sl = [slice(None)] * self.rank
+        for a, ri in zip(axes, pos[:, 1]):
+            sl[a] = ri  # the indices within the blocks
+        sl = tuple(sl)
+        # finally take slices on _data
+        res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
+        return res
 
     # handling of charges =====================================================
 
@@ -562,7 +641,8 @@ class Array(object):
         mask: (list of) 1D array(bool|int)
             for each axis specified by `axes` a mask, which indices of the axes should be kept.
             If `mask` is a bool array, keep the indices where `mask` is True.
-            If `mask` is an int array, keep the indices listed in the mask (ignoring the order).
+            If `mask` is an int array, keep the indices listed in the mask, *ignoring* the
+            order or multiplicity.
         axes: (list of) int | string
             The `i`th entry in this list specifies the axis for the `i`th entry of `mask`,
             either as an int, or with a leg label.
@@ -572,6 +652,8 @@ class Array(object):
         mask = [np.asarray(m) for m in toiterable(mask)]
         if len(axes) != len(mask):
             raise ValueError("len(axes) != len(mask)")
+        if len(axes) == 0:
+            return  # nothing to do.
         for i, m in enumerate(mask):
             # convert integer masks to bool masks
             if m.dtype != np.bool_:
@@ -579,26 +661,27 @@ class Array(object):
                 np.put(mask[i], m, True)
         block_masks = []
         proj_data = np.arange(self.stored_blocks)
-        for m, a in itertools.izip(mask, axes):
+        for m, a in zip(mask, axes):
             l = self.legs[a]
             m_qind, bm, self.legs[a] = l.project(m)
             block_masks.append(bm)
             q = self._qdata[:, a] = m_qind[self._qdata[:, a]]
             piv = (q >= 0)
             self._qdata = self._qdata[piv]
+            # self._qdata_sorted is preserved
             proj_data = proj_data[piv]
         self._set_shape()
         # finally project out the blocks
         data = []
         for i, iold in enumerate(proj_data):
             block = self._data[iold]
-            for m, a in itertools.izip(block_masks, axes):
+            for m, a in zip(block_masks, axes):
                 block = np.compress(m[self._qdata[i, a]], block, axis=a)
             data.append(block)
         self._data = data
 
     def itranspose(self, axes=None):
-        """Transpose axes like `np.transpose`. Yields in place view.
+        """Transpose axes like `np.transpose`. In place.
 
         Parameters
         ----------
@@ -646,7 +729,12 @@ class Array(object):
         get_leg_indices : calls get_leg_index for a list of labels
         set_leg_labels : set the labels of different legs.
         """
-        return self.labels.get(label, label)
+        res = self.labels.get(label, label)
+        if res > self.rank:
+            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
+        elif res < 0:
+            res += self.rank
+        return res
 
     def get_leg_indices(self, labels):
         """Translate a list of leg-indices or leg-labels to leg indices.
@@ -887,6 +975,61 @@ class Array(object):
         self._qdata[:, leg] = p_qind_r[self._qdata[:, leg]]  # equivalent to
         # self._qdata[:, leg] = [p_qind_r[i] for i in self._qdata[:, leg]]
         self._qdata_sorted = False
+
+    def _advanced_getitem(self, inds):
+        """self[inds] for non-integer `inds`.
+        This function is called by self.__getitem__(inds)."""
+        # non-integer inds -> slicing / projection
+        slice_inds = []  # arguments for `take_slice`
+        slice_axes = []
+        project_masks = []  # arguments for `iproject`
+        project_axes = []
+        for a, i in enumerate(inds):
+            if isinstance(i, slice):
+                if i != slice(None):
+                    m = np.zeros(self.shape[a], dtype=np.bool_)
+                    m[i] = True
+                    project_masks.append(m)
+                    project_axes.append(a)
+            else:
+                if isinstance(i, np.ndarray):
+                    project_masks.append(i)
+                    project_axes.append(a)
+                else:  # should be an integer
+                    slice_inds.append(i)
+                    slice_axes.append(a)
+        res = self.take_slice(slice_inds, slice_axes)
+        map_axes = np.add.accumulate([(a not in slice_axes) for a in xrange(self.rank)]) - 1
+        res.iproject(project_masks, [map_axes[p] for p in project_axes])
+        return res
+
+    def _pre_indexing(self, inds):
+        """check if `inds` are valid indices for ``self[inds]`` and replaces Ellipsis by slices.
+
+        Returns
+        -------
+        only_integer : bool
+            whether all of `inds` are (convertible to) np.intp
+        inds : tuple, len=self.rank
+            `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
+        """
+        if type(inds) != tuple:  # for rank 1
+            inds = tuple(inds)
+        if len(inds) < self.rank:
+            inds = inds + (Ellipsis, )
+        if any([(i is Ellipsis) for i in inds]):
+            fill = tuple([slice(None)] * (self.rank - len(inds)+1))
+            e = inds.index(Ellipsis)
+            inds = inds[:e] + fill + inds[e+1:]
+        if len(inds) > self.rank:
+            raise IndexError("too many indices for Array")
+        # do we have only integer entries in `inds`?
+        try:
+            np.array(inds, dtype=np.intp)
+        except:
+            return False, inds
+        else:
+            return True, inds
 
 # functions ====================================================================
 

@@ -115,3 +115,10 @@ def test_reverse_sort_perm(N=10):
     xnew = x[p]
     pinv = charges.reverse_sort_perm(p)
     npt.assert_equal(x, xnew[pinv])
+
+
+if __name__ == "__main__":
+    test_ChargeInfo()
+    test__find_row_differences()
+    test_LegCharge()
+    test_reverse_sort_perm()

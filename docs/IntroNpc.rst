@@ -360,6 +360,46 @@ If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexs
 If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it gaurantees it is still sorted).
 The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
 
+.. _Array_element_access:
+
+Indexing of an Array
+--------------------
+
+Although it is usually not necessary to access single entries of an :class:`~tenpy.linalg.np_conserved.Array`, you can of course do that.
+In the simplest case, this is something like ``A[0, 2, 1]`` for a rank-3 Array ``A``.
+However, accessing single entries is quite slow and usually not recommended. For small Arrays, it may be convenient to convert them
+back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+
+On top of that very basic indexing, `Array` supports part of the slicing and advanced indexing of numpy arrarys
+described in `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_.
+However, our Array class does not support advanced indexing with a single index array (for `rank`>1) -- this would be terribly slow.
+Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
+
+We allow only indexing of the form ``A[i0, i1, ...]``. If all indices ``i0, i1, ...`` are integers, 
+the single corresponding entry (of type `dtype`) is returned.
+
+However, the individual 'indices' ``i0`` for the individual legs can also be one of what is described in the following list.
+In that case, a new :class:`~tenpy.linalg.np_conserved.Array` with less data (specified by the indices) is returned.
+
+The 'indices' can be:
+
+- an `int`: fix the index of that axis, return array with one less dimension. See also :meth:`~tenpy.linalg.np_conserved.Array.take_slice`.
+- a ``slice(None)`` or ``:``: keep the complete axis
+- an ``Ellipsis`` or ``...``: shorthand for ``slice(None)`` for missing axes to fix the len
+- an 1D bool `ndarray` ``mask``: apply a mask to that axis, see :meth:`~tenpy.linalg.np_conserved.Array.iproject`.
+- a ``slice(start, stop, step)`` or ``start:stop:step``: keep only the indices specified by the slice. This is also implemented with `iproject`.
+- an 1D int `ndarray` ``mask``: keep only the indices specified by the array. This is also implemented with `iproject`.
+
+If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, 
+``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
+
+Currently, advanced indexing is not supported for setting values.
+
+.. warning ::
+
+    Due to numpy's advanced indexing, for 1D integer arrays ``a0`` and ``a1`` the following holds ::
+
+        A[a0, a1].to_ndarray() == A.to_ndarray()[np.ix_(a0, a1)] != A.to_ndarray()[a0, a1]
 
 .. _leg_pipes:
 

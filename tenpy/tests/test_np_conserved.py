@@ -61,7 +61,6 @@ def project_multiple_axes(flat_array, perms, axes):
 
 # ------- test functions -------------------
 
-
 def test_npc_Array_conversion():
     # trivial
     a = npc.Array.from_ndarray_trivial(arr)
@@ -115,6 +114,7 @@ def test_npc_Array_sort():
     a_sb.sort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
 
+
 def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
     for t in [('x', None), (None, 'y'), ('x', 'y')]:
@@ -126,6 +126,7 @@ def test_npc_Array_labels():
             if t[l] is not None:
                 axes_l[i] = t[l]
         nst.eq_(tuple(a.get_leg_indices(axes_l)), axes)
+    nst.eq_(a.get_leg_index(-1), 1) # negative indices
 
 
 def test_npc_Array_project():
@@ -170,3 +171,36 @@ def test_npc_Array_itemacces():
     aflat = a.to_ndarray().copy()
     for i, j in it.product(xrange(10), xrange(10)):  # access all elements
         nst.eq_(a[i, j], aflat[i, j])
+    # take_slice
+    a = random_Array((20, 10, 5), chinfo3)
+    aflat = a.to_ndarray().copy()
+    for idx, axes in [(0, 0), (4, 1), ([3, -2], [-1, 0])]:
+        a_sl = a.take_slice(idx, axes)
+        a_sl.test_sanity()
+        sl = [slice(None)]*a.rank
+        try:
+            for i, ax in zip(idx, axes):
+                sl[ax] = i
+        except:
+            sl[axes] = idx
+        sl = tuple(sl)
+        npt.assert_equal(a_sl.to_ndarray(), aflat[sl])
+        npt.assert_equal(a[sl].to_ndarray(), aflat[sl])
+    # advanced indexing with slices and projection/mask
+    for idx in [(2, Ellipsis, 1),
+                (slice(None), 3,  np.array([True, True, False, True, False])),
+                (slice(3, 4), np.array([2, 4, 5]), slice(1, 4, 2))]:  # yapf: disable
+        print "take slice for ", idx
+        b = a[idx]
+        b.test_sanity()
+        bflat = aflat[idx]  # idx may only contain a single array for this to work
+        npt.assert_equal(b.to_ndarray(), bflat)
+
+
+if __name__ == "__main__":
+    test_npc_Array_conversion()
+    test_npc_Array_sort()
+    test_npc_Array_labels()
+    test_npc_Array_project()
+    test_npc_Array_transpose()
+    test_npc_Array_itemacces()
