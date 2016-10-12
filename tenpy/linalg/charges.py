@@ -392,7 +392,7 @@ class LegCharge(object):
         cp.qind[-1, 1] = self.ind_len
         return idx, cp
 
-    def check_contractible(self, other):
+    def test_contractible(self, other):
         """Raises a ValueError if charges are incompatible for contraction with other.
 
         Parameters
@@ -414,7 +414,7 @@ class LegCharge(object):
         - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
         - the charges are the same up to the signs ``qconj``::
 
-                self.qind[:, 2:] * self.qconj = other.qind[:, 2:] * other.qconj[:, 2:].
+                self.qind[:, 2:] * self.qconj = - other.qind[:, 2:] * other.qconj[:, 2:].
 
         In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
         This special case is not considered here - instead use
@@ -423,10 +423,6 @@ class LegCharge(object):
         If you are sure that the legs should be contractable,
         check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
         or whether self and other are blocked or should be sorted.
-
-        .. todo ::
-
-            should we allow a `bunch` before?
         """
         if self.chinfo != other.chinfo:
             raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
@@ -434,11 +430,12 @@ class LegCharge(object):
         if self.qind is other.qind and self.qconj == -other.qconj:
             return  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
-            raise ValueError(''.join(["incomatible charge blocks. qind self, other=\n", str(self),
-                                      "\n", str(other)]))
+            raise ValueError(''.join([
+                "incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}".format(
+                    self, other)]))
         if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * (-other.qconj)):
-            raise ValueError(''.join(["incompatible charges. qind:\n", str(self), "\n", str(other)
-                                      ]))
+            raise ValueError(''.join(["incompatible charges. qind:\n{0!s}\n{1!s}".format(
+                self, other)]))
 
     def project(self, mask):
         """Return copy keeping only the indices specified by `mask`.
