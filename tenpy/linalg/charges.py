@@ -167,7 +167,7 @@ class LegCharge(object):
         """see help(self)"""
         self.chinfo = chargeinfo
         self.qind = np.array(qind, dtype=QDTYPE)
-        self.qconj = qconj
+        self.qconj = int(qconj)
         self.sorted = False
         self.bunched = False
         self.test_sanity()
@@ -245,7 +245,7 @@ class LegCharge(object):
         if not self.chinfo.check_valid(qind[:, 2:]):
             raise ValueError("qind charges invalid for " + str(self.chinfo) + "\n" + str(self))
         if self.qconj not in [-1, 1]:
-            raise ValueError("qconj has invalid value != +-1 :" + str(self.qconj))
+            raise ValueError("qconj has invalid value != +-1 :" + repr(self.qconj))
 
     @property
     def ind_len(self):
@@ -430,12 +430,11 @@ class LegCharge(object):
         if self.qind is other.qind and self.qconj == -other.qconj:
             return  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
-            raise ValueError(''.join([
-                "incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}".format(
-                    self, other)]))
+            raise ValueError("incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}"
+                             .format(self, other))
         if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * (-other.qconj)):
-            raise ValueError(''.join(["incompatible charges. qind:\n{0!s}\n{1!s}".format(
-                self, other)]))
+            raise ValueError("incompatible charges. qconj={0:+d}, {1:+d}, qind:\n{2!s}\n{3!s}"
+                             .format(self.qconj, other.qconj, self, other))
 
     def project(self, mask):
         """Return copy keeping only the indices specified by `mask`.
@@ -466,6 +465,7 @@ class LegCharge(object):
         map_qind = - np.ones(self.block_number, np.int_)
         map_qind[keep] = np.arange(len(keep))
         cp._set_qind_block_sizes(np.array(new_block_lens)[keep])
+        cp.bunched = self.is_blocked()
         return map_qind, block_masks, cp
 
     def __str__(self):
@@ -509,6 +509,7 @@ def reverse_sort_perm(perm):
 
     .. todo ::
         should we move this to another file? maybe tools/math (also move the test!)
+        At least rename this to `reverse_perm`
     """
     return np.argsort(perm)
 

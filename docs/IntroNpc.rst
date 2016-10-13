@@ -370,13 +370,13 @@ In the simplest case, this is something like ``A[0, 2, 1]`` for a rank-3 Array `
 However, accessing single entries is quite slow and usually not recommended. For small Arrays, it may be convenient to convert them
 back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
 
-On top of that very basic indexing, `Array` supports part of the slicing and advanced indexing of numpy arrarys
-described in `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_.
-However, our Array class does not support advanced indexing with a single index array (for `rank`>1) -- this would be terribly slow.
+On top of that very basic indexing, `Array` supports slicing and some kind of advanced indexing, which is however
+different from the one of numpy arrarys (described in `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_).
+Unlike numpy arrays, our Array class does not broadcast existing index arrays -- this would be terribly slow.
 Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
 
-We allow only indexing of the form ``A[i0, i1, ...]``. If all indices ``i0, i1, ...`` are integers, 
-the single corresponding entry (of type `dtype`) is returned.
+Instead, we allow just indexing of the legs independent of each other, of the form ``A[i0, i1, ...]``.
+If all indices ``i0, i1, ...`` are integers, the single corresponding entry (of type `dtype`) is returned.
 
 However, the individual 'indices' ``i0`` for the individual legs can also be one of what is described in the following list.
 In that case, a new :class:`~tenpy.linalg.np_conserved.Array` with less data (specified by the indices) is returned.
@@ -390,16 +390,21 @@ The 'indices' can be:
 - a ``slice(start, stop, step)`` or ``start:stop:step``: keep only the indices specified by the slice. This is also implemented with `iproject`.
 - an 1D int `ndarray` ``mask``: keep only the indices specified by the array. This is also implemented with `iproject`.
 
-If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, 
-``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
+For slices and 1D arrays, additional permuations may be perfomed with the help of :meth:`~tenpy.linalg.np_conserved.Array.permute`.
 
-Currently, advanced indexing is not supported for setting values.
+If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, ``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
+
+Note that indexing always **copies** the data -- even if `int` contains just slices, in which case numpy would return a view.
+However, assigning with ``A[:, [3, 5], 3] = B`` should work as you would expect.
 
 .. warning ::
 
     Due to numpy's advanced indexing, for 1D integer arrays ``a0`` and ``a1`` the following holds ::
 
         A[a0, a1].to_ndarray() == A.to_ndarray()[np.ix_(a0, a1)] != A.to_ndarray()[a0, a1]
+
+    For a combination of slices and arrays, things get more complicated with numpys advanced indexing.
+    In that case, a simple ``np.ix_(...)`` doesn't help any more to emulate our version of indexing.
 
 .. _leg_pipes:
 

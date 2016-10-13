@@ -80,7 +80,7 @@ def test_npc_Array_conversion():
     a_clx = a.astype(np.complex128)
     nst.eq_(a_clx.dtype, np.complex128)
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
-    # from_ndfunc
+    # from_func
     a = npc.Array.from_func(np.ones, chinfo, [lc, lc.conj()])
     a.test_sanity()
     aflat = np.zeros((5, 5))
@@ -148,6 +148,19 @@ def test_npc_Array_project():
     npt.assert_equal(b.to_ndarray(), bflat)
 
 
+def test_npc_Array_permute():
+    sh = (20, 15, 10)
+    a = random_Array(sh, chinfo)
+    aflat = a.to_ndarray().copy()
+    for ax in range(len(sh)):
+        p = np.arange(sh[ax], dtype=np.intp)
+        np.random.shuffle(p)
+        a = a.permute(p, axis=ax)
+        a.test_sanity()
+        aflat = np.take(aflat, p, axis=ax)
+        npt.assert_equal(a.to_ndarray(), aflat)
+
+
 def test_npc_Array_transpose():
     for tr in [None, [2, 1, 0], (1, 2, 0), (0, 2, 1)]:
         a = random_Array((20, 15, 10), chinfo)
@@ -187,13 +200,30 @@ def test_npc_Array_itemacces():
         npt.assert_equal(a_sl.to_ndarray(), aflat[sl])
         npt.assert_equal(a[sl].to_ndarray(), aflat[sl])
     # advanced indexing with slices and projection/mask
-    for idx in [(2, Ellipsis, 1),
-                (slice(None), 3,  np.array([True, True, False, True, False])),
-                (slice(3, 4), np.array([2, 4, 5]), slice(1, 4, 2))]:  # yapf: disable
+    # NOTE: for blat[idx] = aflat[idx] to work, non-slices may not be separated by slices.
+    check_idx = [(2, Ellipsis, 1),
+                 (slice(None), 3, np.array([True, True, False, True, False])),
+                 (slice(3, 4), np.array([2, 4, 5]), slice(1, 4, 2)),
+                 (slice(4, 2, -1), 2, np.array([3, 1, 4, 2]))]  # yapf: disable
+    for idx in check_idx:
         print "take slice for ", idx
         b = a[idx]
         b.test_sanity()
         bflat = aflat[idx]  # idx may only contain a single array for this to work
+        npt.assert_equal(b.to_ndarray(), bflat)
+    # create another random array to check copying with c[inds] = a[inds]
+    b = npc.Array.from_func(np.random.random, a.chinfo, a.legs, a.dtype, a.qtotal, shape_kw='size')
+    # remove half of the blocks to check copying to empty sites as well
+    keep = (np.arange(b.stored_blocks) % 2 == 0)
+    b._data = [d for d, k in zip(b._data, keep) if k]
+    b._qdata = b._qdata[keep]
+    bflat = b.to_ndarray().copy()
+    aflat = a.to_ndarray().copy()
+    for idx in check_idx:
+        print "copy slice for ", idx
+        b[idx] = a[idx]
+        b.test_sanity()
+        bflat[idx] = aflat[idx]  # idx may only contain a single array
         npt.assert_equal(b.to_ndarray(), bflat)
 
 
@@ -202,5 +232,6 @@ if __name__ == "__main__":
     test_npc_Array_sort()
     test_npc_Array_labels()
     test_npc_Array_project()
+    test_npc_Array_permute()
     test_npc_Array_transpose()
     test_npc_Array_itemacces()
