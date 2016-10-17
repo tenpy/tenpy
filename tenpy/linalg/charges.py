@@ -13,6 +13,7 @@ import numpy as np
 import copy
 import itertools
 import bisect
+import warnings
 
 """the dtype of a single charge"""
 QDTYPE = np.int_
@@ -124,7 +125,8 @@ class ChargeInfo(object):
 class LegCharge(object):
     r"""Save the charge data associated to a leg of a tensor.
 
-    In the end, this is a wrapper around a 2D numpy array qind.
+    In the end, this class is more a wrapper around a 2D numpy array `qind`.
+    See :doc:`../IntroNpc` for more details.
 
     Parameters
     ----------
@@ -333,6 +335,10 @@ class LegCharge(object):
         qind = bisect.bisect(block_begin, flat_index) - 1
         return qind, flat_index - block_begin[qind]
 
+    def get_charge(self, qindex):
+        """Return charge ``self.qind[qindex, 2:] * self.qconj`` of a given `qindex`."""
+        return self.qind[qindex, 2:] * self.qconj
+
     def sort(self, bunch=True):
         """Return a copy of `self` sorted by charges (but maybe not bunched).
 
@@ -346,11 +352,11 @@ class LegCharge(object):
 
         Returns
         -------
-        perm_flat : array (ind_len,)
-            the permutation of the indices in flat form.
-            For a flat ndarray, ``sorted_array[..., :] = unsorted_array[..., perm]``.
         perm_qind : array (self.block_len,)
             the permutation of the qind (before bunching) used for the sorting.
+            To obtain the flat permuation such that
+            ``sorted_array[..., :] = unsorted_array[..., perm_flat]``, use
+            ``perm_flat = unsorted_array.perm_flat_from_perm_qind(perm_qind)``
         sorted_copy : :class:`LegCharge`
             a shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
 
@@ -360,17 +366,21 @@ class LegCharge(object):
         np.take : can apply `perm_flat` to a given axis
         reverse_sort_perm : returns inverse of a permutation
         """
+        if self.sorted and ((not bunch) or self.bunched):  # nothing to do
+            return np.arange(self.block_number, dtype=np.intp), self
         perm_qind = np.lexsort(self.qind[:, 2:].T)
         cp = copy.copy(self)
-        cp.qind = np.empty_like(self.qind)
-        cp.qind[:, 2:] = self.qind[perm_qind, 2:]
-        # figure out the re-ordered slice boundaries
-        block_sizes = self._get_block_sizes()
-        cp._set_qind_block_sizes(block_sizes[perm_qind])
+        cp.qind = self.qind[perm_qind, :]  # apply permutation. (advanced indexing -> copy)
+        block_sizes = cp._get_block_sizes()  # uses ``qind[:, 1]-qind[:, 0]``,
+        # which gives the *permuted* block sizes
+        cp._set_qind_block_sizes(block_sizes)
+        cp.sorted = True
         # finally bunch: re-ordering can have brought together equal charges
         if bunch:
             _, cp = cp.bunch()
-        return _perm_flat_from_qind(perm_qind, self.qind), perm_qind, cp
+        else:
+            cp.bunched = False
+        return perm_qind, cp
 
     def bunch(self):
         """Return a copy with bunched self.qind: form blocks for contiguous equal charges.
@@ -385,11 +395,14 @@ class LegCharge(object):
         See also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
+        if self.bunched:  # nothing to do
+            return np.arange(self.block_number, dtype=np.intp), self
         cp = copy.copy(self)
         idx = _find_row_differences(self.qind[:, 2:])[:-1]
-        cp.qind = np.copy(cp.qind[idx])
+        cp.qind = cp.qind[idx]  # avanced indexing -> copy
         cp.qind[:-1, 1] = cp.qind[1:, 0]
         cp.qind[-1, 1] = self.ind_len
+        cp.bunched = True
         return idx, cp
 
     def test_contractible(self, other):
@@ -465,7 +478,7 @@ class LegCharge(object):
         map_qind = - np.ones(self.block_number, np.int_)
         map_qind[keep] = np.arange(len(keep))
         cp._set_qind_block_sizes(np.array(new_block_lens)[keep])
-        cp.bunched = self.is_blocked()
+        cp.bunched = self.is_blocked()  # no, it's not `is_bunched`
         return map_qind, block_masks, cp
 
     def __str__(self):
@@ -478,8 +491,8 @@ class LegCharge(object):
 
     def _set_qind_block_sizes(self, block_sizes):
         """Set self.qind[:, :2] from an list of the blocksizes."""
-        block_sizes = np.asarray(block_sizes, np.int_)
-        self.qind[:, 1] = np.add.accumulate(block_sizes)
+        block_sizes = np.asarray(block_sizes, dtype=QDTYPE)
+        self.qind[:, 1] = np.cumsum(block_sizes)
         self.qind[0, 0] = 0
         self.qind[1:, 0] = self.qind[:-1, 1]
 
@@ -487,17 +500,269 @@ class LegCharge(object):
         """return block sizes"""
         return (self.qind[:, 1] - self.qind[:, 0])
 
+    def perm_flat_from_qind(self, perm_qind):
+        """Convert a permutation of qind (acting on self) into a flat permutation."""
+        return np.concatenate([np.arange(b, e) for (b, e) in self.qind[perm_qind, :2]])
 
-class LegPipe(object):
-    """A LegPipe combines multiple legs of a tensor to one.
+    def perm_qind_from_perm_flat(self, perm_flat):
+        """Convert flat permutation into qind permutation.
+
+        Parameters
+        ----------
+        perm_flat : 1D array
+            a permutation acting on self, which doesn't mix the blocks of qind.
+
+        Returns
+        -------
+        perm_qind : 1D array
+            the permutation of self.qind described by perm_flat.
+
+        Raises
+        ------
+        ValueError
+            If perm_flat mixes blocks of different qindex
+        """
+        perm_flat = np.asarray(perm_flat)
+        perm_qind = perm_flat[self.qind[:, 0]]
+        # check if perm_qind indeed resembles the permutation
+        if np.any(perm_flat != self.perm_flat_from_qind(perm_qind)):
+            raise ValueError("Permutation mixes qind")
+        return perm_qind
+
+
+class LegPipe(LegCharge):
+    r"""A `LegPipe` combines multiple legs of a tensor to one.
+
+    Often, it is necessary to "combine" multiple legs into one:
+    for example to perfom a SVD, the tensor needs to be viewed as a matrix.
+
+    This class does exactly this job: it combines multiple LegCharges ('incoming legs')
+    into one 'pipe' (*the* 'outgoing leg').
+    The pipe itself is a :class:`LegCharge`, with indices running from 0 to the product of the
+    individual legs' `ind_len`, corresponding to all possible combinations of input leg indices.
+
+    Parameters
+    ----------
+    legs : list of :class:`LegCharge`
+        the legs which are to be combined.
+    qconj : {+1, -1}
+        A flag telling whether the charge of the *resulting* pipe points inwards
+        (+1, default) or outwards (-1).
+    block : bool
+        Wheter `self.sort` should be called at the end of initializition in order
+        to ensure complete blocking.
+    sort : bool
+        Whether the outgoing pipe should be sorted. Defaults ``True``; recommended.
+        Note: calling :meth:`sort` after initialization converts to a LegCharge.
+    bunch : bool
+        Whether the outgoing pipe should be bunched. Default ``True``; recommended.
+        Note: calling :meth:`bunch` after initialization converts to a LegCharge.
+
+    Attributes
+    ----------
+    nlegs
+    legs : tuple of :class:`LegCharge`
+        the original legs, which were combined in the pipe.
+    subshape : tuple of int
+        ind_len for each of the incoming legs
+    subqshape : tuple of int
+        block_number for each of the incoming legs
+    q_map:  2D array
+        shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
+        see Notes below for details. lex-sorted by (I_s, i's), i.e. by colums [2:].
+
+    Notes
+    -----
+    For np.reshape, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
+    :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
+
+    In the charged case, however, we want to block :math`k` by charge, so we must
+    implicitly permute as well.  This reordering is encoded in `q_map`.
+
+    Each qindex combination of the `nlegs` input legs :math:`(i_1, ..., i_{nlegs})`,
+    will end up getting placed in some slice :math:`a_j:a_{j+1}` of the outgoing pipe.
+    Within this slice, the data is simply reshaped in usual row-major fashion ('C'-order),
+    i.e., with strides :math:`s_1 > s_2 > ...`.
+
+    It will be a subslice of a new total block labeled by qindex :math:`I_s`.
+    Because many charge combinations fuse to the same total charge,
+    in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
+    :math:`I_s`.  The rows of `q_map` are precisely the collections of
+    ``[b_j, b_{j+1}, i_1, . . . , i_{nlegs}, I_s ]``,
+
+    Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
+    the total block `I_s`, i.e., ``b_j = a_j - self.qind[I_s, 0]``.
+
+    The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``s.
+    Each ``I_s`` will have multiple rows,
+    and the order in which they are stored in `q_map` is the order the data is stored
+    in the actual tensor, i.e., it might look like ::
+
+        [ ...,
+         [ b_j,     b_{j+1},  i_1,    ..., i_{nlegs},     I_s   ],
+         [ b_{j+1}, b_{j+2},  i'_1,   ..., i'_{nlegs},    I_s   ],
+         [ 0,       b_{j+3},  i''_1,  ..., i''_{nlegs},   I_s+1 ],
+         [ b_{j+3}, b_{j+4},  i'''_1, ..., i''''_{nlegs}, I_s+1
+         ...]
+
+
+    The charge fusion rule is::
+
+        self.qind[Qi]*self.qconj == sum([l.qind[qi_l] * l.qconj  for l in self.legs])  mod qmod
+
+    Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
 
     .. todo ::
-        implement. Doesn't it make sense to derive this from LegCharge?!?"""
-    def __init__(self):
-        raise NotImplementedError()
+
+        do we need the following attributes?
+        # qmap_unsorted : 2D array
+        #     shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
+        #     Same rows as `qmap`, but lex-sorted by i's only, i.e. by colums[2:-1].
+        # qmap_perm : 1D array
+        #     the permutation going from qmap_unsorted to qmap.
+    """
+    def __init__(self, legs, qconj=1, sort=True, bunch=True):
+        """see help(self)"""
+        chinfo = legs[0].chinfo
+        # initialize LegCharge with trivial qind, which gets overwritten in _init_from_legs
+        super(LegPipe, self).__init__(chinfo, [[0, 1] + [0]*chinfo.qnumber], qconj)
+        # additional attributes
+        self.legs = legs = tuple(legs)
+        self.subshape = tuple([l.ind_len for l in self.legs])
+        self.subqshape = tuple([l.block_number for l in self.legs])
+        # the diffuclt part: calculate self.qind and self.q_map
+        self._init_from_legs(sort, bunch)
+        self.test_sanity()  # TODO: optimize: do we really want this?
+
+    @property
+    def nlegs(self):
+        """the number of legs"""
+        return len(self.subshape)
+
+    def test_sanity(self):
+        """Sanity check. Raises ValueErrors, if something is wrong."""
+        super(LegPipe, self).test_sanity()
+        if not hasattr(self, "subshape"):
+            return  # omit further check during ``super(LegPipe, self).__init__``
+        assert(all([l.chinfo == self.chinfo for l in self.legs]))
+        assert(self.subshape == tuple([l.ind_len for l in self.legs]))
+        assert(self.subqshape == tuple([l.block_number for l in self.legs]))
+
+    def to_LegCharge(self):
+        """convert self to a LegCharge, discarding the information how to split the legs.
+        Usually not needed, but called by functions, which are not implemented for a LegPipe."""
+        warnings.warn("Converting LegPipe to LegCharge")
+        return LegCharge(self.chinfo, self.qind, self.qconj)
+
+    def conj(self):
+        """return a shallow copy with opposite ``self.qconj``.
+
+        Also conjugates each of the incoming legs."""
+        res = super(LegPipe, self).conj()  # invert self.conj
+        res.legs = tuple([l.conj() for l in self.legs])
+        return res
+
+    def outer_conj(self):
+        """like :meth:`conj`, but don't change ``qconj`` for incoming legs."""
+        res = copy.copy(self)  # shallow
+        res.qconj = -1
+        res.qind = res.qind.copy()
+        res.qind[:, 2:] = self.chinfo.make_valid(-self.qind[:, 2:])
+        return res
+
+    def sort(self, *args, **kwargs):
+        """convert to LegCharge and call :meth:`LegCharge.sort`"""
+        # could be implemented for a LegPipe, but who needs it?
+        res = self.to_LegCharge()
+        return res.sort(*args, **kwargs)
+
+    def bunch(self, *args, **kwargs):
+        """convert to LegCharge and call :meth:`LegCharge.bunch`"""
+        # could be implemented for a LegPipe, but who needs it?
+        res = self.to_LegCharge()
+        return res.bunch(*args, **kwargs)
+
+    def project(self, *args, **kwargs):
+        """convert self to LegCharge and call :meth:`LegCharge.project`"""
+        # could be implemented for a LegPipe, but who needs it?
+        res = self.to_LegCharge()
+        return res.project(*args, **kwargs)
+
+    def _init_from_legs(self, sort=True, bunch=True):
+        """calculate ``self.qind`` and ``self.qmap`` from ``self.legs``.
+
+        `qind` is constructed to fullfill the charge fusion rule stated in the class doc-string.
+        """
+        # this function heavily uses numpys advanced indexing, for details see
+        # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
+        # and the documentation of np.mgrid
+        nlegs = self.nlegs
+        qnumber = self.chinfo.qnumber
+        qshape = self.subqshape
+
+        # create a grid to select the multi-index sector
+        grid = np.mgrid[[slice(0, l) for l in qshape]]
+        # grid is an array with shape ``(nlegs,) + qshape``,
+        # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
+        # collapse the different directions into one.
+        grid = grid.reshape(nlegs, -1)   # *this* is the actual `reshaping`
+        # *columns* of grid are now all possible cominations of qindices.
+
+        nblocks = grid.shape[1]    # number of blocks in the pipe = np.product(qshape)
+        # determine q_map -- it's essentially the grid.
+        q_map = np.empty((nblocks, 2+nlegs+1), dtype=QDTYPE)
+        q_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
+        # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
+        legbs = [l._get_block_sizes() for l in self.legs]
+        # andvanced indexing:
+        # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
+        blocksizes = np.prod([lbs[gr] for lbs, gr in itertools.izip(legbs, grid)], axis=0)
+        # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
+
+        # calculate total charges
+        qind = np.zeros((nblocks, 2+qnumber), dtype=QDTYPE)
+        if qnumber > 0:
+            # similar scheme as for the block sizes above, but now for 1D arrays of charges
+            legcharges = [(self.qconj * l.qconj) * l.qind[:, 2:] for l in self.legs]
+            # ``legcharges[li]`` is a 2D array mapping `q_li` to the charges.
+            # thus ``(legcharges[li])[grid[li], :]`` gives a 2D array of shape (nblocks, qnumber)
+            charges = np.sum([lq[gr] for lq, gr in itertools.izip(legcharges, grid)], axis=0)
+            # now, we have what we need according to the charge **fusion rule**
+            # namely for qi=`leg qindices` and li=`legs`:
+            # charges[(q1, q2,...)] == self.qconj * (l1.qind[q1]*l1.qconj +
+            #                                        l2.qind[q2]*l2.qconj + ...)
+            qind[:, 2:] = self.chinfo.make_valid(charges)  # modulo qmod
+        qind[:, 1] = blocksizes
+        qind[:, 0] = 0
+
+        if sort:
+            # sort by charge. Similar code as in :meth:`LegCharge.sort`,
+            # but don't want to create a copy, nor is qind[:, 0] initialized yet.
+            perm_qind = np.lexsort(qind[:, 2:].T)
+            q_map = q_map[perm_qind]
+            qind = qind[perm_qind]
+        self.qind = qind
+        self.sorted = sort
+        self._set_qind_block_sizes(blocksizes)  # sets qind[:, :2]
+        q_map[:, :2] = qind[:, :2]
+
+        if bunch:
+            # call LegCharge.bunch(), which also calculates new blocksizes
+            idx, bunched = super(LegPipe, self).bunch()
+            self.qind = bunched.qind  # copy qind back to self
+            # calculate q_map[:, -1], the qindices corresponding to the rows of q_map
+            q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
+            q_map_Qi[idx[1:]] = 1  # not for the first entry => np.cumsum starts with 0
+            q_map[:, -1] = q_map_Qi = np.cumsum(q_map_Qi)
+        else:
+            q_map[:, -1] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
+        # finally calculate the slices within blocks: subtract the start of each block
+        q_map[:, :2] -= (self.qind[q_map_Qi, 0])[:, np.newaxis]
+        self.q_map = q_map  # finished
 
 
 # ===== functions =====
+
 
 def reverse_sort_perm(perm):
     """reverse sorting indices.
@@ -533,36 +798,3 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
-
-
-def _perm_flat_from_qind(perm_qind, qind):
-    """translate a permutation of qind into a flat permutation"""
-    return np.concatenate([np.arange(b, e) for (b, e) in qind[perm_qind, :2]])
-
-
-def _perm_qind_from_perm_flat(perm_flat, qind):
-    """translate flat permutaiton into qind permutation.
-
-    Parameters
-    ----------
-    perm_flat : 1D array
-        a permutation, which doesn't mix the blocks of qind
-    qind : 2D array
-        a LegCharge.qind for which the permutation should be obtained
-
-    Returns
-    -------
-    perm_qind : 1D array
-        the permutation of qind described by perm_flat.
-
-    Raises
-    ------
-    ValueError
-        If perm_flat mixes blocks of different qind
-    """
-    perm_flat = np.asarray(perm_flat)
-    perm_qind = perm_flat[qind[:, 0]]
-    # check if perm_qind indeed resembles the permutation
-    if np.any(perm_flat != _perm_flat_from_qind(perm_qind, qind)):
-        raise ValueError("Permutation mixes qind")
-    return perm_qind

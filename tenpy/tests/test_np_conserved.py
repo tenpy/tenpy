@@ -27,19 +27,7 @@ chinfo3 = npc.ChargeInfo([3])  # for larger blocks with random arrays of the sam
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
 
-
-def gen_random_legcharge(n, chinfo):
-    """returns a random legcharge with index len `n`"""
-    qflat = []
-    for mod in chinfo.mod:
-        if mod > 1:
-            qflat.append(np.asarray(np.random.randint(0, mod, size=n), dtype=npc.QDTYPE))
-        else:
-            r = max(3, n//3)
-            qflat.append(np.asarray(np.random.randint(-r, r, size=n), dtype=npc.QDTYPE))
-    qflat = np.array(qflat, dtype=npc.QDTYPE).T
-    qconj = np.random.randint(0, 1, 1) * 2 - 1
-    return npc.LegCharge.from_qflat(chinfo, qflat, qconj)
+from test_charges import gen_random_legcharge
 
 
 def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):

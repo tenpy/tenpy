@@ -411,7 +411,20 @@ However, assigning with ``A[:, [3, 5], 3] = B`` should work as you would expect.
 Introduction to combine_legs, split_legs and LegPipes
 -----------------------------------------------------
 
-Unlike an np.array, the only sensible "reshape" operation on an npc.array is to combine multiple legs into one (**combine_legs**), or the reverse (**split_legs**).
+Often, it is necessary to "combine" multiple legs into one: for example to perfom a SVD, a tensor needs to be viewed as a matrix.
+For a flat array, this can be done with ``np.reshape``, e.g., if ``A`` has shape ``(10, 3, 7)`` then ``B = np.reshape(A, (30, 7))`` will
+result in a (view of the) array with one less dimension, but a "larger" first leg. By default (``order='C'``), this
+results in ::
+    
+    B[i*3 + j , k] == A[i, j, k] for i in range(10) for j in range(3) for k in range(7)
+
+While for a np.array, also a reshaping ``(10, 3, 7) -> (2, 21, 5)`` would be allowed, it does not make sense
+physically [1].
+Unlike an np.array (where changing shape ``(10, 3, 7)->(2, 21, 5)`` is well-defined),
+the only sensible "reshape" operation on an :class:`~tenpy.linalg.np_conserved.Array` are
+
+1) to **combine** multiple legs into one **leg pipe** (:class:`~tenpy.linalg.charges.LegPipe`) with  :meth:`~tenpy.linalg.np_conserved.Array.combine_legs`, or
+2) to **split** a pipe of previously combined legs with :meth:`~tenpy.linalg.np_conserved.Array.split_legs`.
 
 Each leg has a Hilbert space, and a representation of the symmetry on that Hilbert space.
 Combining legs corresponds to the tensor product operation, and for abelian groups, 
@@ -419,26 +432,24 @@ the corresponding "fusion" of the representation is the simple addition of charg
 
 Fusion is not a lossless process, so if we ever want to split the combined leg,
 we need some additional data to tell us how to reverse the tensor product.
-This data is called a **LegPipe**, which we implemented as a class :class:`~tenpy.linalg.charges.LegPipe`.
-Details of the information contained in the LegPipe are given in the class doc string.
+This data is saved in the class :class:`~tenpy.linalg.charges.LegPipe`, derived from the :class:`~tenpy.linalg.charges.LegCharge` and used as new `leg`.
+Details of the information contained in a LegPipe are given in the class doc string.
 
 The rough usage idea is as follows:
 
-a) If you want to combine legs, and do **not** intend to  split any of the newly formed legs back, 
-   you can call :meth:`~tenpy.linalg.Array.combine_legs` without supplying any LegPipes, `combine_legs` will then make them for you.
+1) You can call :meth:`~tenpy.linalg.Array.combine_legs` without supplying any LegPipes, `combine_legs` will then make them for you.
 
-   Nevertheless, if you plan to perform the combination over and over again on sets of legs you know to be identical (ie, same charges etc.)
+   Nevertheless, if you plan to perform the combination over and over again on sets of legs you know to be identical
+   [with same charges etc, up to an overall -1 in `qconj` on all incoming and outgoing Legs]
    you might make a LegPipe anyway to save on the overhead of computing it each time.
+2) In any way, the resulting tensor will have a `LegPipe` as LegCharge on the combined leg.
+   Thus, it and all tensors inheriting the leg, e.g. after the results of `svd`, `tensordot` etc.) will have the information
+   how to split the `LegPipe` back to the original legs.
+3) One you performed the necessary operations, you can call :meth:`~tenpy.linalg.Array.split_legs`.
+   This uses the information saved in the `LegPipe` to split the legs, recovering the original legs.
 
-b) If you want to combine legs, and for some subset of the new legs you will want to split back
-   (either on the tensor in question, or progeny formed by `svd`, `tensordot`, etc.),
-   you *DO* need to compute a LegPipe for the legs in questions before combining them.
-   `split_legs` will then use the pipes to split the leg.
-
-.. todo ::
-
-   Implement LegPipes and (re-)write this chapter. By deriving LegPipe from LegCharge, we might not need to save it
-   separately?
+For a LegPipe, :meth:`~tenpy.linalg.LegPipe.conj`` changes ``qconj`` for the outgoing pipe *and* the incoming legs.
+If you need a `LegPipe` with the same incoming ``qconj``, use :meth:`~tenpy.linalg.LegPipe.outer_conj`.
 
 Leg labeling
 ------------

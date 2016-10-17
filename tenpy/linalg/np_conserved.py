@@ -22,8 +22,8 @@ and :class:`~tenpy.linalg.charges.LegCharge` with additional documentation.
 
 
 .. todo ::
-   usage and examples, Routine listing
-   update ``from charges import``
+   Routine listing,
+   update ``from charges import``,
    write example section
 """
 # Examples
@@ -358,15 +358,17 @@ class Array(object):
         blockslices : tuple of slices
             a slice giving the range of the block in the original tensor for each of the legs
         charges : list of charges
-            the charge value(s) for each of the legs
+            the charge value(s) for each of the legs (takink `qconj` into account)
         qdat : ndarray
-            the qind for each of the legs
+            the qindex for each of the legs
         """
         for block, qdat in itertools.izip(self._data, self._qdata):
-            qind = [l.qind[qi] for (qi, l) in itertools.izip(qdat, self.legs)]
-            blockslices = tuple([slice(qi[0], qi[1]) for qi in qind])
-            qs = [qi[2:] for qi in qind]
-            yield block, blockslices, qs, qdat
+            blockslices = []
+            qs = []
+            for (qi, l) in itertools.izip(qdat, self.legs):
+                blockslices.append(l.get_slice(qi))
+                qs.append(l.get_charge(qi))
+            yield block, tuple(blockslices), qs, qdat
 
     def __getitem__(self, inds):
         """acces entries with ``self[inds]``
@@ -478,7 +480,7 @@ class Array(object):
         res.set_leg_labels([labels[a] for a in keep_axes])
         # calculate new total charge
         for a, (qi, _) in zip(axes, pos):
-            res.qtotal -= self.legs[a].qind[qi, 2:] * self.legs[a].qconj
+            res.qtotal -= self.legs[a].get_charge(qi)
         res.qtotal = self.chinfo.make_valid(res.qtotal)
         # which blocks to keep
         axes = np.array(axes, dtype=np.intp)
@@ -533,7 +535,7 @@ class Array(object):
 
         The total charge is given by finding a nonzero entry [i1, i2, ...] and calculating::
 
-            qtotal = sum([l.qconj[i] * l.qind[il] for il in zip([i1,i2,...], self.legs)])
+            qtotal = sum([l.qind[qi, 2:] * l.conj for i, l in zip([i1,i2,...], self.legs)])
 
         Thus, the total charge can be changed by redefining the leg charge of a given leg.
         This is exaclty what this function does.
@@ -548,6 +550,8 @@ class Array(object):
         leg = self.get_leg_index(leg)
         newqtotal = self.chinfo.make_valid(newqtotal)  # converts to array, default zero
         chdiff = newqtotal - self.qtotal
+        if isinstance(leg, LegPipe):
+            raise ValueError("not possible for a LegPipe. Convert to a LegCharge first!")
         newleg = copy_.copy(self.legs[leg])  # shallow copy of the LegCharge
         newleg.qind = newleg.qind.copy()
         newleg.qind[:, 2:] = self.chinfo.make_valid(newleg.qind[:, 2:] + newleg.qconj * chdiff)
@@ -562,8 +566,7 @@ class Array(object):
         """Return a copy with one ore all legs sorted by charges.
 
         Sort/bunch one or multiple of the LegCharges.
-        Note that legs which are sorted *and* bunched
-        are guaranteed to be blocked by charge.
+        Legs which are sorted *and* bunched are guaranteed to be blocked by charge.
 
         Parameters
         ----------
@@ -594,14 +597,16 @@ class Array(object):
         for li in xrange(self.rank):
             if sort[li] is not False:
                 if sort[li] is True:
-                    p_flat, p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    sort[li] = p_flat
+                    if cp.legs[li].sorted:  # optimization if the leg is sorted already
+                        sort[li] = np.arange(cp.shape[li])
+                        continue
+                    p_qind, newleg = cp.legs[li].sort(bunch=False)
+                    sort[li] = cp.legs[li].perm_flat_from_qind(p_qind)  # called for the old leg
                     cp.legs[li] = newleg
                 else:
                     try:
-                        p_qind = charges._perm_qind_from_perm_flat(sort[li], self.legs[li])
-                    except ValueError:
-                        # permutation mixes qindices
+                        p_qind = self.legs[li].perm_qind_from_perm_flat(sort[li])
+                    except ValueError:  # permutation mixes qindices
                         cp = cp.permute(sort[li], axes=[li])
                         continue
                 cp._perm_qind(p_qind, li)
@@ -625,6 +630,22 @@ class Array(object):
         self._qdata = self._qdata[perm, :]
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
+
+    def combine_legs(self, axes, pipes=[]):
+        """combine multiple legs into one.
+        .. todo ::
+            implement
+
+        """
+        raise NotImplementedError()
+
+    def split_legs(self, axes):
+        """split legs, which were previously combined. They have a LegCharge
+
+        .. todo ::
+            implement
+        """
+        raise NotImplementedError()
 
     # data manipulation =======================================================
 
@@ -740,7 +761,10 @@ class Array(object):
         """Apply a permutation in the indices of an axis.
 
         Similar as np.take with a 1D array.
-        Roughly equivalent to ``self[:, ...] = self[perm, ...]`` for the corresponding `axis`.
+        Roughly equivalent to ``res[:, ...] = self[perm, ...]`` for the corresponding `axis`.
+        .. warning ::
+
+            This function is quite slow, and usually not needed during core algorithms.
 
         Parameters
         ----------
@@ -754,6 +778,11 @@ class Array(object):
         res : :class:`Array`
             a copy of self with leg `axis` permuted, such that
             ``res[i, ...] = self[perm[i], ...]`` for ``i`` along `axis`
+
+        See also
+        --------
+        sort_legcharge : can also be used to perform a general permutation.
+            However, it is faster for permutations which don't mix blocks.
         """
         axis = self.get_leg_index(axis)
         perm = np.asarray(perm, dtype=np.intp)
@@ -904,6 +933,7 @@ class Array(object):
         return tuple(lb)
 
     # string output ===========================================================
+
     def __repr__(self):
         return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
             self.shape, self.chinfo, self.get_leg_labels())
@@ -936,6 +966,7 @@ class Array(object):
 
         return res.format(nonzero=nonzero, total=total, nztotal=nonzero/total, nblocks=nblocks,
                           stored=stored, captsparse=captsparse, bs1=bs1, bs2=bs2, bs3=bs3)
+
     # private functions =======================================================
 
     def _set_shape(self):
@@ -962,14 +993,13 @@ class Array(object):
 
             qtotal = sum_{legs l} legs[l].qind[qindices[l], 2:] * legs[l].qconj() modulo qmod
         """
-        q = np.sum([l.qind[qi, 2:]*l.qconj for l, qi in itertools.izip(self.legs, qindices)],
+        q = np.sum([l.get_charge(qi) for l, qi in itertools.izip(self.legs, qindices)],
                    axis=0)
         return self.chinfo.make_valid(q)
 
     def _get_block_slices(self, qindices):
         """returns tuple of slices for a block selected by `qindices`"""
-        return tuple([slice(l.qind[j, 0], l.qind[j, 1])
-                      for l, j in itertools.izip(self.legs, qindices)])
+        return tuple([l.get_slice(qi) for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block_shape(self, qindices):
         """return shape for the block given by qindices"""
@@ -1181,7 +1211,7 @@ class Array(object):
                             # In that way, we get the permuation within the projected indices.
                             permutations.append((a, reverse_sort_perm(perm)))
         res = self.take_slice(slice_inds, slice_axes)
-        res_axes = np.add.accumulate([(a not in slice_axes) for a in xrange(self.rank)]) - 1
+        res_axes = np.cumsum([(a not in slice_axes) for a in xrange(self.rank)]) - 1
         p_map_qinds, p_masks = res.iproject(project_masks, [res_axes[p] for p in project_axes])
         permutations = [(res_axes[a], p) for a, p in permutations]
         if permute:

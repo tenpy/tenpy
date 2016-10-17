@@ -4,7 +4,6 @@ import tenpy.linalg.charges as charges
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
-import itertools as it
 
 # charges for comparison, unsorted (*_us) and sorted (*_s)
 qflat_us = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2,
@@ -40,6 +39,23 @@ qdict_s = {(-6,): slice(0,  3),
            (6,) : slice(59, 61)}    # yapf: disable
 
 ch_1 = charges.ChargeInfo([1])
+
+# fix the random number generator such that tests are reproducible
+np.random.seed(3141592)  # (it should work for any seed)
+
+
+def gen_random_legcharge(n, chinfo):
+    """returns a random legcharge with index len `n`"""
+    qflat = []
+    for mod in chinfo.mod:
+        if mod > 1:
+            qflat.append(np.asarray(np.random.randint(0, mod, size=n)))
+        else:
+            r = max(3, n//3)
+            qflat.append(np.asarray(np.random.randint(-r, r, size=n)))
+    qflat = np.array(qflat, dtype=charges.QDTYPE).T
+    qconj = np.random.randint(0, 1, 1) * 2 - 1
+    return charges.LegCharge.from_qflat(chinfo, qflat, qconj)
 
 
 def test_ChargeInfo():
@@ -84,7 +100,7 @@ def test_LegCharge():
 
     # test sort & bunch
     lcus_qind = lcus.qind.copy()
-    pflat, pqind, lcus_s = lcus.sort(bunch=False)
+    pqind, lcus_s = lcus.sort(bunch=False)
     lcus_s.test_sanity()
     npt.assert_equal(lcus_qind, lcus.qind)      # don't change the old instance
     npt.assert_equal(lcus_s.qind[:, 2:], lcus.qind[pqind, 2:])     # permutation ok?
@@ -108,6 +124,14 @@ def test_LegCharge():
         assert(lcs.qind[qidx, 0] + idx_in_block == i)
 
 
+def test_LegPipe():
+    shape = (20, 10, 8)
+    legs = [gen_random_legcharge(s, ch_1) for s in shape]
+    pipe = charges.LegPipe(legs, sort=True, bunch=True)
+    pipe.test_sanity()
+    assert(pipe.ind_len == np.prod(shape))
+
+
 def test_reverse_sort_perm(N=10):
     x = np.random.random(N)
     p = np.arange(N)
@@ -121,4 +145,5 @@ if __name__ == "__main__":
     test_ChargeInfo()
     test__find_row_differences()
     test_LegCharge()
+    test_LegPipe()
     test_reverse_sort_perm()
