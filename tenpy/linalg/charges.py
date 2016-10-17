@@ -4,7 +4,7 @@ r"""Basic definitions of a charge: classes :class:`ChargeInfo` and :class:`LegCh
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
-A detailed introduction to np_conserved can be found in :doc:`np_conserved`.
+A detailed introduction to np_conserved can be found in :doc:`../IntroNpc`.
 """
 
 from __future__ import division
@@ -37,6 +37,7 @@ class ChargeInfo(object):
     Attributes
     ----------
     qnumber
+
     mod : 1D array_like of ints
         The periodicity of the charges. One entry for each charge.
     names : list of strings
@@ -44,8 +45,7 @@ class ChargeInfo(object):
 
     Notes
     -----
-    Instances of this class can (and should be) shared between different `LegCharge`s and even
-    `npc.Array`s
+    Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
 
     def __init__(self, mod=[], names=None):
@@ -69,7 +69,7 @@ class ChargeInfo(object):
 
     @property
     def qnumber(self):
-        """the number of charges, also refered to as qnumber"""
+        """the number of charges, also refered to as qnumber."""
         return len(self.mod)
 
     def make_valid(self, charges=None):
@@ -96,7 +96,7 @@ class ChargeInfo(object):
 
         Returns
         -------
-        Bool
+        res : bool
             True, if all 0 <= charges <= self.mod (whenever self.mod != 1)
         """
         charges = np.asarray(charges, dtype=QDTYPE)
@@ -162,7 +162,6 @@ class LegCharge(object):
     Instances of this class can be shared between different `npc.Array`s.
     Thus, functions changing self.qind *must* always make copies;
     further they *must* set `sorted` and `bunched` to false, if not guaranteeing to preserve them.
-
     """
 
     def __init__(self, chargeinfo, qind, qconj=1):
@@ -557,6 +556,10 @@ class LegPipe(LegCharge):
     bunch : bool
         Whether the outgoing pipe should be bunched. Default ``True``; recommended.
         Note: calling :meth:`bunch` after initialization converts to a LegCharge.
+    _perm : 1D array
+        a permutation such that ``q_map[_perm, :]`` is sorted by `i_l` (ignoring the `I_s`).
+    _strides : 1D array
+        strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
 
     Attributes
     ----------
@@ -576,7 +579,7 @@ class LegPipe(LegCharge):
     For np.reshape, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
     :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
 
-    In the charged case, however, we want to block :math`k` by charge, so we must
+    In the charged case, however, we want to block :math:`k` by charge, so we must
     implicitly permute as well.  This reordering is encoded in `q_map`.
 
     Each qindex combination of the `nlegs` input legs :math:`(i_1, ..., i_{nlegs})`,
@@ -618,8 +621,7 @@ class LegPipe(LegCharge):
         # qmap_unsorted : 2D array
         #     shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
         #     Same rows as `qmap`, but lex-sorted by i's only, i.e. by colums[2:-1].
-        # qmap_perm : 1D array
-        #     the permutation going from qmap_unsorted to qmap.
+
     """
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
@@ -704,6 +706,8 @@ class LegPipe(LegCharge):
         grid = np.mgrid[[slice(0, l) for l in qshape]]
         # grid is an array with shape ``(nlegs,) + qshape``,
         # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
+        # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
+        self._strides = np.array(grid.strides, np.intp)[1:] / grid.itemsize
         # collapse the different directions into one.
         grid = grid.reshape(nlegs, -1)   # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
@@ -741,6 +745,7 @@ class LegPipe(LegCharge):
             perm_qind = np.lexsort(qind[:, 2:].T)
             q_map = q_map[perm_qind]
             qind = qind[perm_qind]
+            self._perm = reverse_sort_perm(perm_qind)
         self.qind = qind
         self.sorted = sort
         self._set_qind_block_sizes(blocksizes)  # sets qind[:, :2]
@@ -759,6 +764,29 @@ class LegPipe(LegCharge):
         # finally calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.qind[q_map_Qi, 0])[:, np.newaxis]
         self.q_map = q_map  # finished
+
+    def _map_incoming_qind(self, qind_incoming):
+        """map incoming qindices to indices of q_map.
+
+        Needed for :meth:`~tenpy.linalg.np_conserved.Array.combine_legs`.
+
+        Parameters
+        ----------
+        qind_incoming : 2D array
+            rows are qindices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs
+
+        Returns
+        -------
+        q_map_indices : 1D array
+            for each row of `qind_incoming` an index `j` such that
+            ``self.q_map[j, 2:-1] == qind_incoming[j]``.
+        """
+        assert(qind_incoming.shape[1] == self.nlegs)
+        # calculate indices of qmap[_perm], which is sorted by :math:`i_1, i_2, ...`,
+        # by using the appropriate strides
+        inds_before_perm = np.sum(qind_incoming * self._strides[np.newaxis, :], axis=1)
+        # permute them to indices in q_map
+        return self._perm[inds_before_perm]
 
 
 # ===== functions =====
@@ -793,8 +821,6 @@ def _find_row_differences(qflat):
         The indices where rows change, including the first and last. Equivalent to:
         ``[0]+[i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])] + [len(qflat)]``
     """
-    if len(qflat) == 1:
-        return
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
