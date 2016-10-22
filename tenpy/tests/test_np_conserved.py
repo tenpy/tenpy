@@ -34,6 +34,7 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
     """generates a random npc.Array of given shape with random legcharges and entries."""
     legs = [gen_random_legcharge(s, chinfo) for s in shape]
     a = npc.Array.from_func(func, chinfo, legs, qtotal=qtotal, shape_kw=shape_kw)
+    a.set_leg_labels([chr(i+ord('a')) for i in range(a.rank)])
     if sort:
         _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
     return a
@@ -114,7 +115,7 @@ def test_npc_Array_labels():
             if t[l] is not None:
                 axes_l[i] = t[l]
         nst.eq_(tuple(a.get_leg_indices(axes_l)), axes)
-    nst.eq_(a.get_leg_index(-1), 1) # negative indices
+    nst.eq_(a.get_leg_index(-1), 1)     # negative indices
 
 
 def test_npc_Array_project():
@@ -215,6 +216,23 @@ def test_npc_Array_itemacces():
         npt.assert_equal(b.to_ndarray(), bflat)
 
 
+def test_npc_Array_reshape():
+    a = random_Array((20, 15, 10), chinfo, sort=False)
+    aflat = a.to_ndarray()
+    for comb_legs, transpose in [([[1]], [0, 1, 2]),
+                                 ([[1], [2]], [0, 1, 2]),
+                                 ([[0], [1], [2]], [0, 1, 2]),
+                                 ([[2, 0]], [1, 2, 0]),
+                                 ([[2, 0, 1]], [2, 0, 1])]:
+        print 'combine legs', comb_legs
+        acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        print "=> labels: ", acomb.get_leg_labels()
+        acomb.test_sanity()
+        asplit = acomb.split_legs()
+        asplit.test_sanity()
+        npt.assert_equal(asplit.to_ndarray(), aflat.transpose(transpose))
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -223,3 +241,4 @@ if __name__ == "__main__":
     test_npc_Array_permute()
     test_npc_Array_transpose()
     test_npc_Array_itemacces()
+    test_npc_Array_reshape()

@@ -112,7 +112,7 @@ class Array(object):
           the sphinx build for this class...
         - What about size and stored_blocks?
         - Methods section
-        - should _qdata be of type np.intp instead of QDTYPE?
+        - should distinguish between QDTYPE and _qdata -> np.intp
     """
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -190,7 +190,8 @@ class Array(object):
         qtotal : None | charges
             the total charge of the new array.
         cutoff : float
-            A cutoff to exclude rounding errors of machine precision. Defaults to :data:`QCUTOFF`.
+            Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
+            Defaults to :data:`QCUTOFF`.
 
         Returns
         -------
@@ -514,7 +515,8 @@ class Array(object):
         legcharges : list of LegCharge
             for each leg the LegCharge
         cutoff : float
-            defaults to :data:`QCUTOFF`
+            Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
+            Defaults to :data:`QCUTOFF`.
 
         Returns
         -------
@@ -631,6 +633,8 @@ class Array(object):
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
+    # reshaping ===============================================================
+
     def make_pipe(self, axes, **kwargs):
         """generates a :class:`~tenpy.linalg.charges.LegPipe` for specified axes.
 
@@ -651,7 +655,7 @@ class Array(object):
         return charges.LegPipe(legs, **kwargs)
 
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
-        """combine multiple legs into pipes. If necessary, transpose before.
+        """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
 
         Parameters
         ----------
@@ -673,7 +677,7 @@ class Array(object):
 
         Returns
         -------
-        res : :class:`Array`
+        reshaped : :class:`Array`
             A copy of self, whith some legs combined into pipes as specified by the arguments.
 
         Notes
@@ -686,102 +690,50 @@ class Array(object):
         Examples
         --------
         >>> oldarray.set_leg_labels(['a', 'b', 'c', 'd', 'e'])
-        >>> c1 = oldarray.combine_legs([2, 3], qconj=-1)  # only single output pipe
+        >>> c1 = oldarray.combine_legs([1, 2], qconj=-1)  # only single output pipe
         >>> c1.get_leg_labels()
         ['a', '(b.c)', 'd', 'e']
 
         Indices of `combine_legs` refer to the original array.
-        Necessary permutations are performed automatically:
+        If transposing is necessary, it is performed automatically:
 
-        >>> c2 = oldarray.combine_legs([[1, 4], [5, 2]], qconj=[+1, -1]) # two output pipes
+        >>> c2 = oldarray.combine_legs([[0, 3], [4, 1]], qconj=[+1, -1]) # two output pipes
         >>> c2.get_leg_labels()
         ['(a.d)', 'c', '(e.b)']
         >>> c3 = oldarray.combine_legs([['a', 'd'], ['e', 'b']], new_axes=[2, 1],
         >>>                            pipes=[c2.legs[0], c2.legs[2]])
         >>> c3.get_leg_labels()
         ['b', '(e.b)', '(a.d)']
-
-        .. todo ::
-
-            test this function
-
         """
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
         # check: is combine_legs `iterable(iterable(int|str))` or `iterable(int|str)` ?
-        if [combine_legs[0]] == toiterable(combine_legs[0]):
+        if [combine_legs[0]] == toiterable(combine_legs[0]):  # TODO: remove this option
             # the first entry is (int|str) -> only a single new pipe
             combine_legs = [combine_legs]
             if new_axes is not None:
                 new_axes = toiterable(new_axes)
             if pipes is not None:
                 pipes = toiterable(pipes)
-        npipes = len(combine_legs)
-        # default arguments for pipes and qconj
-        if pipes is None:
-            pipes = [None]*npipes
-        elif len(pipes) != npipes:
-            raise ValueError("wrong len of `pipes`")
-        qconj = list(toiterable(qconj if qconj is not None else +1))
-        if len(qconj) == 1 and 1 < npipes:
-            qconj = [qconj[0]]*npipes  # same qconj for all pipes
-        if len(qconj) != npipes:
-            raise ValueError("wrong len of `qconj`")
-
+        pipes = self._combine_legs_make_pipes(combine_legs, pipes, qconj)  # out-sourced
         # good for index tricks: convert combine_legs into arrays
         combine_legs = [np.asarray(self.get_leg_indices(cl), dtype=np.intp) for cl in combine_legs]
         all_combine_legs = np.concatenate(combine_legs)
         if len(set(all_combine_legs)) != len(all_combine_legs):
             raise ValueError("got a leg multiple times: " + str(combine_legs))
-        # make pipes as necessary
-        for i, pipe in enumerate(pipes):
-            if pipe is None:
-                pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj[i])
-            else:
-                # test for compatibility
-                legs = [self.legs[a] for a in combine_legs[i]]
-                if pipe.nlegs != len(legs):
-                    raise ValueError("pipe has wrong number of legs")
-                if legs[0].qconj != pipe.legs[0].qconj:
-                    pipes[i] = pipe = pipe.conj()  # need opposite qind
-                for self_leg, pipe_leg in zip(legs, pipe.legs):
-                    self_leg.test_contractible(pipe_leg.conj())
-        # (now we can forget about `qconj`)
-
-        # figure out new order of axes, i.e. how to transpose the axes
-        # (first without the pipes, later insert the pipes at `new_axes`)
-        transp = [i for i in range(self.rank) if i not in all_combine_legs]
-        non_combined_legs = np.array(transp)
-        if new_axes is None:  # figure out default new_legs
-            first_cl = np.array([cl[0] for cl in combine_legs])
-            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a))
-                        for a in first_cl]
-        else:
-            # test compatibility
-            if len(new_axes) != npipes:
-                raise ValueError("wrong len of `new_axes`")
-            na_max = len(pipes) + len(non_combined_legs)
-            for i, na in enumerate(new_axes):
-                if na < 0:
-                    new_axes[i] = na + na_max
-                elif na >= na_max:
-                    raise ValueError("new_axis larger than the new number of legs")
-
+        new_axes, transp = self._combine_legs_new_axes(combine_legs, new_axes)  # out-sourced
         # permute arguments sucht that new_axes is sorted ascending
         perm_args = np.argsort(new_axes)
         combine_legs = [combine_legs[p] for p in perm_args]
         pipes = [pipes[p] for p in perm_args]
         new_axes = [new_axes[p] for p in perm_args]
-        # insert the combined legs into `transp` at `new_axes`
-        for na, cl in reversed(zip(new_axes, combine_legs)):
-            # reversed: insert from the back, otherwise we would need to shift
-            transp[na:na] = cl
-        # now, `transp` has again len(self.rank) and gives the necessary transposition.
-        # labels: replace non-set labels with '?#' before transpose
+
+        # labels: replace non-set labels with '?#' (*before* transpose
         labels = [(l if l is not None else '?'+str(i))
                   for i, l in enumerate(self.get_leg_labels())]
+
         # transpose if necessary
-        if transp != range(self.rank):
+        if transp != tuple(range(self.rank)):
             res = self.copy(deep=False)
             res.set_leg_labels(labels)
             res = res.transpose(transp)
@@ -791,22 +743,57 @@ class Array(object):
 
         # the **main work** of copying the data is sourced out, now that we have the
         # standard form of our arguments
-        res = self._combine_legs_worker(combine_legs, non_combined_legs, new_axes, pipes)
+        res = self._combine_legs_worker(combine_legs, new_axes, pipes)
 
         # get new labels
         pipe_labels = [('(' + '.'.join([labels[c] for c in cl]) + ')') for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
-            labels[na:na+p.nlegs] = plab
+            labels[na:na+p.nlegs] = [plab]
         res.set_leg_labels(labels)
         return res
 
-    def split_legs(self, axes):
-        """split legs, which were previously combined. They have a LegCharge
+    def split_legs(self, axes=None, cutoff=0.):
+        """Reshape: opposite of combine_legs: split (some) legs which are LegPipes.
 
-        .. todo ::
-            implement
+        Parameters
+        ----------
+        axes : (iterable of) int|str
+            leg labels or indices determining the axes to split.
+            The corresponding entries in self.legs must be :class:`LegPipe` instances.
+            Defaults to all legs, which are :class:`LegPipe` instances.
+        cutoff : float
+            Splitted data blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
+            Defaults to 0.
+
+        Returns
+        -------
+        reshaped : :class:`Array`
+            a copy of self where the specified legs are splitted.
+
+        Notes
+        -----
+        Labels are split reverting what was done in :meth:`combine_legs`.
+        '?#' labels are replaced with ``None``.
         """
-        raise NotImplementedError()
+        if axes is None:
+            axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
+        else:
+            axes = self.get_leg_indices(toiterable(axes))
+            if len(set(axes)) == len(axes):
+                raise ValueError("can't split a leg multiple times!")
+        for ax in axes:
+            if not isinstance(self.legs[ax], LegPipe):
+                raise ValueError("can't split leg {ax:d} which is not a LegPipe".format(ax=ax))
+        if len(axes) == 0:
+            return self.copy(deep=True)
+
+        res = self._split_legs_worker(axes, cutoff)
+
+        labels = list(self.get_leg_labels())
+        for a in axes:
+            labels[a:a+1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
+        res.set_leg_labels(labels)
+        return res
 
     # data manipulation =======================================================
 
@@ -833,14 +820,17 @@ class Array(object):
         return cp
 
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
-        """Removes ``self._data`` blocks with norm less than cutoff. In place.
+        """Removes ``self._data`` blocks with *norm* less than cutoff. In place.
 
         Parameters
         ----------
         cutoff : float
             blocks with norm <= `cutoff` are removed. defaults to :data:`QCUTOFF`.
         norm_order :
-            a valid `ord` argument for np.linalg.norm.
+            a valid `ord` argument for `np.linalg.norm`.
+            Default ``None`` gives the Frobenius norm/2-norm for matrices/everything else.
+            Note that this differs from other methods, e.g. :meth:`from_ndarray`,
+            which use the maximum norm.
         """
         if len(self._data) == 0:
             return
@@ -1466,7 +1456,62 @@ class Array(object):
             block[block_mask] = o_block  # overwrite data in self
         self.ipurge_zeros(0.)  # remove blocks identically zero
 
-    def _combine_legs_worker(self, combine_legs, non_combined_legs, new_axes, pipes):
+    def _combine_legs_make_pipes(self, combine_legs, pipes, qconj):
+        """argument parsing for :meth:`combine_legs`: make missing pipes.
+
+        Generates missing pipes & checks compatibility for provided pipes."""
+        npipes = len(combine_legs)
+        # default arguments for pipes and qconj
+        if pipes is None:
+            pipes = [None]*npipes
+        elif len(pipes) != npipes:
+            raise ValueError("wrong len of `pipes`")
+        qconj = list(toiterable(qconj if qconj is not None else +1))
+        if len(qconj) == 1 and 1 < npipes:
+            qconj = [qconj[0]]*npipes  # same qconj for all pipes
+        if len(qconj) != npipes:
+            raise ValueError("wrong len of `qconj`")
+
+        pipes = list(pipes)
+        # make pipes as necessary
+        for i, pipe in enumerate(pipes):
+            if pipe is None:
+                pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj[i])
+            else:
+                # test for compatibility
+                legs = [self.legs[a] for a in combine_legs[i]]
+                if pipe.nlegs != len(legs):
+                    raise ValueError("pipe has wrong number of legs")
+                if legs[0].qconj != pipe.legs[0].qconj:
+                    pipes[i] = pipe = pipe.conj()  # need opposite qind
+                for self_leg, pipe_leg in zip(legs, pipe.legs):
+                    self_leg.test_contractible(pipe_leg.conj())
+        return pipes
+
+    def _combine_legs_new_axes(self, combine_legs, new_axes):
+        """figure out new_axes and how legs have to be transposed"""
+        all_combine_legs = np.concatenate(combine_legs)
+        non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs])
+        if new_axes is None:  # figure out default new_legs
+            first_cl = np.array([cl[0] for cl in combine_legs])
+            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a))
+                        for a in first_cl]
+        else:   # test compatibility
+            if len(new_axes) != len(combine_legs):
+                raise ValueError("wrong len of `new_axes`")
+            new_rank = len(combine_legs) + len(non_combined_legs)
+            for i, a in enumerate(new_axes):
+                if a < 0:
+                    new_axes[i] = a + new_rank
+                elif a >= new_rank:
+                    raise ValueError("new_axis larger than the new number of legs")
+        transp = [[a] for a in non_combined_legs]
+        for s in np.argsort(new_axes):
+            transp.insert(new_axes[s], list(combine_legs[s]))
+        transp = sum(transp, [])  # flatten: [a] + [b] = [a, b]
+        return new_axes, tuple(transp)
+
+    def _combine_legs_worker(self, combine_legs, new_axes, pipes):
         """the main work of combine_legs: create a copy and reshape the data blocks.
 
         Assumes standard form of parameters.
@@ -1475,8 +1520,6 @@ class Array(object):
         ----------
         combine_legs : list(1D np.array)
             axes of self which are collected into pipes.
-        non_combined_legs : 1D array
-            axes of self which are not collected into pipes
         new_axes : 1D array
             the axes of the pipes in the new array. Ascending.
         pipes : list of :class:`LegPipe`
@@ -1487,15 +1530,19 @@ class Array(object):
         res : :class:`Array`
             copy of self with combined legs
         """
+        all_combine_legs = np.concatenate(combine_legs)
+        # non_combined_legs: axes of self which are not in combine_legs
+        non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs],
+                                     dtype=np.intp)
         legs = [self.legs[i] for i in non_combined_legs]
         for na, p in zip(new_axes, pipes):  # not reversed
             legs.insert(na, p)
         non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
         non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
 
-        res = self.copy(deep=False)  # TODO: deep?
+        res = self.copy(deep=False)
         res.legs = legs
-        res._set_shape
+        res._set_shape()
         res.labels = {}
         # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
         qmap_inds = [p._map_incoming_qind(self._qdata[:, cl])
@@ -1511,34 +1558,124 @@ class Array(object):
         # now we have probably many duplicate rows in qdata,
         # since for the pipes many `qmap_ind` map to the same `qindex`
         # find unique entries by sorting qdata
-        sort = np.lexsort(qdata)
+        sort = np.lexsort(qdata.T)
         qdata_s = qdata[sort]
+        old_data = [self._data[s] for s in sort]
         qmap_inds = [qm[sort] for qm in qmap_inds]
-
+        # divide into parts, which give a single new block
         diffs = charges._find_row_differences(qdata_s)  # including the first and last row
 
         # now the hard part: map data
-        old_data = self._data
         data = []
-        # get slices for the old blocks
-        # the slices for the new
         slices = [slice(None)]*res.rank  # for selecting the slices in the new blocks
-        # iterate over all different
+        # iterate over ranges of equal qindices in qdata_s
         for beg, end in itertools.izip(diffs[:-1], diffs[1:]):
             qindices = qdata_s[beg]
             new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
             data.append(new_block)
             # copy blocks
-            for old_i in sort[beg:end]:
-                for na, qmi in zip(new_axes, qmap_inds):
-                    slices[na] = qm[sort]
+            for old_data_idx in xrange(beg, end):
+                for na, p, qm_ind in zip(new_axes, pipes, qmap_inds):
+                    slices[na] = slice(*p.q_map[qm_ind[old_data_idx], :2])
                 sl = tuple(slices)
                 new_block_view = new_block[sl]
                 # reshape block while copying
-                new_block_view[:] = old_data[old_i].reshape(new_block_view.shape)
+                new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
         res._qdata = qdata_s[diffs[:-1]]
         res._qdata_sorted = True
         res._data = data
+        return res
+
+    def _split_legs_worker(self, split_axes, cutoff):
+        """the main work of split_legs: create a copy and reshape the data blocks.
+
+        Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
+        """
+        # calculate mappings of axes
+        # in self
+        split_axes = np.array(sorted(split_axes), dtype=np.intp)
+        pipes = [self.legs[a] for a in split_axes]
+        nonsplit_axes = np.array([i for i in xrange(self.rank) if i not in split_axes],
+                                 dtype=np.intp)
+        # in result
+        new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
+        for a in reversed(split_axes):
+            new_nonsplit_axes[a+1:] += self.legs[a].nlegs - 1
+        new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
+        new_split_slices = [slice(a, a+p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
+        new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
+
+        res = self.copy(deep=False)
+        legs = res.legs
+        for a in reversed(split_axes):
+            legs[a:a+1] = legs[a].legs  # replace pipes with saved original legs
+        res._set_shape()
+
+        # get new qdata by stacking columns
+        tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=QDTYPE)
+        tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
+        tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
+
+        # now split the blocks
+        data = []
+        qdata = []  # rows of the new qdata
+        new_block_shape = np.empty(res.rank, dtype=np.intp)
+        block_slice = [slice(None)]*self.rank
+        for old_block, qdata_row in itertools.izip(self._data, tmp_qdata):
+            qmap_slices = [p.q_map_slices[i] for p, i in
+                           zip(pipes, qdata_row[new_split_axes_first])]
+            new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
+            for qmap_rows in itertools.product(*qmap_slices):
+                for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
+                    qdata_row[sl] = block_qind = qm[2:-1]
+                    new_block_shape[sl] = [(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
+                                           zip(pipe.legs, block_qind)]
+                    block_slice[a] = slice(qm[0], qm[1])
+                new_block = old_block[block_slice].reshape(new_block_shape)
+                # all charges are compatible by construction, but some might be zero
+                if not np.any(np.abs(new_block) > cutoff):
+                    continue
+                data.append(new_block.copy())   # copy, not view
+                qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
+        if len(data) > 0:
+            res._qdata = np.array(qdata, dtype=QDTYPE)
+            res._qdata_sorted = False
+        else:
+            res._qdata = np.empty((0, res.rank), dtype=QDTYPE)
+            res._qdata_sorted = True
+        res._data = data
+        return res
+
+    def _split_leg_label(self, label, count):
+        """Revert the combination of labels performed in :meth:`_combine_legs`.
+
+        Return a list of `count` labels corresponding to the original labels before 'combine_legs'.
+
+        Examples
+        --------
+        >>> self._split_leg_label('(a,b,(c,d))', 3)
+        ['a', 'b', '(c.d)']
+        """
+        if label[0] != '(' or label[-1] != ')':
+            raise ValueError("split label, which is not of the Form '(...)'")
+        beg = 1
+        depth = 0  # number of non-closed '(' to the left
+        res = []
+        for i in range(1, len(label)-1):
+            c = label[i]
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+            elif c == '.' and depth == 0:
+                res.append(label[beg:i])
+                beg = i+1
+        res.append(label[beg:i+1])
+        if len(res) != count:
+            raise ValueError("wrong number of splitted labels.")
+        for i in xrange(len(res)):
+            if res[i][0] == '?':
+                res[i] = None
         return res
 
 

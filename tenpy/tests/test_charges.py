@@ -4,6 +4,7 @@ import tenpy.linalg.charges as charges
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
+import itertools as it
 
 # charges for comparison, unsorted (*_us) and sorted (*_s)
 qflat_us = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2,
@@ -127,15 +128,24 @@ def test_LegCharge():
 def test_LegPipe():
     shape = (20, 10, 8)
     legs = [gen_random_legcharge(s, ch_1) for s in shape]
-    pipe = charges.LegPipe(legs, sort=True, bunch=True)
-    pipe.test_sanity()
-    assert(pipe.ind_len == np.prod(shape))
-
+    for sort, bunch in it.product([True, False], repeat=2):
+        pipe = charges.LegPipe(legs, sort=sort, bunch=bunch)
+        pipe.test_sanity()
+        assert(pipe.ind_len == np.prod(shape))
+        print pipe.q_map
+        # test pipe.map_incoming_qind
+        qind_inc = pipe.q_map[:, 2:-1].copy()   # all possible qindices
+        np.random.shuffle(qind_inc)  # different order to make the test non-trivial
+        qmap_ind = pipe._map_incoming_qind(qind_inc)
+        for i in range(len(qind_inc)):
+            npt.assert_equal(pipe.q_map[qmap_ind[i], 2:-1], qind_inc[i])
+            size = np.prod([l.qind[j, 1] - l.qind[j, 0] for l, j in zip(legs, qind_inc[i])])
+            nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
 
 def test_reverse_sort_perm(N=10):
     x = np.random.random(N)
     p = np.arange(N)
-    np.random.shuffle(np.arange(N))
+    np.random.shuffle(p)
     xnew = x[p]
     pinv = charges.reverse_sort_perm(p)
     npt.assert_equal(x, xnew[pinv])
