@@ -233,6 +233,24 @@ def test_npc_Array_reshape():
         npt.assert_equal(asplit.to_ndarray(), aflat.transpose(transpose))
 
 
+def test_npc_Array_scale_axis():
+    a = random_Array((5, 15, 10), chinfo2, sort=True)
+    aflat = a.to_ndarray()
+    s0 = np.random.random((a.shape[0], 1, 1))
+    s1 = np.random.random((1, a.shape[1], 1))
+    s2 = np.random.random((1, 1, a.shape[2]))
+    b = a.scale_axis(s0.flatten(), 0)
+    b.test_sanity()
+    npt.assert_equal(b.to_ndarray(), aflat*s0)
+    a.iscale_axis(s1.flatten(), 1)
+    a.test_sanity()
+    aflat = aflat * s1
+    npt.assert_equal(a.to_ndarray(), aflat)
+    c = a.scale_axis(s2.flatten(), -1)
+    c.test_sanity()
+    npt.assert_equal(c.to_ndarray(), aflat*s2)
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()

@@ -138,7 +138,6 @@ class Array(object):
         else:
             cp = copy_.copy(self)
             # some things should be copied even for shallow copies
-            cp._set_shape()
             cp.qtotal = cp.qtotal.copy()
         # even deep copies can share chargeinfo and legs
         cp.chinfo = self.chinfo
@@ -708,7 +707,7 @@ class Array(object):
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
         # check: is combine_legs `iterable(iterable(int|str))` or `iterable(int|str)` ?
-        if [combine_legs[0]] == toiterable(combine_legs[0]):  # TODO: remove this option
+        if [combine_legs[0]] == toiterable(combine_legs[0]):
             # the first entry is (int|str) -> only a single new pipe
             combine_legs = [combine_legs]
             if new_axes is not None:
@@ -1007,6 +1006,38 @@ class Array(object):
         cp = self.copy(deep=True)
         cp.itranspose(axes)
         return cp
+
+    def iscale_axis(self, s, axis=-1):
+        """scale with varying values along an axis. In place.
+
+        Rescale to ``new_self[i1, ..., i_axis, ...] = s[i_axis] * self[i1, ..., i_axis, ...]``.
+
+        Paremeters
+        ----------
+        s : 1D array, len=self.shape[axis]
+            the vector with which the axis should be scaled
+        axis : str|int
+            the leg label or index for the axis which should be scaled.
+        """
+        axis = self.get_leg_index(axis)
+        s = np.asarray(s)
+        if s.shape != (self.shape[axis],):
+            raise ValueError("s has wrong shape: ", str(s.shape))
+        self.dtype = np.find_common_type([self.dtype], [s.dtype])
+        leg = self.legs[axis]
+        if axis != self.rank - 1:
+            self._data = [np.swapaxes(np.swapaxes(t, axis, -1) * s[leg.get_slice(qi)], axis, -1)
+                          for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
+        else:   # optimize: no need to swap axes, if axis is -1.
+            self._data = [t * s[leg.get_slice(qi)]   # (it's slightly faster for large arrays)
+                          for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
+
+    def scale_axis(self, s, axis=-1):
+        """Samse as :meth:`iscale_axis`, but return a (deep) copy."""
+        res = self.copy(deep=False)
+        res._qdata = res._qdata.copy()
+        res.iscale_axis(s, axis)
+        return res
 
     # labels ==================================================================
 
