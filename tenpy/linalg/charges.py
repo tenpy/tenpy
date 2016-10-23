@@ -1,10 +1,15 @@
-r"""Basic definitions of a charge: classes :class:`ChargeInfo` and :class:`LegCharge`.
+r"""Basic definitions of a charge.
+
+Contains implementation of classes
+:class:`ChargeInfo`,
+:class:`LegCharge` and
+:class:`LegPipe`.
 
 .. note ::
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
-A detailed introduction to np_conserved can be found in :doc:`../IntroNpc`.
+A detailed introduction to `np_conserved` can be found in :doc:`../IntroNpc`.
 """
 
 from __future__ import division
@@ -42,6 +47,16 @@ class ChargeInfo(object):
         The periodicity of the charges. One entry for each charge.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
+
+    Methods
+    -------
+    :meth:`make_valid`
+        takes modulo `qmod`. Gives charge 0 if `charges` is None.
+    :meth:`check_valid`
+        returns true, if charges are valid.
+    :meth:`test_sanity`
+    operators
+        equality ``==, !=``
 
     Notes
     -----
@@ -156,6 +171,25 @@ class LegCharge(object):
         whether the charges are guaranteed to be sorted
     bunched : bool
         whether the charges are guaranteed to be bunched
+
+    Methods
+    -------
+    creation
+        :meth:`from_trivial`, :meth:`from_qflat`, :meth:`from_qdict`
+    :meth:`conj`
+        flip pointing inward/outward `qconj`
+    conversion
+        :meth:`to_qflat`, :meth:`to_qind`, :meth:`to_qdict`
+    checks
+        :meth:`test_sanity`,
+        :meth:`is_blocked`, :meth:`is_sorted`, :meth:`is_bunched`,
+        :meth:`test_contractible`, :meth:`test_equal`
+    translation from and to qindices
+        :meth:`get_slice`, :meth:`get_qindex`, :meth:`get_charge`
+    modify blocks
+        :meth:`sort`, :meth:`bunch`, :meth:`project`
+    convert permutations
+        :meth:`perm_flat_from_perm_qind`, :meth:`perm_qind_from_perm_flat`
 
     Notes
     -----
@@ -298,6 +332,75 @@ class LegCharge(object):
         """returns whether there are contiguous blocks"""
         return len(_find_row_differences(self.qind[:, 2:])) == self.block_number + 1
 
+    def test_contractible(self, other):
+        """Raises a ValueError if charges are incompatible for contraction with other.
+
+        Parameters
+        ----------
+        other : :class:`LegCharge`
+            The LegCharge of the other leg condsidered for contraction.
+
+        Raises
+        ------
+        ValueError
+            If the charges are incompatible for direct contraction.
+
+        Notes
+        -----
+        This function checks that two legs are `ready` for contraction.
+        This is the case, if all of the following conditions are met:
+
+        - the ``ChargeInfo`` is equal
+        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
+        - the charges are the same up to opposite signs ``qconj``::
+
+                self.qind[:, 2:] * self.qconj = -other.qind[:, 2:] * other.qconj[:, 2:]
+
+        In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
+        This special case is not considered here - instead use
+        :meth:~tenpy.linalg.np_conserved.gauge_total_charge`, if a change of the charge is desired.
+
+        If you are sure that the legs should be contractable,
+        check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
+        or whether ``self`` and ``other`` are blocked or should be sorted.
+
+        See also
+        --------
+        test_equal :
+            ``self.test_contractible(other)`` is equivalent to ``self.test_equal(other.conj())``.
+
+        """
+        self.test_equal(other.conj())
+
+    def test_equal(self, other):
+        """test if charges are *equal* including `qconj`.
+
+        Check that all of the following conditions are met:
+
+        - the ``ChargeInfo`` is equal
+        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
+        - the charges are the same up to the signs ``qconj``::
+
+                self.qind[:, 2:] * self.qconj = other.qind[:, 2:] * other.qconj[:, 2:]
+
+        See also
+        --------
+        test_contractible :
+            ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
+        """
+
+        if self.chinfo != other.chinfo:
+            raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
+                other.chinfo)]))
+        if self.qind is other.qind and self.qconj == other.qconj:
+            return  # optimize: don't need to check all charges explicitly
+        if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
+            raise ValueError("incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}"
+                             .format(self, other))
+        if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * other.qconj):
+            raise ValueError("incompatible charges. qconj={0:+d}, {1:+d}, qind:\n{2!s}\n{3!s}"
+                             .format(self.qconj, other.qconj, self, other))
+
     def get_slice(self, qindex):
         """return slice selecting the block for a given `qindex`"""
         return slice(*self.qind[qindex, :2])
@@ -404,75 +507,6 @@ class LegCharge(object):
         cp.bunched = True
         return idx, cp
 
-    def test_contractible(self, other):
-        """Raises a ValueError if charges are incompatible for contraction with other.
-
-        Parameters
-        ----------
-        other : :class:`LegCharge`
-            The LegCharge of the other leg condsidered for contraction.
-
-        Raises
-        ------
-        ValueError
-            If the charges are incompatible for direct contraction.
-
-        Notes
-        -----
-        This function checks that two legs are `ready` for contraction.
-        This is the case, if all of the following conditions are met:
-
-        - the ``ChargeInfo`` is equal
-        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
-        - the charges are the same up to opposite signs ``qconj``::
-
-                self.qind[:, 2:] * self.qconj = -other.qind[:, 2:] * other.qconj[:, 2:]
-
-        In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
-        This special case is not considered here - instead use
-        :meth:~tenpy.linalg.np_conserved.gauge_total_charge`, if a change of the charge is desired.
-
-        If you are sure that the legs should be contractable,
-        check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
-        or whether ``self`` and ``other`` are blocked or should be sorted.
-
-        See also
-        --------
-        test_equal :
-            ``self.test_contractible(other)`` is equivalent to ``self.test_equal(other.conj())``.
-
-        """
-        self.test_equal(other.conj())
-
-    def test_equal(self, other):
-        """test if charges are *equal* including `qconj`.
-
-        Check that all of the following conditions are met:
-
-        - the ``ChargeInfo`` is equal
-        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
-        - the charges are the same up to the signs ``qconj``::
-
-                self.qind[:, 2:] * self.qconj = other.qind[:, 2:] * other.qconj[:, 2:]
-
-        See also
-        --------
-        test_contractible :
-            ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
-        """
-
-        if self.chinfo != other.chinfo:
-            raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
-                other.chinfo)]))
-        if self.qind is other.qind and self.qconj == other.qconj:
-            return  # optimize: don't need to check all charges explicitly
-        if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
-            raise ValueError("incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}"
-                             .format(self, other))
-        if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * other.qconj):
-            raise ValueError("incompatible charges. qconj={0:+d}, {1:+d}, qind:\n{2!s}\n{3!s}"
-                             .format(self.qconj, other.qconj, self, other))
-
     def project(self, mask):
         """Return copy keeping only the indices specified by `mask`.
 
@@ -524,7 +558,7 @@ class LegCharge(object):
         """return block sizes"""
         return (self.qind[:, 1] - self.qind[:, 0])
 
-    def perm_flat_from_qind(self, perm_qind):
+    def perm_flat_from_perm_qind(self, perm_qind):
         """Convert a permutation of qind (acting on self) into a flat permutation."""
         return np.concatenate([np.arange(b, e) for (b, e) in self.qind[perm_qind, :2]])
 
@@ -549,7 +583,7 @@ class LegCharge(object):
         perm_flat = np.asarray(perm_flat)
         perm_qind = perm_flat[self.qind[:, 0]]
         # check if perm_qind indeed resembles the permutation
-        if np.any(perm_flat != self.perm_flat_from_qind(perm_qind)):
+        if np.any(perm_flat != self.perm_flat_from_perm_qind(perm_qind)):
             raise ValueError("Permutation mixes qind")
         return perm_qind
 
@@ -600,6 +634,19 @@ class LegPipe(LegCharge):
         a permutation such that ``q_map[_perm, :]`` is sorted by `i_l` (ignoring the `I_s`).
     _strides : 1D array
         strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
+
+    Methods
+    -------
+    :meth:`to_LegCharge`
+        converts to a :class:`LegCharge`
+    :meth:`test_sanity`
+    :meth:`conj`
+        flip ``qconj`` for all incoming legs and the outgoing leg.
+    :meth:`outer_conj`
+        flip the outgoing `qconj` and outgoing charges
+    modify blocks
+        (these convert to LegCharge)
+        :meth:`sort`, :meth:`bunch`, :meth:`project`
 
     Notes
     -----
@@ -653,7 +700,7 @@ class LegPipe(LegCharge):
         self.subqshape = tuple([l.block_number for l in self.legs])
         # the diffuclt part: calculate self.qind, self.q_map and self.q_map_slices
         self._init_from_legs(sort, bunch)
-        self.test_sanity()  # TODO: optimize: do we really want this?
+        self.test_sanity()
 
     @property
     def nlegs(self):

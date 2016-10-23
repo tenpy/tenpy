@@ -22,8 +22,7 @@ and :class:`~tenpy.linalg.charges.LegCharge` with additional documentation.
 
 
 .. todo ::
-   Routine listing,
-   update ``from charges import``,
+   function listing,
    write example section
 """
 # Examples
@@ -102,17 +101,83 @@ class Array(object):
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
 
+    Methods
+    -------
+    :meth:`from_ndarray_trivial`
+        creation
+    :meth:`from_ndarray`
+    :meth:`from_func`
+    :meth:`copy`
+    :meth:`zeros_like`
+    :meth:`test_sanity`
+
+    :meth:`get_leg_index`
+        labels
+    :meth:`get_leg_indices`
+    :meth:`get_leg_labels`
+    :meth:`set_leg_labels`
+
+    ``str()``
+        output
+    ``repr()``
+    :meth:`sparse_stats`
+
+    ``self[idx]``
+        data acces
+    :meth:`take_slice`
+    :meth:`to_ndarray`
+    ``iter(self)``
+        iteration over blocks
+
+    :meth:`detect_ndarray_qtotal`
+        charges
+    :meth:`gauge_total_charge`
+    :meth:`is_completely_blocked`
+    :meth:`sort_legcharge`
+    :meth:`isort_qdata`
+
+    :meth:`make_pipe`
+         reshape
+    :meth:`combine_legs`
+    :meth:`split_legs`
+    :meth:`squeeze`
+
+    :meth:`astype`
+        data manipulation
+    :meth:`imake_contiguous`
+    :meth:`ipurge_zeros`
+    :meth:`iproject`
+    :meth:`permute`
+    :meth:`itranspose`
+    :meth:`transpose`
+    :meth:`iscale_axis`
+    :meth:`scale_axis`
+
+    :meth:`iunary_blockwise`
+        for unary functions/operators
+    :meth:`unary_blockwise`
+    :meth:`iconj`
+    :meth:`conj`
+    :meth:`norm`
+
+    :meth:`ibinary_blockwise`
+        for binary functions/operators
+    :meth:`binary_blockwise`
+    :meth:`matvec`
+    operators
+        ``+, -`` for other :class:`Array`
+    operators
+        ``*, /`` for other scalars
+
     Notes
     -----
-    While some methods return deep copies, other return just "views".
+    In-place methods are indicated by a name starting with ``i``.
+    (But `is_completely_blocked` is not inplace...)
 
     .. todo ::
-
         - Somehow, including `rank` to the list of attributes breaks
           the sphinx build for this class...
         - What about size and stored_blocks?
-        - Methods section
-        - should distinguish between QDTYPE and _qdata -> np.intp
     """
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -733,7 +798,7 @@ class Array(object):
                         sort[li] = np.arange(cp.shape[li])
                         continue
                     p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    sort[li] = cp.legs[li].perm_flat_from_qind(p_qind)  # called for the old leg
+                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # called for the old leg
                     cp.legs[li] = newleg
                 else:
                     try:
@@ -1265,7 +1330,7 @@ class Array(object):
         return res.iunary_blockwise(func, *args, **kwargs)
 
     def iconj(self, complex_conj=True):
-        """wraper to :meth:`self.conj` with ``inplace=True``"""
+        """wraper around :meth:`self.conj` with ``inplace=True``"""
         self.conj(complex_conj, inplace=True)
 
     def conj(self, complex_conj=True, inplace=False):
