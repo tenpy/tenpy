@@ -29,6 +29,8 @@ np.random.seed(3141592)  # (it should work for any seed)
 
 from test_charges import gen_random_legcharge
 
+EPS = np.finfo(np.float_).eps
+
 
 def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):
     """generates a random npc.Array of given shape with random legcharges and entries."""
@@ -151,11 +153,15 @@ def test_npc_Array_permute():
 
 
 def test_npc_Array_transpose():
+    a = random_Array((20, 15, 10), chinfo)
+    aflat = a.to_ndarray()
     for tr in [None, [2, 1, 0], (1, 2, 0), (0, 2, 1)]:
-        a = random_Array((20, 15, 10), chinfo)
         atr = a.transpose(tr)
         atr.test_sanity()
-        npt.assert_equal(atr.to_ndarray(), a.to_ndarray().transpose(tr))
+        npt.assert_equal(atr.to_ndarray(), aflat.transpose(tr))
+    ax1, ax2 = -1, 0
+    a.iswapaxes(ax1, ax2)
+    npt.assert_equal(a.to_ndarray(), aflat.swapaxes(ax1, ax2))
 
 
 def test_npc_Array_itemacces():
@@ -278,10 +284,13 @@ def test_npc_Array_conj():
 
 def test_npc_Array_norm():
     a = random_Array((15, 10), chinfo3, sort=True)
-    aflat = a.to_ndarray().flatten()
-    for ord in [np.inf, -np.inf, 0, 1, -1, 2, -2, 3.]:
+    aflat = a.to_ndarray()
+    for ord in [np.inf, -np.inf, 0, 1, 2, 3.]:  # divides by 0 for neg. ord
         print "ord = ", ord
-        nst.eq_(a.norm(), np.linalg.norm(aflat))
+        anorm = a.norm(ord)
+        aflnorm = npc.norm(aflat, ord)
+        print abs(anorm - aflnorm)
+        assert (abs(anorm - aflnorm) < 100*EPS)
 
 
 def test_npc_Array_ops():
@@ -326,9 +335,8 @@ def test_npc_Array_ops():
         a.test_sanity()
         a2.test_sanity()
         aflat2 = op(aflat, s)
-        eps = np.finfo(a.dtype).eps
-        assert (np.max(np.abs(a.to_ndarray() - aflat)) < eps)
-        assert (np.max(np.abs(a.to_ndarray() - aflat)) < eps)
+        assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
+        assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
 
 
 if __name__ == "__main__":

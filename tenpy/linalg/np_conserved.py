@@ -81,7 +81,8 @@ class Array(object):
         the leg charges for each of the legs.
     dtype : type or string
         the data type of the array entries. Defaults to np.float64.
-
+    qtotal : 1D array of QDTYPE
+        the total charge of the array. Defaults to 0.
 
     Attributes
     ----------
@@ -1015,6 +1016,7 @@ class Array(object):
 
         Might speed up subsequent tensordot & co, if the blocks were not contiguous before."""
         self._data = [np.ascontigousarray(t) for t in self.dat]
+        return self
 
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
         """Removes ``self._data`` blocks with *norm* less than cutoff. In place.
@@ -1030,7 +1032,7 @@ class Array(object):
             which use the maximum norm.
         """
         if len(self._data) == 0:
-            return
+            return self
         norm = np.array([np.linalg.norm(t, ord=norm_order) for t in self._data])
         keep = (norm > cutoff)  # bool array
         self._data = [t for t, k in itertools.izip(self._data, keep) if k]
@@ -1207,6 +1209,27 @@ class Array(object):
         cp.itranspose(axes)
         return cp
 
+    def iswapaxes(self, axis1, axis2):
+        """similar as ``np.swapaxes``. In place."""
+        axis1 = self.get_leg_index(axis1)
+        axis2 = self.get_leg_index(axis2)
+        if axis1 == axis2:
+            return self  # nothing to do
+        swap = np.arange(self.rank, dtype=np.intp)
+        swap[axis1], swap[axis2] = axis2, axis1
+        legs = self.legs
+        legs[axis1], legs[axis2] = legs[axis2], legs[axis1]
+        for k, v in self.labels.iteritems():
+            if v == axis1:
+                self.labels[k] = axis2
+            if v == axis2:
+                self.labels[k] = axis1
+        self._set_shape()
+        self._qdata = self._qdata[:, swap]
+        self._qdata_sorted = False
+        self._data = [t.swapaxes(axis1, axis2) for t in self._data]
+        return self
+
     def iscale_axis(self, s, axis=-1):
         """scale with varying values along an axis. In place.
 
@@ -1235,6 +1258,7 @@ class Array(object):
         else:  # optimize: no need to swap axes, if axis is -1.
             self._data = [t * s[leg.get_slice(qi)]  # (it's slightly faster for large arrays)
                           for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
+        return self
 
     def scale_axis(self, s, axis=-1):
         """Samse as :meth:`iscale_axis`, but return a (deep) copy."""
@@ -1283,7 +1307,7 @@ class Array(object):
 
     def iconj(self, complex_conj=True):
         """wraper around :meth:`self.conj` with ``inplace=True``"""
-        self.conj(complex_conj, inplace=True)
+        return self.conj(complex_conj, inplace=True)
 
     def conj(self, complex_conj=True, inplace=False):
         """conjugate: complex conjugate data, conjugate charge data.
@@ -1319,41 +1343,19 @@ class Array(object):
         return res
 
     def norm(self, ord=None, convert_to_float=True):
-        r"""Equivalent to `np.linalg.norm(self.to_ndarray().flatten(), ord)`.
+        """Norm of flattened data.
 
-        In contrast to numpy, we don't distinguish between matrices and vectors,
-        but simply calculate the norm for the **flat** (block) data.
-        The usual `ord`-norm is defined as  :math:`(\sum_i |a_i|^{ord} )^{1/ord}`.
-
-        ==========  ================================
-        ord         norm
-        ==========  ================================
-        None/'fro'  Frobenius norm (same as 2-norm)
-        inf         max(abs(x))
-        -inf        min(abs(x))
-        0           sum(x != 0)  (not the '0-norm')
-        other       ususal `ord`-norm
-        ==========  ================================
-
-        Parameters
-        ----------
-        ord :
-            the order of the Norm. See table above
-        convert_to_float :
-            convert integer to float before calculating the norm, avoiding int overflow
-
-        Returns
-        -------
-        norm : float
-            the norm over the *flat* data
-        """
+        See :func:`norm` for details."""
+        if ord == 0:
+            return np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         if convert_to_float:
             new_type = np.find_common_type([np.float_, self.dtype], [])  # int -> float
             if new_type != self.dtype:
                 return self.astype(new_type).norm(ord, False)
         block_norms = [np.linalg.norm(t.reshape((-1, )), ord) for t in self._data]
         # ``.reshape((-1,)) gives a view and is thus faster than ``.flatten()``
-        return np.linalg.norm(block_norms, ord)
+        # add a [0] in the list to ensure correct results for ``ord=-inf``
+        return np.linalg.norm(block_norms + [0], ord)
 
     def __neg__(self):
         """return ``-self``"""
@@ -1434,7 +1436,7 @@ class Array(object):
         .. todo :
             why not define something like a `dot` and use that?
         """
-        return tensordot(self, y, axes=1)
+        return tensordot(self, other, axes=1)
 
     def __add__(self, other):
         """return self + other"""
@@ -1578,7 +1580,7 @@ class Array(object):
 
         Parameters
         ----------
-        qindices : 1D array of QDTYPE
+        qindices : 1D array of np.intp
             the qindices, for which we need to look in _qdata
         insert : bool
             If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
@@ -2118,3 +2120,100 @@ def zeros(*args, **kwargs):
     This is just a wrapper around ``Array(...)``,
     detailed documentation can be found in the class doc-string of :class:`Array`."""
     return Array(*args, **kwargs)
+
+
+def eye_like(a, axis=0):
+    """An identity matrix contractible with the axis of `a`."""
+    axis = a.get_leg_index(a)
+    return diag(1., a.legs[axis])
+
+
+def diag(s, leg, dtype=None):
+    """Returns a square, diagonal matrix of entries `s`.
+
+    The resultign matrix has legs ``(leg, leg.conj())`` and charge 0.
+
+    Parameters
+    ----------
+    s : scalar | 1D array
+        the entries to put on the diagonal. If scalar, all diagonal entries are the same.
+    leg : :class:`LegCharge`
+        the first leg of the resulting matrix.
+    dtype : None | type
+        the data type to be used for the result. By default, use dtype of `s`.
+
+    Returns
+    -------
+    diagonal : :class:`Array`
+        a square matrix with diagonal entries `s`.
+
+    See also
+    --------
+    :meth:`Array.scale_axis` : similar as ``tensordot(diag(s), ...)``, but faster.
+    """
+    s = np.asarray(s, dtype)
+    scalar = (s.ndim == 0)
+    if not scalar and len(s) != leg.ind_len:
+        raise ValueError("len(s)={0:d} not equal to leg.ind_len={1:d}".format(len(s), leg.ind_len))
+    res = Array(leg.chinfo, (leg, leg.conj()), s.dtype)  # default charge is 0
+    # qdata = [[0, 0], [1, 1], ....]
+    res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
+    # ``res._qdata_sorted = True`` was already set
+    if scalar:
+        res._data = [np.diag(s*np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
+    else:
+        res._data = [np.diag(s[leg.get_slice(qi)]) for qi in xrange(leg.block_number)]
+    return res
+
+
+def norm(a, ord=None, convert_to_float=True):
+    r"""Norm of flattened data.
+
+    Equivalent to ``np.linalg.norm(a.to_ndarray().flatten(), ord)``.
+
+    In contrast to numpy, we don't distinguish between matrices and vectors,
+    but simply calculate the norm for the **flat** (block) data.
+    The usual `ord`-norm is defined as  :math:`(\sum_i |a_i|^{ord} )^{1/ord}`.
+
+    ==========  ======================================
+    ord         norm
+    ==========  ======================================
+    None/'fro'  Frobenius norm (same as 2-norm)
+    inf         ``max(abs(x))``
+    -inf        ``min(abs(x))``
+    0           ``sum(a != 0) == np.count_nonzero(x)``
+    other       ususal `ord`-norm
+    ==========  ======================================
+
+    Parameters
+    ----------
+    a : :class:`Array` | np.ndarray
+        the array of which the norm should be calculated.
+    ord :
+        the order of the norm. See table above.
+    convert_to_float :
+        convert integer to float before calculating the norm, avoiding int overflow
+
+    Returns
+    -------
+    norm : float
+        the norm over the *flat* data of the array.
+    """
+    if isinstance(a, Array):
+        return a.norm(ord, convert_to_float)
+    elif isinstance(a, np.ndarray):
+        if convert_to_float:
+            new_type = np.find_common_type([np.float_, a.dtype], [])  # int -> float
+            a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
+        return np.linalg.norm(a.reshape((-1,)), ord)
+    else:
+        raise ValueError("unknown type of a")
+
+
+def tensordot(a, b, axes=2):
+    """equivalent to ``np.tensordot``.
+
+    .. todo :
+        implement
+    """
+    raise NotImplementedError()
