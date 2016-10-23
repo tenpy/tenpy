@@ -111,7 +111,13 @@ pygments_style = 'sphinx'
 
 # Avoid a bunch of warnings when using properties with doc strings in classes.
 # see https://github.com/phn/pytpm/issues/3#issuecomment-12133978
-numpydoc_show_class_members = False
+numpydoc_show_class_members = True
+numpydoc_show_inherited_class_members = True
+numpydoc_class_members_toctree = False
+# if you get a lot of warnings like::
+# None:None: WARNING: toctree contains reference to nonexisting document u'reference/tenpy.linalg.charges.LegCharge.get_qindex'
+# then try to update your numpydoc package with
+# > pip install --upgrade numpydoc
 
 autosummary_generate = True
 

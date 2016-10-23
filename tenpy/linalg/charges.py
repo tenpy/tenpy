@@ -31,7 +31,7 @@ class ChargeInfo(object):
 
     Parameters
     ----------
-    qmod : iterable of `QDTYPE`
+    mod : iterable of `QDTYPE`
         The len gives the number of charges, `qnumber`.
         For each charge one entry `m`: the charge is conserved modulo `m`.
         Defaults to trivial, i.e., no charge.
@@ -41,21 +41,10 @@ class ChargeInfo(object):
     Attributes
     ----------
     qnumber
-
     mod : 1D array_like of ints
         The periodicity of the charges. One entry for each charge.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
-
-    Methods
-    -------
-    :meth:`make_valid`
-        takes modulo `qmod`. Gives charge 0 if `charges` is None.
-    :meth:`check_valid`
-        returns true, if charges are valid.
-    :meth:`test_sanity`
-    operators
-        equality ``==, !=``
 
     Notes
     -----
@@ -171,25 +160,6 @@ class LegCharge(object):
     bunched : bool
         whether the charges are guaranteed to be bunched
 
-    Methods
-    -------
-    creation
-        :meth:`from_trivial`, :meth:`from_qflat`, :meth:`from_qdict`
-    :meth:`conj`
-        flip pointing inward/outward `qconj`
-    conversion
-        :meth:`to_qflat`, :meth:`to_qind`, :meth:`to_qdict`
-    checks
-        :meth:`test_sanity`,
-        :meth:`is_blocked`, :meth:`is_sorted`, :meth:`is_bunched`,
-        :meth:`test_contractible`, :meth:`test_equal`
-    translation from and to qindices
-        :meth:`get_slice`, :meth:`get_qindex`, :meth:`get_charge`
-    modify blocks
-        :meth:`sort`, :meth:`bunch`, :meth:`project`
-    convert permutations
-        :meth:`perm_flat_from_perm_qind`, :meth:`perm_qind_from_perm_flat`
-
     Notes
     -----
     Instances of this class can be shared between different `npc.Array`s.
@@ -217,6 +187,9 @@ class LegCharge(object):
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
         """create a LegCharge from qflat form.
 
+        Bunches, but does *not* sort. We recommend to sort (and bunch) afterwards,
+        if you expect all entries compatible with the charges to be filled.
+
         Parameters
         ----------
         chargeinfo : :class:`ChargeInfo`
@@ -229,7 +202,6 @@ class LegCharge(object):
         See also
         --------
         sort : sorts by charges
-        block : blocks by charges
         """
         qflat = np.asarray(qflat, dtype=QDTYPE)
         indices = _find_row_differences(qflat).reshape(-1, 1)
