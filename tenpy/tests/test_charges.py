@@ -52,7 +52,7 @@ def gen_random_legcharge(n, chinfo):
         if mod > 1:
             qflat.append(np.asarray(np.random.randint(0, mod, size=n)))
         else:
-            r = max(3, n//3)
+            r = max(3, n // 3)
             qflat.append(np.asarray(np.random.randint(-r, r, size=n)))
     qflat = np.array(qflat, dtype=charges.QDTYPE).T
     qconj = np.random.randint(0, 1, 1) * 2 - 1
@@ -103,8 +103,8 @@ def test_LegCharge():
     lcus_qind = lcus.qind.copy()
     pqind, lcus_s = lcus.sort(bunch=False)
     lcus_s.test_sanity()
-    npt.assert_equal(lcus_qind, lcus.qind)      # don't change the old instance
-    npt.assert_equal(lcus_s.qind[:, 2:], lcus.qind[pqind, 2:])     # permutation ok?
+    npt.assert_equal(lcus_qind, lcus.qind)  # don't change the old instance
+    npt.assert_equal(lcus_s.qind[:, 2:], lcus.qind[pqind, 2:])  # permutation ok?
     nst.eq_(lcus_s.is_sorted(), True)
     nst.eq_(lcus_s.is_bunched(), False)
     nst.eq_(lcus_s.is_blocked(), False)
@@ -121,8 +121,8 @@ def test_LegCharge():
     # test get_qindex
     for i in xrange(lcs.ind_len):
         qidx, idx_in_block = lcs.get_qindex(i)
-        assert(lcs.qind[qidx, 0] <= i < lcs.qind[qidx, 1])
-        assert(lcs.qind[qidx, 0] + idx_in_block == i)
+        assert (lcs.qind[qidx, 0] <= i < lcs.qind[qidx, 1])
+        assert (lcs.qind[qidx, 0] + idx_in_block == i)
 
 
 def test_LegPipe():
@@ -131,16 +131,17 @@ def test_LegPipe():
     for sort, bunch in it.product([True, False], repeat=2):
         pipe = charges.LegPipe(legs, sort=sort, bunch=bunch)
         pipe.test_sanity()
-        assert(pipe.ind_len == np.prod(shape))
+        assert (pipe.ind_len == np.prod(shape))
         print pipe.q_map
         # test pipe.map_incoming_qind
-        qind_inc = pipe.q_map[:, 2:-1].copy()   # all possible qindices
+        qind_inc = pipe.q_map[:, 2:-1].copy()  # all possible qindices
         np.random.shuffle(qind_inc)  # different order to make the test non-trivial
         qmap_ind = pipe._map_incoming_qind(qind_inc)
         for i in range(len(qind_inc)):
             npt.assert_equal(pipe.q_map[qmap_ind[i], 2:-1], qind_inc[i])
             size = np.prod([l.qind[j, 1] - l.qind[j, 0] for l, j in zip(legs, qind_inc[i])])
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
+
 
 def test_reverse_sort_perm(N=10):
     x = np.random.random(N)

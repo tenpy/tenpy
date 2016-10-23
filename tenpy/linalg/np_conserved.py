@@ -49,7 +49,7 @@ import itertools
 
 # import public API from charges
 from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
-from . import charges   # for private functions
+from . import charges  # for private functions
 
 from ..tools.math import toiterable
 
@@ -179,6 +179,7 @@ class Array(object):
           the sphinx build for this class...
         - What about size and stored_blocks?
     """
+
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
         self.chinfo = chargeinfo
@@ -257,7 +258,12 @@ class Array(object):
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, chargeinfo, legcharges, dtype=np.float64, qtotal=None,
+    def from_ndarray(cls,
+                     data_flat,
+                     chargeinfo,
+                     legcharges,
+                     dtype=np.float64,
+                     qtotal=None,
                      cutoff=None):
         """convert a flat (numpy) ndarray to an Array.
 
@@ -301,7 +307,7 @@ class Array(object):
         for qindices in res._iter_all_blocks():
             sl = res._get_block_slices(qindices)
             if np.all(res._get_block_charge(qindices) == qtotal):
-                data.append(np.array(data_flat[sl], dtype=res.dtype))   # copy data
+                data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
                 qdata.append(qindices)
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge")
@@ -312,8 +318,15 @@ class Array(object):
         return res
 
     @classmethod
-    def from_func(cls, func, chargeinfo, legcharges, dtype=np.float64, qtotal=None,
-                  func_args=(), func_kwargs={}, shape_kw=None):
+    def from_func(cls,
+                  func,
+                  chargeinfo,
+                  legcharges,
+                  dtype=np.float64,
+                  qtotal=None,
+                  func_args=(),
+                  func_kwargs={},
+                  shape_kw=None):
         """Create an Array from a numpy func.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -503,8 +516,8 @@ class Array(object):
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
-            self.shape, self.chinfo, self.get_leg_labels())
+        return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(self.shape, self.chinfo,
+                                                                          self.get_leg_labels())
 
     def __str__(self):
         res = "\n".join([repr(self)[:-1], str(self.to_ndarray()), ">"])
@@ -520,9 +533,9 @@ class Array(object):
         nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         bs = np.array([t.size for t in self._data], dtype=np.float)
         if nblocks > 0:
-            bs1 = (np.sum(bs**0.5)/nblocks)**2
-            bs2 = np.sum(bs)/nblocks
-            bs3 = (np.sum(bs**2.0)/nblocks)**0.5
+            bs1 = (np.sum(bs**0.5) / nblocks)**2
+            bs2 = np.sum(bs) / nblocks
+            bs3 = (np.sum(bs**2.0) / nblocks)**0.5
             captsparse = float(nonzero) / stored
         else:
             captsparse = 1.
@@ -532,8 +545,16 @@ class Array(object):
             "Captured sparsity: {captsparse:g}\n"  \
             "Effective block sizes (second entry=mean): [{bs1:.2f}, {bs2:.2f}, {bs3:.2f}]"
 
-        return res.format(nonzero=nonzero, total=total, nztotal=nonzero/total, nblocks=nblocks,
-                          stored=stored, captsparse=captsparse, bs1=bs1, bs2=bs2, bs3=bs3)
+        return res.format(
+            nonzero=nonzero,
+            total=total,
+            nztotal=nonzero / total,
+            nblocks=nblocks,
+            stored=stored,
+            captsparse=captsparse,
+            bs1=bs1,
+            bs2=bs2,
+            bs3=bs3)
 
     # accessing entries =======================================================
 
@@ -784,9 +805,9 @@ class Array(object):
             a shallow copy of self, with legs sorted/bunched
         """
         if sort is False or sort is True:  # ``sort in [False, True]`` doesn't work...
-            sort = [sort]*self.rank
+            sort = [sort] * self.rank
         if bunch is False or bunch is True:
-            bunch = [bunch]*self.rank
+            bunch = [bunch] * self.rank
         if not len(sort) == len(bunch) == self.rank:
             raise ValueError("Wrong len for bunch or sort")
         cp = self.copy(deep=False)
@@ -798,7 +819,8 @@ class Array(object):
                         sort[li] = np.arange(cp.shape[li])
                         continue
                     p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # called for the old leg
+                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(
+                        p_qind)  # called for the old leg
                     cp.legs[li] = newleg
                 else:
                     try:
@@ -924,7 +946,7 @@ class Array(object):
         new_axes = [new_axes[p] for p in perm_args]
 
         # labels: replace non-set labels with '?#' (*before* transpose
-        labels = [(l if l is not None else '?'+str(i))
+        labels = [(l if l is not None else '?' + str(i))
                   for i, l in enumerate(self.get_leg_labels())]
 
         # transpose if necessary
@@ -932,7 +954,7 @@ class Array(object):
             res = self.copy(deep=False)
             res.set_leg_labels(labels)
             res = res.transpose(transp)
-            tr_combine_legs = [range(na, na+len(cl)) for na, cl in zip(new_axes, combine_legs)]
+            tr_combine_legs = [range(na, na + len(cl)) for na, cl in zip(new_axes, combine_legs)]
             return res.combine_legs(tr_combine_legs, new_axes=new_axes, pipes=pipes)
         # if we come here, combine_legs has the form of `tr_combine_legs`.
 
@@ -943,7 +965,7 @@ class Array(object):
         # get new labels
         pipe_labels = [('(' + '.'.join([labels[c] for c in cl]) + ')') for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
-            labels[na:na+p.nlegs] = [plab]
+            labels[na:na + p.nlegs] = [plab]
         res.set_leg_labels(labels)
         return res
 
@@ -986,7 +1008,7 @@ class Array(object):
 
         labels = list(self.get_leg_labels())
         for a in axes:
-            labels[a:a+1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
+            labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.set_leg_labels(labels)
         return res
 
@@ -1016,7 +1038,7 @@ class Array(object):
                 raise ValueError("Tried to squeeze non-unit leg")
         keep = [a for a in range(self.rank) if a not in axes]
         if len(keep) == 0:
-            index = tuple([0]*self.rank)
+            index = tuple([0] * self.rank)
             return self[index]
         res = self.copy(deep=False)
         # adjust qtotal
@@ -1193,8 +1215,8 @@ class Array(object):
         res = self.copy(deep=False)  # data is replaced afterwards
         res.legs[axis] = newleg
         qdata_axis = self._qdata[:, axis]
-        new_block_idx = [slice(None)]*self.rank
-        old_block_idx = [slice(None)]*self.rank
+        new_block_idx = [slice(None)] * self.rank
+        old_block_idx = [slice(None)] * self.rank
         data = []
         qdata = {}  # dict for fast look up: tuple(indices) -> _data index
         for old_qind, old_qind_row in enumerate(oldleg.qind):
@@ -1273,15 +1295,15 @@ class Array(object):
         """
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
-        if s.shape != (self.shape[axis],):
+        if s.shape != (self.shape[axis], ):
             raise ValueError("s has wrong shape: ", str(s.shape))
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:
             self._data = [np.swapaxes(np.swapaxes(t, axis, -1) * s[leg.get_slice(qi)], axis, -1)
                           for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
-        else:   # optimize: no need to swap axes, if axis is -1.
-            self._data = [t * s[leg.get_slice(qi)]   # (it's slightly faster for large arrays)
+        else:  # optimize: no need to swap axes, if axis is -1.
+            self._data = [t * s[leg.get_slice(qi)]  # (it's slightly faster for large arrays)
                           for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
 
     def scale_axis(self, s, axis=-1):
@@ -1399,7 +1421,7 @@ class Array(object):
             new_type = np.find_common_type([np.float_, self.dtype], [])  # int -> float
             if new_type != self.dtype:
                 return self.astype(new_type).norm(ord, False)
-        block_norms = [np.linalg.norm(t.reshape((-1,)), ord) for t in self._data]
+        block_norms = [np.linalg.norm(t.reshape((-1, )), ord) for t in self._data]
         # ``.reshape((-1,)) gives a view and is thus faster than ``.flatten()``
         return np.linalg.norm(block_norms, ord)
 
@@ -1438,8 +1460,7 @@ class Array(object):
 
         # If the q_dat structure is identical, we can immediately run through the data.
         if Na == Nb and np.array_equiv(aq, bq):
-            self._data = [func(at, bt, *args, **kwargs)
-                          for at, bt in itertools.izip(adata, bdata)]
+            self._data = [func(at, bt, *args, **kwargs) for at, bt in itertools.izip(adata, bdata)]
         else:  # have to step through comparing left and right qdata
             i, j = 0, 0
             qdata = []
@@ -1562,7 +1583,7 @@ class Array(object):
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.__mul__(1./other)
+            return self.__mul__(1. / other)
         raise NotImplemented
 
     def __div__(self, other):
@@ -1577,7 +1598,7 @@ class Array(object):
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.__imul__(1./other)
+            return self.__imul__(1. / other)
         raise NotImplemented
 
     def __idiv__(self, other):
@@ -1601,7 +1622,7 @@ class Array(object):
         for block_inds in itertools.product(*[xrange(l.block_number)
                                               for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
-            yield tuple(block_inds[::-1])   # back to legs in correct order
+            yield tuple(block_inds[::-1])  # back to legs in correct order
 
     def _get_block_charge(self, qindices):
         """returns the charge of a block selected by `qindices`
@@ -1610,8 +1631,7 @@ class Array(object):
 
             qtotal = sum_{legs l} legs[l].qind[qindices[l], 2:] * legs[l].qconj() modulo qmod
         """
-        q = np.sum([l.get_charge(qi) for l, qi in itertools.izip(self.legs, qindices)],
-                   axis=0)
+        q = np.sum([l.get_charge(qi) for l, qi in itertools.izip(self.legs, qindices)], axis=0)
         return self.chinfo.make_valid(q)
 
     def _get_block_slices(self, qindices):
@@ -1620,8 +1640,8 @@ class Array(object):
 
     def _get_block_shape(self, qindices):
         """return shape for the block given by qindices"""
-        return tuple([(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
-                      itertools.izip(self.legs, qindices)])
+        return tuple([(l.qind[qi, 1] - l.qind[qi, 0])
+                      for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
         """return the ndarray in ``_data`` representing the block corresponding to `qindices`.
@@ -1678,10 +1698,10 @@ class Array(object):
         """
         cp = self.copy(deep=False)
         # lists for each leg:
-        new_to_old_idx = [None]*cp.rank     # the `idx` returned by cp.legs[li].bunch()
-        map_qindex = [None]*cp.rank         # array mapping old qindex to new qindex, such that
+        new_to_old_idx = [None] * cp.rank  # the `idx` returned by cp.legs[li].bunch()
+        map_qindex = [None] * cp.rank  # array mapping old qindex to new qindex, such that
         # new_leg.qind[m_qindex[i]] == old_leg.qind[i]  # (except the second column entry)
-        bunch_qindex = [None]*cp.rank       # bool array wheter the *new* qind was bunched
+        bunch_qindex = [None] * cp.rank  # bool array wheter the *new* qind was bunched
         for li, bunch in enumerate(bunch_legs):
             idx, new_leg = cp.legs[li].bunch()
             cp.legs[li] = new_leg
@@ -1690,14 +1710,14 @@ class Array(object):
             idx = np.append(idx, [self.shape[li]])
             m_qindex = []
             bunch_qindex[li] = b_qindex = np.empty(idx.shape, dtype=np.bool_)
-            for inew in xrange(len(idx)-1):
-                old_blocks = idx[inew+1] - idx[inew]
-                m_qindex.append([inew]*old_blocks)
+            for inew in xrange(len(idx) - 1):
+                old_blocks = idx[inew + 1] - idx[inew]
+                m_qindex.append([inew] * old_blocks)
                 b_qindex[inew] = (old_blocks > 1)
             map_qindex[li] = np.concatenate(m_qindex, axis=0)
 
         # now map _data and _qdata
-        bunched_blocks = {}     # new qindices -> index in new _data
+        bunched_blocks = {}  # new qindices -> index in new _data
         new_data = []
         new_qdata = []
         for old_block, old_qindices in itertools.izip(self._data, self._qdata):
@@ -1716,8 +1736,8 @@ class Array(object):
                 # figure out where to insert the in the new bunched_blocks
                 old_slbeg = [l.qind[qi, 0] for l, qi in itertools.izip(self.legs, old_qindices)]
                 new_slbeg = [l.qind[qi, 0] for l, qi in itertools.izip(cp.legs, new_qindices)]
-                slbeg = [(o-n) for o, n in itertools.izip(old_slbeg, new_slbeg)]
-                sl = [slice(beg, beg+l) for beg, l in itertools.izip(slbeg, old_block.shape)]
+                slbeg = [(o - n) for o, n in itertools.izip(old_slbeg, new_slbeg)]
+                sl = [slice(beg, beg + l) for beg, l in itertools.izip(slbeg, old_block.shape)]
                 # insert the old block into larger new block
                 new_block[tuple(sl)] = old_block
             else:
@@ -1755,9 +1775,9 @@ class Array(object):
         if len(inds) < self.rank:
             inds = inds + (Ellipsis, )
         if any([(i is Ellipsis) for i in inds]):
-            fill = tuple([slice(None)] * (self.rank - len(inds)+1))
+            fill = tuple([slice(None)] * (self.rank - len(inds) + 1))
             e = inds.index(Ellipsis)
-            inds = inds[:e] + fill + inds[e+1:]
+            inds = inds[:e] + fill + inds[e + 1:]
         if len(inds) > self.rank:
             raise IndexError("too many indices for Array")
         # do we have only integer entries in `inds`?
@@ -1809,8 +1829,8 @@ class Array(object):
                     project_masks.append(m)
                     project_axes.append(a)
                     if i.step is not None and i.step < 0:
-                        permutations.append((a,
-                                             np.arange(np.count_nonzero(m), dtype=np.intp)[::-1]))
+                        permutations.append((a, np.arange(
+                            np.count_nonzero(m), dtype=np.intp)[::-1]))
             else:
                 try:
                     iter(i)
@@ -1836,12 +1856,12 @@ class Array(object):
                 res = res.permute(perm, a)
         if not calc_map_qind:
             return res
-        part2self = self._advanced_getitem_map_qind(inds, slice_axes, slice_inds,
-                                                    project_axes, p_map_qinds, p_masks, res_axes)
+        part2self = self._advanced_getitem_map_qind(inds, slice_axes, slice_inds, project_axes,
+                                                    p_map_qinds, p_masks, res_axes)
         return part2self, permutations, res
 
-    def _advanced_getitem_map_qind(self, inds, slice_axes, slice_inds,
-                                   project_axes, p_map_qinds, p_masks, res_axes):
+    def _advanced_getitem_map_qind(self, inds, slice_axes, slice_inds, project_axes, p_map_qinds,
+                                   p_masks, res_axes):
         """generate a function mapping from qindices of `self[inds]` back to qindices of self
 
         This function is called only by `_advanced_getitem(calc_map_qind=True)`
@@ -1891,9 +1911,8 @@ class Array(object):
     def _advanced_setitem_npc(self, inds, other):
         """self[inds] = other for non-integer `inds` and :class:`Array` `other`.
         This function is called by self.__setitem__(inds, other)."""
-        map_part2self, permutations, self_part = self._advanced_getitem(inds,
-                                                                        calc_map_qind=True,
-                                                                        permute=False)
+        map_part2self, permutations, self_part = self._advanced_getitem(
+            inds, calc_map_qind=True, permute=False)
         # permuations are ignored by map_part2self.
         # instead of figuring out permuations in self, apply the *reversed* permutations ot other
         for ax, perm in permutations:
@@ -1927,12 +1946,12 @@ class Array(object):
         npipes = len(combine_legs)
         # default arguments for pipes and qconj
         if pipes is None:
-            pipes = [None]*npipes
+            pipes = [None] * npipes
         elif len(pipes) != npipes:
             raise ValueError("wrong len of `pipes`")
         qconj = list(toiterable(qconj if qconj is not None else +1))
         if len(qconj) == 1 and 1 < npipes:
-            qconj = [qconj[0]]*npipes  # same qconj for all pipes
+            qconj = [qconj[0]] * npipes  # same qconj for all pipes
         if len(qconj) != npipes:
             raise ValueError("wrong len of `qconj`")
 
@@ -1958,9 +1977,8 @@ class Array(object):
         non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs])
         if new_axes is None:  # figure out default new_legs
             first_cl = np.array([cl[0] for cl in combine_legs])
-            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a))
-                        for a in first_cl]
-        else:   # test compatibility
+            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a)) for a in first_cl]
+        else:  # test compatibility
             if len(new_axes) != len(combine_legs):
                 raise ValueError("wrong len of `new_axes`")
             new_rank = len(combine_legs) + len(non_combined_legs)
@@ -1996,8 +2014,8 @@ class Array(object):
         """
         all_combine_legs = np.concatenate(combine_legs)
         # non_combined_legs: axes of self which are not in combine_legs
-        non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs],
-                                     dtype=np.intp)
+        non_combined_legs = np.array(
+            [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
         legs = [self.legs[i] for i in non_combined_legs]
         for na, p in zip(new_axes, pipes):  # not reversed
             legs.insert(na, p)
@@ -2031,7 +2049,7 @@ class Array(object):
 
         # now the hard part: map data
         data = []
-        slices = [slice(None)]*res.rank  # for selecting the slices in the new blocks
+        slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
         # iterate over ranges of equal qindices in qdata_s
         for beg, end in itertools.izip(diffs[:-1], diffs[1:]):
             qindices = qdata_s[beg]
@@ -2059,20 +2077,20 @@ class Array(object):
         # in self
         split_axes = np.array(sorted(split_axes), dtype=np.intp)
         pipes = [self.legs[a] for a in split_axes]
-        nonsplit_axes = np.array([i for i in xrange(self.rank) if i not in split_axes],
-                                 dtype=np.intp)
+        nonsplit_axes = np.array(
+            [i for i in xrange(self.rank) if i not in split_axes], dtype=np.intp)
         # in result
         new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
         for a in reversed(split_axes):
-            new_nonsplit_axes[a+1:] += self.legs[a].nlegs - 1
+            new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
         new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
-        new_split_slices = [slice(a, a+p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
+        new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
         new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
 
         res = self.copy(deep=False)
         legs = res.legs
         for a in reversed(split_axes):
-            legs[a:a+1] = legs[a].legs  # replace pipes with saved original legs
+            legs[a:a + 1] = legs[a].legs  # replace pipes with saved original legs
         res._set_shape()
 
         # get new qdata by stacking columns
@@ -2084,22 +2102,22 @@ class Array(object):
         data = []
         qdata = []  # rows of the new qdata
         new_block_shape = np.empty(res.rank, dtype=np.intp)
-        block_slice = [slice(None)]*self.rank
+        block_slice = [slice(None)] * self.rank
         for old_block, qdata_row in itertools.izip(self._data, tmp_qdata):
-            qmap_slices = [p.q_map_slices[i] for p, i in
-                           zip(pipes, qdata_row[new_split_axes_first])]
+            qmap_slices = [p.q_map_slices[i]
+                           for p, i in zip(pipes, qdata_row[new_split_axes_first])]
             new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
             for qmap_rows in itertools.product(*qmap_slices):
                 for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
                     qdata_row[sl] = block_qind = qm[2:-1]
-                    new_block_shape[sl] = [(l.qind[qi, 1] - l.qind[qi, 0]) for l, qi in
-                                           zip(pipe.legs, block_qind)]
+                    new_block_shape[sl] = [(l.qind[qi, 1] - l.qind[qi, 0])
+                                           for l, qi in zip(pipe.legs, block_qind)]
                     block_slice[a] = slice(qm[0], qm[1])
                 new_block = old_block[block_slice].reshape(new_block_shape)
                 # all charges are compatible by construction, but some might be zero
                 if not np.any(np.abs(new_block) > cutoff):
                     continue
-                data.append(new_block.copy())   # copy, not view
+                data.append(new_block.copy())  # copy, not view
                 qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
         if len(data) > 0:
             res._qdata = np.array(qdata, dtype=np.intp)
@@ -2126,7 +2144,7 @@ class Array(object):
         beg = 1
         depth = 0  # number of non-closed '(' to the left
         res = []
-        for i in range(1, len(label)-1):
+        for i in range(1, len(label) - 1):
             c = label[i]
             if c == '(':
                 depth += 1
@@ -2134,8 +2152,8 @@ class Array(object):
                 depth -= 1
             elif c == '.' and depth == 0:
                 res.append(label[beg:i])
-                beg = i+1
-        res.append(label[beg:i+1])
+                beg = i + 1
+        res.append(label[beg:i + 1])
         if len(res) != count:
             raise ValueError("wrong number of splitted labels.")
         for i in xrange(len(res)):
@@ -2151,7 +2169,7 @@ class Array(object):
         res = []
         beg = 0
         for i in range(1, len(label)):
-            if label[i-1] != ')' and label[i] in '.)':
+            if label[i - 1] != ')' and label[i] in '.)':
                 res.append(label[beg:i])
                 beg = i
         res.append(label[beg:])
@@ -2161,8 +2179,8 @@ class Array(object):
         # remove '**' entries
         return label.replace('**', '')
 
-
 # functions ====================================================================
+
 
 def zeros(*args, **kwargs):
     """create a npc array full of zeros (with no _data).

@@ -19,7 +19,6 @@ import copy
 import itertools
 import bisect
 import warnings
-
 """the dtype of a single charge"""
 QDTYPE = np.int_
 
@@ -102,7 +101,7 @@ class ChargeInfo(object):
             `charges` taken modulo self.mod, but with x % 1 := x
         """
         if charges is None:
-            return np.zeros((self.qnumber,), dtype=QDTYPE)
+            return np.zeros((self.qnumber, ), dtype=QDTYPE)
         charges = np.asarray(charges, dtype=QDTYPE)
         return np.where(self._mod_1, charges, np.mod(charges, self.mod))
 
@@ -429,7 +428,7 @@ class LegCharge(object):
             flat_index += self.ind_len
             if flat_index < 0:
                 raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}"
-                                 .format(flat_index-self.ind_len, self.ind_len))
+                                 .format(flat_index - self.ind_len, self.ind_len))
         elif flat_index > self.ind_len:
             raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}"
                              .format(flat_index, self.ind_len))
@@ -533,7 +532,7 @@ class LegCharge(object):
         keep = np.nonzero(new_block_lens)[0]
         block_masks = [block_masks[i] for i in keep]
         cp.qind = cp.qind[keep]
-        map_qind = - np.ones(self.block_number, np.int_)
+        map_qind = -np.ones(self.block_number, np.int_)
         map_qind[keep] = np.arange(len(keep))
         cp._set_qind_block_sizes(np.array(new_block_lens)[keep])
         cp.bunched = self.is_blocked()  # no, it's not `is_bunched`
@@ -689,11 +688,12 @@ class LegPipe(LegCharge):
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
     """
+
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial qind, which gets overwritten in _init_from_legs
-        super(LegPipe, self).__init__(chinfo, [[0, 1] + [0]*chinfo.qnumber], qconj)
+        super(LegPipe, self).__init__(chinfo, [[0, 1] + [0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
         self.subshape = tuple([l.ind_len for l in self.legs])
@@ -712,9 +712,9 @@ class LegPipe(LegCharge):
         super(LegPipe, self).test_sanity()
         if not hasattr(self, "subshape"):
             return  # omit further check during ``super(LegPipe, self).__init__``
-        assert(all([l.chinfo == self.chinfo for l in self.legs]))
-        assert(self.subshape == tuple([l.ind_len for l in self.legs]))
-        assert(self.subqshape == tuple([l.block_number for l in self.legs]))
+        assert (all([l.chinfo == self.chinfo for l in self.legs]))
+        assert (self.subshape == tuple([l.ind_len for l in self.legs]))
+        assert (self.subqshape == tuple([l.block_number for l in self.legs]))
 
     def to_LegCharge(self):
         """convert self to a LegCharge, discarding the information how to split the legs.
@@ -760,7 +760,7 @@ class LegPipe(LegCharge):
         """fairly short debug output"""
         res_lines = ["LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
                      "qconj {0}->{1:+1};".format(
-                         '('+', '.join(['%+d' % l.qconj for l in self.legs])+')', self.qconj),
+                         '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
                      "block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number)]
         return '\n'.join(res_lines)
 
@@ -768,7 +768,9 @@ class LegPipe(LegCharge):
         """full string representation"""
         return "LegPipe({legs},\nqconj={qconj:+d}, sort={s!r}, bunch={b!r})".format(
             legs='[' + ',\n'.join([repr(l) for l in self.legs]) + ']',
-            qconj=self.qconj, s=self.sorted, b=self.bunched)
+            qconj=self.qconj,
+            s=self.sorted,
+            b=self.bunched)
 
     def _init_from_legs(self, sort=True, bunch=True):
         """calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
@@ -789,12 +791,12 @@ class LegPipe(LegCharge):
         # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
         self._strides = np.array(grid.strides, np.intp)[1:] // grid.itemsize
         # collapse the different directions into one.
-        grid = grid.reshape(nlegs, -1)   # *this* is the actual `reshaping`
+        grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
-        nblocks = grid.shape[1]    # number of blocks in the pipe = np.product(qshape)
+        nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
         # determine q_map -- it's essentially the grid.
-        q_map = np.empty((nblocks, 2+nlegs+1), dtype=QDTYPE)
+        q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QDTYPE)
         q_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
         # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
         legbs = [l._get_block_sizes() for l in self.legs]
@@ -804,7 +806,7 @@ class LegPipe(LegCharge):
         # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
 
         # calculate total charges
-        qind = np.zeros((nblocks, 2+qnumber), dtype=QDTYPE)
+        qind = np.zeros((nblocks, 2 + qnumber), dtype=QDTYPE)
         if qnumber > 0:
             # similar scheme as for the block sizes above, but now for 1D arrays of charges
             legcharges = [(self.qconj * l.qconj) * l.qind[:, 2:] for l in self.legs]
@@ -868,7 +870,7 @@ class LegPipe(LegCharge):
             for each row of `qind_incoming` an index `j` such that
             ``self.q_map[j, 2:-1] == qind_incoming[j]``.
         """
-        assert(qind_incoming.shape[1] == self.nlegs)
+        assert (qind_incoming.shape[1] == self.nlegs)
         # calculate indices of q_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
         # by using the appropriate strides
         inds_before_perm = np.sum(qind_incoming * self._strides[np.newaxis, :], axis=1)
@@ -876,7 +878,6 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
-
 
 # ===== functions =====
 

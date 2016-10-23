@@ -170,8 +170,7 @@ html_static_path = ['sphinx_static']
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
-html_sidebars = { '**': ['localtoc.html', 'relations.html',
-                         'searchbox.html', 'globaltoc.html'], }
+html_sidebars = {'**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'], }
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -206,27 +205,23 @@ html_sidebars = { '**': ['localtoc.html', 'relations.html',
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'TenPydoc'
 
-
 # -- Options for LaTeX output ---------------------------------------------
 
 latex_elements = {
-# The paper size ('letterpaper' or 'a4paper').
-#'papersize': 'letterpaper',
+    # The paper size ('letterpaper' or 'a4paper').
+    #'papersize': 'letterpaper',
 
-# The font size ('10pt', '11pt' or '12pt').
-#'pointsize': '10pt',
+    # The font size ('10pt', '11pt' or '12pt').
+    #'pointsize': '10pt',
 
-# Additional stuff for the LaTeX preamble.
-#'preamble': '',
+    # Additional stuff for the LaTeX preamble.
+    #'preamble': '',
 }
 
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
-latex_documents = [
-  ('index', 'TenPy.tex', u'TenPy Documentation',
-   u'TenPy community', 'manual'),
-]
+latex_documents = [('index', 'TenPy.tex', u'TenPy Documentation', u'TenPy community', 'manual'), ]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
@@ -248,19 +243,14 @@ latex_documents = [
 # If false, no module index is generated.
 #latex_domain_indices = True
 
-
 # -- Options for manual page output ---------------------------------------
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    ('index', 'tenpylight', u'TenPy Documentation',
-     [u'TenPy community'], 1)
-]
+man_pages = [('index', 'tenpylight', u'TenPy Documentation', [u'TenPy community'], 1)]
 
 # If true, show URL addresses after external links.
 #man_show_urls = False
-
 
 # -- Options for Texinfo output -------------------------------------------
 
@@ -268,9 +258,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'TenPy', u'TenPy Documentation',
-   u'TenPy community', 'TenPy', 'One line description of project.',
-   'Miscellaneous'),
+    ('index', 'TenPy', u'TenPy Documentation', u'TenPy community', 'TenPy',
+     'One line description of project.', 'Miscellaneous'),
 ]
 
 # Documents to append as an appendix to all manuals.

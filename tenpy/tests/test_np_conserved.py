@@ -34,7 +34,7 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
     """generates a random npc.Array of given shape with random legcharges and entries."""
     legs = [gen_random_legcharge(s, chinfo) for s in shape]
     a = npc.Array.from_func(func, chinfo, legs, qtotal=qtotal, shape_kw=shape_kw)
-    a.set_leg_labels([chr(i+ord('a')) for i in range(a.rank)])
+    a.set_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
     if sort:
         _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
     return a
@@ -42,13 +42,13 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
 
 def project_multiple_axes(flat_array, perms, axes):
     for p, a in it.izip(perms, axes):
-        idx = [slice(None)]*flat_array.ndim
+        idx = [slice(None)] * flat_array.ndim
         idx[a] = p
         flat_array = flat_array[tuple(idx)]
     return flat_array
 
-
 # ------- test functions -------------------
+
 
 def test_npc_Array_conversion():
     # trivial
@@ -115,7 +115,7 @@ def test_npc_Array_labels():
             if t[l] is not None:
                 axes_l[i] = t[l]
         nst.eq_(tuple(a.get_leg_indices(axes_l)), axes)
-    nst.eq_(a.get_leg_index(-1), 1)     # negative indices
+    nst.eq_(a.get_leg_index(-1), 1)  # negative indices
 
 
 def test_npc_Array_project():
@@ -179,7 +179,7 @@ def test_npc_Array_itemacces():
     for idx, axes in [(0, 0), (4, 1), ([3, -2], [-1, 0])]:
         a_sl = a.take_slice(idx, axes)
         a_sl.test_sanity()
-        sl = [slice(None)]*a.rank
+        sl = [slice(None)] * a.rank
         try:
             for i, ax in zip(idx, axes):
                 sl[ax] = i
@@ -219,10 +219,8 @@ def test_npc_Array_itemacces():
 def test_npc_Array_reshape():
     a = random_Array((20, 15, 10), chinfo, sort=False)
     aflat = a.to_ndarray()
-    for comb_legs, transpose in [([[1]], [0, 1, 2]),
-                                 ([[1], [2]], [0, 1, 2]),
-                                 ([[0], [1], [2]], [0, 1, 2]),
-                                 ([[2, 0]], [1, 2, 0]),
+    for comb_legs, transpose in [([[1]], [0, 1, 2]), ([[1], [2]], [0, 1, 2]),
+                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
                                  ([[2, 0, 1]], [2, 0, 1])]:
         print 'combine legs', comb_legs
         acomb = a.combine_legs(comb_legs)  # just sorts second leg
@@ -241,7 +239,7 @@ def test_npc_Array_reshape():
         # find a index with non-zero entry
         idx = tuple([l.qind[i, 0] for l, i in zip(b.legs, b._qdata[0])])
     else:
-        idx = tuple([0]*b.rank)
+        idx = tuple([0] * b.rank)
     nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
 
 
@@ -253,14 +251,14 @@ def test_npc_Array_scale_axis():
     s2 = np.random.random((1, 1, a.shape[2]))
     b = a.scale_axis(s0.flatten(), 0)
     b.test_sanity()
-    npt.assert_equal(b.to_ndarray(), aflat*s0)
+    npt.assert_equal(b.to_ndarray(), aflat * s0)
     a.iscale_axis(s1.flatten(), 1)
     a.test_sanity()
     aflat = aflat * s1
     npt.assert_equal(a.to_ndarray(), aflat)
     c = a.scale_axis(s2.flatten(), -1)
     c.test_sanity()
-    npt.assert_equal(c.to_ndarray(), aflat*s2)
+    npt.assert_equal(c.to_ndarray(), aflat * s2)
 
 
 def test_npc_Array_conj():
@@ -276,6 +274,7 @@ def test_npc_Array_conj():
     a.test_sanity()
     print a.get_leg_labels()
     nst.eq_(a._conj_leg_label('(a*.(b.c*).(d*.e))'), '(a.(b*.c).(d.e*))')
+
 
 def test_npc_Array_norm():
     a = random_Array((15, 10), chinfo3, sort=True)
@@ -328,8 +327,8 @@ def test_npc_Array_ops():
         a2.test_sanity()
         aflat2 = op(aflat, s)
         eps = np.finfo(a.dtype).eps
-        assert(np.max(np.abs(a.to_ndarray() - aflat)) < eps)
-        assert(np.max(np.abs(a.to_ndarray() - aflat)) < eps)
+        assert (np.max(np.abs(a.to_ndarray() - aflat)) < eps)
+        assert (np.max(np.abs(a.to_ndarray() - aflat)) < eps)
 
 
 if __name__ == "__main__":
