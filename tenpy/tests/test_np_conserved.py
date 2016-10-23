@@ -231,6 +231,18 @@ def test_npc_Array_reshape():
         asplit = acomb.split_legs()
         asplit.test_sanity()
         npt.assert_equal(asplit.to_ndarray(), aflat.transpose(transpose))
+    b = random_Array((10, 1, 5, 1), chinfo3, sort=True)
+    bflat = b.to_ndarray()
+    bs = b.squeeze()
+    bs.test_sanity()
+    npt.assert_equal(bs.to_ndarray(), np.squeeze(bflat))
+    bs.test_sanity()
+    if b.stored_blocks > 0:
+        # find a index with non-zero entry
+        idx = tuple([l.qind[i, 0] for l, i in zip(b.legs, b._qdata[0])])
+    else:
+        idx = tuple([0]*b.rank)
+    nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
 
 
 def test_npc_Array_scale_axis():
@@ -264,6 +276,13 @@ def test_npc_Array_conj():
     a.test_sanity()
     print a.get_leg_labels()
     nst.eq_(a._conj_leg_label('(a*.(b.c*).(d*.e))'), '(a.(b*.c).(d.e*))')
+
+def test_npc_Array_norm():
+    a = random_Array((15, 10), chinfo3, sort=True)
+    aflat = a.to_ndarray().flatten()
+    for ord in [np.inf, -np.inf, 0, 1, -1, 2, -2, 3.]:
+        print "ord = ", ord
+        nst.eq_(a.norm(), np.linalg.norm(aflat))
 
 
 def test_npc_Array_ops():
@@ -324,4 +343,5 @@ if __name__ == "__main__":
     test_npc_Array_reshape()
     test_npc_Array_scale_axis()
     test_npc_Array_conj()
+    test_npc_Array_norm()
     test_npc_Array_ops()

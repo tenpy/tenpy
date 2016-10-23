@@ -49,8 +49,7 @@ import warnings
 import itertools
 
 # import public API from charges
-from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe,
-                      reverse_sort_perm)
+from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
 from . import charges   # for private functions
 
 from ..tools.math import toiterable
@@ -97,7 +96,7 @@ class Array(object):
         labels for the different legs
     _data : list of arrays
         the actual entries of the tensor
-    _qdata : 2D array (len(_data), rank)
+    _qdata : 2D array (len(_data), rank), dtype np.intp
         for each of the _data entries the qind of the different legs.
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
@@ -124,7 +123,7 @@ class Array(object):
         self.qtotal = self.chinfo.make_valid(qtotal)
         self.labels = {}
         self._data = []
-        self._qdata = np.empty((0, self.rank), QDTYPE)
+        self._qdata = np.empty((0, self.rank), dtype=np.intp)
         self._qdata_sorted = True
         self.test_sanity()
 
@@ -187,7 +186,7 @@ class Array(object):
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
         res = cls(chinfo, legs, dtype)
         res._data = [data_flat]
-        res._qdata = np.zeros((1, res.rank), QDTYPE)
+        res._qdata = np.zeros((1, res.rank), np.intp)
         res._qdata_sorted = True
         res.test_sanity()
         return res
@@ -242,7 +241,7 @@ class Array(object):
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge")
         res._data = data
-        res._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(qdata), res.rank))
+        res._qdata = np.array(qdata, dtype=np.intp).reshape((len(qdata), res.rank))
         res._qdata_sorted = True
         res.test_sanity()
         return res
@@ -303,7 +302,7 @@ class Array(object):
             data.append(block)
             qdata.append(qindices)
         res._data = data
-        res._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(qdata), res.rank))
+        res._qdata = np.array(qdata, dtype=np.intp).reshape((len(qdata), res.rank))
         res._qdata_sorted = True  # _iter_all_blocks is in lexiographic order
         res.test_sanity()
         return res
@@ -312,7 +311,7 @@ class Array(object):
         """return a shallow copy of self with only zeros as entries, containing no `_data`"""
         res = self.copy(deep=False)
         res._data = []
-        res._qdata = np.empty((0, res.rank), dtype=QDTYPE)
+        res._qdata = np.empty((0, res.rank), dtype=np.intp)
         res._qdata_sorted = True
         return res
 
@@ -331,6 +330,8 @@ class Array(object):
                     l.chinfo, self.chinfo))
         if self._qdata.shape != (self.stored_blocks, self.rank):
             raise ValueError("_qdata shape wrong")
+        if self._qdata.dtype != np.intp:
+            raise ValueError("wront dtype of _qdata")
         if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
             raise ValueError("invalid qind in _qdata")
         if self._qdata_sorted:
@@ -616,7 +617,7 @@ class Array(object):
         axes = np.array(axes, dtype=np.intp)
         keep_axes = np.array(keep_axes, dtype=np.intp)
         keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
-        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)].reshape((-1, len(keep_axes)))
+        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)]
         # res._qdata_sorted is not changed
         # determine the slices to take on _data
         sl = [slice(None)] * self.rank
@@ -924,6 +925,50 @@ class Array(object):
         res.set_leg_labels(labels)
         return res
 
+    def squeeze(self, axes=None):
+        """Like ``np.squeeze``.
+
+        If a squeezed leg has non-zero charge, this charge is added to :attr:`qtotal`.
+
+        Parameters
+        ----------
+        axes : None | (iterable of) {int|str}
+            labels or indices of the legs which should be 'squeezed', i.e. the legs removed.
+            The corresponding legs must be trivial, i.e., have `ind_len` 1.
+
+        Returns
+        -------
+        squeezed : :class:Array | scalar
+            A scalar of ``self.dtype``, if all axes were squeezed.
+            Else a copy of ``self`` with reduced ``rank`` as specified by `axes`.
+        """
+        if axes is None:
+            axes = tuple([a for a in range(self.rank) if self.shape[a] == 1])
+        else:
+            axes = tuple(self.get_leg_indices(toiterable(axes)))
+        for a in axes:
+            if self.shape[a] != 1:
+                raise ValueError("Tried to squeeze non-unit leg")
+        keep = [a for a in range(self.rank) if a not in axes]
+        if len(keep) == 0:
+            index = tuple([0]*self.rank)
+            return self[index]
+        res = self.copy(deep=False)
+        # adjust qtotal
+        res.legs = tuple([self.legs[a] for a in keep])
+        res._set_shape()
+        for a in axes:
+            res.qtotal -= self.legs[a].get_charge(0)
+        res.qtotal = self.chinfo.make_valid(res.qtotal)
+
+        labels = self.get_leg_labels()
+        res.set_leg_labels([labels[a] for a in keep])
+
+        res._data = [np.squeeze(t, axis=axes).copy() for t in self._data]
+        res._qdata = self._qdata[:, np.array(keep)]
+        # res._qdata_sorted doesn't change
+        return res
+
     # data manipulation =======================================================
 
     def astype(self, dtype):
@@ -948,6 +993,12 @@ class Array(object):
         cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
         return cp
 
+    def imake_contiguous(self):
+        """make each of the blocks contigous with `np.ascontigousarray`.
+
+        Might speed up subsequent tensordot & co, if the blocks were not contiguous before."""
+        self._data = [np.ascontigousarray(t) for t in self.dat]
+
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
         """Removes ``self._data`` blocks with *norm* less than cutoff. In place.
 
@@ -966,7 +1017,7 @@ class Array(object):
         norm = np.array([np.linalg.norm(t, ord=norm_order) for t in self._data])
         keep = (norm > cutoff)  # bool array
         self._data = [t for t, k in itertools.izip(self._data, keep) if k]
-        self._qdata = self._qdata[keep].reshape((len(keep), self.rank))
+        self._qdata = self._qdata[keep]
         # self._qdata_sorted is preserved
         return self
 
@@ -1024,7 +1075,7 @@ class Array(object):
             block_masks.append(bm)
             q = self._qdata[:, a] = m_qind[self._qdata[:, a]]
             piv = (q >= 0)
-            self._qdata = self._qdata[piv].reshape((-1, self.rank))
+            self._qdata = self._qdata[piv]  # keeps dimension
             # self._qdata_sorted is preserved
             proj_data = proj_data[piv]
         self._set_shape()
@@ -1104,7 +1155,7 @@ class Array(object):
         # data blocks copied
         res._data = data
         res._qdata_sorted = False
-        res_qdata = res._qdata = np.empty((len(data), self.rank), dtype=QDTYPE)
+        res_qdata = res._qdata = np.empty((len(data), self.rank), dtype=np.intp)
         for qindices, i in qdata.iteritems():
             res_qdata[i] = qindices
         return res
@@ -1250,6 +1301,43 @@ class Array(object):
         res.labels = labels
         return res
 
+    def norm(self, ord=None, convert_to_float=True):
+        r"""Equivalent to `np.linalg.norm(self.to_ndarray().flatten(), ord)`.
+
+        In contrast to numpy, we don't distinguish between matrices and vectors,
+        but simply calculate the norm for the **flat** (block) data.
+        The usual `ord`-norm is defined as  :math:`(\sum_i |a_i|^{ord} )^{1/ord}`.
+
+        ==========  ================================
+        ord         norm
+        ==========  ================================
+        None/'fro'  Frobenius norm (same as 2-norm)
+        inf         max(abs(x))
+        -inf        min(abs(x))
+        0           sum(x != 0)  (not the '0-norm')
+        other       ususal `ord`-norm
+        ==========  ================================
+
+        Parameters
+        ----------
+        ord :
+            the order of the Norm. See table above
+        convert_to_float :
+            convert integer to float before calculating the norm, avoiding int overflow
+
+        Returns
+        -------
+        norm : float
+            the norm over the *flat* data
+        """
+        if convert_to_float:
+            new_type = np.find_common_type([np.float_, self.dtype], [])  # int -> float
+            if new_type != self.dtype:
+                return self.astype(new_type).norm(ord, False)
+        block_norms = [np.linalg.norm(t.reshape((-1,)), ord) for t in self._data]
+        # ``.reshape((-1,)) gives a view and is thus faster than ``.flatten()``
+        return np.linalg.norm(block_norms, ord)
+
     def __neg__(self):
         """return ``-self``"""
         return self.unary_blockwise(np.negative)
@@ -1307,7 +1395,7 @@ class Array(object):
                     j += 1
                 # if both are zero, we assume f(0, 0) = 0
             self._data = data
-            self._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(data), self.rank))
+            self._qdata = np.array(qdata, dtype=np.intp).reshape((len(data), self.rank))
             # ``self._qdata_sorted = True`` was set by self.isort_qdata
         if len(self._data) > 0:
             self.dtype = self._data[0].dtype
@@ -1320,6 +1408,17 @@ class Array(object):
         """
         res = self.copy(deep=False)
         return res.ibinary_blockwise(func, other, *args, **kwargs)
+
+    def matvec(self, other):
+        """This function is used by the Lanczos algorithm needed for DMRG.
+
+        It is supposed to calculate the matrix - vector - product
+        for a rank-2 matrix ``self`` and a rank-1 vector `other`.
+
+        .. todo :
+            why not define something like a `dot` and use that?
+        """
+        return tensordot(self, y, axes=1)
 
     def __add__(self, other):
         """return self + other"""
@@ -1561,7 +1660,7 @@ class Array(object):
                 new_data.append(old_block.copy())
                 new_qdata.append(new_qindices)
         cp._data = new_data
-        cp._qdata = np.array(new_qdata, dtype=QDTYPE).reshape((len(new_data), self.rank))
+        cp._qdata = np.array(new_qdata, dtype=np.intp).reshape((len(new_data), self.rank))
         cp._qsorted = False
         return cp
 
@@ -1912,7 +2011,7 @@ class Array(object):
         res._set_shape()
 
         # get new qdata by stacking columns
-        tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=QDTYPE)
+        tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
         tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
         tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
 
@@ -1938,10 +2037,10 @@ class Array(object):
                 data.append(new_block.copy())   # copy, not view
                 qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
         if len(data) > 0:
-            res._qdata = np.array(qdata, dtype=QDTYPE)
+            res._qdata = np.array(qdata, dtype=np.intp)
             res._qdata_sorted = False
         else:
-            res._qdata = np.empty((0, res.rank), dtype=QDTYPE)
+            res._qdata = np.empty((0, res.rank), dtype=np.intp)
             res._qdata_sorted = True
         res._data = data
         return res
