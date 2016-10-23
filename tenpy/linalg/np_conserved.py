@@ -43,6 +43,7 @@ and :class:`~tenpy.linalg.charges.LegCharge` with additional documentation.
 from __future__ import division
 
 import numpy as np
+import scipy as sp
 import copy as copy_
 import warnings
 import itertools
@@ -104,7 +105,7 @@ class Array(object):
 
     Notes
     -----
-    The Array
+    While some methods return deep copies, other return just "views".
 
     .. todo ::
 
@@ -131,7 +132,27 @@ class Array(object):
         """Return a (deep or shallow) copy of self.
 
         **Both** deep and shallow copies will share ``chinfo`` and the `LegCharges` in ``legs``.
-        In contrast to a deep copy, the shallow copy will also share the tensor entries.
+
+        In contrast to a deep copy, the shallow copy will also share the tensor entries,
+        namely the *same* instances of ``_qdata`` and ``_data`` and ``labels``
+        (and other 'immutable' properties like the shape or dtype).
+
+        .. note ::
+
+            Shallow copies are *not* recommended unless you know the consequences!
+            See the following examples illustrating some of the pitfalls.
+
+        Examples
+        --------
+        >>> b = a.copy(deep=False)  # shallow copy
+        >>> b[1, 2] = 4.
+
+        Here, the original `a` is changed if and only if the corresponding block
+        existed in `a` before.
+
+        >>> a *= 2
+
+        This does *not* change `b`...
         """
         if deep:
             cp = copy_.deepcopy(self)
@@ -139,9 +160,10 @@ class Array(object):
             cp = copy_.copy(self)
             # some things should be copied even for shallow copies
             cp.qtotal = cp.qtotal.copy()
+            cp.lables = cp.labels.copy()
         # even deep copies can share chargeinfo and legs
-        cp.chinfo = self.chinfo
-        cp.legs = self.legs[:]
+        cp.chinfo = self.chinfo  # same instance
+        cp.legs = self.legs[:]  # copied list with same instances of legs
         return cp
 
     @classmethod
@@ -220,10 +242,7 @@ class Array(object):
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge")
         res._data = data
-        if len(qdata) == 0:
-            res._qdata = np.empty((0, res.rank), dtype=QDTYPE)
-        else:
-            res._qdata = np.array(qdata, dtype=QDTYPE)
+        res._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(qdata), res.rank))
         res._qdata_sorted = True
         res.test_sanity()
         return res
@@ -284,10 +303,7 @@ class Array(object):
             data.append(block)
             qdata.append(qindices)
         res._data = data
-        if len(qdata) == 0:
-            res._qdata = np.empty((0, res.rank), QDTYPE)
-        else:
-            res._qdata = np.array(qdata, dtype=QDTYPE)
+        res._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(qdata), res.rank))
         res._qdata_sorted = True  # _iter_all_blocks is in lexiographic order
         res.test_sanity()
         return res
@@ -296,7 +312,7 @@ class Array(object):
         """return a shallow copy of self with only zeros as entries, containing no `_data`"""
         res = self.copy(deep=False)
         res._data = []
-        res._qdata = np.empty((0, res.rank), QDTYPE)
+        res._qdata = np.empty((0, res.rank), dtype=QDTYPE)
         res._qdata_sorted = True
         return res
 
@@ -338,6 +354,120 @@ class Array(object):
     def stored_blocks(self):
         """the number of (non-zero) blocks stored in self._data"""
         return len(self._data)
+
+    # labels ==================================================================
+
+    def get_leg_index(self, label):
+        """translate a leg-index or leg-label to a leg-index.
+
+        Parameters
+        ----------
+        label : int | string
+            eather the leg-index directly or a label (string) set before.
+
+        Returns
+        -------
+        leg_index : int
+            the index of the label
+
+        See also
+        --------
+        get_leg_indices : calls get_leg_index for a list of labels
+        set_leg_labels : set the labels of different legs.
+        """
+        res = self.labels.get(label, label)
+        if res > self.rank:
+            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
+        elif res < 0:
+            res += self.rank
+        return res
+
+    def get_leg_indices(self, labels):
+        """Translate a list of leg-indices or leg-labels to leg indices.
+
+        Parameters
+        ----------
+        labels : iterable of string/int
+            The leg-labels (or directly indices) to be translated in leg-indices
+
+        Returns
+        -------
+        leg_indices : list of int
+            the translated labels.
+
+        See also
+        --------
+        get_leg_index : used to translate each of the single entries.
+        set_leg_labels : set the labels of different legs.
+        """
+        return [self.get_leg_index(l) for l in labels]
+
+    def set_leg_labels(self, labels):
+        """Return labels for the legs.
+
+        Introduction to leg labeling can be found in :doc:`../IntroNpc`.
+
+        Parameters
+        ----------
+        labels : iterable (strings | None), len=self.rank
+            One label for each of the legs.
+            An entry can be None for an anonymous leg.
+
+        See also
+        --------
+        get_leg: translate the labels to indices
+        get_legs: calls get_legs for an iterable of labels
+        """
+        if len(labels) != self.rank:
+            raise ValueError("Need one leg label for each of the legs.")
+        self.labels = {}
+        for i, l in enumerate(labels):
+            if l == '':
+                raise ValueError("use `None` for empty labels")
+            if l is not None:
+                self.labels[l] = i
+
+    def get_leg_labels(self):
+        """Return tuple of the leg labels, with `None` for anonymous legs."""
+        lb = [None] * self.rank
+        for k, v in self.labels.iteritems():
+            lb[v] = k
+        return tuple(lb)
+
+    # string output ===========================================================
+
+    def __repr__(self):
+        return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
+            self.shape, self.chinfo, self.get_leg_labels())
+
+    def __str__(self):
+        res = "\n".join([repr(self)[:-1], str(self.to_ndarray()), ">"])
+        return res
+
+    def sparse_stats(self):
+        """Returns a string detailing the sparse statistics"""
+        total = np.prod(self.shape)
+        if total is 0:
+            return "Array without entries, one axis is empty."
+        nblocks = self.stored_blocks
+        stored = self.size
+        nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
+        bs = np.array([t.size for t in self._data], dtype=np.float)
+        if nblocks > 0:
+            bs1 = (np.sum(bs**0.5)/nblocks)**2
+            bs2 = np.sum(bs)/nblocks
+            bs3 = (np.sum(bs**2.0)/nblocks)**0.5
+            captsparse = float(nonzero) / stored
+        else:
+            captsparse = 1.
+            bs1, bs2, bs3 = 0, 0, 0
+        res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
+            "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
+            "Captured sparsity: {captsparse:g}\n"  \
+            "Effective block sizes (second entry=mean): [{bs1:.2f}, {bs2:.2f}, {bs3:.2f}]"
+
+        return res.format(nonzero=nonzero, total=total, nztotal=nonzero/total, nblocks=nblocks,
+                          stored=stored, captsparse=captsparse, bs1=bs1, bs2=bs2, bs3=bs3)
 
     # accessing entries =======================================================
 
@@ -486,7 +616,7 @@ class Array(object):
         axes = np.array(axes, dtype=np.intp)
         keep_axes = np.array(keep_axes, dtype=np.intp)
         keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
-        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)].copy()
+        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)].reshape((-1, len(keep_axes)))
         # res._qdata_sorted is not changed
         # determine the slices to take on _data
         sl = [slice(None)] * self.rank
@@ -594,7 +724,7 @@ class Array(object):
         if not len(sort) == len(bunch) == self.rank:
             raise ValueError("Wrong len for bunch or sort")
         cp = self.copy(deep=False)
-        cp._qdata = cp._qdata.copy(self)
+        cp._qdata = cp._qdata.copy()  # Array views may share _qdata, so make a copy first
         for li in xrange(self.rank):
             if sort[li] is not False:
                 if sort[li] is True:
@@ -617,7 +747,7 @@ class Array(object):
             cp = cp._bunch(bunch)  # bunch does not permute...
         return tuple(sort), cp
 
-    def sort_qdata(self):
+    def isort_qdata(self):
         """(lex)sort ``self._qdata``. In place.
 
         Lexsort ``self._qdata`` and ``self._data`` and set ``self._qdata_sorted = True``.
@@ -836,7 +966,7 @@ class Array(object):
         norm = np.array([np.linalg.norm(t, ord=norm_order) for t in self._data])
         keep = (norm > cutoff)  # bool array
         self._data = [t for t, k in itertools.izip(self._data, keep) if k]
-        self._qdata = self._qdata[keep]
+        self._qdata = self._qdata[keep].reshape((len(keep), self.rank))
         # self._qdata_sorted is preserved
         return self
 
@@ -849,7 +979,7 @@ class Array(object):
 
         .. warning ::
             Although it is possible to use an 1D int array as a mask, the order is ignored!
-            If you really need to permute an axis, use :meth:`permute`.
+            If you need to permute an axis, use :meth:`permute` or :meth:`sort_legcharge`.
 
         Parameters
         ----------
@@ -882,6 +1012,8 @@ class Array(object):
             if m.dtype != np.bool_:
                 mask[i] = np.zeros(self.shape[axes[i]], dtype=np.bool_)
                 np.put(mask[i], m, True)
+        # Array views may share ``_qdata`` views, so make a copy of _qdata before manipulating
+        self._qdata = self._qdata.copy()
         block_masks = []
         proj_data = np.arange(self.stored_blocks)
         map_qind = []
@@ -892,7 +1024,7 @@ class Array(object):
             block_masks.append(bm)
             q = self._qdata[:, a] = m_qind[self._qdata[:, a]]
             piv = (q >= 0)
-            self._qdata = self._qdata[piv]
+            self._qdata = self._qdata[piv].reshape((-1, self.rank))
             # self._qdata_sorted is preserved
             proj_data = proj_data[piv]
         self._set_shape()
@@ -1012,12 +1144,16 @@ class Array(object):
 
         Rescale to ``new_self[i1, ..., i_axis, ...] = s[i_axis] * self[i1, ..., i_axis, ...]``.
 
-        Paremeters
+        Parameters
         ----------
         s : 1D array, len=self.shape[axis]
             the vector with which the axis should be scaled
         axis : str|int
             the leg label or index for the axis which should be scaled.
+
+        See also
+        --------
+        iproject : can be used to discard indices for which s is zero.
         """
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
@@ -1039,117 +1175,250 @@ class Array(object):
         res.iscale_axis(s, axis)
         return res
 
-    # labels ==================================================================
+    # block-wise operations == element wise with numpy ufunc
 
-    def get_leg_index(self, label):
-        """translate a leg-index or leg-label to a leg-index.
+    def iunary_blockwise(self, func, *args, **kwargs):
+        """Roughly ``self = f(self)``, block-wise. In place.
 
-        Parameters
-        ----------
-        label : int | string
-            eather the leg-index directly or a label (string) set before.
+        Applies an unary function `func` to the non-zero blocks in ``self._data``.
 
-        Returns
-        -------
-        leg_index : int
-            the index of the label
-
-        See also
-        --------
-        get_leg_indices : calls get_leg_index for a list of labels
-        set_leg_labels : set the labels of different legs.
-        """
-        res = self.labels.get(label, label)
-        if res > self.rank:
-            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
-        elif res < 0:
-            res += self.rank
-        return res
-
-    def get_leg_indices(self, labels):
-        """Translate a list of leg-indices or leg-labels to leg indices.
+        .. note ::
+            Assumes implicitly that ``func(np.zeros(...), *args, **kwargs)`` gives 0,
+            since we don't let `func` act on zero blocks!
 
         Parameters
         ----------
-        labels : iterable of string/int
-            The leg-labels (or directly indices) to be translated in leg-indices
+        func : function
+            A function acting on flat arrays, returning flat arrays.
+            It is called like ``new_block = func(block, *args, **kwargs)``.
+        *args :
+            additional arguments given to function *after* the block
+        **kwargs :
+            keyword arguments given to the function
 
-        Returns
-        -------
-        leg_indices : list of int
-            the translated labels.
-
-        See also
+        Examples
         --------
-        get_leg_index : used to translate each of the single entries.
-        set_leg_labels : set the labels of different legs.
+        >>> a.iunaray_blockwise(np.real)  # get real part
+        >>> a.iunaray_blockwise(np.conj)  # same data as a.iconj(), but doesn't charge conjugate.
         """
-        return [self.get_leg_index(l) for l in labels]
+        self._data = [func(t, *args, **kwargs) for t in self._data]
+        if len(self._data) > 0:
+            self.dtype = self._data[0].dtype
+        return self
 
-    def set_leg_labels(self, labels):
-        """Return labels for the legs.
+    def unary_blockwise(self, func, *args, **kwargs):
+        """Roughly ``return func(self)``, block-wise. Copies.
 
-        Introduction to leg labeling can be found in :doc:`../IntroNpc`.
+        Same as :meth:`iunary_blockwise`, but makes a **shallow** copy first."""
+        res = self.copy(deep=False)
+        return res.iunary_blockwise(func, *args, **kwargs)
+
+    def iconj(self, complex_conj=True):
+        """wraper to :meth:`self.conj` with ``inplace=True``"""
+        self.conj(complex_conj, inplace=True)
+
+    def conj(self, complex_conj=True, inplace=False):
+        """conjugate: complex conjugate data, conjugate charge data.
+
+        Conjugate all legs, set negative qtotal.
+
+        Labeling: takes 'a' -> 'a*', 'a*'-> 'a' and
+        '(a,(b*,c))' -> '(a*, (b, c*))'
 
         Parameters
         ----------
-        labels : iterable (strings | None), len=self.rank
-            One label for each of the legs.
-            An entry can be None for an anonymous leg.
-
-        See also
-        --------
-        get_leg: translate the labels to indices
-        get_legs: calls get_legs for an iterable of labels
+        complex_conj : bool
+            Wheter the data should be complex conjugated.
+        inplace : bool
+            wheter to apply changes to `self`, or to return a *deep* copy
         """
-        if len(labels) != self.rank:
-            raise ValueError("Need one leg label for each of the legs.")
-        self.labels = {}
-        for i, l in enumerate(labels):
-            if l is not None:
-                self.labels[l] = i
-
-    def get_leg_labels(self):
-        """Return tuple of the leg labels, with `None` for anonymous legs."""
-        lb = [None] * self.rank
-        for k, v in self.labels.iteritems():
-            lb[v] = k
-        return tuple(lb)
-
-    # string output ===========================================================
-
-    def __repr__(self):
-        return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(
-            self.shape, self.chinfo, self.get_leg_labels())
-
-    def __str__(self):
-        res = "\n".join([repr(self)[:-1], str(self.to_ndarray()), ">"])
-        return res
-
-    def sparse_stats(self):
-        """Returns a string detailing the sparse statistics"""
-        total = np.prod(self.shape)
-        if total is 0:
-            return "Array without entries, one axis is empty."
-        nblocks = self.stored_blocks
-        stored = self.size
-        nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
-        bs = np.array([t.size for t in self._data], dtype=np.float)
-        if nblocks > 0:
-            bs1 = (np.sum(bs**0.5)/nblocks)**2
-            bs2 = np.sum(bs)/nblocks
-            bs3 = (np.sum(bs**2.0)/nblocks)**0.5
-            captsparse = float(nonzero) / stored
+        if self.dtype.kind == 'c' and complex_conj:
+            if inplace:
+                res = self.iunary_blockwise(np.conj)
+            else:
+                res = self.unary_blockwise(np.conj)
         else:
-            captsparse = 1.
-            bs1, bs2, bs3 = 0, 0, 0
-        res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
-            "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
-            "Captured sparsity: {captsparse:g}\n"  \
-            "Effective block sizes (second entry=mean): [{bs1:.2f}, {bs2:.2f}, {bs3:.2f}]"
+            if inplace:
+                res = self
+            else:
+                res = self.copy(deep=True)
+        res.qtotal = -res.qtotal
+        res.legs = [l.conj() for l in res.legs]
+        labels = {}
+        for lab, ax in res.labels.iteritems():
+            labels[self._conj_leg_label(lab)] = ax
+        res.labels = labels
+        return res
 
-        return res.format(nonzero=nonzero, total=total, nztotal=nonzero/total, nblocks=nblocks,
-                          stored=stored, captsparse=captsparse, bs1=bs1, bs2=bs2, bs3=bs3)
+    def __neg__(self):
+        """return ``-self``"""
+        return self.unary_blockwise(np.negative)
+
+    def ibinary_blockwise(self, func, other, *args, **kwargs):
+        """Roughly ``self = func(self, other)``, block-wise. In place.
+
+        Applies a binary function 'block-wise' to the non-zero blocks of
+        ``self._data`` and ``other._data``, storing result in place.
+        Assumes that `other` is an :class:`Array` as well, with the same shape
+        and compatible legs.
+
+        .. note ::
+            Assumes implicitly that
+            ``func(np.zeros(...), np.zeros(...), *args, **kwargs)`` gives 0,
+            since we don't let `func` act on zero blocks!
+
+        Examples
+        --------
+        >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
+        >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
+        """
+        for self_leg, other_leg in zip(self.legs, other.legs):
+            self_leg.test_equal(other_leg)
+        self.isort_qdata()
+        other.isort_qdata()
+
+        adata = self._data
+        bdata = other._data
+        aq = self._qdata
+        bq = other._qdata
+        Na, Nb = len(aq), len(bq)
+
+        # If the q_dat structure is identical, we can immediately run through the data.
+        if Na == Nb and np.array_equiv(aq, bq):
+            self._data = [func(at, bt, *args, **kwargs)
+                          for at, bt in itertools.izip(adata, bdata)]
+        else:  # have to step through comparing left and right qdata
+            i, j = 0, 0
+            qdata = []
+            data = []
+            while i < Na or j < Nb:
+                if tuple(aq[i]) == tuple(bq[j]):  # a and b are non-zero
+                    data.append(func(adata[i], bdata[j], *args, **kwargs))
+                    qdata.append(aq[i])
+                    i += 1
+                    j += 1
+                elif j >= Nb or (tuple(aq[i, ::-1]) < tuple(bq[j, ::-1])):  # b is 0
+                    data.append(func(adata[i], np.zeros_like(adata[i]), *args, **kwargs))
+                    qdata.append(aq[i])
+                    i += 1
+                else:  # a is 0
+                    data.append(func(np.zeros_like(bdata[j]), bdata[j], *args, **kwargs))
+                    qdata.append(bq[j])
+                    j += 1
+                # if both are zero, we assume f(0, 0) = 0
+            self._data = data
+            self._qdata = np.array(qdata, dtype=QDTYPE).reshape((len(data), self.rank))
+            # ``self._qdata_sorted = True`` was set by self.isort_qdata
+        if len(self._data) > 0:
+            self.dtype = self._data[0].dtype
+        return self
+
+    def binary_blockwise(self, func, other, *args, **kwargs):
+        """Roughly ``return func(self, other)``, block-wise. Copies.
+
+        Same as :meth:`ibinary_blockwise`, but makes a **shallow** copy first.
+        """
+        res = self.copy(deep=False)
+        return res.ibinary_blockwise(func, other, *args, **kwargs)
+
+    def __add__(self, other):
+        """return self + other"""
+        if isinstance(other, Array):
+            return self.binary_blockwise(np.add, other)
+        elif sp.isscalar(other):
+            warnings.warn("block-wise add ignores zero blocks!")
+            return self.unary_blockwise(np.add, other)
+        elif isinstance(other, np.ndarray):
+            return self.to_ndarray().__add__(other)
+        raise NotImplemented  # unknown type of other
+
+    def __radd__(self, other):
+        """return other + self"""
+        return self.__add__(other)  # (assume commutativity of self.dtype)
+
+    def __iadd__(self, other):
+        """self += other"""
+        if isinstance(other, Array):
+            return self.ibinary_blockwise(np.add, other)
+        elif sp.isscalar(other):
+            warnings.warn("block-wise add ignores zero blocks!")
+            return self.iunary_blockwise(np.add, other)
+        # can't convert to numpy array in place, thus no ``self += ndarray``
+        raise NotImplemented  # unknown type of other
+
+    def __sub__(self, other):
+        """return self - other"""
+        if isinstance(other, Array):
+            return self.binary_blockwise(np.subtract, other)
+        elif sp.isscalar(other):
+            warnings.warn("block-wise subtract ignores zero blocks!")
+            return self.unary_blockwise(np.subtract, other)
+        elif isinstance(other, np.ndarray):
+            return self.to_ndarray().__sub__(other)
+        raise NotImplemented  # unknown type of other
+
+    def __isub__(self, other):
+        """self -= other"""
+        if isinstance(other, Array):
+            return self.ibinary_blockwise(np.subtract, other)
+        elif sp.isscalar(other):
+            warnings.warn("block-wise subtract ignores zero blocks!")
+            return self.iunary_blockwise(np.subtract, other)
+        # can't convert to numpy array in place, thus no ``self -= ndarray``
+        raise NotImplementedError()
+
+    def __mul__(self, other):
+        """return ``self * other`` for scalar ``other``
+
+        Use explicit functions for matrix multiplication etc."""
+        if sp.isscalar(other):
+            if other == 0.:
+                return self.zeros_like()
+            return self.unary_blockwise(np.multiply, other)
+        raise NotImplemented
+
+    def __rmul__(self, other):
+        """return ``other * self`` for scalar `other`"""
+        return self * other  # (assumes commutativity of self.dtype)
+
+    def __imul__(self, other):
+        """``self *= other`` for scalar `other`"""
+        if sp.isscalar(other):
+            if other == 0.:
+                self._data = []
+                self._qdata = np.empty((0, self.rank), np.intp)
+                self._qdata_sorted = True
+                return self
+            return self.iunary_blockwise(np.multiply, other)
+        raise NotImplemented
+
+    def __truediv__(self, other):
+        """return ``self / other`` for scalar `other` with ``__future__.division``."""
+        if sp.isscalar(other):
+            if other == 0.:
+                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
+                    type(self), type(other)))
+            return self.__mul__(1./other)
+        raise NotImplemented
+
+    def __div__(self, other):
+        """``self / other`` for scalar `other` without ``__future__.division``.
+
+        Still broadcast to floats."""
+        return self.__truediv__(other)
+
+    def __itruediv__(self, other):
+        """``self /= other`` for scalar `other`` with ``__future__.division``."""
+        if sp.isscalar(other):
+            if other == 0.:
+                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
+                    type(self), type(other)))
+            return self.__imul__(1./other)
+        raise NotImplemented
+
+    def __idiv__(self, other):
+        """``self /= other`` for scalar `other`` without ``__future__.division``."""
+        return self.__itruediv__(other)
 
     # private functions =======================================================
 
@@ -1292,7 +1561,7 @@ class Array(object):
                 new_data.append(old_block.copy())
                 new_qdata.append(new_qindices)
         cp._data = new_data
-        cp._qdata = np.array(new_qdata, dtype=QDTYPE)
+        cp._qdata = np.array(new_qdata, dtype=QDTYPE).reshape((len(new_data), self.rank))
         cp._qsorted = False
         return cp
 
@@ -1612,7 +1881,7 @@ class Array(object):
                 new_block_view = new_block[sl]
                 # reshape block while copying
                 new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
-        res._qdata = qdata_s[diffs[:-1]]
+        res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
         res._qdata_sorted = True
         res._data = data
         return res
@@ -1680,7 +1949,8 @@ class Array(object):
     def _split_leg_label(self, label, count):
         """Revert the combination of labels performed in :meth:`_combine_legs`.
 
-        Return a list of `count` labels corresponding to the original labels before 'combine_legs'.
+        Return a list of labels corresponding to the original labels before 'combine_legs'.
+        Test that it splits into `count` labels.
 
         Examples
         --------
@@ -1708,6 +1978,24 @@ class Array(object):
             if res[i][0] == '?':
                 res[i] = None
         return res
+
+    def _conj_leg_label(self, label):
+        """conjugate a leg `label`.
+
+        Takes ``'a' -> 'a*'; 'a*'-> 'a'; '(a.(b*.c))' -> '(a*.(b.c*))'``"""
+        # first insert '*' after each label, taking into account recursion of LegPipes
+        res = []
+        beg = 0
+        for i in range(1, len(label)):
+            if label[i-1] != ')' and label[i] in '.)':
+                res.append(label[beg:i])
+                beg = i
+        res.append(label[beg:])
+        label = '*'.join(res)
+        if label[-1] != ')':
+            label += '*'
+        # remove '**' entries
+        return label.replace('**', '')
 
 
 # functions ====================================================================

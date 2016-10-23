@@ -90,7 +90,7 @@ def test_npc_Array_sort():
     _, a_sb = a_s.sort_legcharge(False, True)
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # bunch after sort
     npt.assert_equal(a_sb._qdata_sorted, False)
-    a_sb.sort_qdata()
+    a_sb.isort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
     # and for larger random array
     a = random_Array((20, 15, 10), chinfo2, sort=False)
@@ -100,7 +100,7 @@ def test_npc_Array_sort():
     _, a_sb = a_s.sort_legcharge(False, True)
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # bunch after sort
     npt.assert_equal(a_sb._qdata_sorted, False)
-    a_sb.sort_qdata()
+    a_sb.isort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
 
 
@@ -234,7 +234,7 @@ def test_npc_Array_reshape():
 
 
 def test_npc_Array_scale_axis():
-    a = random_Array((5, 15, 10), chinfo2, sort=True)
+    a = random_Array((5, 15, 10), chinfo3, sort=True)
     aflat = a.to_ndarray()
     s0 = np.random.random((a.shape[0], 1, 1))
     s1 = np.random.random((1, a.shape[1], 1))
@@ -251,6 +251,68 @@ def test_npc_Array_scale_axis():
     npt.assert_equal(c.to_ndarray(), aflat*s2)
 
 
+def test_npc_Array_conj():
+    a = random_Array((15, 10), chinfo3, sort=True)
+    a.set_leg_labels(['a', 'b*'])
+    aflat = a.to_ndarray()
+    b = a.conj()
+    b.test_sanity()
+    npt.assert_equal(a.to_ndarray(), aflat)
+    npt.assert_equal(b.to_ndarray(), aflat.conj())
+    a.iconj()
+    npt.assert_equal(a.to_ndarray(), aflat.conj())
+    a.test_sanity()
+    print a.get_leg_labels()
+    nst.eq_(a._conj_leg_label('(a*.(b.c*).(d*.e))'), '(a.(b*.c).(d.e*))')
+
+
+def test_npc_Array_ops():
+    a = random_Array((15, 10), chinfo3, sort=True)
+    b = npc.Array.from_func(np.random.random, a.chinfo, a.legs, qtotal=a.qtotal, shape_kw='size')
+    s = 3.12
+    aflat = a.to_ndarray()
+    bflat = b.to_ndarray()
+    import operator as Op
+    # addition / subtraction
+    for op in [Op.add, Op.sub, Op.iadd, Op.isub]:
+        print op.__name__
+        a2 = op(a, b)
+        a.test_sanity()
+        a2.test_sanity()
+        aflat2 = op(aflat, bflat)
+        npt.assert_equal(a.to_ndarray(), aflat)
+        npt.assert_equal(a2.to_ndarray(), aflat2)
+    npt.assert_equal(b.to_ndarray(), bflat)  # should not have been modified...
+    # multiplication
+    for op in [Op.mul, Op.imul]:
+        print op.__name__
+        a2 = op(a, s)
+        a.test_sanity()
+        a2.test_sanity()
+        aflat2 = op(aflat, s)
+        npt.assert_equal(a.to_ndarray(), aflat)
+        npt.assert_equal(a2.to_ndarray(), aflat2)
+    # reversed multiplication
+    print "rmul"
+    a2 = s * a
+    a.test_sanity()
+    a2.test_sanity()
+    aflat2 = s * aflat
+    npt.assert_equal(a.to_ndarray(), aflat)
+    npt.assert_equal(a2.to_ndarray(), aflat2)
+    # division
+    for op in [Op.truediv, Op.itruediv]:
+        # may differ by machine precision due to rounding errors
+        print op.__name__
+        a2 = op(a, s)
+        a.test_sanity()
+        a2.test_sanity()
+        aflat2 = op(aflat, s)
+        eps = np.finfo(a.dtype).eps
+        assert(np.max(np.abs(a.to_ndarray() - aflat)) < eps)
+        assert(np.max(np.abs(a.to_ndarray() - aflat)) < eps)
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -260,3 +322,6 @@ if __name__ == "__main__":
     test_npc_Array_transpose()
     test_npc_Array_itemacces()
     test_npc_Array_reshape()
+    test_npc_Array_scale_axis()
+    test_npc_Array_conj()
+    test_npc_Array_ops()

@@ -57,7 +57,7 @@ Physical Example
 For concreteness, you can think of the Hamiltonian :math:`H = -t \sum_{<i,j>} (c^\dagger_i c_j + H.c.) + U n_i n_j` 
 with :math:`n_i = c^\dagger_i c_i`.
 This Hamiltonian has the global :math:`U(1)` gauge symmetry :math:`c_i \rightarrow c_i e^i\phi`.
-The corresponding charge is the total number of particles :math:`N = \sum_i n_i` [1].
+The corresponding charge is the total number of particles :math:`N = \sum_i n_i`.
 You would then introduce one charge with :math:`m=1`.
 
 Note that the total charge is a sum of local terms, living on single sites.
@@ -419,7 +419,7 @@ results in ::
     B[i*3 + j , k] == A[i, j, k] for i in range(10) for j in range(3) for k in range(7)
 
 While for a np.array, also a reshaping ``(10, 3, 7) -> (2, 21, 5)`` would be allowed, it does not make sense
-physically [1].
+physically.
 Unlike an np.array (where changing shape ``(10, 3, 7)->(2, 21, 5)`` is well-defined),
 the only sensible "reshape" operation on an :class:`~tenpy.linalg.np_conserved.Array` are
 
@@ -475,14 +475,15 @@ So here is how it works:
   For instance, the call ``tensordot(A, B, [ ['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
   (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
   and 2 as 'the 2nd leg'. That's why we require labels to be strings!
-- Labels will be intelligently inherited through the various operations of `np_conserved`.
+- Labels will be intelligently inherited through the various operations of `np_conserved`. Assume `
     - Under `transpose`, labels are permuted.
-    - Under `conj`, `iconj`: takes  ``'a' -> 'a*'`` and ``'a*' -> 'a'``
     - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
-    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter.  Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
+    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
+      Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
       Then if `b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'a.b': 0, 'c': 1}``.
       If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
     - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
+    - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a,(b*,c))' -> '(a*, (b, c*))'``
     - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
     - Under `pinv`, the labels are transposed
 
@@ -496,7 +497,6 @@ See also
   As noted above, all 'public' API is imported in :mod:`~tenpy.linalg.np_conserved`.
 
 
-
 .. todo ::
-   Full example
+   Full examples
    Further References?!?

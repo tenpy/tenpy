@@ -422,11 +422,11 @@ class LegCharge(object):
         This function checks that two legs are `ready` for contraction.
         This is the case, if all of the following conditions are met:
 
-        - the ChargeInfo is equal
+        - the ``ChargeInfo`` is equal
         - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
-        - the charges are the same up to the signs ``qconj``::
+        - the charges are the same up to opposite signs ``qconj``::
 
-                self.qind[:, 2:] * self.qconj = - other.qind[:, 2:] * other.qconj[:, 2:].
+                self.qind[:, 2:] * self.qconj = -other.qind[:, 2:] * other.qconj[:, 2:]
 
         In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
         This special case is not considered here - instead use
@@ -434,17 +434,42 @@ class LegCharge(object):
 
         If you are sure that the legs should be contractable,
         check whether it is necessary to use :meth:`ChargeInfo.make_valid`,
-        or whether self and other are blocked or should be sorted.
+        or whether ``self`` and ``other`` are blocked or should be sorted.
+
+        See also
+        --------
+        test_equal :
+            ``self.test_contractible(other)`` is equivalent to ``self.test_equal(other.conj())``.
+
         """
+        self.test_equal(other.conj())
+
+    def test_equal(self, other):
+        """test if charges are *equal* including `qconj`.
+
+        Check that all of the following conditions are met:
+
+        - the ``ChargeInfo`` is equal
+        - the charge blocks are equal, i.e., ``qind[:, :2]`` are equal
+        - the charges are the same up to the signs ``qconj``::
+
+                self.qind[:, 2:] * self.qconj = other.qind[:, 2:] * other.qconj[:, 2:]
+
+        See also
+        --------
+        test_contractible :
+            ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
+        """
+
         if self.chinfo != other.chinfo:
             raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
                 other.chinfo)]))
-        if self.qind is other.qind and self.qconj == -other.qconj:
+        if self.qind is other.qind and self.qconj == other.qconj:
             return  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.qind[:, :2], other.qind[:, :2]):
             raise ValueError("incomatible charge blocks. self.qind=\n{0!s}\nother.qind={1!s}"
                              .format(self, other))
-        if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * (-other.qconj)):
+        if not np.array_equal(self.qind[:, 2:] * self.qconj, other.qind[:, 2:] * other.qconj):
             raise ValueError("incompatible charges. qconj={0:+d}, {1:+d}, qind:\n{2!s}\n{3!s}"
                              .format(self.qconj, other.qconj, self, other))
 
