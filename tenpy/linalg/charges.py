@@ -212,7 +212,7 @@ class LegCharge(object):
         return res
 
     @classmethod
-    def from_qind(cls, chargeinfo, qflat, qconj=1):
+    def from_qind(cls, chargeinfo, qind, qconj=1):
         """just a wrapper around self.__init__(), see class doc-string for parameters.
 
         See also
@@ -220,7 +220,7 @@ class LegCharge(object):
         sort : sorts by charges
         block : blocks by charges
         """
-        res = cls(chargeinfo, qflat, qconj)
+        res = cls(chargeinfo, qind, qconj)
         res.sorted = res.is_sorted()
         res.bunched = res.is_bunched()
         return res

@@ -95,7 +95,7 @@ class Array(object):
         the data type of the entries
     chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
         the nature of the charge
-    qtotal : charge values
+    qtotal : 1D array
         the total charge of the tensor.
     legs : list of :class:`~tenpy.linalg.charges.LegCharge`
         the leg charges for each of the legs.
@@ -108,7 +108,6 @@ class Array(object):
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
-
     """
 
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
@@ -156,7 +155,7 @@ class Array(object):
             cp = copy_.copy(self)
             # some things should be copied even for shallow copies
             cp.qtotal = cp.qtotal.copy()
-            cp.lables = cp.labels.copy()
+            cp.labels = cp.labels.copy()
         # even deep copies can share chargeinfo and legs
         cp.chinfo = self.chinfo  # same instance
         cp.legs = self.legs[:]  # copied list with same instances of legs
@@ -2166,6 +2165,211 @@ def diag(s, leg, dtype=None):
     return res
 
 
+def concatenate(arrays, axis=0, copy=True):
+    """stack arrays along a given axis, similar as np.concatenate.
+
+    Stacks the qind of the array, without sorting/blocking.
+    Labels are inherited from the first array only.
+
+    Parameters
+    ----------
+    arrays : iterable of :class:`Array`
+        the arrays to be stacked. They must have the same shape and charge data
+        except on the specified axis.
+    axis : int | str
+        leg index or label of the first array. Defines the axis along which the arrays are stacked.
+    copy : bool
+        wheter to copy the data blocks
+
+    Returns
+    -------
+    stacked : :class:`Array`
+        concatenation of the given `arrays` along the specified axis.
+
+    See also
+    --------
+    :meth:`Array.sort_legcharge` : can be used to block by charges along the axis.
+    """
+    arrays = list(arrays)
+    res = arrays[0].zeros_like()
+    res.labels = arrays[0].labels.copy()
+    axis = res.get_leg_index(axis)
+    not_axis = range(res.rank)
+    del not_axis[axis]
+    not_axis = np.array(not_axis, dtype=np.intp)
+    # test for compatibility
+    for a in arrays:
+        if a.shape[:axis] != res.shape[:axis] or a.shape[axis+1:] != res.shape[axis+1:]:
+            raise ValueError("wrong shape "+repr(a))
+        if a.chinfo != res.chinfo:
+            raise ValueError("wrong ChargeInfo")
+        if a.qtotal != res.qtotal:
+            raise ValueError("wrong qtotal")
+        for l in not_axis:
+            a.legs[l].test_equal(res.legs[l])
+    dtype = res.dtype = np.find_common_type([a.dtype for a in arrays], [])
+    # stack the data
+    res_axis_qinds = []
+    res_qdata = []
+    res_data = []
+    ind_shift = 0  # sum of previous `ind_len`
+    qind_shift = 0  # sum of previous `block_number`
+    axis_qconj = res.legs[axis].qconj
+    for a in arrays:
+        leg = a.legs[axis]
+        # shift first two columns of `leg.qind`
+        qind = leg.qind.copy()
+        qind[:, :2] += ind_shift
+        if leg.qconj != axis_qconj:
+            qind[:, 2:] = res.chinfo.make_valid(-qind[:, 2:])
+        res_axis_qinds.append(qind)
+        qdata = a._qdata.copy()
+        qdata[:, axis] += qind_shift
+        res_qdata.append(qdata)
+        if copy:
+            res_data.extend([np.array(t, dtype) for t in a._data])
+        else:
+            res_data.extend([np.asarray(t, dtype) for t in a._data])
+        # update shifts for next array
+        ind_shift += leg.ind_len
+        qind_shift += leg.block_number
+    res_axis_qinds = np.concatenate(res_axis_qinds, axis=0)
+    res.legs[axis] = LegCharge.from_qind(res.chinfo, res_axis_qinds, axis_qconj)
+    res._set_shape()
+    res._qdata = np.concatenate(res_qdata, axis=0)
+    res._qdata_sorted = False
+    res._data = res_data
+    res.test_sanity()
+    return res
+
+
+def grid_concat(grid, axes, copy=True):
+    """Given an np.array of npc.Arrays, performs a multi-dimensional concatentation along 'axes'.
+
+    Stacks the qind of the array, *without* sorting/blocking.
+
+    Parameters
+    ----------
+    grid : np.array[dtype=np.object] of :class:`Array`
+        the grid of arrays.
+    axes : list of int
+        The axes along which to concatenate the arrays,  same len as the dimension of the grid.
+        Concatenate arrays of the `i`th axis of the grid along the axis ``axes[i]``
+    copy : bool
+        whether the _data blocks are copied.
+
+    Examples
+    --------
+    Assume we have rank 2 Arrays ``A, B, C, D`` of shapes
+    ``(1, 2), (1, 4), (3, 2), (3, 4)`` sharing the legs of equal sizes.
+    Then the following grid will result in a ``(1+3, 2+4)`` shaped array:
+
+    >>> g = grid_concat([[A, B], [C, D]], axes=[0, 1])
+    >>> g.shape
+    (4, 6)
+
+    If ``A, B, C, D`` were rank 4 arrays, with the first and last leg as before, and sharing
+    *common* legs ``1`` and ``2``, then you would get a rank-4 array:
+
+    >>> g = grid_concat([[A, B], [C, D]], axes=[0, 3])
+    >>> g.shape
+    (4, 6)
+
+    See also
+    --------
+    :meth:`Array.sort_legcharge` : can be used to block by charges.
+    """
+    if not isinstance(grid, np.ndarray):
+        grid = np.array(grid, dtype=np.object)
+    if grid.ndim < 1 or grid.ndim != len(axes):
+        raise ValueError("grid has wrong dimension")
+    # Simple recursion on ndim. Copy only required on first go.
+    if grid.ndim > 1:
+        grid = [grid_concat(b, axes=axes[1:], copy=copy) for b in grid]
+        copy = False
+    grid = concatenate(grid, axes[0], copy=copy)
+    return grid
+
+
+def grid_outer(grid, grid_legs):
+    """Given an np.array of npc.Arrays, return the corresponding higher-dimensional Array.
+
+    Parameters
+    ----------
+    grid : np.ndarray[dtype=object] of {:class:`Array` | None}
+        the grid gives the first part of the axes of the resulting array.
+        Entries have to have all the same shape and charge-data, giving the remaining axes.
+        ``None`` entries in the grid are interpreted as zeros.
+    grid_legs : list of :class:`LegCharge`
+        the legcharges along the grid.
+
+    Examples
+    --------
+    A typical use-case for this function is the generation of an MPO.
+    Say you have npc.Arrays ``Splus, Sminus, Sz``, each with legs ``[phys.conj(), phys]``.
+    Further, you have to define appropriate LegCharges `l_left` and `l_right`.
+    Then one `matrix` of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
+
+
+    >>> id = np.eye_like(Sz)
+    >>> W_mpo = grid_outer([[id, Splus, Sminus, Sz, None],
+    ...                     [None, None, None, None, J Sminus],
+    ...                     [None, None, None, None, J Splus],
+    ...                     [None, None, None, None, J Sz],
+    ...                     [None, None, None, None, id]],
+    ...                    leg_charges=[l_left, l_right])
+    >>> W_mpo.shape
+    (4, 4, 2, 2)
+
+    .. tood :
+        test!  # TODO
+        Would be really nice, if it could derive appropriate leg charges at least for one leg.
+        derived from the entries
+    """
+    if not isinstance(grid, np.ndarray):
+        grid = np.array(grid, dtype=np.object)
+    if grid.ndim < 1 or grid.ndim != len(grid_legs):
+        raise ValueError("grid has wrong dimension")
+    # find a non-trivial entry in the array
+    # use np.nditer to iterate with multi-index over the grid.
+    # see https://docs.scipy.org/doc/numpy/reference/arrays.nditer.html for details.
+    it = np.nditer(grid, flags=['multi_index'])  # numpy iterator
+    while it[0] is None and not it.finished:
+        it.iternext()
+    entry = it[0]
+    if entry is None:
+        raise ValueError("No non-trivial entries!")
+    chinfo = entry.chinfo
+    legs = list(grid_legs) + entry.legs
+    dtype = np.find_common_type([a.dtype for a in np.nditer(grid) if a is not None], [])
+    # figure out total charge from first non-zero entry
+    idx = it.multi_index
+    idx_charges = [l.get_charges(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
+    qtotal = chinfo.make_valid(np.sum(idx_charges + [entry.qtotal], axis=0))
+    # create resulting array with correct charges
+    res = Array(entry.chinfo, legs, dtype, qtotal)
+    # now again iterate over all entries of the grid to fill `res`.
+    it = np.nditer(grid, flags=['multi_index'])  # numpy iterator; see comment above.
+    while not it.finished:
+        entry = it[0]
+        if entry is None:
+            continue
+        idx = it.multiindex
+        # insert the values with Array.__setitem__ partial indexing.
+        res[idx] = entry
+        it.iternext()
+    return res
+
+
+def tensordot(a, b, axes=2):
+    """equivalent to ``np.tensordot``.
+
+    .. todo :
+        implement
+    """
+    raise NotImplementedError()
+
+
 def norm(a, ord=None, convert_to_float=True):
     r"""Norm of flattened data.
 
@@ -2208,12 +2412,3 @@ def norm(a, ord=None, convert_to_float=True):
         return np.linalg.norm(a.reshape((-1,)), ord)
     else:
         raise ValueError("unknown type of a")
-
-
-def tensordot(a, b, axes=2):
-    """equivalent to ``np.tensordot``.
-
-    .. todo :
-        implement
-    """
-    raise NotImplementedError()

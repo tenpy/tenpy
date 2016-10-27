@@ -235,6 +235,7 @@ def test_npc_Array_reshape():
         asplit = acomb.split_legs()
         asplit.test_sanity()
         npt.assert_equal(asplit.to_ndarray(), aflat.transpose(transpose))
+    # test squeeze
     b = random_Array((10, 1, 5, 1), chinfo3, sort=True)
     bflat = b.to_ndarray()
     bs = b.squeeze()
@@ -247,6 +248,18 @@ def test_npc_Array_reshape():
     else:
         idx = tuple([0] * b.rank)
     nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
+    # test concatenate
+    # create array `c` to concatenate with b along axis 2
+    legs = b.legs[:]
+    legs[1] = gen_random_legcharge(5, b.chinfo)
+    c1 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
+    c1flat = c1.to_ndarray()
+    legs[1] = gen_random_legcharge(3, b.chinfo)
+    c2 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
+    c2flat = c2.to_ndarray()
+    bc1c2 = npc.concatenate([b, c1, c2], axis=1)
+    bc1c2.test_sanity()
+    npt.assert_equal(bc1c2.to_ndarray(), np.concatenate([bflat, c1flat, c2flat], axis=1))
 
 
 def test_npc_Array_scale_axis():
