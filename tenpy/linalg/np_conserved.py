@@ -139,15 +139,15 @@ class Array(object):
 
         Examples
         --------
+        Be (very!) careful when making non-deep copies: In the following example,
+        the original `a` is changed if and only if the corresponding block existed in `a` before.
         >>> b = a.copy(deep=False)  # shallow copy
         >>> b[1, 2] = 4.
 
-        Here, the original `a` is changed if and only if the corresponding block
-        existed in `a` before.
+        Other `inplace` operations might have no effect at all (although we don't guarantee that):
 
-        >>> a *= 2
-
-        This does *not* change `b`...
+        >>> a *= 2  # has no effect on `b`
+        >>> b.iconj()  # nor does this change `a`
         """
         if deep:
             cp = copy_.deepcopy(self)
@@ -1192,6 +1192,8 @@ class Array(object):
             axes = tuple(self.get_leg_indices(axes))
             if len(axes) != self.rank or len(set(axes)) != self.rank:
                 raise ValueError("axes has wrong length: " + str(axes))
+            if axes == tuple(xrange(self.rank)):
+                return self  # nothing to do
         axes_arr = np.array(axes)
         self.legs = [self.legs[a] for a in axes]
         self._set_shape()
@@ -2321,7 +2323,7 @@ def grid_outer(grid, grid_legs):
     >>> W_mpo.shape
     (4, 4, 2, 2)
 
-    .. tood :
+    .. todo :
         test!  # TODO
         Would be really nice, if it could derive appropriate leg charges at least for one leg.
         derived from the entries
@@ -2358,16 +2360,255 @@ def grid_outer(grid, grid_legs):
         # insert the values with Array.__setitem__ partial indexing.
         res[idx] = entry
         it.iternext()
+    res.test_sanity()
+    return res
+
+
+def outer(a, b):
+    """Forms the outer tensor product, equivalent to ``tensordot(a, b, axes=0)``.
+
+    Labels are inherited from `a` and `b`. In case of a collision (same label in both `a` and `b`),
+    they are both dropped.
+
+    Parameters
+    ----------
+    a, b : :class:`Array`
+        the arrays for which to form the product.
+
+    Returns
+    -------
+    c : :class:`Array`
+        Array of rank ``a.rank + b.rank`` such that (for ``Ra = a.rank; Rb = b.rank``):
+
+            c[i_1, ..., i_Ra, j_1, ... j_R] = a[i_1, ..., i_Ra] * b[j_1, ..., j_rank_b]
+    """
+    if a.chinfo != b.chinfo:
+        raise ValueError("different ChargeInfo")
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    qtotal = a.chinfo.make_valid(a.qtotal + b.qtotal)
+    res = Array(a.chinfo, a.legs+b.legs, dtype, qtotal)
+
+    # fill with data
+    qdata_a = a._qdata
+    qdata_b = b._qdata
+    grid = np.mgrid[:len(qdata_a), :len(qdata_b)].T.reshape(-1, 2)
+    # grid is lexsorted like qdata, with rows as all combinations of a/b block indices.
+    qdata_res = np.empty((len(qdata_a)*len(qdata_b), res.rank), dtype=np.intp)
+    qdata_res[:, :a.rank] = qdata_a[grid[:, 0]]
+    qdata_res[:, a.rank:] = qdata_b[grid[:, 1]]
+    # use numpys broadcasting to obtain the tensor product
+    idx_reshape = (Ellipsis,) + tuple([np.newaxis]*b.rank)
+    data_a = [ta[idx_reshape] for ta in a._data]
+    idx_reshape = tuple([np.newaxis]*a.rank) + (Ellipsis,)
+    data_b = [tb[idx_reshape] for tb in b._data]
+    res._data = [data_a[i] * data_b[j] for i, j in grid]
+    res._qdata = qdata_res
+    res._qdata_sorted = a._qdata_sorted and b._qdata_sorted  # since grid is lex sorted
+    # labels
+    res.labels = a.labels.copy()
+    for k in b.labels:
+        if k in res.labels:
+            del res.labels[k]  # drop collision
+        else:
+            res.labels[k] = b.labels[k] + a.rank
+    return res
+
+
+def inner(a, b, axes=None, do_conj=False):
+    """Contract all legs in `a` and `b`, return scalar.
+
+    Parameters
+    ----------
+    a, b : class:`Array`
+        The arrays for which to calculate the product.
+        Must have same rank, and compatible LegCharges.
+    axes : ``(axes_a, axes_b)`` | ``None``
+        ``None`` is equivalent to ``(range(-axes, 0), range(axes))``.
+        Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
+        which should be contracted. Legs can be specified with leg labels or indices.
+        Contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+    do_conj : bool
+        If ``False`` (Default), ignore it.
+        if ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``
+
+    Returns
+    -------
+    inner_product : dtype
+        a scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
+    """
+    if a.rank != b.rank:
+        raise ValueError("different rank!")
+    if axes is not None:
+        axes_a, axes_b = axes
+        axes_a = a.get_leg_indices(toiterable(axes_a))
+        axes_b = a.get_leg_indices(toiterable(axes_b))
+        # we can permute axes_a and axes_b. Use that to ensure axes_b = range(b.rank)
+        sort_axes_b = np.argsort(axes_b)
+        axes_a = [axes_a[i] for i in sort_axes_b]
+        transp = (tuple(axes_a) != tuple(range(a.rank)))
+    else:
+        transp = False
+    if transp or do_conj:
+        a = a.copy(deep=False)
+    if transp:
+        a.itranspose(axes_a)
+    if do_conj:
+        a = a.iconj()
+    # check charge compatibility
+    if a.chinfo != b.chinfo:
+        raise ValueError("different ChargeInfo")
+    for lega, legb in zip(a.legs, b.legs):
+        lega.test_contractible(legb)
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    res = dtype.type(0)
+    if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
+        return res  # can't have blocks to be contracted
+    if a.stored_blocks == 0 or b.stored_blocks == 0:
+        return res  # also trivial
+
+    # need to find common blocks in a and b, i.e. equal leg charges.
+    # for faster comparison, generate 1D arrays with a combined index
+    stride = np.cumprod([1] + [l.block_number for l in a.legs[:-1]])
+    a_qdata = np.sum(a._qdata*stride, axis=1)
+    a_data = a._data
+    if not a._qdata_sorted:
+        perm = np.argsort(a_qdata)
+        a_qdata = a_qdata[perm]
+        a_data = [a_data[i] for i in perm]
+    b_qdata = np.sum(b._qdata*stride, axis=1)
+    b_data = b._data
+    if not b._qdata_sorted:
+        perm = np.argsort(b_qdata)
+        b_qdata = b_qdata[perm]
+        b_data = [b_data[i] for i in perm]
+    for i, j in _iter_common_sorted(a_qdata, b_qdata,
+                                    xrange(len(a_qdata)), xrange(len(b_qdata))):
+        res += np.inner(a_data[i].reshape((-1,)), b_data[j].reshape((-1,)))
     return res
 
 
 def tensordot(a, b, axes=2):
-    """equivalent to ``np.tensordot``.
+    """Similar as ``np.tensordot`` but for :class:`Array`.
 
-    .. todo :
-        implement
+    Builds the tensor product of `a` and `b` and sums over the specified axes.
+    Does not require complete blocking of the charges.
+
+    Labels are inherited from `a` and `b`.
+    In case of a collistion (= the same label inherited from `a` and `b`), both labels are dropped.
+
+    Parameters
+    ----------
+    a, b : :class:`Array`
+        the first and second npc Array for which axes are to be contracted.
+    axes : ``(axes_a, axes_b)`` | int
+        A single integer is equivalent to ``(range(-axes, 0), range(axes))``.
+        Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
+        which should be contracted. Legs can be specified with leg labels or indices.
+        Contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+
+    Returns
+    -------
+    a_dot_b : :class:`Array`
+        The tensorproduct of `a` and `b`, summed over the specified axes.
+        In case of a full contraction, returns scalar.
+
+    Implementation Notes
+    --------------------
+    Looking at the source of numpy's tensordot (which is just 62 lines of python code),
+    you will find that it has the following strategy:
+    1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
+    2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
+       such that `a` and `b` are matrices.
+    3. Perform a matrix product with `np.dot`.
+    4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
+
+    The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
+    [This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
+    than the O(N*K*M) needed by a naive implementation looping over the indices.]
+
+    We follow the same overall strategy, viewing the :class:`Array` as a tensor with
+    data block entries.
+    Step 1) is performed directly in this function body.
+
+    The steps 2) and 4) could be implemented with :meth:`Array.combine_legs`
+    and :meth:`Array.split_legs`.
+    However, that would actually be an overkill: we're not interested
+    in the full charge data of the combined legs (which would be generated in the LegPipes).
+    Instead, we just need to track the qindices of the `a._qdata` and `b._qdata` carefully.
+
+    Our step 2) is implemented in :func:`_tensordot_pre_worker`:
+    We split `a._qdata` in `a_qdata_keep` and `a_qdata_sum`, and similar for `b`.
+    Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
+    `i` can be any row of `a_qdata_keep`, `j` can be any row of `b_qdata_keep`.
+    The `k1` and `k2` are rows of `a_qdata_sum` and `b_qdata_sum`, which stem from the same legs
+    (up to a :meth:`LegCharge.conj()`).
+    In our storage scheme, `a._data[s]` then contains the block :math:`A_{i,k1}` for
+    ``j = a_qdata_keep[s]`` and ``k1 = a_qdata_sum[s]``.
+    To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
+    Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
+    equal rows of `i` are contiguous in `#_qdata_keep`.
+    Then, they are identified with :func:`Charges._find_row_differences`.
+
+    Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
+    analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.
+    It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
+    However, this is not as bad as it sounds:
+    First, we loop only over existent ``i`` and ``j``
+    (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
+    Second, if the ``i`` and ``j`` are not compatible with the new total charge,
+    we know that ``C_{i,j}`` will be zero.
+    Third, given ``i`` and ``j``, the sum over ``k`` runs only over
+    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+
+    How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
+    depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
+    is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
+
+    Step 4) is - as far as necessary - done in parallel with step 3).
     """
-    raise NotImplementedError()
+    if a.chinfo != b.chinfo:
+        raise ValueError("Different ChargeInfo")
+    try:
+        axes_a, axes_b = axes
+        axes_int = False
+    except TypeError:
+        axes = int(axes)
+        axes_int = True
+    if not axes_int:
+        # like step 1.) bring into standard form by transposing
+        axes_a = a.get_leg_indices(toiterable(axes_a))
+        axes_b = b.get_leg_indices(toiterable(axes_b))
+        if len(axes_a) != len(axes_a):
+            raise ValueError("different lens of axes for a, b: " + repr(axes))
+        not_axes_a = [i for i in range(a.rank) if i not in axes_a]
+        not_axes_b = [i for i in range(b.rank) if i not in axes_b]
+        a = a.copy(deep=False)
+        b = b.copy(deep=False)
+        a.itranspose(not_axes_a + axes_a)
+        b.itranspose(axes_b + not_axes_b)
+        axes = len(axes_a)
+    # now `axes` is integer
+    # check for special cases
+    if axes == 0:
+        return outer(a, b)  # no sum necessary
+    if axes == a.rank and axes == b.rank:
+        return inner(a, b)  # full contraction
+
+    # check for contraction compatibility
+    for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
+        lega.test_contractible(legb)
+
+    # the main work is out-sourced
+    res = _tensordot_worker(a, b, axes)
+
+    # labels
+    res.labels = a.labels.copy()
+    for k in b.labels:
+        if k in res.labels:
+            del res.labels[k]  # drop collision
+        else:
+            res.labels[k] = b.labels[k] + a.rank - 2*axes
+    return res
 
 
 def norm(a, ord=None, convert_to_float=True):
@@ -2412,3 +2653,135 @@ def norm(a, ord=None, convert_to_float=True):
         return np.linalg.norm(a.reshape((-1,)), ord)
     else:
         raise ValueError("unknown type of a")
+
+
+def _iter_common_sorted(a, b, a_idx, b_idx):
+    """Yields ``i, j for j, i in itertools.product(b_idx, a_idx) if a[i] == b[j]``.
+
+    *Assumes* that ``[a[i] for i in a_idx]`` and ``[b[j] for j in b_idx]`` are strictly ascending.
+    Given that, it is equivalent to (but faster than)::
+
+        for j, i in itertools.product(b_idx, a_idx):
+            if a[i] == b[j]:
+                yield i, j
+    """
+    a_it = iter(a_idx)
+    b_it = iter(b_idx)
+    i = next(a_it)
+    j = next(b_it)
+    try:
+        while True:
+            if a[i] < b[j]:
+                i = next(a_it)
+            elif b[j] < a[i]:
+                j = next(b_it)
+            else:
+                yield i, j
+                i = next(a_it)
+                j = next(b_it)
+    except StopIteration:
+        pass  # only one of the iterators finished
+    for i in a_it:      # remaing in a_it. skipped if a_it is finished.
+        if a[i] == b[j]:
+            yield i, j
+    for j in b_it:      # remaining in b_it
+        if a[i] == b[j]:
+            yield i, j
+    raise StopIteration  # finished
+
+
+def _tensordot_pre_worker(a, b, cut_a, cut_b):
+    """The pre-calculations before the actual matrix procut.
+
+    Called by :func:`_tensordot_worker`.
+    See doc-string of :func:`tensordot` for details on the implementation.
+    """
+    # convert qindices over which we sum to a 1D array for faster lookup/iteration
+    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
+    a_qdata_sum = np.sum(a._qdata[:, cut_a:]*stride, axis=1)
+    # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
+    a_sort = np.lexsort(np.append(a_qdata_sum[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
+    a_qdata_keep = a._qdata[a_sort, :cut_a]
+    a_qdata_sum = a_qdata_sum[a_sort]
+    a_data = a._data
+    a_data = [a_data[i] for i in a_sort]
+    # combine all b_qdata[axes_b] into one column (with the same stride as before)
+    b_qdata_sum = np.sum(b._qdata[:, :cut_b] * stride, axis=1)
+    # lex-sort b_qdata, dominated by the axes summed over, then the axes kept.
+    b_data = b._data
+    if not b._qdata_sorted:
+        b_sort = np.lexsort(np.append(b_qdata_sum[:, np.newaxis], b._qdata[:, cut_b:], axis=1).T)
+        b_qdata_keep = b._qdata[b_sort, cut_b:]
+        b_qdata_sum = b_qdata_sum[b_sort]
+        b_data = [b_data[i] for i in b_sort]
+    else:
+        b_qdata_keep = b._qdata[:, cut_b:]
+    # find blocks where qdata_a[not_axes_a] and qdata_b[not_axes_b] change
+    a_slices = charges._find_row_differences(a_qdata_keep)
+    b_slices = charges._find_row_differences(b_qdata_keep)
+    a_qdata_keep = a_qdata_keep[a_slices[:-1]]
+    b_qdata_keep = b_qdata_keep[b_slices[:-1]]
+    a_charges_keep = a.chinfo.make_valid(
+        np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0))
+    b_charges_keep = a.chinfo.make_valid(
+        np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0))
+    # collect and return the results
+    a_pre_result = a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_slices
+    b_pre_result = b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_slices
+    return a_pre_result, b_pre_result
+
+
+def _tensordot_worker(a, b, axes):
+    """main work of tensordot.
+
+    Assumes standard form of parameters: axes is integer,
+    sum over the last `axes` legs of `a` and first `axes` legs of `b`.
+
+    Called by :func:`tensordot`.
+    See doc-string of :func:`tensordot` for details on the implementation.
+    """
+    cut_a = a.rank - axes
+    cut_b = axes
+    a_pre_result, b_pre_result = _tensordot_pre_worker(a, b, cut_a, cut_b)
+    a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_slices = a_pre_result
+    b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_slices = b_pre_result
+    chinfo = a.chinfo
+    qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    res_qdata = []
+    res_data = []
+    # loop over column/row of the result
+    for col_b, b_qindex_keep in enumerate(b_qdata_keep):
+        # (row_a changes faster than col_b, such that the resulting array is qdata lex-sorted)
+        Q_col = b_charges_keep[col_b]
+        b_sl = xrange(*b_slices[col_b:col_b+2])
+        for row_a, a_qindex_keep in enumerate(a_qdata_keep):
+            Q_row = a_charges_keep[row_a]
+            if np.any(chinfo.make_valid(Q_col + Q_row) != qtotal):
+                continue
+            a_sl = xrange(*a_slices[row_a:row_a+2])
+            block_sum = None
+            for k1, k2 in _iter_common_sorted(a_qdata_sum, b_qdata_sum, a_sl, b_sl):
+                block = np.tensordot(a_data[k1], b_data[k2], axes=axes)
+                # TODO: optimize? # reshape, dot, reshape.
+                if block_sum is None:
+                    block_sum = np.asarray(block, dtype=dtype)
+                else:
+                    block_sum += block
+            if block_sum is None:
+                continue  # no common blocks
+            res_qdata.append(np.append(a_qindex_keep, b_qindex_keep, axis=0))
+            res_data.append(block_sum)
+    res = Array(chinfo, a.legs[:cut_a]+b.legs[cut_b:], dtype, qtotal)
+    if len(res_data) == 0:
+        return res
+    # (at least one of Q_row, Q_col is non-empty, so _qdata is also not empty)
+    res._qdata = np.array(res_qdata, dtype=np.intp)
+    res._qdata_sorted = True
+    res._data = res_data
+    print res._qdata.shape
+    print res.stored_blocks
+    print res.rank
+    print res.shape
+    res.test_sanity()
+    return res

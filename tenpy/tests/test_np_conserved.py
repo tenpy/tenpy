@@ -352,6 +352,73 @@ def test_npc_Array_ops():
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
 
 
+def test_npc_tensordot():
+    for sort in [True, False]:
+        print "sort =", sort
+        a = random_Array((10, 12, 15), chinfo3, qtotal=[0], sort=sort)
+        aflat = a.to_ndarray()
+        legs_b = [l.conj() for l in a.legs[::-1]]
+        b = npc.Array.from_func(np.random.random, a.chinfo, legs_b, qtotal=[1], shape_kw='size')
+        bflat = b.to_ndarray()
+        print "axes = 1"  # start simple: only one axes
+        c = npc.tensordot(a, b, axes=1)
+        c.test_sanity()
+        cflat = np.tensordot(aflat, bflat, axes=1)
+        npt.assert_array_almost_equal_nulp(c.to_ndarray(), cflat, sum(a.shape))
+        print "axes = 2"   # second: more than one axis
+        c = npc.tensordot(a, b, axes=([1, 2], [1, 0]))
+        c.test_sanity()
+        cflat = np.tensordot(aflat, bflat, axes=([1, 2], [1, 0]))
+        npt.assert_array_almost_equal_nulp(c.to_ndarray(), cflat, sum(a.shape))
+        for i in range(b.shape[0]):
+            b2 = b[i, :, :]
+            if b2.stored_blocks > 0:
+                break
+        b2flat = b2.to_ndarray()
+        print "right tensor fully contracted"
+        print a.shape, b2.shape
+        d = npc.tensordot(a, b2, axes=([0, 1], [1, 0]))
+        d.test_sanity()
+        dflat = np.tensordot(aflat, b2flat, axes=([0, 1], [1, 0]))
+        npt.assert_array_almost_equal_nulp(d.to_ndarray(), dflat, sum(a.shape))
+        print "left tensor fully contracted"
+        d = npc.tensordot(b2, a, axes=([0, 1], [1, 0]))
+        d.test_sanity()
+        dflat = np.tensordot(b2flat, aflat, axes=([0, 1], [1, 0]))
+        npt.assert_array_almost_equal_nulp(d.to_ndarray(), dflat, sum(a.shape))
+    print "full/no contraction is tested in test_npc_inner/test_npc_outer"
+
+
+def test_npc_inner():
+    for sort in [True, False]:
+        print "sort =", sort
+        a = random_Array((10, 7, 5), chinfo3, sort=sort)
+        aflat = a.to_ndarray()
+        legs_b = [l.conj() for l in a.legs[::-1]]
+        b = npc.Array.from_func(np.random.random, a.chinfo, legs_b,
+                                qtotal=-a.qtotal, shape_kw='size')
+        bflat = b.to_ndarray()
+        c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
+        nst.eq_(type(c), np.dtype(float))
+        cflat = np.tensordot(aflat, bflat, axes=[[2, 0, 1], [0, 2, 1]])
+        npt.assert_array_almost_equal_nulp(c, cflat, max(a.size, b.size))
+
+
+def test_npc_outer():
+    for sort in [True, False]:
+        print "sort =", sort
+        a = random_Array((6, 7), chinfo3, sort=sort)
+        b = random_Array((5, 5), chinfo3, sort=sort)
+        aflat = a.to_ndarray()
+        bflat = b.to_ndarray()
+        c = npc.outer(a, b)
+        c.test_sanity()
+        cflat = np.tensordot(aflat, bflat, axes=0)
+        npt.assert_equal(c.to_ndarray(), cflat)
+        c = npc.tensordot(a, b, axes=0)  # (should as well call npc.outer)
+        npt.assert_equal(c.to_ndarray(), cflat)
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -365,3 +432,6 @@ if __name__ == "__main__":
     test_npc_Array_conj()
     test_npc_Array_norm()
     test_npc_Array_ops()
+    test_npc_tensordot()
+    test_npc_inner()
+    test_npc_outer()

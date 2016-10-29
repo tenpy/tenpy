@@ -883,6 +883,8 @@ def _find_row_differences(qflat):
         The indices where rows change, including the first and last. Equivalent to:
         ``[0]+[i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])] + [len(qflat)]``
     """
+    if qflat.shape[1] == 0:
+        return np.array([0, qflat.shape[0]], dtype=np.intp)
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
