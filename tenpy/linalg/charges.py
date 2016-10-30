@@ -187,25 +187,35 @@ class LegCharge(object):
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
         """create a LegCharge from qflat form.
 
-        Bunches, but does *not* sort. We recommend to sort (and bunch) afterwards,
-        if you expect all entries compatible with the charges to be filled.
+        Does *neither* bunch *nor* sort. We recommend to sort (and bunch) afterwards,
+        if you expect that tensors using the LegCharge have entries at all positions compatible
+        with the charges.
 
         Parameters
         ----------
         chargeinfo : :class:`ChargeInfo`
             the nature of the charge
-        qflat : list(charges)
+        qflat : array_like (ind_len, `qnumber`)
             `qnumber` charges for each index of the leg on entry
         qconj : {-1, 1}
             A flag telling whether the charge points inwards (+1) or outwards (-1).
 
         See also
         --------
-        sort : sorts by charges
+        :meth:`sort` : sorts by charges
+        :meth:`bunch` : bunches contiguous blocks of the same charge.
         """
         qflat = np.asarray(qflat, dtype=QDTYPE)
-        indices = _find_row_differences(qflat).reshape(-1, 1)
-        qind = np.hstack((indices[:-1], indices[1:], qflat[indices[:-1, 0]]))
+        if qflat.ndim == 1 and chargeinfo.qnumber == 1:
+            # accept also 1D arrays, if the qnumber is 1
+            qflat = qflat.reshape(-1, 1)
+        ind_len, qnum = qflat.shape
+        if qnum != chargeinfo.qnumber:
+            raise ValueError("qflat has wrong shape!")
+        qind = np.empty((ind_len, 2+qnum), dtype=QDTYPE)
+        qind[:, 0] = np.arange(ind_len)
+        qind[:, 1] = np.arange(1, ind_len+1)
+        qind[:, 2:] = chargeinfo.make_valid(qflat)
         res = cls(chargeinfo, qind, qconj)
         res.sorted = res.is_sorted()
         res.bunched = res.is_bunched()
@@ -463,7 +473,8 @@ class LegCharge(object):
         idx : 1D array
             the indices of the old qind which are kept
         cp : :class:`LegCharge`
-            a copy of self, which is bunched
+            a new LegCharge with the same charges at given indices of the leg,
+            but (possibly) shorter ``self.qind``.
 
         See also
         --------

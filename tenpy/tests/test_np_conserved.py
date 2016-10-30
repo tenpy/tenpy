@@ -262,6 +262,33 @@ def test_npc_Array_reshape():
     npt.assert_equal(bc1c2.to_ndarray(), np.concatenate([bflat, c1flat, c2flat], axis=1))
 
 
+def test_npc_grid_outer():
+    ci = chinfo3
+    p_leg = gen_random_legcharge(4, ci)
+    legs_op = [p_leg, p_leg.conj()]
+    op_0 = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[0], shape_kw='size')
+    op_pl = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[1], shape_kw='size')
+    op_min = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[-1], shape_kw='size')
+    op_id = npc.eye_like(op_0)
+    grid = [[op_id, op_pl, op_min, op_0, None],
+            [None, None, None, None, op_min],
+            [None, None, None, None, op_pl],
+            [None, None, None, None, op_0],
+            [None, None, None, None, op_id]]  # yapf: disable
+    leg_WL = npc.LegCharge.from_qflat(ci, [0, 1, -1, 0, 0])
+    leg_WR = npc.LegCharge.from_qflat(ci, [0, 1, -1, 0, 0], -1)
+    leg_WR_calc = npc.grid_outer_calc_legcharge(grid, [leg_WL, None], qconj=-1)[1]
+    leg_WR.test_equal(leg_WR_calc)
+
+    W = npc.grid_outer(grid, [leg_WL, leg_WR])
+    W.test_sanity()
+    Wflat = np.zeros([5, 5, 4, 4])
+    for idx, op in [[(0, 0), op_id], [(0, 1), op_pl], [(0, 2), op_min], [(0, 3), op_0],
+                    [(1, 4), op_min], [(2, 4), op_pl], [(3, 4), op_0], [(4, 4), op_id]]:
+        Wflat[idx] = op.to_ndarray()
+    npt.assert_equal(W.to_ndarray(), Wflat)
+
+
 def test_npc_Array_scale_axis():
     a = random_Array((5, 15, 10), chinfo3, sort=True)
     aflat = a.to_ndarray()

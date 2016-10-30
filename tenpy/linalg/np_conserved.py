@@ -819,7 +819,7 @@ class Array(object):
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            specify whether new created charges point inward or outward. Defaults to +1.
+            specify whether new created pipes point inward or outward. Defaults to +1.
             Ignored for given `pipes`, which are not newly calculated.
 
         Returns
@@ -1143,6 +1143,7 @@ class Array(object):
             raise ValueError("permutation has wrong length")
         rev_perm = reverse_sort_perm(perm)
         newleg = LegCharge.from_qflat(self.chinfo, oldleg.to_qflat()[perm], oldleg.qconj)
+        newleg = newleg.bunch()[1]
         res = self.copy(deep=False)  # data is replaced afterwards
         res.legs[axis] = newleg
         qdata_axis = self._qdata[:, axis]
@@ -1353,8 +1354,8 @@ class Array(object):
             new_type = np.find_common_type([np.float_, self.dtype], [])  # int -> float
             if new_type != self.dtype:
                 return self.astype(new_type).norm(ord, False)
-        block_norms = [np.linalg.norm(t.reshape((-1, )), ord) for t in self._data]
-        # ``.reshape((-1,)) gives a view and is thus faster than ``.flatten()``
+        block_norms = [np.linalg.norm(t.reshape(-1), ord) for t in self._data]
+        # ``.reshape(-1) gives a 1D view and is thus faster than ``.flatten()``
         # add a [0] in the list to ensure correct results for ``ord=-inf``
         return np.linalg.norm(block_norms + [0], ord)
 
@@ -1433,9 +1434,6 @@ class Array(object):
 
         It is supposed to calculate the matrix - vector - product
         for a rank-2 matrix ``self`` and a rank-1 vector `other`.
-
-        .. todo :
-            why not define something like a `dot` and use that?
         """
         return tensordot(self, other, axes=1)
 
@@ -2112,6 +2110,7 @@ class Array(object):
         # remove '**' entries
         return label.replace('**', '')
 
+
 # functions ====================================================================
 
 
@@ -2125,14 +2124,14 @@ def zeros(*args, **kwargs):
 
 def eye_like(a, axis=0):
     """An identity matrix contractible with the axis of `a`."""
-    axis = a.get_leg_index(a)
+    axis = a.get_leg_index(axis)
     return diag(1., a.legs[axis])
 
 
 def diag(s, leg, dtype=None):
     """Returns a square, diagonal matrix of entries `s`.
 
-    The resultign matrix has legs ``(leg, leg.conj())`` and charge 0.
+    The resulting matrix has legs ``(leg, leg.conj())`` and charge 0.
 
     Parameters
     ----------
@@ -2252,7 +2251,7 @@ def grid_concat(grid, axes, copy=True):
 
     Parameters
     ----------
-    grid : np.array[dtype=np.object] of :class:`Array`
+    grid : array_like of :class:`Array`
         the grid of arrays.
     axes : list of int
         The axes along which to concatenate the arrays,  same len as the dimension of the grid.
@@ -2293,75 +2292,129 @@ def grid_concat(grid, axes, copy=True):
     return grid
 
 
-def grid_outer(grid, grid_legs):
+def grid_outer(grid, grid_legs, qtotal=None):
     """Given an np.array of npc.Arrays, return the corresponding higher-dimensional Array.
 
     Parameters
     ----------
-    grid : np.ndarray[dtype=object] of {:class:`Array` | None}
+    grid : array_like of {:class:`Array` | None}
         the grid gives the first part of the axes of the resulting array.
         Entries have to have all the same shape and charge-data, giving the remaining axes.
         ``None`` entries in the grid are interpreted as zeros.
     grid_legs : list of :class:`LegCharge`
-        the legcharges along the grid.
+        One LegCharge for each dimension of the grid along the grid.
+    qtotal : charge
+        The total charge of the Array.
+        By default (``None``), derive it out from a non-trivial entry of the grid.
+
+    Returns
+    -------
+    res : :class:`Array`
+        An Array with shape ``grid.shape + nontrivial_grid_entry.shape``.
+        Constructed such that ``res[idx] == grid[idx]`` for any index ``idx`` of the `grid`
+        the `grid` entry is not trivial (``None``).
+
+    See also
+    --------
+    grid_outer_calc_legcharge : can calculate one missing :class:`LegCharge` of the grid.
+
 
     Examples
     --------
     A typical use-case for this function is the generation of an MPO.
     Say you have npc.Arrays ``Splus, Sminus, Sz``, each with legs ``[phys.conj(), phys]``.
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
-    Then one `matrix` of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
+    Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
 
     >>> id = np.eye_like(Sz)
     >>> W_mpo = grid_outer([[id, Splus, Sminus, Sz, None],
-    ...                     [None, None, None, None, J Sminus],
-    ...                     [None, None, None, None, J Splus],
-    ...                     [None, None, None, None, J Sz],
+    ...                     [None, None, None, None, J*Sminus],
+    ...                     [None, None, None, None, J*Splus],
+    ...                     [None, None, None, None, J*Sz],
     ...                     [None, None, None, None, id]],
     ...                    leg_charges=[l_left, l_right])
     >>> W_mpo.shape
     (4, 4, 2, 2)
 
     .. todo :
-        test!  # TODO
         Would be really nice, if it could derive appropriate leg charges at least for one leg.
         derived from the entries
     """
-    if not isinstance(grid, np.ndarray):
-        grid = np.array(grid, dtype=np.object)
-    if grid.ndim < 1 or grid.ndim != len(grid_legs):
-        raise ValueError("grid has wrong dimension")
-    # find a non-trivial entry in the array
-    # use np.nditer to iterate with multi-index over the grid.
-    # see https://docs.scipy.org/doc/numpy/reference/arrays.nditer.html for details.
-    it = np.nditer(grid, flags=['multi_index'])  # numpy iterator
-    while it[0] is None and not it.finished:
-        it.iternext()
-    entry = it[0]
-    if entry is None:
-        raise ValueError("No non-trivial entries!")
+    grid_shape, entries = _nontrivial_grid_entries(grid)
+    if len(grid_shape) != len(grid_legs):
+        raise ValueError("wrong number of grid_legs")
+    if grid_shape != tuple([l.ind_len for l in grid_legs]):
+        raise ValueError("grid shape incompatible with grid_legs")
+    idx, entry = entries[0]  # first non-trivial entry
     chinfo = entry.chinfo
+    dtype = np.find_common_type([e.dtype for _, e in entries], [])
     legs = list(grid_legs) + entry.legs
-    dtype = np.find_common_type([a.dtype for a in np.nditer(grid) if a is not None], [])
-    # figure out total charge from first non-zero entry
-    idx = it.multi_index
-    idx_charges = [l.get_charges(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
-    qtotal = chinfo.make_valid(np.sum(idx_charges + [entry.qtotal], axis=0))
-    # create resulting array with correct charges
+    if qtotal is None:
+        # figure out qtotal from first non-zero entry
+        grid_charges = [l.get_charge(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
+        qtotal = chinfo.make_valid(np.sum(grid_charges + [entry.qtotal], axis=0))
+    else:
+        qtotal = chinfo.make_valid(qtotal)
     res = Array(entry.chinfo, legs, dtype, qtotal)
-    # now again iterate over all entries of the grid to fill `res`.
-    it = np.nditer(grid, flags=['multi_index'])  # numpy iterator; see comment above.
-    while not it.finished:
-        entry = it[0]
-        if entry is None:
-            continue
-        idx = it.multiindex
-        # insert the values with Array.__setitem__ partial indexing.
-        res[idx] = entry
-        it.iternext()
+    # main work: iterate over all non-trivial entries to fill `res`.
+    for idx, entry in entries:
+        res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
     res.test_sanity()
     return res
+
+
+def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False):
+    """Derive a LegCharge for a grid used for :func:`grid_outer`.
+
+    Note: the resulting LegCharge is *not* bunched.
+
+    Parameters
+    ----------
+    grid : array_like of {:class:`Array` | None}
+        the grid as it will be given to :func:`grid_outer`
+    grid_legs : list of {:class:`LegCharge` | None}
+        One LegCharge for each dimension of the grid, except for one entry which is ``None``.
+        This missing entry is to be calculated.
+    qtotal : charge
+        The desired total charge of the array. Defaults to 0.
+
+    Returns
+    -------
+    new_grid_legs : list of :class:`LegCharge`
+        A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
+    """
+    grid_shape, entries = _nontrivial_grid_entries(grid)
+    if len(grid_shape) != len(grid_legs):
+        raise ValueError("wrong number of grid_legs")
+    if any([s != l.ind_len for s, l in zip(grid_shape, grid_legs) if l is not None]):
+        raise ValueError("grid shape incompatible with grid_legs")
+    idx, entry = entries[0]  # first non-trivial entry
+    chinfo = entry.chinfo
+    axis = [a for a, l in enumerate(grid_legs) if l is None]
+    if len(axis) > 1:
+        raise ValueError("can only derive one grid_leg")
+    axis = axis[0]
+    grid_legs = list(grid_legs)
+    qtotal = chinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
+    qflat = [None]*grid_shape[axis]
+    for idx, entry in entries:
+        grid_charges = [l.get_charge(l.get_qindex(i)[0])
+                        for a, (i, l) in enumerate(zip(idx, grid_legs)) if a != axis]
+        qflat_entry = chinfo.make_valid(qtotal - entry.qtotal - np.sum(grid_charges, axis=0))
+        i = idx[axis]
+        if qflat[i] is None:
+            qflat[i] = qflat_entry
+        elif np.any(qflat[i] != qflat_entry):
+            print qflat
+            print qflat[i]
+            print qflat_entry
+            raise ValueError("different grid entries lead to different charges" +
+                             " at index " + str(i))
+    if any([q is None for q in qflat]):
+        raise ValueError("can't derive flat charge for all indices:" + str(qflat))
+    grid_legs[axis] = LegCharge.from_qflat(chinfo, qconj*np.array(qflat), qconj)
+    return grid_legs
 
 
 def outer(a, b):
@@ -2653,6 +2706,25 @@ def norm(a, ord=None, convert_to_float=True):
         return np.linalg.norm(a.reshape((-1,)), ord)
     else:
         raise ValueError("unknown type of a")
+
+
+# private functions ============================================================
+
+def _nontrivial_grid_entries(grid):
+    """return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
+    grid = np.asarray(grid, dtype=np.object)
+    entries = []  # fill with (multi_index, entry)
+    # use np.nditer to iterate with multi-index over the grid.
+    # see https://docs.scipy.org/doc/numpy/reference/arrays.nditer.html for details.
+    it = np.nditer(grid, flags=['multi_index', 'refs_ok'])  # numpy iterator
+    while not it.finished:
+        e = it[0].item()
+        if e is not None:
+            entries.append((it.multi_index, e))
+        it.iternext()
+    if len(entries) == 0:
+        raise ValueError("No non-trivial entries in grid")
+    return grid.shape, entries
 
 
 def _iter_common_sorted(a, b, a_idx, b_idx):

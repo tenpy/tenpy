@@ -56,7 +56,7 @@ def gen_random_legcharge(n, chinfo):
             qflat.append(np.asarray(np.random.randint(-r, r, size=n)))
     qflat = np.array(qflat, dtype=charges.QDTYPE).T
     qconj = np.random.randint(0, 1, 1) * 2 - 1
-    return charges.LegCharge.from_qflat(chinfo, qflat, qconj)
+    return charges.LegCharge.from_qflat(chinfo, qflat, qconj).bunch()[1]
 
 
 def test_ChargeInfo():
@@ -84,10 +84,10 @@ def test__find_row_differences():
 
 
 def test_LegCharge():
-    lcs = charges.LegCharge.from_qflat(ch_1, qflat_s)
+    lcs = charges.LegCharge.from_qflat(ch_1, qflat_s).bunch()[1]
     npt.assert_equal(lcs.qind, qind_s)  # check qflat_s -> qind_s
     npt.assert_equal(lcs.to_qflat(), qflat_s)  # check qind_s -> qflat_s
-    lcus = charges.LegCharge.from_qflat(ch_1, qflat_us)
+    lcus = charges.LegCharge.from_qflat(ch_1, qflat_us).bunch()[1]
     npt.assert_equal(lcus.qind, qind_us)  # check qflat_us -> qind_us
     npt.assert_equal(lcus.to_qflat(), qflat_us)  # check qind_us -> qflat_us
 
