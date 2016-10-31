@@ -330,7 +330,7 @@ def test_npc_Array_norm():
         anorm = a.norm(ord)
         aflnorm = npc.norm(aflat, ord)
         print abs(anorm - aflnorm)
-        assert (abs(anorm - aflnorm) < 100*EPS)
+        assert (abs(anorm - aflnorm) < 100 * EPS)
 
 
 def test_npc_Array_ops():
@@ -392,7 +392,7 @@ def test_npc_tensordot():
         c.test_sanity()
         cflat = np.tensordot(aflat, bflat, axes=1)
         npt.assert_array_almost_equal_nulp(c.to_ndarray(), cflat, sum(a.shape))
-        print "axes = 2"   # second: more than one axis
+        print "axes = 2"  # second: more than one axis
         c = npc.tensordot(a, b, axes=([1, 2], [1, 0]))
         c.test_sanity()
         cflat = np.tensordot(aflat, bflat, axes=([1, 2], [1, 0]))
@@ -422,8 +422,8 @@ def test_npc_inner():
         a = random_Array((10, 7, 5), chinfo3, sort=sort)
         aflat = a.to_ndarray()
         legs_b = [l.conj() for l in a.legs[::-1]]
-        b = npc.Array.from_func(np.random.random, a.chinfo, legs_b,
-                                qtotal=-a.qtotal, shape_kw='size')
+        b = npc.Array.from_func(
+            np.random.random, a.chinfo, legs_b, qtotal=-a.qtotal, shape_kw='size')
         bflat = b.to_ndarray()
         c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
         nst.eq_(type(c), np.dtype(float))

@@ -2110,7 +2110,6 @@ class Array(object):
         # remove '**' entries
         return label.replace('**', '')
 
-
 # functions ====================================================================
 
 
@@ -2160,7 +2159,7 @@ def diag(s, leg, dtype=None):
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
     if scalar:
-        res._data = [np.diag(s*np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
+        res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
     else:
         res._data = [np.diag(s[leg.get_slice(qi)]) for qi in xrange(leg.block_number)]
     return res
@@ -2200,8 +2199,8 @@ def concatenate(arrays, axis=0, copy=True):
     not_axis = np.array(not_axis, dtype=np.intp)
     # test for compatibility
     for a in arrays:
-        if a.shape[:axis] != res.shape[:axis] or a.shape[axis+1:] != res.shape[axis+1:]:
-            raise ValueError("wrong shape "+repr(a))
+        if a.shape[:axis] != res.shape[:axis] or a.shape[axis + 1:] != res.shape[axis + 1:]:
+            raise ValueError("wrong shape " + repr(a))
         if a.chinfo != res.chinfo:
             raise ValueError("wrong ChargeInfo")
         if a.qtotal != res.qtotal:
@@ -2326,7 +2325,6 @@ def grid_outer(grid, grid_legs, qtotal=None):
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
     Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
-
     >>> id = np.eye_like(Sz)
     >>> W_mpo = grid_outer([[id, Splus, Sminus, Sz, None],
     ...                     [None, None, None, None, J*Sminus],
@@ -2335,11 +2333,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
     ...                     [None, None, None, None, id]],
     ...                    leg_charges=[l_left, l_right])
     >>> W_mpo.shape
-    (4, 4, 2, 2)
-
-    .. todo :
-        Would be really nice, if it could derive appropriate leg charges at least for one leg.
-        derived from the entries
+    (5, 5, 2, 2)
     """
     grid_shape, entries = _nontrivial_grid_entries(grid)
     if len(grid_shape) != len(grid_legs):
@@ -2397,7 +2391,7 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
     axis = axis[0]
     grid_legs = list(grid_legs)
     qtotal = chinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
-    qflat = [None]*grid_shape[axis]
+    qflat = [None] * grid_shape[axis]
     for idx, entry in entries:
         grid_charges = [l.get_charge(l.get_qindex(i)[0])
                         for a, (i, l) in enumerate(zip(idx, grid_legs)) if a != axis]
@@ -2409,11 +2403,11 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
             print qflat
             print qflat[i]
             print qflat_entry
-            raise ValueError("different grid entries lead to different charges" +
-                             " at index " + str(i))
+            raise ValueError("different grid entries lead to different charges" + " at index " +
+                             str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo, qconj*np.array(qflat), qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo, qconj * np.array(qflat), qconj)
     return grid_legs
 
 
@@ -2439,20 +2433,20 @@ def outer(a, b):
         raise ValueError("different ChargeInfo")
     dtype = np.find_common_type([a.dtype, b.dtype], [])
     qtotal = a.chinfo.make_valid(a.qtotal + b.qtotal)
-    res = Array(a.chinfo, a.legs+b.legs, dtype, qtotal)
+    res = Array(a.chinfo, a.legs + b.legs, dtype, qtotal)
 
     # fill with data
     qdata_a = a._qdata
     qdata_b = b._qdata
     grid = np.mgrid[:len(qdata_a), :len(qdata_b)].T.reshape(-1, 2)
     # grid is lexsorted like qdata, with rows as all combinations of a/b block indices.
-    qdata_res = np.empty((len(qdata_a)*len(qdata_b), res.rank), dtype=np.intp)
+    qdata_res = np.empty((len(qdata_a) * len(qdata_b), res.rank), dtype=np.intp)
     qdata_res[:, :a.rank] = qdata_a[grid[:, 0]]
     qdata_res[:, a.rank:] = qdata_b[grid[:, 1]]
     # use numpys broadcasting to obtain the tensor product
-    idx_reshape = (Ellipsis,) + tuple([np.newaxis]*b.rank)
+    idx_reshape = (Ellipsis, ) + tuple([np.newaxis] * b.rank)
     data_a = [ta[idx_reshape] for ta in a._data]
-    idx_reshape = tuple([np.newaxis]*a.rank) + (Ellipsis,)
+    idx_reshape = tuple([np.newaxis] * a.rank) + (Ellipsis, )
     data_b = [tb[idx_reshape] for tb in b._data]
     res._data = [data_a[i] * data_b[j] for i, j in grid]
     res._qdata = qdata_res
@@ -2512,32 +2506,7 @@ def inner(a, b, axes=None, do_conj=False):
         raise ValueError("different ChargeInfo")
     for lega, legb in zip(a.legs, b.legs):
         lega.test_contractible(legb)
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
-    res = dtype.type(0)
-    if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
-        return res  # can't have blocks to be contracted
-    if a.stored_blocks == 0 or b.stored_blocks == 0:
-        return res  # also trivial
-
-    # need to find common blocks in a and b, i.e. equal leg charges.
-    # for faster comparison, generate 1D arrays with a combined index
-    stride = np.cumprod([1] + [l.block_number for l in a.legs[:-1]])
-    a_qdata = np.sum(a._qdata*stride, axis=1)
-    a_data = a._data
-    if not a._qdata_sorted:
-        perm = np.argsort(a_qdata)
-        a_qdata = a_qdata[perm]
-        a_data = [a_data[i] for i in perm]
-    b_qdata = np.sum(b._qdata*stride, axis=1)
-    b_data = b._data
-    if not b._qdata_sorted:
-        perm = np.argsort(b_qdata)
-        b_qdata = b_qdata[perm]
-        b_data = [b_data[i] for i in perm]
-    for i, j in _iter_common_sorted(a_qdata, b_qdata,
-                                    xrange(len(a_qdata)), xrange(len(b_qdata))):
-        res += np.inner(a_data[i].reshape((-1,)), b_data[j].reshape((-1,)))
-    return res
+    return _inner_worker(a, b)
 
 
 def tensordot(a, b, axes=2):
@@ -2660,7 +2629,7 @@ def tensordot(a, b, axes=2):
         if k in res.labels:
             del res.labels[k]  # drop collision
         else:
-            res.labels[k] = b.labels[k] + a.rank - 2*axes
+            res.labels[k] = b.labels[k] + a.rank - 2 * axes
     return res
 
 
@@ -2703,12 +2672,12 @@ def norm(a, ord=None, convert_to_float=True):
         if convert_to_float:
             new_type = np.find_common_type([np.float_, a.dtype], [])  # int -> float
             a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
-        return np.linalg.norm(a.reshape((-1,)), ord)
+        return np.linalg.norm(a.reshape((-1, )), ord)
     else:
         raise ValueError("unknown type of a")
 
-
 # private functions ============================================================
+
 
 def _nontrivial_grid_entries(grid):
     """return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
@@ -2753,13 +2722,41 @@ def _iter_common_sorted(a, b, a_idx, b_idx):
                 j = next(b_it)
     except StopIteration:
         pass  # only one of the iterators finished
-    for i in a_it:      # remaing in a_it. skipped if a_it is finished.
+    for i in a_it:  # remaing in a_it. skipped if a_it is finished.
         if a[i] == b[j]:
             yield i, j
-    for j in b_it:      # remaining in b_it
+    for j in b_it:  # remaining in b_it
         if a[i] == b[j]:
             yield i, j
     raise StopIteration  # finished
+
+
+def _inner_worker(a, b):
+    """Full contraction of `a` and `b` with axes in matching order."""
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    res = dtype.type(0)
+    if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
+        return res  # can't have blocks to be contracted
+    if a.stored_blocks == 0 or b.stored_blocks == 0:
+        return res  # also trivial
+    # need to find common blocks in a and b, i.e. equal leg charges.
+    # for faster comparison, generate 1D arrays with a combined index
+    stride = np.cumprod([1] + [l.block_number for l in a.legs[:-1]])
+    a_qdata = np.sum(a._qdata * stride, axis=1)
+    a_data = a._data
+    if not a._qdata_sorted:
+        perm = np.argsort(a_qdata)
+        a_qdata = a_qdata[perm]
+        a_data = [a_data[i] for i in perm]
+    b_qdata = np.sum(b._qdata * stride, axis=1)
+    b_data = b._data
+    if not b._qdata_sorted:
+        perm = np.argsort(b_qdata)
+        b_qdata = b_qdata[perm]
+        b_data = [b_data[i] for i in perm]
+    for i, j in _iter_common_sorted(a_qdata, b_qdata, xrange(len(a_qdata)), xrange(len(b_qdata))):
+        res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
+    return res
 
 
 def _tensordot_pre_worker(a, b, cut_a, cut_b):
@@ -2770,7 +2767,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
-    a_qdata_sum = np.sum(a._qdata[:, cut_a:]*stride, axis=1)
+    a_qdata_sum = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_sum[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
     a_qdata_keep = a._qdata[a_sort, :cut_a]
@@ -2826,12 +2823,12 @@ def _tensordot_worker(a, b, axes):
     for col_b, b_qindex_keep in enumerate(b_qdata_keep):
         # (row_a changes faster than col_b, such that the resulting array is qdata lex-sorted)
         Q_col = b_charges_keep[col_b]
-        b_sl = xrange(*b_slices[col_b:col_b+2])
+        b_sl = xrange(*b_slices[col_b:col_b + 2])
         for row_a, a_qindex_keep in enumerate(a_qdata_keep):
             Q_row = a_charges_keep[row_a]
             if np.any(chinfo.make_valid(Q_col + Q_row) != qtotal):
                 continue
-            a_sl = xrange(*a_slices[row_a:row_a+2])
+            a_sl = xrange(*a_slices[row_a:row_a + 2])
             block_sum = None
             for k1, k2 in _iter_common_sorted(a_qdata_sum, b_qdata_sum, a_sl, b_sl):
                 block = np.tensordot(a_data[k1], b_data[k2], axes=axes)
@@ -2844,7 +2841,7 @@ def _tensordot_worker(a, b, axes):
                 continue  # no common blocks
             res_qdata.append(np.append(a_qindex_keep, b_qindex_keep, axis=0))
             res_data.append(block_sum)
-    res = Array(chinfo, a.legs[:cut_a]+b.legs[cut_b:], dtype, qtotal)
+    res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], dtype, qtotal)
     if len(res_data) == 0:
         return res
     # (at least one of Q_row, Q_col is non-empty, so _qdata is also not empty)

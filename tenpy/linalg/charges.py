@@ -212,9 +212,9 @@ class LegCharge(object):
         ind_len, qnum = qflat.shape
         if qnum != chargeinfo.qnumber:
             raise ValueError("qflat has wrong shape!")
-        qind = np.empty((ind_len, 2+qnum), dtype=QDTYPE)
+        qind = np.empty((ind_len, 2 + qnum), dtype=QDTYPE)
         qind[:, 0] = np.arange(ind_len)
-        qind[:, 1] = np.arange(1, ind_len+1)
+        qind[:, 1] = np.arange(1, ind_len + 1)
         qind[:, 2:] = chargeinfo.make_valid(qflat)
         res = cls(chargeinfo, qind, qconj)
         res.sorted = res.is_sorted()
