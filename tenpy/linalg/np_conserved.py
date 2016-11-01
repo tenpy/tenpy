@@ -50,8 +50,9 @@ import itertools
 # import public API from charges
 from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
 from . import charges  # for private functions
+from .svd_robust import svd as svd_flat
 
-from ..tools.math import toiterable
+from ..tools.math import toiterable, anynan
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
@@ -316,7 +317,7 @@ class Array(object):
         return res
 
     def zeros_like(self):
-        """return a shallow copy of self with only zeros as entries, containing no `_data`"""
+        """return a copy of self with only zeros as entries, containing no `_data`"""
         res = self.copy(deep=False)
         res._data = []
         res._qdata = np.empty((0, res.rank), dtype=np.intp)
@@ -678,15 +679,17 @@ class Array(object):
         warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.")
         return self.chinfo.make_valid()
 
-    def gauge_total_charge(self, leg, newqtotal=None):
-        """changes the total charge of an Array `A` inplace by adjusting the charge on a certain leg.
+    def gauge_total_charge(self, leg, newqtotal=None, newleg_qconj=None):
+        """Changes the total charge by adjusting the charge on a certain leg.
 
         The total charge is given by finding a nonzero entry [i1, i2, ...] and calculating::
 
-            qtotal = sum([l.qind[qi, 2:] * l.conj for i, l in zip([i1,i2,...], self.legs)])
+            qtotal = self.chinfo.make_valid(
+                np.sum([l.get_charge(l.get_qindex(qi)[0])
+                        for i, l in zip([i1,i2,...], self.legs)], axis=0))
 
-        Thus, the total charge can be changed by redefining the leg charge of a given leg.
-        This is exaclty what this function does.
+        Thus, the total charge can be changed by redefining (= shifting) the LegCharge
+        of a single given leg. This is exaclty what this function does.
 
         Parameters
         ----------
@@ -694,17 +697,33 @@ class Array(object):
             the new leg (index or label), for which the charge is changed
         newqtotal : charge values, defaults to 0
             the new total charge
+        newleg_qconj: {+1, -1, None}
+            Whether the new LegCharge points inward (+1) or outward (-1) afterwards.
+            By default (None) use the previous ``self.legs[leg].qconj``.
+
+        Returns
+        -------
+        copy : :class:`Array`
+            a shallow copy of self with ``copy.qtotal == newqtotal`` and new ``copy.legs[leg]``.
+            The new leg will be a :class`LegCharge`, even if the old leg was a :class:`LegPipe`.
         """
-        leg = self.get_leg_index(leg)
-        newqtotal = self.chinfo.make_valid(newqtotal)  # converts to array, default zero
+        res = self.copy(deep=False)
+        ax = self.get_leg_index(leg)
+        oldleg_qconj = self.legs[ax].qconj
+        if newleg_qconj is None:
+            newleg_qconj = oldleg_qconj
+        if newleg_qconj not in [-1, +1]:
+            raise ValueError("invalid new_qconj")
+        chinfo = self.chinfo
+        newqtotal = res.qtotal = chinfo.make_valid(newqtotal)  # default zero
         chdiff = newqtotal - self.qtotal
-        if isinstance(leg, LegPipe):
-            raise ValueError("not possible for a LegPipe. Convert to a LegCharge first!")
-        newleg = copy_.copy(self.legs[leg])  # shallow copy of the LegCharge
-        newleg.qind = newleg.qind.copy()
-        newleg.qind[:, 2:] = self.chinfo.make_valid(newleg.qind[:, 2:] + newleg.qconj * chdiff)
-        self.legs[leg] = newleg
-        self.qtotal = newqtotal
+        newleg_qind = self.legs[ax].qind.copy()
+        newleg_qind[:, 2:] += oldleg_qconj * chdiff
+        if oldleg_qconj != newleg_qconj:
+            newleg_qind[:, 2:] = -newleg_qind[:, 2:]
+        newleg_qind[:, 2:] = chinfo.make_valid(newleg_qind[:, 2:])
+        res.legs[leg] = LegCharge.from_qind(chinfo, newleg_qind, newleg_qconj)
+        return res
 
     def is_completely_blocked(self):
         """returns bool wheter all legs are blocked by charge"""
@@ -827,6 +846,10 @@ class Array(object):
         reshaped : :class:`Array`
             A copy of self, whith some legs combined into pipes as specified by the arguments.
 
+        See also
+        --------
+        :meth:`combine_legs` : this is reversed by split_legs.
+
         Notes
         -----
         Labels are inherited from self.
@@ -902,6 +925,11 @@ class Array(object):
     def split_legs(self, axes=None, cutoff=0.):
         """Reshape: opposite of combine_legs: split (some) legs which are LegPipes.
 
+        Reverts :meth:`combine_legs` (except a possibly performed `transpose`).
+        The splited legs are replacing the LegPipes at their position, see the examples below.
+        Labels are split reverting what was done in :meth:`combine_legs`.
+        '?#' labels are replaced with ``None``.
+
         Parameters
         ----------
         axes : (iterable of) int|str
@@ -917,10 +945,21 @@ class Array(object):
         reshaped : :class:`Array`
             a copy of self where the specified legs are splitted.
 
-        Notes
-        -----
-        Labels are split reverting what was done in :meth:`combine_legs`.
-        '?#' labels are replaced with ``None``.
+        See also
+        --------
+        :meth:`combine_legs` : this is reversed by split_legs.
+
+        Examples
+        --------
+        Given a rank-5 Array `old_array`, you can combine it and split it again:
+
+        >>> old_array.set_leg_labels(['a', 'b', 'c', 'd', 'e'])
+        >>> comb_array = old_array.combine_legs([[0, 3], [2, 4]] )
+        >>> comb_array.get_leg_labels()
+        ['(a.d)', 'b', '(c.e)']
+        >>> split_array = comb_array.split_legs([0, 2])
+        >>> split_array.get_leg_labels()
+        ['a', 'd', 'b', 'c', 'e']
         """
         if axes is None:
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
@@ -941,6 +980,26 @@ class Array(object):
             labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.set_leg_labels(labels)
         return res
+
+    def as_completely_blocked(self):
+        """gives a version of self which is completely blocked by charges.
+
+        Functions like :func:`svd` or :func:`eigh` require a complete blocking by charges.
+        This can be achieved by encapsulating each leg which is not completely blocked into a
+        :class:`LegPipe` (containing only that single leg). The LegPipe will then contain all
+        necessary information to revert the blocking.
+
+        Returns
+        -------
+        encapsulated_axes : list of int
+            the leg indices which have been encapsulated into Pipes.
+        blocked_self : :class:`Array`
+            self (if ``len(encapsulated_axes) = 0``) or a copy of self with
+        """
+        enc_axes = [a for a, l in enumerate(self.legs) if not l.is_blocked()]
+        if len(enc_axes) == 0:
+            return enc_axes, self
+        return enc_axes, self.combine_legs([[a] for a in enc_axes])
 
     def squeeze(self, axes=None):
         """Like ``np.squeeze``.
@@ -2633,6 +2692,101 @@ def tensordot(a, b, axes=2):
     return res
 
 
+def svd(a, full_matrices=False, compute_uv=True, cutoff=None, qtotal_LR=[None, None],
+        inner_labels=[None, None], inner_qconj=+1):
+    """Singualar value decomposition of an Array `a`.
+
+    Factorizes ``U, S, VH = svd(a)``, such that ``a = U*diag(S)*VH`` (where ``*`` stands for
+    a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
+    For a non-zero `cutoff` this holds only approximately.
+
+    There is a gauge freedom regarding the charges, see also :meth:`Array.gauge_total_charge`.
+    We ensure contractibility by setting ``U.legs[1] = VH.legs[0].conj()``.
+    Further, we gauge the LegCharge such that `U` and `V` have the desired `qtotal_LR`.
+
+    Parameters
+    ----------
+    a : :class:`Array`, shape ``(M, N)``
+        The matrix to be decomposed.
+    full_matrices : bool
+        If ``False`` (default), `U` and `V` have shapes ``(M, K)`` and ``(K, N)``,
+        where ``K=len(S)``.
+        If ``True``, `U` and `V` are full square unitary matrices with shapes ``(M, M)`` and
+        ``(N, N)``. Note that the arrays are not directly contractible in that case; ``diag(S)``
+        would need to be a rectangluar ``(M, N)`` matrix.
+    compute_uv : bool
+        Wheter to compute and return `U` and `V`.
+    cutoff : ``None`` | float
+        Keep only singular values which are (strictly) greater than `cutoff`.
+        (Then the factorization holds only approximately).
+        If ``None`` (default), ignored.
+    qtotal_LR : [{charges|None}, {charges|None}]
+        The desired `qtotal` for `U` and `VH`, respectively.
+        ``[None, None]`` (Default) is equivalent to ``[None, a.qtotal]``.
+        A single `None` entry is replaced the unique charge satisfying the requirement
+        ``U.qtotal + VH.qtotal = a.qtotal (modulo qmod)``.
+    inner_labels_LR: [{str|None}, {str|None}]
+        The first label corresponds to ``U.legs[1]``, the second to ``VH.legs[0]``.
+    inner_qconj : {+1, -1}
+        Direction of the charges for the new leg. Default +1.
+        The new LegCharge is constructed such that ``VH.legs[0].qconj = qconj``.
+
+    Returns
+    -------
+    U : :class:`Array`
+        Matrix with left singular vectors as columns.
+        Shape ``(M, M)`` or ``(M, K)`` depending on `full_matrices`.
+    S : 1D ndarray
+        The singluar values of the array. If no `cutoff` is given, it has lenght ``min(M, N)``.
+        Otherwise, the length is reduced by
+    VH : :class:`Array`
+        Matrix with right singular vectors as rows.
+        Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
+
+    .. todo :
+        implement full_matrices=True
+    """
+    # check arguments
+    if a.rank != 2:
+        raise ValueError("SVD is only defined for a 2D matrix. Use LegPipes!")
+    a_labels = a.get_leg_labels()
+    if full_matrices and ((not compute_uv) or cutoff is not None):
+        raise ValueError("What do you want? Check your goals!")
+    labL, labR = inner_labels
+    U_labels = [a_labels[0], labL]
+    VH_labels = [labR, a_labels[1]]
+    # ensure complete blocking
+    piped_axes, a = a.as_completely_blocked()
+
+    # figure out qtotal_LR
+    qtotal_L, qtotal_R = qtotal_LR
+    if qtotal_L is None and qtotal_R is None:
+        qtotal_R = a.qtotal
+    if qtotal_L is None:
+        qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
+    elif qtotal_L is None:
+        qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
+    elif np.any(a.qtotal != a.chinfo.make_valid(qtotal_L + qtotal_R)):
+        raise ValueError("The entries of `qtotal_LR` have to add up to ``a.qtotal``!")
+    qtotal_LR = qtotal_L, qtotal_R
+
+    # the main work
+    overwrite_a = (len(piped_axes) > 0)
+    U, S, VH = _svd_worker(a, full_matrices, compute_uv, overwrite_a,
+                           cutoff, qtotal_LR, inner_qconj)
+    if not compute_uv:
+        return S
+
+    # 'split' pipes introduced to ensure complete blocking
+    if 0 in piped_axes:
+        U.split_legs(0)
+    if 1 in piped_axes:
+        VH.split_legs(1)
+    U.set_leg_labels(U_labels)
+    VH.set_leg_labels(VH_labels)
+    return U, S, VH
+
+
 def norm(a, ord=None, convert_to_float=True):
     r"""Norm of flattened data.
 
@@ -2848,9 +3002,97 @@ def _tensordot_worker(a, b, axes):
     res._qdata = np.array(res_qdata, dtype=np.intp)
     res._qdata_sorted = True
     res._data = res_data
-    print res._qdata.shape
-    print res.stored_blocks
-    print res.rank
-    print res.shape
-    res.test_sanity()
     return res
+
+
+def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, inner_qconj):
+    """main work of svd. Assumes that `a` is 2D and completely blocked."""
+    chinfo = a.chinfo
+    qtotal_L, qtotal_R = qtotal_LR
+    at = 0  # will be gradually increased, counting the number of singular values
+    S = []
+    if compute_uv:
+        U_data = []
+        U_qdata = []
+        VH_data = []
+        VH_qdata = []
+    qind_row = np.empty(2+chinfo.qnumber, dtype=QDTYPE)
+    new_leg_qind = []
+    if full_matrices:
+        new_leg_qind_full = []
+        at_full = 0
+
+    # main loop
+    for a_qdata_row, block in itertools.izip(a._qdata, a._data):
+        if compute_uv:
+            U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
+            if anynan(U_b) or anynan(VH_b):
+                raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
+                    np.nansum(U_b), np.nansum(VH_b)))
+        else:
+            S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
+        if anynan(S_b):
+            raise ValueError("NaN in S: " + str(np.nansum(S_b)))
+
+        if cutoff is not None:
+            keep = (S_b > cutoff)  # bool array
+            S_b = S_b[keep]
+            if compute_uv:
+                U_b = U_b[:, keep]
+                VH_b = VH_b[keep, :]
+        num = len(S_b)
+        if num > 0:  # have new singular values
+            S.append(S_b)
+            if compute_uv:
+                qi_L, qi_R = a_qdata_row
+                qi_C = len(new_leg_qind)
+                # qind_row for the new leg at the *right*, `VH.legs[0]`.
+                qind_row[0] = at
+                qind_row[1] = at + num
+                qind_row[2:] = (qtotal_R - a.legs[1].get_charge(qi_R))*inner_qconj
+                new_leg_qind.append(qind_row.copy())
+                U_data.append(U_b.astype(a.dtype, copy=False))
+                VH_data.append(VH_b.astype(a.dtype, copy=False))
+                U_qdata.append(np.array([qi_L, qi_C], dtype=np.intp))
+                VH_qdata.append(np.array([qi_C, qi_R], dtype=np.intp))
+        if full_matrices:
+            # num will be min(block.shape) > 0 and compute_uv=True
+            # Thus we inserted U_b and V_H already to U_data and VH_data!
+            # just need to take care of the second LegCharge required...
+            num_full = max(block.shape)
+            # qind_row also for the right. adjust later...
+            qind_row[0] = at_full
+            qind_row[1] = at_full + num_full
+            new_leg_qind_full.append(qind_row.copy())
+            at_full += num_full
+        at += num
+    if at == 0:
+        raise RuntimeError("SVD found no singluar values")
+    S = np.concatenate(S)
+    if not compute_uv:
+        return (None, S, None)
+
+    # else: compute_uv is True
+    new_leg_qind = np.array(new_leg_qind, dtype=QDTYPE)
+    new_leg_qind[:, 2:] = chinfo.make_valid(new_leg_qind[:, 2:])
+    new_leg_R = LegCharge.from_qind(chinfo, new_leg_qind, inner_qconj)
+    new_leg_L = new_leg_R.conj()
+    if full_matrices:
+        new_leg_qind_full = np.array(new_leg_qind_full, dtype=QDTYPE)
+        new_leg_qind_full[:, 2:] = chinfo.make_valid(new_leg_qind_full[:, 2:])
+        new_leg_full = LegCharge.from_qind(chinfo, new_leg_qind_full, inner_qconj)
+        if len(S) == a.shape[1]:  # new_leg_R is fine
+            new_leg_L = new_leg_full.conj()
+        elif len(S) == a.shape[0]:  # new_leg_L is fine
+            new_leg_R = new_leg_full
+        else:
+            raise Exception("this should not happen...")
+    U = Array(chinfo, [a.legs[0], new_leg_L], a.dtype, qtotal_L)
+    VH = Array(chinfo, [new_leg_R, a.legs[1]], a.dtype, qtotal_R)
+    U._data = U_data
+    U._qdata = np.array(U_qdata, dtype=np.intp)
+    U._qdata_sorted = a._qdata_sorted
+    VH._data = VH_data
+    VH._qdata = np.array(VH_qdata, dtype=np.intp)
+    VH._qdata_sorted = a._qdata_sorted
+    return U, S, VH

@@ -45,7 +45,7 @@ from numpy.linalg.linalg import LinAlgError, _makearray, _fastCopyAndTranspose, 
 _old_scipy = (np.lib._version.NumpyVersion(scipy.__version__) < '0.18.0')
 # (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
 
-#: the loaded share
+#: the CLAPACK library loaded with _load_lapack
 _lapack_lib = None
 
 

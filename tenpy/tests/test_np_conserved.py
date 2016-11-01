@@ -65,7 +65,7 @@ def test_npc_Array_conversion():
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc_add.conj()])
     npt.assert_equal(a.qtotal, np.array([-1, 0], npc.QDTYPE))
     npt.assert_equal(a.to_ndarray(), arr)
-    a.gauge_total_charge(1)
+    a = a.gauge_total_charge(1)
     npt.assert_equal(a.qtotal, np.array([0, 0], npc.QDTYPE))
     # check type conversion
     a_clx = a.astype(np.complex128)
@@ -444,6 +444,41 @@ def test_npc_outer():
         npt.assert_equal(c.to_ndarray(), cflat)
         c = npc.tensordot(a, b, axes=0)  # (should as well call npc.outer)
         npt.assert_equal(c.to_ndarray(), cflat)
+
+
+def test_npc_svd():
+    for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
+        print "m, n = ", m, n
+        tol_NULP = max(max(m, n)**4, 100)
+        for i in xrange(1000):
+            A = random_Array((m, n), chinfo3, sort=True)
+            if A.stored_blocks > 0:
+                break
+        Aflat = A.to_ndarray()
+        Sonly = npc.svd(A, compute_uv=False)
+        U, S, VH = npc.svd(A, full_matrices=False, compute_uv=True)
+        U.test_sanity()
+        VH.test_sanity()
+        npt.assert_array_almost_equal_nulp(Sonly, S, tol_NULP)
+        recalc = npc.tensordot(U.scale_axis(S, axis=-1), VH, axes=1)
+        npt.assert_array_almost_equal_nulp(recalc.to_ndarray(), Aflat, tol_NULP)
+        # compare with flat SVD
+        Uflat, Sflat, VHflat = np.linalg.svd(Aflat, False, True)
+        print Sflat
+        print S
+        perm = np.argsort(-S) # sort descending
+        print S[perm]
+        iperm = npc.reverse_sort_perm(perm)
+        for i in xrange(len(Sflat)):
+            if i not in iperm:  # dopped it in npc.svd()
+                assert(Sflat[i] < EPS*10)
+        Sflat = Sflat[iperm]
+        npt.assert_array_almost_equal_nulp(Sonly, Sflat, tol_NULP)
+        # comparing U and Uflat is hard: U columns can change by a phase...
+    Ufull, Sfull, VHfull = npc.svd(A, full_matrices=True, compute_uv=True)
+    Ufull.test_sanity()
+    VHfull.test_sanity()
+    npt.assert_array_almost_equal_nulp(Sfull, S, tol_NULP)
 
 
 if __name__ == "__main__":
