@@ -28,24 +28,49 @@ http://projects.scipy.org/numpy/ticket/990, which is now hosted at
 He explains a bit more in detail, what fails.
 
 The include of `dgesvd` to scipy was done here `https://github.com/scipy/scipy/pull/5994`_.
+
+Examples
+--------
+The idea is that you just import the `svd` from this module and use it as replacement for
+``np.linalg.svd`` or ``scipy.linalg.svd``:
+
+>>> from svd_robust import svd
+>>> U, S, VT = svd([[1., 1.], [0., [1.]])
+
 """
 
 import numpy as np
 import scipy
+import scipy.linalg
 import warnings
 
 from ctypes import CDLL, POINTER, c_int, c_char
 from numpy.core import single, double, csingle, cdouble  # for those, 'c' = complex
 
-from numpy.linalg.linalg import LinAlgError, _makearray, _fastCopyAndTranspose, \
-    isComplexType, _realType, _commonType, \
-    _assertRank2, _assertFinite, _assertNoEmpty2d
+from numpy.linalg.linalg import LinAlgError
 
-#: check the scipy version wheter it includes LAPACK's 'gesvd'
-_old_scipy = (np.lib._version.NumpyVersion(scipy.__version__) < '0.18.0')
+try:
+    from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
+        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
+except:
+    warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
+    # If you get this warning, you might still be lucky and not need the workaround,
+    # for examply, if you have a recent version of scipy....
+
+    # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
+    # from the numpy code (version 1.11.0 works for me) on github.
+
+
+# check the scipy version wheter it includes LAPACK's 'gesvd'
+try:
+    # simply check wether scipy.linalg.svd has the keyword it should have
+    scipy.linalg.svd([1], lapack_driver='dgesvd')
+    _old_scipy = False
+except TypeError:
+    _old_scipy = True
 # (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
 
-#: the CLAPACK library loaded with _load_lapack
+#: will be the the CLAPACK library loaded with _load_lapack()
 _lapack_lib = None
 
 
@@ -94,7 +119,7 @@ def svd(a,
             pass
     # 'gesvd' lapack driver
     if not _old_scipy:
-        # scipy version >= 0.18.0 : use 'gesvd' included in LAPACK
+        # use the LAPACK wrapper included in scipy version >= 0.18.0 : use 'gesvd' included in LAPACK
         return scipy.linalg.svd(a, full_matrices, compute_uv, overwrite_a, check_finite, 'gesvd')
     else:  # for backwards compatibility
         _load_lapack(warn=warn)
