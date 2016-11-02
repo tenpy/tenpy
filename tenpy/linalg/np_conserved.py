@@ -2473,6 +2473,58 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
     return grid_legs
 
 
+def trace(a, leg1=0, leg2=1):
+    """Trace of `a`, summing over leg1 and leg2.
+
+    Requires that the contracted legs are contractible (i.e. have opposite charges).
+    Labels are inherited from `a`.
+
+    Parameters
+    ----------
+    leg1, leg2: str|int
+        The leg label or index for the two legs which should be contracted (i.e. summed over).
+
+    Returns
+    -------
+    traced : :class:`Array` | ``a.dtype``
+        A scalar if ``a.rank == 2``, else an :class:`Array` of rank ``a.rank - 2``.
+        Equivalent to ``sum([a.take_slice([i, i], [leg1, leg2]) for i in range(a.shape[leg1])])``.
+    """
+    ax1, ax2 = a.get_leg_indices([leg1, leg2])
+    if ax1 == ax2:
+        raise ValueError("leg1 = {0!r} == leg2 = {1!r} ???".format(leg1, leg2))
+    a.legs[ax1].test_contractible(a.legs[ax2])
+    if a.rank == 2:
+        # full contraction: ax1, ax2 = 0, 1 or vice versa
+        res = a.dtype.type(0.)
+        for qdata_row, block in itertools.izip(a._qdata, a._data):
+            if qdata_row[0] == qdata_row[1]:
+                res += np.trace(block)
+        return res
+    # non-complete contraction
+    keep = np.array([ax for ax in xrange(a.rank) if ax != ax1 and ax != ax2], dtype=np.intp)
+    legs = [a.legs[ax] for ax in keep]
+    res = Array(a.chinfo, legs, a.dtype, a.qtotal)
+    if a.stored_blocks > 0:
+        res_data = {}  # dictionary qdata_row -> block
+        for qdata_row, block in itertools.izip(a._qdata, a._data):
+            if qdata_row[ax1] != qdata_row[ax2]:
+                continue  # not on the diagonal => doesn't contribute
+            new_qdata_row = tuple(qdata_row[keep])
+            if new_qdata_row in res_data:
+                res_data[new_qdata_row] += np.trace(block, axis1=ax1, axis2=ax2)
+            else:
+                res_data[new_qdata_row] = np.trace(block, axis1=ax1, axis2=ax2)
+        if len(res_data) > 0:
+            res._data = res_data.values()
+            res._qdata = np.array(res_data.keys(), np.intp)
+            res._qdata_sorted = False
+    # labels
+    a_labels = a.get_leg_labels()
+    res.set_leg_labels([a_labels[ax] for ax in keep])
+    return res
+
+
 def outer(a, b):
     """Forms the outer tensor product, equivalent to ``tensordot(a, b, axes=0)``.
 
@@ -2788,6 +2840,36 @@ def svd(a, full_matrices=False, compute_uv=True, cutoff=None, qtotal_LR=[None, N
     U.set_leg_labels(U_labels)
     VH.set_leg_labels(VH_labels)
     return U, S, VH
+
+
+def pinv(a, cutoff=1.e-15):
+    """Compute the (Moore-Penrose) pseudo-inverse of a matrix.
+
+    Equivalent to the following procedure: Perform a SVD, ``U, S, VH = svd(a, cutoff=cutoff)``
+    with a `cutoff` > 0, calculate ``P = U * diag(1/S) * VH``
+    (with ``*`` denoting tensordot) and return ``P.conj.transpose()``.
+
+    Parameters
+    ----------
+    a : (M, N) :class:`Array`
+      Matrix to be pseudo-inverted.
+    cuttof : float
+        Cutoff for small singular values, as given to :func:`svd`.
+        (Note: different convetion than numpy.)
+
+    Returns
+    -------
+    B : (N, M) :class:`Array`
+      The pseudo-inverse of `a`.
+    """
+    if cutoff <= 0.:
+        raise ValueError("invalid cutoff")
+    # follow exactly the procedure lined out.
+    # however, use inplace methods and don't construct the diagonal matrix explicitly.
+    U, S, VH = svd(a, cutoff=cutoff)
+    X = VH.itranspose().iconj().iscale_axis(1./S, axis=-1)
+    Z = U.itranspose().iconj()
+    return tensordot(X, Z, axes=1)
 
 
 def norm(a, ord=None, convert_to_float=True):

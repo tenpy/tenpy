@@ -457,6 +457,7 @@ def test_npc_svd():
         Aflat = A.to_ndarray()
         Sonly = npc.svd(A, compute_uv=False)
         U, S, VH = npc.svd(A, full_matrices=False, compute_uv=True)
+        assert(U.shape[1] == S.shape[0] == VH.shape[0])
         U.test_sanity()
         VH.test_sanity()
         npt.assert_array_almost_equal_nulp(Sonly, S, tol_NULP)
@@ -464,8 +465,6 @@ def test_npc_svd():
         npt.assert_array_almost_equal_nulp(recalc.to_ndarray(), Aflat, tol_NULP)
         # compare with flat SVD
         Uflat, Sflat, VHflat = np.linalg.svd(Aflat, False, True)
-        print Sflat
-        print S
         perm = np.argsort(-S) # sort descending
         print S[perm]
         iperm = npc.reverse_sort_perm(perm)
@@ -479,6 +478,29 @@ def test_npc_svd():
     Ufull.test_sanity()
     VHfull.test_sanity()
     npt.assert_array_almost_equal_nulp(Sfull, S, tol_NULP)
+
+
+def test_npc_pinv():
+    m, n = (10, 20)
+    A = random_Array((m, n), chinfo3)
+    tol_NULP = max(max(m, n)**3, 1000)
+    Aflat = A.to_ndarray()
+    P = npc.pinv(A, 1.e-13)
+    P.test_sanity()
+    Pflat = np.linalg.pinv(Aflat, 1.e-13)
+    assert(np.max(np.abs(P.to_ndarray() - Pflat)) < tol_NULP*EPS)
+
+
+def test_trace():
+    chinfo = chinfo3
+    legs = [gen_random_legcharge(s, chinfo) for s in (7, 8, 9)]
+    legs.append(legs[1].conj())
+    A = npc.Array.from_func(np.random.random, chinfo, legs, qtotal=[1], shape_kw='size')
+    Aflat = A.to_ndarray()
+    Atr = npc.trace(A, leg1=1, leg2=-1)
+    Atr.test_sanity()
+    Aflattr = np.trace(Aflat, axis1=1, axis2=-1)
+    npt.assert_array_almost_equal_nulp(Atr.to_ndarray(), Aflattr, A.shape[1])
 
 
 if __name__ == "__main__":
