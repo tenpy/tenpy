@@ -34,7 +34,7 @@ EPS = np.finfo(np.float_).eps
 
 def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):
     """generates a random npc.Array of given shape with random legcharges and entries."""
-    legs = [gen_random_legcharge(s, chinfo) for s in shape]
+    legs = [gen_random_legcharge(chinfo, s) for s in shape]
     a = npc.Array.from_func(func, chinfo, legs, qtotal=qtotal, shape_kw=shape_kw)
     a.set_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
     if sort:
@@ -251,10 +251,10 @@ def test_npc_Array_reshape():
     # test concatenate
     # create array `c` to concatenate with b along axis 2
     legs = b.legs[:]
-    legs[1] = gen_random_legcharge(5, b.chinfo)
+    legs[1] = gen_random_legcharge(b.chinfo, 5)
     c1 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
     c1flat = c1.to_ndarray()
-    legs[1] = gen_random_legcharge(3, b.chinfo)
+    legs[1] = gen_random_legcharge(b.chinfo, 3)
     c2 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
     c2flat = c2.to_ndarray()
     bc1c2 = npc.concatenate([b, c1, c2], axis=1)
@@ -264,7 +264,7 @@ def test_npc_Array_reshape():
 
 def test_npc_grid_outer():
     ci = chinfo3
-    p_leg = gen_random_legcharge(4, ci)
+    p_leg = gen_random_legcharge(ci, 4)
     legs_op = [p_leg, p_leg.conj()]
     op_0 = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[0], shape_kw='size')
     op_pl = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[1], shape_kw='size')
@@ -493,7 +493,7 @@ def test_npc_pinv():
 
 def test_trace():
     chinfo = chinfo3
-    legs = [gen_random_legcharge(s, chinfo) for s in (7, 8, 9)]
+    legs = [gen_random_legcharge(chinfo, s) for s in (7, 8, 9)]
     legs.append(legs[1].conj())
     A = npc.Array.from_func(np.random.random, chinfo, legs, qtotal=[1], shape_kw='size')
     Aflat = A.to_ndarray()
