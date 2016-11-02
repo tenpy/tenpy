@@ -109,6 +109,9 @@ class Array(object):
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
+
+    .. todo :
+        we don't allow 0-rank arrays, do we? derive chargeinfo from legs !
     """
 
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
