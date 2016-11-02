@@ -2464,8 +2464,7 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
             print qflat
             print qflat[i]
             print qflat_entry
-            raise ValueError("different grid entries lead to different charges" + " at index " +
-                             str(i))
+            raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
     grid_legs[axis] = LegCharge.from_qflat(chinfo, qconj * np.array(qflat), qconj)

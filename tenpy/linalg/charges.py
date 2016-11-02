@@ -19,7 +19,8 @@ import copy
 import itertools
 import bisect
 import warnings
-"""the dtype of a single charge"""
+
+#: the dtype of a single charge
 QDTYPE = np.int_
 
 
@@ -306,6 +307,8 @@ class LegCharge(object):
 
     def is_sorted(self):
         """returns whether the charge values in qind are sorted lexiographically"""
+        if self.chinfo.qnumber == 0:
+            return True
         res = np.lexsort(self.qind[:, 2:].T)
         return np.all(res == np.arange(len(res)))
 
