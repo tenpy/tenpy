@@ -192,13 +192,7 @@ class Array(object):
         return res
 
     @classmethod
-    def from_ndarray(cls,
-                     data_flat,
-                     chargeinfo,
-                     legcharges,
-                     dtype=np.float64,
-                     qtotal=None,
-                     cutoff=None):
+    def from_ndarray(cls, data_flat, chargeinfo, legcharges, dtype=None, qtotal=None, cutoff=None):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -210,8 +204,8 @@ class Array(object):
             the nature of the charge
         legcharges : list of LegCharge
             a LegCharge for each of the legs.
-        dtype : type | string
-            the data type of the array entries. Defaults to np.float64.
+        dtype : ``np.dtype`` | string
+            the data type of the array entries. Defaults to dtype of data_flat.
         qtotal : None | charges
             the total charge of the new array.
         cutoff : float
@@ -229,8 +223,11 @@ class Array(object):
         """
         if cutoff is None:
             cutoff = QCUTOFF
+        data_flat = np.asarray(data_flat)  # unspecified dtype
+        if dtype is None:
+            dtype = data_flat.dtype
         res = cls(chargeinfo, legcharges, dtype, qtotal)  # without any data
-        data_flat = np.asarray(data_flat, dtype=res.dtype)
+        data_flat = data_flat.astype(dtype, copy=False)
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
                 res.shape, data_flat.shape))
@@ -968,7 +965,7 @@ class Array(object):
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
         else:
             axes = self.get_leg_indices(toiterable(axes))
-            if len(set(axes)) == len(axes):
+            if len(set(axes)) != len(axes):
                 raise ValueError("can't split a leg multiple times!")
         for ax in axes:
             if not isinstance(self.legs[ax], LegPipe):
@@ -1122,7 +1119,7 @@ class Array(object):
         axes : (list of) int | string
             The `i`th entry in this list specifies the axis for the `i`th entry of `mask`,
             either as an int, or with a leg label.
-            If axes is just a single int/string, specify just one mask.
+            If axes is just a single int/string, specify just a single mask.
 
         Returns
         -------
@@ -1132,8 +1129,10 @@ class Array(object):
             ``block_masks[a][qind]`` is a boolen mask which indices to keep
             in block ``qindex`` of ``axes[a]``
         """
+        if axes is not toiterable(axes):
+            mask = [mask]
         axes = self.get_leg_indices(toiterable(axes))
-        mask = [np.asarray(m) for m in toiterable(mask)]
+        mask = [np.asarray(m) for m in mask]
         if len(axes) != len(mask):
             raise ValueError("len(axes) != len(mask)")
         if len(axes) == 0:
