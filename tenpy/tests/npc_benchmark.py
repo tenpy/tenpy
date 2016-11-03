@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 """Benchmark comparison:
 
-new TenPyLight npc -vs.- old TenPy npc -vs.- flat numpy.
+new TenPyLight npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 """
 import timeit
+import cProfile
+import time
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc
@@ -98,13 +100,15 @@ def convert_old_npc(a, b, axes):
     a2 = old_npc.zeros(a_qind, a.dtype, a_qconj, a.qtotal, mod_q)
     a2.sorted = a._qdata_sorted
     a2.dat = a._data[:]
-    a2.q_dat = a._qdata.copy()
+    a2.q_dat = np.array(a._qdata, dtype=np.uint)
     b_qind = [l.qind for l in b.legs]
     b_qconj = [l.qconj for l in b.legs]
     b2 = old_npc.zeros(b_qind, b.dtype, b_qconj, b.qtotal, mod_q)
     b2.sorted = b._qdata_sorted
     b2.dat = b._data[:]
-    b2.q_dat = b._qdata.copy()
+    b2.q_dat = np.array(b._qdata, dtype=np.uint)
+    a2.check_sanity()
+    b2.check_sanity()
     return a2, b2, (axes_a, axes_b)
 
 
@@ -142,9 +146,19 @@ def tensordot_timing(do_flat=True, do_old_npc=True,
     return time_npc, time_old_npc, time_flat
 
 
+def tensordot_profile(fn=None, **kwargs):
+    """profile the tensordot"""
+    a, b, axes = setup_npc(**kwargs)
+    print "profile tensordot(a, b, axes) with following sparse stats:"
+    print a.sparse_stats()
+    print b.sparse_stats()
+    cProfile.runctx("npc.tensordot(a, b, axes)", globals(), locals(), fn)
+
+
 def run_tensordot_timing(sizes=range(5, 60, 5),
                          num_qs=range(3),
                          seeds=range(5),
+                         dmax=1000,
                          **kwargs):
     print "------ tensordot_timing ------"
     data = {}
@@ -160,7 +174,7 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
             print size  # just to notice that we're still running
             dims = [kwargs.get(k, 2) for k in ['dim_a_out', 'dim_b_out', 'dim_contract']]
             mat_shape = [size**d for d in dims]  # flat requires to perform matrix (M,N) dot (N,K)
-            do_flat = (np.prod(mat_shape) <= 70**3) and (num_q == num_qs[0])
+            do_flat = (np.prod(mat_shape) <= dmax**3) and (num_q == num_qs[0])
             timing = np.zeros(3)  # average over seeds
             for seed in seeds:
                 kwargs.update(mod_q=mod_q, size=size, seed=seed)
@@ -173,18 +187,20 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
     return data
 
 
-def run_save(fn_t='npc_benchmark_res_{dim}_{n_qsectors:d}.pkl'):
-    """get a collection of different timings...."""
-    import pickle
-    sizes = range(5, 50, 5) + range(50, 200, 25)
-    for n_qsectors, dim in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3)]:
+def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000):
+    """get a collection of different timings....
+    2D matrices to be contracted are at most of shape (dmax, dmax)."""
+    sizes_all = range(5, 50, 5) + range(50, 200, 25) + range(200, 500, 100) + range(500, 2001, 250)
+    for n_qsectors, dim in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
         print "+"*100
+        print "n_qsectors = {nq:d}, dim ={dim:d}".format(nq=n_qsectors, dim=dim)
+        sizes = [s for s in sizes_all if s**dim < dmax]
+        print "sizes = ", sizes
         kwargs = dict(n_qsectors=n_qsectors, dim_a_out=dim, dim_b_out=dim, dim_contract=dim)
-        data = run_tensordot_timing(sizes=sizes, **kwargs)
+        data = run_tensordot_timing(sizes=sizes, dmax=dmax, **kwargs)
+        data['kwargs'] = kwargs
         fn = fn_t.format(n_qsectors=n_qsectors, dim=dim)
-        print "save to ", fn
-        with open(fn, 'w') as f:
-            pickle.dump(data, f)
+        save(data, fn)
 
 
 def print_timing_res(data):
@@ -192,8 +208,9 @@ def print_timing_res(data):
     sizes = data['sizes']
     timed = data['timings']
     print "="*80
-    print "qnum| size |     flat|      old|      new|  new-old|"
-    row = "{qn: 4d}{s: 5d}{flat: 10.4f}{old: 10.4f}{new: 10.4f}{new_old: 10.4f}|"
+    # print "kwargs:", data['kwargs']
+    print "qnum size      flat       old       new   new-old"
+    row = "{qn: 4d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
     for qnumber, timed_qn in zip(num_qs, timed):
         for size, timed_size in zip(sizes, timed_qn):
             new, old, flat = timed_size
@@ -219,7 +236,9 @@ def plot_timing_res(data, fn=None):
                             (t_qn[:, 2], 'numpy', 'b'),
                             # (t_qn[:, 2]-t_qn[:, 1], 'diff old_npc-npc', 'k')
                             ]:
-            pl.plot(sizes, t, col+m+'-', markersize=8, label=lab)
+            lab = "{lab}, qnumber {qn:d}".format(lab=lab, qn=qn)
+            pl.plot(sizes, t, col+m+'-', markersize=8, label=lab+', qnumber ')
+    pl.title(', '.join([k+"="+str(v) for k, v in data['kwargs'].iteritems()]))
     pl.xlabel('size')
     pl.ylabel('total time')
     pl.loglog()
@@ -227,24 +246,56 @@ def plot_timing_res(data, fn=None):
     if fn is None:
         pl.show()
     else:
-        pl.save(fn+'.png')
+        pl.savefig(fn)
     pl.close()
 
 
+def load(fn):
+    import pickle
+    print "loading ", fn
+    with open(fn, 'r') as f:
+        return pickle.load(f)
+
+
+def save(data, fn):
+    import pickle
+    print "save to ", fn
+    with open(fn, 'w') as f:
+        pickle.dump(data, f)
+
+
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        import pickle
-        if sys.argv[1] == 'run_save':
-            run_save()
-            sys.exit(0)
-        for fn in sys.argv[1:]:
-            print "loading results from ", fn+'.pklz'
-            with open(fn+'.pkl', 'r') as f:
-                timing_res = pickle.load(f)  # load the timing results from the file
-            print_timing_res(timing_res)
-            plot_timing_res(timing_res, fn)
-        sys.exit(0)
-    timing_res = run_tensordot_timing()
-    print_timing_res(timing_res)
-    plot_timing_res(timing_res)
+    import argparse
+    import os.path
+    parser = argparse.ArgumentParser(description="""obtianing benchmarks of np_conserved.
+                                     Without any arguments, just run a quick test.""")
+
+    parser.add_argument('-t', '--timing', action='store_true',
+                        help="""run the function run_timing_save() to perform an extensive timing
+                        for scaling analysis. Duration > 1h!""")
+    parser.add_argument('-p', '--plot', action='store_true',
+                        help='print and plot the timing results saved in given files.')
+    parser.add_argument('--profile', action='store_true',
+                        help='profile tensordot. Save to file, if one is given.')
+    parser.add_argument('files', nargs='*',
+                        help='Specify filenames used depending on other options.')
+    args = parser.parse_args()
+    if args.timing:
+        t0 = time.time()
+        run_save()
+        print "="*80
+        print "finished timing after", time.time()-t0, "seconds in total"
+    if args.plot:
+        for fn in args.files:
+            data = load(fn)
+            print_timing_res(data)
+            plot_timing_res(data, os.path.splitext(fn)[0]+'.png')
+    if args.profile:
+        fn = None if len(args.files) == 0 else args.files[0]
+        dim = 3
+        tensordot_profile(fn, size=30, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
+                          dim_contract=dim)
+    if not any([args.timing, args.plot, args.profile]):
+        data = run_tensordot_timing()
+        print_timing_res(data)
+        plot_timing_res(data)
