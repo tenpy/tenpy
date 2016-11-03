@@ -20,35 +20,34 @@ import itertools
 import bisect
 import warnings
 
-#: the dtype of a single charge
-QDTYPE = np.int_
-
 
 class ChargeInfo(object):
-    r"""Meta-data about the charge of a tensor.
+    """Meta-data about the charge of a tensor.
 
     Saves info about the nature of the charge of a tensor.
     Provides :meth:`make_valid` for taking modulo `m`.
 
     Parameters
     ----------
-    mod : iterable of `QDTYPE`
+    mod : iterable of `qtype`
         The len gives the number of charges, `qnumber`.
         For each charge one entry `m`: the charge is conserved modulo `m`.
         Defaults to trivial, i.e., no charge.
     names : list of str
         Descriptive names for the charges.  Defaults to ``['']*qnumber``.
+    qtype : type
+        the data type for the numpy arrays. Defaults to `np.int_`.
 
     Attributes
     ----------
     qnumber
-    mod : 1D array QDTYPE
-        The periodicity of the charges. One entry for each charge.
+    mod
+    qtype
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
     _mask_mod1 : 1D array bool
-        mask equivalent to ``(mod == 1)``, to speed up `make_valid`
-    _mod_masked : 1D arry QDTYPE
+        mask ``(mod == 1)``, to speed up `make_valid`
+    _mod_masked : 1D arry qtype
         equivalent to ``self.mod[self._maks_mod1]``
 
     Notes
@@ -56,11 +55,11 @@ class ChargeInfo(object):
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
 
-    def __init__(self, mod=[], names=None):
+    def __init__(self, mod=[], names=None, qtype=np.int_):
         """see help(self)"""
-        self.mod = np.array(mod, dtype=QDTYPE)
-        self._mask = np.not_equal(self.mod, 1)  # pre-convert for faster make_valid
-        self._mod_masked = np.array(self.mod[self._mask], dtype=QDTYPE)
+        mod = np.array(mod, dtype=qtype)
+        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
+        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
         if names is None:
             names = [''] * self.qnumber
         self.names = [str(n) for n in names]
@@ -68,11 +67,9 @@ class ChargeInfo(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self.mod.ndim != 1:
+        if self._mod_masked.ndim != 1:
             raise ValueError("mod has wrong shape")
-        assert np.all(self._mask == np.not_equal(self.mod, 1))
-        assert np.all(self._mod_masked == self.mod[self._mask])
-        if np.any(self.mod <= 0):
+        if np.any(self._mod_masked <= 0):
             raise ValueError("mod should be > 0")
         if len(self.names) != self.qnumber:
             raise ValueError("names has incompatible length with mod")
@@ -80,10 +77,24 @@ class ChargeInfo(object):
     @property
     def qnumber(self):
         """the number of charges, also refered to as qnumber."""
-        return len(self.mod)
+        return len(self._mask)
+
+    @property
+    def mod(self):
+        """modulo how much each of the charges is taken."""
+        res = np.ones(self.qnumber, dtype=self.qtype)
+        res[self._mask] = self._mod_masked
+        return res
+
+    @property
+    def qtype(self):
+        """the data type of the charges"""
+        return self._mod_masked.dtype
 
     def make_valid(self, charges=None):
-        r"""Take charges modulo self.mod.
+        """Take charges modulo self.mod.
+
+        Acts in-place, if charges is an array.
 
         Parameters
         ----------
@@ -94,11 +105,11 @@ class ChargeInfo(object):
         Returns
         -------
         charges :
-            `charges` taken modulo self.mod, but with x % 1 := x
+            `charges` taken modulo `mod`, but with ``x % 1 := x``
         """
         if charges is None:
-            return np.zeros((self.qnumber, ), dtype=QDTYPE)
-        charges = np.array(charges, dtype=QDTYPE)
+            return np.zeros((self.qnumber, ), dtype=self.qtype)
+        charges = np.array(charges, dtype=self.qtype)
         charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
         return charges
 
@@ -110,7 +121,7 @@ class ChargeInfo(object):
         res : bool
             True, if all 0 <= charges <= self.mod (wherever self.mod != 1)
         """
-        charges = np.asarray(charges, dtype=QDTYPE)[..., self._mask]
+        charges = np.asarray(charges, dtype=self.qtype)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
     def __repr__(self):
@@ -121,7 +132,7 @@ class ChargeInfo(object):
         r"""compare self.mod and self.names for equality, ignoring missin names."""
         if self is other:
             return True
-        if not self.mod == other.mod:
+        if not np.all(self.mod == other.mod):
             return False
         for l, r in itertools.izip(self.names, other.names):
             if r != l and l != '' and r != '':
@@ -178,7 +189,7 @@ class LegCharge(object):
     def __init__(self, chargeinfo, qind, qconj=1):
         """see help(self)"""
         self.chinfo = chargeinfo
-        self.qind = np.array(qind, dtype=QDTYPE)
+        self.qind = np.array(qind, dtype=chargeinfo.qtype)
         self.qconj = int(qconj)
         self.sorted = False
         self.bunched = False
@@ -213,14 +224,14 @@ class LegCharge(object):
         :meth:`sort` : sorts by charges
         :meth:`bunch` : bunches contiguous blocks of the same charge.
         """
-        qflat = np.asarray(qflat, dtype=QDTYPE)
+        qflat = np.asarray(qflat, dtype=chargeinfo.qtype)
         if qflat.ndim == 1 and chargeinfo.qnumber == 1:
             # accept also 1D arrays, if the qnumber is 1
             qflat = qflat.reshape(-1, 1)
         ind_len, qnum = qflat.shape
         if qnum != chargeinfo.qnumber:
             raise ValueError("qflat has wrong shape!")
-        qind = np.empty((ind_len, 2 + qnum), dtype=QDTYPE)
+        qind = np.empty((ind_len, 2 + qnum), dtype=chargeinfo.qtype)
         qind[:, 0] = np.arange(ind_len)
         qind[:, 1] = np.arange(1, ind_len + 1)
         qind[:, 2:] = chargeinfo.make_valid(qflat)
@@ -249,7 +260,7 @@ class LegCharge(object):
 
         """
         qind = [[sl.start, sl.stop] + list(ch) for (ch, sl) in qdict.iteritems()]
-        qind = np.array(qind, dtype=QDTYPE)
+        qind = np.array(qind, dtype=chargeinfo.qtype)
         sort = np.argsort(qind[:, 0])  # sort by slice start
         qind = qind[sort, :]
         res = cls(chargeinfo, qind, qconj)
@@ -289,7 +300,7 @@ class LegCharge(object):
 
     def to_qflat(self):
         """return `self.qind` in `qdict` form"""
-        qflat = np.empty((self.ind_len, self.chinfo.qnumber), dtype=QDTYPE)
+        qflat = np.empty((self.ind_len, self.chinfo.qnumber), dtype=self.chinfo.qtype)
         for qsec in self.qind:
             qflat[slice(qsec[0], qsec[1])] = qsec[2:]
         return qflat
@@ -541,7 +552,7 @@ class LegCharge(object):
 
     def _set_qind_block_sizes(self, block_sizes):
         """Set self.qind[:, :2] from an list of the blocksizes."""
-        block_sizes = np.asarray(block_sizes, dtype=QDTYPE)
+        block_sizes = np.asarray(block_sizes, dtype=self.chinfo.qtype)
         self.qind[:, 1] = np.cumsum(block_sizes)
         self.qind[0, 0] = 0
         self.qind[1:, 0] = self.qind[:-1, 1]
@@ -789,7 +800,7 @@ class LegPipe(LegCharge):
 
         nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
         # determine q_map -- it's essentially the grid.
-        q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QDTYPE)
+        q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=self.chinfo.qtype)
         q_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
         # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
         legbs = [l._get_block_sizes() for l in self.legs]
@@ -799,7 +810,7 @@ class LegPipe(LegCharge):
         # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
 
         # calculate total charges
-        qind = np.zeros((nblocks, 2 + qnumber), dtype=QDTYPE)
+        qind = np.zeros((nblocks, 2 + qnumber), dtype=self.chinfo.qtype)
         if qnumber > 0:
             # similar scheme as for the block sizes above, but now for 1D arrays of charges
             legcharges = [(self.qconj * l.qconj) * l.qind[:, 2:] for l in self.legs]

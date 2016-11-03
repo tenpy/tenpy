@@ -48,7 +48,7 @@ import warnings
 import itertools
 
 # import public API from charges
-from .charges import (QDTYPE, ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
+from .charges import (ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
@@ -82,7 +82,7 @@ class Array(object):
         the leg charges for each of the legs.
     dtype : type or string
         the data type of the array entries. Defaults to np.float64.
-    qtotal : 1D array of QDTYPE
+    qtotal : 1D array of `chargeinfo.qtype`
         the total charge of the array. Defaults to 0.
 
     Attributes
@@ -105,7 +105,7 @@ class Array(object):
     _data : list of arrays
         the actual entries of the tensor
     _qdata : 2D array (len(_data), rank), dtype np.intp
-        for each of the _data entries the qind of the different legs.
+        for each of the _data entries the qindices of the different legs.
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
@@ -120,7 +120,7 @@ class Array(object):
         self.legs = list(legcharges)
         self._set_shape()
         self.dtype = np.dtype(dtype)
-        self.qtotal = self.chinfo.make_valid(qtotal)
+        self.qtotal = self.chinfo.make_valid(qtotal).copy()
         self.labels = {}
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp)
@@ -491,7 +491,7 @@ class Array(object):
 
     def to_ndarray(self):
         """convert self to a dense numpy ndarray."""
-        res = np.zeros(self.shape, self.dtype)
+        res = np.zeros(self.shape, dtype=self.dtype)
         for block, slices, _, _ in self:  # that's elegant! :)
             res[slices] = block
         return res
@@ -715,7 +715,7 @@ class Array(object):
         if newleg_qconj not in [-1, +1]:
             raise ValueError("invalid new_qconj")
         chinfo = self.chinfo
-        newqtotal = res.qtotal = chinfo.make_valid(newqtotal)  # default zero
+        newqtotal = res.qtotal = chinfo.make_valid(newqtotal).copy()  # default zero
         chdiff = newqtotal - self.qtotal
         newleg_qind = self.legs[ax].qind.copy()
         newleg_qind[:, 2:] += oldleg_qconj * chdiff
@@ -1594,6 +1594,8 @@ class Array(object):
 
     def _set_shape(self):
         """deduce self.shape from self.legs"""
+        if len(self.legs) == 0:
+            raise ValueError("We don't allow 0-dimensional arrays. Why should we?""")
         self.shape = tuple([lc.ind_len for lc in self.legs])
 
     def _iter_all_blocks(self):
@@ -2803,9 +2805,6 @@ def svd(a, full_matrices=False, compute_uv=True, cutoff=None, qtotal_LR=[None, N
     VH : :class:`Array`
         Matrix with right singular vectors as rows.
         Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
-
-    .. todo :
-        implement full_matrices=True
     """
     # check arguments
     if a.rank != 2:
@@ -3109,7 +3108,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         U_qdata = []
         VH_data = []
         VH_qdata = []
-    qind_row = np.empty(2+chinfo.qnumber, dtype=QDTYPE)
+    qind_row = np.empty(2+chinfo.qnumber, dtype=chinfo.qtype)
     new_leg_qind = []
     if full_matrices:
         new_leg_qind_full = []
@@ -3166,12 +3165,12 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         return (None, S, None)
 
     # else: compute_uv is True
-    new_leg_qind = np.array(new_leg_qind, dtype=QDTYPE)
+    new_leg_qind = np.array(new_leg_qind, dtype=a.chinfo.qtype)
     new_leg_qind[:, 2:] = chinfo.make_valid(new_leg_qind[:, 2:])
     new_leg_R = LegCharge.from_qind(chinfo, new_leg_qind, inner_qconj)
     new_leg_L = new_leg_R.conj()
     if full_matrices:
-        new_leg_qind_full = np.array(new_leg_qind_full, dtype=QDTYPE)
+        new_leg_qind_full = np.array(new_leg_qind_full, dtype=a.chinfo.qtype)
         new_leg_qind_full[:, 2:] = chinfo.make_valid(new_leg_qind_full[:, 2:])
         new_leg_full = LegCharge.from_qind(chinfo, new_leg_qind_full, inner_qconj)
         if len(S) == a.shape[1]:  # new_leg_R is fine

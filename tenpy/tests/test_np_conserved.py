@@ -53,32 +53,32 @@ def project_multiple_axes(flat_array, perms, axes):
 
 
 def test_npc_Array_conversion():
-    # trivial
+    print "trivial"
     a = npc.Array.from_ndarray_trivial(arr)
     npt.assert_equal(a.to_ndarray(), arr)
-    # non-trivial charges
+    print "non-trivial charges"
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
     npt.assert_equal(a._get_block_charge([0, 2]), [-2, 0])
     npt.assert_equal(a.to_ndarray(), arr)
-    npt.assert_equal(a.qtotal, np.array([0, 0], npc.QDTYPE))
-    # check non-zero total charge
+    npt.assert_equal(a.qtotal, [0, 0])
+    print "check non-zero total charge"
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc_add.conj()])
-    npt.assert_equal(a.qtotal, np.array([-1, 0], npc.QDTYPE))
+    npt.assert_equal(a.qtotal, [-1, 0])
     npt.assert_equal(a.to_ndarray(), arr)
     a = a.gauge_total_charge(1)
-    npt.assert_equal(a.qtotal, np.array([0, 0], npc.QDTYPE))
-    # check type conversion
+    npt.assert_equal(a.qtotal, [0, 0])
+    print "check type conversion"
     a_clx = a.astype(np.complex128)
     nst.eq_(a_clx.dtype, np.complex128)
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
-    # from_func
+    print "from_func"
     a = npc.Array.from_func(np.ones, chinfo, [lc, lc.conj()])
     a.test_sanity()
     aflat = np.zeros((5, 5))
     for ind in [(0, 0), (1, 1), (1, 4), (4, 1), (2, 2), (3, 3), (4, 4)]:
         aflat[ind] = 1.
     npt.assert_equal(a.to_ndarray(), aflat)
-    # random array
+    print "random array"
     a = random_Array((20, 15, 10), chinfo2, sort=False)
     a.test_sanity()
 
