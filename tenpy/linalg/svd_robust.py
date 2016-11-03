@@ -45,6 +45,7 @@ import scipy.linalg
 import warnings
 
 from ctypes import CDLL, POINTER, c_int, c_char
+from ctypes.util import find_library
 from numpy.core import single, double, csingle, cdouble  # for those, 'c' = complex
 
 from numpy.linalg.linalg import LinAlgError
@@ -218,7 +219,7 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
 
 
 def _load_lapack(libs=["libLAPACK.dylib", "libmkl_rt.so", "libmkl_intel_lp64.so", "liblapack.so",
-                       "libopenblas.dll"],
+                       "libopenblas.dll", find_library('lapack')],
                  warn=True):
     """load & return a CLAPACK library."""
     global _lapack_lib
