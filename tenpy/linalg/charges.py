@@ -42,10 +42,14 @@ class ChargeInfo(object):
     Attributes
     ----------
     qnumber
-    mod : 1D array_like of ints
+    mod : 1D array QDTYPE
         The periodicity of the charges. One entry for each charge.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
+    _mask_mod1 : 1D array bool
+        mask equivalent to ``(mod == 1)``, to speed up `make_valid`
+    _mod_masked : 1D arry QDTYPE
+        equivalent to ``self.mod[self._maks_mod1]``
 
     Notes
     -----
@@ -55,7 +59,8 @@ class ChargeInfo(object):
     def __init__(self, mod=[], names=None):
         """see help(self)"""
         self.mod = np.array(mod, dtype=QDTYPE)
-        self._mod_1 = np.equal(self.mod, 1)  # pre-convert for faster make_valid
+        self._mask = np.not_equal(self.mod, 1)  # pre-convert for faster make_valid
+        self._mod_masked = np.array(self.mod[self._mask], dtype=QDTYPE)
         if names is None:
             names = [''] * self.qnumber
         self.names = [str(n) for n in names]
@@ -65,7 +70,8 @@ class ChargeInfo(object):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if self.mod.ndim != 1:
             raise ValueError("mod has wrong shape")
-        assert np.all(self._mod_1 == np.equal(self.mod, 1))
+        assert np.all(self._mask == np.not_equal(self.mod, 1))
+        assert np.all(self._mod_masked == self.mod[self._mask])
         if np.any(self.mod <= 0):
             raise ValueError("mod should be > 0")
         if len(self.names) != self.qnumber:
@@ -92,8 +98,9 @@ class ChargeInfo(object):
         """
         if charges is None:
             return np.zeros((self.qnumber, ), dtype=QDTYPE)
-        charges = np.asarray(charges, dtype=QDTYPE)
-        return np.where(self._mod_1, charges, np.mod(charges, self.mod))
+        charges = np.array(charges, dtype=QDTYPE)
+        charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
+        return charges
 
     def check_valid(self, charges):
         r"""Check, if `charges` has all entries as expected from self.mod.
@@ -101,10 +108,10 @@ class ChargeInfo(object):
         Returns
         -------
         res : bool
-            True, if all 0 <= charges <= self.mod (whenever self.mod != 1)
+            True, if all 0 <= charges <= self.mod (wherever self.mod != 1)
         """
-        charges = np.asarray(charges, dtype=QDTYPE)
-        return np.all(np.logical_or(self._mod_1, np.logical_and(0 <= charges, charges < self.mod)))
+        charges = np.asarray(charges, dtype=QDTYPE)[..., self._mask]
+        return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
     def __repr__(self):
         """full string representation"""

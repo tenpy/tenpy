@@ -1069,13 +1069,6 @@ class Array(object):
         cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
         return cp
 
-    def imake_contiguous(self):
-        """make each of the blocks contigous with `np.ascontigousarray`.
-
-        Might speed up subsequent tensordot & co, if the blocks were not contiguous before."""
-        self._data = [np.ascontigousarray(t) for t in self.dat]
-        return self
-
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
         """Removes ``self._data`` blocks with *norm* less than cutoff. In place.
 
@@ -2171,6 +2164,19 @@ class Array(object):
         # remove '**' entries
         return label.replace('**', '')
 
+    def _imake_contiguous(self, order='C'):
+        """Make each of the blocks contigous in memory.
+
+        Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
+        (No need to call it manually: it's called from tensordot anyways!)"""
+        if order == 'C':
+            self._data = [np.ascontiguousarray(t) for t in self._data]
+        elif order == 'F':
+            self._data = [np.asfortranarray(t) for t in self._data]
+        else:
+            raise ValueError("unknown order")
+        return self
+
 # functions ====================================================================
 
 
@@ -2708,6 +2714,8 @@ def tensordot(a, b, axes=2):
     except TypeError:
         axes = int(axes)
         axes_int = True
+    a = a.copy(deep=False)  # shallow copy allows to call _imake_contiguous and itranspose
+    b = b.copy(deep=False)  # which would otherwise break views.
     if not axes_int:
         # like step 1.) bring into standard form by transposing
         axes_a = a.get_leg_indices(toiterable(axes_a))
@@ -2716,11 +2724,11 @@ def tensordot(a, b, axes=2):
             raise ValueError("different lens of axes for a, b: " + repr(axes))
         not_axes_a = [i for i in range(a.rank) if i not in axes_a]
         not_axes_b = [i for i in range(b.rank) if i not in axes_b]
-        a = a.copy(deep=False)
-        b = b.copy(deep=False)
         a.itranspose(not_axes_a + axes_a)
         b.itranspose(axes_b + not_axes_b)
         axes = len(axes_a)
+    a._imake_contiguous('C')  # this is performance critical!
+    b._imake_contiguous('C')
     # now `axes` is integer
     # check for special cases
     if axes == 0:
@@ -3028,9 +3036,11 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     a_qdata_keep = a_qdata_keep[a_slices[:-1]]
     b_qdata_keep = b_qdata_keep[b_slices[:-1]]
     a_charges_keep = a.chinfo.make_valid(
-        np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0))
+        np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
+        if cut_a > 0 else None)
     b_charges_keep = a.chinfo.make_valid(
-        np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0))
+        np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0)
+        if cut_b < b.rank else None)
     # collect and return the results
     a_pre_result = a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_slices
     b_pre_result = b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_slices
