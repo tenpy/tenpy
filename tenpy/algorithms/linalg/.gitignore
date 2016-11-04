@@ -1,7 +1,0 @@
-!*.py
-*.c
-*.pyc
-*.html
-*.so
-build/*
-npc_helper.cpp
