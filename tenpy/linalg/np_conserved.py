@@ -464,17 +464,20 @@ class Array(object):
         nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         bs = np.array([t.size for t in self._data], dtype=np.float)
         if nblocks > 0:
-            bs1 = (np.sum(bs**0.5) / nblocks)**2
-            bs2 = np.sum(bs) / nblocks
-            bs3 = (np.sum(bs**2.0) / nblocks)**0.5
-            captsparse = float(nonzero) / stored
+            captsparse = float(nonzero)/stored
+            bs_min = int(np.min(bs))
+            bs_max = int(np.max(bs))
+            bs_mean = np.sum(bs) / nblocks
+            bs_med = np.median(bs)
+            bs_var = np.var(bs)
         else:
             captsparse = 1.
-            bs1, bs2, bs3 = 0, 0, 0
+            bs_min = bs_max = bs_mean = bs_med = bs_var = 0
         res = "{nonzero:d} of {total:d} entries (={nztotal:g}) nonzero,\n" \
             "stored in {nblocks:d} blocks with {stored:d} entries.\n" \
             "Captured sparsity: {captsparse:g}\n"  \
-            "Effective block sizes (second entry=mean): [{bs1:.2f}, {bs2:.2f}, {bs3:.2f}]"
+            "Block sizes min:{bs_min:d} mean:{bs_mean:.2f} median:{bs_med:.1f} " \
+            "max:{bs_max:d} var:{bs_var:.2f}"
 
         return res.format(
             nonzero=nonzero,
@@ -483,9 +486,11 @@ class Array(object):
             nblocks=nblocks,
             stored=stored,
             captsparse=captsparse,
-            bs1=bs1,
-            bs2=bs2,
-            bs3=bs3)
+            bs_min=bs_min,
+            bs_max=bs_max,
+            bs_mean=bs_mean,
+            bs_med=bs_med,
+            bs_var=bs_var)
 
     # accessing entries =======================================================
 
@@ -3078,7 +3083,10 @@ def _tensordot_worker(a, b, axes):
             block_sum = None
             for k1, k2 in _iter_common_sorted(a_qdata_sum, b_qdata_sum, a_sl, b_sl):
                 block = np.tensordot(a_data[k1], b_data[k2], axes=axes)
-                # TODO: optimize? # reshape, dot, reshape.
+                # TODO: optimize! tensordot = reshape, np.dot, reshape.
+                # np.dot eats a lot of time! for what???
+                # reshape can be taken out of the for loops
+                # replace np.dot with BLAS gemm/gemv, but ensure error checking before!
                 if block_sum is None:
                     block_sum = np.asarray(block, dtype=dtype)
                 else:

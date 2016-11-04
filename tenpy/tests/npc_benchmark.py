@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc
+import tenpy
 try:
     import algorithms.linalg.np_conserved as old_npc
     has_old_npc = True
@@ -149,7 +150,9 @@ def tensordot_timing(do_flat=True, do_old_npc=True,
 def tensordot_profile(fn=None, **kwargs):
     """profile the tensordot"""
     a, b, axes = setup_npc(**kwargs)
-    print "profile tensordot(a, b, axes) with following sparse stats:"
+    print "profile tensordot(a, b, axes)"
+    print "a: {a!r}\nb: {b!r}\naxes {axes!r}".format(a=a, b=b, axes=axes)
+    print "sparse stats:"
     print a.sparse_stats()
     print b.sparse_stats()
     cProfile.runctx("npc.tensordot(a, b, axes)", globals(), locals(), fn)
@@ -199,6 +202,7 @@ def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000):
         kwargs = dict(n_qsectors=n_qsectors, dim_a_out=dim, dim_b_out=dim, dim_contract=dim)
         data = run_tensordot_timing(sizes=sizes, dmax=dmax, **kwargs)
         data['kwargs'] = kwargs
+        data['version'] = tenpy.version.full_version
         fn = fn_t.format(n_qsectors=n_qsectors, dim=dim)
         save(data, fn)
 
@@ -208,6 +212,7 @@ def print_timing_res(data):
     sizes = data['sizes']
     timed = data['timings']
     print "="*80
+    print "version", data['version']
     # print "kwargs:", data['kwargs']
     print "qnum size      flat       old       new   new-old"
     row = "{qn: 4d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
@@ -236,11 +241,12 @@ def plot_timing_res(data, fn=None):
                             (t_qn[:, 2], 'numpy', 'b'),
                             # (t_qn[:, 2]-t_qn[:, 1], 'diff old_npc-npc', 'k')
                             ]:
-            lab = "{lab}, qnumber {qn:d}".format(lab=lab, qn=qn)
-            pl.plot(sizes, t, col+m+'-', markersize=8, label=lab+', qnumber ')
-    pl.title(', '.join([k+"="+str(v) for k, v in data['kwargs'].iteritems()]))
-    pl.xlabel('size')
-    pl.ylabel('total time')
+            lab = "qnumber {qn:d}, {lab}".format(lab=lab, qn=qn)
+            if np.any(t != 0.):  # only if we have data
+                pl.plot(sizes, t, col+m+'-', markersize=8, label=lab)
+    pl.title(', '.join([k+"="+str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
+    pl.xlabel('size (of each leg)')
+    pl.ylabel('total time [s]')
     pl.loglog()
     pl.legend(loc='upper left')
     if fn is None:
@@ -293,8 +299,8 @@ if __name__ == "__main__":
     if args.profile:
         fn = None if len(args.files) == 0 else args.files[0]
         dim = 3
-        tensordot_profile(fn, size=30, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
-                          dim_contract=dim)
+        tensordot_profile(fn, size=10, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
+                          dim_contract=dim, seed=2)
     if not any([args.timing, args.plot, args.profile]):
         data = run_tensordot_timing()
         print_timing_res(data)
