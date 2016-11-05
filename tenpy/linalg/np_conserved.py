@@ -684,7 +684,7 @@ class Array(object):
         warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.")
         return self.chinfo.make_valid()
 
-    def gauge_total_charge(self, leg, newqtotal=None, newleg_qconj=None):
+    def gauge_total_charge(self, leg, newqtotal=None, new_qconj=None):
         """Changes the total charge by adjusting the charge on a certain leg.
 
         The total charge is given by finding a nonzero entry [i1, i2, ...] and calculating::
@@ -702,7 +702,7 @@ class Array(object):
             the new leg (index or label), for which the charge is changed
         newqtotal : charge values, defaults to 0
             the new total charge
-        newleg_qconj: {+1, -1, None}
+        new_qconj: {+1, -1, None}
             Whether the new LegCharge points inward (+1) or outward (-1) afterwards.
             By default (None) use the previous ``self.legs[leg].qconj``.
 
@@ -714,20 +714,19 @@ class Array(object):
         """
         res = self.copy(deep=False)
         ax = self.get_leg_index(leg)
-        oldleg_qconj = self.legs[ax].qconj
-        if newleg_qconj is None:
-            newleg_qconj = oldleg_qconj
-        if newleg_qconj not in [-1, +1]:
+        old_qconj = self.legs[ax].qconj
+        if new_qconj is None:
+            new_qconj = old_qconj
+        if new_qconj not in [-1, +1]:
             raise ValueError("invalid new_qconj")
         chinfo = self.chinfo
         newqtotal = res.qtotal = chinfo.make_valid(newqtotal).copy()  # default zero
         chdiff = newqtotal - self.qtotal
-        newleg_qind = self.legs[ax].qind.copy()
-        newleg_qind[:, 2:] += oldleg_qconj * chdiff
-        if oldleg_qconj != newleg_qconj:
-            newleg_qind[:, 2:] = -newleg_qind[:, 2:]
-        newleg_qind[:, 2:] = chinfo.make_valid(newleg_qind[:, 2:])
-        res.legs[leg] = LegCharge.from_qind(chinfo, newleg_qind, newleg_qconj)
+        new_charges = self.legs[ax].charges + old_qconj * chdiff
+        if old_qconj != new_qconj:
+            new_charges = -new_charges
+        new_charges = chinfo.make_valid(new_charges)
+        res.legs[ax] = LegCharge.from_qind(chinfo, self.legs[ax].slices, new_charges, new_qconj)
         return res
 
     def is_completely_blocked(self):
@@ -773,8 +772,8 @@ class Array(object):
                         sort[li] = np.arange(cp.shape[li])
                         continue
                     p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(
-                        p_qind)  # called for the old leg
+                    print p_qind, newleg
+                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # (old leg!)
                     cp.legs[li] = newleg
                 else:
                     try:
@@ -1210,8 +1209,8 @@ class Array(object):
         old_block_idx = [slice(None)] * self.rank
         data = []
         qdata = {}  # dict for fast look up: tuple(indices) -> _data index
-        for old_qind, old_qind_row in enumerate(oldleg.qind):
-            old_range = xrange(old_qind_row[0], old_qind_row[1])
+        for old_qind, (beg, end) in enumerate(oldleg._slice_start_stop()):
+            old_range = xrange(beg, end)
             for old_data_index in np.nonzero(qdata_axis == old_qind)[0]:
                 old_block = self._data[old_data_index]
                 old_qindices = self._qdata[old_data_index]
@@ -1228,7 +1227,7 @@ class Array(object):
                     new_block = data[new_data_ind]
                     # copy data
                     new_block_idx[axis] = within_new
-                    old_block_idx[axis] = i_old - old_qind_row[0]
+                    old_block_idx[axis] = i_old - beg
                     new_block[tuple(new_block_idx)] = old_block[tuple(old_block_idx)]
         # data blocks copied
         res._data = data
@@ -1621,7 +1620,7 @@ class Array(object):
 
         The charge of a single block is defined as ::
 
-            qtotal = sum_{legs l} legs[l].qind[qindices[l], 2:] * legs[l].qconj() modulo qmod
+            qtotal = sum_{legs l} legs[l].get_charges(qindices[l])) modulo qmod
         """
         q = np.sum([l.get_charge(qi) for l, qi in itertools.izip(self.legs, qindices)], axis=0)
         return self.chinfo.make_valid(q)
@@ -1632,7 +1631,7 @@ class Array(object):
 
     def _get_block_shape(self, qindices):
         """return shape for the block given by qindices"""
-        return tuple([(l.qind[qi, 1] - l.qind[qi, 0])
+        return tuple([(l.slices[qi+1] - l.slices[qi])
                       for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
@@ -1692,8 +1691,8 @@ class Array(object):
         # lists for each leg:
         new_to_old_idx = [None] * cp.rank  # the `idx` returned by cp.legs[li].bunch()
         map_qindex = [None] * cp.rank  # array mapping old qindex to new qindex, such that
-        # new_leg.qind[m_qindex[i]] == old_leg.qind[i]  # (except the second column entry)
-        bunch_qindex = [None] * cp.rank  # bool array wheter the *new* qind was bunched
+        # ``new_leg.charges[m_qindex[i]] == old_leg.charges[i]``
+        bunch_qindex = [None] * cp.rank  # bool array wheter the *new* qindex was bunched
         for li, bunch in enumerate(bunch_legs):
             idx, new_leg = cp.legs[li].bunch()
             cp.legs[li] = new_leg
@@ -1726,8 +1725,8 @@ class Array(object):
                 else:
                     new_block = new_data[bunched_blocks[new_qindices]]
                 # figure out where to insert the in the new bunched_blocks
-                old_slbeg = [l.qind[qi, 0] for l, qi in itertools.izip(self.legs, old_qindices)]
-                new_slbeg = [l.qind[qi, 0] for l, qi in itertools.izip(cp.legs, new_qindices)]
+                old_slbeg = [l.slices[qi] for l, qi in itertools.izip(self.legs, old_qindices)]
+                new_slbeg = [l.slices[qi] for l, qi in itertools.izip(cp.legs, new_qindices)]
                 slbeg = [(o - n) for o, n in itertools.izip(old_slbeg, new_slbeg)]
                 sl = [slice(beg, beg + l) for beg, l in itertools.izip(slbeg, old_block.shape)]
                 # insert the old block into larger new block
@@ -2102,7 +2101,7 @@ class Array(object):
             for qmap_rows in itertools.product(*qmap_slices):
                 for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
                     qdata_row[sl] = block_qind = qm[2:-1]
-                    new_block_shape[sl] = [(l.qind[qi, 1] - l.qind[qi, 0])
+                    new_block_shape[sl] = [(l.slices[qi+1] - l.slices[qi])
                                            for l, qi in zip(pipe.legs, block_qind)]
                     block_slice[a] = slice(qm[0], qm[1])
                 new_block = old_block[block_slice].reshape(new_block_shape)
@@ -2283,20 +2282,17 @@ def concatenate(arrays, axis=0, copy=True):
             a.legs[l].test_equal(res.legs[l])
     dtype = res.dtype = np.find_common_type([a.dtype for a in arrays], [])
     # stack the data
-    res_axis_qinds = []
+    res_axis_bl_sizes = []
+    res_axis_charges = []
     res_qdata = []
     res_data = []
-    ind_shift = 0  # sum of previous `ind_len`
     qind_shift = 0  # sum of previous `block_number`
     axis_qconj = res.legs[axis].qconj
     for a in arrays:
         leg = a.legs[axis]
-        # shift first two columns of `leg.qind`
-        qind = leg.qind.copy()
-        qind[:, :2] += ind_shift
-        if leg.qconj != axis_qconj:
-            qind[:, 2:] = res.chinfo.make_valid(-qind[:, 2:])
-        res_axis_qinds.append(qind)
+        res_axis_bl_sizes.append(leg._get_block_sizes())
+        charges = leg.charges if leg.qconj == axis_qconj else res.chinfo.make_valid(-leg.charges)
+        res_axis_charges.append(charges)
         qdata = a._qdata.copy()
         qdata[:, axis] += qind_shift
         res_qdata.append(qdata)
@@ -2304,11 +2300,10 @@ def concatenate(arrays, axis=0, copy=True):
             res_data.extend([np.array(t, dtype) for t in a._data])
         else:
             res_data.extend([np.asarray(t, dtype) for t in a._data])
-        # update shifts for next array
-        ind_shift += leg.ind_len
         qind_shift += leg.block_number
-    res_axis_qinds = np.concatenate(res_axis_qinds, axis=0)
-    res.legs[axis] = LegCharge.from_qind(res.chinfo, res_axis_qinds, axis_qconj)
+    res_axis_slices = np.append([0], np.cumsum(np.concatenate(res_axis_bl_sizes)))
+    res_axis_charges = np.concatenate(res_axis_charges, axis=0)
+    res.legs[axis] = LegCharge.from_qind(res.chinfo, res_axis_slices, res_axis_charges, axis_qconj)
     res._set_shape()
     res._qdata = np.concatenate(res_qdata, axis=0)
     res._qdata_sorted = False
@@ -2480,7 +2475,8 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo, qconj * np.array(qflat), qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
+                                           qconj)
     return grid_legs
 
 
@@ -3116,10 +3112,10 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         U_qdata = []
         VH_data = []
         VH_qdata = []
-    qind_row = np.empty(2+chinfo.qnumber, dtype=chinfo.qtype)
-    new_leg_qind = []
+    new_leg_slices = []
+    new_leg_charges = []
     if full_matrices:
-        new_leg_qind_full = []
+        new_leg_slices_full = []
         at_full = 0
 
     # main loop
@@ -3145,12 +3141,11 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             S.append(S_b)
             if compute_uv:
                 qi_L, qi_R = a_qdata_row
-                qi_C = len(new_leg_qind)
+                qi_C = len(new_leg_slices)
                 # qind_row for the new leg at the *right*, `VH.legs[0]`.
-                qind_row[0] = at
-                qind_row[1] = at + num
-                qind_row[2:] = (qtotal_R - a.legs[1].get_charge(qi_R))*inner_qconj
-                new_leg_qind.append(qind_row.copy())
+                new_leg_slices.append(at)
+                charges_row = (qtotal_R - a.legs[1].get_charge(qi_R))*inner_qconj
+                new_leg_charges.append(charges_row)
                 U_data.append(U_b.astype(a.dtype, copy=False))
                 VH_data.append(VH_b.astype(a.dtype, copy=False))
                 U_qdata.append(np.array([qi_L, qi_C], dtype=np.intp))
@@ -3159,12 +3154,8 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             # num will be min(block.shape) > 0 and compute_uv=True
             # Thus we inserted U_b and V_H already to U_data and VH_data!
             # just need to take care of the second LegCharge required...
-            num_full = max(block.shape)
-            # qind_row also for the right. adjust later...
-            qind_row[0] = at_full
-            qind_row[1] = at_full + num_full
-            new_leg_qind_full.append(qind_row.copy())
-            at_full += num_full
+            new_leg_slices_full.append(at_full)
+            at_full += max(block.shape)
         at += num
     if at == 0:
         raise RuntimeError("SVD found no singluar values")
@@ -3173,14 +3164,14 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         return (None, S, None)
 
     # else: compute_uv is True
-    new_leg_qind = np.array(new_leg_qind, dtype=a.chinfo.qtype)
-    new_leg_qind[:, 2:] = chinfo.make_valid(new_leg_qind[:, 2:])
-    new_leg_R = LegCharge.from_qind(chinfo, new_leg_qind, inner_qconj)
+    new_leg_slices = np.append(new_leg_slices, [at])
+    new_leg_charges = chinfo.make_valid(new_leg_charges)
+    new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
     new_leg_L = new_leg_R.conj()
     if full_matrices:
-        new_leg_qind_full = np.array(new_leg_qind_full, dtype=a.chinfo.qtype)
-        new_leg_qind_full[:, 2:] = chinfo.make_valid(new_leg_qind_full[:, 2:])
-        new_leg_full = LegCharge.from_qind(chinfo, new_leg_qind_full, inner_qconj)
+        new_leg_slices_full = np.append(new_leg_slices_full, [at_full])
+        new_leg_full = LegCharge.from_qind(chinfo, new_leg_slices_full, new_leg_charges,
+                                           inner_qconj)
         if len(S) == a.shape[1]:  # new_leg_R is fine
             new_leg_L = new_leg_full.conj()
         elif len(S) == a.shape[0]:  # new_leg_L is fine

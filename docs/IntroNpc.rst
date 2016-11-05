@@ -496,7 +496,11 @@ See also
   :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and :class:`~tenpy.linalg.charges.LegPipe`.
   As noted above, all 'public' API is imported in :mod:`~tenpy.linalg.np_conserved`.
 
+.. todo ::
+   adjust: redefinded qind -> slices, charges
 
 .. todo ::
    Full examples
+
+.. todo ::
    Further References?!?

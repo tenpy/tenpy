@@ -10,39 +10,26 @@ import itertools as it
 qflat_us = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2,
                      -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2,
                      2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 6, 6]).reshape((-1, 1))
-qind_us = np.array([[0, 3, -6],
-                    [3, 6, -4],
-                    [6, 8, 4],
-                    [8, 12, -4],
-                    [12, 23, -2],
-                    [23, 34, 0],
-                    [34, 37, -2],
-                    [37, 41, 0],
-                    [41, 55, 2],
-                    [55, 59, 4],
-                    [59, 61, 6]])   # yapf: disable
+slices_us = np.array([0, 3, 6, 8, 12, 23, 34, 37, 41, 55, 59, 61])
+charges_us = np.array([[-6], [-4], [4], [-4], [-2], [0], [-2], [0], [2], [4], [6]])
 # sorted
 qflat_s = np.sort(qflat_us, axis=0)
-qind_s = np.array([[ 0,  3, -6],
-                   [ 3, 10, -4],
-                   [10, 24, -2],
-                   [24, 39,  0],
-                   [39, 53,  2],
-                   [53, 59,  4],
-                   [59, 61,  6]])    # yapf: disable
+slices_s = np.array([0, 3, 10, 24, 39, 53, 59, 61])
+charges_s = np.array([[-6], [-4], [-2], [0], [2], [4], [6]])
 
-qdict_s = {(-6,): slice(0,  3),
-           (-4,): slice(3,  10),
+qdict_s = {(-6,): slice(0, 3),
+           (-4,): slice(3, 10),
            (-2,): slice(10, 24),
-           (0,) : slice(24, 39),
-           (2,) : slice(39, 53),
-           (4,) : slice(53, 59),
-           (6,) : slice(59, 61)}    # yapf: disable
+           (0,): slice(24, 39),
+           (2,): slice(39, 53),
+           (4,): slice(53, 59),
+           (6,): slice(59, 61)}
 
 ch_1 = charges.ChargeInfo([1])
 
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
+
 
 def rand_permutation(n):
     perm = range(n)
@@ -125,26 +112,29 @@ def test__find_row_differences():
 
 def test_LegCharge():
     lcs = charges.LegCharge.from_qflat(ch_1, qflat_s).bunch()[1]
-    npt.assert_equal(lcs.qind, qind_s)  # check qflat_s -> qind_s
-    npt.assert_equal(lcs.to_qflat(), qflat_s)  # check qind_s -> qflat_s
+    npt.assert_equal(lcs.charges, charges_s)  # check from_qflat
+    npt.assert_equal(lcs.slices, slices_s)  # check from_qflat
+    npt.assert_equal(lcs.to_qflat(), qflat_s)  # check to_qflat
     lcus = charges.LegCharge.from_qflat(ch_1, qflat_us).bunch()[1]
-    npt.assert_equal(lcus.qind, qind_us)  # check qflat_us -> qind_us
-    npt.assert_equal(lcus.to_qflat(), qflat_us)  # check qind_us -> qflat_us
+    npt.assert_equal(lcus.charges, charges_us)  # check from_qflat
+    npt.assert_equal(lcus.slices, slices_us)  # check from_qflat
+    npt.assert_equal(lcus.to_qflat(), qflat_us)  # check to_qflat
 
     lc = charges.LegCharge.from_qdict(ch_1, qdict_s)
-    npt.assert_equal(lc.qind, qind_s)  # qdict -> qflat
-    npt.assert_equal(lc.to_qdict(), qdict_s)  # qflat -> qdict
+    npt.assert_equal(lc.charges, charges_s)  # check from_qdict
+    npt.assert_equal(lc.slices, slices_s)  # check from_dict
+    npt.assert_equal(lc.to_qdict(), qdict_s)  # chec to_qdict
     nst.eq_(lcs.is_sorted(), True)
     nst.eq_(lcs.is_blocked(), True)
     nst.eq_(lcus.is_sorted(), False)
     nst.eq_(lcus.is_blocked(), False)
 
     # test sort & bunch
-    lcus_qind = lcus.qind.copy()
+    lcus_charges = lcus.charges.copy()
     pqind, lcus_s = lcus.sort(bunch=False)
     lcus_s.test_sanity()
-    npt.assert_equal(lcus_qind, lcus.qind)  # don't change the old instance
-    npt.assert_equal(lcus_s.qind[:, 2:], lcus.qind[pqind, 2:])  # permutation ok?
+    npt.assert_equal(lcus_charges, lcus.charges)  # don't change the old instance
+    npt.assert_equal(lcus_s.charges, lcus.charges[pqind])  # permutation returned by sort ok?
     nst.eq_(lcus_s.is_sorted(), True)
     nst.eq_(lcus_s.is_bunched(), False)
     nst.eq_(lcus_s.is_blocked(), False)
@@ -161,8 +151,8 @@ def test_LegCharge():
     # test get_qindex
     for i in xrange(lcs.ind_len):
         qidx, idx_in_block = lcs.get_qindex(i)
-        assert (lcs.qind[qidx, 0] <= i < lcs.qind[qidx, 1])
-        assert (lcs.qind[qidx, 0] + idx_in_block == i)
+        assert (lcs.slices[qidx] <= i < lcs.slices[qidx+1])
+        assert (lcs.slices[qidx] + idx_in_block == i)
 
 
 def test_LegPipe():
@@ -179,7 +169,7 @@ def test_LegPipe():
         qmap_ind = pipe._map_incoming_qind(qind_inc)
         for i in range(len(qind_inc)):
             npt.assert_equal(pipe.q_map[qmap_ind[i], 2:-1], qind_inc[i])
-            size = np.prod([l.qind[j, 1] - l.qind[j, 0] for l, j in zip(legs, qind_inc[i])])
+            size = np.prod([l.slices[j+1] - l.slices[j] for l, j in zip(legs, qind_inc[i])])
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
 
 

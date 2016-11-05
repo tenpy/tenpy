@@ -85,6 +85,7 @@ def test_npc_Array_conversion():
 
 def test_npc_Array_sort():
     a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    print lc  # XXX
     p_flat, a_s = a.sort_legcharge(True, False)
     npt.assert_equal(p_flat[0], [3, 0, 2, 1, 4])
     arr_s = arr[np.ix_(*p_flat)]  # what a_s should be
@@ -244,7 +245,7 @@ def test_npc_Array_reshape():
     bs.test_sanity()
     if b.stored_blocks > 0:
         # find a index with non-zero entry
-        idx = tuple([l.qind[i, 0] for l, i in zip(b.legs, b._qdata[0])])
+        idx = tuple([l.slices[qi] for l, qi in zip(b.legs, b._qdata[0])])
     else:
         idx = tuple([0] * b.rank)
     nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
@@ -275,8 +276,8 @@ def test_npc_grid_outer():
             [None, None, None, None, op_pl],
             [None, None, None, None, op_0],
             [None, None, None, None, op_id]]  # yapf: disable
-    leg_WL = npc.LegCharge.from_qflat(ci, [0, 1, -1, 0, 0])
-    leg_WR = npc.LegCharge.from_qflat(ci, [0, 1, -1, 0, 0], -1)
+    leg_WL = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]))
+    leg_WR = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]), -1)
     leg_WR_calc = npc.grid_outer_calc_legcharge(grid, [leg_WL, None], qconj=-1)[1]
     leg_WR.test_equal(leg_WR_calc)
 
