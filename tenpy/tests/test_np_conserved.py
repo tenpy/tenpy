@@ -466,7 +466,7 @@ def test_npc_svd():
         npt.assert_array_almost_equal_nulp(recalc.to_ndarray(), Aflat, tol_NULP)
         # compare with flat SVD
         Uflat, Sflat, VHflat = np.linalg.svd(Aflat, False, True)
-        perm = np.argsort(-S) # sort descending
+        perm = np.argsort(-S)  # sort descending
         print S[perm]
         iperm = npc.reverse_sort_perm(perm)
         for i in xrange(len(Sflat)):
@@ -504,6 +504,36 @@ def test_trace():
     npt.assert_array_almost_equal_nulp(Atr.to_ndarray(), Aflattr, A.shape[1])
 
 
+def test_eig():
+    size = 50
+    ci = chinfo3
+    l = gen_random_legcharge(ci, size)
+    A = npc.Array.from_func(np.random.random, ci, [l, l.conj()], qtotal=None, shape_kw='size')
+    A += A.conj().itranspose()
+    Aflat = A.to_ndarray()
+    W, V = npc.eigh(A, sort='m>')
+    V.test_sanity()
+    V_W = V.scale_axis(W, axis=-1)
+    recalc = npc.tensordot(V_W, V.conj(), axes=[1, 1])
+    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), size**3)
+    Wflat, Vflat = np.linalg.eigh(Aflat)
+    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, size**3)
+    W2 = npc.eigvalsh(A, sort='m>')
+    npt.assert_array_almost_equal_nulp(W, W2, size**3)
+
+    # check also complex
+    B = 1.j * npc.Array.from_func(np.random.random, ci, [l, l.conj()], qtotal=None, shape_kw='size')
+    B += B.conj().itranspose()
+    B = A + B
+    Bflat = B.to_ndarray()
+    W, V = npc.eigh(B, sort='m>')
+    V.test_sanity()
+    recalc = npc.tensordot(V.scale_axis(W, axis=-1), V.conj(), axes=[1, 1])
+    npt.assert_array_almost_equal_nulp(Bflat, recalc.to_ndarray(), size**3)
+    Wflat, Vflat = np.linalg.eigh(Bflat)
+    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, size**3)
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -520,3 +550,7 @@ if __name__ == "__main__":
     test_npc_tensordot()
     test_npc_inner()
     test_npc_outer()
+    test_npc_svd()
+    test_npc_pinv()
+    test_trace()
+    test_eig()

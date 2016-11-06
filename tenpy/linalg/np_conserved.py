@@ -52,7 +52,8 @@ from .charges import (ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
-from ..tools.math import toiterable, anynan
+from ..tools.misc import to_iterable, anynan, argsort
+from ..tools.math import sp_speigs
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
@@ -614,8 +615,8 @@ class Array(object):
         slided_self : :class:`Array`
             a copy of self, equivalent to taking slices with indices inserted in axes.
         """
-        axes = self.get_leg_indices(toiterable(axes))
-        indices = np.asarray(toiterable(indices), dtype=np.intp)
+        axes = self.get_leg_indices(to_iterable(axes))
+        indices = np.asarray(to_iterable(indices), dtype=np.intp)
         if len(axes) != len(indices):
             raise ValueError("len(axes) != len(indices)")
         if indices.ndim != 1:
@@ -772,8 +773,7 @@ class Array(object):
                         sort[li] = np.arange(cp.shape[li])
                         continue
                     p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    print p_qind, newleg
-                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # (old leg!)
+                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # old leg!
                     cp.legs[li] = newleg
                 else:
                     try:
@@ -882,13 +882,13 @@ class Array(object):
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
         # check: is combine_legs `iterable(iterable(int|str))` or `iterable(int|str)` ?
-        if [combine_legs[0]] == toiterable(combine_legs[0]):
+        if [combine_legs[0]] == to_iterable(combine_legs[0]):
             # the first entry is (int|str) -> only a single new pipe
             combine_legs = [combine_legs]
             if new_axes is not None:
-                new_axes = toiterable(new_axes)
+                new_axes = to_iterable(new_axes)
             if pipes is not None:
-                pipes = toiterable(pipes)
+                pipes = to_iterable(pipes)
         pipes = self._combine_legs_make_pipes(combine_legs, pipes, qconj)  # out-sourced
         # good for index tricks: convert combine_legs into arrays
         combine_legs = [np.asarray(self.get_leg_indices(cl), dtype=np.intp) for cl in combine_legs]
@@ -968,7 +968,7 @@ class Array(object):
         if axes is None:
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
         else:
-            axes = self.get_leg_indices(toiterable(axes))
+            axes = self.get_leg_indices(to_iterable(axes))
             if len(set(axes)) != len(axes):
                 raise ValueError("can't split a leg multiple times!")
         for ax in axes:
@@ -980,8 +980,9 @@ class Array(object):
         res = self._split_legs_worker(axes, cutoff)
 
         labels = list(self.get_leg_labels())
-        for a in axes:
-            labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
+        for a in sorted(axes, reverse=True):
+            if labels[a] is not None:
+                labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.set_leg_labels(labels)
         return res
 
@@ -1003,7 +1004,8 @@ class Array(object):
         enc_axes = [a for a, l in enumerate(self.legs) if not l.is_blocked()]
         if len(enc_axes) == 0:
             return enc_axes, self
-        return enc_axes, self.combine_legs([[a] for a in enc_axes])
+        qconj = [self.legs[a].qconj for a in enc_axes]
+        return enc_axes, self.combine_legs([[a] for a in enc_axes], qconj=qconj)
 
     def squeeze(self, axes=None):
         """Like ``np.squeeze``.
@@ -1025,7 +1027,7 @@ class Array(object):
         if axes is None:
             axes = tuple([a for a in range(self.rank) if self.shape[a] == 1])
         else:
-            axes = tuple(self.get_leg_indices(toiterable(axes)))
+            axes = tuple(self.get_leg_indices(to_iterable(axes)))
         for a in axes:
             if self.shape[a] != 1:
                 raise ValueError("Tried to squeeze non-unit leg")
@@ -1051,14 +1053,16 @@ class Array(object):
 
     # data manipulation =======================================================
 
-    def astype(self, dtype):
-        """Return (deep) copy with new dtype, upcasting all blocks in ``_data``.
+    def astype(self, dtype, copy=True):
+        """Return copy with new dtype, upcasting all blocks in ``_data``.
 
         Parameters
         ----------
         dtype : convertible to a np.dtype
             the new data type.
             If None, deduce the new dtype as common type of ``self._data``.
+        copy : bool
+            whether to make a copy of the blocks even if the type didn't change.
 
         Returns
         -------
@@ -1126,9 +1130,9 @@ class Array(object):
             ``block_masks[a][qind]`` is a boolen mask which indices to keep
             in block ``qindex`` of ``axes[a]``
         """
-        if axes is not toiterable(axes):
+        if axes is not to_iterable(axes):
             mask = [mask]
-        axes = self.get_leg_indices(toiterable(axes))
+        axes = self.get_leg_indices(to_iterable(axes))
         mask = [np.asarray(m) for m in mask]
         if len(axes) != len(mask):
             raise ValueError("len(axes) != len(mask)")
@@ -1172,9 +1176,7 @@ class Array(object):
 
         Similar as np.take with a 1D array.
         Roughly equivalent to ``res[:, ...] = self[perm, ...]`` for the corresponding `axis`.
-        .. warning ::
-
-            This function is quite slow, and usually not needed during core algorithms.
+        Note: This function is quite slow, and usually not needed!
 
         Parameters
         ----------
@@ -1192,7 +1194,7 @@ class Array(object):
         See also
         --------
         sort_legcharge : can also be used to perform a general permutation.
-            However, it is faster for permutations which don't mix blocks.
+            Preferable, since it is faster for permutations which don't mix charge blocks.
         """
         axis = self.get_leg_index(axis)
         perm = np.asarray(perm, dtype=np.intp)
@@ -1441,6 +1443,8 @@ class Array(object):
         """
         for self_leg, other_leg in zip(self.legs, other.legs):
             self_leg.test_equal(other_leg)
+        if np.any(self.qtotal != other.qtotal):
+            raise ValueError("can't add Array's with different `qtotal`")
         self.isort_qdata()
         other.isort_qdata()
 
@@ -1453,24 +1457,26 @@ class Array(object):
         # If the q_dat structure is identical, we can immediately run through the data.
         if Na == Nb and np.array_equiv(aq, bq):
             self._data = [func(at, bt, *args, **kwargs) for at, bt in itertools.izip(adata, bdata)]
-        else:  # have to step through comparing left and right qdata
+        else:  # otherwise we have to step through comparing left and right qdata
             i, j = 0, 0
             qdata = []
             data = []
             while i < Na or j < Nb:
-                if tuple(aq[i]) == tuple(bq[j]):  # a and b are non-zero
+                if i < Na and j < Nb and tuple(aq[i]) == tuple(bq[j]):  # a and b are non-zero
                     data.append(func(adata[i], bdata[j], *args, **kwargs))
                     qdata.append(aq[i])
                     i += 1
+                    j += 1
+                elif i >= Na or j < Nb and (tuple(aq[i, ::-1]) > tuple(bq[j, ::-1])):  # a is 0
+                    data.append(func(np.zeros_like(bdata[j]), bdata[j], *args, **kwargs))
+                    qdata.append(bq[j])
                     j += 1
                 elif j >= Nb or (tuple(aq[i, ::-1]) < tuple(bq[j, ::-1])):  # b is 0
                     data.append(func(adata[i], np.zeros_like(adata[i]), *args, **kwargs))
                     qdata.append(aq[i])
                     i += 1
-                else:  # a is 0
-                    data.append(func(np.zeros_like(bdata[j]), bdata[j], *args, **kwargs))
-                    qdata.append(bq[j])
-                    j += 1
+                else:   # tested a == b or a < b or a > b, so this should never happen
+                    assert False
                 # if both are zero, we assume f(0, 0) = 0
             self._data = data
             self._qdata = np.array(qdata, dtype=np.intp).reshape((len(data), self.rank))
@@ -1791,6 +1797,9 @@ class Array(object):
             indices for the different axes, as returned by :meth:`_pre_indexing`
         calc_map_qind :
             whether to calculate and return the additional `map_qind` and `axes` tuple
+        permute :
+            if False, don't perform permutations in case one of `inds` is an unsorted index array,
+            but consider it as a mask only, ignoring the order of the indices.
 
         Returns
         -------
@@ -1833,7 +1842,7 @@ class Array(object):
                     project_masks.append(i)
                     project_axes.append(a)
                     if i.dtype != np.bool_:  # should be integer indexing
-                        perm = np.argsort(i)  # check if maks is sorted
+                        perm = np.argsort(i)  # check if `i` is sorted
                         if np.any(perm != np.arange(len(perm))):
                             # np.argsort(i) gives the reverse permutation, so reverse it again.
                             # In that way, we get the permuation within the projected indices.
@@ -1940,7 +1949,7 @@ class Array(object):
             pipes = [None] * npipes
         elif len(pipes) != npipes:
             raise ValueError("wrong len of `pipes`")
-        qconj = list(toiterable(qconj if qconj is not None else +1))
+        qconj = list(to_iterable(qconj if qconj is not None else +1))
         if len(qconj) == 1 and 1 < npipes:
             qconj = [qconj[0]] * npipes  # same qconj for all pipes
         if len(qconj) != npipes:
@@ -2469,9 +2478,6 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
         if qflat[i] is None:
             qflat[i] = qflat_entry
         elif np.any(qflat[i] != qflat_entry):
-            print qflat
-            print qflat[i]
-            print qflat_entry
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
@@ -2608,8 +2614,8 @@ def inner(a, b, axes=None, do_conj=False):
         raise ValueError("different rank!")
     if axes is not None:
         axes_a, axes_b = axes
-        axes_a = a.get_leg_indices(toiterable(axes_a))
-        axes_b = a.get_leg_indices(toiterable(axes_b))
+        axes_a = a.get_leg_indices(to_iterable(axes_a))
+        axes_b = a.get_leg_indices(to_iterable(axes_b))
         # we can permute axes_a and axes_b. Use that to ensure axes_b = range(b.rank)
         sort_axes_b = np.argsort(axes_b)
         axes_a = [axes_a[i] for i in sort_axes_b]
@@ -2721,8 +2727,8 @@ def tensordot(a, b, axes=2):
     b = b.copy(deep=False)  # which would otherwise break views.
     if not axes_int:
         # like step 1.) bring into standard form by transposing
-        axes_a = a.get_leg_indices(toiterable(axes_a))
-        axes_b = b.get_leg_indices(toiterable(axes_b))
+        axes_a = a.get_leg_indices(to_iterable(axes_a))
+        axes_b = b.get_leg_indices(to_iterable(axes_b))
         if len(axes_a) != len(axes_a):
             raise ValueError("different lens of axes for a, b: " + repr(axes))
         not_axes_a = [i for i in range(a.rank) if i not in axes_a]
@@ -2920,6 +2926,199 @@ def norm(a, ord=None, convert_to_float=True):
         return np.linalg.norm(a.reshape((-1, )), ord)
     else:
         raise ValueError("unknown type of a")
+
+
+def eigh(a, UPLO='L', sort=None):
+    r"""Calculate eigenvalues and eigenvectors for a hermitian matrix.
+
+    ``W, V = eigh(a)`` yields :math:`a = V diag(w) V^{\dagger}`.
+    **Assumes** that a is hermitian, ``a.conj().transpose() == a``.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        The hermitian square matrix to be diagonalized.
+    UPLO : {'L', 'U'}
+        wheter to take the lower ('L', default) or upper ('U') triangular part of `a`.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+
+    Returns
+    -------
+    W : 1D ndarray
+        the eigenvalues, sorted within the same charge blocks according to `sort`.
+    V : :class:`Array`
+        Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+
+    Notes
+    -----
+    Requires the legs to be contractible.
+    If `a` is not blocked by charge, a blocked copy is made via a permutation ``P``,
+    :math:` a' =  P a P = V' W' (V')^{\dagger}`.
+    The eigenvectors `V` are then obtained by the reverse permutation,
+    :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
+    """
+    return _eig_worker(True, a, sort, UPLO)  # hermitian
+
+
+def eig(a, sort=None):
+    r"""Calculate eigenvalues and eigenvectors for a non-hermitian matrix.
+
+    ``W, V = eig(a)`` yields :math:`a = V diag(w) V^{\dagger}`.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        The hermitian square matrix to be diagonalized.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+
+    Returns
+    -------
+    W : 1D ndarray
+        the eigenvalues, sorted within the same charge blocks according to `sort`.
+    V : :class:`Array`
+        Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+
+    Notes
+    -----
+    Requires the legs to be contractible.
+    If `a` is not blocked by charge, a blocked copy is made via a permutation ``P``,
+    :math:` a' =  P a P = V' W' (V')^{\dagger}`.
+    The eigenvectors `V` are then obtained by the reverse permutation,
+    :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
+    """
+    return _eig_worker(False, a, sort)  # non-hermitian
+
+
+def eigvalsh(a, UPLO='L', sort=None):
+    r"""Calculate eigenvalues for a hermitian matrix.
+
+    **Assumes** that a is hermitian, ``a.conj().transpose() == a``.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        The hermitian square matrix to be diagonalized.
+    UPLO : {'L', 'U'}
+        wheter to take the lower ('L', default) or upper ('U') triangular part of `a`.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+
+    Returns
+    -------
+    W : 1D ndarray
+        the eigenvalues, sorted within the same charge blocks according to `sort`.
+
+    Notes
+    -----
+    The eigenvalues are sorted within blocks of the completely blocked legs.
+    """
+    return _eigvals_worker(True, a, sort, UPLO)
+
+
+def eigvals(a, sort=None):
+    r"""Calculate eigenvalues for a hermitian matrix.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        The hermitian square matrix to be diagonalized.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues should are sorted *within* each charge block.
+        Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
+
+    Returns
+    -------
+    W : 1D ndarray
+        the eigenvalues, sorted within the same charge blocks according to `sort`.
+
+    Notes
+    -----
+    The eigenvalues are sorted within blocks of the completely blocked legs.
+    """
+    return _eigvals_worker(False, a, sort)
+
+
+def speigs(a, charge_sector, k, *args, **kwargs):
+    """Sparse eigenvalue decomposition ``w, v`` of square `a` in a given charge sector.
+
+    Finds `k` right eigenvectors (chosen by ``kwargs['which']``) in a given charge sector,
+    ``tensordot(A, V[i]) = W[i] * V[i]``.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        a square array with contractible legs and vanishing total charge.
+    charge_sector : charges
+        `ndim` charges to select the block
+    k : int
+        how many eigenvalues/vectors should be calculated.
+        If the block of `charge_sector` is smaller than `k`, `k` may be reduced accordingly.
+
+    Returns
+    -------
+    W : ndarray
+        `k` (or less) eigenvalues
+    V : list of :class:`Array`
+        `k` (or less) right eigenvectors of `A` with total charge `charge_sector`.
+        Note that when interpreted as a matrix,
+        this is the transpose of what ``np.eigs`` normally gives.
+
+    .. todo :
+        test this function
+    """
+    charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber,))
+    if a.rank != 2 or a.shape[0] != a.shape[1]:
+        raise ValueError("can only diagonalize a matrix!")
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
+    ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
+    a.legs[0].test_contractible(a.legs[1])
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
+
+    # find qindex corresponding to `charge_sector`
+    qdict = a.legs[0].to_qdict()  # maps charges -> slice
+    sl = qdict.get(tuple(charge_sector), None)
+    if sl is None:
+        raise ValueError("desired charges sector not present in `a`")
+    qi, _ = a.legs[0].get_qindex(sl.start)
+    # find the relevant block in `a`
+    block_exists = True
+    for qinds, block in itertools.izip(a._qdata, a._data):
+        if qinds[0] == qi:
+            break  # found the correct `block`
+    else:  # no break during the loop
+        block_exists = False
+
+    if block_exists:
+        res = sp_speigs(block, k, *args, **kwargs)
+        if ret_eigv:
+            W, V_flat = res
+        else:
+            W = res
+    else:  # block corresponding to charge_sector is zero
+        block_size = sl.stop - sl.start
+        k = min(block_size, k)
+        W = np.zeros(k, a.dtype)
+        V_flat = np.zeros((block_size, k), a.dtype)
+        V_flat[:k, :k] = np.eye(k, a.dtype)  # chose standard basis as eigenvectors
+    # convert V_flat to npc Arrays and return
+    if ret_eigv:
+        V = []
+        for j in range(V_flat.shape[1]):
+            U = zeros(a.chinfo, [a.legs[0]], dtype=a.dtype, qtotal=charge_sector)
+            U._data = [V_flat[:, j]]
+            U._qdata = np.array([[qi]], dtype=np.intp)
+            if len(piped_axes) > 0:
+                U = U.split_legs(0)
+            V.append(U)
+        return W, V
+    else:
+        return W
 
 # private functions ============================================================
 
@@ -3187,3 +3386,58 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
     VH._qdata = np.array(VH_qdata, dtype=np.intp)
     VH._qdata_sorted = a._qdata_sorted
     return U, S, VH
+
+
+def _eig_worker(hermitian, a, sort, UPLO='L'):
+    """worker for ``eig``, ``eigh``"""
+    if a.rank != 2 or a.shape[0] != a.shape[1]:
+        raise ValueError("can only diagonalize a matrix!")
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
+    a.legs[0].test_contractible(a.legs[1])
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
+
+    dtype = np.float if hermitian else np.complex
+    resw = np.zeros(a.shape[0], dtype=dtype)
+    resv = diag(1., a.legs[0], dtype=np.promote_types(dtype, a.dtype))
+    # w, v now default to 0 and the Identity
+    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+        if hermitian:
+            rw, rv = np.linalg.eigh(block, UPLO)
+        else:
+            rw, rv = np.linalg.eig(block)
+        if sort is not None:  # apply sorting options
+            perm = argsort(rw, sort)
+            rw = np.take(rw, perm)
+            rv = np.take(rv, perm, axis=1)
+        qi = qindices[0]  # both `a` and `resv` are sorted and share the same qindices
+        resv._data[qi] = rv  # replace idendity block
+        resw[a.legs[0].get_slice(qi)] = rw  # replace eigenvalues
+    if len(piped_axes) > 0:
+        resv = resv.split_legs(0)  # the 'outer' facing leg is permuted back.
+    return resw, resv
+
+
+def _eigvals_worker(hermitian, a, sort, UPLO='L'):
+    """worker for ``eigvals``, ``eigvalsh``"""
+    if a.rank != 2 or a.shape[0] != a.shape[1]:
+        raise ValueError("can only diagonalize a matrix!")
+    a.legs[0].test_contractible(a.legs[1])
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
+
+    dtype = np.float if hermitian else np.complex
+    resw = np.zeros(a.shape[0], dtype=dtype)
+    # w now default to 0
+    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+        if hermitian:
+            rw = np.linalg.eigvalsh(block, UPLO)
+        else:
+            rw = np.linalg.eigvals(block)
+        if sort is not None:  # apply sorting options
+            perm = argsort(rw, sort)
+            rw = np.take(rw, perm)
+        qi = qindices[0]  # both `a` and `resv` are sorted and share the same qindices
+        resw[a.legs[0].get_slice(qi)] = rw  # replace eigenvalues
+    return resw

@@ -170,7 +170,7 @@ class LegCharge(object):
         the nature of the charge. Can be shared between LegCharges
     slices : ndarray (block_number+1)
         A block with 'qindex' ``qi`` correspondes to the leg indices in
-        ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slices`.
+        ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slice`.
     charges : ndarray (block_number, chinfo.qnumber)
         ``charges[qi]`` gives the charges for a block with 'qindex' ``qi``.
         Note: the sign might be changed by `qconj`. See also :meth:`get_charge`.

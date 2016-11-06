@@ -1,23 +1,17 @@
+"""Differnt math functions needed at some point in the library.
+
+.. todo :
+    clean up, document, move to tools/misc, tools/fit
+"""
 import numpy as np
-import scipy.sparse.linalg  # for the exception
 import scipy.sparse as sparse
 import scipy.optimize as optimize
-
-from .string import joinstr
+import warnings
 
 try:
     from scipy.sparse.linalg import eigs as sparse_eigen
 except ImportError:
     pass
-
-try:
-    """ you can 'pip install bottleneck' to use this framework
-            for fast NaN processing
-    """
-    import bottleneck as bn
-    has_bottleneck = True
-except:
-    has_bottleneck = False
 
 int_I3 = np.eye(3, dtype=int)
 LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
@@ -26,19 +20,6 @@ LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
 ##########################################################################
 # Random useful stuff
 # TODO: this has nothing to do with `math`. Move this to tools/misc.py
-# TODO: rename toiterable -> to_iterable etc
-
-
-def toiterable(o):
-    """Ensures 'o' is iterable. If o is a singleton or str, returns [o]"""
-    if type(o) == str:
-        return [o]
-    try:
-        iter(o)
-    except TypeError:
-        return [o]
-    else:
-        return o
 
 
 def tonparray(o, array_size=None):
@@ -144,12 +125,6 @@ def matvec_to_array(H):
         v[i] = 0
     return X
 
-
-def anynan(a):
-    if has_bottleneck:
-        return bn.anynan(a)
-    else:
-        return np.isnan(np.sum(a))
 
 
 def zero_if_close(a, tol=1e-15):
@@ -257,76 +232,40 @@ def lcm(a, b):
     return a0 * (b0 // a)
 
 
-def speigs(A,
-           k=6,
-           M=None,
-           sigma=None,
-           which='LM',
-           v0=None,
-           ncv=None,
-           maxiter=None,
-           tol=0,
-           return_eigenvectors=True,
-           Minv=None,
-           OPinv=None,
-           OPpart=None):
-    """ Compute the sparse eigenvalues(eigenvectors), without the restriction k < rank(A) - 1 """
-    d = A.shape[0]  # A should be a squre LinearOperator
-    if k < d - 1:
-        if True:  # sparse.sputils.getdtype(A) == float:
-            # print 'crashing call for periodic bc or complex mps'
-            return sparse_eigen(
-                A,
-                k=k,
-                M=M,
-                sigma=sigma,
-                which=which,
-                v0=v0,
-                ncv=ncv,
-                maxiter=maxiter,
-                tol=tol,
-                return_eigenvectors=return_eigenvectors,
-                Minv=Minv,
-                OPinv=OPinv,
-                OPpart=OPpart)
-            # print 'happy return'
-        else:
-            Areal = sparse.csr_matrix(sparse.bmat([[A.real, -A.imag], [A.imag, A.real]]))
-            eigA = sparse_eigen(
-                A,
-                k=k,
-                M=M,
-                sigma=sigma,
-                which=which,
-                v0=v0,
-                ncv=ncv,
-                maxiter=maxiter,
-                tol=tol,
-                return_eigenvectors=return_eigenvectors,
-                Minv=Minv,
-                OPinv=OPinv,
-                OPpart=OPpart)
-            if return_eigenvectors:
-                ind = np.argsort(eigA[0])
-                return (eigA[0][ind[0:-1:2]], eigA[1][:, ind[0:-1:2]])
-            else:
-                eigA.sort()
-                return eigA[0:-1:2]
+def speigs(A, k, *args, **kwargs):
+    """Wrapper around scipy.sparse.linalg.eigs, lifting the restriction ``k < rank(A)-1``.
 
+    Parameters
+    ----------
+    A : MxM ndarray or like scipy.sparse.linalg.LinearOperator
+        the (square) linear operator for which the eigenvalues should be computed.
+    k : int
+        the number of eigenvalues to be computed.
+    *args, **kwargs :
+        further arguments are directly given to ``scipy.sparse.linalg.eigs``
+
+    Returns
+    -------
+    w : ndarray
+        array of min(`k`, A.shape[0]) eigenvalues
+    v : ndarray
+        array of min(`k`, A.shape[0]) eigenvectors, ``v[:, i]`` is the `i`th eigenvector.
+        Only returned if ``kwargs['return_eigenvectors'] == True``.
+    """
+    d = A.shape[0]
+    if A.shape != (d, d):
+        raise ValueError("A.shape not a square matrix: " + str(A.shape))
+    if k < d:
+        return sparse_eigen(A, k, *args, **kwargs)
     else:
-        if A.shape != (d, d):
-            raise ValueError, "A.shape not a square matrix: " + str(A.shape)
+        if k > d:
+            warnings.warn("trimming k={k:d} to d={d:d}".format(k=k, d=d))
         if isinstance(A, np.ndarray):
             Amat = A
         else:
-            # Constructs the matrix
-            v = np.zeros((d), A.dtype)
-            Amat = np.empty((d, d), A.dtype)
-            for i in range(d):
-                v[i] = 1
-                Amat[:, i] = A.matvec(v)
-                v[i] = 0
-        if return_eigenvectors:
+            Amat = matvec_to_array(A)  # Constructs the matrix
+        ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
+        if ret_eigv:
             return np.linalg.eig(Amat)
         else:
             return np.linalg.eigvals(Amat)
