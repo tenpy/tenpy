@@ -505,10 +505,11 @@ def test_trace():
 
 
 def test_eig():
-    size = 50
+    size = 10
     ci = chinfo3
     l = gen_random_legcharge(ci, size)
     A = npc.Array.from_func(np.random.random, ci, [l, l.conj()], qtotal=None, shape_kw='size')
+    print "hermitian A"
     A += A.conj().itranspose()
     Aflat = A.to_ndarray()
     W, V = npc.eigh(A, sort='m>')
@@ -521,8 +522,8 @@ def test_eig():
     W2 = npc.eigvalsh(A, sort='m>')
     npt.assert_array_almost_equal_nulp(W, W2, size**3)
 
-    # check also complex
-    B = 1.j * npc.Array.from_func(np.random.random, ci, [l, l.conj()], qtotal=None, shape_kw='size')
+    print "check complex B"
+    B = 1.j * npc.Array.from_func(np.random.random, ci, [l, l.conj()], shape_kw='size')
     B += B.conj().itranspose()
     B = A + B
     Bflat = B.to_ndarray()
@@ -532,6 +533,20 @@ def test_eig():
     npt.assert_array_almost_equal_nulp(Bflat, recalc.to_ndarray(), size**3)
     Wflat, Vflat = np.linalg.eigh(Bflat)
     npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, size**3)
+
+    print "calculate without 'hermitian' knownledge"
+    W, V = npc.eig(B, sort='m>')
+    assert(np.max(np.abs(W.imag)) < EPS*size**3)
+    npt.assert_array_almost_equal_nulp(np.sort(W.real), Wflat, size**3)
+
+    print "sparse speigs"
+    qi = 1
+    ch_sect = B.legs[0].get_charge(qi)
+    Wsp, Vsp = npc.speigs(B, ch_sect, k=3, which='LM')
+    for W_i, V_i in zip(Wsp, Vsp):
+        V_i.test_sanity()
+        diff = npc.tensordot(B, V_i, axes=1) - V_i * W_i
+        assert(npc.norm(diff, np.inf) < EPS*size**3)
 
 
 if __name__ == "__main__":

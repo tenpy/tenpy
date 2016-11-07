@@ -53,7 +53,7 @@ from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort
-from ..tools.math import sp_speigs
+from ..tools.math import speigs as _sp_speigs
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
@@ -348,6 +348,11 @@ class Array(object):
             perm = np.lexsort(self._qdata.T)
             if np.any(perm != np.arange(len(perm))):
                 raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
+        # check total charge
+        block_q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, self._qdata.T)], axis=0)
+        block_q = self.chinfo.make_valid(block_q)
+        if np.any(block_q != self.qtotal):
+            raise ValueError("some row of _qdata is incompatible with total charge")
 
     # properties ==============================================================
 
@@ -1444,7 +1449,7 @@ class Array(object):
         for self_leg, other_leg in zip(self.legs, other.legs):
             self_leg.test_equal(other_leg)
         if np.any(self.qtotal != other.qtotal):
-            raise ValueError("can't add Array's with different `qtotal`")
+            raise ValueError("Arrays can't have different `qtotal`!")
         self.isort_qdata()
         other.isort_qdata()
 
@@ -3047,7 +3052,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     """Sparse eigenvalue decomposition ``w, v`` of square `a` in a given charge sector.
 
     Finds `k` right eigenvectors (chosen by ``kwargs['which']``) in a given charge sector,
-    ``tensordot(A, V[i]) = W[i] * V[i]``.
+    ``tensordot(A, V[i], axes=1) = W[i] * V[i]``.
 
     Parameters
     ----------
@@ -3058,6 +3063,8 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     k : int
         how many eigenvalues/vectors should be calculated.
         If the block of `charge_sector` is smaller than `k`, `k` may be reduced accordingly.
+    *args, **kwargs :
+        additional arguments given to `scipy.sparse.linalg.eigs`
 
     Returns
     -------
@@ -3080,28 +3087,28 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     a.legs[0].test_contractible(a.legs[1])
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
 
-    # find qindex corresponding to `charge_sector`
-    qdict = a.legs[0].to_qdict()  # maps charges -> slice
-    sl = qdict.get(tuple(charge_sector), None)
-    if sl is None:
-        raise ValueError("desired charges sector not present in `a`")
-    qi, _ = a.legs[0].get_qindex(sl.start)
-    # find the relevant block in `a`
-    block_exists = True
+    # find the block correspoding to `charge_sector` in `a`
+    block_exists = False
     for qinds, block in itertools.izip(a._qdata, a._data):
-        if qinds[0] == qi:
-            break  # found the correct `block`
-    else:  # no break during the loop
-        block_exists = False
-
-    if block_exists:
-        res = sp_speigs(block, k, *args, **kwargs)
+        qi = qinds[0]
+        if np.any(a.chinfo.make_valid(a.legs[0].get_charge(qi)) != charge_sector):
+            continue
+        block_exists = True  # found the correct `block`
+        res = _sp_speigs(block, k, *args, **kwargs)
         if ret_eigv:
             W, V_flat = res
         else:
             W = res
-    else:  # block corresponding to charge_sector is zero
-        block_size = sl.stop - sl.start
+        break
+
+    if not block_exists:  # block corresponding to charge_sector is zero
+        for qi in xrange(a.legs[0].block_number):
+            if np.all(a.chinfo.make_valid(a.legs[0].get_charge(qi)) == charge_sector):
+                sl = a.legs[0].slices
+                block_size = sl[qi+1] - sl[qi]
+                break
+        else:
+            raise ValueError("desired charge sector not present in the leg of `a`")
         k = min(block_size, k)
         W = np.zeros(k, a.dtype)
         V_flat = np.zeros((block_size, k), a.dtype)
