@@ -184,6 +184,7 @@ pseudoxml:
 
 src2rst:
 	# note: there seems to be a bug in sphinx-apidoc such that it ignores following 'excludedirs'
+	rm $(REFDIR)/*.rst
 	$(SPHINXAPIDOC) -d 3 -e -f -o $(REFDIR) $(SRC)
 	rm $(REFDIR)/modules.rst  # this file does not contain useful information
 	# thus, I didn't include it to the :toctree:, but it's existence triggers a warning. So we just remove it...

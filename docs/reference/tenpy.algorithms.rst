@@ -1,13 +1,6 @@
 tenpy.algorithms package
 ========================
 
-Subpackages
------------
-
-.. toctree::
-
-    tenpy.algorithms.linalg
-
 Module contents
 ---------------
 

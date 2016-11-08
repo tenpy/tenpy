@@ -8,6 +8,7 @@ Submodules
 
    tenpy.linalg.charges
    tenpy.linalg.np_conserved
+   tenpy.linalg.svd_robust
 
 Module contents
 ---------------
