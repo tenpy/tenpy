@@ -21,13 +21,12 @@ otherwise we (try to) load `dgesvd` and `zgesvd` from shared LAPACK libraries.
 References
 ----------
 
-Further details can be found
 The tribute for the dgesvd wrapper code goes to 'jgarcke', originally posted at
-http://projects.scipy.org/numpy/ticket/990, which is now hosted at
-`https://github.com/numpy/numpy/issues/1588`_
-He explains a bit more in detail, what fails.
+http://projects.scipy.org/numpy/ticket/990, which is now hosted
+at https://github.com/numpy/numpy/issues/1588
+He explains a bit more in detail what fails.
 
-The include of `dgesvd` to scipy was done here `https://github.com/scipy/scipy/pull/5994`_.
+The include of `dgesvd` to scipy was done in https://github.com/scipy/scipy/pull/5994.
 
 Examples
 --------

@@ -371,7 +371,7 @@ However, accessing single entries is quite slow and usually not recommended. For
 back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
 
 On top of that very basic indexing, `Array` supports slicing and some kind of advanced indexing, which is however
-different from the one of numpy arrarys (described in `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_).
+different from the one of numpy arrarys (described `here <http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html>`_).
 Unlike numpy arrays, our Array class does not broadcast existing index arrays -- this would be terribly slow.
 Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
 

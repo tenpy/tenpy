@@ -1004,7 +1004,8 @@ class Array(object):
         encapsulated_axes : list of int
             the leg indices which have been encapsulated into Pipes.
         blocked_self : :class:`Array`
-            self (if ``len(encapsulated_axes) = 0``) or a copy of self with
+            self (if ``len(encapsulated_axes) = 0``) or a copy of self,
+            which is completely blocked.
         """
         enc_axes = [a for a, l in enumerate(self.legs) if not l.is_blocked()]
         if len(enc_axes) == 0:

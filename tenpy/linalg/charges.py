@@ -258,8 +258,8 @@ class LegCharge(object):
     def from_qdict(cls, chargeinfo, qdict, qconj=1):
         """create a LegCharge from qdict form.
 
-        Paremters
-        ---------
+        Parameters
+        ----------
         chargeinfo : :class:`ChargeInfo`
             the nature of the charge
         qdict : dict
