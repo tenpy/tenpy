@@ -43,6 +43,7 @@ from __future__ import division
 
 import numpy as np
 import scipy as sp
+from scipy.linalg import blas as BLAS  # python interface to BLAS
 import copy as copy_
 import warnings
 import itertools
@@ -121,7 +122,7 @@ class Array(object):
         self.legs = list(legcharges)
         self._set_shape()
         self.dtype = np.dtype(dtype)
-        self.qtotal = self.chinfo.make_valid(qtotal).copy()
+        self.qtotal = self.chinfo.make_valid(qtotal)
         self.labels = {}
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp)
@@ -298,9 +299,11 @@ class Array(object):
         res = cls(chargeinfo, legcharges, dtype, qtotal)  # without any data yet.
         data = []
         qdata = []
-        for qindices in res._iter_all_blocks():
-            if np.any(res._get_block_charge(qindices) != res.qtotal):
-                continue
+        # iterate over all qindices compatible with qtotal
+        qindices = np.array([qi for qi in res._iter_all_blocks()], dtype=np.intp)
+        block_charges = res._get_block_charge(qindices.T)  # .T: allows to use 2D `qindices`
+        compatible = np.all(block_charges == res.qtotal, axis=1)
+        for qindices in qindices[compatible]:
             shape = res._get_block_shape(qindices)
             if shape_kw is None:
                 block = func(shape, *func_args, **func_kwargs)
@@ -453,7 +456,7 @@ class Array(object):
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.array shape={0!s} charge={1!s} labels={2!s}>".format(self.shape, self.chinfo,
+        return "<npc.Array shape={0!s} charge={1!s} labels={2!s}>".format(self.shape, self.chinfo,
                                                                           self.get_leg_labels())
 
     def __str__(self):
@@ -2651,6 +2654,8 @@ def tensordot(a, b, axes=2):
     Labels are inherited from `a` and `b`.
     In case of a collistion (= the same label inherited from `a` and `b`), both labels are dropped.
 
+    Detailed implementation notes are available in the doc-string of :func:`_tensordot_worker`.
+
     Parameters
     ----------
     a, b : :class:`Array`
@@ -2665,61 +2670,7 @@ def tensordot(a, b, axes=2):
     -------
     a_dot_b : :class:`Array`
         The tensorproduct of `a` and `b`, summed over the specified axes.
-        In case of a full contraction, returns scalar.
-
-    Implementation Notes
-    --------------------
-    Looking at the source of numpy's tensordot (which is just 62 lines of python code),
-    you will find that it has the following strategy:
-    1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
-    2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
-       such that `a` and `b` are matrices.
-    3. Perform a matrix product with `np.dot`.
-    4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
-
-    The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
-    [This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
-    than the O(N*K*M) needed by a naive implementation looping over the indices.]
-
-    We follow the same overall strategy, viewing the :class:`Array` as a tensor with
-    data block entries.
-    Step 1) is performed directly in this function body.
-
-    The steps 2) and 4) could be implemented with :meth:`Array.combine_legs`
-    and :meth:`Array.split_legs`.
-    However, that would actually be an overkill: we're not interested
-    in the full charge data of the combined legs (which would be generated in the LegPipes).
-    Instead, we just need to track the qindices of the `a._qdata` and `b._qdata` carefully.
-
-    Our step 2) is implemented in :func:`_tensordot_pre_worker`:
-    We split `a._qdata` in `a_qdata_keep` and `a_qdata_sum`, and similar for `b`.
-    Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
-    `i` can be any row of `a_qdata_keep`, `j` can be any row of `b_qdata_keep`.
-    The `k1` and `k2` are rows of `a_qdata_sum` and `b_qdata_sum`, which stem from the same legs
-    (up to a :meth:`LegCharge.conj()`).
-    In our storage scheme, `a._data[s]` then contains the block :math:`A_{i,k1}` for
-    ``j = a_qdata_keep[s]`` and ``k1 = a_qdata_sum[s]``.
-    To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
-    Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
-    equal rows of `i` are contiguous in `#_qdata_keep`.
-    Then, they are identified with :func:`Charges._find_row_differences`.
-
-    Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
-    analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.
-    It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
-    However, this is not as bad as it sounds:
-    First, we loop only over existent ``i`` and ``j``
-    (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
-    Second, if the ``i`` and ``j`` are not compatible with the new total charge,
-    we know that ``C_{i,j}`` will be zero.
-    Third, given ``i`` and ``j``, the sum over ``k`` runs only over
-    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
-
-    How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
-    depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
-    is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
-
-    Step 4) is - as far as necessary - done in parallel with step 3).
+        Returns a scalar in case of a full contraction.
     """
     if a.chinfo != b.chinfo:
         raise ValueError("Different ChargeInfo")
@@ -2729,10 +2680,10 @@ def tensordot(a, b, axes=2):
     except TypeError:
         axes = int(axes)
         axes_int = True
-    a = a.copy(deep=False)  # shallow copy allows to call _imake_contiguous and itranspose
-    b = b.copy(deep=False)  # which would otherwise break views.
     if not axes_int:
-        # like step 1.) bring into standard form by transposing
+        a = a.copy(deep=False)  # shallow copy allows to call _imake_contiguous and itranspose
+        b = b.copy(deep=False)  # which would otherwise break views.
+        # step 1.) of the implementation notes: bring into standard form by transposing
         axes_a = a.get_leg_indices(to_iterable(axes_a))
         axes_b = b.get_leg_indices(to_iterable(axes_b))
         if len(axes_a) != len(axes_a):
@@ -2742,8 +2693,6 @@ def tensordot(a, b, axes=2):
         a.itranspose(not_axes_a + axes_a)
         b.itranspose(axes_b + not_axes_b)
         axes = len(axes_a)
-    a._imake_contiguous('C')  # this is performance critical!
-    b._imake_contiguous('C')
     # now `axes` is integer
     # check for special cases
     if axes == 0:
@@ -3211,11 +3160,48 @@ def _inner_worker(a, b):
     return res
 
 
+def _tensordot_pre_reshape(x, cut, dtype):
+    """reshape ndarray `x` to a (fortran) matrix/vector (depending on `cut`)"""
+    if cut == x.ndim or cut == 0:
+        return np.reshape(x, (-1, )).astype(dtype, order='F', copy=False)  # 1D vector
+    p = 1
+    for s in x.shape[:cut]:
+        p *= s
+    return np.reshape(x, (p, -1)).astype(dtype, order='F', copy=False)  # 2D matrix
+
+
 def _tensordot_pre_worker(a, b, cut_a, cut_b):
-    """The pre-calculations before the actual matrix procut.
+    """Pre-calculations before the actual matrix procut.
 
     Called by :func:`_tensordot_worker`.
     See doc-string of :func:`tensordot` for details on the implementation.
+
+    Parameters
+    ----------
+    a, b : :class:`Array`
+        the arrays to be contracted with tensordot
+    cut_a, cut_b : int
+        contract `a.legs[cut_a:]` with `b.legs[:cut_b]`
+
+    Returns
+    -------
+    a_pre_result, b_pre_result : tuple
+        In the following order, it
+        contains for `a`, and `b` respectively, in the following order:
+        a_data : list of reshaped tensors
+        a_qdata_sum : 2D array with qindices of `a` which we need to sum over
+        a_qdata_keep : 2D array of the qindices of `a` which will appear in the final result
+        a_charges_keep : 2D array of charges fora_shape_keep,
+        a_slices : partition to map the indices of a_*_keep to a_data
+    f_dot_sum : function
+        a wrapper around a suitable blas function for perfoming.
+        For ``a, a2, ...`` from ``a_data`` (and similar for ``b_data``) the code
+        ``s = f_dot_sum(a, b, None); s = f_dot_sum(a2, b2, s); ....``
+        should be equivalent to (yet faster than)
+        ``s = np.dot(a, b); s += np.dot(a2, b2); ... ``.
+    res_dtype : np.dtype
+        The data type which should be chosed for the result.
+        (The `dtype` of the ``s`` above might differ from `res_dtype`!).
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
@@ -3242,63 +3228,146 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     b_slices = charges._find_row_differences(b_qdata_keep)
     a_qdata_keep = a_qdata_keep[a_slices[:-1]]
     b_qdata_keep = b_qdata_keep[b_slices[:-1]]
+    a_shape_keep = [a_data[i].shape[:cut_a] for i in a_slices[:-1]]
+    b_shape_keep = [b_data[i].shape[cut_b:] for i in b_slices[:-1]]
     a_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
         if cut_a > 0 else None)
     b_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0)
         if cut_b < b.rank else None)
+    # determine calculation type and result type
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
+    calc_dtype = {'s': np.float32, 'd': np.float64, 'c': np.complex64, 'z': np.complex128}[prefix]
+    # reshape a_data and b_data to matrix/vector in fortran order
+    a_data = [_tensordot_pre_reshape(T, cut_a, calc_dtype) for T in a_data]
+    b_data = [_tensordot_pre_reshape(T, cut_b, calc_dtype) for T in b_data]
+    # determine blas function
+    f_name = 'gemv' if (cut_a == 0 or cut_b == b.rank) else 'gemm'
+    blas_dot = BLAS.get_blas_funcs(f_name, (a_data[0], b_data[0]))  # (a/b_data can't be empty)
+    kw_overwrite = 'overwrite_c' if f_name == 'gemm' else 'overwrite_y'
+    kw_overwrite = {kw_overwrite: True}
+    if cut_a > 0:
+        def f_dot_sum(a, b, sum):
+            """BLAS wrapper to perform ``sum += np.dot(a, b); return sum``.
+            If ``sum is None``, return ``np.dot(a, b)``."""
+            if sum is None:
+                return blas_dot(1., a, b)
+            return blas_dot(1., a, b, 1., sum, **kw_overwrite)
+    else:
+        # special case: `a` is vector, so we need blas_dot(b, a, transpose_)
+        kw_no_overwrite = {'trans': True}
+        kw_overwrite.update(kw_no_overwrite)
+
+        def f_dot_sum(a, b, sum):
+            """BLAS wrapper to perform ``sum += np.dot(a, b); return sum``.
+            If ``sum is None``, return ``np.dot(a, b)``."""
+            if sum is None:
+                return blas_dot(1., b, a, **kw_no_overwrite)
+            return blas_dot(1., b, a, 1., sum, **kw_overwrite)
+
     # collect and return the results
-    a_pre_result = a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_slices
-    b_pre_result = b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_slices
-    return a_pre_result, b_pre_result
+    a_pre_result = a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_shape_keep, a_slices
+    b_pre_result = b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_shape_keep, b_slices
+    return a_pre_result, b_pre_result, f_dot_sum, res_dtype
 
 
 def _tensordot_worker(a, b, axes):
-    """main work of tensordot.
+    """main work of tensordot, called by :func:`tensordot`.
 
     Assumes standard form of parameters: axes is integer,
     sum over the last `axes` legs of `a` and first `axes` legs of `b`.
 
-    Called by :func:`tensordot`.
-    See doc-string of :func:`tensordot` for details on the implementation.
+    Notes
+    -----
+    Looking at the source of numpy's tensordot (which is just 62 lines of python code),
+    you will find that it has the following strategy:
+
+    1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
+    2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
+       such that `a` and `b` are matrices.
+    3. Perform a matrix product with `np.dot`.
+    4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
+
+    The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
+    [This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
+    than the O(N*K*M) needed by a naive implementation looping over the indices.]
+
+    We follow the same overall strategy, viewing the :class:`Array` as a tensor with
+    data block entries.
+    Step 1) is performed directly in :func:`tensordot`.
+
+    The steps 2) and 4) could be implemented with :meth:`Array.combine_legs`
+    and :meth:`Array.split_legs`.
+    However, that would actually be an overkill: we're not interested
+    in the full charge data of the combined legs (which would be generated in the LegPipes).
+    Instead, we just need to track the qindices of the `a._qdata` and `b._qdata` carefully.
+
+    Our step 2) is implemented in :func:`_tensordot_pre_worker`:
+    We split `a._qdata` in `a_qdata_keep` and `a_qdata_sum`, and similar for `b`.
+    Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
+    `i` can be any row of `a_qdata_keep`, `j` can be any row of `b_qdata_keep`.
+    The `k1` and `k2` are rows of `a_qdata_sum` and `b_qdata_sum`, which stem from the same legs
+    (up to a :meth:`LegCharge.conj()`).
+    In our storage scheme, `a._data[s]` then contains the block :math:`A_{i,k1}` for
+    ``j = a_qdata_keep[s]`` and ``k1 = a_qdata_sum[s]``.
+    To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
+    Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
+    equal rows of `i` are contiguous in `#_qdata_keep`.
+    Then, they are identified with :func:`Charges._find_row_differences`.
+
+    Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
+    analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.
+    It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
+    However, this is not as bad as it sounds:
+    First, we loop only over existent ``i`` and ``j``
+    (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
+    Second, if the ``i`` and ``j`` are not compatible with the new total charge,
+    we know that ``C_{i,j}`` will be zero.
+    Third, given ``i`` and ``j``, the sum over ``k`` runs only over
+    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+
+    How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
+    depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
+    is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
+
+    Step 4) is finally implemented in :func:`_tensordot_post_worker`,
     """
+    if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
+        return zeros(a.chinfo, a.legs[:-axes] + b.legs[axes:],
+                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
+
     cut_a = a.rank - axes
     cut_b = axes
-    a_pre_result, b_pre_result = _tensordot_pre_worker(a, b, cut_a, cut_b)
-    a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_slices = a_pre_result
-    b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_slices = b_pre_result
+    a_pre_result, b_pre_result, f_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
+    a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_shape_keep, a_slices = a_pre_result
+    b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_shape_keep, b_slices = b_pre_result
     chinfo = a.chinfo
     qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
     res_qdata = []
     res_data = []
-    # loop over column/row of the result
+    # Step 3) loop over column/row of the result
     for col_b, b_qindex_keep in enumerate(b_qdata_keep):
         # (row_a changes faster than col_b, such that the resulting array is qdata lex-sorted)
-        Q_col = b_charges_keep[col_b]
         b_sl = xrange(*b_slices[col_b:col_b + 2])
-        for row_a, a_qindex_keep in enumerate(a_qdata_keep):
-            Q_row = a_charges_keep[row_a]
-            if np.any(chinfo.make_valid(Q_col + Q_row) != qtotal):
-                continue
+        # determine the charge the *row* must have
+        Q_row = chinfo.make_valid(qtotal - b_charges_keep[col_b])
+        # find indices `row_a` with `Q_row == a_charges_keep[row_a]`
+        rows = np.nonzero(np.all(a_charges_keep == Q_row, axis=1))[0]
+        for row_a in rows:
+            a_qindex_keep = a_qdata_keep[row_a]
             a_sl = xrange(*a_slices[row_a:row_a + 2])
             block_sum = None
             for k1, k2 in _iter_common_sorted(a_qdata_sum, b_qdata_sum, a_sl, b_sl):
-                block = np.tensordot(a_data[k1], b_data[k2], axes=axes)
-                # TODO: optimize! tensordot = reshape, np.dot, reshape.
-                # np.dot eats a lot of time! for what???
-                # reshape can be taken out of the for loops
-                # replace np.dot with BLAS gemm/gemv, but ensure error checking before!
-                if block_sum is None:
-                    block_sum = np.asarray(block, dtype=dtype)
-                else:
-                    block_sum += block
+                block_sum = f_dot_sum(a_data[k1], b_data[k2], block_sum)
             if block_sum is None:
                 continue  # no common blocks
             res_qdata.append(np.append(a_qindex_keep, b_qindex_keep, axis=0))
-            res_data.append(block_sum)
-    res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], dtype, qtotal)
+            # Step 4) reshape back to tensors
+            block_sum = block_sum.reshape(a_shape_keep[row_a] + b_shape_keep[col_b])
+            res_data.append(block_sum.astype(res_dtype, copy=False))
+    res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if len(res_data) == 0:
         return res
     # (at least one of Q_row, Q_col is non-empty, so _qdata is also not empty)
@@ -3365,7 +3434,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             at_full += max(block.shape)
         at += num
     if at == 0:
-        raise RuntimeError("SVD found no singluar values")
+        raise RuntimeError("SVD found no singluar values")  # (at least none > cutoff)
     S = np.concatenate(S)
     if not compute_uv:
         return (None, S, None)

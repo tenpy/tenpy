@@ -62,14 +62,12 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     n_qsector = np.asarray(n_qsector, dtype=np.intp)
     if n_qsector.shape != (chinfo.qnumber,):
         raise ValueError
-    part = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
-    qind = np.zeros((len(part) - 1, len(n_qsector) + 2), int)
-    qind[:, 0] = part[:-1]
-    qind[:, 1] = part[1:]
+    slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
+    qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
     q_combos = [a for a in it.product(*[range(-(nq // 2), nq // 2 + 1) for nq in n_qsector])]
-    qs = np.array(q_combos)[rand_distinct_int(0, len(q_combos) - 1, len(part) - 1), :]
-    qind[:, 2:] = chinfo.make_valid(qs)
-    return charges.LegCharge.from_qind(chinfo, qind)
+    qs = np.array(q_combos)[rand_distinct_int(0, len(q_combos) - 1, len(slices) - 1), :]
+    qs = chinfo.make_valid(qs)
+    return charges.LegCharge.from_qind(chinfo, slices, qs)
 
 
 def gen_random_legcharge(chinfo, ind_len):

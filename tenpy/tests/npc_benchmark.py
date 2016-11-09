@@ -89,6 +89,13 @@ def convert_flat(a, b, axes):
     return a.to_ndarray(), b.to_ndarray(), (axes_a, axes_b)
 
 
+def convert_leg2oldqind(leg):
+    """return `qind` to describe a new :class:`npc.LegCharge` in an old `npc_old.array`"""
+    return np.hstack([leg.slices[:-1].reshape(-1, 1),
+                      leg.slices[1:].reshape(-1, 1),
+                      leg.charges])
+
+
 def convert_old_npc(a, b, axes):
     "given the result of setup_npc, convert for ``npc_old.tensordot(a, b, axes)``"
     axes_a, axes_b = axes
@@ -96,13 +103,13 @@ def convert_old_npc(a, b, axes):
     axes_b = b.get_leg_indices(axes_b)
 
     mod_q = a.chinfo.mod.copy()
-    a_qind = [l.qind for l in a.legs]
+    a_qind = [convert_leg2oldqind(l) for l in a.legs]
     a_qconj = [l.qconj for l in a.legs]
     a2 = old_npc.zeros(a_qind, a.dtype, a_qconj, a.qtotal, mod_q)
     a2.sorted = a._qdata_sorted
     a2.dat = a._data[:]
     a2.q_dat = np.array(a._qdata, dtype=np.uint)
-    b_qind = [l.qind for l in b.legs]
+    b_qind = [convert_leg2oldqind(l) for l in b.legs]
     b_qconj = [l.qconj for l in b.legs]
     b2 = old_npc.zeros(b_qind, b.dtype, b_qconj, b.qtotal, mod_q)
     b2.sorted = b._qdata_sorted
@@ -163,6 +170,8 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
                          seeds=range(5),
                          dmax=1000,
                          **kwargs):
+    """call `tensordot_timing` for different `sizes` and `num_qs`.
+    Note: dmax is only used to switch `do_flat`."""
     print "------ tensordot_timing ------"
     data = {}
     data['seeds'] = seeds
@@ -190,8 +199,8 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
     return data
 
 
-def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000):
-    """get a collection of different timings....
+def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000, **kwargs):
+    """get a fairly exhaustive collection of timings for different n_qsectros and dim....
     2D matrices to be contracted are at most of shape (dmax, dmax)."""
     sizes_all = range(5, 50, 5) + range(50, 200, 25) + range(200, 500, 100) + range(500, 2001, 250)
     for n_qsectors, dim in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
@@ -199,9 +208,9 @@ def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000):
         print "n_qsectors = {nq:d}, dim ={dim:d}".format(nq=n_qsectors, dim=dim)
         sizes = [s for s in sizes_all if s**dim < dmax]
         print "sizes = ", sizes
-        kwargs = dict(n_qsectors=n_qsectors, dim_a_out=dim, dim_b_out=dim, dim_contract=dim)
+        kwargs.update(n_qsectors=n_qsectors, dim_a_out=dim, dim_b_out=dim, dim_contract=dim)
         data = run_tensordot_timing(sizes=sizes, dmax=dmax, **kwargs)
-        data['kwargs'] = kwargs
+        data['kwargs'] = kwargs.copy()
         data['version'] = tenpy.version.full_version
         fn = fn_t.format(n_qsectors=n_qsectors, dim=dim)
         save(data, fn)
@@ -212,7 +221,8 @@ def print_timing_res(data):
     sizes = data['sizes']
     timed = data['timings']
     print "="*80
-    print "version", data['version']
+    if 'version' in data:
+        print "version", data['version']
     # print "kwargs:", data['kwargs']
     print "qnum size      flat       old       new   new-old"
     row = "{qn: 4d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
@@ -244,7 +254,8 @@ def plot_timing_res(data, fn=None):
             lab = "qnumber {qn:d}, {lab}".format(lab=lab, qn=qn)
             if np.any(t != 0.):  # only if we have data
                 pl.plot(sizes, t, col+m+'-', markersize=8, label=lab)
-    pl.title(', '.join([k+"="+str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
+    if 'kwargs' in data:
+        pl.title(', '.join([k+"="+str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
     pl.xlabel('size (of each leg)')
     pl.ylabel('total time [s]')
     pl.loglog()
@@ -279,6 +290,8 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--timing', action='store_true',
                         help="""run the function run_timing_save() to perform an extensive timing
                         for scaling analysis. Duration > 1h!""")
+    parser.add_argument('--dmax', type=int, default=2000,
+                        help="""maximum dimension of matrices to multiply for timing""")
     parser.add_argument('-p', '--plot', action='store_true',
                         help='print and plot the timing results saved in given files.')
     parser.add_argument('--profile', action='store_true',
@@ -288,7 +301,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.timing:
         t0 = time.time()
-        run_save()
+        run_save(dmax=args.dmax)
         print "="*80
         print "finished timing after", time.time()-t0, "seconds in total"
     if args.plot:
@@ -298,10 +311,10 @@ if __name__ == "__main__":
             plot_timing_res(data, os.path.splitext(fn)[0]+'.png')
     if args.profile:
         fn = None if len(args.files) == 0 else args.files[0]
-        dim = 3
-        tensordot_profile(fn, size=10, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
+        dim = 2
+        tensordot_profile(fn, mod_q=[1, 1], size=50, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
                           dim_contract=dim, seed=2)
     if not any([args.timing, args.plot, args.profile]):
-        data = run_tensordot_timing()
+        data = run_tensordot_timing(sizes=[s for s in range(5, 60, 5) if s**2 < args.dmax])
         print_timing_res(data)
         plot_timing_res(data)

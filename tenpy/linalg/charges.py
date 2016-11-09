@@ -105,7 +105,7 @@ class ChargeInfo(object):
         Returns
         -------
         charges :
-            `charges` taken modulo `mod`, but with ``x % 1 := x``
+            A copy of `charges` taken modulo `mod`, but with ``x % 1 := x``
         """
         if charges is None:
             return np.zeros((self.qnumber, ), dtype=self.qtype)
