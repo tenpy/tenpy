@@ -29,6 +29,7 @@ def to_iterable(a):
     else:
         return a
 
+
 if has_bottleneck:
     anynan = bn.anynan
 else:
@@ -82,3 +83,10 @@ def argsort(a, sort=None, **kwargs):
         else:
             raise ValueError("unknown sort option " + repr(sort))
     return np.argsort(a, **kwargs)
+
+
+def lexsort(a, axis=-1):
+    """wrapper around ``np.lexsort``: allow for trivial case ``a.shape[0] = 0`` without sorting"""
+    if any([s == 0 for s in a.shape]):
+        return np.arange(a.shape[axis], dtype=np.intp)
+    return np.lexsort(a, axis=axis)

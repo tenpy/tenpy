@@ -20,6 +20,8 @@ import itertools
 import bisect
 import warnings
 
+from ..tools.misc import lexsort
+
 
 class ChargeInfo(object):
     """Meta-data about the charge of a tensor.
@@ -234,7 +236,7 @@ class LegCharge(object):
             qflat = qflat.reshape(-1, 1)
         ind_len, qnum = qflat.shape
         if qnum != chargeinfo.qnumber:
-            raise ValueError("qflat has wrong shape!")
+            raise ValueError("qflat with second dimension != qnumber")
         res = cls(chargeinfo, np.arange(ind_len+1), qflat, qconj)
         res.sorted = res.is_sorted()
         res.bunched = res.is_bunched()
@@ -284,6 +286,8 @@ class LegCharge(object):
         ch = self.charges
         if sl.shape != (self.block_number+1,):
             raise ValueError("wrong len of `slices`")
+        if sl[0] != 0:
+            raise ValueError("slices does not start with 0")
         if ch.shape[1] != self.chinfo.qnumber:
             raise ValueError("shape of `charges` incompatible with qnumber")
         if not self.chinfo.check_valid(ch):
@@ -334,7 +338,7 @@ class LegCharge(object):
         """returns whether the charge values in qind are sorted lexiographically"""
         if self.chinfo.qnumber == 0:
             return True
-        res = np.lexsort(self.charges.T)
+        res = lexsort(self.charges.T)
         return np.all(res == np.arange(len(res)))
 
     def is_bunched(self):
@@ -477,7 +481,7 @@ class LegCharge(object):
         """
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
-        perm_qind = np.lexsort(self.charges.T)
+        perm_qind = lexsort(self.charges.T)
         cp = copy.copy(self)
         cp.charges = self.charges[perm_qind, :]
         block_sizes = self._get_block_sizes()
@@ -832,7 +836,7 @@ class LegPipe(LegCharge):
         if sort:
             # sort by charge. Similar code as in :meth:`LegCharge.sort`,
             # but don't want to create a copy, nor is qind[:, 0] initialized yet.
-            perm_qind = np.lexsort(charges.T)
+            perm_qind = lexsort(charges.T)
             q_map = q_map[perm_qind]
             charges = charges[perm_qind]
             blocksizes = blocksizes[perm_qind]

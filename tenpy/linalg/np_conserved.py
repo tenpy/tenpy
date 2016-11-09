@@ -113,7 +113,7 @@ class Array(object):
         but *must* be set to `False` by algorithms changing _qdata.
 
     .. todo :
-        we don't allow 0-rank arrays, do we? derive chargeinfo from legs !
+        - we don't allow 0-rank arrays, do we?  -> can derive chargeinfo from legs!
     """
 
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
@@ -3024,9 +3024,6 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         `k` (or less) right eigenvectors of `A` with total charge `charge_sector`.
         Note that when interpreted as a matrix,
         this is the transpose of what ``np.eigs`` normally gives.
-
-    .. todo :
-        test this function
     """
     charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber,))
     if a.rank != 2 or a.shape[0] != a.shape[1]:
@@ -3232,10 +3229,14 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     b_shape_keep = [b_data[i].shape[cut_b:] for i in b_slices[:-1]]
     a_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
-        if cut_a > 0 else None).reshape((-1, a.chinfo.qnumber))
+        if cut_a > 0 else None)
+    if a_charges_keep.ndim < 2:
+        a_charges_keep = a_charges_keep.reshape((-1, a.chinfo.qnumber))
     b_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0)
-        if cut_b < b.rank else None).reshape((-1, a.chinfo.qnumber))
+        if cut_b < b.rank else None)
+    if b_charges_keep.ndim < 2:
+        b_charges_keep = b_charges_keep.reshape((-1, a.chinfo.qnumber))
     # determine calculation type and result type
     dtype = np.find_common_type([a.dtype, b.dtype], [])
     prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
@@ -3437,7 +3438,6 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
     S = np.concatenate(S)
     if not compute_uv:
         return (None, S, None)
-
     # else: compute_uv is True
     new_leg_slices = np.append(new_leg_slices, [at])
     new_leg_charges = chinfo.make_valid(new_leg_charges)
@@ -3447,12 +3447,10 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         new_leg_slices_full = np.append(new_leg_slices_full, [at_full])
         new_leg_full = LegCharge.from_qind(chinfo, new_leg_slices_full, new_leg_charges,
                                            inner_qconj)
-        if len(S) == a.shape[1]:  # new_leg_R is fine
+        if a.shape[0] >= a.shape[1]:  # new_leg_R is fine
             new_leg_L = new_leg_full.conj()
-        elif len(S) == a.shape[0]:  # new_leg_L is fine
+        else:  # new_leg_L is fine
             new_leg_R = new_leg_full
-        else:
-            raise Exception("this should not happen...")
     U = Array(chinfo, [a.legs[0], new_leg_L], a.dtype, qtotal_L)
     VH = Array(chinfo, [new_leg_R, a.legs[1]], a.dtype, qtotal_R)
     U._data = U_data

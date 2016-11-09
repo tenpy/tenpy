@@ -79,7 +79,7 @@ def gen_random_legcharge(chinfo, ind_len):
         else:
             r = max(3, ind_len // 3)
             qflat.append(np.asarray(np.random.randint(-r, r, size=ind_len)))
-    qflat = np.array(qflat, dtype=chinfo.qtype).T
+    qflat = np.array(qflat, dtype=chinfo.qtype).T.reshape(ind_len, chinfo.qnumber)
     qconj = np.random.randint(0, 1, 1) * 2 - 1
     return charges.LegCharge.from_qflat(chinfo, qflat, qconj).bunch()[1]
 
