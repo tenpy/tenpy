@@ -3232,10 +3232,10 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     b_shape_keep = [b_data[i].shape[cut_b:] for i in b_slices[:-1]]
     a_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
-        if cut_a > 0 else None)
+        if cut_a > 0 else None).reshape((-1, a.chinfo.qnumber))
     b_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0)
-        if cut_b < b.rank else None)
+        if cut_b < b.rank else None).reshape((-1, a.chinfo.qnumber))
     # determine calculation type and result type
     dtype = np.find_common_type([a.dtype, b.dtype], [])
     prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
@@ -3354,8 +3354,7 @@ def _tensordot_worker(a, b, axes):
         # determine the charge the *row* must have
         Q_row = chinfo.make_valid(qtotal - b_charges_keep[col_b])
         # find indices `row_a` with `Q_row == a_charges_keep[row_a]`
-        rows = np.nonzero(np.all(a_charges_keep == Q_row, axis=1))[0]
-        for row_a in rows:
+        for row_a in np.nonzero(np.all(a_charges_keep == Q_row, axis=1))[0]:
             a_qindex_keep = a_qdata_keep[row_a]
             a_sl = xrange(*a_slices[row_a:row_a + 2])
             block_sum = None

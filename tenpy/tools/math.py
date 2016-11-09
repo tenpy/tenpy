@@ -7,6 +7,7 @@ import numpy as np
 import scipy.sparse as sparse
 import scipy.optimize as optimize
 import warnings
+from . import misc
 
 try:
     from scipy.sparse.linalg import eigs as sparse_eigen
@@ -255,20 +256,26 @@ def speigs(A, k, *args, **kwargs):
     d = A.shape[0]
     if A.shape != (d, d):
         raise ValueError("A.shape not a square matrix: " + str(A.shape))
-    if k < d:
+    if k < d-1:
         return sparse_eigen(A, k, *args, **kwargs)
     else:
         if k > d:
             warnings.warn("trimming k={k:d} to d={d:d}".format(k=k, d=d))
+            k = d
         if isinstance(A, np.ndarray):
             Amat = A
         else:
             Amat = matvec_to_array(A)  # Constructs the matrix
         ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
+        which = kwargs.get('which', args[2] if len(args) > 2 else 'LM')
         if ret_eigv:
-            return np.linalg.eig(Amat)
+            W, V = np.linalg.eig(Amat)
+            keep = misc.argsort(W, which)[:k]
+            return W[keep], V[:, keep]
         else:
-            return np.linalg.eigvals(Amat)
+            W = np.linalg.eigvals(Amat)
+            keep = misc.argsort(W, which)[:k]
+            return W
 
 
 def perm_sign(p):
