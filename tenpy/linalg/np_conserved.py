@@ -111,9 +111,6 @@ class Array(object):
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
-
-    .. todo :
-        - we don't allow 0-rank arrays, do we?  -> can derive chargeinfo from legs!
     """
 
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
@@ -336,6 +333,8 @@ class Array(object):
         if any([self.dtype != d.dtype for d in self._data]):
             raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
                 self.dtype, [self.dtype != d.dtype for d in self._data]))
+        if len(self.legs) == 0:
+            raise ValueError("We don't allow rank-0 tensors without legs")
         for l in self.legs:
             l.test_sanity()
             if l.chinfo != self.chinfo:

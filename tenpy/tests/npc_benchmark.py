@@ -202,7 +202,8 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
 def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000, **kwargs):
     """get a fairly exhaustive collection of timings for different n_qsectros and dim....
     2D matrices to be contracted are at most of shape (dmax, dmax)."""
-    sizes_all = range(5, 50, 5) + range(50, 200, 25) + range(200, 500, 100) + range(500, 2001, 250)
+    sizes_all = [3, 5, 8, 10, 12] + range(15, 50, 5) + range(50, 200, 25) + \
+        range(200, 500, 100) + range(500, 3001, 250)
     for n_qsectors, dim in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
         print "+"*100
         print "n_qsectors = {nq:d}, dim ={dim:d}".format(nq=n_qsectors, dim=dim)
@@ -289,7 +290,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-t', '--timing', action='store_true',
                         help="""run the function run_timing_save() to perform an extensive timing
-                        for scaling analysis. Duration > 1h!""")
+                        for scaling analysis. Duration with a single CPU ~10-30 minutes.""")
     parser.add_argument('--dmax', type=int, default=2000,
                         help="""maximum dimension of matrices to multiply for timing""")
     parser.add_argument('-p', '--plot', action='store_true',
