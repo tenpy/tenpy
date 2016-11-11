@@ -12,6 +12,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
       yapf -r -i ./
 
 .. note ::
+
   Since no tool is perfect, you can format some regions of code manually and enclose them 
   with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
@@ -61,24 +62,26 @@ However, to keep consistency, we ask you to comply with the following guidelines
       1
 - Use relative imports within TenPy. Example::
 
-      from ..algorithms.linalg import np_conserved as npc
-      # instead of `import tenpy.tools.strings `
+      from ..linalg import np_conserved as npc
 
 - If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``docs/`` folder
   to update the documentation index for the reference.
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
+  You should make sure that all tests run through, before you ``git push`` back into the public repo.
+- Reversely, if you write new functions, please also include suitable tests!
 - A To-Do list can be found in :doc:`docs/todo.rst <todo>`. It also contains a bug list.
-  Sphinx also extract blocks following ``.. todo ::`` from doc-strings, generating a list 
+  Sphinx also extract blocks following ``.. todo ::`` from doc-strings, 
+  collecting them in a list in the html documentation.
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
-  If you're not completely sure that you will remove it soon, please add a doc-string with a 
+  If you're not 100% sure that you will remove it soon, please add a doc-string with a 
   ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
 
-  Even during development, unfinished functions should ``raise NotImplementedError()``.
+  Unfinished functions should ``raise NotImplementedError()``.
   Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`docs/todo.rst <todo>`
 
 
-Thank You for helping with the development!
+**Thank You** for helping with the development!
 
 
 Additional information

@@ -290,7 +290,8 @@ if __name__ == "__main__":
 
     parser.add_argument('-t', '--timing', action='store_true',
                         help="""run the function run_timing_save() to perform an extensive timing
-                        for scaling analysis. Duration with a single CPU ~10-30 minutes.""")
+                        for scaling analysis. Duration with a single CPU may vary
+                        from 10 minutes to 2 hours...""")
     parser.add_argument('--dmax', type=int, default=2000,
                         help="""maximum dimension of matrices to multiply for timing""")
     parser.add_argument('-p', '--plot', action='store_true',

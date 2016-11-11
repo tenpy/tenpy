@@ -26,6 +26,7 @@ You can install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/py
     sudo pip install --upgrade sphinx numpydoc
 
 .. note ::
+
    If you don't have super user rights, try ``pip install --upgrade --user sphinx numpydoc`` to 
    install the packages to your home directory.
 
@@ -39,9 +40,10 @@ and enjoy this and other documentation beautifully rendered, with cross links, M
 and even a search function :-).
 
 .. note ::
-   Building the html documentation requires loading the modules.
-   Thus make sure that the folder tenpy is included in you `$PYTHONPATH`.
 
+   Building the html documentation requires loading the modules.
+   Thus make sure that the folder tenpy is included in you `$PYTHONPATH`,
+   as described in :doc:`docs/INSTALL.rst <INSTALL>`.
 
 
 Contents
@@ -61,9 +63,8 @@ Indices and tables
 * :ref:`search`
 
 
-
 I found a bug
 -------------
-If you can fix it, do it. git commit with a message starting as 'BUG: description'.
+If you can fix it, do it. ``git commit`` with a message containing ```bug`` in the description.
 
 Alternatively, you can report it in the `BUGS` section of :doc:`docs/todo.rst <todo>`.

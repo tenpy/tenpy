@@ -2,5 +2,4 @@
 ./*.py
 *.dat
 .DS_Store
-!version.py
 ._*

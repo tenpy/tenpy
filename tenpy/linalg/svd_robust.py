@@ -64,7 +64,7 @@ except:
 # check the scipy version wheter it includes LAPACK's 'gesvd'
 try:
     # simply check wether scipy.linalg.svd has the keyword it should have
-    scipy.linalg.svd([1], lapack_driver='dgesvd')
+    scipy.linalg.svd([[1.]], lapack_driver='gesvd')
     _old_scipy = False
 except TypeError:
     _old_scipy = True
@@ -119,7 +119,7 @@ def svd(a,
             pass
     # 'gesvd' lapack driver
     if not _old_scipy:
-        # use the LAPACK wrapper included in scipy version >= 0.18.0 : use 'gesvd' included in LAPACK
+        # use LAPACK wrapper included in scipy version >= 0.18.0
         return scipy.linalg.svd(a, full_matrices, compute_uv, overwrite_a, check_finite, 'gesvd')
     else:  # for backwards compatibility
         _load_lapack(warn=warn)
