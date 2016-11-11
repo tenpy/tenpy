@@ -171,18 +171,8 @@ def test_LegPipe():
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
 
 
-def test_reverse_sort_perm(N=10):
-    x = np.random.random(N)
-    p = np.arange(N)
-    np.random.shuffle(p)
-    xnew = x[p]
-    pinv = charges.reverse_sort_perm(p)
-    npt.assert_equal(x, xnew[pinv])
-
-
 if __name__ == "__main__":
     test_ChargeInfo()
     test__find_row_differences()
     test_LegCharge()
     test_LegPipe()
-    test_reverse_sort_perm()

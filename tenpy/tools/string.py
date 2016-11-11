@@ -1,8 +1,12 @@
-import numpy as np
+"""Tools for handling strings."""
 
 
 def uni_to_str(d):
-    """Given a nested structure (though assuming all iterables are either tuples, lists, or dicts, recursively converts unicode objects to python strings. This is useful when importing from json format (as it imports text as unicode).
+    """convert unicode to string in a nested structure 'd' of tuples, lists, dict.
+
+    Given a nested structure (though assuming all iterables are either tuples, lists, or dicts),
+    recursively converts unicode objects to python strings.
+    This is useful when importing from json format (as it imports text as unicode).
     """
     if type(d) == unicode:
         return str(d)
@@ -22,7 +26,7 @@ def uni_to_str(d):
 
 
 def is_non_string_iterable(x):
-    """Check if x is a non-string iterable.  (E.g., list, tuple, dictionary, np.ndarray) """
+    """Check if x is a non-string iterable, (e.g., list, tuple, dictionary, np.ndarray)"""
     if isinstance(x, str):
         return False
     try:
@@ -32,66 +36,73 @@ def is_non_string_iterable(x):
         return False
 
 
-def joinstr(strlist, valign='c', delim=''):
-    # TODO, does not handle tabs properly
-    # TODO, vary the vertical justification
-    """ Join strings with multilines
-            no newline at the end of everything
+def vert_join(strlist, valign='t', halign='l', delim=' '):
+    """Join strings with multilines vertically such that they appear next to each other.
 
-            with tabs, it tries its best to guess where it is (if any of the strings has more than one line)
-            """
-    # below are all lists, an item for each one in strlist
-    numstr = len(strlist)
-    slist = []  # list of string in strlist[i]
-    numlines = []  # number of lines in strlist[i]
-    # strwidth = []		# max width of strlist[i]
-    # a string with only spaces and tabs, with strwidth number of characters
-    # (use for padding)
-    empty_str = []
-    for s in strlist:
-        if isinstance(s, str):
-            list_of_lines = s.split('\n')
+    Parameters
+    ----------
+    strlist : list of str
+        the strings to be joined vertically
+    valing : {'t', 'c', 'b'}
+        vertical alignment of the strings: top, center, or bottom
+    halign : {'l', 'c', 'r'}
+        horizontal alignment of the strings: left, center, or right
+    delim : str
+        field separator between the strings
+
+    Returns
+    -------
+    joined : str
+        a string where the strings of strlist are aligned vertically
+
+    Examples
+    --------
+    >>> print vert_join(['a sample\nstring', str(np.arange(9).reshape(3, 3))], delim=' | ')
+    a sample | [[0 1 2]
+    string   |  [3 4 5]
+             |  [6 7 8]]
+    """
+    # expand tabs, split to newlines
+    strlist = [str(s).expandtabs().split('\n') for s in strlist]
+    numstrings = len(strlist)
+    # number of lines in each string
+    numlines = [len(lines) for lines in strlist]
+    # maximum number of lines = total number of lines in the resulting string
+    totallines = max(numlines)
+    # width for each of thestrings
+    widths = [max([len(l) for l in lines]) for lines in strlist]
+    # translate halign to string format mini language
+    halign = {'l': '<', 'c': '^', 'r': '>'}[halign]
+    fstr = ['{0: '+halign+str(w)+'s}' for w in widths]
+
+    # create a 2d table
+    res = [[' '*widths[j] for j in range(numstrings)] for i in range(totallines)]
+
+    for j, lines in enumerate(strlist):
+        if valign == 't':
+            voffset = 0
+        elif valign == 'b':
+            voffset = totallines - len(lines)
+        elif valign == 'c':
+            voffset = (totallines - len(lines)) // 2  # rounds to int
         else:
-            list_of_lines = str(s).split('\n')  # convert to string
-        slist.append(list_of_lines)
-        numlines.append(len(list_of_lines))
-        list_of_str_lengths = list(len(l) for l in list_of_lines)
-        the_longest_line = list_of_lines[np.argmax(list_of_str_lengths)]
-        empty_maxlen_liststr = [' '] * len(the_longest_line)
-        for i in range(len(the_longest_line)):
-            if the_longest_line[i] == '\t':
-                empty_maxlen_liststr[i] = '\t'
-        empty_str.append("".join(empty_maxlen_liststr))
-    maxlines = max(numlines)
-    s = ""
-    for i in range(maxlines):
-        for t in range(numstr):
-            if i < int((maxlines - numlines[t]) / 2) or i >= int(
-                (maxlines - numlines[t]) / 2) + numlines[t]:
-                s += empty_str[t]
-            else:
-                print_str = slist[t][i - int((maxlines - numlines[t]) / 2)]
-                s += print_str + empty_str[t][len(print_str):]
-            if t < numstr - 1:
-                s += delim
-        if i < maxlines - 1:
-            s += '\n'
-    return s
+            raise ValueError('invalid valign ' + str(valign))
+
+        for i, l in enumerate(lines):
+            res[i+voffset][j] = fstr[j].format(l)  # format to fixed widths[j]
+
+    # convert the created table to a single string
+    res = '\n'.join([delim.join(lines) for lines in res])
+    return res
 
 
 def to_mathematica_lists(a):
-    """ curly brackets """
-    #	if not isinstance(a, np.ndarray): raise ValueError
+    """convert nested `a` to string readable by mathematica using curly brackets '{...}'"""
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:
         iter(a)
-        s = "{"
-        for i, suba in enumerate(a):
-            if i > 0:
-                s += ", "
-            s += to_mathematica_lists(suba)
-        s += "}"
+        s = "{" + ", ".join([to_mathematica_lists(suba) for suba in a]) + "}"
         return s
     except TypeError:
         if isinstance(a, float) or isinstance(a, complex):

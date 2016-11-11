@@ -6,6 +6,7 @@ import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
 import itertools as it
+from tenpy.tools.misc import inverse_permutation
 
 chinfo = npc.ChargeInfo([1, 2], ['number', 'parity'])
 # parity can be derived from number. Yet, this should all work...
@@ -530,7 +531,7 @@ def test_npc_svd():
         Uflat, Sflat, VHflat = np.linalg.svd(Aflat, False, True)
         perm = np.argsort(-S)  # sort descending
         print S[perm]
-        iperm = npc.reverse_sort_perm(perm)
+        iperm = inverse_permutation(perm)
         for i in xrange(len(Sflat)):
             if i not in iperm:  # dopped it in npc.svd()
                 assert(Sflat[i] < EPS*10)
@@ -548,7 +549,7 @@ def test_npc_svd():
     Aflat = A.to_ndarray()
     U, S, VH = npc.svd(A)
     recalc = npc.tensordot(U.scale_axis(S, axis=-1), VH, axes=1)
-    tol_NULP = max(max(A.shape)**4, 100)
+    tol_NULP = max(max(A.shape)**4, 1000)
     npt.assert_array_almost_equal_nulp(recalc.to_ndarray(), Aflat, tol_NULP)
 
 

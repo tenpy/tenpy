@@ -49,12 +49,18 @@ import warnings
 import itertools
 
 # import public API from charges
-from .charges import (ChargeInfo, LegCharge, LegPipe, reverse_sort_perm)
+from .charges import (ChargeInfo, LegCharge, LegPipe)
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
-from ..tools.misc import to_iterable, anynan, argsort
+from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation
 from ..tools.math import speigs as _sp_speigs
+from ..tools.string import vert_join
+
+__all__ = ['QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like',
+           'diag', 'concatenate', 'grid_concat', 'grid_outer', 'grid_outer_calc_legcharge',
+           'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig',
+           'eigvalsh', 'eigvals', 'speigs']
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
@@ -459,8 +465,11 @@ class Array(object):
                                                                           self.get_leg_labels())
 
     def __str__(self):
-        res = "\n".join([repr(self)[:-1], str(self.to_ndarray()), ">"])
-        return res
+        res = [repr(self)[:-1], vert_join([str(l) for l in self.legs], delim='|')]
+        if np.prod(self.shape) < 100:
+            res.append(str(self.to_ndarray()))
+        res.append('>')
+        return '\n'.join(res)
 
     def sparse_stats(self):
         """Returns a string detailing the sparse statistics"""
@@ -1209,7 +1218,7 @@ class Array(object):
         oldleg = self.legs[axis]
         if len(perm) != oldleg.ind_len:
             raise ValueError("permutation has wrong length")
-        rev_perm = reverse_sort_perm(perm)
+        inv_perm = inverse_permutation(perm)
         newleg = LegCharge.from_qflat(self.chinfo, oldleg.to_qflat()[perm], oldleg.qconj)
         newleg = newleg.bunch()[1]
         res = self.copy(deep=False)  # data is replaced afterwards
@@ -1226,7 +1235,7 @@ class Array(object):
                 old_qindices = self._qdata[old_data_index]
                 new_qindices = old_qindices.copy()
                 for i_old in old_range:
-                    i_new = rev_perm[i_old]
+                    i_new = inv_perm[i_old]
                     qi_new, within_new = newleg.get_qindex(i_new)
                     new_qindices[axis] = qi_new
                     # look up new_qindices in `qdata`, insert them if necessary
@@ -1760,7 +1769,7 @@ class Array(object):
         # since new ``new.legs[leg][i] == old.legs[leg][p_qind[i]]``,
         # we have new ``new.legs[leg][reverse_sort_perm(p_qind)[b]] == old.legs[leg][b]``
         # thus we replace an entry `b` in ``_qdata[:, leg]``with reverse_sort_perm(q_ind)[b].
-        p_qind_r = reverse_sort_perm(p_qind)
+        p_qind_r = inverse_permutation(p_qind)
         self._qdata[:, leg] = p_qind_r[self._qdata[:, leg]]  # equivalent to
         # self._qdata[:, leg] = [p_qind_r[i] for i in self._qdata[:, leg]]
         self._qdata_sorted = False
@@ -1854,7 +1863,7 @@ class Array(object):
                         if np.any(perm != np.arange(len(perm))):
                             # np.argsort(i) gives the reverse permutation, so reverse it again.
                             # In that way, we get the permuation within the projected indices.
-                            permutations.append((a, reverse_sort_perm(perm)))
+                            permutations.append((a, inverse_permutation(perm)))
         res = self.take_slice(slice_inds, slice_axes)
         res_axes = np.cumsum([(a not in slice_axes) for a in xrange(self.rank)]) - 1
         p_map_qinds, p_masks = res.iproject(project_masks, [res_axes[p] for p in project_axes])
@@ -1924,7 +1933,7 @@ class Array(object):
         # permuations are ignored by map_part2self.
         # instead of figuring out permuations in self, apply the *reversed* permutations ot other
         for ax, perm in permutations:
-            other = other.permute(reverse_sort_perm(perm), ax)
+            other = other.permute(inverse_permutation(perm), ax)
         # now test compatibility of self_part with `other`
         if self_part.rank != other.rank:
             raise IndexError("wrong number of indices")

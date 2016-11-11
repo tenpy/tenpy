@@ -20,7 +20,10 @@ import itertools
 import bisect
 import warnings
 
-from ..tools.misc import lexsort
+from ..tools.misc import lexsort, inverse_permutation
+from ..tools.string import vert_join
+
+__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 
 
 class ChargeInfo(object):
@@ -477,7 +480,7 @@ class LegCharge(object):
         --------
         bunch : enlarge blocks for contiguous qind of the same charges.
         np.take : can apply `perm_flat` to a given axis
-        reverse_sort_perm : returns inverse of a permutation
+        inverse_permutation : returns inverse of a permutation
         """
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
@@ -550,8 +553,9 @@ class LegCharge(object):
         return map_qind, block_masks, cp
 
     def __str__(self):
-        """return a string of slices & charges"""
-        return '\n'.join([str(self.slices), str(self.charges)])
+        """return a string of nicely formatted slices & charges"""
+        slices = '\n'.join([str(s) for s in self.slices])
+        return vert_join([slices, str(self.charges)], delim=' ')
 
     def __repr__(self):
         """full string representation"""
@@ -840,7 +844,7 @@ class LegPipe(LegCharge):
             q_map = q_map[perm_qind]
             charges = charges[perm_qind]
             blocksizes = blocksizes[perm_qind]
-            self._perm = reverse_sort_perm(perm_qind)
+            self._perm = inverse_permutation(perm_qind)
         else:
             self._perm = None
         self.charges = charges
@@ -895,21 +899,6 @@ class LegPipe(LegCharge):
         return self._perm[inds_before_perm]
 
 # ===== functions =====
-
-
-def reverse_sort_perm(perm):
-    """reverse sorting indices.
-
-    Sort functions (as :meth:`LegCharge.sort`) return a (1D) permutation `perm` array,
-    such that ``sorted_array = old_array[perm]``.
-    This function reverses the permutation `perm`,
-    such that ``old_array = sorted_array[reverse_sort_perm(perm)]``.
-
-    .. todo ::
-        should we move this to another file? maybe tools/math (also move the test!)
-        At least rename this to `reverse_perm`
-    """
-    return np.argsort(perm)
 
 
 def _find_row_differences(qflat):
