@@ -36,8 +36,6 @@ Concrete things to be fixed in different files
 - add doc strings in __init__.py for different folders, explaining the most important parts of the modules
 - The MPO class has no function for expectation value with MPS?
 
-- need a test running the examples !!!!
-
 
 To be done at some point for the next releases
 ----------------------------------------------
