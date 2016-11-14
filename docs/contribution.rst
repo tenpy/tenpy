@@ -80,6 +80,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   Unfinished functions should ``raise NotImplementedError()``.
   Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`docs/todo.rst <todo>`
 
+- if you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 
 **Thank You** for helping with the development!
 
@@ -91,5 +92,4 @@ Additional information
    :maxdepth: 2
 
    todo
-   changes_TenPy
 

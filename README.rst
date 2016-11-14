@@ -3,9 +3,9 @@ Welcome to TenPy!
 
 Introduction
 ------------
-TenPy is a Python Library for the simulation of strongly correlated quantum systems with tensor networks.
+TenPy is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 It's based on TenPy2, but tries to be readable and easy to understand for new peoples.
-A detailed list of changes compared to the previous TenPy can be found in docs/changes_TenPy.rst
+A list of changes compared to the previous TenPy can be found in docs/changes_TenPy.rst
 
 How do I get set up?
 --------------------
@@ -13,7 +13,7 @@ Follow the instructions in :doc:`docs/INSTALL.rst <INSTALL>`.
 
 How to read the documentation
 -----------------------------
-The documentation is based on Python's docstrings, and some additional .rst files located in docs/.
+The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in docs/.
 
 All documentation should be formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
 This means it's readable in the source plain text, but one can also convert it to other formats.
@@ -42,7 +42,7 @@ and even a search function :-).
 .. note ::
 
    Building the html documentation requires loading the modules.
-   Thus make sure that the folder tenpy is included in you `$PYTHONPATH`,
+   Thus make sure that the folder tenpy is included in your ``$PYTHONPATH``,
    as described in :doc:`docs/INSTALL.rst <INSTALL>`.
 
 

@@ -30,8 +30,8 @@ def to_iterable(a):
 def to_ndarray(a, array_size=None):
     """Convert to an 1D numpy array. If required, tile to the required size.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     a :
         the input to be converted to an array. If a is not iterable, use `[a]`.
     array_size : int
@@ -170,6 +170,7 @@ def atleast_2d_pad(a, pad_item=0):
     """Transform `a` into a 2D array, filling missing places with `pad_item`.
 
     Given a list of lists, turn it to a 2D array (pad with 0), or turn a 1D list to 2D.
+
     Parameters
     ----------
     a : list of lists
@@ -188,6 +189,7 @@ def atleast_2d_pad(a, pad_item=0):
     >>> atleast_2d_pad([[3, 4],[1, 6, 7]])
     array([[ 3.,  4.,  0.],
            [ 1.,  6.,  7.]])
+
     """
     iter(a)  # check that a is at least 1D iterable
     if len(a) == 0:
@@ -211,8 +213,8 @@ def atleast_2d_pad(a, pad_item=0):
 def transpose_list_list(D, pad=None):
     """Returns a list of lists T, such that ``T[i][j] = D[j][i]``.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     D : list of list
         to be transposed
     pad :
@@ -238,8 +240,8 @@ def transpose_list_list(D, pad=None):
 def zero_if_close(a, tol=1.e-15):
     """set real and/or imaginary part to 0 if their absolute value is smaller than `tol`.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     a : ndarray
         numpy array to be rounded
     tol : float
@@ -256,8 +258,8 @@ def zero_if_close(a, tol=1.e-15):
 def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     """Pad an array along a given `axis`.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     a : ndarray
         the array to be padded
     w_l : int

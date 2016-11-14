@@ -104,7 +104,7 @@ def svd(a,
 
     Returns
     -------
-    U, s, Vh : ndarray
+    U, S, Vh : ndarray
         As described in doc-string of `scipy.linalg.svd`
     """
     if lapack_driver not in ['gesdd', 'gesvd']:
@@ -142,7 +142,7 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
 
     Returns
     -------
-    U, s, vH : ndarray
+    U, S, Vh : ndarray
         see doc-string of `numpy.linalg.svd` for details.
     """
     a, wrap = _makearray(a)  # uses order='C'

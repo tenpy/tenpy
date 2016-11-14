@@ -14,7 +14,7 @@ Primary goals for the coming release
 - CamelCase for classes
 - include minimal library with mps, mpo, basic model (XXZ)
 
-- setup of the library
+- some way to set the number of cores used by the MKL
 
 
 Concrete things to be fixed in different files

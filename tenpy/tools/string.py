@@ -37,7 +37,7 @@ def is_non_string_iterable(x):
 
 
 def vert_join(strlist, valign='t', halign='l', delim=' '):
-    """Join strings with multilines vertically such that they appear next to each other.
+    r"""Join strings with multilines vertically such that they appear next to each other.
 
     Parameters
     ----------
@@ -57,10 +57,12 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
 
     Examples
     --------
-    >>> print vert_join(['a sample\nstring', str(np.arange(9).reshape(3, 3))], delim=' | ')
-    a sample | [[0 1 2]
-    string   |  [3 4 5]
-             |  [6 7 8]]
+    >>> print vert_join(['a\nsample\nmultiline\nstring', str(np.arange(9).reshape(3, 3))],
+    ...                 delim=' | ')
+    a         | [[0 1 2]
+    sample    |  [3 4 5]
+    multiline |  [6 7 8]]
+    string
     """
     # expand tabs, split to newlines
     strlist = [str(s).expandtabs().split('\n') for s in strlist]

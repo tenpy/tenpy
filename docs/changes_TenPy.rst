@@ -5,6 +5,9 @@ Global Changes
 --------------
 - syntax style based on PEP8. Use ``$>yapf -r -i ./`` to ensure consitent formatting over the whole project.
   Special comments ``# yapf: disable`` and ``# yapf: enable`` can be used for manual formatting of some regions in code.
+- Following PEP8, we distinguish between 'private' functions, 
+  indicated by names starting with an underscore and to be used only within the library, and the public API. 
+  The puplic API should be backwards-compatible with different releases, while private functions might change at any time.
 - all modules are in the folder ``tenpy`` to avoid name conflicts with other libraries.
 - withing the library, relative imports are used, e.g., ``from ..tools.math import (toiterable, tonparray)``
   Exception: the files in `tests/` and `examples/` run as ``__main__`` and can't use relative imports
