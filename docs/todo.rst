@@ -4,7 +4,7 @@ Update docs/changes_TenPy.rst if you've done something.
 
 Primary goals for the coming release
 ------------------------------------
-- convert TenPy2 code with autopep8, restrict to necessary parts. 
+- convert TenPy2 code, restrict to necessary parts. 
 
     - add files from old git repo without changes, git commit
     - run `$> yapf -r -i`. See docs/changes_TenPy.rst for detailed command
@@ -12,10 +12,7 @@ Primary goals for the coming release
     - git commit
 
 - CamelCase for classes
-- rewrite of np_conserved
-- run tests, extend tests
 - include minimal library with mps, mpo, basic model (XXZ)
-- update INSTALL.rst
 
 - setup of the library
 
@@ -24,10 +21,8 @@ Concrete things to be fixed in different files
 ----------------------------------------------
 - np_conserved:
 
-  - documentation of general idea -> docs/IntroNpc
-  - introduce new class leg_charge with charge data for a single leg -> linalg/charges.py
-  - moved into tenpy/linalg
-  - add state labeling to LegCharge ?
+  - add state labeling to LegCharge !
+  - as_completely_blocked: option to select only some legs
 
 - model:
 
@@ -38,12 +33,10 @@ Concrete things to be fixed in different files
     derive MPS-chain fixing index notation for accessing different sites
     How to best handle different mappings lattice->chain?
 
-- algorithms/linalg/npc_setup: document possible variables/setups in docs/setup.tex
-- which of algorithms/linalg/svd_* are necessary? np_conserved use svd_{d,z}gesvd.
-  I also have a svd_robust.py in my TenPy; is that used anywhere?
 - add doc strings in __init__.py for different folders, explaining the most important parts of the modules
 - The MPO class has no function for expectation value with MPS?
-- get rid of all the Warnings when building doc with sphinx.
+
+- need a test running the examples !!!!
 
 
 To be done at some point for the next releases
@@ -58,29 +51,18 @@ To be done at some point for the next releases
 - properties might be useful for certain things, e.g. for dtype of npc.Array
 
 - np_conserved:
-  the new version runs with python only.
-  Optimization: is this really necessary/ does it make sense? profile the code!
-  *If* we agree to optimize, write a Cython file with functions having the **same** call structure/results as the pure
-  python once. Keep both version, and add a function in np_conserved, say `np_conserved.optimize()`,
-  which imports the Cython module and replaces all the functions in np_conserved with the corresponding Cython versions.
-  In that way, we have a fully functional portable code, which still can be optimized where necessary.
-  Make shure to add tests checking that both versions of all functions give the same results.
+  optional just-in-time compilation with numba could maybe speed things up?
 
-Other
------
-- Rename TenPy to distinguish from old version? TenPyLight is quite long...
-- how much speedup does npc_helper give? 
-  Maybe, a portable (python-only) np_conserved without npc_helper would be possible?
 
 Wish-list
 ---------
 - Open Source on GitHub? -> Licence? Documentation on readthedocs.org?
 - dump of stack for lated inspection, when an error occurs while on the cluster?
 - logging mechanism?
-- Johannes Motruk: extend simulation class: save standard variables?
+- Johannes Motruk: extend simulation class: save standard variables like entropy, energy, etc?
 - Ruben: extend MPS TransferMatrix class
 - Johannes H: possible to convert to python3? 
-- Johannes H: ED code using the symmetries, including example/test?
+- Johannes H, Maximilian: ED code using the symmetries, including example/test?
 
 Auto-generated To-Do list
 -------------------------

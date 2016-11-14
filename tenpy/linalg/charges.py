@@ -411,10 +411,10 @@ class LegCharge(object):
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return  # optimize: don't need to check all charges explicitly
-        if not np.array_equal(self.slices, other.slices):
-            raise ValueError("incomatible slices. self:\n{0!s}\nother:{1!s}".format(self, other))
-        if not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
-            raise ValueError("incomatible charges. self:\n{0!s}\nother:{1!s}".format(self, other))
+        if not np.array_equal(self.slices, other.slices) or \
+                not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
+            raise ValueError("incompatible LegCharge\n" +
+                             vert_join(["self\n"+str(self), "other\n"+str(other)], delim=' | '))
 
     def get_slice(self, qindex):
         """return slice selecting the block for a given `qindex`"""
@@ -554,8 +554,9 @@ class LegCharge(object):
 
     def __str__(self):
         """return a string of nicely formatted slices & charges"""
+        qconj = " {0:+d}\n".format(self.qconj)
         slices = '\n'.join([str(s) for s in self.slices])
-        return vert_join([slices, str(self.charges)], delim=' ')
+        return qconj + vert_join([slices, str(self.charges)], delim=' ')
 
     def __repr__(self):
         """full string representation"""
@@ -777,9 +778,11 @@ class LegPipe(LegCharge):
     def __str__(self):
         """fairly short debug output"""
         res_lines = ["LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
-                     "qconj {0}->{1:+1};".format(
+                     "    qconj {0}->{1:+1};".format(
                          '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
-                     "block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number)]
+                     "    block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number),
+                     vert_join([str(l) for l in self.legs], delim=' | '),
+                     ')']
         return '\n'.join(res_lines)
 
     def __repr__(self):

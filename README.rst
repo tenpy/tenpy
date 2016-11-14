@@ -62,9 +62,8 @@ Indices and tables
 * :ref:`modindex`
 * :ref:`search`
 
-
 I found a bug
 -------------
-If you can fix it, do it. ``git commit`` with a message containing ```bug`` in the description.
+If you know how to fix it, just do it. ``git commit`` with a message containing ``bug`` in the description.
 
 Alternatively, you can report it in the `BUGS` section of :doc:`docs/todo.rst <todo>`.

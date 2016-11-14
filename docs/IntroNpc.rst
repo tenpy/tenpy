@@ -543,10 +543,13 @@ See also
   It contians the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions for working with them (creating and manipulating).
 - The module :mod:`tenpy.linalg.charges` contains implementations for the charge structure, for example the classes
   :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and :class:`~tenpy.linalg.charges.LegPipe`.
-  As noted above, all 'public' API is imported in :mod:`~tenpy.linalg.np_conserved`.
+  As noted above, the 'public' API is imported to (and accessible from) :mod:`~tenpy.linalg.np_conserved`.
+
+A full example code for spin-1/2
+--------------------------------
+Below follows a full example demonstrating the creation and contraction of Arrays.
+
+.. literalinclude:: ../examples/npc_intro.py
 
 .. todo ::
-   Full examples
-
-.. todo ::
-   Further References?!?
+   References?!?

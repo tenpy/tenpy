@@ -1,6 +1,6 @@
 r"""A module to handle charge conservation in tensor networks.
 
-A detailed introduction (including notations) can be found in :doc:`../IntroNpc`.
+A detailed introduction to this module (including notations) can be found in :doc:`../IntroNpc`.
 
 This module `np_conserved` implements an class :class:`Array`
 designed to make use of charge conservation in tensor networks.
@@ -14,30 +14,28 @@ All possible operations (e.g. tensordot, svd, ...) on such arrays preserve the t
 structure. In addition, these operations make use of the charges to figure out which of the blocks
 it hase to use/combine - this is the basis for the speed-up.
 
+**Overview**
 
-See also
---------
-:mod:`tenpy.linalg.charges` : Implementation of :class:`~tenpy.linalg.charges.ChargeInfo`
-and :class:`~tenpy.linalg.charges.LegCharge` with additional documentation.
+Classes:
+:class:`ChargeInfo`, :class:`LegCharge`, :class:`LegPipe`, :class:`Array`
 
+Array creation:
+:func:`zeros`, :func:`eye_like`, :func:`diag`,
 
-.. todo ::
-   function listing,
-   write example section
+Concatenation:
+:func:`concatenate`, :func:`grid_concat`, :func:`grid_outer` :func:`grid_outer_calc_legcharge`
+
+Contraction of some legs:
+:func:`tensordot`, :func:`outer`, :func:`inner`, :func:`trace`
+
+Linear algebra:
+:func:`svd`, :func:`pinv`, :func:`norm`
+
+Eigen systems:
+:func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
+
+----------------------------------------------------------------------------
 """
-# Examples
-# --------
-# >>> import numpy as np
-# >>> import tenpy.linalg.np_conserved as npc
-# >>> Sz = np.array([[0., 1.], [1., 0.]])
-# >>> Sz_c = npc.Array.from_ndarray_trivial(Sz)  # convert to npc array with trivial charge
-# >>> Sz_c
-# <npc.Array shape=(2, 2)>
-# >>> sx = npc.ndarray.from_ndarray([[0., 1.], [1., 0.]])  # trivial charge conservation
-# >>> b = npc.ndarray.from_ndarray([[0., 1.], [1., 0.]])  # trivial charge conservation
-# >>>
-# >>> print a[0, -1]
-# >>> c = npc.tensordot(a, b, axes=([1], [0]))
 
 from __future__ import division
 
@@ -400,6 +398,10 @@ class Array(object):
         set_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
+        try:
+            res = int(res)
+        except:
+            raise KeyError("label not found: "+repr(label))
         if res > self.rank:
             raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         elif res < 0:
@@ -457,6 +459,24 @@ class Array(object):
         for k, v in self.labels.iteritems():
             lb[v] = k
         return tuple(lb)
+
+    def get_leg(self, label):
+        """return self.legs[self.get_leg_index(label)].
+
+        Convenient function returning the leg corresponding to a leg label/index."""
+        return self.legs[self.get_leg_index(label)]
+
+    def ireplace_label(self, old_label, new_label):
+        """replace the leg label `old_label` with `new_label`. In place."""
+        old_label, new_label = str(old_label), str(new_label)
+        self.labels[new_label] = self.labels[old_label]
+        if new_label != old_label:
+            del self.labels[old_label]
+        return self
+
+    def replace_label(self, old_label, new_label):
+        """return a shallow copy with the leg label `old_label` replaced by `new_label`."""
+        return self.copy(deep=False).ireplace_label(old_label, new_label)
 
     # string output ===========================================================
 
@@ -868,7 +888,7 @@ class Array(object):
 
         See also
         --------
-        :meth:`combine_legs` : this is reversed by split_legs.
+        :meth:`split_legs` : inverse reshaping splitting LegPipes.
 
         Notes
         -----
@@ -926,8 +946,9 @@ class Array(object):
         if transp != tuple(range(self.rank)):
             res = self.copy(deep=False)
             res.set_leg_labels(labels)
-            res = res.transpose(transp)
-            tr_combine_legs = [range(na, na + len(cl)) for na, cl in zip(new_axes, combine_legs)]
+            res = res.itranspose(transp)
+            inv_transp = inverse_permutation(transp)
+            tr_combine_legs = [[inv_transp[a] for a in cl] for cl in combine_legs]
             return res.combine_legs(tr_combine_legs, new_axes=new_axes, pipes=pipes)
         # if we come here, combine_legs has the form of `tr_combine_legs`.
 
@@ -1985,7 +2006,7 @@ class Array(object):
                 if legs[0].qconj != pipe.legs[0].qconj:
                     pipes[i] = pipe = pipe.conj()  # need opposite qind
                 for self_leg, pipe_leg in zip(legs, pipe.legs):
-                    self_leg.test_contractible(pipe_leg.conj())
+                    self_leg.test_equal(pipe_leg)
         return pipes
 
     def _combine_legs_new_axes(self, combine_legs, new_axes):
@@ -2439,6 +2460,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
     chinfo = entry.chinfo
     dtype = np.find_common_type([e.dtype for _, e in entries], [])
     legs = list(grid_legs) + entry.legs
+    labels = tuple(entry.get_leg_labels())
     if qtotal is None:
         # figure out qtotal from first non-zero entry
         grid_charges = [l.get_charge(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
@@ -2449,6 +2471,10 @@ def grid_outer(grid, grid_legs, qtotal=None):
     # main work: iterate over all non-trivial entries to fill `res`.
     for idx, entry in entries:
         res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
+        if labels is not None and tuple(entry.get_leg_labels()) != labels:
+            labels = None
+    if labels is not None:
+        res.set_leg_labels([None]*len(grid_shape) + list(labels))
     res.test_sanity()
     return res
 
@@ -2632,7 +2658,7 @@ def inner(a, b, axes=None, do_conj=False):
     if axes is not None:
         axes_a, axes_b = axes
         axes_a = a.get_leg_indices(to_iterable(axes_a))
-        axes_b = a.get_leg_indices(to_iterable(axes_b))
+        axes_b = b.get_leg_indices(to_iterable(axes_b))
         # we can permute axes_a and axes_b. Use that to ensure axes_b = range(b.rank)
         sort_axes_b = np.argsort(axes_b)
         axes_a = [axes_a[i] for i in sort_axes_b]
@@ -2660,7 +2686,8 @@ def tensordot(a, b, axes=2):
     Does not require complete blocking of the charges.
 
     Labels are inherited from `a` and `b`.
-    In case of a collistion (= the same label inherited from `a` and `b`), both labels are dropped.
+    In case of a collistion (= the same label would be inherited from `a` and `b`
+    after the contraction), both labels are dropped.
 
     Detailed implementation notes are available in the doc-string of :func:`_tensordot_worker`.
 
@@ -2716,12 +2743,13 @@ def tensordot(a, b, axes=2):
     res = _tensordot_worker(a, b, axes)
 
     # labels
-    res.labels = a.labels.copy()
+    res.set_leg_labels(list(a.get_leg_labels()[:-axes]) + [None]*(b.rank-axes))
     for k in b.labels:
-        if k in res.labels:
-            del res.labels[k]  # drop collision
-        else:
-            res.labels[k] = b.labels[k] + a.rank - 2 * axes
+        if b.labels[k] >= axes:  # not contracted
+            if k in res.labels:
+                del res.labels[k]  # drop collision
+            else:
+                res.labels[k] = b.labels[k] + a.rank - 2 * axes
     return res
 
 
