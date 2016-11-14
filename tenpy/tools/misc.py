@@ -11,8 +11,10 @@ try:
 except:
     has_bottleneck = False
 
-all = ['to_iterable', 'to_ndarray', 'anynan', 'argsort', 'inverse_permutation',
-       'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad']
+all = [
+    'to_iterable', 'to_ndarray', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
+    'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad'
+]
 
 
 def to_iterable(a):
@@ -57,6 +59,7 @@ def to_ndarray(a, array_size=None):
 if has_bottleneck:
     anynan = bn.anynan
 else:
+
     def anynan(a):
         """check whether any entry of a ndarray `a` is 'NaN'"""
         return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
@@ -206,7 +209,7 @@ def atleast_2d_pad(a, pad_item=0):
         return np.array([a])
     maxlen = max([len(s) for s in a])
     # Pad if necessary
-    a = [np.hstack([s, [pad_item]*(maxlen - len(s))]) for s in a]
+    a = [np.hstack([s, [pad_item] * (maxlen - len(s))]) for s in a]
     return np.array(a)
 
 

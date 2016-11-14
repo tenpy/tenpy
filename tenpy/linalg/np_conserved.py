@@ -55,10 +55,11 @@ from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join
 
-__all__ = ['QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like',
-           'diag', 'concatenate', 'grid_concat', 'grid_outer', 'grid_outer_calc_legcharge',
-           'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig',
-           'eigvalsh', 'eigvals', 'speigs']
+__all__ = [
+    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
+    'concatenate', 'grid_concat', 'grid_outer', 'grid_outer_calc_legcharge', 'trace', 'outer',
+    'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig', 'eigvalsh', 'eigvals', 'speigs'
+]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
@@ -401,7 +402,7 @@ class Array(object):
         try:
             res = int(res)
         except:
-            raise KeyError("label not found: "+repr(label))
+            raise KeyError("label not found: " + repr(label))
         if res > self.rank:
             raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         elif res < 0:
@@ -501,7 +502,7 @@ class Array(object):
         nonzero = np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         bs = np.array([t.size for t in self._data], dtype=np.float)
         if nblocks > 0:
-            captsparse = float(nonzero)/stored
+            captsparse = float(nonzero) / stored
             bs_min = int(np.min(bs))
             bs_max = int(np.max(bs))
             bs_mean = np.sum(bs) / nblocks
@@ -1353,11 +1354,15 @@ class Array(object):
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:
-            self._data = [np.swapaxes(np.swapaxes(t, axis, -1) * s[leg.get_slice(qi)], axis, -1)
-                          for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
+            self._data = [
+                np.swapaxes(np.swapaxes(t, axis, -1) * s[leg.get_slice(qi)], axis, -1)
+                for qi, t in itertools.izip(self._qdata[:, axis], self._data)
+            ]
         else:  # optimize: no need to swap axes, if axis is -1.
-            self._data = [t * s[leg.get_slice(qi)]  # (it's slightly faster for large arrays)
-                          for qi, t in itertools.izip(self._qdata[:, axis], self._data)]
+            self._data = [
+                t * s[leg.get_slice(qi)]  # (it's slightly faster for large arrays)
+                for qi, t in itertools.izip(self._qdata[:, axis], self._data)
+            ]
         return self
 
     def scale_axis(self, s, axis=-1):
@@ -1513,7 +1518,7 @@ class Array(object):
                     data.append(func(adata[i], np.zeros_like(adata[i]), *args, **kwargs))
                     qdata.append(aq[i])
                     i += 1
-                else:   # tested a == b or a < b or a > b, so this should never happen
+                else:  # tested a == b or a < b or a > b, so this should never happen
                     assert False
                 # if both are zero, we assume f(0, 0) = 0
             self._data = data
@@ -1643,7 +1648,7 @@ class Array(object):
     def _set_shape(self):
         """deduce self.shape from self.legs"""
         if len(self.legs) == 0:
-            raise ValueError("We don't allow 0-dimensional arrays. Why should we?""")
+            raise ValueError("We don't allow 0-dimensional arrays. Why should we?" "")
         self.shape = tuple([lc.ind_len for lc in self.legs])
 
     def _iter_all_blocks(self):
@@ -1654,8 +1659,8 @@ class Array(object):
         qindices : tuple of int
             a qindex for each of the legs
         """
-        for block_inds in itertools.product(*[xrange(l.block_number)
-                                              for l in reversed(self.legs)]):
+        for block_inds in itertools.product(
+                *[xrange(l.block_number) for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
             yield tuple(block_inds[::-1])  # back to legs in correct order
 
@@ -1675,7 +1680,7 @@ class Array(object):
 
     def _get_block_shape(self, qindices):
         """return shape for the block given by qindices"""
-        return tuple([(l.slices[qi+1] - l.slices[qi])
+        return tuple([(l.slices[qi + 1] - l.slices[qi])
                       for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
@@ -2065,16 +2070,18 @@ class Array(object):
         res._set_shape()
         res.labels = {}
         # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
-        qmap_inds = [p._map_incoming_qind(self._qdata[:, cl])
-                     for p, cl in zip(pipes, combine_legs)]
+        qmap_inds = [
+            p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
+        ]
 
         # get new qdata
         qdata = np.empty((self.stored_blocks, res.rank), dtype=self._qdata.dtype)
         qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
         for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
-            np.take(p.q_map[:, -1],  # last column of q_map maps to qindex of the pipe
-                    qmap_ind,
-                    out=qdata[:, na])  # write the result directly into qdata
+            np.take(
+                p.q_map[:, -1],  # last column of q_map maps to qindex of the pipe
+                qmap_ind,
+                out=qdata[:, na])  # write the result directly into qdata
         # now we have probably many duplicate rows in qdata,
         # since for the pipes many `qmap_ind` map to the same `qindex`
         # find unique entries by sorting qdata
@@ -2142,13 +2149,14 @@ class Array(object):
         new_block_shape = np.empty(res.rank, dtype=np.intp)
         block_slice = [slice(None)] * self.rank
         for old_block, qdata_row in itertools.izip(self._data, tmp_qdata):
-            qmap_slices = [p.q_map_slices[i]
-                           for p, i in zip(pipes, qdata_row[new_split_axes_first])]
+            qmap_slices = [
+                p.q_map_slices[i] for p, i in zip(pipes, qdata_row[new_split_axes_first])
+            ]
             new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
             for qmap_rows in itertools.product(*qmap_slices):
                 for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
                     qdata_row[sl] = block_qind = qm[2:-1]
-                    new_block_shape[sl] = [(l.slices[qi+1] - l.slices[qi])
+                    new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
                                            for l, qi in zip(pipe.legs, block_qind)]
                     block_slice[a] = slice(qm[0], qm[1])
                 new_block = old_block[block_slice].reshape(new_block_shape)
@@ -2229,6 +2237,7 @@ class Array(object):
         else:
             raise ValueError("unknown order")
         return self
+
 
 # functions ====================================================================
 
@@ -2474,7 +2483,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
         if labels is not None and tuple(entry.get_leg_labels()) != labels:
             labels = None
     if labels is not None:
-        res.set_leg_labels([None]*len(grid_shape) + list(labels))
+        res.set_leg_labels([None] * len(grid_shape) + list(labels))
     res.test_sanity()
     return res
 
@@ -2514,8 +2523,10 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
     qtotal = chinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
     qflat = [None] * grid_shape[axis]
     for idx, entry in entries:
-        grid_charges = [l.get_charge(l.get_qindex(i)[0])
-                        for a, (i, l) in enumerate(zip(idx, grid_legs)) if a != axis]
+        grid_charges = [
+            l.get_charge(l.get_qindex(i)[0]) for a, (i, l) in enumerate(zip(idx, grid_legs))
+            if a != axis
+        ]
         qflat_entry = chinfo.make_valid(qtotal - entry.qtotal - np.sum(grid_charges, axis=0))
         i = idx[axis]
         if qflat[i] is None:
@@ -2524,8 +2535,8 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
-                                           qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo,
+                                           chinfo.make_valid(qconj * np.array(qflat)), qconj)
     return grid_legs
 
 
@@ -2743,7 +2754,7 @@ def tensordot(a, b, axes=2):
     res = _tensordot_worker(a, b, axes)
 
     # labels
-    res.set_leg_labels(list(a.get_leg_labels()[:-axes]) + [None]*(b.rank-axes))
+    res.set_leg_labels(list(a.get_leg_labels()[:-axes]) + [None] * (b.rank - axes))
     for k in b.labels:
         if b.labels[k] >= axes:  # not contracted
             if k in res.labels:
@@ -2753,8 +2764,13 @@ def tensordot(a, b, axes=2):
     return res
 
 
-def svd(a, full_matrices=False, compute_uv=True, cutoff=None, qtotal_LR=[None, None],
-        inner_labels=[None, None], inner_qconj=+1):
+def svd(a,
+        full_matrices=False,
+        compute_uv=True,
+        cutoff=None,
+        qtotal_LR=[None, None],
+        inner_labels=[None, None],
+        inner_qconj=+1):
     """Singualar value decomposition of an Array `a`.
 
     Factorizes ``U, S, VH = svd(a)``, such that ``a = U*diag(S)*VH`` (where ``*`` stands for
@@ -2830,8 +2846,8 @@ def svd(a, full_matrices=False, compute_uv=True, cutoff=None, qtotal_LR=[None, N
 
     # the main work
     overwrite_a = (len(piped_axes) > 0)
-    U, S, VH = _svd_worker(a, full_matrices, compute_uv, overwrite_a,
-                           cutoff, qtotal_LR, inner_qconj)
+    U, S, VH = _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR,
+                           inner_qconj)
     if not compute_uv:
         return S
 
@@ -2870,7 +2886,7 @@ def pinv(a, cutoff=1.e-15):
     # follow exactly the procedure lined out.
     # however, use inplace methods and don't construct the diagonal matrix explicitly.
     U, S, VH = svd(a, cutoff=cutoff)
-    X = VH.itranspose().iconj().iscale_axis(1./S, axis=-1)
+    X = VH.itranspose().iconj().iscale_axis(1. / S, axis=-1)
     Z = U.itranspose().iconj()
     return tensordot(X, Z, axes=1)
 
@@ -3061,7 +3077,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         Note that when interpreted as a matrix,
         this is the transpose of what ``np.eigs`` normally gives.
     """
-    charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber,))
+    charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber, ))
     if a.rank != 2 or a.shape[0] != a.shape[1]:
         raise ValueError("can only diagonalize a matrix!")
     if np.any(a.qtotal != a.chinfo.make_valid()):
@@ -3088,7 +3104,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         for qi in xrange(a.legs[0].block_number):
             if np.all(a.chinfo.make_valid(a.legs[0].get_charge(qi)) == charge_sector):
                 sl = a.legs[0].slices
-                block_size = sl[qi+1] - sl[qi]
+                block_size = sl[qi + 1] - sl[qi]
                 break
         else:
             raise ValueError("desired charge sector not present in the leg of `a`")
@@ -3109,6 +3125,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         return W, V
     else:
         return W
+
 
 # private functions ============================================================
 
@@ -3286,6 +3303,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     kw_overwrite = 'overwrite_c' if f_name == 'gemm' else 'overwrite_y'
     kw_overwrite = {kw_overwrite: True}
     if cut_a > 0:
+
         def f_dot_sum(a, b, sum):
             """BLAS wrapper to perform ``sum += np.dot(a, b); return sum``.
             If ``sum is None``, return ``np.dot(a, b)``."""
@@ -3456,7 +3474,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
                 qi_C = len(new_leg_slices)
                 # qind_row for the new leg at the *right*, `VH.legs[0]`.
                 new_leg_slices.append(at)
-                charges_row = (qtotal_R - a.legs[1].get_charge(qi_R))*inner_qconj
+                charges_row = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
                 new_leg_charges.append(charges_row)
                 U_data.append(U_b.astype(a.dtype, copy=False))
                 VH_data.append(VH_b.astype(a.dtype, copy=False))

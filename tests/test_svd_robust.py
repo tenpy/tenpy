@@ -10,6 +10,7 @@ from tenpy.linalg import svd_robust
 
 np.random.seed(3141592)  # (it should work for any seed)
 
+
 def test_CLAPACK_import():
     """just try to import the lapack library on the local system."""
     svd_robust._load_lapack(warn=False)
@@ -22,7 +23,8 @@ def check_svd_function(svd_function):
         print "dtype = ", dtype
         for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
             print "m, n = ", m, n
-            tol_NULP = 200*max(max(m, n)**3, 100)  # quite large tolerance, but seems to be required...
+            tol_NULP = 200 * max(max(m, n)**3,
+                                 100)  # quite large tolerance, but seems to be required...
             A = np.random.random(size=(m, n))
             A = np.asarray(A, dtype)
             if dtype in [np.complex64, np.complex128]:

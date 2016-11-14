@@ -49,5 +49,6 @@ def test_perm_sign():
     check = [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]
     npt.assert_equal(res, check)
 
+
 if __name__ == "__main__":
     test_inverse_permutation()

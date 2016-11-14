@@ -3,8 +3,11 @@
 import numpy as np
 import scipy.optimize as optimize
 
-__all__ = ['alg_decay', 'linear_fit', 'lin_fit_res', 'alg_decay_fit_res', 'alg_decay_fit',
-           'alg_decay_fits', 'plot_alg_decay_fit']
+__all__ = [
+    'alg_decay', 'linear_fit', 'lin_fit_res', 'alg_decay_fit_res', 'alg_decay_fit',
+    'alg_decay_fits', 'plot_alg_decay_fit'
+]
+
 
 def alg_decay(x, a, b, c):
     """define the algebraic decay"""
@@ -80,9 +83,11 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     ys = np.array(ys)
     y_shape = ys.shape
     assert y_shape[-1] == len(x)
-    abc_flat = np.array([alg_decay_fit(
-        x, yyy, npts=npts, power_range=power_range, power_mesh=power_mesh)
-                         for yyy in ys.reshape(-1, len(x))])
+    abc_flat = np.array([
+        alg_decay_fit(
+            x, yyy, npts=npts, power_range=power_range, power_mesh=power_mesh)
+        for yyy in ys.reshape(-1, len(x))
+    ])
     return abc_flat.reshape(y_shape[:-1] + (3, ))
 
 

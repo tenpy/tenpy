@@ -93,7 +93,7 @@ def speigs(A, k, *args, **kwargs):
     d = A.shape[0]
     if A.shape != (d, d):
         raise ValueError("A.shape not a square matrix: " + str(A.shape))
-    if k < d-1:
+    if k < d - 1:
         return sparse_eigen(A, k, *args, **kwargs)
     else:
         if k > d:

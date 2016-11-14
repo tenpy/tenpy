@@ -60,7 +60,6 @@ except:
     # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
     # from the numpy code (version 1.11.0 works for me) on github.
 
-
 # check the scipy version wheter it includes LAPACK's 'gesvd'
 try:
     # simply check wether scipy.linalg.svd has the keyword it should have
@@ -217,8 +216,10 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
         return s
 
 
-def _load_lapack(libs=["libLAPACK.dylib", "libmkl_rt.so", "libmkl_intel_lp64.so", "liblapack.so",
-                       "libopenblas.dll", find_library('lapack')],
+def _load_lapack(libs=[
+        "libLAPACK.dylib", "libmkl_rt.so", "libmkl_intel_lp64.so", "liblapack.so",
+        "libopenblas.dll", find_library('lapack')
+],
                  warn=True):
     """load & return a CLAPACK library."""
     global _lapack_lib
@@ -276,8 +277,10 @@ def _set_CLAPACK_callsignatures(lapack_lib):
 def _get_gesvd(t):
     """return _lapack_lib.#gesvd_ where # = d/z is chosen depending on type `t`"""
     lib = _load_lapack()
-    type2gesvd = {single: lib.sgesvd_,
-                  double: lib.dgesvd_,
-                  csingle: lib.cgesvd_,
-                  cdouble: lib.zgesvd_}
+    type2gesvd = {
+        single: lib.sgesvd_,
+        double: lib.dgesvd_,
+        csingle: lib.cgesvd_,
+        cdouble: lib.zgesvd_
+    }
     return type2gesvd[t]

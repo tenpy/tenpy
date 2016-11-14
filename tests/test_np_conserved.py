@@ -26,7 +26,7 @@ chinfo2 = npc.ChargeInfo([1, 3, 1, 2])  # more charges for better testing
 chinfo3 = npc.ChargeInfo([3])  # for larger blocks with random arrays of the same shape
 chinfoTr = npc.ChargeInfo()  # trivial charge
 
-lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]]*4)
+lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
@@ -52,6 +52,7 @@ def project_multiple_axes(flat_array, perms, axes):
         idx[a] = p
         flat_array = flat_array[tuple(idx)]
     return flat_array
+
 
 # ------- test functions -------------------
 
@@ -521,7 +522,7 @@ def test_npc_svd():
         Aflat = A.to_ndarray()
         Sonly = npc.svd(A, compute_uv=False)
         U, S, VH = npc.svd(A, full_matrices=False, compute_uv=True)
-        assert(U.shape[1] == S.shape[0] == VH.shape[0])
+        assert (U.shape[1] == S.shape[0] == VH.shape[0])
         U.test_sanity()
         VH.test_sanity()
         npt.assert_array_almost_equal_nulp(Sonly, S, tol_NULP)
@@ -534,7 +535,7 @@ def test_npc_svd():
         iperm = inverse_permutation(perm)
         for i in xrange(len(Sflat)):
             if i not in iperm:  # dopped it in npc.svd()
-                assert(Sflat[i] < EPS*10)
+                assert (Sflat[i] < EPS * 10)
         Sflat = Sflat[iperm]
         npt.assert_array_almost_equal_nulp(Sonly, Sflat, tol_NULP)
         # comparing U and Uflat is hard: U columns can change by a phase...
@@ -561,7 +562,7 @@ def test_npc_pinv():
     P = npc.pinv(A, 1.e-13)
     P.test_sanity()
     Pflat = np.linalg.pinv(Aflat, 1.e-13)
-    assert(np.max(np.abs(P.to_ndarray() - Pflat)) < tol_NULP*EPS)
+    assert (np.max(np.abs(P.to_ndarray() - Pflat)) < tol_NULP * EPS)
 
 
 def test_trace():
@@ -608,18 +609,18 @@ def test_eig():
 
     print "calculate without 'hermitian' knownledge"
     W, V = npc.eig(B, sort='m>')
-    assert(np.max(np.abs(W.imag)) < EPS*size**3)
+    assert (np.max(np.abs(W.imag)) < EPS * size**3)
     npt.assert_array_almost_equal_nulp(np.sort(W.real), Wflat, size**3)
 
     print "sparse speigs"
     qi = 1
     ch_sect = B.legs[0].get_charge(qi)
-    k = min(3, B.legs[0].slices[qi+1] - B.legs[0].slices[qi])
+    k = min(3, B.legs[0].slices[qi + 1] - B.legs[0].slices[qi])
     Wsp, Vsp = npc.speigs(B, ch_sect, k=k, which='LM')
     for W_i, V_i in zip(Wsp, Vsp):
         V_i.test_sanity()
         diff = npc.tensordot(B, V_i, axes=1) - V_i * W_i
-        assert(npc.norm(diff, np.inf) < EPS*size**3)
+        assert (npc.norm(diff, np.inf) < EPS * size**3)
 
     print "for trivial charges"
     A = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')

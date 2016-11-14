@@ -75,10 +75,10 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     widths = [max([len(l) for l in lines]) for lines in strlist]
     # translate halign to string format mini language
     halign = {'l': '<', 'c': '^', 'r': '>'}[halign]
-    fstr = ['{0: '+halign+str(w)+'s}' for w in widths]
+    fstr = ['{0: ' + halign + str(w) + 's}' for w in widths]
 
     # create a 2d table
-    res = [[' '*widths[j] for j in range(numstrings)] for i in range(totallines)]
+    res = [[' ' * widths[j] for j in range(numstrings)] for i in range(totallines)]
 
     for j, lines in enumerate(strlist):
         if valign == 't':
@@ -91,7 +91,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
             raise ValueError('invalid valign ' + str(valign))
 
         for i, l in enumerate(lines):
-            res[i+voffset][j] = fstr[j].format(l)  # format to fixed widths[j]
+            res[i + voffset][j] = fstr[j].format(l)  # format to fixed widths[j]
 
     # convert the created table to a single string
     res = '\n'.join([delim.join(lines) for lines in res])

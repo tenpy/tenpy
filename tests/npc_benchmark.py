@@ -29,8 +29,15 @@ tdot = {mod}.{tensordot}
 timing_code = "tdot(a, b, axes)"
 
 
-def setup_npc(mod_q=[1], n_qsectors=3, size=20, dim_a_out=2, dim_b_out=2, dim_contract=2,
-              select_frac=1., dtype=np.float, seed=123):
+def setup_npc(mod_q=[1],
+              n_qsectors=3,
+              size=20,
+              dim_a_out=2,
+              dim_b_out=2,
+              dim_contract=2,
+              select_frac=1.,
+              dtype=np.float,
+              seed=123):
     """Returns ``a, b, axes`` for timing of ``npc.tensordot(a, b, axes)``
 
     Constructed such that dim_contract legs are contracted, with
@@ -67,7 +74,7 @@ def setup_npc(mod_q=[1], n_qsectors=3, size=20, dim_a_out=2, dim_b_out=2, dim_co
     b.set_leg_labels(labs[:b.rank])
     a.itranspose(rand_permutation(a.rank))
     b.itranspose(rand_permutation(b.rank))
-    axes = [labs[:dim_contract]]*2
+    axes = [labs[:dim_contract]] * 2
     return a, b, axes
 
 
@@ -91,9 +98,7 @@ def convert_flat(a, b, axes):
 
 def convert_leg2oldqind(leg):
     """return `qind` to describe a new :class:`npc.LegCharge` in an old `npc_old.array`"""
-    return np.hstack([leg.slices[:-1].reshape(-1, 1),
-                      leg.slices[1:].reshape(-1, 1),
-                      leg.charges])
+    return np.hstack([leg.slices[:-1].reshape(-1, 1), leg.slices[1:].reshape(-1, 1), leg.charges])
 
 
 def convert_old_npc(a, b, axes):
@@ -120,8 +125,11 @@ def convert_old_npc(a, b, axes):
     return a2, b2, (axes_a, axes_b)
 
 
-def tensordot_timing(do_flat=True, do_old_npc=True,
-                     rep_bestof=3, rep_tdot=3, seed_range=range(3),
+def tensordot_timing(do_flat=True,
+                     do_old_npc=True,
+                     rep_bestof=3,
+                     rep_tdot=3,
+                     seed_range=range(3),
                      **kwargs):
     """run tensordot timing for given kwargs of ``setup_npc``.
 
@@ -137,19 +145,19 @@ def tensordot_timing(do_flat=True, do_old_npc=True,
     npc_setup = setup_code.format(
         mod=__name__, setup_fct='setup_npc', kwargs=kwargs, tensordot='npc.tensordot')
     T = timeit.Timer(timing_code, npc_setup)
-    time_npc = min(T.repeat(rep_bestof, rep_tdot))/rep_tdot
+    time_npc = min(T.repeat(rep_bestof, rep_tdot)) / rep_tdot
 
     if do_flat:
         npc_setup = setup_code.format(
             mod=__name__, setup_fct='setup_flat', kwargs=kwargs, tensordot='np.tensordot')
         T = timeit.Timer(timing_code, npc_setup)
-        time_flat = min(T.repeat(rep_bestof, rep_tdot))/rep_tdot
+        time_flat = min(T.repeat(rep_bestof, rep_tdot)) / rep_tdot
 
     if has_old_npc and do_old_npc:
         npc_setup = setup_code.format(
             mod=__name__, setup_fct='setup_old_npc', kwargs=kwargs, tensordot='old_npc.tensordot')
         T = timeit.Timer(timing_code, npc_setup)
-        time_old_npc = min(T.repeat(rep_bestof, rep_tdot))/rep_tdot
+        time_old_npc = min(T.repeat(rep_bestof, rep_tdot)) / rep_tdot
 
     return time_npc, time_old_npc, time_flat
 
@@ -179,7 +187,7 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
     data['num_qs'] = num_qs
     all_timings = []
     for num_q in num_qs:
-        mod_q = [1]*num_q
+        mod_q = [1] * num_q
         print "num_q:", num_q
         num_q_timings = []
         for size in sizes:
@@ -192,8 +200,8 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
                 kwargs.update(mod_q=mod_q, size=size, seed=seed)
                 res = tensordot_timing(do_flat, True, 3, 3, **kwargs)
                 timing += res
-            num_q_timings.append(timing/len(seeds))
-        print "-"*80
+            num_q_timings.append(timing / len(seeds))
+        print "-" * 80
         all_timings.append(num_q_timings)
     data['timings'] = np.array(all_timings, dtype=np.float)
     return data
@@ -205,7 +213,7 @@ def run_save(fn_t='npc_benchmark_timeit_{dim}_{n_qsectors:d}.pkl', dmax=2000, **
     sizes_all = [3, 5, 8, 10, 12] + range(15, 50, 5) + range(50, 200, 25) + \
         range(200, 500, 100) + range(500, 3001, 250)
     for n_qsectors, dim in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
-        print "+"*100
+        print "+" * 100
         print "n_qsectors = {nq:d}, dim ={dim:d}".format(nq=n_qsectors, dim=dim)
         sizes = [s for s in sizes_all if s**dim < dmax]
         print "sizes = ", sizes
@@ -221,7 +229,7 @@ def print_timing_res(data):
     num_qs = data['num_qs']
     sizes = data['sizes']
     timed = data['timings']
-    print "="*80
+    print "=" * 80
     if 'version' in data:
         print "version", data['version']
     # print "kwargs:", data['kwargs']
@@ -230,9 +238,8 @@ def print_timing_res(data):
     for qnumber, timed_qn in zip(num_qs, timed):
         for size, timed_size in zip(sizes, timed_qn):
             new, old, flat = timed_size
-            print row.format(qn=qnumber, s=size, flat=flat, new=new, old=old,
-                             new_old=new-old)
-    print "="*80
+            print row.format(qn=qnumber, s=size, flat=flat, new=new, old=old, new_old=new - old)
+    print "=" * 80
 
 
 def plot_timing_res(data, fn=None):
@@ -247,16 +254,18 @@ def plot_timing_res(data, fn=None):
     markers = ['o', 's', 'v', 'x']  # num_q
     pl.figure(figsize=(10, 7))
     for qn, t_qn, m in zip(num_qs, timed, markers):
-        for t, lab, col in [(t_qn[:, 0], 'npc', 'r'),
-                            (t_qn[:, 1], 'old_npc', 'g'),
-                            (t_qn[:, 2], 'numpy', 'b'),
-                            # (t_qn[:, 2]-t_qn[:, 1], 'diff old_npc-npc', 'k')
-                            ]:
+        for t, lab, col in [
+            (t_qn[:, 0], 'npc', 'r'),
+            (t_qn[:, 1], 'old_npc', 'g'),
+            (t_qn[:, 2], 'numpy', 'b'),
+                # (t_qn[:, 2]-t_qn[:, 1], 'diff old_npc-npc', 'k')
+        ]:
             lab = "qnumber {qn:d}, {lab}".format(lab=lab, qn=qn)
             if np.any(t != 0.):  # only if we have data
-                pl.plot(sizes, t, col+m+'-', markersize=8, label=lab)
+                pl.plot(sizes, t, col + m + '-', markersize=8, label=lab)
     if 'kwargs' in data:
-        pl.title(', '.join([k+"="+str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
+        pl.title(', '.join(
+            [k + "=" + str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
     pl.xlabel('size (of each leg)')
     pl.ylabel('total time [s]')
     pl.loglog()
@@ -288,34 +297,50 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="""obtianing benchmarks of np_conserved.
                                      Without any arguments, just run a quick test.""")
 
-    parser.add_argument('-t', '--timing', action='store_true',
-                        help="""run the function run_timing_save() to perform an extensive timing
+    parser.add_argument(
+        '-t',
+        '--timing',
+        action='store_true',
+        help="""run the function run_timing_save() to perform an extensive timing
                         for scaling analysis. Duration with a single CPU may vary
                         from 10 minutes to 2 hours...""")
-    parser.add_argument('--dmax', type=int, default=2000,
-                        help="""maximum dimension of matrices to multiply for timing""")
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help='print and plot the timing results saved in given files.')
-    parser.add_argument('--profile', action='store_true',
-                        help='profile tensordot. Save to file, if one is given.')
-    parser.add_argument('files', nargs='*',
-                        help='Specify filenames used depending on other options.')
+    parser.add_argument(
+        '--dmax',
+        type=int,
+        default=2000,
+        help="""maximum dimension of matrices to multiply for timing""")
+    parser.add_argument(
+        '-p',
+        '--plot',
+        action='store_true',
+        help='print and plot the timing results saved in given files.')
+    parser.add_argument(
+        '--profile', action='store_true', help='profile tensordot. Save to file, if one is given.')
+    parser.add_argument(
+        'files', nargs='*', help='Specify filenames used depending on other options.')
     args = parser.parse_args()
     if args.timing:
         t0 = time.time()
         run_save(dmax=args.dmax)
-        print "="*80
-        print "finished timing after", time.time()-t0, "seconds in total"
+        print "=" * 80
+        print "finished timing after", time.time() - t0, "seconds in total"
     if args.plot:
         for fn in args.files:
             data = load(fn)
             print_timing_res(data)
-            plot_timing_res(data, os.path.splitext(fn)[0]+'.png')
+            plot_timing_res(data, os.path.splitext(fn)[0] + '.png')
     if args.profile:
         fn = None if len(args.files) == 0 else args.files[0]
         dim = 2
-        tensordot_profile(fn, mod_q=[1, 1], size=50, n_qsectors=5, dim_a_out=dim, dim_b_out=dim,
-                          dim_contract=dim, seed=2)
+        tensordot_profile(
+            fn,
+            mod_q=[1, 1],
+            size=50,
+            n_qsectors=5,
+            dim_a_out=dim,
+            dim_b_out=dim,
+            dim_contract=dim,
+            seed=2)
     if not any([args.timing, args.plot, args.profile]):
         data = run_tensordot_timing(sizes=[s for s in range(5, 60, 5) if s**2 < args.dmax])
         print_timing_res(data)

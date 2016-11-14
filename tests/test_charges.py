@@ -7,9 +7,11 @@ import nose.tools as nst
 import itertools as it
 
 # charges for comparison, unsorted (*_us) and sorted (*_s)
-qflat_us = np.array([-6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2,
-                     -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2,
-                     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 6, 6]).reshape((-1, 1))
+qflat_us = np.array([
+    -6, -6, -6, -4, -4, -4, 4, 4, -4, -4, -4, -4, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -2, -2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4,
+    4, 4, 4, 6, 6
+]).reshape((-1, 1))
 slices_us = np.array([0, 3, 6, 8, 12, 23, 34, 37, 41, 55, 59, 61])
 charges_us = np.array([[-6], [-4], [4], [-4], [-2], [0], [-2], [0], [2], [4], [6]])
 # sorted
@@ -17,13 +19,15 @@ qflat_s = np.sort(qflat_us, axis=0)
 slices_s = np.array([0, 3, 10, 24, 39, 53, 59, 61])
 charges_s = np.array([[-6], [-4], [-2], [0], [2], [4], [6]])
 
-qdict_s = {(-6,): slice(0, 3),
-           (-4,): slice(3, 10),
-           (-2,): slice(10, 24),
-           (0,): slice(24, 39),
-           (2,): slice(39, 53),
-           (4,): slice(53, 59),
-           (6,): slice(59, 61)}
+qdict_s = {
+    (-6, ): slice(0, 3),
+    (-4, ): slice(3, 10),
+    (-2, ): slice(10, 24),
+    (0, ): slice(24, 39),
+    (2, ): slice(39, 53),
+    (4, ): slice(53, 59),
+    (6, ): slice(59, 61)
+}
 
 ch_1 = charges.ChargeInfo([1])
 
@@ -60,7 +64,7 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     if np.isscalar(n_qsector):
         n_qsector = [n_qsector] * chinfo.qnumber
     n_qsector = np.asarray(n_qsector, dtype=np.intp)
-    if n_qsector.shape != (chinfo.qnumber,):
+    if n_qsector.shape != (chinfo.qnumber, ):
         raise ValueError
     slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
     qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
@@ -149,7 +153,7 @@ def test_LegCharge():
     # test get_qindex
     for i in xrange(lcs.ind_len):
         qidx, idx_in_block = lcs.get_qindex(i)
-        assert (lcs.slices[qidx] <= i < lcs.slices[qidx+1])
+        assert (lcs.slices[qidx] <= i < lcs.slices[qidx + 1])
         assert (lcs.slices[qidx] + idx_in_block == i)
 
 
@@ -167,7 +171,7 @@ def test_LegPipe():
         qmap_ind = pipe._map_incoming_qind(qind_inc)
         for i in range(len(qind_inc)):
             npt.assert_equal(pipe.q_map[qmap_ind[i], 2:-1], qind_inc[i])
-            size = np.prod([l.slices[j+1] - l.slices[j] for l, j in zip(legs, qind_inc[i])])
+            size = np.prod([l.slices[j + 1] - l.slices[j] for l, j in zip(legs, qind_inc[i])])
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
 
 

@@ -240,7 +240,7 @@ class LegCharge(object):
         ind_len, qnum = qflat.shape
         if qnum != chargeinfo.qnumber:
             raise ValueError("qflat with second dimension != qnumber")
-        res = cls(chargeinfo, np.arange(ind_len+1), qflat, qconj)
+        res = cls(chargeinfo, np.arange(ind_len + 1), qflat, qconj)
         res.sorted = res.is_sorted()
         res.bunched = res.is_bunched()
         return res
@@ -287,7 +287,7 @@ class LegCharge(object):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         sl = self.slices
         ch = self.charges
-        if sl.shape != (self.block_number+1,):
+        if sl.shape != (self.block_number + 1, ):
             raise ValueError("wrong len of `slices`")
         if sl[0] != 0:
             raise ValueError("slices does not start with 0")
@@ -406,19 +406,19 @@ class LegCharge(object):
         """
 
         if self.chinfo != other.chinfo:
-            raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
-                other.chinfo)]))
+            raise ValueError(''.join(
+                ["incompatible ChargeInfo\n", str(self.chinfo), str(other.chinfo)]))
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.slices, other.slices) or \
                 not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
-            raise ValueError("incompatible LegCharge\n" +
-                             vert_join(["self\n"+str(self), "other\n"+str(other)], delim=' | '))
+            raise ValueError("incompatible LegCharge\n" + vert_join(
+                ["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
     def get_slice(self, qindex):
         """return slice selecting the block for a given `qindex`"""
-        return slice(self.slices[qindex], self.slices[qindex+1])
+        return slice(self.slices[qindex], self.slices[qindex + 1])
 
     def get_qindex(self, flat_index):
         """find qindex containing a flat index.
@@ -511,7 +511,7 @@ class LegCharge(object):
         See also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
-        if self.bunched:   # nothing to do
+        if self.bunched:  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
         cp = copy.copy(self)
         idx = _find_row_differences(self.charges)[:-1]
@@ -560,8 +560,8 @@ class LegCharge(object):
 
     def __repr__(self):
         """full string representation"""
-        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(
-            self.chinfo, self.qconj, self.slices, self.charges)
+        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(self.chinfo, self.qconj,
+                                                                      self.slices, self.charges)
 
     def _set_block_sizes(self, block_sizes):
         """Set self.slices from an list of the block-sizes."""
@@ -713,7 +713,7 @@ class LegPipe(LegCharge):
         """see help(self)"""
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial qind, which gets overwritten in _init_from_legs
-        super(LegPipe, self).__init__(chinfo, [0, 1], [[0]*chinfo.qnumber], qconj)
+        super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
         self.subshape = tuple([l.ind_len for l in self.legs])
@@ -777,12 +777,13 @@ class LegPipe(LegCharge):
 
     def __str__(self):
         """fairly short debug output"""
-        res_lines = ["LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
-                     "    qconj {0}->{1:+1};".format(
-                         '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
-                     "    block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number),
-                     vert_join([str(l) for l in self.legs], delim=' | '),
-                     ')']
+        res_lines = [
+            "LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
+            "    qconj {0}->{1:+1};".format(
+                '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
+            "    block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number), vert_join(
+                [str(l) for l in self.legs], delim=' | '), ')'
+        ]
         return '\n'.join(res_lines)
 
     def __repr__(self):
@@ -900,6 +901,7 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
+
 
 # ===== functions =====
 
