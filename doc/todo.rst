@@ -1,13 +1,13 @@
 To-Do list
 ==========
-Update docs/changes_TenPy.rst if you've done something.
+Update doc/changes_TenPy.rst if you've done something.
 
 Primary goals for the coming release
 ------------------------------------
 - convert TenPy2 code, restrict to necessary parts. 
 
     - add files from old git repo without changes, git commit
-    - run `$> yapf -r -i`. See docs/changes_TenPy.rst for detailed command
+    - run `$> yapf -r -i`. See doc/changes_TenPy.rst for detailed command
     - relative imports (except in tests)
     - git commit
 

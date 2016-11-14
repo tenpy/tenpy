@@ -17,7 +17,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
 - Every function/class/module should be documented by its doc-string (c.f. :pep:`257`),
-  additional documentation is in ``docs/``
+  additional documentation is in ``doc/``
   The documentation uses `reStructuredText`. If you're new to `reStructuredText`, consider reading this
   `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
   We use the `numpydoc` extension to sphinx, so please read and follow these
@@ -64,13 +64,13 @@ However, to keep consistency, we ask you to comply with the following guidelines
 
       from ..linalg import np_conserved as npc
 
-- If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``docs/`` folder
+- If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``doc/`` folder
   to update the documentation index for the reference.
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
 - Reversely, if you write new functions, please also include suitable tests!
-- A To-Do list can be found in :doc:`docs/todo.rst <todo>`. It also contains a bug list.
+- A To-Do list can be found in :doc:`doc/todo.rst <todo>`. It also contains a bug list.
   Sphinx also extract blocks following ``.. todo ::`` from doc-strings, 
   collecting them in a list in the html documentation.
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
@@ -78,7 +78,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
 
   Unfinished functions should ``raise NotImplementedError()``.
-  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`docs/todo.rst <todo>`
+  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`doc/todo.rst <todo>`
 
 - if you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 

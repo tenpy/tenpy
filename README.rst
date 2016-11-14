@@ -5,15 +5,15 @@ Introduction
 ------------
 TenPy is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 It's based on TenPy2, but tries to be readable and easy to understand for new peoples.
-A list of changes compared to the previous TenPy can be found in docs/changes_TenPy.rst
+A list of changes compared to the previous TenPy can be found in doc/changes_TenPy.rst
 
 How do I get set up?
 --------------------
-Follow the instructions in :doc:`docs/INSTALL.rst <INSTALL>`.
+Follow the instructions in :doc:`doc/INSTALL.rst <INSTALL>`.
 
 How to read the documentation
 -----------------------------
-The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in docs/.
+The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in `doc/`.
 
 All documentation should be formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
 This means it's readable in the source plain text, but one can also convert it to other formats.
@@ -30,20 +30,20 @@ You can install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/py
    If you don't have super user rights, try ``pip install --upgrade --user sphinx numpydoc`` to 
    install the packages to your home directory.
 
-Afterwards, go to the folder `docs` and run the following command::
+Afterwards, go to the folder `doc/` and run the following command::
 
     make html
 
-This should generate the html documentation in `docs/sphinx_build/html`.
+This should generate the html documentation in `doc/sphinx_build/html`.
 Simply open this folder (or to be precise: the file `index.html` in it) in your webbroser
-and enjoy this and other documentation beautifully rendered, with cross links, Math forumulas
+and enjoy this and other documentation beautifully rendered, with cross links, math forumulas
 and even a search function :-).
 
 .. note ::
 
    Building the html documentation requires loading the modules.
    Thus make sure that the folder tenpy is included in your ``$PYTHONPATH``,
-   as described in :doc:`docs/INSTALL.rst <INSTALL>`.
+   as described in :doc:`doc/INSTALL.rst <INSTALL>`.
 
 
 Contents
@@ -66,4 +66,4 @@ I found a bug
 -------------
 If you know how to fix it, just do it. ``git commit`` with a message containing ``bug`` in the description.
 
-Alternatively, you can report it in the `BUGS` section of :doc:`docs/todo.rst <todo>`.
+Alternatively, you can report it in the `BUGS` section of :doc:`doc/todo.rst <todo>`.
