@@ -14,7 +14,7 @@ import subprocess
 import os
 
 # hard-coded version
-version = (0, 0, 0)
+version = (0, 1, 0)
 
 
 def git_version():
