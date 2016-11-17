@@ -2238,7 +2238,6 @@ class Array(object):
             raise ValueError("unknown order")
         return self
 
-
 # functions ====================================================================
 
 
@@ -2535,8 +2534,8 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo,
-                                           chinfo.make_valid(qconj * np.array(qflat)), qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
+                                           qconj)
     return grid_legs
 
 
@@ -3126,7 +3125,6 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     else:
         return W
 
-
 # private functions ============================================================
 
 
@@ -3147,39 +3145,32 @@ def _nontrivial_grid_entries(grid):
     return grid.shape, entries
 
 
-def _iter_common_sorted(a, b, a_idx, b_idx):
-    """Yields ``i, j for j, i in itertools.product(b_idx, a_idx) if a[i] == b[j]``.
+def _iter_common_sorted(a, b):
+    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
-    *Assumes* that ``[a[i] for i in a_idx]`` and ``[b[j] for j in b_idx]`` are strictly ascending.
+    *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
     Given that, it is equivalent to (but faster than)::
 
-        for j, i in itertools.product(b_idx, a_idx):
+        for j, i in itertools.product(range(j_start, j_stop), range(i_start, i_stop)):
             if a[i] == b[j]:
                 yield i, j
     """
-    a_it = iter(a_idx)
-    b_it = iter(b_idx)
-    i = next(a_it)
-    j = next(b_it)
-    try:
-        while True:
-            if a[i] < b[j]:
-                i = next(a_it)
-            elif b[j] < a[i]:
-                j = next(b_it)
-            else:
-                yield i, j
-                i = next(a_it)
-                j = next(b_it)
-    except StopIteration:
-        pass  # only one of the iterators finished
-    for i in a_it:  # remaing in a_it. skipped if a_it is finished.
-        if a[i] == b[j]:
-            yield i, j
-    for j in b_it:  # remaining in b_it
-        if a[i] == b[j]:
-            yield i, j
-    raise StopIteration  # finished
+    l_a = len(a)
+    l_b = len(b)
+    i, j = 0, 0
+    res = []  # TODO
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            i += 1
+        elif b[j] < a[i]:
+            j += 1
+        else:
+            res.append((i, j))
+            # yield i, j
+            i += 1
+            j += 1
+    return res
+    # raise StopIteration  # finished
 
 
 def _inner_worker(a, b):
@@ -3205,19 +3196,31 @@ def _inner_worker(a, b):
         perm = np.argsort(b_qdata)
         b_qdata = b_qdata[perm]
         b_data = [b_data[i] for i in perm]
-    for i, j in _iter_common_sorted(a_qdata, b_qdata, xrange(len(a_qdata)), xrange(len(b_qdata))):
+    for i, j in _iter_common_sorted(a_qdata, b_qdata):
         res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
     return res
 
 
-def _tensordot_pre_reshape(x, cut, dtype):
-    """reshape ndarray `x` to a (fortran) matrix/vector (depending on `cut`)"""
-    if cut == x.ndim or cut == 0:
-        return np.reshape(x, (-1, )).astype(dtype, order='F', copy=False)  # 1D vector
-    p = 1
-    for s in x.shape[:cut]:
-        p *= s
-    return np.reshape(x, (p, -1)).astype(dtype, order='F', copy=False)  # 2D matrix
+def _tensordot_pre_reshape(data, cut, dtype, same_shape_before_cut=True):
+    """reshape blocks to (fortran) matrix/vector (depending on `cut`)"""
+    if cut == 0 or cut == data[0][0].ndim:
+        # special case: reshape to 1D vectors
+        return [[np.reshape(T, (-1, )).astype(
+            dtype, order='F', copy=False) for T in blocks] for blocks in data]
+    res = []
+    for blocks in data:
+        if same_shape_before_cut:
+            p = 1
+            for s in blocks[0].shape[:cut]:
+                p *= s
+            shape = (p, -1)
+        else:
+            p = 1
+            for s in blocks[0].shape[cut:]:
+                p *= s
+            shape = (-1, p)
+        res.append([np.reshape(T, shape).astype(dtype, order='F', copy=False) for T in blocks])
+    return res
 
 
 def _tensordot_pre_worker(a, b, cut_a, cut_b):
@@ -3229,7 +3232,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     Parameters
     ----------
     a, b : :class:`Array`
-        the arrays to be contracted with tensordot
+        the arrays to be contracted with tensordot. Should have non-empty ``a._data``
     cut_a, cut_b : int
         contract `a.legs[cut_a:]` with `b.legs[:cut_b]`
 
@@ -3239,12 +3242,13 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
         In the following order, it
         contains for `a`, and `b` respectively, in the following order:
         a_data : list of reshaped tensors
-        a_qdata_sum : 2D array with qindices of `a` which we need to sum over
+        a_qdata_contr : 2D array with qindices of `a` which we need to sum over
         a_qdata_keep : 2D array of the qindices of `a` which will appear in the final result
-        a_charges_keep : 2D array of charges fora_shape_keep,
+        a_charges_keep : 2D array of charges for a_shape_keep,
         a_slices : partition to map the indices of a_*_keep to a_data
     f_dot_sum : function
-        a wrapper around a suitable blas function for perfoming.
+        a wrapper around a suitable BLAS function for perfoming the matrix product
+        of single blocks sum over the results.
         For ``a, a2, ...`` from ``a_data`` (and similar for ``b_data``) the code
         ``s = f_dot_sum(a, b, None); s = f_dot_sum(a2, b2, s); ....``
         should be equivalent to (yet faster than)
@@ -3255,31 +3259,36 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
-    a_qdata_sum = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
+    a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
-    a_sort = np.lexsort(np.append(a_qdata_sum[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
+    a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
     a_qdata_keep = a._qdata[a_sort, :cut_a]
-    a_qdata_sum = a_qdata_sum[a_sort]
+    a_qdata_contr = a_qdata_contr[a_sort]
     a_data = a._data
     a_data = [a_data[i] for i in a_sort]
     # combine all b_qdata[axes_b] into one column (with the same stride as before)
-    b_qdata_sum = np.sum(b._qdata[:, :cut_b] * stride, axis=1)
+    b_qdata_contr = np.sum(b._qdata[:, :cut_b] * stride, axis=1)
     # lex-sort b_qdata, dominated by the axes summed over, then the axes kept.
     b_data = b._data
     if not b._qdata_sorted:
-        b_sort = np.lexsort(np.append(b_qdata_sum[:, np.newaxis], b._qdata[:, cut_b:], axis=1).T)
+        b_sort = np.lexsort(np.append(b_qdata_contr[:, np.newaxis], b._qdata[:, cut_b:], axis=1).T)
         b_qdata_keep = b._qdata[b_sort, cut_b:]
-        b_qdata_sum = b_qdata_sum[b_sort]
+        b_qdata_contr = b_qdata_contr[b_sort]
         b_data = [b_data[i] for i in b_sort]
     else:
         b_qdata_keep = b._qdata[:, cut_b:]
     # find blocks where qdata_a[not_axes_a] and qdata_b[not_axes_b] change
     a_slices = charges._find_row_differences(a_qdata_keep)
     b_slices = charges._find_row_differences(b_qdata_keep)
+    # the slices divide a_data and b_data into rows and columns of the final result
+    a_data = [a_data[i:i2] for i, i2 in itertools.izip(a_slices[:-1], a_slices[1:])]
+    b_data = [b_data[j:j2] for j, j2 in itertools.izip(b_slices[:-1], b_slices[1:])]
+    a_qdata_contr = [a_qdata_contr[i:i2] for i, i2 in itertools.izip(a_slices[:-1], a_slices[1:])]
+    b_qdata_contr = [b_qdata_contr[i:i2] for i, i2 in itertools.izip(b_slices[:-1], b_slices[1:])]
     a_qdata_keep = a_qdata_keep[a_slices[:-1]]
     b_qdata_keep = b_qdata_keep[b_slices[:-1]]
-    a_shape_keep = [a_data[i].shape[:cut_a] for i in a_slices[:-1]]
-    b_shape_keep = [b_data[i].shape[cut_b:] for i in b_slices[:-1]]
+    a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
+    b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
     a_charges_keep = a.chinfo.make_valid(
         np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
         if cut_a > 0 else None)
@@ -3295,37 +3304,64 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
     calc_dtype = {'s': np.float32, 'd': np.float64, 'c': np.complex64, 'z': np.complex128}[prefix]
     # reshape a_data and b_data to matrix/vector in fortran order
-    a_data = [_tensordot_pre_reshape(T, cut_a, calc_dtype) for T in a_data]
-    b_data = [_tensordot_pre_reshape(T, cut_b, calc_dtype) for T in b_data]
+    a_data = _tensordot_pre_reshape(a_data, cut_a, calc_dtype, same_shape_before_cut=True)
+    b_data = _tensordot_pre_reshape(b_data, cut_b, calc_dtype, same_shape_before_cut=False)
     # determine blas function
     f_name = 'gemv' if (cut_a == 0 or cut_b == b.rank) else 'gemm'
-    blas_dot = BLAS.get_blas_funcs(f_name, (a_data[0], b_data[0]))  # (a/b_data can't be empty)
+    blas_dot = BLAS.get_blas_funcs(f_name, (a_data[0][0], b_data[0][0]))
     kw_overwrite = 'overwrite_c' if f_name == 'gemm' else 'overwrite_y'
     kw_overwrite = {kw_overwrite: True}
     if cut_a > 0:
 
-        def f_dot_sum(a, b, sum):
-            """BLAS wrapper to perform ``sum += np.dot(a, b); return sum``.
-            If ``sum is None``, return ``np.dot(a, b)``."""
-            if sum is None:
-                return blas_dot(1., a, b)
-            return blas_dot(1., a, b, 1., sum, **kw_overwrite)
+        def fast_dot_sum(a, b, a_qdata, b_qdata):
+            """BLAS wrapper to perform contraction in a fast way.
+
+            Equivalent to::
+                np.sum([np.dot(a[k1], b[k2])
+                    for k1, k2 in _iter_common_sorted(a_qdata, b_qdata)], axis=0)
+
+            Returns ``None`` if no ``(k1, k2)`` pair existed.
+            """
+            ks = _iter_common_sorted(a_qdata, b_qdata)
+            if len(ks) == 0:
+                return None
+            k1, k2 = ks[0]
+            sum = blas_dot(1., a[k1], b[k2])
+            for k1, k2 in ks[1:]:
+                sum = blas_dot(1., a[k1], b[k2], 1., sum, **kw_overwrite)
+            return sum
     else:
-        # special case: `a` is vector, so we need blas_dot(b, a, transpose_)
+        # special case: `a` contains 1D vectors, so we need blas_dot(b, a, trans=True)
         kw_no_overwrite = {'trans': True}
         kw_overwrite.update(kw_no_overwrite)
 
-        def f_dot_sum(a, b, sum):
-            """BLAS wrapper to perform ``sum += np.dot(a, b); return sum``.
-            If ``sum is None``, return ``np.dot(a, b)``."""
-            if sum is None:
-                return blas_dot(1., b, a, **kw_no_overwrite)
-            return blas_dot(1., b, a, 1., sum, **kw_overwrite)
+        def fast_dot_sum(a, b, a_qdata, b_qdata):
+            # same as above fast_dot_sum, but for special case that a contains vectors
+            ks = _iter_common_sorted(a_qdata, b_qdata)
+            if len(ks) == 0:
+                return None
+            k1, k2 = ks[0]
+            sum = blas_dot(1., b[k2], a[k1], **kw_no_overwrite)
+            for k1, k2 in ks[1:]:
+                sum = blas_dot(1., b[k2], a[k1], 1., sum, **kw_overwrite)
+            return sum
 
     # collect and return the results
-    a_pre_result = a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_shape_keep, a_slices
-    b_pre_result = b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_shape_keep, b_slices
-    return a_pre_result, b_pre_result, f_dot_sum, res_dtype
+    a_pre_result = a_data, a_qdata_contr, a_qdata_keep, a_charges_keep, a_shape_keep
+    b_pre_result = b_data, b_qdata_contr, b_qdata_keep, b_charges_keep, b_shape_keep
+    return a_pre_result, b_pre_result, fast_dot_sum, res_dtype
+
+
+def _tensordot_pre_compatible(chinfo, qtotal, a_charges_keep, b_charges_keep):
+    """figure out colum/row indices of the output matrix, which are compatible with charges.
+    """
+    # (if there are really many small blocks in the tensors, this function eats a significant
+    # amount of the time...)
+    compatible = np.all(
+        chinfo.make_valid(a_charges_keep[np.newaxis, :, :] + b_charges_keep[:, np.newaxis, :]) ==
+        qtotal,
+        axis=2)
+    return np.nonzero(compatible)
 
 
 def _tensordot_worker(a, b, axes):
@@ -3389,43 +3425,42 @@ def _tensordot_worker(a, b, axes):
 
     Step 4) is finally implemented in :func:`_tensordot_post_worker`,
     """
+    chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
-        return zeros(a.chinfo, a.legs[:-axes] + b.legs[axes:],
+        return zeros(chinfo, a.legs[:-axes] + b.legs[axes:],
                      np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
-
     cut_a = a.rank - axes
     cut_b = axes
-    a_pre_result, b_pre_result, f_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
-    a_data, a_qdata_sum, a_qdata_keep, a_charges_keep, a_shape_keep, a_slices = a_pre_result
-    b_data, b_qdata_sum, b_qdata_keep, b_charges_keep, b_shape_keep, b_slices = b_pre_result
-    chinfo = a.chinfo
-    qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
-    res_qdata = []
-    res_data = []
+    a_pre_result, b_pre_result, fast_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
+    a_data, a_qdata_contr, a_qdata_keep, a_charges_keep, a_shape_keep = a_pre_result
+    b_data, b_qdata_contr, b_qdata_keep, b_charges_keep, b_shape_keep = b_pre_result
+
     # Step 3) loop over column/row of the result
-    for col_b, b_qindex_keep in enumerate(b_qdata_keep):
-        # (row_a changes faster than col_b, such that the resulting array is qdata lex-sorted)
-        b_sl = xrange(*b_slices[col_b:col_b + 2])
-        # determine the charge the *row* must have
-        Q_row = chinfo.make_valid(qtotal - b_charges_keep[col_b])
-        # find indices `row_a` with `Q_row == a_charges_keep[row_a]`
-        for row_a in np.nonzero(np.all(a_charges_keep == Q_row, axis=1))[0]:
-            a_qindex_keep = a_qdata_keep[row_a]
-            a_sl = xrange(*a_slices[row_a:row_a + 2])
-            block_sum = None
-            for k1, k2 in _iter_common_sorted(a_qdata_sum, b_qdata_sum, a_sl, b_sl):
-                block_sum = f_dot_sum(a_data[k1], b_data[k2], block_sum)
-            if block_sum is None:
-                continue  # no common blocks
-            res_qdata.append(np.append(a_qindex_keep, b_qindex_keep, axis=0))
+
+    # first find output colum/row indices of the result, which are compatible with the charges
+    qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
+    col_row_idx = _tensordot_pre_compatible(chinfo, qtotal, a_charges_keep, b_charges_keep)
+
+    cols_b, rows_a = col_row_idx
+    # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
+    # determine output qdata
+    res_qdata = np.append(a_qdata_keep[rows_a], b_qdata_keep[cols_b], axis=1)
+    keep = np.ones(len(res_qdata), dtype=bool)
+    res_data = []
+    for res_qdata_idx, (col_b, row_a) in enumerate(np.transpose(col_row_idx)):
+        block_contr = fast_dot_sum(a_data[row_a], b_data[col_b], a_qdata_contr[row_a],
+                                   b_qdata_contr[col_b])
+        if block_contr is None:  # no common blocks
+            keep[res_qdata_idx] = False
+        else:
             # Step 4) reshape back to tensors
-            block_sum = block_sum.reshape(a_shape_keep[row_a] + b_shape_keep[col_b])
-            res_data.append(block_sum.astype(res_dtype, copy=False))
+            block_contr = block_contr.reshape(a_shape_keep[row_a] + b_shape_keep[col_b])
+            res_data.append(block_contr.astype(res_dtype, copy=False))
     res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if len(res_data) == 0:
         return res
-    # (at least one of Q_row, Q_col is non-empty, so _qdata is also not empty)
-    res._qdata = np.array(res_qdata, dtype=np.intp)
+    # (at least one entry is non-empty, so res_qdata[keep] is also not empty)
+    res._qdata = res_qdata[keep]
     res._qdata_sorted = True
     res._data = res_data
     return res
