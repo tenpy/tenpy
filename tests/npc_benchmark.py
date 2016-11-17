@@ -237,7 +237,7 @@ def run_save(fn_t='npc_benchmark_timeit_{legs}_{n_qsectors:d}.pkl', dmax=2000, *
     for n_qsectors, legs in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
         print "+" * 100
         print "n_qsectors = {nq:d}, legs ={legs:d}".format(nq=n_qsectors, legs=legs)
-        print "sizes = ", sizes
+        print "sizes = ", sizes_all
         kwargs.update(n_qsectors=n_qsectors, leg_a_out=legs, leg_b_out=legs, leg_contract=legs)
         data = run_tensordot_timing(sizes=sizes_all, dmax=dmax, **kwargs)
         data['kwargs'] = kwargs.copy()
@@ -272,6 +272,7 @@ def plot_timing_res(data, fn=None):
     num_qs = data['num_qs']
     sizes = data['sizes']
     timed = data['timings']
+    timed = np.ma.array(timed, mask=(timed == 0.))
     markers = ['o', 's', 'v', 'x']  # num_q
     pl.figure(figsize=(10, 7))
     for qn, t_qn, m in zip(num_qs, timed, markers):
