@@ -51,7 +51,7 @@ from .charges import (ChargeInfo, LegCharge, LegPipe)
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
-from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation
+from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join
 
@@ -3352,18 +3352,6 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     return a_pre_result, b_pre_result, fast_dot_sum, res_dtype
 
 
-def _tensordot_pre_compatible(chinfo, qtotal, a_charges_keep, b_charges_keep):
-    """figure out colum/row indices of the output matrix, which are compatible with charges.
-    """
-    # (if there are really many small blocks in the tensors, this function eats a significant
-    # amount of the time...)
-    compatible = np.all(
-        chinfo.make_valid(a_charges_keep[np.newaxis, :, :] + b_charges_keep[:, np.newaxis, :]) ==
-        qtotal,
-        axis=2)
-    return np.nonzero(compatible)
-
-
 def _tensordot_worker(a, b, axes):
     """main work of tensordot, called by :func:`tensordot`.
 
@@ -3439,28 +3427,32 @@ def _tensordot_worker(a, b, axes):
 
     # first find output colum/row indices of the result, which are compatible with the charges
     qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
-    col_row_idx = _tensordot_pre_compatible(chinfo, qtotal, a_charges_keep, b_charges_keep)
+    # fast way to match the find the compatible indices
+    a_lookup_charges = list_to_dict_list(a_charges_keep)  # lookup table ``charge -> [row_a]``
+    # a_charges_match: for each row in a, which charge in b is compatible?
+    b_charges_match = chinfo.make_valid(qtotal - b_charges_keep)
 
-    cols_b, rows_a = col_row_idx
     # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
     # determine output qdata
-    res_qdata = np.append(a_qdata_keep[rows_a], b_qdata_keep[cols_b], axis=1)
-    keep = np.ones(len(res_qdata), dtype=bool)
     res_data = []
-    for res_qdata_idx, (col_b, row_a) in enumerate(np.transpose(col_row_idx)):
-        block_contr = fast_dot_sum(a_data[row_a], b_data[col_b], a_qdata_contr[row_a],
-                                   b_qdata_contr[col_b])
-        if block_contr is None:  # no common blocks
-            keep[res_qdata_idx] = False
-        else:
-            # Step 4) reshape back to tensors
-            block_contr = block_contr.reshape(a_shape_keep[row_a] + b_shape_keep[col_b])
-            res_data.append(block_contr.astype(res_dtype, copy=False))
+    res_qdata_a = []
+    res_qdata_b = []
+    for col_b, charge_match in enumerate(b_charges_match):
+        rows_a = a_lookup_charges.get(tuple(charge_match), [])  # empty list if no match
+        for row_a in rows_a:
+            block_contr = fast_dot_sum(a_data[row_a], b_data[col_b], a_qdata_contr[row_a],
+                                       b_qdata_contr[col_b])
+            if block_contr is not None:  # no common blocks
+                # Step 4) reshape back to tensors
+                block_contr = block_contr.reshape(a_shape_keep[row_a] + b_shape_keep[col_b])
+                res_data.append(block_contr.astype(res_dtype, copy=False))
+                res_qdata_a.append(a_qdata_keep[row_a])
+                res_qdata_b.append(b_qdata_keep[col_b])
     res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if len(res_data) == 0:
         return res
     # (at least one entry is non-empty, so res_qdata[keep] is also not empty)
-    res._qdata = res_qdata[keep]
+    res._qdata = np.concatenate((res_qdata_a, res_qdata_b), axis=1)
     res._qdata_sorted = True
     res._data = res_data
     return res

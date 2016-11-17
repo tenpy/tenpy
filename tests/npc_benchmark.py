@@ -4,6 +4,9 @@
 New TenPyLight npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 Run ``python npc_benchmark.py --help`` for usage options.
 """
+
+from __future__ import division
+
 import timeit
 import cProfile
 import time
@@ -174,13 +177,30 @@ def tensordot_profile(fn=None, dmax=None, **kwargs):
     cProfile.runctx("npc.tensordot(a, b, axes)", globals(), locals(), fn)
 
 
-def run_tensordot_timing(sizes=range(5, 60, 5),
+def skip_timing(dmax, size=20, mod_q=[1], n_qsectors=3, **kwargs):
+    """use dmax to determine whether to skip the timing for the given parameters"""
+    legs = [kwargs.get(k, 2) for k in ['leg_a_out', 'leg_b_out', 'leg_contract']]
+    flat_shapes = [size**d for d in legs]  # flat requires to perform matrix (M,N) dot (N,K)
+    do_flat = (np.prod(flat_shapes) <= dmax**3) and (len(mod_q) == 0)
+    # estimate the number of charge sectors on each leg
+    sectors = min(size, n_qsectors**len(mod_q))
+    sectors_shape = [sectors**d for d in legs]
+    blocks = np.prod(sectors_shape)
+    block_dot_flops = np.prod([f / s for f, s in zip(flat_shapes, sectors_shape)])
+    # roughly the number of flops for a `dot` of blocks
+    matmul = sectors_shape[0] * sectors_shape[2]  # roughly the number of `dot` of blocks,
+    # assuming full charge blocking (fails for legs > 1)
+    skip_all = blocks > dmax**3 or matmul * block_dot_flops > dmax**3
+    return skip_all, do_flat
+
+
+def run_tensordot_timing(sizes=range(5, 80, 5),
                          num_qs=range(3),
                          seeds=range(5),
-                         dmax=1000,
+                         dmax=2000,
                          **kwargs):
     """call `tensordot_timing` for different `sizes` and `num_qs`.
-    Note: dmax is only used to switch `do_flat`."""
+    """
     print "------ tensordot_timing ------"
     data = {}
     data['seeds'] = seeds
@@ -193,33 +213,33 @@ def run_tensordot_timing(sizes=range(5, 60, 5),
         num_q_timings = []
         for size in sizes:
             print size  # just to notice that we're still running
-            legs = [kwargs.get(k, 2) for k in ['leg_a_out', 'leg_b_out', 'leg_contract']]
-            mat_shape = [size**d for d in legs]  # flat requires to perform matrix (M,N) dot (N,K)
-            do_flat = (np.prod(mat_shape) <= dmax**3) and (num_q == num_qs[0])
             timing = np.zeros(3)  # average over seeds
-            for seed in seeds:
-                kwargs.update(mod_q=mod_q, size=size, seed=seed)
-                res = tensordot_timing(do_flat, True, 3, 3, **kwargs)
-                timing += res
+            kwargs.update(mod_q=mod_q, size=size)
+            skip_all, do_flat = skip_timing(dmax=dmax, **kwargs)
+            if not skip_all:
+                for seed in seeds:
+                    kwargs.update(seed=seed)
+                    res = tensordot_timing(do_flat, True, 3, 3, **kwargs)
+                    timing += res
             num_q_timings.append(timing / len(seeds))
         print "-" * 80
         all_timings.append(num_q_timings)
-    data['timings'] = np.array(all_timings, dtype=np.float)
+    all_timings = np.array(all_timings, dtype=np.float)
+    data['timings'] = all_timings
     return data
 
 
 def run_save(fn_t='npc_benchmark_timeit_{legs}_{n_qsectors:d}.pkl', dmax=2000, **kwargs):
     """get a fairly exhaustive collection of timings for different n_qsectros and leg_*....
-    2D matrices to be contracted are at most of shape (dmax, dmax)."""
+    """
     sizes_all = [3, 5, 8, 10, 12] + range(15, 50, 5) + range(50, 200, 25) + \
         range(200, 500, 100) + range(500, 3001, 250)
     for n_qsectors, legs in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
         print "+" * 100
         print "n_qsectors = {nq:d}, legs ={legs:d}".format(nq=n_qsectors, legs=legs)
-        sizes = [s for s in sizes_all if s**legs < dmax]
         print "sizes = ", sizes
         kwargs.update(n_qsectors=n_qsectors, leg_a_out=legs, leg_b_out=legs, leg_contract=legs)
-        data = run_tensordot_timing(sizes=sizes, dmax=dmax, **kwargs)
+        data = run_tensordot_timing(sizes=sizes_all, dmax=dmax, **kwargs)
         data['kwargs'] = kwargs.copy()
         data['version'] = tenpy.version.full_version
         fn = fn_t.format(n_qsectors=n_qsectors, legs=legs)
@@ -234,8 +254,8 @@ def print_timing_res(data):
     if 'version' in data:
         print "version", data['version']
     # print "kwargs:", data['kwargs']
-    print "qnum size      flat       old       new   new-old"
-    row = "{qn: 4d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
+    print "num_q size      flat       old       new   new-old"
+    row = "{qn: 5d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
     for qnumber, timed_qn in zip(num_qs, timed):
         for size, timed_size in zip(sizes, timed_qn):
             new, old, flat = timed_size
@@ -255,12 +275,8 @@ def plot_timing_res(data, fn=None):
     markers = ['o', 's', 'v', 'x']  # num_q
     pl.figure(figsize=(10, 7))
     for qn, t_qn, m in zip(num_qs, timed, markers):
-        for t, lab, col in [
-            (t_qn[:, 0], 'npc', 'r'),
-            (t_qn[:, 1], 'old_npc', 'g'),
-            (t_qn[:, 2], 'numpy', 'b'),
-                # (t_qn[:, 2]-t_qn[:, 1], 'diff old_npc-npc', 'k')
-        ]:
+        for t, lab, col in [(t_qn[:, 0], 'npc', 'r'), (t_qn[:, 1], 'old_npc', 'g'),
+                            (t_qn[:, 2], 'numpy', 'b')]:
             lab = "qnumber {qn:d}, {lab}".format(lab=lab, qn=qn)
             if np.any(t != 0.):  # only if we have data
                 pl.plot(sizes, t, col + m + '-', markersize=8, label=lab)
@@ -345,9 +361,8 @@ if __name__ == "__main__":
             plot_timing_res(data, os.path.splitext(fn)[0] + '.png')
     if args.profile:
         fn = None if len(args.files) == 0 else args.files[0]
-        tensordot_profile(fn, mod_q=[1, 1], size=50, seed=2, **kwargs)
+        tensordot_profile(fn, mod_q=[1], size=50, seed=2, **kwargs)
     if not any([args.timing, args.plot, args.profile]):
-        sizes = [s for s in range(5, 60, 5) if s**2 < args.dmax]
-        data = run_tensordot_timing(sizes=sizes, **kwargs)
+        data = run_tensordot_timing(**kwargs)
         print_timing_res(data)
         plot_timing_res(data)

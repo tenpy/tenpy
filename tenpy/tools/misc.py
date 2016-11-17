@@ -149,7 +149,7 @@ def list_to_dict_list(l):
 
     Parameters
     ----------
-    l: list (iterabele of immutable)
+    l: iterable of iterabele of immutable
         A list of objects that can be converted to tuples to be used as keys for a dictionary.
 
     Returns
