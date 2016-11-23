@@ -60,6 +60,10 @@ The optional packages can be installed with::
     conda install matplotlib sphinx numpydoc pip nose
     pip install yapf    # (if you want to contribute)
 
+.. note :
+    MKL uses different threads to parallelize different BLAS and LAPACK routines.
+    If you want to change that (for example because you run tenpy on a cluster),
+    take a look at :mod:`tenpy/tools/process`.
 
 Including tenpy into PYTHONPATH
 -------------------------------

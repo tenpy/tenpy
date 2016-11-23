@@ -37,3 +37,4 @@ tools
   like ``to_iterable`` and ``to_array`` (renamed to follow PEP8, and documented)
 - moved stuff for fitting to :mod:`tenpy.tools.fit`
 - enhanced :func:`tenpy.tools.string.vert_join` for nice formatting
+- moved (parts of) old `cluster/omp.py` to :mod:`tenpy.tools.process`

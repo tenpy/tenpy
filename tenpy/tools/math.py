@@ -3,10 +3,7 @@ import numpy as np
 import warnings
 from . import misc
 
-try:
-    from scipy.sparse.linalg import eigs as sparse_eigen
-except ImportError:
-    pass
+from scipy.sparse.linalg import eigs as sparse_eigen
 
 int_I3 = np.eye(3, dtype=int)
 LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])

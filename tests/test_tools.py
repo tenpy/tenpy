@@ -50,5 +50,37 @@ def test_perm_sign():
     npt.assert_equal(res, check)
 
 
+def test_memory_usage():
+    tools.process.memory_usage()
+
+
+def test_omp(n=2):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')  # disable warngings temporarily
+        if tools.process.omp_set_nthreads(n):
+            nthreads = tools.process.omp_get_nthreads()
+            print nthreads
+            assert(nthreads == n)
+        else:
+            print "test_omp failed to import the OpenMP libaray."
+
+
+def test_mkl(n=2):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')  # disable warngings temporarily
+        if tools.process.mkl_set_nthreads(n):
+            nthreads = tools.process.mkl_get_nthreads()
+            print nthreads
+            assert(nthreads == n)
+        else:
+            print "test_mkl failed to import the shared MKL libaray."
+
+
 if __name__ == "__main__":
     test_inverse_permutation()
+    test_argsort()
+    test_speigs()
+    test_perm_sign()
+    test_memory_usage()
+    test_omp()
+    test_mkl()
