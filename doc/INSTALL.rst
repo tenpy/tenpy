@@ -18,6 +18,7 @@ Beside the standard library you will need only a few things listed below.
 
 Python 2.7 with fairly recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
 Some kind of LAPACK/BLAS library is a prerequisite for SciPy.
+If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.
 
 Optional Requirements
 ---------------------

@@ -152,7 +152,7 @@ class ChargeInfo(object):
 class LegCharge(object):
     r"""Save the charge data associated to a leg of a tensor.
 
-    In the end, this class is more a wrapper around a 2D numpy array `qind`.
+    This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
     See :doc:`../IntroNpc` for more details.
 
     Parameters
@@ -338,7 +338,7 @@ class LegCharge(object):
         return (len(s) == self.block_number)
 
     def is_sorted(self):
-        """returns whether the charge values in qind are sorted lexiographically"""
+        """returns whether `self.charges` is sorted lexiographically"""
         if self.chinfo.qnumber == 0:
             return True
         res = lexsort(self.charges.T)
@@ -394,7 +394,7 @@ class LegCharge(object):
         Check that all of the following conditions are met:
 
         - the ``ChargeInfo`` is equal
-        - the `slices` are equal, i.e., ``qind[:, :2]`` are equal
+        - the `slices` are equal
         - the `charges` are the same up to the signs ``qconj``::
 
                 self.charges * self.qconj = other.charges * other.qconj

@@ -2241,12 +2241,12 @@ class Array(object):
 # functions ====================================================================
 
 
-def zeros(*args, **kwargs):
+def zeros(chargeinfo, legcharges, dtype=np.float64, qtotal=None):
     """create a npc array full of zeros (with no _data).
 
     This is just a wrapper around ``Array(...)``,
     detailed documentation can be found in the class doc-string of :class:`Array`."""
-    return Array(*args, **kwargs)
+    return Array(chargeinfo, legcharges, dtype, qtotal)
 
 
 def eye_like(a, axis=0):

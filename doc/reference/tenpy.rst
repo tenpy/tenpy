@@ -8,6 +8,7 @@ Subpackages
 
     tenpy.algorithms
     tenpy.linalg
+    tenpy.models
     tenpy.tools
 
 Submodules

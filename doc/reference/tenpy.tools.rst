@@ -6,8 +6,10 @@ Submodules
 
 .. toctree::
 
+   tenpy.tools.fit
    tenpy.tools.math
    tenpy.tools.misc
+   tenpy.tools.process
    tenpy.tools.string
 
 Module contents
