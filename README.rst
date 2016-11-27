@@ -17,7 +17,7 @@ The documentation is based on Python's docstrings, and some additional ``*.rst``
 
 All documentation should be formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
 This means it's readable in the source plain text, but one can also convert it to other formats.
-If you like it simply, you can just use intective python `help()`, Python IDEs of your choice, or just read the source.
+If you like it simple, you can just use intective python `help()`, Python IDEs of your choice, or just read the source.
 
 Alternatively, you can also use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats including HTML or PDF.

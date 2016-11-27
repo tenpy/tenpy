@@ -1,12 +1,13 @@
 """Classes to define the lattice structure of a model.
 
 .. todo :
-    documentation, examples, ...
+    documentation, how to generate new lattices, examples, ...
 """
 
 import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..tools.misc import to_iterable
 
 
 class Site(object):
@@ -16,8 +17,8 @@ class Site(object):
 
     Parameters
     ----------
-    charges : :class:`npc.LegCharge`
-        Charges of the physical state.
+    leg : :class:`npc.LegCharge`
+        Charges of the physical states, to be used for the physical leg of MPS & co).
     state_labels : None | list
         List of labels for the local basis states. ``None`` entries are ignored / not set.
     **site_ops :
@@ -30,7 +31,7 @@ class Site(object):
     onsite_ops
     leg : :class:`npc.LegCharge`
         Charges of the local basis states.
-    state_labels : dict
+    state_labels : iterable of (str, int)
         (Optional) labels for the local basis states.
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
@@ -65,16 +66,18 @@ class Site(object):
     """
     def __init__(self, charges, state_labels=None, **site_ops):
         self.leg = charges
-        self.state_labels = dict(state_labels)
+        if state_labels is None:
+            state_labels = []
+        self.state_labels = dict([(k, v % self.dim) for k, v in state_labels])
         self.opnames = set()
         self.add_op('Id', npc.diag(1., self.leg))
-        for name, op in site_ops:
+        for name, op in site_ops.iteritems():
             self.add_op(name, op)
         self.test_sanity()
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        for lab, ind in self.state_labels:
+        for lab, ind in self.state_labels.iteritems():
             if type(lab) != str:
                 raise ValueError("wrong type of state label")
             if not 0 <= ind < self.dim:
@@ -87,6 +90,7 @@ class Site(object):
                 raise ValueError("only rank-2 onsite operators allowed")
             op.legs[0].test_equal(self.leg)
             op.legs[1].test_contractible(self.leg)
+            op.test_sanity()
 
     @property
     def dim(self):
@@ -111,6 +115,7 @@ class Site(object):
         op : np.ndarray | npc.Array
             A matrix acting on the local hilbert space representing the local operator.
             Dense numpy arrays are automatically converted to :class:`npc.Array`.
+            LegCharges have to be [leg, leg.conj()].
         """
         name = str(name)
         if name in self.opnames:
@@ -127,6 +132,7 @@ class Site(object):
             raise ValueError("only rank-2 on-site operators allowed")
         op.legs[0].test_equal(self.leg)
         op.legs[1].test_contractible(self.leg)
+        op.test_sanity()
         setattr(self, name, op)
         self.opnames.add(name)
 
@@ -152,16 +158,19 @@ class Site(object):
 
 
 class Lattice(object):
-    r"""Collects lattice sites into a lattice.
+    r"""A general lattice.
 
-    The lattice consists of a `unit_cell` which is repeated in `D` different directions.
-    A site of the lattice is thus identified by (1) `D` indices ``a = (a_0, ...,  a_{D-1})`` with
-    ``0 <= a_i < Ls[i]`` picking the unit cell in combination with (2) an index ``j``
-    picking the site within the unit cell. It is located in 'real space' at
-    ``sum_i a_i*basis[i] + unit_cell_positions[j]``.
+    The lattice consists of a **unit cell** which is repeated in `dim` different directions.
+    A site of the lattice is thus identified by **lattice indices** ``(x_0, ..., x_{dim-1}, u)``,
+    where ``0 <= x_l < Ls[l]`` pick the position of the unit cell in the lattice and
+    ``0 <= u < len(unit_cell)`` picks the site within the unit cell. The site is located
+    in 'space' at ``sum_l x_l*basis[l] + unit_cell_positions[u]`` (see :meth:`position`).
 
     In addition to the pure geometry, this class also defines an 'order' of all sites.
     This order maps the lattice to a finite 1D chain and defines the geometry of MPSs and MPOs.
+    The **MPS index** `i` corresponds thus to the lattice sites given by
+    ``(a_0, ..., a_{D-1}, u) = tuple(self.order[i])``.
+    Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
 
     Parameters
     ----------
@@ -174,81 +183,123 @@ class Lattice(object):
         Defaults ``'default'``: First direction changing slowest, within the unit cell fastest.
     bc_MPS : {'finite', 'segment', 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
-    basis : ndarray, shape (D, D)
-        translation vectors shifting the unit cell. The ``i``th row gives the vector shifting in
-        direction ``i``. Defaults to the standard orthonormal basis ``np.eye(D)``.
-    positions : ndarray, shape (len(unit_cell), D)
-        for each site of the unit cell a vector giving its position within the unit cell.
-        Defaults to ``np.zeros``.
+    basis : iterable of 1D arrays
+        for each direction one translation vectors shifting the unit cell.
+        Defaults to the standard ONB ``np.eye(dim)``.
+    positions : iterable of 1D arrays
+        for each site of the unit cell the position within the unit cell.
+        Defaults to ``np.zeros((len(unit_cell), dim))``.
 
     Attributes
     ----------
     dim
+    N_cells
     N_sites
+    Ls : tuple of int
+        the length in each direction.
+    shape : tuple of int
+        the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     chinfo : :class:`npc.ChargeInfo`
         The nature of the charge (which is the same for all sites).
     unit_cell : list of :class:`Site`
         the lattice sites making up a unit cell of the lattice.
-    site_labels : dict(str -> int)
-        optional names of the sites in the unit cell.
-    Ls : list of int
-        the length in each direction.
-    order : ndarray, shape (N_sites, dim+1)
+    order : ndarray (N_sites, dim+1)
         Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
         This order defines how an MPS/MPO winds through the lattice.
     bc_MPS : {'finite', 'segment', 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice.
-    basis: ndarray, shape (dim, dim)
+    basis: ndarray (dim, dim)
         translation vectors shifting the unit cell. The ``i``th row gives the vector shifting in
         direction ``i``.
     unit_cell_positions : ndarray, shape (len(unit_cell), dim)
         for each site in the unit cell a vector giving its position within the unit cell.
+    _strides : ndarray (dim, )
+        necessary for :meth:`mps2lat`
+    _perm : ndarray (N, )
+        permutation needed to make `order` lexsorted.
+    _mps2lat_vals_idx : ndarray `shape`
+        index array for reshape/reordering in :meth:`mps2lat_vals`
+    _mps_fix_u : tuple of ndarray (N_cells, ) np.intp
+        for each site of the unit cell an index array selecting the mps indices of that site.
+    _mps_fix_u_None : ndarray (N_sites, )
+        just np.arange(N_sites, np.intp)
+    _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
+        similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
 
     .. todo :
         what are valid values for MPS boundary conditions? -> need to define MPS class first...
-
     .. todo :
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
-    def __init__(self, Ls, unit_cell, order='default', bc_MPS='finite', basis=None, positions=None):
-        self.Ls = [int(L) for L in Ls]
+    def __init__(self,
+                 Ls,
+                 unit_cell,
+                 order='default',
+                 bc_MPS='finite',
+                 basis=None,
+                 positions=None):
+        self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
+        self.N_cells = int(np.prod(self.Ls))
+        self.shape = self.Ls + (len(unit_cell), )
         self.chinfo = self.unit_cell[0].leg.chinfo
-        for site in unit_cell:
-            if site.chinfo != self.chinfo:
-                raise ValueError("All sites must have the same ChargeInfo!")
+        self.N_sites = int(np.prod(self.shape))
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
             basis = np.eye(self.dim)
-        self.unit_cell_positions = positions
-        self.basis = basis
+        self.unit_cell_positions = np.asarray(positions)
+        self.basis = np.asarray(basis)
+        # calculate order for MPS
         self.order = self.ordering(order)
+        # from order, calc necessary stuff for mps2lat and lat2mps
+        self._perm = np.lexsort(self.order.T)
+        # use advanced numpy indexing...
+        self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
+        self._mps2lat_vals_idx[tuple(self.order.T)] = np.arange(self.N_sites)
+        # versions for fixed u
+        self._mps_fix_u = []
+        self._mps2lat_vals_idx_fix_u = []
+        for u in range(len(self.unit_cell)):
+            mps_fix_u = np.nonzero(self.order[:, -1] == u)[0]
+            self._mps_fix_u.append(mps_fix_u)
+            mps2lat_vals_idx = np.empty(self.Ls, np.intp)
+            mps2lat_vals_idx[tuple(self.order[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
+            self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
+        self._mps_fix_u = tuple(self._mps_fix_u)
+        # calculate _strides
+        strides = [1]
+        for L in self.Ls:
+            strides.append(strides[-1]*L)
+        self._strides = np.array(strides, np.intp)
+        self.test_sanity()  # check consistency
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        assert self.shape == self.Ls + (len(self.unit_cell), )
+        assert self.N_cells == np.prod(self.Ls)
+        assert self.N_sites == np.prod(self.shape)
         for site in self.unit_cell:
             if not isinstance(site, Site):
                 raise ValueError("element of Unit cell is not Site.")
             if site.leg.chinfo != self.chinfo:
                 raise ValueError("All sites must have the same ChargeInfo!")
+            site.test_sanity()
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
             raise ValueError("Need one position for each site in the unit cell.")
+        if self.basis.shape[1] != self.unit_cell_positions.shape[1]:
+            raise ValueError("Different space dimensions of `basis` and `unit_cell_positions`")
+        # if one of the following assert fails, the `ordering` function returned an invalid array
+        assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
+        assert np.all(np.sum(self.order * self._strides, axis=1)[self._perm]
+                      == np.arange(self.N_sites))  # rows of `order` unique?
 
     @property
     def dim(self):
         """the dimension of the lattice."""
         return len(self.Ls)
-
-    @property
-    def N_sites(self):
-        """the number of sites in the lattice"""
-        N = self.Ls[0]
-        for L in self.Ls[1:]:
-            N *= L
-        return N*len(self.unit_cell)
 
     def ordering(self, name):
         """Provide possible orderings of the `N` lattice sites.
@@ -285,94 +336,255 @@ class Lattice(object):
         """
         res = np.empty((self.N_sites, self.dim+1), np.intp)
         if name in ["default", "Cstyle"]:
-            shapes = self.Ls + [len(self.unit_cell)]
-            res = np.mgrid[tuple([slice(0, L) for L in shapes])]
+            res = np.mgrid[tuple([slice(0, L) for L in self.shape])]
             return res.reshape((self.dim+1, self.N_sites)).T
         elif name == "Fstyle":
-            shapes = self.Ls[::-1] + [len(self.unit_cell)]
-            res = np.mgrid[tuple([slice(0, L) for L in shapes])]
-            res = res.transpose([0] + range(1, self.dim-1)[::-1] + [self.dim+2])
-            return res.reshape((self.dim+1, self.N_sites)).T
+            shape = self.Ls[::-1] + (len(self.unit_cell), )
+            res = np.mgrid[tuple([slice(0, L) for L in shape])]
+            res = res.reshape((self.dim+1, self.N_sites)).T
+            perm = np.array(range(self.dim)[::-1] + [-1])
+            return res[:, perm]
         elif name in ["snake", "snakeCstyle"]:
-            return _ordering_snake(self.Ls+[len(self.unit_cell)])
+            return _ordering_snake(self.shape)
         elif name == "snakeFstyle":
-            res = _ordering_snake(self.Ls[::-1] + [len(self.unit_cell)])
-            reorder = np.array(range(self.dim)[::-1]+[-1])
-            return res[:, reorder]
+            res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
+            perm = np.array(range(self.dim)[::-1]+[-1])
+            return res[:, perm]
         # in a derived lattice ``class DerivedLattice(Lattice)``, use:
         # return super(DerivedLattice, self).ordering(name)
         # such that the derived lattece also has the orderings defined in this function.
         raise ValueError("unknown ordering name" + str(name))
 
-    def plot_ordering(self, order=None, axes=None):
+    def plot_ordering(self, order=None, ax=None):
         """Vizualize the ordering by plotting the lattice.
-
-        .. todo :
-            implement
-        """
-        # if order is None:
-        #     order = self.order
-        # import pylab as pl
-        # if axes is None:
-        #     axes = pl.gca()
-        raise NotImplementedError() # TODO
-
-    def position(self, site_indices):
-        """return 'real space' position of one or multiple sites.
 
         Parameters
         ----------
-        site_indices : array
+        order : None | 2D array (self.N_sites, self.dim+1)
+            An order array as returned by :meth:`ordering`. ``None`` defaults to ``self.order``.
+        ax : matplotlib.pyplot.Axes
+            The axes on which the ordering should be plotted. Defaults to ``pylab.gca()``.
         """
-        idx = np.asarray(site_indices, dtype=np.intp)
-        if idx.shape[-1] != self.dim + 1:
-            raise ValueError("wrong number of indices")
+        if order is None:
+            order = self.order
+        import pylab as pl
+        if ax is None:
+            ax = pl.gca()
+        pos = self.position(order)
+        D = pos.shape[1]
+        styles = ['o', '^', 's', 'p', 'h', 'D', 'd', 'v', '<', '>']
+        if D == 1:
+            ax.plot(pos[:, 0], np.zeros(len(pos)), 'r-')
+            for u in range(len(self.unit_cell)):
+                p = pos[self.mps_idx_fix_u(u), 0]
+                ax.plot(p, np.zeros(len(p)), styles[u % len(styles)])
+            for i, p in enumerate(pos):
+                ax.text(p[0], 0.1, str(i))
+        elif D == 2:
+            ax.plot(pos[:, 0], pos[:, 1], 'r-')
+            for u in range(len(self.unit_cell)):
+                p = pos[self.mps_idx_fix_u(u), :]
+                ax.plot(p[:, 0], p[:, 1], styles[u % len(styles)])
+            for i, p in enumerate(pos):
+                ax.text(p[0], p[1], str(i))
+        else:
+            raise NotImplementedError()  # D >= 3
+
+    def position(self, lat_idx):
+        """return 'space' position of one or multiple sites.
+
+        Parameters
+        ----------
+        lat_idx : ndarray, ``(... , dim+1)``
+            lattice indices
+
+        Returns
+        -------
+        pos : ndarray, ``(..., dim)``
+        """
+        idx = self._asvalid_latidx(lat_idx)
         res = np.take(self.unit_cell_positions, idx[..., -1], axis=0)
         for i in range(self.dim):
             res += idx[..., i, np.newaxis] * self.basis[i]
         return res
 
-    def mps2lat(self, i):
-        """translate mps index `i` to lattice site index ``(x, y, ... , u)``"""
-        return tuple(self.order[i])
-
-    def lat2mps(self, site_index):
-        """translate site_index ``(x, y, ..., u)`` to mps index `i`.
-
-        .. todo :
-            implement: i = perm[sum(site_index*strides)]
-            perm and strides have to be calculated in __init__.
-        """
-        raise NotImplementedError()
-
     def site(self, i):
-        """return :class:`Site` instance corresponding to an mps index"""
+        """return :class:`Site` instance corresponding to an MPS index `i`"""
         return self.unit_cell[self.order[i, -1]]
 
+    def mps2lat_idx(self, i):
+        """translate MPS index `i` to lattice indices ``(x_0, ..., x_{D_1}, u)``"""
+        return tuple(self.order[i])
 
-class Chain(Lattice):
-    """A simple chain of L equal sites."""
-    def __init__(self, L, site, bc_MPS='finite'):
-        super(Chain, self).__init__([L], [site], bc_MPS=bc_MPS)  # and otherwise default values.
+    def lat2mps_idx(self, lat_idx):
+        """translate lattice indices ``(x_0, ..., x_{D-1}, u)`` to MPS index `i`."""
+        i = np.sum(self._asvalid_latidx(lat_idx)*self._strides, axis=-1)
+        return self._perm[i]
+
+    def mps_idx_fix_u(self, u=None):
+        """return an index array of MPS indices for which the site within the unit cell is `u`.
+
+        If you have multiple sites in your unit-cell, an onsite operator is in general not defined
+        for all sites. This functions allows to pick unit
+        """
+        if u is not None:
+            return self._mps_fix_u[u]
+        return np.arange(self.N_sites, dtype=np.intp)
+
+    def mps2lat_values(self, A, axes=0, u=None):
+        """reshape/reorder A to replace an MPS index by lattice indices.
+
+        Parameters
+        ----------
+        A : ndarray
+            some values. Must have ``A.shape[axes] = self.N_sites`` if `u` is ``None``, or
+            ``A.shape[axes] = self.N_cells`` if `u` is an int.
+        axes : (iterable of) int
+            chooses the axis which should be replaced.
+        u : ``None`` | int
+            Optionally choose a subset of MPS indices present in the axes of `A`, namely the
+            indices corresponding to ``self.unit_cell[u]``, as returned by :meth:`mps_idx_fix_u`.
+            The resulting array will not have the additional dimension(s) of `u`.
+
+        Returns
+        -------
+        res_A : ndarray
+            reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
+            ``res_A[..., self.order, ...] = A[..., np.arange(self.N_sites), ...]``
+
+        Example
+        -------
+        Say you measure expection values of an onsite term for an MPS, which gives you an 1D array
+        `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
+        Then this function gives you the expectation values ordered by the lattice:
+
+        >>> print lat.shape, A.shape
+        (10, 3, 2) (60,)
+        >>> A_res = lat.mps2lat_values(A)
+        >>> A_res.shape
+        (10, 3, 2)
+        >>> A_res[lat.mps2lat_idx(5)] == A[5]
+        True
+
+        If you have a correlation function ``C[i, j]``, it gets just slightly more complicated:
+
+        >>> print lat.shape, C.shape
+        (10, 3, 2) (60, 60)
+        >>> lat.mps2lat_values(C, axes=[0, 1]).shape
+        (10, 3, 2, 10, 3, 2)
+
+        If the unit cell consists of different physical sites, an onsite operator might be defined
+        only on one of the sites in the unit cell. Then you can use :meth:`mps_idx_fix_u` to get
+        the indices of sites it is defined on, measure the operator on these sites, and use
+        the argument `u` of this function. say y
+
+        >>> u = 0
+        >>> idx_subset = lat.mps_idx_fix_u(u)
+        >>> A_u = A[idx_subset]
+        >>> A_u_res = lat.mps2lat_values(A_u, u=u)
+        >>> A_u_res.shape
+        (10, 3)
+        >>> np.all(A_res[:, :, u] == A_u_res[:, :])
+        True
+
+        .. todo :
+            make sure this function is used for expectation values...
+        """
+        axes = to_iterable(axes)
+        if len(axes) > 1:
+            axes = [(ax + A.ndim if ax < 0 else ax) for ax in axes]
+            for ax in reversed(sorted(axes)):  # need to start with largest axis!
+                A = self.mps2lat_values(A, ax, u)  # recursion with single axis
+            return A
+        # choose the appropriate index arrays calcuated in __init__
+        if u is None:
+            idx = self._mps2lat_vals_idx
+        else:
+            idx = self._mps2lat_vals_idx_fix_u[u]
+        return np.take(A, idx, axis=axes[0])
+
+    def _asvalid_latidx(self, lat_idx):
+        """convert lat_idx to ndarray with valid entries >=0."""
+        lat_idx = np.asarray(lat_idx, dtype=np.intp)
+        if lat_idx.shape[-1] != len(self.shape):
+            raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
+        lat_idx = np.choose(lat_idx < 0, [lat_idx, lat_idx + self.shape])
+        if np.any(lat_idx < 0) or np.any(lat_idx >= self.shape):
+            raise IndexError("lattice index out of bonds")
+        return lat_idx
+
+
+class SimpleLattice(Lattice):
+    """A lattice with a unit cell consiting of just a single site.
+
+    In many cases, the unit cell consists just of a single site, such that the the last entry of
+    `u` of an 'lattice index' can only be ``0``.
+    From the point of internal algorithms, we handle this class like a :class:`Lattice` --
+    in that way we don't need to distinguish special cases in the algorithms.
+
+    Yet, from the point of a tenpy user, for example if you measure and expectation value
+    on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
+    not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
+    ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
+
+    Parameters
+    ----------
+    Ls : list of int
+        the length in each direction
+    site : :class:`Site`
+        the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    order : str
+        A string specifying the order, given to :meth:`ordering`.
+        Defaults ``'default'``: First direction changing slowest.
+    bc_MPS : {'finite', 'segment', 'infinite'}
+        boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
+    basis : iterable of 1D arrays
+        for each direction one translation vectors shifting the unit cell.
+        Defaults to the standard ONB ``np.eye(dim)``.
+    position : 1D array
+        The position of the site within the unit cell. Defaults to ``np.zeros(dim))``.
+    """
+    def __init__(self, Ls, site, order='default', bc_MPS='finite', basis=None, position=None):
+        if position is not None:
+            position = [position]
+        super(SimpleLattice, self).__init__(Ls, [site], order, bc_MPS, basis, position)
+
+    def mps2lat_values(self, A, axes=0, u=None):
+        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
+        super(SimpleLattice, self).mps2lat_values(A, axes, 0)
+
+
+class Chain(SimpleLattice):
+    """A simple uniform chain of L equal sites."""
+    def __init__(self, L, site, order='default', bc_MPS='finite'):
+        super(Chain, self).__init__([L], site, order, bc_MPS)  # and otherwise default values.
+
+
+class SquareLattice(SimpleLattice):
+    """A simple uniform square lattice of `Lx` by `Lx` sites."""
+    def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
+        super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
 
 
 def _ordering_snake(Ls):
     """built the order of a snake winding through a (hyper-)cubic lattice in Cstyle order."""
-    order = np.emtpy((1, 0), dtype=np.intp)
+    Ls = list(Ls)
+    order = np.empty((1, 0), dtype=np.intp)
     while len(Ls) > 0:
         L = Ls.pop()
         L0, D = order.shape
         new_order = np.empty((L*L0, D+1), dtype=np.intp)
-        new_order[:, 0] = np.repeat(np.arange(L), order.shape[0])
-        new_order[:L, 1:] = order
+        print order.shape, "- L =", L, "-->", new_order.shape
+        new_order[:, 0] = np.repeat(np.arange(L), L0)
+        new_order[:L0, 1:] = order
         if L > 1:
             # reverse order to go back for second index
-            new_order[L:2*L, 1:] = order[::-1]
+            new_order[L0:2*L0, 1:] = order[::-1]
         if L > 2:
             # repeat (ascending, descending) up to length L
             rep = L // 2 - 1
-            new_order[2*L:(rep+1)*2*L, :] = np.tile(new_order[:2*L, :], [rep, 1])
+            new_order[2*L0:(rep+1)*2*L0, 1:] = np.tile(new_order[:2*L0, 1:], [rep, 1])
             if L % 2 == 1:
-                new_order[-2*L:, :] = order
+                new_order[-L0:, 1:] = order
         order = new_order
     return order
