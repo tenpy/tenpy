@@ -173,6 +173,8 @@ class Lattice(object):
     The **MPS index** `i` corresponds thus to the lattice sites given by
     ``(a_0, ..., a_{D-1}, u) = tuple(self.order[i])``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
+    :meth:`mps2lat_values` perform the necessary reshaping and re-ordering from arrays indexed in
+    MPS from to arrays indexed in lattice form.
 
     Parameters
     ----------
