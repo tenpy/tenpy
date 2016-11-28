@@ -4,6 +4,8 @@
     documentation, how to generate new lattices, examples, ...
 """
 
+from __future__ import division
+
 import numpy as np
 
 from ..linalg import np_conserved as npc
@@ -425,11 +427,40 @@ class Lattice(object):
         """return an index array of MPS indices for which the site within the unit cell is `u`.
 
         If you have multiple sites in your unit-cell, an onsite operator is in general not defined
-        for all sites. This functions allows to pick unit
+        for all sites. This functions returns an index array of the mps indices which belong to
+        sites given by ``self.unit_cell[u]``.
+
+        Parameters
+        ----------
+        u : None | int
+            Selects a site of the unit cell. ``None`` (default) means all sites.
+
+        Returns
+        -------
+        mps_idx : array
+            MPS indices for which ``self.site(i) is self.unit_cell[u]``.
         """
         if u is not None:
             return self._mps_fix_u[u]
         return np.arange(self.N_sites, dtype=np.intp)
+
+    def mps_lat_idx_fix_u(self, u=None):
+        """Similar as :meth:`mps_idx_fix_u`, but return also the corresponding lattice indices.
+
+        Parameters
+        ----------
+        u : None | int
+            Selects a site of the unit cell. ``None`` (default) means all sites.
+
+        Returns
+        -------
+        mps_idx : array
+            MPS indices `i` for which ``self.site(i) is self.unit_cell[u]``.
+        lat_idx : 2D array
+            The `j`th row contains the lattice index (without `u`) corresponding to ``mps_idx[j]``.
+        """
+        mps_idx = self.mps_idx_fix_u(self)
+        return mps_idx, self.order[mps_idx, :-1]
 
     def mps2lat_values(self, A, axes=0, u=None):
         """reshape/reorder A to replace an MPS index by lattice indices.

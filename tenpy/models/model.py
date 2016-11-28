@@ -1,5 +1,11 @@
 """This module contains a base class for a model"""
 
+from __future__ import division
+
+import numpy as np
+
+from ..tools.misc import to_array
+
 
 class Model:
     """Base class for a general `model`.
@@ -20,13 +26,15 @@ class Model:
 
     Parameters
     ----------
-    lattice : :class:`tenpy.model.lattice.Lattice`
+    lat : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the underlying Hilbert space.
-    bc : list of {'open', 'periodic'}
+    bc_coupling : list of {'open', 'periodic'}
         boundary conditions (of the couplings) in each direction of the lattice.
-    onsite_terms : list of (opname, u, strength)
-        opstrength is broadcasted to the lattice size
-    coupling_terms : list of (opname1, u1, opname2, u2, direction, strength)
+    H_onsite_terms : list of ({scalar | array}, int, str)
+        Entries are ``(strength, u, opname)``, where `u` picks a cite of the unit cell.
+        `strength` is tiled to the lattice size.
+    coupling_terms : list of (
+        Entries are ``(strength, u, opname, u2, opname2, direction)``
 
     Attributes
     ----------
@@ -54,28 +62,56 @@ class Model:
     .. todo :
         implement ...
     """
-    def __init__(self, lattice, bc_coupling, H_onsite=[], H_couplings=[]):
+    def __init__(self, lattice, bc_coupling='open', H_onsite_terms=[], H_coupling_terms=[]):
         self.lattice = lattice
         self.bc_coupling = bc_coupling
-        raise NotImplementedError()
+        H_onsite_terms = self._valid_onsite_terms(H_onsite_terms)
+        H_coupling_terms = self._valid_coupling_terms(H_coupling_terms)
+        self.terms = (H_onsite_terms, H_coupling_terms)
+        self.H_onsite_terms = H_onsite_terms  # TODO : parse, cast values to lattice.
+        self.H_coupling_terms = H_coupling_terms  # TODO : parse, cast values to lattice.
+        self.H_bond = None
+        self.eig_bond = None
+        self.U_bond = None
+        self.U_parameters = None
+
+    def test_sanity(self):
+        """Sanity check. Raises ValueErrors, if something is wrong."""
+        raise NotImplementedError()  # TODO
 
     def calc_H_onsite(self, H_onsite):
-        """calculate H_onsite from the onsite terms"""
-        raise NotImplementedError()
+        """calculate `self.H_onsite` from the onsite terms."""
+        raise NotImplementedError()  # TODO
+
+    def calc_H_MPO(self):
+        """calculate `self.H_MPO` from ``self.H_coupling_terms``."""
+        raise NotImplementedError()  # TODO
 
     def calc_H_bond(self, H_couplings, H_onsite=None):
         """calculate H_bond from the coupling terms."""
         raise NotImplementedError()
 
-    def cast_1_per_site(self, value):
-        """broadcast/tile `value` to a numpy array with one value per site.
+    def _convert_onsite_terms(self, H_onsite_terms):
+        """convert H_onsite_terms into different format & check for incompatibility."""
+        uc = self.lat.unit_cell
+        luc = len(uc)
+        terms = [dict() for _ in xrange(self.lat.N_sites)]
+        for strength, u, opname in H_onsite_terms:
+            if u < 0:  # TODO make a function in `Lattice` for that
+                u += luc
+            if u < 0 or u >= luc:
+                raise IndexError("Index of unit_cell `u` out of bonds")
+            if opname not in uc[u].opnames:
+                raise ValueError("unknown onsite operator {1!r} for u={2:d}".format(opname, u))
+            strength = to_array(strength, self.lat.Ls)
+            for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
+                terms[i] = terms[i].get(opname, 0) + strength[i_lat]  # TODO XXX
+        for d in terms:  # remove zeros
+            for k in d.keys():
+                if d[k] == 0:
+                    del d[k]
+        return terms
 
-        .. todo :
-            implement. Need further cast funcitons (1 per bond respecting boundary conditions...)
-            General `cast` should exist in tools.misc."""
-        value = np.asarray(value)
-        if value.ndim > self.dim + 1:
-            raise ValueError("too many dimensions")
-
-
-
+    def _convert_coupling_terms(self, H_coupling_terms):
+        """convert H_coupling_terms into valid form & check for incompatibility."""
+        raise NotImplementedError()  # TODO

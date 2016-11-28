@@ -29,31 +29,42 @@ def to_iterable(a):
         return a
 
 
-def to_ndarray(a, array_size=None):
-    """Convert to an 1D numpy array. If required, tile to the required size.
+def to_array(a, shape=(None, )):
+    """Convert `a` to an numpy array and tile to matching dimension/shape.
+
+    This function provides similar functionality as numpys broadcast, but not quite the same:
+    Only scalars are broadcasted to higher dimensions, wh
+    For a non-scalar, we require the dimension to match.
+    Note that this is generalization of numpys 'broadcast'.
 
     Parameters
     ----------
-    a :
-        the input to be converted to an array. If a is not iterable, use `[a]`.
-    array_size : int
-        the desired lenght of the array. If not None, repeat `a` periodically to fit the len.
+    a : scalar | array_like
+        The input to be converted to an array. A scalar is reshaped to the desired dimension.
+    shape : tuple of {None | int}
+        the desired shape of the array. An entry ``None`` indicates arbitrary len >=1.
+        For int entries, tile the array periodically to fit the len.
 
-    Raises
-    ------
-    ValueError : if the len of a is not a divisor of `array_size`
+    Returns
+    -------
+    a_array : ndarray
+        A copy of `a` converted to a numpy ndarray of desired dimension and shape.
     """
-    try:
-        iter(a)
-    except TypeError:
-        a = np.array([a])
-    else:
-        a = np.array(a)
-    if array_size is not None:
-        if array_size % len(a) != 0:
-            raise ValueError("incomensurate len")
-        a = np.tile(a, array_size // len(a))
-    return a
+    a = np.array(a)  # copy
+    if a.ndim != len(shape):
+        if a.size == 1:
+            a = np.reshape(a, [1]*len(shape))
+        else:  # extending dimensions is ambiguous, so we better raise an Error.
+            raise ValueError("don't know how to cast `a` to required dimensions.")
+    reps = [1] * a.ndim
+    for i in range(a.ndim):
+        if shape[i] is None:
+            continue
+        if shape[i] % a.shape[i] != 0:
+            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                a.shape[i], shape[i]))
+        reps[i] = shape[i] // a.shape[i]
+    return np.tile(a, reps)
 
 
 if has_bottleneck:
