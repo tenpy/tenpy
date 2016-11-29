@@ -40,12 +40,13 @@ def alg_decay_fit_res(log_b, x, y):
 
 def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     """Fit y to the form a * x**(-b) + c.
+
     Returns a triplet [a, b, c].
 
     npts specifies the maximum number of points to fit.  If npts < len(x), then alg_decay_fit() will only fit to the last npts points.
     power_range is a tuple that gives that restricts the possible ranges for b.
     power_mesh is a list of numbers, which specifies how fine to search for the optimal b.
-            E.g., if power_mesh = [60,10], then it'll first divide the power_range into 60 intervals, and then divide those intervals by 10.
+    E.g., if power_mesh = [60,10], then it'll first divide the power_range into 60 intervals, and then divide those intervals by 10.
     """
     x = np.array(x)
     y = np.array(y)

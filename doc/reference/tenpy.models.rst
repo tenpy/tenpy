@@ -6,9 +6,9 @@ Submodules
 
 .. toctree::
 
+   tenpy.models.XXZ_chain
    tenpy.models.lattice
    tenpy.models.model
-   tenpy.models.spin_chain
 
 Module contents
 ---------------

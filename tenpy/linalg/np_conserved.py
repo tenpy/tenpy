@@ -116,6 +116,10 @@ class Array(object):
     _qdata_sorted : Bool
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
+
+    .. todo :
+        remove chargeinfo from parameters, instead read it out from 'legcharges'.
+        0D-arrays are anyways forbidden....
     """
 
     def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
@@ -2903,8 +2907,8 @@ def norm(a, ord=None, convert_to_float=True):
     ord         norm
     ==========  ======================================
     None/'fro'  Frobenius norm (same as 2-norm)
-    inf         ``max(abs(x))``
-    -inf        ``min(abs(x))``
+    np.inf      ``max(abs(x))``
+    -np.inf     ``min(abs(x))``
     0           ``sum(a != 0) == np.count_nonzero(x)``
     other       ususal `ord`-norm
     ==========  ======================================

@@ -1,6 +1,13 @@
 tenpy.algorithms package
 ========================
 
+Submodules
+----------
+
+.. toctree::
+
+   tenpy.algorithms.tebd
+
 Module contents
 ---------------
 

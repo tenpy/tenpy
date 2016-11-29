@@ -11,6 +11,7 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_iterable
 
+__all__ = ['Site', 'Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
 
 class Site(object):
     """Collects necessary information about a single local site of a lattice.
@@ -157,6 +158,10 @@ class Site(object):
         except:
             raise KeyError("label not found: " + repr(label))
         return res
+
+    def get_op(self, name):
+        """return operator of given name"""
+        return getattr(self, name)
 
 
 class Lattice(object):
@@ -485,8 +490,8 @@ class Lattice(object):
             reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
             ``res_A[..., self.order, ...] = A[..., np.arange(self.N_sites), ...]``
 
-        Example
-        -------
+        Examples
+        --------
         Say you measure expection values of an onsite term for an MPS, which gives you an 1D array
         `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
         Then this function gives you the expectation values ordered by the lattice:
