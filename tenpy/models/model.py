@@ -11,13 +11,13 @@ as an MPO with a :class:`MPOModel`.
 On the other hand, TEBD needs the model to be 'nearest neighbor' and thus
 a representation by nearest-neighbor terms.
 
-The `TwoSiteModel` is the attempt to generalize the representation of `H`
+The `CouplingModel` is the attempt to generalize the representation of `H`
 by explicitly specifying the couplings of onsite-terms, and providing functionality
 for converting the specified couplings into an MPO or nearest-neighbor bonds.
 This allows to quickly generate new 'models' for a broad class of Hamiltonians.
-However, as the name suggests, this class is (at least for now) limited to interactions involving
+However, this class is (at least for now) limited to interactions involving
 only two sites. For other cases (e.g. exponentially decaying long-range interactions in 1D),
-it might be simpler to specify MPO explicitly.
+it might be simpler to specify the MPO explicitly.
 
 Of course, we also provide ways to transform a :class:`NearestNeighborModel` into a
 :class:`MPOModel` and vice versa, as far as this is possible.
@@ -32,73 +32,69 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 
-__all__ = ['TwoSiteModel', 'NearestNeighborModel', 'MPOModel']
+__all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
 
-class TwoSiteModel(object):
-    """Base class for a general Model consisting of two-site couplings.
+_bc_coupling_choices = {'open': True, 'periodic': False}
 
-    A `model` is the general form of an Hamiltonian. It consists of
-    1) The underlying hilbert space given by the :class:`~tenpy.model.lattice.Lattice`.
-    2) The Hamiltonian's onsite terms.
-    3) The Hamiltonian's couplings between different sites.
+class CouplingModel(object):
+    """Base class for a general Model of a Hamiltonian consisting of two-site couplings.
 
-    This information specifies the Hamiltonian completely, so it is always possible to
-    construct an MPO representing the Hamiltonian. This is done during initialization
-    and saved in `self.H_MPO`.
-
-    Furthermore, the model can hold two-site bond-operators, e.g. for the application of TEBD.
+    In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
+    terms.
 
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     bc_coupling : (iterable of) {'open' | 'periodic'}
-        Boundary conditions (of the couplings) in each direction of the lattice.
-        A singe {'open' | 'periodic'} holds for all directions.
-    H_onsite_terms : list of tuples
-        Entries ``(strength, u, opname)`` are given as arguments to :meth:`add_onsite`.
-    H_couplings : list of tuples
-        Entries ``(strength, u, opname, u2, opname2, direction)`` (& possible optional arguments)
-        are given as arguments to :meth:`add_twosite_terms`.
+        Boundary conditions of the couplings in each direction of the lattice. Defines how the
+        couplings are added in :meth:`add_coupling`. A singe string holds for all directions.
 
     Attributes
     ----------
     lat : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    bc_coupling : list of {'open', 'periodic'}
-        Boundary conditions (of the couplings) in each direction of the lattice.
+    bc_coupling : bool ndarray
+        Boundary conditions of the couplings in each direction of the lattice,
+        translated into a bool array with the global `_bc_coupling_choices`.
     onsite_terms : list of dict
         For each mps index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
         Filled by :meth:`add_onsite`.
     coupling_terms : list of dict
         For each mps index `i` a dictionary of the form
         ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``.
-        If ``lat.bc_MPS == 'infinite'`` it may have entries with `j` < `i` going over the
-        iMPS boundary. all other terms have `i` < `j`. Filled by :meth:`add_coupling_term`.
+        Entries with ``j < i`` are only allowed for ``lat.bc_MPS == 'infinite'``, in which case
+        they indicate couplings over the iMPS boundary, i.e., between the sites
+        ``(i, j+lat.N_sites)`` and between the sites ``(i-lat.N_sites, j)``.
+        Filled by :meth:`add_coupling`.
     H_onsite : list of :class:`npc.Array`
         For each site (in MPS order) the onsite part of the Hamiltonian.
 
     .. todo :
         implement ...
+        Some way to generalize to couplings involving multiple sites?
     """
-    def __init__(self, lattice, bc_coupling='open', H_onsite_terms=[], H_coupling_terms=[]):
+    def __init__(self, lattice, bc_coupling='open'):
         self.lat = lattice
-        if bc_coupling in ['open', 'periodic']:
-            bc_coupling = [bc_coupling] * self.lat.dim
-        self.bc_coupling = list(bc_coupling)
-        self.onsite_terms = [dict() for _ in range(self.lattice.N_sites)]
-        self.coupling_terms = [dict() for _ in range(self.lattice.N_sites)]
+        global _bc_coupling_choices
+        if bc_coupling in _bc_coupling_choices.keys():
+            bc_coupling = [_bc_coupling_choices[bc_coupling]] * self.lat.dim
+        else:
+            bc_coupling = [_bc_coupling_choices[bc] for bc in bc_coupling]
+        self.bc_coupling = np.array(bc_coupling)
+        self.onsite_terms = [dict() for _ in range(self.lat.N_sites)]
+        self.coupling_terms = [dict() for _ in range(self.lat.N_sites)]
         self.H_onsite = None
         self.test_sanity()
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if len(self.bc_coupling) != self.lat.dim:
+        if self.bc_coupling.shape != (self.lat.dim, ):
             raise ValueError("Wrong len of bc_coupling")
-        for bc in self.bc_coupling:
-            if bc not in ['open', 'periodic']:
-                raise ValueError("invalid value for boundary conditions: " + repr(bc))
-        raise NotImplementedError()  # TODO
+        assert self.bc_coupling.dtype == np.bool
+        assert int(_bc_coupling_choices['open']) == 1
+        assert int(_bc_coupling_choices['periodic']) == 0
+        # TODO : need more checks
 
     def add_onsite(self, strength, u, opname):
         """Add onsite terms to self.
@@ -132,9 +128,10 @@ class TwoSiteModel(object):
         where ``OP1 := lat.unit_cell[u1].opname1`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``
         and ``OP2 := lat.unit_cell[u2].opname2`` acts on the site
         ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
-        If ``bc_coupling[a] == 'periodic'``, the index ``x_a`` is taken modulo ``lattice.Ls[a]``
-        and runs through ``range(lattice.Ls[a])``; for open boundary conditions
-        it runs only up to ``range(lattic.Ls[a]-dx[a])``.
+        If ``bc_coupling[a] == 'periodic'``, the index ``x_a`` is taken modulo ``lat.Ls[a]``
+        and runs through ``range(lat.Ls[a])``.
+        For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
+        ``0 <= x_a+dx < lat.Ls[a]``.
 
         Parameters
         ----------
@@ -149,34 +146,52 @@ class TwoSiteModel(object):
         op2 : str
             valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2.
         dx : iterable of int
-            translation vector between OP1 and OP2.
-            For a 1D lattice, a single int is also fine.
+            translation vector between OP1 and OP2. For a 1D lattice, a single int is also fine.
         op_string : str
             name of an operator to be used inbewteen OP1 and OP2.
             Typical use case is the phase for a Jordan-Wigner transformation.
+            (This operator should be defined on all sites in the unit cell.)
         """
         for op, u in [(op1, u1), (op2, u2)]:
             if op not in self.lat.unit_cell[u].opnames:
                 raise ValueError("unknown onsite operator {1!r} for u={2:d}".format(op, u))
-        strength = to_array(strength, self._coupling_shape(dx))  # tile to correct shape
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
+        strength = to_array(strength, self._coupling_shape(dx))  # tile to correct shape
         luc = len(self.lat.unit_cell)
         if np.all(dx == 0) and u1 % luc == u2 % luc:
             raise ValueError("Coupling shouldn't be onsite!")
         idx_i, idx_i_lat = self.lat.mps_lat_idx_fix_u(u1)
-        idx_j_lat = (idx_i_lat + dx) % np.array(self.lat.Ls)
-        idx_j = self.lat.lat2mps_idx(np.hstack(idx_j_lat, [[u2]]*len(idx_i_lat)))
+        idx_j_lat_shifted = idx_i_lat + dx
+        idx_j_lat = idx_j_lat_shifted % np.array(self.lat.Ls)
+        keep = np.all(np.logical_or(idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
+                                    ~self.bc_coupling), # direction has periodic bound. cond.
+                      axis=1)
+        idx_i = idx_i[keep]
+        idx_i_lat = idx_i_lat[keep]
+        idx_j_lat = idx_j_lat[keep]
+        idx_j = self.lat.lat2mps_idx(np.hstack([idx_j_lat, [[u2]]*len(idx_i_lat)]))
         for i, i_lat, j in zip(idx_i, idx_i_lat, idx_j):
             o1, o2 = op1, op2
-            if j < i and (self.lat.bc_MPS != 'infinite' or (i - j > j + self.N_sites - i)):
-                # the last condition checks wether we better go over the iMPS boundary.
-                # TODO check the last condition for special cases.... Does it work as expected?
+            if self.lat.bc_MPS == 'infinite':
+                d_in = abs(i-j)  # distance within the chain
+                d_out = self.lat.N_sites - d_in  # distance over the boundary
+                if d_in < d_out:
+                    swap = (j < i)  # ensure coupling within the chain
+                elif d_in > d_out:
+                    swap = (i < j)  # ensure coupling over the iMPS boundary
+                else: # d_in == d_out
+                    swap = False  # don't change the order
+                    # this is necessary for correct TEBD for iMPS with L=2
+            else:  # finite MPS
+                swap = (j < i)  # ensure i < j
+            if swap:
+                print "swap ", i, j
                 i, o1, j, o2 = j, op2, i, op1  # swap OP1 <-> OP2
             d1 = self.coupling_terms[i]
             # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             d2 = d1.setdefault((o1, op_string), dict())
             d3 = d2.setdefault(j, dict())
-            d3[op2] = d3.get(o2, 0) + strength[i_lat]
+            d3[op2] = d3.get(o2, 0) + strength[tuple(i_lat)]
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
@@ -184,7 +199,7 @@ class TwoSiteModel(object):
         Parameters
         ----------
         tol_zero : float
-            prefactors ``abs(strength) < tol_zero`` are considered to be zero.
+            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
 
         Returns
         -------
@@ -208,8 +223,8 @@ class TwoSiteModel(object):
 
         Parameters
         ----------
-            prefactors ``abs(strength) < tol_zero``  are considered to be zero.
         tol_zero : float
+            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
 
         Returns
         -------
@@ -221,11 +236,12 @@ class TwoSiteModel(object):
         ValueError : if the Hamiltonian contains longer-range terms.
         """
         if self.H_onsite is None:
-            self.H_onsite = self.calc_H_onsite(tol)
-        finite = (self.lat.bc_MPS != 'infinte')
+            self.H_onsite = self.calc_H_onsite(tol_zero)
+        # self._remove_coupling_terms_zeros(tol_zero)
+        finite = (self.lat.bc_MPS != 'infinite')
         res = []
         for i, d1 in enumerate(self.coupling_terms):
-            j = i + 1 % self.lat.N_sites
+            j = (i + 1) % self.lat.N_sites
             site_i = self.lat.site(i)
             site_j = self.lat.site(j)
             strength = 0.5 if i > 0 or i == 0 and not finite else 1.
@@ -241,34 +257,34 @@ class TwoSiteModel(object):
                         raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
                             i=i, j=j2))
                     for op2, strength in d3.iteritems():
-                        H = H + strength * npc.outer(op1, op2)
+                        H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
             H.set_leg_labels(['pL', 'pL*', 'pR', 'pR*'])
             res.append(H)
         if finite:
-            assert(res[-1].norm(np.inf) <= tol)
+            assert(res[-1].norm(np.inf) <= tol_zero)
         return res
 
     def calc_H_MPO(self):
         """calculate MPO representation of self."""
-        return None   # TODO. (Just pass on for now to allow testing with XXZChain.
+        return None   # TODO. (Just pass on for now to allow testing with XXZChain).
         raise NotImplementedError()  # TODO
 
-    def _remove_onsite_terms_zeros(self, tol=1.e-15):
+    def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
         """remove entries of strength `0` from ``self.onsite_terms``."""
         for term in self.onsite_terms:
             for op in term.keys():
-                if abs(term[op]) < tol:
+                if abs(term[op]) < tol_zero:
                     del term[op]
         # done
 
-    def _remove_coupling_terms_zeros(self, tol=1.e-15):
+    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
         """remove entries of strength `0` from ``self.onsite_terms``."""
         for d1 in self.coupling_terms:
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             for op_i_op_str, d2 in d1.iteritems():
                 for j, d3 in d2.iteritems():
                     for op_j, st in d3:
-                        if abs(st) < tol:
+                        if abs(st) < tol_zero:
                             del d3[op_j]
                     if len(d3) == 0:
                         del d2[j]
@@ -278,7 +294,7 @@ class TwoSiteModel(object):
 
     def _coupling_shape(self, dx):
         """calculate correct shape of the strengths for each coupling."""
-        return tuple([La - dxa * int(bca == 'periodic')
+        return tuple([La - dxa * int(bca)
                       for La, dxa, bca in zip(self.lat.Ls, dx, self.bc_coupling)])
 
 
@@ -312,7 +328,13 @@ class NearestNeighborModel(object):
         self.calc_bond_eig()
         self.U_bond = None
         self.U_param = dict()
-        raise NotImplementedError()  # TODO
+        # raise NotImplementedError()  # TODO
+
+    def calc_bond_eig(self):
+        """calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``."""
+        self.bond_eig_vals = None  # TODO calculate....
+        self.bond_eig_vecs = None
+        # raise NotImplementedError()  # pass on to allow testing with XXZChain
 
 
 class MPOModel(object):
@@ -328,8 +350,9 @@ class MPOModel(object):
         MPO representation of the Hamiltonian.
 
     .. todo :
-        implement. Host environment?
+        implement.
+        Should it host the environment, similar as NearestNeighborModel hosts U?
     """
     def __init__(self, H_MPO):
         self.H_MPO = H_MPO
-        self.lat = H_MPO.lat
+        # self.lat = H_MPO.lat # TODO or similar. Implement MPO class first.

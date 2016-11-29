@@ -2,6 +2,12 @@
 
 .. todo :
     documentation, how to generate new lattices, examples, ...
+.. todo :
+    provide a way to generate the most common 'Sites'
+    (spin half, hard-core bosons, bosons, fermions, fermion with spin).
+.. todo :
+    implement some __repr__ and/or __str__...
+    equality tests?
 """
 
 from __future__ import division
@@ -22,8 +28,8 @@ class Site(object):
     ----------
     leg : :class:`npc.LegCharge`
         Charges of the physical states, to be used for the physical leg of MPS & co).
-    state_labels : None | list
-        List of labels for the local basis states. ``None`` entries are ignored / not set.
+    state_labels : None | list of str
+        Optinally a label for each local basis states. ``None`` entries are ignored / not set.
     **site_ops :
         Additional keyword arguments of the form ``name=op`` given to :meth:`add_op`.
         The identity operator 'Id' is always included.
@@ -34,7 +40,7 @@ class Site(object):
     onsite_ops
     leg : :class:`npc.LegCharge`
         Charges of the local basis states.
-    state_labels : iterable of (str, int)
+    state_labels : {str: int}
         (Optional) labels for the local basis states.
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
@@ -69,9 +75,10 @@ class Site(object):
     """
     def __init__(self, charges, state_labels=None, **site_ops):
         self.leg = charges
-        if state_labels is None:
-            state_labels = []
-        self.state_labels = dict([(k, v % self.dim) for k, v in state_labels])
+        self.state_labels = dict()
+        if state_labels is not None:
+            for i, v in enumerate(state_labels):
+                self.state_labels[str(v)] = i
         self.opnames = set()
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.iteritems():
@@ -160,7 +167,7 @@ class Site(object):
         return res
 
     def get_op(self, name):
-        """return operator of given name"""
+        """return operator of given name."""
         return getattr(self, name)
 
 
@@ -237,6 +244,7 @@ class Lattice(object):
 
     .. todo :
         what are valid values for MPS boundary conditions? -> need to define MPS class first...
+        write & use a function `_valid_bc_MPS`.
     .. todo :
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
@@ -259,6 +267,7 @@ class Lattice(object):
             basis = np.eye(self.dim)
         self.unit_cell_positions = np.asarray(positions)
         self.basis = np.asarray(basis)
+        self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
         # from order, calc necessary stuff for mps2lat and lat2mps
@@ -304,6 +313,8 @@ class Lattice(object):
         assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
         assert np.all(np.sum(self.order * self._strides, axis=1)[self._perm]
                       == np.arange(self.N_sites))  # rows of `order` unique?
+        if self.bc_MPS not in ['finite', 'segment', 'infinite']:
+            raise ValueError("invalid MPS boundary conditions")
 
     @property
     def dim(self):
@@ -466,7 +477,7 @@ class Lattice(object):
         lat_idx : 2D array
             The `j`th row contains the lattice index (without `u`) corresponding to ``mps_idx[j]``.
         """
-        mps_idx = self.mps_idx_fix_u(self)
+        mps_idx = self.mps_idx_fix_u(u)
         return mps_idx, self.order[mps_idx, :-1]
 
     def mps2lat_values(self, A, axes=0, u=None):
