@@ -1,7 +1,7 @@
-tenpy.models.XXZ_chain module
+tenpy.models.xxz_chain module
 =============================
 
-.. automodule:: tenpy.models.XXZ_chain
+.. automodule:: tenpy.models.xxz_chain
     :members:
     :undoc-members:
     :show-inheritance:

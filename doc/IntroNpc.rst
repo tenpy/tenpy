@@ -175,14 +175,11 @@ Remeber that the LegCharge associates to each index of the leg a charge value (f
 Let ``a.to_qflat()[ia]`` denote the charge(s) of index ``ia`` for leg ``a``, and similar for other legs.
 
 In addition, the LegCharge has a flag :attr:`~tenpy.linalg.charges.LegCharge.qconj`. This flag **qconj** is only a sign,
-saved as +1 or -1, specifying whether the charges point inward (+1, default) or outward (-1) of the tensor.
+saved as +1 or -1, specifying whether the charges point 'inward' (+1, default) or 'outward' (-1) of the tensor.
 
-Then, the **total charge** of a single entry ``T[ia, ib, ic, ...]`` of the tensor is defined as::
+Then, the **total charge of an entry** ``T[ia, ib, ic, ...]`` of the tensor is defined as::
 
    qtotal[ia, ib, ic, ...] = a.to_qflat()[ia] * a.qconj + b.to_qflat()[ib] * b.qconj + c.to_qflat()[ic] * c.qconj + ...  modulo qmod
-
-In case of multiple charges, ``qnumber`` > 1, this equation holds for each of the different charges individually with the
-corresponding ``qmod`` of the charge.
 
 The rule which entries of the a :class:`~tenpy.linalg.np_conserved.Array` can be non-zero
 (i.e., are 'compatible' with the charges), is then very simple:
@@ -190,9 +187,15 @@ The rule which entries of the a :class:`~tenpy.linalg.np_conserved.Array` can be
 .. topic :: Rule for non-zero entries
 
     An entry ``ia, ib, ic, ...`` of a :class:`~tenpy.linalg.np_conserved.Array` can only be non-zero,
-    if ``qtotal[ia, ib, ic, ...]`` matches the :attr:`~tenpy.linalg.np_conserved.qtotal` attribute of the class.
+    if ``qtotal[ia, ib, ic, ...]`` matches the *unique* :attr:`~tenpy.linalg.np_conserved.qtotal` attribute of the class.
 
-Again, this must hold for each of the charges seperately in the case ``qnumber`` > 1.
+In other words, there is a *single* **total charge** ``.qtotal`` attribute of a :class:`~tenpy.linalg.np_conserved.Array`.
+All indices ``ia, ib, ic, ...`` for which the above defined ``qtotal[ia, ib, ic, ...]`` matches this `total charge`,
+are said to be **compatible with the charges** and can be non-zero. 
+All other indices are **incompatible with the charges** and must be zero.
+
+In case of multiple charges, `qnumber` > 1, is a straigth-forward generalization:
+an entry can only be non-zero if it is `compatible` with each of the defined charges.
 
 
 The pesky qconj - contraction as an example
@@ -212,8 +215,8 @@ An entry ``C[ia,ic]`` will only be non-zero,
 if there is an ``ib`` such that both ``A[ia,ib]`` and ``B[ib,ic]`` are non-zero, i.e., both of the following equations are
 fullfilled::
 
-    A.qtotal == A.legs[0].to_qflat()[ia] A.legs[0].qconj + A.legs[1].to_qflat()[ib] A.legs[1].qconj  modulo qmod
-    B.qtotal == B.legs[0].to_qflat()[ib] B.legs[0].qconj + B.legs[1].to_qflat()[ic] B.legs[1].qconj  modulo qmod
+    A.qtotal == A.legs[0].to_qflat()[ia] * A.legs[0].qconj + A.legs[1].to_qflat()[ib] * A.legs[1].qconj  modulo qmod
+    B.qtotal == B.legs[0].to_qflat()[ib] * B.legs[0].qconj + B.legs[1].to_qflat()[ic] * B.legs[1].qconj  modulo qmod
 
 (``A.legs[0]`` is the :class:`~tenpy.linalg.charges.LegCharge` saving the charges of the first leg (with index ``ia``) of `A`.)
 
@@ -244,7 +247,7 @@ This leads to the following convention:
 Assigning charges to non-physical legs
 --------------------------------------
 From the above physical examples, it should be clear how you assign charges to physical legs.
-But what about other legs, e.g, the virtual bond of an MPS? 
+But what about other legs, e.g, the virtual bond of an MPS (or an MPO)? 
 
 The charge of these bonds must be derived by using the 'rule for non-zero entries', as far as they are not arbitrary.
 As a concrete example, consider an MPS on just two spin 1/2 sites::
@@ -253,34 +256,60 @@ As a concrete example, consider an MPS on just two spin 1/2 sites::
     |   x->- | A | ->-y->- | B | ->-z
     |        -----         -----
     |          ^             ^
-    |          |a            |b
+    |          |p            |p
 
-The legs ``a`` and ``b`` are physical, say with indices :math:`\uparrow = 0` and :math:`\downarrow = 1`.
-As noted above, we can associate the charges 1 (up) and 0 (down), respectively.
+The two legs ``p`` are the physical legs and share the same charge, as they both describe the same local Hilbert space.
+For better distincition, let me label the indices of them by :math:`\uparrow=0` and :math:`\downarrow=1`.
+As noted above, we can associate the charges 1 (:math:`p=\uparrow`) and -1 (:math:`p=\downarrow`), respectively, so we define::
 
-The legs ``x`` and ``z`` are 'dummy' indices with just one index ``0``.
-The charge on one of them, as well as the total charge of both ``A`` and ``B`` is somewhat arbitrary, so we make a simple choice: 
-total charge 0 on both arrays, as well as charge 0 for `x` = 0.
+    chinfo = npc.ChargeInfo([1], ['2*Sz'])
+    p  = npc.LegCharge.from_qflat(chinfo, [1, -1], qconj=+1)
 
-Finally, we also have to define ``qconj`` values. We stick to the convention used in our MPS code: physical
-legs incoming (qconj=1), and from left to right on the virtual bonds.
+For the ``qconj`` signs, we stick to the convention used in our MPS code and indicated by the
+arrows in above 'picture': physical legs are incoming (``qconj=+1``), and from left to right on the virtual bonds.
+This is acchieved by using ``[p, x, y.conj()]`` as `legs` for ``A``, and ``[p, y, z.conj()]`` for ``B``, with the
+default ``qconj=+1`` for all ``p, x, y, z``: ``y.conj()`` has the same charges as ``y``, but opposite ``qconj=-1``.
+
+The legs ``x`` and ``z`` of an ``L=2`` MPS, are 'dummy' legs with just one index ``0``.
+The charge on one of them, as well as the total charge of both ``A`` and ``B`` is arbitrary (i.e., a gauge freedom),
+so we make a simple choice: total charge 0 on both arrays, as well as for :math:`x=0`, 
+``x = npc.LegCharge.from_qflat(chinfo, [0], qconj=+1)``.
 
 The charges on the bonds `y` and `z` then depend on the state the MPS represents.
-Here, we consider a singlet as a the simplest non-trivial example.
-A possible MPS representation is given by::
+Here, we consider a singlet :math:`\psi = (|\uparrow \downarrow\rangle  - |\downarrow \uparrow\rangle)\sqrt{2}`
+as a simple example. A possible MPS representation is given by::
 
-    A[up]   = [[1, 0]]     B[up]   = [[0], [-1]]
-    A[down] = [[0, 1]]     B[down] = [[1], [0]]
+    A[up, :, :]   = [[1/2.**0.5, 0]]     B[up, :, :]   = [[0], [-1]]
+    A[down, :, :] = [[0, 1/2.**0.5]]     B[down, :, :] = [[1], [0]]
 
 There are two non-zero entries in ``A``, for the indices :math:`(a, x, y) = (\uparrow, 0, 0)` and :math:`(\downarrow, 0, 1)`.
-To comply with the rules for non-zero entries, we then have to assign the charge 1 to `y` = 0, and the charge 0 to `y` = 1.
-Again, we associate the same charge values of `y` to the ``A`` and ``B``, and just change the ``qconj``.
-The non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)` then implies the charge 0 for `z` = 0.
-Note, that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is then automatically fullfilled:
-this is an implication of the fact that the singlet has a well defined value for :math:`S^z_a + S^z_b`.
-For other states without fixed magnetization (e.g., :math:`|\uparrow \uparrow> + |\downarrow \downarrow>`)
-we could not use the charge conservation.
+For :math:`(a, x, y) = (\uparrow, 0, 0)`, we want::
 
+    A.qtotal = 0 = p.to_qflat()[up] * p.qconj + x.to_qflat()[0] * x.qconj + y.conj().to_qflat()[0] * y.conj().qconj 
+                 = 1                * (+1)    + 0               * (+1)    + y.conj().to_qflat()[0] * (-1)
+
+This fixes the charge of ``y=0`` to 1.
+A similar calculation for :math:`(a, x, y) = (\downarrow, 0, 1)` yields the charge ``-1`` for ``y=1``.
+We have thus all the charges of the leg ``y`` and can define ``y = npc.LegCharge.from_qflat(chinfo, [1, -1], qconj=+1)``.
+
+Now take a look at the entries of ``B``. 
+For the non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)`, we want::
+
+    B.qtotal = 0 = p.to_qflat()[up] * p.qconj + y.to_qflat()[1] * y.qconj + z.conj().to_qflat()[0] * z.conj().qconj 
+                 = 1                * (+1)    + (-1)            * (+1)    + z.conj().to_qflat()[0] * (-1)
+
+This implies the charge 0 for `z` = 0, thus ``z = npc.LegCharge.form_qflat(chinfo, [0], qconj=+1)``.
+Finally, note that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is automatically fullfilled!
+This is an implication of the fact that the singlet has a well defined value for :math:`S^z_a + S^z_b`.
+For other states without fixed magnetization (e.g., :math:`|\uparrow \uparrow\rangle + |\downarrow \downarrow\rangle`)
+this would not be the case, and we could not use charge conservation.
+
+
+.. note ::
+    
+    This section is meant be an pedagogical introduction. In you program, you can use the functions 
+    :func:`~tenpy.linalg.np_conserved.detect_legcharge` (which does exactly what's described above) or
+    :func:`~tenpy.linalg.np_conserved.detect_qtotal` (if you know all `LegCharges`, but not `qtotal`).
 
 Array creation
 --------------

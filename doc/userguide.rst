@@ -17,7 +17,7 @@ doc
     The necessary files for the reference in `doc/reference` can be auto-generated/updated with ``make src2html``.
 tenpy
     The actual source code of the library.
-    Every subfolder contains an ``__init__.py`` file containing a summary what the modules in it are good for.
+    Every subfolder contains an ``__init__.py`` file with a summary what the modules in it are good for.
     (This file is also necessary to mark the folder as part of the python package.
     Consequently, other subfolders of the git repo should not include a ``__init__.py`` file.)
 examples
