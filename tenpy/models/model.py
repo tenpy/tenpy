@@ -251,8 +251,8 @@ class CouplingModel(object):
             H = H + npc.outer(site_i.Id, strength * self.H_onsite[j])
             for (op1, op_str), d2 in d1.iteritems():
                 for j2, d3 in d2.iteritems():
-                    # we expect j = j2 even for N_sites = 1, 2 and PBC
-                    # TODO: also for special cases? (L=1, L=2, ...)
+                    # i, j in terms are defined such that we expect j = j2,
+                    # (including the case N_sites = 2 and iMPS
                     if j != j2:
                         raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
                             i=i, j=j2))

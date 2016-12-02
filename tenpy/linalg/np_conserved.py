@@ -23,7 +23,10 @@ Array creation:
 :func:`zeros`, :func:`eye_like`, :func:`diag`,
 
 Concatenation:
-:func:`concatenate`, :func:`grid_concat`, :func:`grid_outer` :func:`grid_outer_calc_legcharge`
+:func:`concatenate`, :func:`grid_concat`, :func:`grid_outer`
+
+Detecting charges of flat arrays:
+:func:`detect_qtotal`, :func:`detect_legcharge`, :func:`detect_grid_outer_legcharge`
 
 Contraction of some legs:
 :func:`tensordot`, :func:`outer`, :func:`inner`, :func:`trace`
@@ -57,8 +60,9 @@ from ..tools.string import vert_join
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
-    'concatenate', 'grid_concat', 'grid_outer', 'grid_outer_calc_legcharge', 'trace', 'outer',
-    'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig', 'eigvalsh', 'eigvals', 'speigs'
+    'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
+    'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
+    'eig', 'eigvalsh', 'eigvals', 'speigs'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -227,7 +231,7 @@ class Array(object):
 
         See also
         --------
-        detect_ndarray_qtotal : used to detect the total charge of the flat array.
+        detect_qtotal : used to detect ``qtotal`` if not given.
         """
         if cutoff is None:
             cutoff = QCUTOFF
@@ -240,7 +244,7 @@ class Array(object):
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
                 res.shape, data_flat.shape))
         if qtotal is None:
-            res.qtotal = qtotal = res.detect_ndarray_qtotal(data_flat, cutoff)
+            res.qtotal = qtotal = detect_qtotal(data_flat, legcharges, cutoff)
         data = []
         qdata = []
         for qindices in res._iter_all_blocks():
@@ -693,38 +697,6 @@ class Array(object):
         return res
 
     # handling of charges =====================================================
-
-    def detect_ndarray_qtotal(self, flat_array, cutoff=None):
-        """ Returns the total charge of first non-zero sector found in `a`.
-
-        Charge information is taken from self.
-        If you have only the charge data, create an empty Array(chinf, legcharges).
-
-        Parameters
-        ----------
-        flat_array : array
-            the flat numpy array from which you want to detect the charges
-        chinfo : ChargeInfo
-            the nature of the charge
-        legcharges : list of LegCharge
-            for each leg the LegCharge
-        cutoff : float
-            Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
-            Defaults to :data:`QCUTOFF`.
-
-        Returns
-        -------
-        qtotal : charge
-            the total charge fo the first non-zero (i.e. > cutoff) charge block
-        """
-        if cutoff is None:
-            cutoff = QCUTOFF
-        for qindices in self._iter_all_blocks():
-            sl = self._get_block_slices(qindices)
-            if np.any(np.abs(flat_array[sl]) > cutoff):
-                return self._get_block_charge(qindices)
-        warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.")
-        return self.chinfo.make_valid()
 
     def gauge_total_charge(self, leg, newqtotal=None, new_qconj=None):
         """Changes the total charge by adjusting the charge on a certain leg.
@@ -2443,7 +2415,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
 
     See also
     --------
-    grid_outer_calc_legcharge : can calculate one missing :class:`LegCharge` of the grid.
+    detect_grid_outer_legcharge : can calculate one missing :class:`LegCharge` of the grid.
 
 
     Examples
@@ -2491,7 +2463,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
     return res
 
 
-def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False):
+def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False):
     """Derive a LegCharge for a grid used for :func:`grid_outer`.
 
     Note: the resulting LegCharge is *not* bunched.
@@ -2510,6 +2482,10 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
     -------
     new_grid_legs : list of :class:`LegCharge`
         A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
+
+    See also
+    --------
+    detect_legcharge : similar functionality for a flat numpy array instead of a grid.
     """
     grid_shape, entries = _nontrivial_grid_entries(grid)
     if len(grid_shape) != len(grid_legs):
@@ -2541,6 +2517,101 @@ def grid_outer_calc_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False
     grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
                                            qconj)
     return grid_legs
+
+
+def detect_qtotal(flat_array, legcharges, cutoff=None):
+    """Returns the total charge (w.r.t `legs`) of first non-zero sector found in `flat_array`.
+
+    Charge information is taken from self.
+    If you have only the charge data, create an empty Array(chinf, legcharges).
+
+    Parameters
+    ----------
+    flat_array : array
+        the flat numpy array from which you want to detect the charges
+    legcharges : list of :class:`LegCharge`
+        for each leg the LegCharge.
+    cutoff : float
+        Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
+        Defaults to :data:`QCUTOFF`.
+
+    Returns
+    -------
+    qtotal : charge
+        the total charge fo the first non-zero (i.e. > cutoff) charge block
+
+    See also
+    --------
+    detect_legcharge : detects the charges of one missing LegCharge if `qtotal` is known.
+    detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
+    """
+    if cutoff is None:
+        cutoff = QCUTOFF
+    chinfo = legcharges[0].chinfo
+    test_array = zeros(chinfo, legcharges)  # Array prototype with correct charges
+    for qindices in test_array._iter_all_blocks():
+        sl = test_array._get_block_slices(qindices)
+        if np.any(np.abs(flat_array[sl]) > cutoff):
+            return test_array._get_block_charge(qindices)
+    warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.")
+    return chinfo.make_valid()
+
+
+def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, cutoff=None):
+    """calculate a missing `LegCharge` by looking for nonzero entries of a flat array.
+
+    Parameters
+    ----------
+    flat_array : ndarray
+        A flat array, in which we look for non-zero entries.
+    chargeinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
+        The nature of the charge.
+    legcharges : list of :class:`LegCharge`
+        One LegCharge for each dimension of flat_array, except for one entry which is ``None``.
+        This missing entry is to be calculated.
+    qconj : {+1, -1}
+        `qconj` for the new calculated LegCharge.
+    qtotal : charges
+        Desired total charge of the array. Defaults to zeros.
+    cutoff : float
+        Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
+        Defaults to :data:`QCUTOFF`.
+
+    Returns
+    -------
+    new_legcharges : list of :class:`LegCharge`
+        A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge,
+
+    See also
+    --------
+    detect_grid_outer_legcharge : similar functionality if the flat array is given by a 'grid'.
+    detect_qtotal : detects the total charge, if all legs are known.
+    """
+    flat_array = np.asarray(flat_array)
+    legs = list(legcharges)
+    if cutoff is None:
+        cutoff = QCUTOFF
+    if flat_array.ndim != len(legs):
+        raise ValueError("wrong number of grid_legs")
+    if any([s != l.ind_len for s, l in zip(flat_array.shape, legs) if l is not None]):
+        raise ValueError("array shape incompatible with legcharges")
+    axis = [a for a, l in enumerate(legs) if l is None]
+    if len(axis) > 1:
+        raise ValueError("can only derive one charges for one leg.")
+    axis = axis[0]
+    axis_len = flat_array.shape[axis]
+    if chargeinfo.qnumber == 0:
+        legs[axis] = LegCharge.from_trivial(axis_len, chargeinfo, qconj=qconj)
+        return legs
+    qtotal = chargeinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
+    legs_known = legs[:axis] + legs[axis+1:]
+    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=chargeinfo.qtype)
+    for i in range(axis_len):
+        A_i = np.take(flat_array, i, axis=axis)
+        qflat[i] = detect_qtotal(A_i, legs_known, cutoff)
+    qflat = chargeinfo.make_valid((qtotal - qflat) * qconj)
+    legs[axis] = LegCharge.from_qflat(chargeinfo, qflat, qconj)
+    return legs
 
 
 def trace(a, leg1=0, leg2=1):

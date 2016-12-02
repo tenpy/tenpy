@@ -316,7 +316,7 @@ def test_npc_grid_outer():
             [None, None, None, None, op_id]]  # yapf: disable
     leg_WL = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]))
     leg_WR = npc.LegCharge.from_qflat(ci, ci.make_valid([[0], [1], [-1], [0], [0]]), -1)
-    leg_WR_calc = npc.grid_outer_calc_legcharge(grid, [leg_WL, None], qconj=-1)[1]
+    leg_WR_calc = npc.detect_grid_outer_legcharge(grid, [leg_WL, None], qconj=-1)[1]
     leg_WR.test_equal(leg_WR_calc)
 
     W = npc.grid_outer(grid, [leg_WL, leg_WR])
@@ -631,6 +631,27 @@ def test_eig():
     npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), A.shape[0]**3)
 
 
+def test_charge_detection():
+    chinfo = chinfo3
+    for qtotal in [[0], [1], None]:
+        print "qtotal=", qtotal
+        shape = (4, 5, 5)
+        A = random_Array(shape, chinfo3, qtotal=qtotal)
+        Aflat = A.to_ndarray()
+        legs = A.legs[:]
+        print A
+        qt = npc.detect_qtotal(Aflat, legs)
+        npt.assert_equal(qt, chinfo.make_valid(qtotal))
+        for i in range(len(shape)):
+            correct_leg = legs[i]
+            legs[i] = None
+            legs = npc.detect_legcharge(Aflat, chinfo, legs, A.qtotal, correct_leg.qconj)
+            res_leg = legs[i]
+            nst.eq_(res_leg.qconj, correct_leg.qconj)
+            legs[i].bunch()[1].test_equal(correct_leg.bunch()[1])
+    # done
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -651,3 +672,4 @@ if __name__ == "__main__":
     test_npc_pinv()
     test_trace()
     test_eig()
+    test_charge_detection()
