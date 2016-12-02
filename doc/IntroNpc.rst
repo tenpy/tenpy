@@ -304,6 +304,8 @@ This is an implication of the fact that the singlet has a well defined value for
 For other states without fixed magnetization (e.g., :math:`|\uparrow \uparrow\rangle + |\downarrow \downarrow\rangle`)
 this would not be the case, and we could not use charge conservation.
 
+As an exercise, you can calculate the charge of `z` in the case that ``A.qtotal=5``, ``B.qtotal = -1`` and
+charge ``2`` for ``x=0``. The result is -2.
 
 .. note ::
     
