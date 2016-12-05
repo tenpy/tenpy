@@ -7,6 +7,7 @@ Submodules
 .. toctree::
 
    tenpy.networks.mpo
+   tenpy.networks.mps
 
 Module contents
 ---------------
