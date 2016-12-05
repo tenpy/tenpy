@@ -1,6 +1,6 @@
-"""Various Tensor Network Classes such as MPS,MPO etc.
+"""Various Tensor Network Classes such as MPS, MPO etc.
 """
 
-from . import MPS
+from . import mps
 
-__all__ = ['MPS']
+__all__ = ['mps']

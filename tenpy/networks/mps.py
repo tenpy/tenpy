@@ -16,9 +16,9 @@ import itertools
 
 from ..linalg import np_conserved as npc
 from ..models import lattice as lat
-
 """Canonical form conventions: B = s**nu[0] Gamma s**nu[1], nu[0] + nu[1] = 1 """
 nu = {'A': np.array([1., 0.]), 'C': np.array([0.5, 0.5]), 'B': np.array([0., 1.])}
+
 
 class MPS(object):
     """ A Matrix Product State (MPS) class that contains the sites (B) and bonds (s)
@@ -32,12 +32,14 @@ class MPS(object):
 
     .. todo : Write more documentation.
     """
-    def __init__(self, L = None, bc = 'finite', form = 'B'):
+
+    def __init__(self, L=None, bc='finite', form='B'):
         self.B = None
         self.s = None
-        self.form = nu[form].copy()# self.form = [1., 0.], [0.5, 0.5], [0., 1.] for A C B respectively.
+        self.form = nu[
+            form].copy()  # self.form = [1., 0.], [0.5, 0.5], [0., 1.] for A C B respectively.
 
-        self.bc = bc # 'finite', 'periodic', 'segment', will be overwritten from lattice if provided
+        self.bc = bc  # 'finite', 'periodic', 'segment', will be overwritten from lattice if provided
 
         #convenience info that can be read from B:
         self.L = L
@@ -56,11 +58,11 @@ class MPS(object):
             """
         self.L = len(self.B)
         self.d = self.B[0].shape[0]
-        self.dtype = self.B[0].dtype #Necessary to "promote all others??"
+        self.dtype = self.B[0].dtype  #Necessary to "promote all others??"
         self.chinfo = self.B[0].chinfo
 
     @classmethod
-    def product_imps(cls, d, p_state, dtype = np.float, lattice = None, form = 'B',charge_l = None):
+    def product_imps(cls, d, p_state, dtype=np.float, lattice=None, form='B', charge_l=None):
         """ Construct a matrix product state from a given product state
 
             d: site dimension
@@ -77,7 +79,7 @@ class MPS(object):
 
         """
         L = np.product(lattice.shape)
-        if len(p_state)!=L: raise ValueError("Length of p_state does not match lattice")
+        if len(p_state) != L: raise ValueError("Length of p_state does not match lattice")
 
         psi = cls()
         psi.B = []
@@ -87,7 +89,7 @@ class MPS(object):
         psi.bc = lattice.bc_MPS
 
         if charge_l is None:
-            charge_l = np.zeros((ci.qnumber),np.int)
+            charge_l = np.zeros((ci.qnumber), np.int)
         else:
             charge_l = np.array(charge_l)
 
@@ -101,16 +103,16 @@ class MPS(object):
                 B[p_state[i2], 0, 0] = 1.0
             p_leg = lattice.site(i2).leg
             if i2 == 0:
-                v_leg_left = npc.LegCharge.from_qflat(ci,charge_l)
+                v_leg_left = npc.LegCharge.from_qflat(ci, charge_l)
             else:
                 v_leg_left = v_leg_right
-            charge_r = np.array(lattice.site(i2).leg.charges[p_state[i2]]+v_leg_left.charges[0])
-            v_leg_right = npc.LegCharge.from_qflat(ci,charge_r)
+            charge_r = np.array(lattice.site(i2).leg.charges[p_state[i2]] + v_leg_left.charges[0])
+            v_leg_right = npc.LegCharge.from_qflat(ci, charge_r)
 
-            B = npc.Array.from_ndarray(B, ci, [p_leg,v_leg_left, v_leg_right.conj()])
+            B = npc.Array.from_ndarray(B, ci, [p_leg, v_leg_left, v_leg_right.conj()])
             B.set_leg_labels(['p', 'vL', 'vR'])
             psi.B.append(B)
-            s = np.ones(1, dtype = np.float)
+            s = np.ones(1, dtype=np.float)
             psi.s.append(s)
         psi.s.append(s)
 

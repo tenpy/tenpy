@@ -11,7 +11,7 @@ This example includes the following steps:
 """
 import tenpy.linalg.np_conserved as npc
 import numpy as np
-import tenpy.networks.MPS as MPS
+from tenpy.networks.mps import MPS
 from tenpy.models.lattice import Lattice
 from tenpy.models.lattice import Site
 
@@ -33,8 +33,13 @@ site = Site(p_leg, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
 
 #make lattice from unit cell and create product MPS 'on lattice'
 print "1) create Arrays for an Neel MPS"
-lat = Lattice([L,1],[site],order='default',bc_MPS='finite')
-lat_mps = MPS.MPS.product_imps(2, [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0], dtype = np.float, lattice = lat, form = 'B',charge_l = None)
+lat = Lattice([L, 1], [site], order='default', bc_MPS='finite')
+lat_mps = MPS.product_imps(
+    2, [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    dtype=np.float,
+    lattice=lat,
+    form='B',
+    charge_l=None)
 
 print "2) create an MPO representing the AFM Heisenberg Hamiltonian"
 
@@ -60,10 +65,12 @@ Ws = [W] * L
 
 print "3) define 'environments' left and right"
 
-envL = npc.zeros(ci, [W.get_leg('wL').conj(), lat_mps.B[0].get_leg('vL').conj(), lat_mps.B[0].get_leg('vL')])
+envL = npc.zeros(
+    ci, [W.get_leg('wL').conj(), lat_mps.B[0].get_leg('vL').conj(), lat_mps.B[0].get_leg('vL')])
 envL.set_leg_labels(['wR', 'vR', 'vR*'])
 envL[0, :, :] = npc.diag(1., envL.legs[1])
-envR = npc.zeros(ci, [W.get_leg('wR').conj(), lat_mps.B[-1].get_leg('vR').conj(), lat_mps.B[-1].get_leg('vR')])
+envR = npc.zeros(
+    ci, [W.get_leg('wR').conj(), lat_mps.B[-1].get_leg('vR').conj(), lat_mps.B[-1].get_leg('vR')])
 envR.set_leg_labels(['wL', 'vL', 'vL*'])
 envR[-1, :, :] = npc.diag(1., envR.legs[1])
 
@@ -116,6 +123,7 @@ for even_odd in [0, 1]:
         invsq = np.linalg.norm(S)
         lat_mps.s[i + 1] = S / invsq
         U = U.iscale_axis(S / invsq, 'vR')
-        lat_mps.B[i] = U.split_legs(0).iscale_axis(lat_mps.s[i]**-1, 'vL').ireplace_label('p2', 'p')
+        lat_mps.B[i] = U.split_legs(0).iscale_axis(lat_mps.s[i]**-1, 'vL').ireplace_label('p2',
+                                                                                          'p')
         lat_mps.B[i + 1] = V.split_legs(1).ireplace_label('q2', 'p')
 print "finished"
