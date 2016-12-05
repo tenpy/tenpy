@@ -9,6 +9,7 @@ Subpackages
     tenpy.algorithms
     tenpy.linalg
     tenpy.models
+    tenpy.networks
     tenpy.tools
 
 Submodules

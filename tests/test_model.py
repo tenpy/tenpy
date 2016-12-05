@@ -7,7 +7,6 @@
 
 from __future__ import division
 
-
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
@@ -34,4 +33,3 @@ lat_spin_half = lattice.Chain(2, site_spin_half)
 def test_CouplingModel():
     M = model.CouplingModel(lat_spin_half, 'open')
     M.test_sanity()
-
