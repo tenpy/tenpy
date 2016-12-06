@@ -72,7 +72,8 @@ class Site(object):
         self.state_labels = dict()
         if state_labels is not None:
             for i, v in enumerate(state_labels):
-                self.state_labels[str(v)] = i
+                if v is not None:
+                    self.state_labels[str(v)] = i
         self.opnames = set()
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.iteritems():

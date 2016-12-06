@@ -9,6 +9,23 @@ import nose.tools as nst
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
 
+from test_charges import gen_random_legcharge
+
+
+def test_site():
+    chinfo = npc.ChargeInfo([1, 3])
+    leg = gen_random_legcharge(chinfo, 8)
+    op1 = npc.Array.from_func(np.random.random, chinfo, [leg, leg.conj()], shape_kw='size')
+    op2 = npc.Array.from_func(np.random.random, chinfo, [leg, leg.conj()], shape_kw='size')
+    labels = ['up'] + [None]*6 + ['down']
+    s = site.Site(leg, labels, silly_op=op1)
+    nst.eq_(s.get_state_index('up'), 0)
+    nst.eq_(s.get_state_index('down'), 8-1)
+    nst.eq_(s.opnames, set(['silly_op', 'Id']))
+    assert(s.silly_op is op1)
+    s.add_op('op2', op2)
+    assert(s.op2 is op2)
+
 
 def test_spin_half_site():
     for conserve in ['Sz', 'parity', None]:
