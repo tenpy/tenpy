@@ -15,8 +15,8 @@ class Site(object):
 
     It has the on-site operators as attributes, e.g. ``self.Id`` is the identy.
 
-    (This class is implemented in :module:`tenpy.networks.site` but also imported in
-    :module:`tenpy.models.lattice` for convenience.)
+    (This class is implemented in :mod:`tenpy.networks.site` but also imported in
+    :mod:`tenpy.models.lattice` for convenience.)
 
     Parameters
     ----------
@@ -58,13 +58,13 @@ class Site(object):
     array([[ 0.,  1.],
            [ 0.,  0.]])
 
-    .. todo :
+    .. todo ::
         Problem: what if we later want to remove the charges / add new charges?!?
         Some onsite op's might not be compatible with charges, although the resulting
         Hamiltonian might be?
-    .. todo :
+    .. todo ::
         add option to sort by charges and save the resulting permutation.
-    .. todo :
+    .. todo ::
         need clever way to handle Jordan-Wigner strings for fermions...
     """
     def __init__(self, charges, state_labels=None, **site_ops):

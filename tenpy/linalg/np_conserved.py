@@ -121,7 +121,7 @@ class Array(object):
         whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
 
-    .. todo :
+    .. todo ::
         remove chargeinfo from parameters, instead read it out from 'legcharges'.
         0D-arrays are anyways forbidden....
     """

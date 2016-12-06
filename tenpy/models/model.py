@@ -22,7 +22,7 @@ it might be simpler to specify the MPO explicitly.
 Of course, we also provide ways to transform a :class:`NearestNeighborModel` into a
 :class:`MPOModel` and vice versa, as far as this is possible.
 
-.. todo :
+.. todo ::
     User guide: introduction how to create a new model
 """
 
@@ -70,7 +70,7 @@ class CouplingModel(object):
     H_onsite : list of :class:`npc.Array`
         For each site (in MPS order) the onsite part of the Hamiltonian.
 
-    .. todo :
+    .. todo ::
         implement ...
         Some way to generalize to couplings involving multiple sites?
     """
@@ -319,7 +319,7 @@ class NearestNeighborModel(object):
     U_param : dict
         TEBD parameters for which `U_bond` was calculated.
 
-    .. todo :
+    .. todo ::
         implement
     """
     def __init__(self, lattice, H_bond):
@@ -349,7 +349,7 @@ class MPOModel(object):
     H_MPO : :class:`tenpy.tn.mpo.MPO`
         MPO representation of the Hamiltonian.
 
-    .. todo :
+    .. todo ::
         implement.
         Should it host the environment, similar as NearestNeighborModel hosts U?
     """

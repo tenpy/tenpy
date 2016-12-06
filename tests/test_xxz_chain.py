@@ -1,6 +1,6 @@
 """test of :class:`tenpy.models.XXZChain`.
 
-.. todo :
+.. todo ::
     more tests...
 """
 

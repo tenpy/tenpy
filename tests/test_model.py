@@ -1,6 +1,6 @@
 """A collection of tests for (classes in) :module:`tenpy.models.model`.
 
-.. todo :
+.. todo ::
     move example sites to models.lattice
     A lot more to test: conversions
 """

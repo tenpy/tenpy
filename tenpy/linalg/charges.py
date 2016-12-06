@@ -32,8 +32,8 @@ class ChargeInfo(object):
     Saves info about the nature of the charge of a tensor.
     Provides :meth:`make_valid` for taking modulo `m`.
 
-    (This class is implemented in :module:`tenpy.linalg.charges` but also imported in
-    :module:`tenpy.linalg.np_conserved` for convenience.)
+    (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
+    :mod:`tenpy.linalg.np_conserved` for convenience.)
 
     Parameters
     ----------
@@ -158,8 +158,8 @@ class LegCharge(object):
     This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
     See :doc:`../IntroNpc` for more details.
 
-    (This class is implemented in :module:`tenpy.linalg.charges` but also imported in
-    :module:`tenpy.linalg.np_conserved` for convenience.)
+    (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
+    :mod:`tenpy.linalg.np_conserved` for convenience.)
 
     Parameters
     ----------
@@ -624,8 +624,8 @@ class LegPipe(LegCharge):
     The pipe itself is a :class:`LegCharge`, with indices running from 0 to the product of the
     individual legs' `ind_len`, corresponding to all possible combinations of input leg indices.
 
-    (This class is implemented in :module:`tenpy.linalg.charges` but also imported in
-    :module:`tenpy.linalg.np_conserved` for convenience.)
+    (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
+    :mod:`tenpy.linalg.np_conserved` for convenience.)
 
     Parameters
     ----------

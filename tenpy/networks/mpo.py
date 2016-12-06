@@ -51,7 +51,7 @@ class MPO(object):
     ----------
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
-    Ws : list of :class:`npc.Array`
+    Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Should have labels ``wL, wR, p, p*``.
     idL : None | list of int
         Indices on the bonds, which correpond to 'only identities to the left'.
@@ -66,7 +66,7 @@ class MPO(object):
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
-    Ws : list of :class:`npc.Array``
+    Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``wL, wR, p, p*``
     bc : {'finite', 'infinite'}
         Boundary conditions.
@@ -76,9 +76,6 @@ class MPO(object):
     idR : list of {int | None}
         Indices on the bonds, which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
-
-    .. todo :
-        how to best document the types as npc.Array ?
     """
 
     #: valid boundary conditions.
@@ -348,7 +345,7 @@ class MPOGraph(object):
 
         Returns
         -------
-        grid : list of list of {None|Array}
+        grid : list of list of {None | :class:`~tenpy.linalg.np_conserved.Array`}
             The grid W[i] with operators
         """
         site = self.sites[i]
@@ -357,7 +354,6 @@ class MPOGraph(object):
                 if entry is None:
                     continue
                 opname, strength = entry[0]
-                # TODO: allow ``0 + npc.Array``....
                 res = strength * site.get_op(opname)
                 for opname, strength in entry[1:]:
                     res = res + strength * site.get_op(opname)

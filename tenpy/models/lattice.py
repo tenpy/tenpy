@@ -1,11 +1,11 @@
 """Classes to define the lattice structure of a model.
 
-.. todo :
+.. todo ::
     documentation, how to generate new lattices, examples, ...
-.. todo :
+.. todo ::
     provide a way to generate the most common 'Sites'
     (spin half, hard-core bosons, bosons, fermions, fermion with spin).
-.. todo :
+.. todo ::
     implement some __repr__ and/or __str__...
     equality tests?
 """
@@ -14,11 +14,11 @@ from __future__ import division
 
 import numpy as np
 
-from ..linalg import np_conserved as npc
 from ..tools.misc import to_iterable
 from ..networks.site import Site
 
 __all__ = ['Site', 'Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
+
 
 class Lattice(object):
     r"""A general lattice.
@@ -64,7 +64,7 @@ class Lattice(object):
         the length in each direction.
     shape : tuple of int
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
-    chinfo : :class:`npc.ChargeInfo`
+    chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
         The nature of the charge (which is the same for all sites).
     unit_cell : list of :class:`Site`
         the lattice sites making up a unit cell of the lattice.
@@ -91,10 +91,10 @@ class Lattice(object):
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
 
-    .. todo :
+    .. todo ::
         what are valid values for MPS boundary conditions? -> need to define MPS class first...
         write & use a function `_valid_bc_MPS`.
-    .. todo :
+    .. todo ::
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
     def __init__(self,
@@ -391,7 +391,7 @@ class Lattice(object):
         >>> np.all(A_res[:, :, u] == A_u_res[:, :])
         True
 
-        .. todo :
+        .. todo ::
             make sure this function is used for expectation values...
         """
         axes = to_iterable(axes)

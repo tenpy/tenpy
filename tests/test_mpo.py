@@ -1,6 +1,6 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`.
 
-.. todo :
+.. todo ::
     A lot more to test...
 """
 

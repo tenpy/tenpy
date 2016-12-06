@@ -3,10 +3,10 @@
 Although the XXZ chain is contained in the more general `SpinChain`,
 the idea of this class is to serve as a pedagogical example for a 'model'.
 
-.. todo :
+.. todo ::
     `SpinChain` is not implemented yet. Add crossref in sphinx format.
 
-.. todo :
+.. todo ::
     Add something like the old tenpy.models.model.set_var to tools and use it.
 """
 
