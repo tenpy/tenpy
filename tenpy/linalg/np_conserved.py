@@ -698,7 +698,7 @@ class Array(object):
 
     # handling of charges =====================================================
 
-    def gauge_total_charge(self, leg, newqtotal=None, new_qconj=None):
+    def gauge_total_charge(self, axis, newqtotal=None, new_qconj=None):
         """Changes the total charge by adjusting the charge on a certain leg.
 
         The total charge is given by finding a nonzero entry [i1, i2, ...] and calculating::
@@ -712,7 +712,7 @@ class Array(object):
 
         Parameters
         ----------
-        leg : int or string
+        axis : int or string
             the new leg (index or label), for which the charge is changed
         newqtotal : charge values, defaults to 0
             the new total charge
@@ -727,7 +727,7 @@ class Array(object):
             The new leg will be a :class`LegCharge`, even if the old leg was a :class:`LegPipe`.
         """
         res = self.copy(deep=False)
-        ax = self.get_leg_index(leg)
+        ax = self.get_leg_index(axis)
         old_qconj = self.legs[ax].qconj
         if new_qconj is None:
             new_qconj = old_qconj

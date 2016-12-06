@@ -14,6 +14,9 @@ Global Changes
 
   Files outside of the library (and in `tests/`, `examples/`) should use
   absolute imports, e.g. ``import tenpy.algorithms.tebd``
+- renamed `tenpy/mps/` to `tenpy/networks`, since it containes various tensor networks.
+- added :class:`~tenpy.networks.site.Site` describing the local physical sites by providing the physical LegCharge and
+  onsite operators.
 
 
 np_conserved
@@ -38,3 +41,4 @@ tools
 - moved stuff for fitting to :mod:`tenpy.tools.fit`
 - enhanced :func:`tenpy.tools.string.vert_join` for nice formatting
 - moved (parts of) old `cluster/omp.py` to :mod:`tenpy.tools.process`
+

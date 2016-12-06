@@ -102,7 +102,7 @@ class MPO(object):
         self.test_sanity()
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check. Raises Errors if something is wrong."""
         assert self.L == len(self.sites)
         if self.bc not in self._valid_bc:
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
