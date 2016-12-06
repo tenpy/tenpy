@@ -10,13 +10,14 @@ import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
 
-from tenpy.networks import mpo
+from tenpy.networks import mpo, site
 
-from test_model import site_spin_half  # TODO: example sites....
+site_spin_half = site.spin_half_site(conserve='Sz')
 
 def test_MPOGraph(L=4):
     for L in [4, 2, 1]:
         print L
         g = mpo.MPOGraph([site_spin_half]*L, 'finite')
         g.test_sanity()
-        print g
+        print repr(g)
+        print str(g)

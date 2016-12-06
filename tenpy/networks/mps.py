@@ -60,7 +60,7 @@ class MPS(object):
                 (where we save the part in the brackets ``[ ... ]``).
     'infinite'  infinite MPS (iMPS): we save a 'MPS unit cell` ``[s0 G0 s1 G1 ... s{L-1} G{L-1}]``
                 which is repeated periodically, identifying all indices modulo ``self.L``.
-                In particular, the last bond ``L`` is identified with ``0`.
+                In particular, the last bond ``L`` is identified with ``0``.
                 (The MPS unit cell can differ from a lattice unit cell).
                 bond is identified with the first one.
     ==========  ===================================================================================

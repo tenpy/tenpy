@@ -1,7 +1,7 @@
 """Defines a class describing the local physical Hilbert space.
 
 .. todo ::
-    implement more standard sites, e.g. fermions, bosons, hard-core-bosons, ...
+    implement more standard sites, e.g. spin-full fermions, spin-S, ...
 """
 from __future__ import division
 
@@ -62,10 +62,10 @@ class Site(object):
         Problem: what if we later want to remove the charges / add new charges?!?
         Some onsite op's might not be compatible with charges, although the resulting
         Hamiltonian might be?
+
     .. todo ::
         add option to sort by charges and save the resulting permutation.
-    .. todo ::
-        need clever way to handle Jordan-Wigner strings for fermions...
+        Use it where helpful, e.g. for boson_site(conserve=parity) and co.
     """
     def __init__(self, charges, state_labels=None, **site_ops):
         self.leg = charges
@@ -140,6 +140,22 @@ class Site(object):
         setattr(self, name, op)
         self.opnames.add(name)
 
+    def rename_op(self, old_name, new_name):
+        """Rename an added operator.
+
+        Parameters
+        ----------
+        old_name : str
+            The old name of the operator.
+        new_name : str
+            The new name of the operator.
+        """
+        if old_name == new_name:
+            return
+        op = getattr(self, old_name)
+        setattr(self, new_name, op)
+        delattr(self, old_name)
+
     def get_state_index(self, label):
         """return index of a basis state from its label.
 
@@ -164,6 +180,7 @@ class Site(object):
         """return operator of given name."""
         return getattr(self, name)
 
+
 # ------------------------------------------------------------------------------
 # functions for generating the most common local sites.
 
@@ -171,31 +188,39 @@ class Site(object):
 def spin_half_site(conserve='Sz'):
     """Generate spin-1/2 site.
 
-    Local states are spin-up (0) and spin-down (1).
-    Local operators are spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``.
+    Local states are ``up``(0) and ``down``(1).
+    Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
+    ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
 
-    ============== ====  ======================
+    ============== ====  ==========================
     `conserve`     qmod  onsite operators
-    ============== ====  ======================
+    ============== ====  ==========================
     ``'Sz'``       [1]   ``Id, Sz, Sp, Sm``
-    ``'parity'``   [2]   additional ``Sx, Sy``
-    ``None``       []    all above
-    ============== ====  ======================
+    ``'parity'``   [2]   ``Id, Sz, Sp, Sm, Sx, Sy``
+    ``None``       []    ``Id, Sz, Sp, Sm, Sx, Sy``
+    ============== ====  ==========================
+
+    ==============  ================================================
+    operator        description
+    ==============  ================================================
+    ``Id``          identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``  spin components :math:`S^{x,y,z}`,
+                    equal to half the Pauli matrices.
+    ``Sp, Sm``      spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    ==============  ================================================
 
     Parameters
     ----------
     conserve : str
         Defines what is conserved, see table above.
 
-
     Returns
     -------
     site : class:`Site`
         Spin-1/2 site with `leg`, `leg.chinfo` and onsite operators.
-
     """
     if conserve not in ['Sz', 'parity', None]:
-        raise ValueError("invalid 'conserve': " + repr(conserve))
+        raise ValueError("invalid `conserve`: " + repr(conserve))
     Sx = [[0., 0.5], [0.5, 0.]]
     Sy = [[0., -0.5j], [+0.5j, 0.]]
     Sz = [[0.5, 0.], [0., -0.5]]
@@ -215,5 +240,145 @@ def spin_half_site(conserve='Sz'):
     site = Site(leg, ['up', 'down'], **ops)
     return site
 
-def boson_site(Nc=2, conserve='N'):
-    raise NotImplementedError()
+
+def fermion_site(conserve='N', filling=0.5):
+    r"""Create a :class:`Site` for spin-less fermions.
+
+    Local states are ``empty`` and ``occupied``.
+    Local operators can be built from creation operators.
+
+    .. warning :
+        Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
+        otherwise you just describe hardcore bosons!
+
+    ============== ====  ==========================
+    `conserve`     qmod  onsite operators
+    ============== ====  ==========================
+    ``'N'``        [1]   ``Id, JW, C, Cd, N``
+    ``'parity'``   [2]   ``Id, JW, C, Cd, N``
+    ``None``       []    ``Id, JW, C, Cd, N``
+    ============== ====  ==========================
+
+    ==============  ========================================
+    operator        description
+    ==============  ========================================
+    ``Id``          identity :math:`\mathbb{1}`
+    ``JW``          Sign for the Jordan-Wigner string.
+    ``C``           Annihilation operator :math:`c`
+    ``Cd``          Creation operator :math:`c^\dagger`
+    ``N``           Number operator :math:`n= c^\dagger c`
+    ``dN``          :math:`\delta n := n - filling`
+    ``dNdN``        :math:`(\delta n)^2`
+    ==============  ========================================
+
+    Parameters
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+
+    Returns
+    -------
+    site : class:`Site`
+        (Spin-less) fermion site with `leg`, `leg.chinfo` and onsite operators.
+
+    .. todo ::
+        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
+
+    .. todo ::
+        Should we define onsite operators ``n-filling`` option for filling?
+    """
+    if conserve not in ['N', 'parity', None]:
+        raise ValueError("invalid `conserve`: " + repr(conserve))
+    JW = np.array([[0., 0.], [0., 1.]])
+    C = np.array([[0., 1.], [0., 0.]])
+    Cd = np.array([[0., 0.], [1., 0.]])
+    N = np.array([[0., 0.], [0., 1.]])
+    dN = np.array([[-filling, 0.], [0., 1.-filling]])
+    dNdN = dN**2   # (element wise power is fine since dN is diagonal)
+    ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
+    if conserve == 'N':
+        chinfo = npc.ChargeInfo([1], ['N'])
+        leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+    elif conserve == 'parity':
+        chinfo = npc.ChargeInfo([2], ['parity'])
+        leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+    else:
+        leg = npc.LegCharge.from_trivial(2)
+    return Site(leg, ['empty', 'occupied'], **ops)
+
+
+def boson_site(Nmax=1, conserve='N', filling=0.):
+    r"""Create a :class:`Site` for up to `Nmax` bosons.
+
+    Local states are ``vac, 1, 2, ... , Nc``.
+    Local operators can be built from creation operators.
+
+
+    ============== ====  ==================================
+    `conserve`     qmod  onsite operators
+    ============== ====  ==================================
+    ``'N'``        [1]   ``Id, B, Bd, N, NN, dN, dNdN, P``
+    ``'parity'``   [2]   ``Id, B, Bd, N, NN, dN, dNdN, P``
+    ``None``       []    ``Id, B, Bd, N, NN, dN, dNdN, P``
+    ============== ====  ==================================
+
+    ==============  ========================================
+    operator        description
+    ==============  ========================================
+    ``Id``          identity :math:`\mathbb{1}`
+    ``B``           Annihilation operator :math:`b`
+    ``Bd``          Creation operator :math:`b^\dagger`
+    ``N``           Number operator :math:`N= b^\dagger b`
+    ``NN``          :math:`N^2`
+    ``dN``          :math:`\delta N := N - filling`
+    ``dNdN``        :math:`(\delta N)^2`
+    ``P``           Parity :math:`Id - 2 (N \mod 2)`.
+    ==============  ========================================
+
+    Parameters
+    ----------
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
+        The default ``Nmax=1`` describes hard-core bosons.
+    conserve : str
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+
+    Returns
+    -------
+    site : class:`Site`
+        Bosonic site with `leg`, `leg.chinfo` and onsite operators.
+
+    .. todo ::
+        should sort by charges for ``conserve='parity'``!
+    """
+    if conserve not in ['N', 'parity', None]:
+        raise ValueError("invalid `conserve`: " + repr(conserve))
+    dim = Nmax + 1
+    if dim < 2:
+        raise ValueError("local dimension should be larger than 1....")
+    B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
+    for n in xrange(1, dim):
+        B[n-1, n] = np.sqrt(n)
+    Bd = np.transpose(B) # .conj() doesn't do anything
+    # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
+    Ndiag = np.arange(dim, dtype=np.float)
+    N = np.diag(Ndiag)
+    NN = np.diag(Ndiag**2)
+    dN = np.diag(Ndiag - filling)
+    dNdN = np.diag((Ndiag - filling)**2)
+    P = np.diag(1.-2.*np.mod(Ndiag, 2))
+    ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
+    if conserve == 'N':
+        chinfo = npc.ChargeInfo([1], ['N'])
+        leg = npc.LegCharge.from_qflat(chinfo, range(dim))
+    elif conserve == 'parity':
+        chinfo = npc.ChargeInfo([2], ['parity'])
+        leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
+        # TODO: sort. Maybe use a pipe?
+    else:
+        leg = npc.LegCharge.from_trivial(dim)
+    return Site(leg, ['vac'] + [str(n) for n in range(1, dim)], **ops)
