@@ -47,6 +47,10 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
         # 3) local physical site
         site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
+        # NOTE: spin-1/2 is so common that there is a predefined `site` for it.
+        # you could replcaes step 1)-3) by:
+        # from tenpy.networks.site import spin_half_site
+        # site = spin_half_site(conserve='Sz')
         # 4) lattice
         lat = Chain(L, site, bc_MPS=bc_MPS)
         bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'

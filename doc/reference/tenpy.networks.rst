@@ -8,6 +8,7 @@ Submodules
 
    tenpy.networks.mpo
    tenpy.networks.mps
+   tenpy.networks.site
 
 Module contents
 ---------------

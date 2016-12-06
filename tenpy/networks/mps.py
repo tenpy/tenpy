@@ -46,6 +46,7 @@ class MPS(object):
 
     Valid boundary conditions are the following:
 
+    ==========  ===================================================================================
     `bc`        description
     ==========  ===================================================================================
     'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is acchieved
@@ -62,6 +63,7 @@ class MPS(object):
                 In particular, the last bond ``L`` is identified with ``0`.
                 (The MPS unit cell can differ from a lattice unit cell).
                 bond is identified with the first one.
+    ==========  ===================================================================================
 
     We store one 3-leg tensor `_Bs[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
     ``0 <= i < L``.  Additionally, we store `L`+1 singular value arrays `s[ib]` on each bond
@@ -70,9 +72,9 @@ class MPS(object):
     :meth:`get_theta` and :meth:`get_B` to access the Bs:
     these functions take care of various possible canonical forms.
 
-
+    ==========  ===================================================================================
     `nu`        description
-    ==========  =================================================================================
+    ==========  ===================================================================================
     ``'B'``     right canonical: ``B[i] = -- Gamma[i] -- s[i+1]--``
                 Algorithms are based on this form, so this form should be preferred to avoid
                 problems
@@ -82,6 +84,7 @@ class MPS(object):
                 based on the ``'B'`` form).
     ``None``    Non-canoncial form. No singular values are taken care of in :meth:`get_theta`
                 and co. You should use :meth:`canoncial_from` (or similar) before using algorithms!
+    ==========  ===================================================================================
 
 
     Parameters

@@ -172,18 +172,27 @@ def spin_half_site(conserve='Sz'):
     """Generate spin-1/2 site.
 
     Local states are spin-up (0) and spin-down (1).
-    Local operators are spin-1/2 operators, e.g. :math:`Sz = [[0.5, 0.], [0., -0.5]]``.
+    Local operators are spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``.
 
-    ``conserve``   onsite operators
-    ============== =======================
-    ``'Sz'``       ``Id, Sz, Sp, Sm``
-    ``'parity'``   additional ``Sx, Sy``
-    ``None``       all above
+    ============== ====  ======================
+    `conserve`     qmod  onsite operators
+    ============== ====  ======================
+    ``'Sz'``       [1]   ``Id, Sz, Sp, Sm``
+    ``'parity'``   [2]   additional ``Sx, Sy``
+    ``None``       []    all above
+    ============== ====  ======================
+
+    Parameters
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+
 
     Returns
     -------
     site : class:`Site`
-        With `leg`, `leg.chinfo` and onsite operators as described above.
+        Spin-1/2 site with `leg`, `leg.chinfo` and onsite operators.
+
     """
     if conserve not in ['Sz', 'parity', None]:
         raise ValueError("invalid 'conserve': " + repr(conserve))
@@ -195,12 +204,16 @@ def spin_half_site(conserve='Sz'):
     ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
     if conserve == 'Sz':
         chinfo = npc.ChargeInfo([1], ['2*Sz'])
+        leg = npc.LegCharge.from_qflat(chinfo, [1, -1])
     else:
         ops.update(Sx=Sx, Sy=Sy)
         if conserve == 'parity':
-            chinfo = npc.ChargeInfo([1], ['2*Sz'])
+            chinfo = npc.ChargeInfo([2], ['parity'])
+            leg = npc.LegCharge.from_qflat(chinfo, [1, 0])  # [1, -1] would need ``qmod=[4]``...
         else:
-            chinfo = npc.ChargeInfo()  # trivial charges
-    leg = npc.LegCharge.from_qflat(chinfo, [1, -1])
+            leg = npc.LegCharge.from_trivial(2)
     site = Site(leg, ['up', 'down'], **ops)
     return site
+
+def boson_site(Nc=2, conserve='N'):
+    raise NotImplementedError()
