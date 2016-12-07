@@ -227,32 +227,6 @@ class MPS(object):
         SVs = [[1.]] * (L + 1)
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
-    # @classmethod
-    # def product_af_example(cls,L,form = 'B'):
-    #     psi = cls()
-    #     psi.B = []
-    #     psi.s = []
-    #     psi.form = nu[form].copy()
-    #     # create a ChargeInfo to specify the nature of the charge
-    #     ci = npc.ChargeInfo([1], ['2*Sz'])
-    #
-    #     # create LegCharges on physical leg and even/odd bonds
-    #     p_leg = npc.LegCharge.from_qflat(ci, [[1], [-1]])  # charges for up, down
-    #     v_leg_even = npc.LegCharge.from_qflat(ci, [[0]])
-    #     v_leg_odd = npc.LegCharge.from_qflat(ci, [[1]])
-    #
-    #     B_even = npc.zeros(ci, [v_leg_even, v_leg_odd.conj(), p_leg])
-    #     B_odd = npc.zeros(ci, [v_leg_odd, v_leg_even.conj(), p_leg])
-    #     B_even[0, 0, 0] = 1.  # up
-    #     B_odd[0, 0, 1] = 1.  # down
-    #
-    #     for B in [B_even, B_odd]:
-    #         B.set_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
-    #
-    #     psi.B = [B_even, B_odd] * (L // 2) + [B_even] * (L % 2)  # (right-canonical)
-    #     psi.s = [np.ones(1)] * L
-    #     return psi
-
     @property
     def L(self):
         """Number of physical sites. For an iMPS the len of the MPS unit cell."""
@@ -275,38 +249,86 @@ class MPS(object):
         # TODO: for a finitie MPS only on the non-trivial bonds?
         return [len(s) for s in self._S]
 
+    def _to_valid_index(self, i):
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError, "i = %s out of bounds for finite MPS" % i
+        return i
+
     def get_B(self, i, form='B', copy=False):
         """return `B` in canonical form at site `i`.
 
         .. todo ::
             take care of `form`!!!
         """
+        i = self._to_valid_index(i)
         if copy:
-            return self._B[i % self.L].copy(deep=True)
+            return self._B[i].copy(deep=True)
         else:
-            return self._B[i % self.L]
+            return self._B[i]
 
     def set_B(self, i, B, form='B'):
         """set `B` at site `i`. The given `B` is in canonical form described by `form`."""
+        i = self._to_valid_index(i)
         if self._valid_forms[form] != self.form:
             # TODO: what if form is different???
             raise NotImplementedError()
-        self._B[i % self.L] = B
+        self._B[i] = B
 
     def get_SL(self, i):
         """return singular values on the left of site `i`"""
-        return self._S[i % self.L]
+        i = self._to_valid_index(i)
+        return self._S[i]
 
     def get_SR(self, i):
         """set singular values on the right of site `i`"""
-        return self._S[(i % self.L) + 1]
+        i = self._to_valid_index(i)
+        return self._S[(i + 1)]
 
     def set_SL(self, i, S):
         """set singular values on the left of site `i`"""
-        # TODO: handle finite bc correctly!!!
-        self._S[(i % self.L)] = S
+        i = self._to_valid_index(i)
+        self._S[i] = S
 
     def set_SR(self, i, S):
         """set singular values on the left of site `i`"""
-        # TODO: handle finite bc correctly!!!
-        self._S[(i % self.L) + 1] = S
+        i = self._to_valid_index(i)
+        self._S[(i + 1)] = S
+
+    def get_theta(self,i,n = 2):
+        """ Returns the n-site wavefunction
+            th = s G_i1 s G_i2 . . . G_in s.
+            If n != 1, we will stick to the convention of
+            calling the physical labels p0, p1, ....
+            If n = 1, we will label the physical leg p in order
+            to be consistent with the B notation.
+        """
+        i = self._to_valid_index(i)
+        if self.finite:
+            if (i < 0 or i + n > self.L): raise ValueError, "i = %s out of bounds" % i
+
+        fL = 1 - self.form[0] #left factor
+        fR = 1 - self.form[1] #right factor
+        theta = self.get_B(i,copy = True)
+        sL = self.get_SL(i)
+        theta.iscale_axis(sL**fL,axis = 'vL')
+
+        if n == 1:
+            sR = self.get_SR(i)
+            return theta.iscale_axis(sR**fR, axis = 'vR')
+
+        theta.ireplace_label('p','p0')
+        sofar = 1
+        for i in range(i+1,i + n):
+            B = self.get_B(i,copy=True)
+            #TODO: MS to JH, not sure, you know more about this copy stuff
+            B.ireplace_label('p','p'+str(sofar))
+            if sofar == n-1:
+                sR = self.get_SR(i)
+                B = B.scale_axis(sR**fR, axis = 'vR' )
+            theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
+            sofar+=1
+        return theta
