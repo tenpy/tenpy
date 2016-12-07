@@ -40,12 +40,12 @@ class MPO(object):
     An MPO can be applied to an MPS, which increases the `chi` of the MPS by a *factor* of the
     MPO bond dimension.
 
-    In general, you can view the MPO as an MPS with larger physical space and bring it into
-    canoncial form. However, unlike for an MPS, this doesn't simplify calculations.
-
-    However, if an MPO describes a sum of local terms (as most Hamiltonians are),
+    If an MPO describes a sum of local terms (e.g. most Hamiltonians),
     some bond indices correspond to 'only identities to the left/right'.
     We store these indices in `idL` and `idR` (if there are such indices).
+
+    (In general, you can view the MPO as an MPS with larger physical space and bring it into
+    canoncial form. However, unlike for an MPS, this doesn't simplify calculations.)
 
     Parameters
     ----------
