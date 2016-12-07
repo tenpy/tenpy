@@ -514,7 +514,7 @@ def test_npc_outer():
 def test_npc_svd():
     for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
         print "m, n = ", m, n
-        tol_NULP = max(max(m, n)**4, 100)
+        tol_NULP = max(20 * max(m, n)**3, 1000)
         for i in xrange(1000):
             A = random_Array((m, n), chinfo3, sort=True)
             if A.stored_blocks > 0:
@@ -550,7 +550,7 @@ def test_npc_svd():
     Aflat = A.to_ndarray()
     U, S, VH = npc.svd(A)
     recalc = npc.tensordot(U.scale_axis(S, axis=-1), VH, axes=1)
-    tol_NULP = max(max(A.shape)**4, 1000)
+    tol_NULP = max(20 * max(A.shape)**3, 1000)
     npt.assert_array_almost_equal_nulp(recalc.to_ndarray(), Aflat, tol_NULP)
 
 

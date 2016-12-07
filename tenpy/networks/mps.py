@@ -25,26 +25,29 @@ We use the following label convention (arrows indicate `qconj`)::
 
 from __future__ import division
 import numpy as np
-import itertools
 
 from ..linalg import np_conserved as npc
+from ..tools.misc import to_iterable
 
 
 class MPS(object):
-    r""" A Matrix Product State (MPS) class that contains the sites (B) and bonds (s)
 
-    We store in this MPS class the tensors corresponding to sites (labelled B),
-    and the matrices corresponding to bonds (labelled s). Note that we have
+    r"""An (infinite) Matrix Product State (MPS) that contains the sites (`B`) and bonds (`s`)
+
+    We store in this MPS class the tensors corresponding to sites (labelled `B`),
+    and the singular values of the bonds (labelled `S`). Note that we have
     len(B)+1 entries for s, with the first corresponding to the bond to the left
     of the first site.
 
-    We restrict ourselves to normalized states (i.e. ``np.linalg.norm(psi._S[ib]) == 1.``).
+    We restrict ourselves to normalized states (i.e. ``np.linalg.norm(psi._S[i]) == 1`` up to
+    roundoff errors).
 
     For efficient simulations, it is crucial that the MPS is in a 'canonical form'.
     The different forms and boundary conditions are easiest described in Vidal's
     :math:`\Gamma, \Lambda` notation [1].
 
-    Valid boundary conditions are the following:
+    Valid MPS boundary conditions (not to confuse with `bc_coupling` of
+    :class:`tenpy.models.model.CouplingModel`)  are the following:
 
     ==========  ===================================================================================
     `bc`        description
@@ -65,56 +68,73 @@ class MPS(object):
                 bond is identified with the first one.
     ==========  ===================================================================================
 
-    We store one 3-leg tensor `_Bs[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
-    ``0 <= i < L``.  Additionally, we store `L`+1 singular value arrays `s[ib]` on each bond
-    ``0 <= ib <= L``. ``_Ss[ib]`` gives the singlur values on the bond ``i-1, i``.
-    To take care of different canonical forms, algorithms should use functions like
-    :meth:`get_theta` and :meth:`get_B` to access the Bs:
-    these functions take care of various possible canonical forms.
+    We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
+    ``0 <= i < L``.  Additionally, we store `L`+1 singular value arrays `_S[ib]` on each bond
+    ``0 <= ib <= L`` (independent of the boundary conditions).
+    ``_Ss[ib]`` gives the singlur values on the bond ``i-1, i``.
 
-    ==========  ===================================================================================
-    `nu`        description
-    ==========  ===================================================================================
-    ``'B'``     right canonical: ``B[i] = -- Gamma[i] -- s[i+1]--``
-                Algorithms are based on this form, so this form should be preferred to avoid
-                problems
-    ``'C'``     symmetric form: ``B[i] = -- s[i]**0.5 -- Gamma[i] -- s[i+1]**0.5--``
-    ``'A'``     left canonical: ``B[i] = -- s[i] -- Gamma[i] --``.
-                For stability reasons, we recommend not to use this form (because algorithms are
-                based on the ``'B'`` form).
-    ``None``    Non-canoncial form. No singular values are taken care of in :meth:`get_theta`
-                and co. You should use :meth:`canoncial_from` (or similar) before using algorithms!
-    ==========  ===================================================================================
+    An MPS can be in different 'canonical forms' (see [1], [2]).
+    To take care of the different canonical forms, algorithms should use functions like
+    :meth:`get_theta`, :meth:`get_B` and :meth:`set_B` instead of accessing them directly,
+    as they return the `B` in the desired form (which can be chosed as an argument).
+
+    ======== ========== =======================================================================
+    `form`   tuple      description
+    ======== ========== =======================================================================
+    ``'B'``  (0, 1)     right canonical: ``_B[i] = -- Gamma[i] -- s[i+1]--``
+                        The default form, which algorithms asssume.
+    ``'C'``  (0.5, 0.5) symmetric form: ``_B[i] = -- s[i]**0.5 -- Gamma[i] -- s[i+1]**0.5--``
+    ``'A'``  (1, 0)     left canonical: ``_B[i] = -- s[i] -- Gamma[i] --``.
+                        For stability reasons, we recommend to *not* use this form.
+    ``'G'``  (0, 0)     Save only the `Gamma`, ``_B[i] = --Gamma[i] -- ``.
+                        For stability reasons, we recommend to *not* use this form.
+    ``None`` ``None``   General non-canoncial form.
+                        Valid form for initialization, but you need to call
+                        :meth:`canonicalize` (or sub-functions) before using algorithms.
+    ======== ========== =======================================================================
 
 
     Parameters
     ----------
-    arg : type
-        TODO: document __init__ arguments here
+    sites : list of :class:`~tenpy.networks.site.Site`
+        Defines the local Hilbert space for each site.
+    Bs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
+    SVs : list of 1D array
+        The singular values on *each* bond. Should always have length `L+1`.
+        Entries out of :attr:`nontrivial_bonds` are ignored.
+    bc : {'finite' | 'segment' | 'infinite'}
+        Boundary conditions as described in above table.
+    form : (list of) {``'B'``| ``'A'``| ``'C'``| ``None``}
+        The form the Bs. A single choice holds for all of the entries.
 
     Attributes
     ----------
     L
-    bond_inds
     chi
-    sites : list of :class:`~tenpy.models.lattice.Site`
+    finite
+    nontrivial_bonds
+    sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site.
     bc : {'finite', 'segment', 'infinite'}
         Boundary conditions as described in above table.
-    form : None | (float, float)
-        Describes the canonical form. ``None`` means non-canonical form, otherwise the stored
-        `_Bs` are ``s**form[0] -- Gamma -- s**form[1]``.
-        Can be compared to entries of `_valid_forms`
+    form : list of {``None`` | tuple(float, float)}
+        Describes the canonical form on each site.
+        ``None`` means non-canonical form.
+        For ``form = (nuL, nuR)``, the stored `_B[i]` are
+        ``s**form[0] -- Gamma -- s**form[1]`` (in Vidal's notation).
     dtype : type or string
         The data type of the `_Bs`.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : list of 1D arrays
+    _S : None | list of 1D arrays
         The singular values on each virtual bond, length ``L+1``.
-        ``_S[i]`` is to the left of ``_B[i]``.
-        We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`.
+        May be ``None`` if the MPS is not in canonical form.
+        Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
+        We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
+        take proper care of the boundary conditions.
     _valid_forms : dict
         Mapping for canonical forms to a tuple ``(nuL, nuR)` such that
         ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` can be saved.
@@ -130,39 +150,67 @@ class MPS(object):
     [2] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
     """
 
-    #: Canonical form conventions: B = s**nu[0]--Gamma--s**nu[1].
-    #: For canonical forms, ``nu[0] + nu[1] = 1``
+    # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
+    # For the canonical forms, ``nu[0] + nu[1] = 1``
     _valid_forms = {
         'A': (1., 0.),
         'C': (0.5, 0.5),
         'B': (0., 1.),
-        None: (0., 0.),  # not in any canonical form
+        'G': (0., 0.),  # like Vidal's `Gamma`.
+        None: None,  # means 'not in any canonical form'
     }
 
-    #: valid boundary conditions. Don't overwrite this!
+    # valid boundary conditions. Don't overwrite this!
     _valid_bc = ('finite', 'segment', 'infinite')
 
     def __init__(self, sites, Bs, SVs, bc='finite', form='B'):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = Bs[0].dtype
+        self.form = self._parse_form(form)
+        self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True) for B in Bs]
-        self._S = [np.array(s, dtype=np.float) for s in SVs]
-        self.form = self._valid_forms[form]  # tuple (nuL, nuR) describing canonical form.
-        self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
+        self._S = [None]*(self.L + 1)
+        self._S[0] = self._S[-1] = np.ones([1])
+        for i in range(self.L+1)[self.nontrivial_bonds]:
+            self._S[i] = np.array(SVs[i], dtype=np.float)
+        if self.bc == 'infinite':
+            self._S[-1] = self.S[0]
+        self.test_sanity()
 
-        # TODO: We so far don't include the old grouped,can_keep
-        # JH: we don't need 'grouped', that's what `Lattice` and `Site` are for.
-        #     `can_keep` should be an argument of `canonical_form2`.
-
-        self.check_sanity()
-
-    def check_sanity(self):
+    def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
         if self.bc not in self._valid_bc:
             raise ValueError("invalid boundary condition: " + repr(self.bc))
+        if len(self._B) != self.L:
+            raise ValueError("wrong len of self._B")
+        if len(self._S) != self.L + 1:
+            raise ValueError("wrong len of self._S")
+        for i, B in enumerate(self._B):
+            if not set(['vL', 'vR', 'p']) <= set(B.get_leg_labels()):
+                raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
+            B.test_sanity()  # recursive...
+            if len(self._S[i]) != B.get_leg('vL').ind_len or \
+                    len(self._S[i+1]) != B.get_leg('vL').ind_len:
+                raise ValueError("shape of B incompatible with len of singu")
+            if not self.finite or i + 1 < self.L:
+                B2 = self._B[(i+1) % self.L]
+                B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+        if self.bc == 'finite':
+            if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
+                raise ValueError("non-trivial outer bonds for finite MPS")
+        elif self.bc == 'infinite':
+            if self._S[self.L] != self._S[0]:
+                raise ValueError("iMPS with S[0] != S[L]")
+
+        assert len(self.form) == self.L
+        for f in self.form:
+            if f is not None:
+                assert isinstance(f, tuple)
+                assert len(f) == 2
+
         # TODO: much more checks
 
     @classmethod
@@ -245,37 +293,71 @@ class MPS(object):
 
     @property
     def chi(self):
-        """Dimensions of the virtual bonds"""
-        # TODO: for a finitie MPS only on the non-trivial bonds?
-        return [len(s) for s in self._S]
+        """Dimensions of the (nontrivial) virtual bonds."""
+        return [len(s) for s in self._S[self._nontrivial_bonds()]]
+
+    @property
+    def nontrivial_bonds(self):
+        """Slice of the non-trivial bond indices, depending on ``self.bc``."""
+        if self.bc == 'finite':
+            return slice(1, self.L)
+        elif self.bc == 'segment':
+            return slice(0, self.L+1)
+        elif self.bc == 'infinite':
+            return slice(0, self.L)
 
     def _to_valid_index(self, i):
+        """make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
             return i % self.L
         if i < 0:
             i += self.L
         if i >= self.L or i < 0:
-            raise ValueError, "i = %s out of bounds for finite MPS" % i
+            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
 
     def get_B(self, i, form='B', copy=False):
-        """return `B` in canonical form at site `i`.
+        """return (view of) `B` at site `i` in canonical form.
 
-        .. todo ::
-            take care of `form`!!!
+        Parameters
+        ----------
+        i : int
+            Index choosing the site.
+        form : {``'B'``| ``'A'``| ``'C'``| ``None``}
+            The (canonical) form of the returned B.
+            For ``None``, return the matrix in whatever form it is.
+        copy : bool
+            Whether to return a copy even if `form` matches the current form.
+
+        Returns
+        -------
+        B : :class:`~tenpy.linalg.np_conserved.Array`
+            The MPS 'matrix' `B` at site `i` with leg labels ``vL, vR, p`` (in undefined order).
+            May be a view of the matrix (if `copy`=True),
+            or a copy (if the form changed or `copy`=True)
+
+        Raises
+        ------
+        ValueError : if self is not in canoncial form and ``form != None``.
         """
         i = self._to_valid_index(i)
-        if copy:
-            return self._B[i].copy(deep=True)
-        else:
-            return self._B[i]
+        form = self._to_valid_form(form)
+        return self._convert_form_i(self._B[i], i, self.form[i], form, copy)
 
     def set_B(self, i, B, form='B'):
-        """set `B` at site `i`. The given `B` is in canonical form described by `form`."""
+        """set `B` at site `i`.
+
+        Parameters
+        ----------
+        i : int
+            Index choosing the site.
+        B : :class:`~tenpy.linalg.np_conserved.Array`
+            The 'matrix' at site `i`. Should have leg labels ``vL, vR, p`` (in any order).
+        form : {``'B'``| ``'A'``| ``'C'``| ``None``}
+            The (canonical) form of `B`. ``None`` stands for non-canonical form.
+        """
         i = self._to_valid_index(i)
-        if self._valid_forms[form] != self.form:
-            # TODO: what if form is different???
-            raise NotImplementedError()
+        self.form[i] = self._to_valid_form(form)
         self._B[i] = B
 
     def get_SL(self, i):
@@ -284,51 +366,147 @@ class MPS(object):
         return self._S[i]
 
     def get_SR(self, i):
-        """set singular values on the right of site `i`"""
+        """return singular values on the right of site `i`"""
         i = self._to_valid_index(i)
-        return self._S[(i + 1)]
+        return self._S[i + 1]
 
     def set_SL(self, i, S):
         """set singular values on the left of site `i`"""
         i = self._to_valid_index(i)
         self._S[i] = S
+        if not self.finite and i == 0:
+            self._S[self.L] = S
 
     def set_SR(self, i, S):
         """set singular values on the left of site `i`"""
         i = self._to_valid_index(i)
-        self._S[(i + 1)] = S
+        self._S[i + 1] = S
+        if not self.finite and i == self.L - 1:
+            self._S[0] = S
 
-    def get_theta(self,i,n = 2):
-        """ Returns the n-site wavefunction
-            th = s G_i1 s G_i2 . . . G_in s.
-            If n != 1, we will stick to the convention of
-            calling the physical labels p0, p1, ....
-            If n = 1, we will label the physical leg p in order
-            to be consistent with the B notation.
+    def get_theta(self, i, n=2):
+        """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
+
+        Parameters
+        ----------
+        i : int
+            Site index.
+        n : int
+            Number of sites. The result lives on ``sites[i:i+n]``.
+
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The n-site wave function with leg labels ``vL, vR, p0, p1, .... p{n-1}``
+            (undefined order).
+            In Vidal's notation (with s=lambda, G=Gamma):
+            ``theta = s G_i s G_{i+1} s ... G_{i+n-1} s``.
         """
         i = self._to_valid_index(i)
         if self.finite:
-            if (i < 0 or i + n > self.L): raise ValueError, "i = %s out of bounds" % i
+            if (i < 0 or i + n > self.L):
+                raise ValueError("i = {0:d} out of bounds".format(i))
 
-        fL = 1 - self.form[0] #left factor
-        fR = 1 - self.form[1] #right factor
-        theta = self.get_B(i,copy = True)
-        sL = self.get_SL(i)
-        theta.iscale_axis(sL**fL,axis = 'vL')
+        if self.form[i] is None or self.form[(i + n - 1) % self.L] is None:
+            # we allow intermediate `form`=None except at the very left and right.
+            raise ValueError("can't calculate theta for non-canonical form")
 
-        if n == 1:
-            sR = self.get_SR(i)
-            return theta.iscale_axis(sR**fR, axis = 'vR')
+        # the following code is an equivalent to::
+        #
+        #   theta = self.get_B(i, form='B').replace_label('p', 'p0')
+        #   theta.iscale_axis(self.get_SL(i), 'vL')
+        #   for k in range(1, n):
+        #       j = (i + n) % self.L
+        #       B = self.get_B(j, form='B').replace_label('p', 'p'+str(k))
+        #       theta = npc.tensordot(theta, B, ['vR', 'vL'])
+        #   return theta
+        #
+        # However, the following code is nummerically more stable if ``self.form`` is not `B`
+        # (since it avoids unnecessary `scale_axis`) and works also for intermediate sites with
+        # ``self.form[j] = None``.
 
-        theta.ireplace_label('p','p0')
-        sofar = 1
-        for i in range(i+1,i + n):
-            B = self.get_B(i,copy=True)
-            #TODO: MS to JH, not sure, you know more about this copy stuff
-            B.ireplace_label('p','p'+str(sofar))
-            if sofar == n-1:
-                sR = self.get_SR(i)
-                B = B.scale_axis(sR**fR, axis = 'vR' )
+        fL, fR = self.form[i]  # left / right form exponent
+        copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
+        theta = self.get_B(i, form=None, copy=copy)  # in the current form
+        if fL != 1.:
+            theta = theta.scale_axis(self.get_SL(i)**(1.-fL), axis='vL')
+        theta = theta.replace_label('p', 'p0')
+        for k in range(1, n):  # nothing if n=1.
+            j = (i + k) % self.L
+            B = self.get_B(j, None, False).replace_label('p', 'p'+str(k))
+            if self.form[j] is not None and fR is not None:
+                fL_j, fR_j = self.form[j]
+                need_fL = 1. - fL_j - fR
+                if need_fL != 0.:  # only True if ``self.form[j-1] != self.form[j]``.
+                    B = B.scale_axis(self.get_SL(i)**need_fL, axis='vL')
+                fR = fR_j
+            else:
+                # for `self.form[j]=None`, we can just assume
+                # that it's fine to not include any further `s`.
+                fR is None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
-            sofar+=1
+        if fR != 1:  # fR = self.form[i+n-1][1]
+            theta = theta.scale_axis(self.get_SR(i)**(1.-fL), axis='vR')
         return theta
+
+    def convert_form(self, new_form='B'):
+        """tranform self into different canonical form (by scaling the legs with singular values).
+
+        Parameters
+        ----------
+        new_form : (list of) str | tuple(float, float)
+            The desired new form.
+
+        Raises
+        ------
+        ValueError : if trying to convert from a ``None`` form. Use :meth:`canonicalize` instead!
+        """
+        new_forms = self._parse_form(new_form)
+        for i, form in enumerate(new_forms):
+            new_B = self.get_B(i, form=form, copy=False)  # calculates the desired form.
+            self.set_B(i, new_B, form=form)
+
+    def _parse_form(self, form):
+        """parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
+        if isinstance(form, tuple):
+            return [form]*self.L
+        form = to_iterable(form)
+        if len(form) == 1:
+            form = [form[0]]*self.L
+        if len(form) != self.L:
+            raise ValueError("Wrong len of `form`: " + repr(form))
+        return [self._to_valid_form(f) for f in form]
+
+    def _to_valid_form(self, form):
+        """parse `form` = {tuple | key of _valid_forms} to a tuple"""
+        if isinstance(form, tuple):
+            return form
+        return self._valid_forms[form]
+
+    def _convert_form_i(self, B, i, form, new_form, copy=True):
+        """transform `B` of form `form` into canonical form `new_form`.
+
+        ======== ======== ================================================
+        form     new_form action
+        ======== ======== ================================================
+        *        ``None`` return (copy of) B
+        tuple    tuple    scale the legs 'vL' and 'vR' of B appropriately
+                          with ``self.get_SL(i)`` and ``self.get_SR(i)``
+        ``None`` tuple    raise ValueError
+        ======== ======== ================================================
+        """
+        if new_form is None or form == new_form:
+            if copy:
+                return B.copy()
+            return B  # nothing to do
+        if form is None:
+            raise ValueError("can't convert form of non-canonical state!")
+        old_L, old_R = form
+        new_L, new_R = new_form
+        diff_L = new_L - old_L
+        diff_R = new_R - old_R
+        if diff_L != 0.:
+            B = B.scale_axis(self.get_SL(i)**diff_L, 'vL')  # copies
+        if diff_R != 0.:
+            B = B.scale_axis(self.get_SR(i)**diff_R, 'vR')
+        return B
