@@ -132,7 +132,7 @@ class Site(object):
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
             # try to convert op into npc.Array
-            op = npc.Array.from_ndarray(op, self.leg.chinfo, [self.leg, self.leg.conj()])
+            op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
         if op.rank != 2:
             raise ValueError("only rank-2 on-site operators allowed")
         op.legs[0].test_equal(self.leg)

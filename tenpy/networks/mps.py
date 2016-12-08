@@ -54,7 +54,7 @@ class MPS(object):
     ==========  ===================================================================================
     'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is acchieved
                 by using a trivial left and right bond ``s[0] = s[-1] = np.array([1.])``.
-    'segment'   Generalization of 'finite`, describes an MPS embedded in left and right
+    'segment'   Generalization of 'finite', describes an MPS embedded in left and right
                 environments. The left environment is described by ``chi[0]`` *orthonormal* states
                 which are weighted by the singular values ``s[0]``. Similar, ``s[L]`` weight some
                 right orthonormal states. You can think of the left and right states to be
@@ -86,7 +86,7 @@ class MPS(object):
     ``'C'``  (0.5, 0.5) symmetric form: ``_B[i] = -- s[i]**0.5 -- Gamma[i] -- s[i+1]**0.5--``
     ``'A'``  (1, 0)     left canonical: ``_B[i] = -- s[i] -- Gamma[i] --``.
                         For stability reasons, we recommend to *not* use this form.
-    ``'G'``  (0, 0)     Save only the `Gamma`, ``_B[i] = --Gamma[i] -- ``.
+    ``'G'``  (0, 0)     Save only the `Gamma`, ``_B[i] = -- Gamma[i] -- ``.
                         For stability reasons, we recommend to *not* use this form.
     ``None`` ``None``   General non-canoncial form.
                         Valid form for initialization, but you need to call
@@ -230,15 +230,15 @@ class MPS(object):
         p_state : iterable of {int | 1D array}
             Defines the product state.
             If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``
-            If ``p_state[i]`` is an array, then site ``i``s wavefunction is ``p_state[i]``
+            If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
             The data type of the array entries.
         form : None | str
             defines the canonical form. See docstring of :class:`MPS`.
-        chargeL: charges
-            Bond charges at bond 0, which are(purely conventional) #Do we need this??
+        chargeL : charges
+            Bond charges at bond 0, which are purely conventional.
 
         """
         sites = list(sites)
@@ -263,7 +263,7 @@ class MPS(object):
             # calculate the LegCharge of the right leg
             legs = [site.leg, legL, None]  # other legs are known
             legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
-            B = npc.Array.from_ndarray(B, ci, legs, dtype)
+            B = npc.Array.from_ndarray(B, legs, dtype)
             B.set_leg_labels(['p', 'vL', 'vR'])
             Bs.append(B)
             legL = legs[-1].conj()  # prepare for next `i`

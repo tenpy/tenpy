@@ -15,8 +15,8 @@ from test_charges import gen_random_legcharge
 def test_site():
     chinfo = npc.ChargeInfo([1, 3])
     leg = gen_random_legcharge(chinfo, 8)
-    op1 = npc.Array.from_func(np.random.random, chinfo, [leg, leg.conj()], shape_kw='size')
-    op2 = npc.Array.from_func(np.random.random, chinfo, [leg, leg.conj()], shape_kw='size')
+    op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
+    op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     labels = ['up'] + [None]*6 + ['down']
     s = site.Site(leg, labels, silly_op=op1)
     nst.eq_(s.get_state_index('up'), 0)

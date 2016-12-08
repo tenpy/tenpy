@@ -42,9 +42,9 @@ psi = MPS.from_product_state(
 print "2) create an MPO representing the AFM Heisenberg Hamiltonian"
 
 # create physical spin-1/2 operators Sz, S+, S-
-Sz = npc.Array.from_ndarray([[0.5, 0.], [0., -0.5]], ci, [p_leg, p_leg.conj()])
-Sp = npc.Array.from_ndarray([[0., 1.], [0., 0.]], ci, [p_leg, p_leg.conj()])
-Sm = npc.Array.from_ndarray([[0., 0.], [1., 0.]], ci, [p_leg, p_leg.conj()])
+Sz = npc.Array.from_ndarray([[0.5, 0.], [0., -0.5]], [p_leg, p_leg.conj()])
+Sp = npc.Array.from_ndarray([[0., 1.], [0., 0.]], [p_leg, p_leg.conj()])
+Sm = npc.Array.from_ndarray([[0., 0.], [1., 0.]], [p_leg, p_leg.conj()])
 Id = npc.eye_like(Sz)  # identity
 for op in [Sz, Sp, Sm, Id]:
     op.set_leg_labels(['p2', 'p'])  # physical out, physical in
@@ -64,11 +64,11 @@ Ws = [W] * L
 print "3) define 'environments' left and right"
 
 envL = npc.zeros(
-    ci, [W.get_leg('wL').conj(), psi.get_B(0).get_leg('vL').conj(), psi.get_B(0).get_leg('vL')])
+    [W.get_leg('wL').conj(), psi.get_B(0).get_leg('vL').conj(), psi.get_B(0).get_leg('vL')])
 envL.set_leg_labels(['wR', 'vR', 'vR*'])
 envL[0, :, :] = npc.diag(1., envL.legs[1])
 envR = npc.zeros(
-    ci, [W.get_leg('wR').conj(), psi.get_B(-1).get_leg('vR').conj(), psi.get_B(-1).get_leg('vR')])
+    [W.get_leg('wR').conj(), psi.get_B(-1).get_leg('vR').conj(), psi.get_B(-1).get_leg('vR')])
 envR.set_leg_labels(['wL', 'vL', 'vL*'])
 envR[-1, :, :] = npc.diag(1., envR.legs[1])
 

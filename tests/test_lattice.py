@@ -14,8 +14,8 @@ def test_lattice():
     chinfo = npc.ChargeInfo([1, 3])
     leg = gen_random_legcharge(chinfo, 8)
     leg2 = gen_random_legcharge(chinfo, 2)
-    op1 = npc.Array.from_func(np.random.random, chinfo, [leg, leg.conj()], shape_kw='size')
-    op2 = npc.Array.from_func(np.random.random, chinfo, [leg2, leg2.conj()], shape_kw='size')
+    op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
+    op2 = npc.Array.from_func(np.random.random, [leg2, leg2.conj()], shape_kw='size')
     site1 = lattice.Site(leg, [('up', 0), ('down', -1)], op1=op1)
     site2 = lattice.Site(leg2, [('down', 0), ('up', -1)], op2=op2)
     for order in ['default', 'Fstyle', 'snake', 'snakeFstyle']:

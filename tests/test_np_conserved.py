@@ -39,7 +39,7 @@ EPS = np.finfo(np.float_).eps
 def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):
     """generates a random npc.Array of given shape with random legcharges and entries."""
     legs = [gen_random_legcharge(chinfo, s) for s in shape]
-    a = npc.Array.from_func(func, chinfo, legs, qtotal=qtotal, shape_kw=shape_kw)
+    a = npc.Array.from_func(func, legs, qtotal=qtotal, shape_kw=shape_kw)
     a.set_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
     if sort:
         _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
@@ -62,12 +62,12 @@ def test_npc_Array_conversion():
     a = npc.Array.from_ndarray_trivial(arr)
     npt.assert_equal(a.to_ndarray(), arr)
     print "non-trivial charges"
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     npt.assert_equal(a._get_block_charge([0, 2]), [-2, 0])
     npt.assert_equal(a.to_ndarray(), arr)
     npt.assert_equal(a.qtotal, [0, 0])
     print "check non-zero total charge"
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc_add.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc_add.conj()])
     npt.assert_equal(a.qtotal, [-1, 0])
     npt.assert_equal(a.to_ndarray(), arr)
     a = a.gauge_total_charge(1)
@@ -77,7 +77,7 @@ def test_npc_Array_conversion():
     nst.eq_(a_clx.dtype, np.complex128)
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
     print "from_func"
-    a = npc.Array.from_func(np.ones, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_func(np.ones, [lc, lc.conj()])
     a.test_sanity()
     aflat = np.zeros((5, 5))
     for ind in [(0, 0), (1, 1), (1, 4), (4, 1), (2, 2), (3, 3), (4, 4)]:
@@ -87,13 +87,13 @@ def test_npc_Array_conversion():
     a = random_Array((20, 15, 10), chinfo2, sort=False)
     a.test_sanity()
     a = random_Array((20, 15, 10), chinfoTr, sort=False)
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     a.test_sanity()
 
 
 def test_npc_Array_sort():
     print "sort a square matrix"
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     print lc
     p_flat, a_s = a.sort_legcharge(True, False)
     npt.assert_equal(p_flat[0], [3, 0, 2, 1, 4])
@@ -120,14 +120,14 @@ def test_npc_Array_sort():
     p_flat, a_sb = a.sort_legcharge(False, True)
 
     print "'sort' trivial charge"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     p_flat, a_s = a.sort_legcharge(True, False)
     a_s.test_sanity()
     npt.assert_equal(a_s.to_ndarray(), a.to_ndarray())  # p_flat should be trivial permuations...
 
 
 def test_npc_Array_labels():
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     for t in [('x', None), (None, 'y'), ('x', 'y')]:
         a.set_leg_labels(t)
         nst.eq_(a.get_leg_labels(), t)
@@ -141,7 +141,7 @@ def test_npc_Array_labels():
 
 
 def test_npc_Array_project():
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     p1 = np.array([True, True, False, True, True])
     p2 = np.array([0, 1, 3])
 
@@ -160,7 +160,7 @@ def test_npc_Array_project():
     npt.assert_equal(b.to_ndarray(), bflat)
 
     print "for trivial charge"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     p1 = (np.arange(lcTr.ind_len) % 3 == 0)
     b = a.copy(True)
     b.iproject([p1, p2], (0, 1))
@@ -195,7 +195,7 @@ def test_npc_Array_transpose():
 
 
 def test_npc_Array_itemacces():
-    a = npc.Array.from_ndarray(arr, chinfo, [lc, lc.conj()])
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     aflat = a.to_ndarray().copy()
     for i, j in it.product(xrange(5), xrange(5)):  # access all elements
         nst.eq_(a[i, j], aflat[i, j])
@@ -237,7 +237,7 @@ def test_npc_Array_itemacces():
         bflat = aflat[idx]  # idx may only contain a single array for this to work
         npt.assert_equal(b.to_ndarray(), bflat)
     # create another random array to check copying with c[inds] = a[inds]
-    b = npc.Array.from_func(np.random.random, a.chinfo, a.legs, a.dtype, a.qtotal, shape_kw='size')
+    b = npc.Array.from_func(np.random.random, a.legs, a.dtype, a.qtotal, shape_kw='size')
     # remove half of the blocks to check copying to empty sites as well
     keep = (np.arange(b.stored_blocks) % 2 == 0)
     b._data = [d for d, k in zip(b._data, keep) if k]
@@ -282,17 +282,17 @@ def test_npc_Array_reshape():
     # create array `c` to concatenate with b along axis 2
     legs = b.legs[:]
     legs[1] = gen_random_legcharge(b.chinfo, 5)
-    c1 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
+    c1 = npc.Array.from_func(np.random.random, legs, qtotal=b.qtotal, shape_kw='size')
     c1flat = c1.to_ndarray()
     legs[1] = gen_random_legcharge(b.chinfo, 3)
-    c2 = npc.Array.from_func(np.random.random, b.chinfo, legs, qtotal=b.qtotal, shape_kw='size')
+    c2 = npc.Array.from_func(np.random.random, legs, qtotal=b.qtotal, shape_kw='size')
     c2flat = c2.to_ndarray()
     bc1c2 = npc.concatenate([b, c1, c2], axis=1)
     bc1c2.test_sanity()
     npt.assert_equal(bc1c2.to_ndarray(), np.concatenate([bflat, c1flat, c2flat], axis=1))
 
     print "trivial charges"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
     acomb = a.combine_legs([0, 1])
     acomb.test_sanity()
@@ -305,9 +305,9 @@ def test_npc_grid_outer():
     ci = chinfo3
     p_leg = gen_random_legcharge(ci, 4)
     legs_op = [p_leg, p_leg.conj()]
-    op_0 = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[0], shape_kw='size')
-    op_pl = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[1], shape_kw='size')
-    op_min = npc.Array.from_func(np.random.random, ci, legs_op, qtotal=[-1], shape_kw='size')
+    op_0 = npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
+    op_pl = npc.Array.from_func(np.random.random, legs_op, qtotal=[1], shape_kw='size')
+    op_min = npc.Array.from_func(np.random.random, legs_op, qtotal=[-1], shape_kw='size')
     op_id = npc.eye_like(op_0)
     grid = [[op_id, op_pl, op_min, op_0, None],
             [None, None, None, None, op_min],
@@ -360,7 +360,7 @@ def test_npc_Array_conj():
     print a.get_leg_labels()
     nst.eq_(a._conj_leg_label('(a*.(b.c*).(d*.e))'), '(a.(b*.c).(d.e*))')
     print "conjugate Trivial charges"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
     a.iconj()
     npt.assert_equal(a.to_ndarray(), aflat.conj())
@@ -380,7 +380,7 @@ def test_npc_Array_norm():
 
 def test_npc_Array_ops():
     a = random_Array((15, 10), chinfo3, sort=True)
-    b = npc.Array.from_func(np.random.random, a.chinfo, a.legs, qtotal=a.qtotal, shape_kw='size')
+    b = npc.Array.from_func(np.random.random, a.legs, qtotal=a.qtotal, shape_kw='size')
     s = 3.12
     aflat = a.to_ndarray()
     bflat = b.to_ndarray()
@@ -430,7 +430,7 @@ def test_npc_tensordot():
         a = random_Array((10, 12, 15), chinfo3, qtotal=[0], sort=sort)
         aflat = a.to_ndarray()
         legs_b = [l.conj() for l in a.legs[::-1]]
-        b = npc.Array.from_func(np.random.random, a.chinfo, legs_b, qtotal=[1], shape_kw='size')
+        b = npc.Array.from_func(np.random.random, legs_b, qtotal=[1], shape_kw='size')
         bflat = b.to_ndarray()
         print "axes = 1"  # start simple: only one axes
         c = npc.tensordot(a, b, axes=1)
@@ -460,7 +460,7 @@ def test_npc_tensordot():
         npt.assert_array_almost_equal_nulp(d.to_ndarray(), dflat, sum(a.shape))
     # full/no contraction is tested in test_npc_inner/test_npc_outer
     print "for trivial charge"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
     b = npc.tensordot(a, a, axes=1)
     bflat = np.tensordot(aflat, aflat, axes=1)
@@ -474,7 +474,7 @@ def test_npc_inner():
         aflat = a.to_ndarray()
         legs_b = [l.conj() for l in a.legs[::-1]]
         b = npc.Array.from_func(
-            np.random.random, a.chinfo, legs_b, qtotal=-a.qtotal, shape_kw='size')
+            np.random.random, legs_b, qtotal=-a.qtotal, shape_kw='size')
         bflat = b.to_ndarray()
         c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
         nst.eq_(type(c), np.dtype(float))
@@ -482,7 +482,7 @@ def test_npc_inner():
         npt.assert_array_almost_equal_nulp(c, cflat, max(a.size, b.size))
 
     print "for trivial charge"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
     b = npc.tensordot(a, a, axes=2)
     bflat = np.tensordot(aflat, aflat, axes=2)
@@ -504,7 +504,7 @@ def test_npc_outer():
         npt.assert_equal(c.to_ndarray(), cflat)
 
     print "for trivial charge"
-    a = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
     b = npc.tensordot(a, a, axes=0)
     bflat = np.tensordot(aflat, aflat, axes=0)
@@ -546,7 +546,7 @@ def test_npc_svd():
     npt.assert_array_almost_equal_nulp(Sfull, S, tol_NULP)
 
     print "for trivial charges"
-    A = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    A = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     Aflat = A.to_ndarray()
     U, S, VH = npc.svd(A)
     recalc = npc.tensordot(U.scale_axis(S, axis=-1), VH, axes=1)
@@ -569,7 +569,7 @@ def test_trace():
     chinfo = chinfo3
     legs = [gen_random_legcharge(chinfo, s) for s in (7, 8, 9)]
     legs.append(legs[1].conj())
-    A = npc.Array.from_func(np.random.random, chinfo, legs, qtotal=[1], shape_kw='size')
+    A = npc.Array.from_func(np.random.random, legs, qtotal=[1], shape_kw='size')
     Aflat = A.to_ndarray()
     Atr = npc.trace(A, leg1=1, leg2=-1)
     Atr.test_sanity()
@@ -581,7 +581,7 @@ def test_eig():
     size = 10
     ci = chinfo3
     l = gen_random_legcharge(ci, size)
-    A = npc.Array.from_func(np.random.random, ci, [l, l.conj()], qtotal=None, shape_kw='size')
+    A = npc.Array.from_func(np.random.random, [l, l.conj()], qtotal=None, shape_kw='size')
     print "hermitian A"
     A += A.conj().itranspose()
     Aflat = A.to_ndarray()
@@ -596,7 +596,7 @@ def test_eig():
     npt.assert_array_almost_equal_nulp(W, W2, size**3)
 
     print "check complex B"
-    B = 1.j * npc.Array.from_func(np.random.random, ci, [l, l.conj()], shape_kw='size')
+    B = 1.j * npc.Array.from_func(np.random.random, [l, l.conj()], shape_kw='size')
     B += B.conj().itranspose()
     B = A + B
     Bflat = B.to_ndarray()
@@ -623,7 +623,7 @@ def test_eig():
         assert (npc.norm(diff, np.inf) < EPS * size**3)
 
     print "for trivial charges"
-    A = npc.Array.from_func(np.random.random, chinfoTr, [lcTr, lcTr.conj()], shape_kw='size')
+    A = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     A = A + A.conj().itranspose()
     Aflat = A.to_ndarray()
     W, V = npc.eigh(A)

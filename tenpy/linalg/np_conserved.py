@@ -87,14 +87,12 @@ class Array(object):
 
     Parameters
     ----------
-    chargeinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-        the nature of the charge, used as self.chinfo.
-    legs : list of :class:`~tenpy.linalg.charges.LegCharge`
-        the leg charges for each of the legs.
+    legcharges : list of :class:`~tenpy.linalg.charges.LegCharge`
+        The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
     dtype : type or string
-        the data type of the array entries. Defaults to np.float64.
+        The data type of the array entries. Defaults to np.float64.
     qtotal : 1D array of `chargeinfo.qtype`
-        the total charge of the array. Defaults to 0.
+        The total charge of the array. Defaults to 0.
 
     Attributes
     ----------
@@ -102,34 +100,33 @@ class Array(object):
     size
     stored_blocks
     shape : tuple(int)
-        the number of indices for each of the legs
+        The number of indices for each of the legs
     dtype : np.dtype
-        the data type of the entries
+        The data type of the entries
     chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-        the nature of the charge
+        The nature of the charge.
     qtotal : 1D array
-        the total charge of the tensor.
+        The total charge of the tensor.
     legs : list of :class:`~tenpy.linalg.charges.LegCharge`
-        the leg charges for each of the legs.
+        The leg charges for each of the legs.
     labels : dict (string -> int)
-        labels for the different legs
+        Labels for the different legs
     _data : list of arrays
-        the actual entries of the tensor
+        The actual entries of the tensor
     _qdata : 2D array (len(_data), rank), dtype np.intp
-        for each of the _data entries the qindices of the different legs.
+        For each of the _data entries the qindices of the different legs.
     _qdata_sorted : Bool
-        whether self._qdata is lexsorted. Defaults to `True`,
+        Whether self._qdata is lexsorted. Defaults to `True`,
         but *must* be set to `False` by algorithms changing _qdata.
 
-    .. todo ::
-        remove chargeinfo from parameters, instead read it out from 'legcharges'.
-        0D-arrays are anyways forbidden....
     """
 
-    def __init__(self, chargeinfo, legcharges, dtype=np.float64, qtotal=None):
+    def __init__(self, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
-        self.chinfo = chargeinfo
         self.legs = list(legcharges)
+        if len(self.legs) == 0:
+            raise ValueError("can't have 0-rank Tensor")
+        self.chinfo = self.legs[0].chinfo
         self._set_shape()
         self.dtype = np.dtype(dtype)
         self.qtotal = self.chinfo.make_valid(qtotal)
@@ -172,7 +169,7 @@ class Array(object):
             # some things should be copied even for shallow copies
             cp.qtotal = cp.qtotal.copy()
             cp.labels = cp.labels.copy()
-        # even deep copies can share chargeinfo and legs
+        # even deep copies can share chinfo and legs
         cp.chinfo = self.chinfo  # same instance
         cp.legs = self.legs[:]  # copied list with same instances of legs
         return cp
@@ -196,7 +193,7 @@ class Array(object):
         data_flat = np.array(data_flat, dtype)
         chinfo = ChargeInfo()
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
-        res = cls(chinfo, legs, dtype)
+        res = cls(legs, dtype)
         res._data = [data_flat]
         res._qdata = np.zeros((1, res.rank), np.intp)
         res._qdata_sorted = True
@@ -204,7 +201,7 @@ class Array(object):
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, chargeinfo, legcharges, dtype=None, qtotal=None, cutoff=None):
+    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -212,10 +209,8 @@ class Array(object):
         data_flat : array_like
             the flat ndarray which should be converted to a npc `Array`.
             The shape has to be compatible with legcharges.
-        chargeinfo : ChargeInfo
-            the nature of the charge
-        legcharges : list of LegCharge
-            a LegCharge for each of the legs.
+        legcharges : list of :class:`LegCharge`
+            The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
         dtype : ``np.dtype`` | string
             the data type of the array entries. Defaults to dtype of data_flat.
         qtotal : None | charges
@@ -238,7 +233,7 @@ class Array(object):
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
             dtype = data_flat.dtype
-        res = cls(chargeinfo, legcharges, dtype, qtotal)  # without any data
+        res = cls(legcharges, dtype, qtotal)  # without any data
         data_flat = data_flat.astype(dtype, copy=False)
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
@@ -263,7 +258,6 @@ class Array(object):
     @classmethod
     def from_func(cls,
                   func,
-                  chargeinfo,
                   legcharges,
                   dtype=np.float64,
                   qtotal=None,
@@ -284,10 +278,8 @@ class Array(object):
             If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
             otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
             `shape` is a tuple of int.
-        chargeinfo : ChargeInfo
-            the nature of the charge
-        legcharges : list of LegCharge
-            a LegCharge for each of the legs.
+        legcharges : list of :class:`LegCharge`
+            The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
         dtype : type | string
             the data type of the output entries. Defaults to np.float64.
             Note that this argument is not given to func, but rather a type conversion
@@ -306,7 +298,7 @@ class Array(object):
         res : :class:`Array`
             an Array with blocks filled using `func`.
         """
-        res = cls(chargeinfo, legcharges, dtype, qtotal)  # without any data yet.
+        res = cls(legcharges, dtype, qtotal)  # without any data yet.
         data = []
         qdata = []
         # iterate over all qindices compatible with qtotal
@@ -2217,12 +2209,12 @@ class Array(object):
 # functions ====================================================================
 
 
-def zeros(chargeinfo, legcharges, dtype=np.float64, qtotal=None):
+def zeros(legcharges, dtype=np.float64, qtotal=None):
     """create a npc array full of zeros (with no _data).
 
     This is just a wrapper around ``Array(...)``,
     detailed documentation can be found in the class doc-string of :class:`Array`."""
-    return Array(chargeinfo, legcharges, dtype, qtotal)
+    return Array(legcharges, dtype, qtotal)
 
 
 def eye_like(a, axis=0):
@@ -2258,7 +2250,7 @@ def diag(s, leg, dtype=None):
     scalar = (s.ndim == 0)
     if not scalar and len(s) != leg.ind_len:
         raise ValueError("len(s)={0:d} not equal to leg.ind_len={1:d}".format(len(s), leg.ind_len))
-    res = Array(leg.chinfo, (leg, leg.conj()), s.dtype)  # default charge is 0
+    res = Array((leg, leg.conj()), s.dtype)  # default charge is 0
     # qdata = [[0, 0], [1, 1], ....]
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
@@ -2451,7 +2443,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
         qtotal = chinfo.make_valid(np.sum(grid_charges + [entry.qtotal], axis=0))
     else:
         qtotal = chinfo.make_valid(qtotal)
-    res = Array(entry.chinfo, legs, dtype, qtotal)
+    res = Array(legs, dtype, qtotal)
     # main work: iterate over all non-trivial entries to fill `res`.
     for idx, entry in entries:
         res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
@@ -2522,9 +2514,6 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
 def detect_qtotal(flat_array, legcharges, cutoff=None):
     """Returns the total charge (w.r.t `legs`) of first non-zero sector found in `flat_array`.
 
-    Charge information is taken from self.
-    If you have only the charge data, create an empty Array(chinf, legcharges).
-
     Parameters
     ----------
     flat_array : array
@@ -2548,7 +2537,7 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     if cutoff is None:
         cutoff = QCUTOFF
     chinfo = legcharges[0].chinfo
-    test_array = zeros(chinfo, legcharges)  # Array prototype with correct charges
+    test_array = zeros(legcharges)  # Array prototype with correct charges
     for qindices in test_array._iter_all_blocks():
         sl = test_array._get_block_slices(qindices)
         if np.any(np.abs(flat_array[sl]) > cutoff):
@@ -2645,7 +2634,7 @@ def trace(a, leg1=0, leg2=1):
     # non-complete contraction
     keep = np.array([ax for ax in xrange(a.rank) if ax != ax1 and ax != ax2], dtype=np.intp)
     legs = [a.legs[ax] for ax in keep]
-    res = Array(a.chinfo, legs, a.dtype, a.qtotal)
+    res = Array(legs, a.dtype, a.qtotal)
     if a.stored_blocks > 0:
         res_data = {}  # dictionary qdata_row -> block
         for qdata_row, block in itertools.izip(a._qdata, a._data):
@@ -2688,7 +2677,7 @@ def outer(a, b):
         raise ValueError("different ChargeInfo")
     dtype = np.find_common_type([a.dtype, b.dtype], [])
     qtotal = a.chinfo.make_valid(a.qtotal + b.qtotal)
-    res = Array(a.chinfo, a.legs + b.legs, dtype, qtotal)
+    res = Array(a.legs + b.legs, dtype, qtotal)
 
     # fill with data
     qdata_a = a._qdata
@@ -3190,7 +3179,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     if ret_eigv:
         V = []
         for j in range(V_flat.shape[1]):
-            U = zeros(a.chinfo, [a.legs[0]], dtype=a.dtype, qtotal=charge_sector)
+            U = zeros([a.legs[0]], dtype=a.dtype, qtotal=charge_sector)
             U._data = [V_flat[:, j]]
             U._qdata = np.array([[qi]], dtype=np.intp)
             if len(piped_axes) > 0:
@@ -3490,8 +3479,8 @@ def _tensordot_worker(a, b, axes):
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
-        return zeros(chinfo, a.legs[:-axes] + b.legs[axes:],
-                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
+        return zeros(a.legs[:-axes] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
+                     a.qtotal + b.qtotal)
     cut_a = a.rank - axes
     cut_b = axes
     a_pre_result, b_pre_result, fast_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
@@ -3523,7 +3512,7 @@ def _tensordot_worker(a, b, axes):
                 res_data.append(block_contr.astype(res_dtype, copy=False))
                 res_qdata_a.append(a_qdata_keep[row_a])
                 res_qdata_b.append(b_qdata_keep[col_b])
-    res = Array(chinfo, a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
+    res = Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if len(res_data) == 0:
         return res
     # (at least one entry is non-empty, so res_qdata[keep] is also not empty)
@@ -3607,8 +3596,8 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             new_leg_L = new_leg_full.conj()
         else:  # new_leg_L is fine
             new_leg_R = new_leg_full
-    U = Array(chinfo, [a.legs[0], new_leg_L], a.dtype, qtotal_L)
-    VH = Array(chinfo, [new_leg_R, a.legs[1]], a.dtype, qtotal_R)
+    U = Array([a.legs[0], new_leg_L], a.dtype, qtotal_L)
+    VH = Array([new_leg_R, a.legs[1]], a.dtype, qtotal_R)
     U._data = U_data
     U._qdata = np.array(U_qdata, dtype=np.intp)
     U._qdata_sorted = a._qdata_sorted

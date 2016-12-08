@@ -210,7 +210,7 @@ class CouplingModel(object):
         res = []
         for i, terms in enumerate(self.onsite_terms):
             s = self.lat.site(i)
-            H = npc.zeros(s.leg.chinfo, [s.leg, s.leg.conj()])
+            H = npc.zeros([s.leg, s.leg.conj()])
             for opname, strength in terms.iteritems():
                 H = H + getattr(s, terms[0])  # (can't use ``+=``: may change dtype)
             res.append(H)
