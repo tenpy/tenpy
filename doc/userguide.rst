@@ -32,9 +32,10 @@ Content
 -------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    INSTALL
    contribution
+   todo
    changes_TenPy
    IntroNpc

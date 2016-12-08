@@ -83,13 +83,3 @@ However, to keep consistency, we ask you to comply with the following guidelines
 - if you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 
 **Thank You** for helping with the development!
-
-
-Additional information
-----------------------
-
-.. toctree::
-   :maxdepth: 2
-
-   todo
-
