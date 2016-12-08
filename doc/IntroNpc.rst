@@ -8,6 +8,8 @@ of certain matrices, which in turn speeds up SVD or diagonalization a lot.
 Even for more general (non-square-matrix) tensors, charge conservation imposes restrictions which blocks of a tensor can
 be non-zero. Only those blocks need to be saved, and e.g. tensordot can be speeded up.
 
+This introduction covers our implementation of charges; explaining mathematical details of the underlying symmetry is beyond its scope.
+We refer you to Ref. [1]_ for the general idea, which is more nicely explained for the example of a :math:`U(1)` symmetry in [2]_.
 
 Notations
 ---------
@@ -276,7 +278,7 @@ so we make a simple choice: total charge 0 on both arrays, as well as for :math:
 ``x = npc.LegCharge.from_qflat(chinfo, [0], qconj=+1)``.
 
 The charges on the bonds `y` and `z` then depend on the state the MPS represents.
-Here, we consider a singlet :math:`\psi = (|\uparrow \downarrow\rangle  - |\downarrow \uparrow\rangle)\sqrt{2}`
+Here, we consider a singlet :math:`\psi = (|\uparrow \downarrow\rangle  - |\downarrow \uparrow\rangle)/\sqrt{2}`
 as a simple example. A possible MPS representation is given by::
 
     A[up, :, :]   = [[1/2.**0.5, 0]]     B[up, :, :]   = [[0], [-1]]
@@ -582,5 +584,7 @@ Below follows a full example demonstrating the creation and contraction of Array
 
 .. literalinclude:: ../examples/npc_intro.py
 
-.. todo ::
-   References?!?
+References
+----------
+.. [1] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), arXiv:0907.2994
+.. [2] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, arXiv:1008.4774
