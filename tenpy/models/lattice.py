@@ -16,6 +16,7 @@ import numpy as np
 
 from ..tools.misc import to_iterable
 from ..networks.site import Site
+from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = ['Site', 'Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
 
@@ -46,7 +47,7 @@ class Lattice(object):
     order : str
         a string specifying the order, given to :meth:`ordering`.
         Defaults ``'default'``: First direction changing slowest, within the unit cell fastest.
-    bc_MPS : {'finite', 'segment', 'infinite'}
+    bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
     basis : iterable of 1D arrays
         for each direction one translation vectors shifting the unit cell.
@@ -71,7 +72,7 @@ class Lattice(object):
     order : ndarray (N_sites, dim+1)
         Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
         This order defines how an MPS/MPO winds through the lattice.
-    bc_MPS : {'finite', 'segment', 'infinite'}
+    bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice.
     basis: ndarray (dim, dim)
         translation vectors shifting the unit cell. The ``i``th row gives the vector shifting in
@@ -79,7 +80,7 @@ class Lattice(object):
     unit_cell_positions : ndarray, shape (len(unit_cell), dim)
         for each site in the unit cell a vector giving its position within the unit cell.
     _strides : ndarray (dim, )
-        necessary for :meth:`mps2lat`
+        necessary for :meth:`mps2lat_idx`
     _perm : ndarray (N, )
         permutation needed to make `order` lexsorted.
     _mps2lat_vals_idx : ndarray `shape`
@@ -162,7 +163,7 @@ class Lattice(object):
         assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
         assert np.all(np.sum(self.order * self._strides, axis=1)[self._perm]
                       == np.arange(self.N_sites))  # rows of `order` unique?
-        if self.bc_MPS not in ['finite', 'segment', 'infinite']:
+        if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
 
     @property

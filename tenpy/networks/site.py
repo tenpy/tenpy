@@ -286,9 +286,6 @@ def fermion_site(conserve='N', filling=0.5):
 
     .. todo ::
         Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
-
-    .. todo ::
-        Should we define onsite operators ``n-filling`` option for filling?
     """
     if conserve not in ['N', 'parity', None]:
         raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -364,7 +361,7 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
     B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
     for n in xrange(1, dim):
         B[n-1, n] = np.sqrt(n)
-    Bd = np.transpose(B) # .conj() doesn't do anything
+    Bd = np.transpose(B)   # .conj() wouldn't do anything
     # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
     Ndiag = np.arange(dim, dtype=np.float)
     N = np.diag(Ndiag)

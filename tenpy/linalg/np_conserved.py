@@ -2417,12 +2417,12 @@ def grid_outer(grid, grid_legs, qtotal=None):
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
     Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
-    >>> id = np.eye_like(Sz)
-    >>> W_mpo = grid_outer([[id, Splus, Sminus, Sz, None],
+    >>> Id = np.eye_like(Sz)
+    >>> W_mpo = grid_outer([[Id, Splus, Sminus, Sz, None],
     ...                     [None, None, None, None, J*Sminus],
     ...                     [None, None, None, None, J*Splus],
     ...                     [None, None, None, None, J*Sz],
-    ...                     [None, None, None, None, id]],
+    ...                     [None, None, None, None, Id]],
     ...                    leg_charges=[l_left, l_right])
     >>> W_mpo.shape
     (5, 5, 2, 2)

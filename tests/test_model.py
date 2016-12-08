@@ -1,7 +1,7 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`.
 
 .. todo ::
-    A lot more to test: conversions of the different models
+    A lot more to test, e.g. conversions of the different models
 """
 
 from __future__ import division
@@ -23,5 +23,6 @@ lat_spin_half = lattice.Chain(5, site_fermion)
 
 
 def test_CouplingModel():
-    M = model.CouplingModel(lat_spin_half, 'open')
-    M.test_sanity()
+    for bc in ['open', 'periodic']:
+        M = model.CouplingModel(lat_spin_half, 'open')
+        M.test_sanity()

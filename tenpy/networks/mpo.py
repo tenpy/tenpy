@@ -1,22 +1,38 @@
 """Matrix product operator (MPO).
 
-An MPO is the generalization of an MPS to operators. Graphically::
+An MPO is the generalization of an :class:`~tenpy.networks.mps.MPS` to operators. Graphically::
 
-          ^        ^         ^
-          |        |         |
-     ->- Ws[0] ->- Ws[1] ->- Ws[2] ->- ...
-          |        |         |
-          ^        ^         ^
+    |      ^        ^        ^
+    |      |        |        |
+    |  ->- W[0] ->- W[1] ->- W[2] ->- ...
+    |      |        |        |
+    |      ^        ^        ^
 
-We use the following label convention (arrows indicate `qconj`)::
+So each 'matrix' has two physical legs ``p, p*`` instead of just one,
+i.e. the entries of the 'matrices' are local operators.
+Valid boundary conditions of an MPO are the same as for an MPS
+(i.e. ``'finite' | 'segment' | 'infinite'``).
+(In general, you can view the MPO as an MPS with larger physical space and bring it into
+canoncial form. However, unlike for an MPS, this doesn't simplify calculations.
+Thus, an MPO has no `form`.)
 
-           p*
-           ^
-           |
-    wL ->- W ->- wR
-           |
-           ^
-           p
+We use the following label convention for the `W` (where arrows indicate `qconj`)::
+
+    |            p*
+    |            ^
+    |            |
+    |     wL ->- W ->- wR
+    |            |
+    |            ^
+    |            p
+
+
+If an MPO describes a sum of local terms (e.g. most Hamiltonians),
+some bond indices correspond to 'only identities to the left/right'.
+We store these indices in `IdL` and `IdR` (if there are such indices).
+
+Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
+i.e. between sites ``i-1`` and ``i``.
 
 
 .. todo ::
@@ -28,6 +44,7 @@ import itertools
 
 from ..linalg import np_conserved as npc
 from ..tools.string import vert_join
+from .mps import MPS as _MPS   # only for MPS._valid_bc
 
 __all__ = ['MPO', 'MPOGraph']
 
@@ -35,66 +52,57 @@ __all__ = ['MPO', 'MPOGraph']
 class MPO(object):
     """Matrix product operator, finite (MPO) or infinite (iMPO).
 
-    Similar as an MPS, but each `matrix` has two physical legs ``p, p*`` instead of just one,
-    i.e. the entries are local operators.
-    An MPO can be applied to an MPS, which increases the `chi` of the MPS by a *factor* of the
-    MPO bond dimension.
-
-    If an MPO describes a sum of local terms (e.g. most Hamiltonians),
-    some bond indices correspond to 'only identities to the left/right'.
-    We store these indices in `idL` and `idR` (if there are such indices).
-
-    (In general, you can view the MPO as an MPS with larger physical space and bring it into
-    canoncial form. However, unlike for an MPS, this doesn't simplify calculations.)
-
     Parameters
     ----------
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
     Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Should have labels ``wL, wR, p, p*``.
-    idL : None | list of int
+    bc : {'finite' | 'segment' | 'infinite'}
+        Boundary conditions as described in :mod:`~tenpy.networks.mps`.
+        ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
+    IdL : (iterable of) {int | None}
         Indices on the bonds, which correpond to 'only identities to the left'.
-    idR : None | list of int
+        A single entry holds for all bonds.
+    IdR : (iterable of) {int | None}
         Indices on the bonds, which correpond to 'only identities to the right'.
 
     Attributes
     ----------
     L : int
         ``len(sites)``. For an iMPS, this is the number of sites in the MPS unit cell.
-    chinfo : class:`npc.ChargeInfo`
+    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
-    Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The matrices of the MPO. Labels are ``wL, wR, p, p*``
-    bc : {'finite', 'infinite'}
+    bc : {'finite' | 'segment' | 'infinite'}
         Boundary conditions.
-    idL : list of {int | None}
+    IdL : list of {int | None}
         Indices on the bonds, which correpond to 'only identities to the left'.
         ``None`` for bonds where it is not set.
-    idR : list of {int | None}
+    IdR : list of {int | None}
         Indices on the bonds, which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
+    _W : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The matrices of the MPO. Labels are ``wL, wR, p, p*``
+    _valid_bc : tuple of str
+        Valid boundary conditions. The same as for an MPS.
     """
 
-    #: valid boundary conditions.
-    _valid_bc = ('infinite', 'finite')
+    _valid_bc = _MPS._valid_bc   # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', idL=None, idR=None):
+    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.L = len(self.sites)
-        self.Ws = list(Ws)
-        self._set_chi_from_Ws()
-        if idL is None:
-            self.idL = [None]*len(self.L+1)
+        self._W = list(Ws)
+        if IdL is None:
+            self.IdL = [None]*(self.L+1)
         else:
-            self.idL = list(idL)
-        if idR is None:
-            self.idR = [None]*len(self.L+1)
+            self.IdL = list(IdL)
+        if IdR is None:
+            self.IdR = [None]*(self.L+1)
         else:
-            self.idR = list(idR)
+            self.IdR = list(IdR)
         self.bc = bc
         self.test_sanity()
 
@@ -105,27 +113,74 @@ class MPO(object):
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
         for i in range(self.L):
             S = self.sites[i]
-            W = self.Ws[i]
+            W = self._W[i]
             S.leg.test_equal(W.get_leg('p'))
             S.leg.test_contractible(W.get_leg('p*'))
-            if self.bc == 'infinite' or i < self.L:
+            if self.bc == 'infinite' or i + 1 < self.L:
                 W2 = self.get_W(i+1)
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
         if self.bc == 'finite':
-            assert(self.Ws[0].get_leg('wL').ind_len == 1)
-            assert(self.Ws[-1].get_leg('wR').ind_len == 1)
-        if not (len(self.idL) == len(self.idR) == self.L+1):
-                raise ValueError("wrong len of `idL`/`idR`")
+            assert(self._W[0].get_leg('wL').ind_len == 1)
+            assert(self._W[-1].get_leg('wR').ind_len == 1)
+        if not (len(self.IdL) == len(self.IdR) == self.L+1):
+                raise ValueError("wrong len of `IdL`/`IdR`")
 
-    def get_W(self, i):
-        """return `W` at site `i`."""
-        return self.W[i % self.L]
+    @property
+    def L(self):
+        """Number of physical sites. For an iMPO the len of the MPO unit cell."""
+        return len(self.sites)
 
-    def _set_chi_from_Ws(self):
-        """set ``self.chi` from the ``Ws``."""
-        chis = [W.get_leg('wL').ind_len for W in self.Ws]
-        chis.append(self.Ws[-1].get_leg('wR').ind_len)
-        self.chi = chis
+    @property
+    def dim(self):
+        """List of local physical dimensions."""
+        return [site.dim for site in self.sites]
+
+    @property
+    def finite(self):
+        "Distinguish MPO (``True; bc='finite', 'segment'`` ) vs. iMPO (``False; bc='infinite'``)"
+        assert (self.bc in self._valid_bc)
+        return self.bc != 'infinite'
+
+    @property
+    def chi(self):
+        """Dimensions of the (nontrivial) virtual bonds."""
+        return [W.get_leg('wL').ind_len for W in self._W] + [self._W[-1].get_leg('wR').ind_len]
+
+    def get_W(self, i, copy=False):
+        """Return `W` at site `i`."""
+        i = self._to_valid_index(i)
+        if copy:
+            return self._W[i].copy()
+        return self._W[i]
+
+    def set_W(self, i, W):
+        """Set `W` at site `i`."""
+        i = self._to_valid_index(i)
+        self._W[i] = W
+
+    def get_IdL(self, i):
+        """Return index of `IdL` at bond to the *left* of site `i`.
+
+        May be ``None``."""
+        i = self._valid_index(i)
+        return self.IdL[i]
+
+    def get_IdR(self, i):
+        """Return index of `IdL` at bond to the *right* of site `i`.
+
+        May be ``None``."""
+        i = self._valid_index(i)
+        return self.IdR[i+1]
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `self.bc`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
 
 
 class MPOGraph(object):
@@ -142,7 +197,7 @@ class MPOGraph(object):
     on the local Hilbert space. The entry ``W[wL, wR]`` connects the vertex ``wL`` on bond
     ``(i-1, i)`` with the vertex ``wR`` on bond ``(i, i+1)``.
 
-    The keys ``'idR'`` (for 'idenity left') and ``'idR'`` (for 'identity right') are reserved to
+    The keys ``'IdR'`` (for 'idenity left') and ``'IdR'`` (for 'identity right') are reserved to
     represent only ``'Id'`` (=identity) operators to the left and right of the bond, respectively.
 
     Parameters
@@ -152,14 +207,14 @@ class MPOGraph(object):
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
     add_id : bool
-        Wheter to add identities to generate the states 'idL' and 'idR' on each site.
+        Wheter to add identities to generate the states 'IdL' and 'IdR' on each site.
 
     Attributes
     ----------
     L
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
-    chinfo : :class:`npc.ChargeInfo`
+    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
         The nature of the charge.
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
@@ -170,6 +225,11 @@ class MPOGraph(object):
         ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
     _grid_legs : None | list of LegCharge
         The charges for the MPO
+
+
+    .. todo ::
+        might be useful to add a "cleanup" function which removes operators cancelling each other
+        and/or unused states. Or better use a 'compress' of the MPO?
     """
     def __init__(self, sites, bc='finite', add_id=True):
         self.sites = list(sites)
@@ -178,15 +238,10 @@ class MPOGraph(object):
         # empty graph
         self.states = [set() for _ in xrange(self.L+1)]
         self.graph = [{} for _ in xrange(self.L)]
-        # add usual entries for 'idL' and 'idR'
-        if add_id:
-            for i in range(self.L):
-                self.add(i, 'idL', 'idL', 'Id', 1., check_op=False)
-                self.add(i, 'idR', 'idR', 'Id', 1., check_op=False)
-        self.test_sanity()
         self._ordered_states = None
         self._grids = None
         self._grid_legs = None
+        self.test_sanity()
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -194,18 +249,27 @@ class MPOGraph(object):
         assert len(self.states) == self.L+1
         if self.bc not in MPO._valid_bc:
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
-        # TODO: much more checks
         for i, site in enumerate(self.sites):
             if site.leg.chinfo != self.chinfo:
                 raise ValueError("invalid ChargeInfo for site {i:d}".format(i=i))
+            stL, stR = self.states[i:i+2]
+            # check graph
+            gr = self.graph[i]
+            for keyL in gr:
+                assert keyL in stL
+                for keyR in gr[keyL]:
+                    assert keyR in stR
+                    for opname, strength in gr[keyL][keyR]:
+                        assert opname in site.opnames
+        # done
 
     @property
     def L(self):
-        """number of physical sites. For an iMPS the length of the unit cell."""
+        """Number of physical sites. For an iMPS the length of the unit cell."""
         return len(self.sites)
 
     def add(self, i, keyL, keyR, opname, strength, check_op=True):
-        """insert an edge into the graph.
+        """Insert an edge into the graph.
 
         Parameters
         ----------
@@ -237,15 +301,44 @@ class MPOGraph(object):
         else:
             D[keyR].append((opname, strength))
 
+    def add_missing_IdL_IdR(self):
+        """Add missing 'Id' edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
+
+        For ``bc='infinite'``, insert missing identities at *all* bonds.
+        For ``bc='finite' | 'segment'`` only insert
+        ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
+        ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
+
+        Thus, this function should be called *after* all other operators have been inserted.
+        """
+        if self.bc == 'infinite':
+            # infinite boundary connections: add for all sites
+            for i, G in enumerate(self.graph):
+                if 'IdL' not in G.get('IdL', []):
+                    self.add(i, 'IdL', 'IdL', 'Id', 1.)
+                if 'IdR' not in G.get('IdR', []):
+                    self.add(i, 'IdR', 'IdR', 'Id', 1.)
+        else:
+            max_IdL = max([0] + [i for i, s in enumerate(self.states) if 'IdL' in s])
+            for i in range(max_IdL):
+                if 'IdL' not in self.graph[i].get('IdL', []):
+                    self.add(i, 'IdL', 'IdL', 'Id', 1.)
+            min_IdR = min([self.L] + [i for i, s in enumerate(self.states) if 'IdR' in s])
+            for i in range(min_IdR, self.L):
+                if 'IdR' not in self.graph[i].get('IdR', []):
+                    self.add(i, 'IdR', 'IdR', 'Id', 1.)
+        # done
+
     def build_MPO(self, W_qtotal=None, leg0=None):
-        """build the MPO represented by the graph (`self`).
+        """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
         W_qtotal : None | charges
             charges for *each* of the individual `W`.
         leg0 : None | :class:`npc.LegCharge`
-            The charges to be used for the very first leg.
+            The charges to be used for the very first leg (which is a gauge freedom).
+            If ``None`` (default), use zeros.
 
         Returns
         -------
@@ -253,11 +346,10 @@ class MPOGraph(object):
             the MPO which self represents.
         """
         self.test_sanity()
-        # TODO : remove `unused` states !!!
         # pre-work: generate the grid
         self._set_ordered_states()
-        self._build_grid()
-        self._calc_grid_legs(W_qtotal)
+        self._build_grids()
+        self._calc_grid_legs(W_qtotal, leg0)
         # now build the `W` from the grid
         Ws = []
         for i in xrange(self.L):
@@ -265,9 +357,9 @@ class MPOGraph(object):
             W = npc.grid_outer(self._grids[i], legs, W_qtotal)
             W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws.append(W)
-        idL = [s.get('idL', None) for s in self._ordered_states]
-        idR = [s.get('idR', None) for s in self._ordered_states]
-        return MPO(self.sites, Ws, self.bc, idL, idR)
+        IdL = [s.get('IdL', None) for s in self._ordered_states]
+        IdR = [s.get('IdR', None) for s in self._ordered_states]
+        return MPO(self.sites, Ws, self.bc, IdL, IdR)
 
     def __repr__(self):
         return "<MPOGraph L={L:d}>".format(L=self.L)
@@ -296,23 +388,22 @@ class MPOGraph(object):
     def _set_ordered_states(self):
         """define an ordering of the 'states' on each MPO bond.
 
-        Set ``self._ordered_sites`` to a list of dictionaries ``{state: index}``.
+        Set ``self._ordered_states`` to a list of dictionaries ``{state: index}``.
         """
-        res = []
+        res = self._ordered_states = []
         for s in self.states:
             d = {}
-            # try 'idL'=0 and 'idR'=-1.
-            if 'idL' in s:
+            # try 'IdL'=0 and 'IdR'=-1.
+            if 'IdL' in s:
                 offset = 1
-                d['idL'] = 0
+                d['IdL'] = 0
             else:
                 offset = 0
-            for i, key in enumerate(sorted(s - {'idL', 'idR'}, key=str)):
+            for i, key in enumerate(sorted(s - {'IdL', 'IdR'}, key=str)):
                 d[key] = i + offset
-            if 'idR' in s:
-                d['idR'] = len(s) - 1
+            if 'IdR' in s:
+                d['IdR'] = len(s) - 1
             res.append(d)
-        return res
 
     def _build_grids(self):
         """translate the graph dictionaries into grids for the `Ws`."""
@@ -364,7 +455,7 @@ class MPOGraph(object):
         """calculate LegCharges for the grids from self.grid"""
         grids = self._grids
         assert(grids is not None)  # make sure _grid_insert_ops was called
-        if self.bc == 'finite':
+        if self.bc != 'infinite':
             self._calc_grid_legs_finite(grids, W_qtotal, leg0)
         else:
             self._calc_grid_legs_infinite(grids, W_qtotal, leg0)
@@ -393,7 +484,7 @@ class MPOGraph(object):
         The hard case. Initially, we do not know all charges of the first leg; and they have to
         be consistent with the final leg.
 
-        The way to go: gauge 'idL' on the very left leg to 0, then gradually calculate the charges
+        The way to go: gauge 'IdL' on the very left leg to 0, then gradually calculate the charges
         by going along the edges of the graph (maybe also over the iMPO boundary).
         """
         if leg0 is not None:
@@ -407,7 +498,7 @@ class MPOGraph(object):
         assert(states is not None)  # make sure self._set_ordered_states() was called
         charges = [{} for _ in xrange(self.L)]
         charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
-        charges['idL'] = self.chinfo.make_valid(None)  # default charge = 0.
+        charges['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
         chis = [len(s) for s in self.states]
         for _ in xrange(1000*self.L):  # I don't expect interactions with larger range than that...
             for i in xrange(self.L):

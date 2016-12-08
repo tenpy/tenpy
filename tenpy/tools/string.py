@@ -70,7 +70,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     # number of lines in each string
     numlines = [len(lines) for lines in strlist]
     # maximum number of lines = total number of lines in the resulting string
-    totallines = max(numlines)
+    totallines = max([0] + numlines)
     # width for each of thestrings
     widths = [max([len(l) for l in lines]) for lines in strlist]
     # translate halign to string format mini language
