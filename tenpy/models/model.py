@@ -36,6 +36,7 @@ __all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
 
 _bc_coupling_choices = {'open': True, 'periodic': False}
 
+
 class CouplingModel(object):
     """Base class for a general Model of a Hamiltonian consisting of two-site couplings.
 
@@ -85,7 +86,8 @@ class CouplingModel(object):
         self.onsite_terms = [dict() for _ in range(self.lat.N_sites)]
         self.coupling_terms = [dict() for _ in range(self.lat.N_sites)]
         self.H_onsite = None
-        self.test_sanity()
+        CouplingModel.test_sanity(self)
+        # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -164,7 +166,7 @@ class CouplingModel(object):
         idx_j_lat_shifted = idx_i_lat + dx
         idx_j_lat = idx_j_lat_shifted % np.array(self.lat.Ls)
         keep = np.all(np.logical_or(idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
-                                    ~self.bc_coupling), # direction has periodic bound. cond.
+                                    ~self.bc_coupling),  # direction has periodic bound. cond.
                       axis=1)
         idx_i = idx_i[keep]
         idx_i_lat = idx_i_lat[keep]
@@ -179,7 +181,7 @@ class CouplingModel(object):
                     swap = (j < i)  # ensure coupling within the chain
                 elif d_in > d_out:
                     swap = (i < j)  # ensure coupling over the iMPS boundary
-                else: # d_in == d_out
+                else:  # d_in == d_out
                     swap = False  # don't change the order
                     # this is necessary for correct TEBD for iMPS with L=2
             else:  # finite MPS
@@ -191,7 +193,7 @@ class CouplingModel(object):
             # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             d2 = d1.setdefault((o1, op_string), dict())
             d3 = d2.setdefault(j, dict())
-            d3[op2] = d3.get(o2, 0) + strength[tuple(i_lat)]
+            d3[o2] = d3.get(o2, 0) + strength[tuple(i_lat)]
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
@@ -228,20 +230,22 @@ class CouplingModel(object):
 
         Returns
         -------
-        H_bond : list of npc.Array
-            Bond terms. Legs are ``['pL', 'pL*', 'pR', 'pR*']``
+        H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Bond terms as required by the constructor of :class:`NearestNeighborModel`.
+            Legs are ``['pL', 'pL*', 'pR', 'pR*']``
 
         Raises
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
+        self._remove_coupling_terms_zeros(tol_zero)
         if self.H_onsite is None:
             self.H_onsite = self.calc_H_onsite(tol_zero)
-        # self._remove_coupling_terms_zeros(tol_zero)
         finite = (self.lat.bc_MPS != 'infinite')
-        res = []
+        res = [None]*self.lat.N_sites
         for i, d1 in enumerate(self.coupling_terms):
-            j = (i + 1) % self.lat.N_sites
+            j = (i+1) % self.lat.N_sites
+            d1 = self.coupling_terms[i]
             site_i = self.lat.site(i)
             site_j = self.lat.site(j)
             strength = 0.5 if i > 0 or i == 0 and not finite else 1.
@@ -259,9 +263,9 @@ class CouplingModel(object):
                     for op2, strength in d3.iteritems():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
             H.set_leg_labels(['pL', 'pL*', 'pR', 'pR*'])
-            res.append(H)
+            res[j] = H
         if finite:
-            assert(res[-1].norm(np.inf) <= tol_zero)
+            assert(res[0].norm(np.inf) <= tol_zero)
         return res
 
     def calc_H_MPO(self):
@@ -278,12 +282,14 @@ class CouplingModel(object):
         # done
 
     def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
-        """remove entries of strength `0` from ``self.onsite_terms``."""
+        """remove entries of strength `0` from ``self.coupling_terms``."""
+        from pprint import pprint
+        pprint(self.coupling_terms)
         for d1 in self.coupling_terms:
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             for op_i_op_str, d2 in d1.iteritems():
                 for j, d3 in d2.iteritems():
-                    for op_j, st in d3:
+                    for op_j, st in d3.iteritems():
                         if abs(st) < tol_zero:
                             del d3[op_j]
                     if len(d3) == 0:
@@ -303,13 +309,21 @@ class NearestNeighborModel(object):
 
     Suitable for TEBD.
 
+    Parameters
+    ----------
+    lat : :class:`tenpy.model.lattice.Lattice`
+        The lattice defining the geometry and the local Hilbert space(s).
+    H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+        ``H_bond[i]`` acts on sites ``(i-1, i)``; we require ``len(H_bond) == lat.N_sites``.
+
     Attributes
     ----------
     lat : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     H_bond : list of :class:`npc.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
-        ``H_bond[i]`` acts on sites ``(i, i+1)``.
+        ``H_bond[i]`` acts on sites ``(i-1, i)``.
     bond_eig_vals : list of 1D arrays
         eigenvalues for each entry of H_bond
     bond_eig_vecs : list of npc.Array
@@ -322,13 +336,21 @@ class NearestNeighborModel(object):
     .. todo ::
         implement
     """
-    def __init__(self, lattice, H_bond):
-        self.lat = lattice
+    def __init__(self, lat, H_bond):
+        self.lat = lat
         self.H_bond = list(H_bond)
+        if self.lat.bc_MPS != 'infinite':
+            self.H_bond[0] = None
         self.calc_bond_eig()
         self.U_bond = None
         self.U_param = dict()
         # raise NotImplementedError()  # TODO
+        NearestNeighborModel.test_sanity(self)
+        # like self.test_sanity(), but use the version defined below even for derived class
+
+    def test_sanity(self):
+        if len(self.H_bond) != self.lat.N_sites:
+            raise ValueError("wrong len of H_bond")
 
     def calc_bond_eig(self):
         """calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``."""

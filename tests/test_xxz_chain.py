@@ -18,7 +18,7 @@ def test_XXZChain():
     chain = XXZChain(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite')
     chain.test_sanity()
     # check bond eigenvalues
-    for Hb in chain.H_bond[:-1]:
+    for Hb in chain.H_bond[1:]:
         Hb2 = Hb.combine_legs([['pL', 'pR'], ['pL*', 'pR*']], qconj=[+1, -1])
         W = npc.eigvalsh(Hb2)
         # TODO check eigenvalues for nozero hz, ...?
