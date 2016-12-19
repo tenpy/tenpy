@@ -358,6 +358,13 @@ class NearestNeighborModel(object):
         self.bond_eig_vecs = None
         # raise NotImplementedError()  # pass on to allow testing with XXZChain
 
+    def calc_U(self, param):
+        if (param == self.U_param):
+            return
+        self.U_param = param
+        # calculate exp(iHt) for given parameters
+        # TODO ....
+        raise NotImplementedError()
 
 class MPOModel(object):
     """Base class for a model with an MPO representation of the Hamiltonian.
