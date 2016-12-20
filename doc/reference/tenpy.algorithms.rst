@@ -7,6 +7,7 @@ Submodules
 .. toctree::
 
    tenpy.algorithms.tebd
+   tenpy.algorithms.truncation
 
 Module contents
 ---------------

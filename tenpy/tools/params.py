@@ -1,6 +1,13 @@
 """Tools to handle paramters for algorithms.
 
-See the doc-string of :func:`get_parameter` for details."""
+See the doc-string of :func:`get_parameter` for details.
+
+.. todo :
+    If a function (like `tenpy.algorithms.truncation` using `get_parameter` gets called very
+    often, we might want a way to print the parameters only for the first time they are used.
+    Maybe add a special keyword `_used_par` wich is a set?
+    That would also allow for a check for miss-spelled parameters....
+"""
 
 __all__ = ["get_parameter"]
 

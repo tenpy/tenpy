@@ -9,6 +9,7 @@ Submodules
    tenpy.tools.fit
    tenpy.tools.math
    tenpy.tools.misc
+   tenpy.tools.params
    tenpy.tools.process
    tenpy.tools.string
 

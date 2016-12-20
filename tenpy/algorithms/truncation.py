@@ -1,0 +1,242 @@
+r"""Truncation of Schmidt values, e.g. for TEBD.
+
+Often, it is necessary to truncate the number of states on a virtual bond of an MPS,
+keeping only the state with the largest Schmidt values.
+The function :func:`truncation` picks exactly those from a given Schmidt spectrum
+:math:`\lambda_a`, depending on some parameters explained in the doc-string of the function.
+
+Further, we provide :class:`TruncationError` for a simple way to keep track of the
+total truncation error.
+
+The SVD on a virtual bond of an MPS actually gives a Schmidt decomposition
+:math:`|\psi\rangle = \sum_{a} \lambda_a |L_a\rangle |R_a\rangle`
+where :math:`|L_a\rangle` and :math:`|R_a\rangle` form orthonormal bases of the parts
+left and right of the virtual bond.
+Let us assume that the state is properly normalized,
+:math:`\langle\psi | \psi\rangle = \sum_{a} \lambda^2 = 1`.
+Assume that the singular values are ordered descending, and that we keep the first :math:`\chi_c`
+of the initially :math:`\chi` Schmidt values.
+
+Then we decompose the untuncated state as
+:math:`|\psi\rangle = \sqrt{1-\epsilon}|\psi_{tr}\rangle + \sqrt{\epsilon}|\psi_{tr}^\perp\rangle`
+where
+:math:`|\psi_{tr}\rangle =
+\frac{1}{\sqrt{1-\epsilon}} \sum_{a < \chi_c} \lambda_a|L_a\rangle|R_a\rangle`
+is the truncated state kept (normalized to 1),
+:math:`|\psi_{tr}^\perp\rangle =
+\frac{1}{\sqrt{\epsilon}} \sum_{a >= \chi_c} \lambda_a |L_a\rangle|R_a\rangle`
+is the discarded part (orthogonal to the kept part) and the
+*truncation error of a single truncation* is defined as
+:math:`\epsilon = 1 - |\langle \psi | \psi_{tr}\rangle |^2 = \sum_{a >= \chi_c} \lambda_a^2`.
+
+.. warning :
+    For imaginary time evolution (e.g. with TEBD), you try to project out the ground state.
+    Then, looking at the truncation error definde in this module does *not* give you any
+    information how good the found state coincides with the actual ground state!
+    (Instead, the returned truncation error depends on the overlap with the initial state,
+    which is arbitrary > 0)
+
+.. warning :
+    This module takes only track of the errors coming from the trunecation of Schmidt values.
+    There might be other sources of error as well, for example TEBD has also an discretisation
+    error depending on the chosen time step.
+
+.. todo :
+    The `TEBD wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`_
+    (in the section 'Errors coming from the truncation of the Hilbert space')
+    claims that there is a second more subtle error, which stems from the change of the Schmidt
+    basis |R_a> on bond i-1 if we truncate bond i.
+    In the end, that leads just to a factor of 2 in TruncationError.__init__ ???
+    (I couldn't follow the argument completely,
+    and the factor was definetly not included in the old TenPy.)
+"""
+
+import numpy as np
+import warnings
+from ..tools.params import get_parameter
+
+__all__ = ['TruncationError', 'truncate']
+
+
+class TruncationError(object):
+    r"""Class representing a truncation error.
+
+    The default initialization represents "no truncation".
+
+    .. warning:
+        For imaginary time evolution, this is *not* the error you are interested in!
+
+    Attributes
+    ----------
+    Ov_err
+    eps : float
+        The total sum of all discared Schmidt values squared.
+    Ov : float
+        A lower bound for the overlap :math:`|\langle \psi_{trunc} | \psi_{correct} \rangle|^2`
+        (assuming normalization of both states).
+        This is probably the quantity you are actually interested in.
+
+    Examples
+    --------
+    >>> TE = TruncationError()
+    >>> TE += tebd.time_evolution(...)
+
+    .. todo :
+        what if eps < 1.e-16? in that case 1.-eps = 1 to machine precision. Just ignore that?
+    """
+    def __init__(self):
+        self.eps = 0.
+        self.Ov = 1.
+
+    @classmethod
+    def from_norm(cls, norm_new, norm_old=1.):
+        """Construct TruncationError from norm after and before the truncation.
+
+        Parameters
+        ----------
+        norm_new : float
+            Norm of Schmidt values kept, :math:`\sqrt{\sum_{a kept} \lambda_a^2}`
+            (before re-normalization).
+        norm_old : float
+            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+        """
+        res = cls()
+        res.eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
+        res.Ov = 1. - 2.*res.eps  # TODO: include factor of 2? See above link to wikipedia
+        return res
+
+    def __add__(self, other):
+        res = TruncationError()
+        res.eps = self.eps + other.eps  # whatever that actually means...
+        res.Ov = self.Ov * other.Ov
+        return res
+
+    @property
+    def Ov_err(self):
+        """Error ``1.-Ov`` of the overlap with the correct state."""
+        return 1. - self.Ov
+
+    def __repr__(self):
+        return "<TruncationError eps={eps:.4e}, Ov={Ov:.10f}>".format(eps=self.eps, Ov=self.Ov)
+
+
+def truncate(S, trunc_par):
+    """Given a schmidt spectrum Y, determine which values to keep.
+
+    1) a maximum allowed chi (chi_max)
+    2) a bound on singular values, -log(s_i) < svd_max.
+    3) a desired truncation error, trunc_cut
+    4) a desire not to split near degenerate Schmidt values., tol.
+    Due to various symmetries there may be degenerate (or near degenerate) s_i,
+    so we don't split any s_i s.t. log(s_i/s_j)  < tol .
+
+    truncation_par = {'chi_min','chi_max', 'svd_max', 'trunc_cut', tol}
+    chi_max:    maximum chi allowed for truncation
+    svd_max:    exp(-svd_max) is the minimum Schmidt value allowed for truncation.
+    trunc_cut:  the desired truncation bound, 1 - |PsiTrunc|^2 < trunc_cut
+    chi_min:    minimum chi allowed for truncation. used for preventing TEBD lowering the value of chi after a local perturbation.
+    tol: minimum allowed splitting between last sv kept and first dropped
+
+    If chi_max or svd_max is None, the corresponding criteria is not checked.
+    If trunc_cut = None, it is considered 0.
+
+    Parameters
+    ----------
+    S : 1D array
+        Schmidt values (as returned by an SVD).
+    trunc_par: dict
+        Parameters giving constraints for the truncation.
+        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+
+        ============ ====== ====================================================
+        key          type   constraint
+        ============ ====== ====================================================
+        chi_max      int    Keep at most `chi_max` Schmidt values.
+        ------------ ------ ----------------------------------------------------
+        chi_min      int    Keep at least `chi_min` Schmidt values.
+        ------------ ------ ----------------------------------------------------
+        symmetry_tol float  Don't cut between Schmidt values with
+                            ``log(S[i]/S[j]) < log(symmetry_tol)``
+                            (i.e. either keep either both `i` and `j` or none).
+        ------------ ------ ----------------------------------------------------
+        svd_min      float  Discard small Schmidt values ``S[i] < svd_min``.
+        ------------ ------ ----------------------------------------------------
+        max_trunc    float  Discard small Schmidt values as long as
+                            ``sum_{i discarded} S[i]**2 <= max_trunc``
+        ============ ====== ====================================================
+
+    Returns
+    -------
+    mask : 1D bool array
+        Index mask, True for indices which should be kept.
+        Indices of S which should be kept (sorted by ascending S).
+    norm_new : float
+        The norm of the truncated Schmidt values, ``np.linalg.norm(S[mask])``.
+        Useful for re-normalization.
+    err : :class:`TruncationError`
+        The error of the represented state which is introduced due to the truncation.
+    """
+    chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
+    chi_min = get_parameter(trunc_par, 'chi_min', 0, 'truncation')
+    sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
+    svd_min = get_parameter(trunc_par, 'svd_min', None, 'truncation')
+    max_trunc = get_parameter(trunc_par, 'max_trunc', 0, 'truncation')
+
+    if max_trunc >= 1.:
+        raise ValueError("trunc_cut >=1.")
+    if not np.any(S > 1.e-10):
+        warnings.warn("no Schmidt value above 1.e-10")
+    if np.any(S < -1.e-10):
+        warnings.warn("negative Schmidt values!")
+
+    # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
+    logS = np.log(np.choose(S <= 0., [S, 1.e-100*np.ones(len(S))]))
+    piv = np.argsort(logS)  # sort *ascending*.
+    # goal: find an index 'cut' such that we keep piv[cut:].
+    logS = logS[piv]
+    good = np.ones(len(piv), dtype=np.bool)  # good[cut] = (is `cut` a good choice?)
+    # we choose the smalles 'good' cut.
+
+    if chi_max is not None:
+        # keep at most chi_max values
+        good2 = np.zeros(len(piv), dtype=np.bool)
+        good2[-chi_max:] = True
+        good = _combine_constraints(good, good2, "chi_max")
+
+    if chi_min is not None and chi_min > 1:
+        # keep at most chi_max values
+        good2 = np.ones(len(piv), dtype=np.bool)
+        good2[-chi_min+1:] = False
+        good = _combine_constraints(good, good2, "chi_min")
+
+    if sym_tol:
+        # don't cut between values with log(S[i]/S[j]) < log(sym_tol)
+        good2 = np.empty(len(piv), np.bool)
+        good2[0] = True
+        good2[1:] = np.greater_equal(logS[1:] - logS[:-1], np.log(sym_tol))
+        good = _combine_constraints(good, good2, "symmetry_tol")
+
+    if svd_min is not None:
+        # keep only values S[i] >= svd_min
+        good2 = np.greater_equal(logS, np.log(svd_min))
+        good = _combine_constraints(good, good2, "svd_min")
+
+    if max_trunc is not None:
+        good2 = (np.cumsum(S[piv]**2) > max_trunc)
+        good = _combine_constraints(good, good2, "max_trunc")
+
+    cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
+    mask = np.zeros(len(S), dtype=np.bool)
+    np.put(mask, piv[cut:], True)
+    norm_new = np.linalg.norm(S[mask])
+    return mask, norm_new, TruncationError.from_norm(norm_new, np.linalg.norm(S)),
+
+
+def _combine_constraints(good1, good2, warn):
+    """return logical_and(good1, good2) if there remains at least one `True` entry.
+    Otherwise print a warning and return just `good1`."""
+    res = np.logical_and(good1, good2)
+    if np.any(res):
+        return res
+    warnings.warn("truncation: can't satisfy constraint " + warn)
+    return good1
