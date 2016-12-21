@@ -1,25 +1,24 @@
 """Tools to handle paramters for algorithms.
 
 See the doc-string of :func:`get_parameter` for details.
-
-.. todo :
-    If a function (like `tenpy.algorithms.truncation` using `get_parameter` gets called very
-    often, we might want a way to print the parameters only for the first time they are used.
-    Maybe add a special keyword `_used_par` wich is a set?
-    That would also allow for a check for miss-spelled parameters....
 """
+
+import warnings
 
 __all__ = ["get_parameter"]
 
-def get_parameter(par_dict, key, default, descr=''):
+
+def get_parameter(par_dict, key, default, descr):
     """Read out a parameter from the dictionary and/or provide default values.
 
     This function provides a similar functionality as ``par_dict.get(key, default)``.
     *Unlike* `dict.get` this function writes the default value into the dictionary
-    (i.e. in other words it's more similar to ``par_dict.set_default(key, default)``).
+    (i.e. in other words it's more similar to ``par_dict.setdefault(key, default)``).
 
-    However, a special key ``'verbose'`` (with value > 0) *in* the `par_dict`
-    triggers this function to additionally print the used (default) value.
+    However, a special key ``'verbose'`` *in* the `par_dict` with value > 0 triggers this function
+    to additionally print the used value. If verbose >= 10, it is printed every time its used,
+    otherwise only for the first use.
+    (Wheter a parameter was used is saved in the set ``par_dict['_used_param']``.)
 
     This function should be used in the algorithms to read out parameters.
     Then, when the algorithms are calleed by TenPy users,
@@ -33,13 +32,13 @@ def get_parameter(par_dict, key, default, descr=''):
     ----------
     par_dict : dict
         A dicionary of the parameters as provided by the user.
-        If `key` is not a valid key, par_dict[key] is set to the `default`
+        If `key` is not a valid key, ``par_dict[key]`` is set to `default`.
     key : string
         The key for the parameter which should be read out from the dictionary.
     default :
         The default value for the parameter.
     descr : str
-        A short description like 'TEBD', 'XXZ_model', which is used for verbose output.
+        A short description for verbose output, like 'TEBD', 'XXZ_model', 'truncation'.
 
     Returns
     -------
@@ -71,11 +70,42 @@ def get_parameter(par_dict, key, default, descr=''):
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
     set parameter 'dt'=0.1 for TEBD
 
+
     """
     verbose = par_dict.get('verbose', 0)
-    val = par_dict.get(key, default)
-    if verbose > 0:
+    val = par_dict.setdefault(key, default)  # get the value; set default if not existent
+    used = par_dict.setdefault('_used_param', set())
+    if verbose > 5 or (key not in used and verbose > 0):
         defaultstring = "" if key in par_dict else "(default) "
         print "set parameter {key!r}={val!s} {defaultstring}for {descr!s}".format(
             descr=descr, key=key, val=val, defaultstring=defaultstring)
+    if key not in used:
+        used.add(key)
     return val
+
+
+def unused_parameters(par_dict, warn=None):
+    """Returns a set of the parameters which have not been read out with `get_parameters`.
+
+    This function might be useful to check for typos in the parameter keys.
+
+    Parameters
+    ----------
+    par_dict : dict
+        A dictionary of parameters which was given to (functions using) :meth:`get_parameter`
+    warn : None | str
+        If given, print a warning "unused parameter {key!r} for {warn!s}" for each unused key.
+
+    Returns
+    -------
+    unused_keys : set
+        The set of keys of the par_dict which was not used
+    """
+    used = par_dict.get('_used_param', set())
+    unused = set(par_dict.keys()) - used
+    unused.discard('_used_param')
+    unused.discard('verbose')
+    if warn is not None:
+        for key in unused:
+            warnings.warn("unused parameter {key!r} for {descr!s}".format(key=key, descr=warn))
+    return unused

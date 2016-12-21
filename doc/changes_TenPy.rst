@@ -34,6 +34,12 @@ np_conserved
 - more functions, e.g. :func:`~tenpy.linalg.np_conserved.grid_outer`
 
 
+TEBD
+----
+- Introduced TruncationError for easy handling of total truncation error.
+- some truncation parameters are renamed and may have a different meaning, e.g. `svd_max` -> `svd_min` 
+  has no 'log' in the definition.
+
 tools
 -----
 - added :mod:`tenpy.tools.misc`, which contains 'random stuff' from old ``tools.math``
@@ -41,4 +47,7 @@ tools
 - moved stuff for fitting to :mod:`tenpy.tools.fit`
 - enhanced :func:`tenpy.tools.string.vert_join` for nice formatting
 - moved (parts of) old `cluster/omp.py` to :mod:`tenpy.tools.process`
+- added :mod:`tenpy.tools.params` for a simplified handling of parameter/arguments for models and/or algorithms.
+  Similar as the old `models.model.set_var`, but use it also for algorithms. Also, it may modify the given dictionary.
+
 
