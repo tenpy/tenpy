@@ -15,7 +15,8 @@ from tenpy.models.xxz_chain import XXZChain
 
 
 def test_XXZChain():
-    chain = XXZChain(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite')
+    pars = dict(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite')
+    chain = XXZChain(pars)
     chain.test_sanity()
     # check bond eigenvalues
     for Hb in chain.H_bond[1:]:
@@ -26,7 +27,9 @@ def test_XXZChain():
 
     for L in [2, 3, 4, 5, 6]:
         print "L =", L
-        chain = XXZChain(L=L, Jxx=1., Jz=1., hz=0., bc_MPS='infinite')
+        pars['L'] = L
+        pars['bc_MPS'] = 'infinite'
+        chain = XXZChain(pars)
         pprint.pprint(chain.coupling_terms)
         assert len(chain.H_bond) == L
         Hb0 = chain.H_bond[0]
