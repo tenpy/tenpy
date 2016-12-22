@@ -60,10 +60,10 @@ class CouplingModel(object):
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `_bc_coupling_choices`.
     onsite_terms : list of dict
-        For each mps index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
+        For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
         Filled by :meth:`add_onsite`.
     coupling_terms : list of dict
-        For each mps index `i` a dictionary of the form
+        For each MPS index `i` a dictionary of the form
         ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``.
         Entries with ``j < i`` are only allowed for ``lat.bc_MPS == 'infinite'``, in which case
         they indicate couplings over the iMPS boundary, i.e., between the sites
@@ -412,6 +412,7 @@ class NearestNeighborModel(object):
         # TODO ....
         else:
             raise NotImplementedError('Only 4th order Trotter has been implemented')
+
 
 class MPOModel(object):
     """Base class for a model with an MPO representation of the Hamiltonian.

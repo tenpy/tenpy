@@ -16,7 +16,9 @@ import numpy as np
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..linalg import np_conserved as npc
+from ..tools.params import get_parameter
 
+__all__ = ['XXZChain']
 
 class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     r"""Spin-1/2 XXZ chain with Sz conservation.
@@ -36,8 +38,16 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+
+    All parameters are
     """
-    def __init__(self, L=2, Jxx=1., Jz=1., hz=0., bc_MPS='finite'):
+    def __init__(self, model_param):
+        # 0) read out/set default parameters
+        L = get_parameter(model_param, 'L', 2, self.__class__)
+        Jxx = get_parameter(model_param, 'Jxx', 1., self.__class__)
+        Jz = get_parameter(model_param, 'Jxx', 1., self.__class__)
+        hz = get_parameter(model_param, 'hz', 0., self.__class__)
+        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         # 1) charges of the physical Leg. The only time that we actually define charges!
         leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
         # 2) onsite operators

@@ -123,23 +123,6 @@ class TruncationError(object):
 def truncate(S, trunc_par):
     """Given a schmidt spectrum Y, determine which values to keep.
 
-    1) a maximum allowed chi (chi_max)
-    2) a bound on singular values, -log(s_i) < svd_max.
-    3) a desired truncation error, trunc_cut
-    4) a desire not to split near degenerate Schmidt values., tol.
-    Due to various symmetries there may be degenerate (or near degenerate) s_i,
-    so we don't split any s_i s.t. log(s_i/s_j)  < tol .
-
-    truncation_par = {'chi_min','chi_max', 'svd_max', 'trunc_cut', tol}
-    chi_max:    maximum chi allowed for truncation
-    svd_max:    exp(-svd_max) is the minimum Schmidt value allowed for truncation.
-    trunc_cut:  the desired truncation bound, 1 - |PsiTrunc|^2 < trunc_cut
-    chi_min:    minimum chi allowed for truncation. used for preventing TEBD lowering the value of chi after a local perturbation.
-    tol: minimum allowed splitting between last sv kept and first dropped
-
-    If chi_max or svd_max is None, the corresponding criteria is not checked.
-    If trunc_cut = None, it is considered 0.
-
     Parameters
     ----------
     S : 1D array
@@ -147,6 +130,7 @@ def truncate(S, trunc_par):
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+        All parameters default to ``None``, in which case the constraint is ignored.
 
         ============ ====== ====================================================
         key          type   constraint
@@ -156,20 +140,21 @@ def truncate(S, trunc_par):
         chi_min      int    Keep at least `chi_min` Schmidt values.
         ------------ ------ ----------------------------------------------------
         symmetry_tol float  Don't cut between Schmidt values with
-                            ``log(S[i]/S[j]) < log(symmetry_tol)``
+                            ``|log(S[i]/S[j])| < log(symmetry_tol)``
                             (i.e. either keep either both `i` and `j` or none).
+                            This is useful to prevent discarding (nearly)
+                            degenerate pairs in case of symmetries.
         ------------ ------ ----------------------------------------------------
-        svd_min      float  Discard small Schmidt values ``S[i] < svd_min``.
+        svd_min      float  Discard all small Schmidt values ``S[i] < svd_min``.
         ------------ ------ ----------------------------------------------------
-        max_trunc    float  Discard small Schmidt values as long as
-                            ``sum_{i discarded} S[i]**2 <= max_trunc``
+        trunc_cut    float  Discard all small Schmidt values as long as
+                            ``sum_{i discarded} S[i]**2 <= trunc_cut``.
         ============ ====== ====================================================
 
     Returns
     -------
     mask : 1D bool array
         Index mask, True for indices which should be kept.
-        Indices of S which should be kept (sorted by ascending S).
     norm_new : float
         The norm of the truncated Schmidt values, ``np.linalg.norm(S[mask])``.
         Useful for re-normalization.
@@ -177,12 +162,12 @@ def truncate(S, trunc_par):
         The error of the represented state which is introduced due to the truncation.
     """
     chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
-    chi_min = get_parameter(trunc_par, 'chi_min', 0, 'truncation')
+    chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
     sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
     svd_min = get_parameter(trunc_par, 'svd_min', None, 'truncation')
-    max_trunc = get_parameter(trunc_par, 'max_trunc', 0, 'truncation')
+    trunc_cut = get_parameter(trunc_par, 'trunc_cut', None, 'truncation')
 
-    if max_trunc >= 1.:
+    if trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")
     if not np.any(S > 1.e-10):
         warnings.warn("no Schmidt value above 1.e-10")
@@ -221,9 +206,9 @@ def truncate(S, trunc_par):
         good2 = np.greater_equal(logS, np.log(svd_min))
         good = _combine_constraints(good, good2, "svd_min")
 
-    if max_trunc is not None:
-        good2 = (np.cumsum(S[piv]**2) > max_trunc)
-        good = _combine_constraints(good, good2, "max_trunc")
+    if trunc_cut is not None:
+        good2 = (np.cumsum(S[piv]**2) > trunc_cut)
+        good = _combine_constraints(good, good2, "trunc_cut")
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
     mask = np.zeros(len(S), dtype=np.bool)
@@ -238,5 +223,5 @@ def _combine_constraints(good1, good2, warn):
     res = np.logical_and(good1, good2)
     if np.any(res):
         return res
-    warnings.warn("truncation: can't satisfy constraint " + warn)
+    warnings.warn("truncation: can't satisfy constraint for " + warn)
     return good1
