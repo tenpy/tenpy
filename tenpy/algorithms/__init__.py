@@ -1,2 +1,4 @@
-# This file marks this directory as a python package.
-# It is empty on purpose.
+"""A collection of algorithms such as TEBD and DMRG to be used in
+conjunction with the general tensor networks.
+
+"""

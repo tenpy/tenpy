@@ -31,6 +31,7 @@ import numpy as np
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
+from ..tools.params import get_parameter
 
 __all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
 
@@ -353,18 +354,64 @@ class NearestNeighborModel(object):
             raise ValueError("wrong len of H_bond")
 
     def calc_bond_eig(self):
-        """calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``."""
-        self.bond_eig_vals = None  # TODO calculate....
-        self.bond_eig_vecs = None
-        # raise NotImplementedError()  # pass on to allow testing with XXZChain
+        """calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``.
+
+        Raises ValueError is 2-site Hamiltonian could not be diagonalized.
+        """
+        self.bond_eig_vals = []
+        self.bond_eig_vecs = []
+        for h in self.H_bond:
+            #TODO: Check if hermitian?!
+            if h == None:
+                w = v = None
+            else:
+                H2 = h.combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1])
+                w,v = npc.eigh(H2)
+            self.bond_eig_vals.append(w)  #The eigensystem
+            self.bond_eig_vecs.append(v)
+
+            # check if the diagonalisation worked, as in TenPy
+            if h != None:
+                Hnp = H2.to_ndarray()
+                vnp = v.to_ndarray()
+                Hp = np.dot(np.dot(vnp,np.diag(w)),np.conj(vnp.T))
+                if np.allclose(Hnp,Hp) != True:
+                    raise ValueError("Diagonalisation of bond did not work!")
 
     def calc_U(self, param):
+        #TODO: Old TenPy has E_offset
         if (param == self.U_param):
             return
         self.U_param = param
-        # calculate exp(iHt) for given parameters
+        TrotterOrder = get_parameter(param, 'order',2,'TrotterDecomp')
+        dt = get_parameter(param,'dt',0.1,'TrotterDecomp')
+        type = get_parameter(param,'type','REAL','TrotterDecomp')
+
+        if TrotterOrder == 1:
+            self.U_bond = [[None]*len(self.H_bond)]
+            for i_bond in range(len(self.H_bond)):
+                if self.bond_eig_vals[i_bond] != None:
+                    if (type == 'IMAG'):
+                        s = np.exp(-dt*self.bond_eig_vals[i_bond])
+                    elif (type == 'REAL'):
+                        s = np.exp(-1j*dt*( self.bond_eig_vals[i_bond]))
+                    else:
+                        raise ValueError("Need to have either real time (REAL) or imaginary time (IMAG)")
+                    V = self.bond_eig_vecs[i_bond]
+                    #U = V s V^dag, s = e^(- tau E )
+                    U = V.scale_axis(s, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = self.H_bond[i_bond].combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1]).get_leg_labels()
+                    U.set_leg_labels(labels)
+                    #TODO: Not nice!!
+                    self.U_bond[0][i_bond] = U.split_legs()
+        elif TrotterOrder == 2:
+            raise NotImplementedError()
+        elif TrotterOrder == 4:
+            raise NotImplementedError()
         # TODO ....
-        raise NotImplementedError()
+        else:
+            raise NotImplementedError('Only 4th order Trotter has been implemented')
 
 class MPOModel(object):
     """Base class for a model with an MPO representation of the Hamiltonian.
