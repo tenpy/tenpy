@@ -74,6 +74,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         self.add_coupling(Jxx_half, 0, 'Sm', 0, 'Sp', 1)
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize MPO
-        MPOModel.__init__(self, self.calc_H_MPO())
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
         # 8) initialize bonds (the order of 7/8 doesn't matter)
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())

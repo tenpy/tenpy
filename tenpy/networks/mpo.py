@@ -206,8 +206,6 @@ class MPOGraph(object):
         Local sites of the Hilbert space.
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
-    add_id : bool
-        Wheter to add identities to generate the states 'IdL' and 'IdR' on each site.
 
     Attributes
     ----------
@@ -219,7 +217,7 @@ class MPOGraph(object):
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
     states : list of set of keys
-        ``edges[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
+        ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
     graph : list of dict of dict of list of tuples
         For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
         ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
@@ -231,7 +229,7 @@ class MPOGraph(object):
         might be useful to add a "cleanup" function which removes operators cancelling each other
         and/or unused states. Or better use a 'compress' of the MPO?
     """
-    def __init__(self, sites, bc='finite', add_id=True):
+    def __init__(self, sites, bc='finite'):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
@@ -274,17 +272,17 @@ class MPOGraph(object):
         Parameters
         ----------
         i : int
-            site index at which the edge of the graph is to be inserted.
+            Site index at which the edge of the graph is to be inserted.
         keyL : hashable
             The state at bond (i-1, i) to connect from.
         keyR : hashable
             The state at bond (i, i+1) to connect to.
         opname : str
-            name of the operator
+            Name of the operator.
         strength : str
-            prefactor of the operator to be inserted.
+            Prefactor of the operator to be inserted.
         check_op : bool
-            wheter to check that 'opname' exists on the given `site`.
+            Wheter to check that 'opname' exists on the given `site`.
         """
         i = i % self.L
         if check_op:
@@ -301,41 +299,66 @@ class MPOGraph(object):
         else:
             D[keyR].append((opname, strength))
 
+    def add_string(self, i, j, key, opname='Id', check_op=True):
+        """Insert a bunch of edges for an 'operator string' into the graph.
+
+        Terms like :math:`S^z_i S^z_j` actually stand for
+        :math:`S^z_i \otimes \prod_{i < k < j} \mathbb{1}_k \otimes S^z_j`.
+        This function adds the :math:`\mathbb{1}` terms.
+
+        Parameters
+        ----------
+        i, j: int
+            An edge is inserted on all bonds between `i` and `j`.
+        key: hashable
+            The state at bond (i-1, i) to connect from and on bond (j-1, j) to connect to.
+            Also used for the intermediate states.
+            No operator is inserted on a site `i < k < j` if ``has_edge(k, key, key)``.
+        opname : str
+            Name of the operator to be used for the string.
+            Useful for the Jordan-Wigner transformation to fermions.
+        """
+        if j < i:
+            if self.bc != 'infinite':
+                raise ValueError("j < i not allowed for finite boundary conditions")
+            j += self.L
+        for k in range(i+1, j):
+            k = k % self.L
+            if not self.has_edge(k, key, key):
+                self.add(k, key, key, opname, 1., check_op=check_op)
+
     def add_missing_IdL_IdR(self):
-        """Add missing 'Id' edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
+        """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
 
         For ``bc='infinite'``, insert missing identities at *all* bonds.
         For ``bc='finite' | 'segment'`` only insert
         ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
         ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
 
-        Thus, this function should be called *after* all other operators have been inserted.
+        This function should be called *after* all other operators have been inserted.
         """
         if self.bc == 'infinite':
             # infinite boundary connections: add for all sites
-            for i, G in enumerate(self.graph):
-                if 'IdL' not in G.get('IdL', []):
-                    self.add(i, 'IdL', 'IdL', 'Id', 1.)
-                if 'IdR' not in G.get('IdR', []):
-                    self.add(i, 'IdR', 'IdR', 'Id', 1.)
+            self.add_string(-1, self.L, 'IdL')
+            self.add_string(-1, self.L, 'IdR')
         else:
-            max_IdL = max([0] + [i for i, s in enumerate(self.states) if 'IdL' in s])
-            for i in range(max_IdL):
-                if 'IdL' not in self.graph[i].get('IdL', []):
-                    self.add(i, 'IdL', 'IdL', 'Id', 1.)
-            min_IdR = min([self.L] + [i for i, s in enumerate(self.states) if 'IdR' in s])
-            for i in range(min_IdR, self.L):
-                if 'IdR' not in self.graph[i].get('IdR', []):
-                    self.add(i, 'IdR', 'IdR', 'Id', 1.)
+            max_IdL = max([0] + [i for i, s in enumerate(self.states[:-1]) if 'IdL' in s])
+            self.add_string(-1, max_IdL, 'IdL', 'Id', 1.)
+            min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
+            self.add_string(min_IdR - 1, self.L, 'IdR', 'Id', 1.)
         # done
+
+    def has_edge(self, i, keyL, keyR):
+        """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
+        return keyR in self.graph[i].get(keyL, [])
 
     def build_MPO(self, W_qtotal=None, leg0=None):
         """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
-        W_qtotal : None | charges
-            charges for *each* of the individual `W`.
+        W_qtotal : None | charge
+            A single qtotal used for *each* of the individual `W`.
         leg0 : None | :class:`npc.LegCharge`
             The charges to be used for the very first leg (which is a gauge freedom).
             If ``None`` (default), use zeros.
@@ -353,7 +376,7 @@ class MPOGraph(object):
         # now build the `W` from the grid
         Ws = []
         for i in xrange(self.L):
-            legs = [self._grid_legs[i], self._grid_legs[i+1]]
+            legs = [self._grid_legs[i], self._grid_legs[i+1].conj()]
             W = npc.grid_outer(self._grids[i], legs, W_qtotal)
             W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws.append(W)
@@ -386,7 +409,7 @@ class MPOGraph(object):
         return '\n'.join(res)
 
     def _set_ordered_states(self):
-        """define an ordering of the 'states' on each MPO bond.
+        """Define an ordering of the 'states' on each MPO bond.
 
         Set ``self._ordered_states`` to a list of dictionaries ``{state: index}``.
         """
@@ -475,10 +498,10 @@ class MPOGraph(object):
             gr_legs = [legs[-1], None]
             gr_legs = npc.detect_grid_outer_legcharge(gr, gr_legs, qtotal=W_qtotal, qconj=-1,
                                                       bunch=False)
-            legs.append(gr_legs[1])
+            legs.append(gr_legs[1].conj())
         self._grid_legs = legs
 
-    def _calc_grid_legs_inifinte(self, grids, W_qtotal, leg0):
+    def _calc_grid_legs_infinite(self, grids, W_qtotal, leg0):
         """calculate LegCharges from `self._grid` for an iMPO.
 
         The hard case. Initially, we do not know all charges of the first leg; and they have to
@@ -494,22 +517,23 @@ class MPOGraph(object):
             self.legs[-1].test_contractible(self.legs[0])
             return
         chinfo = self.chinfo
+        W_qtotal = chinfo.make_valid(W_qtotal)
         states = self._ordered_states
         assert(states is not None)  # make sure self._set_ordered_states() was called
         charges = [{} for _ in xrange(self.L)]
         charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
-        charges['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
+        charges[0]['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
         chis = [len(s) for s in self.states]
         for _ in xrange(1000*self.L):  # I don't expect interactions with larger range than that...
             for i in xrange(self.L):
-                chL, chR = self.charges[i:i+2]
+                chL, chR = charges[i:i+2]
                 stL, stR = states[i:i+2]
                 graph = self.graph[i]
-                grid = self._grid[i]
+                grid = self._grids[i]
                 for keyL, qL in chL.iteritems():
                     for keyR in graph[keyL]:
                         # calculate charge qR from the entry of the grid
-                        op = grid[stL[keyL], stR[keyR]]
+                        op = grid[stL[keyL]][stR[keyR]]
                         assert(op is not None)
                         qR = chinfo.make_valid(qL + op.qtotal - W_qtotal)
                         if keyR not in chR:
@@ -519,14 +543,14 @@ class MPOGraph(object):
             if all([len(qs) == chi for qs, chi in itertools.izip(charges, chis)]):
                 break
         else:  # no break
-            # this should not happen (if we have no bugs), but who knows :(
-            # if it happens, it means that some
-            raise ValueError("Unable to determine the grid legcharges.")
+            # this should not happen (if we have no bugs), but who knows ^_^
+            assert(False)  # maybe some error in the connections of the graph?
+            # raise ValueError("Unable to determine the grid legcharges.")
         # finally generate LegCharge from the dictionaries
         self._grid_legs = []
         for qs, st in itertools.izip(charges, states):
             qfl = [None]*len(qs)
             for key, q in qs.iteritems():
-                qfl[states[key]] = q
+                qfl[st[key]] = q
             leg = npc.LegCharge.from_qflat(chinfo, qfl, qconj=+1)
             self._grid_legs.append(leg)

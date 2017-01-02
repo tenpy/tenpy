@@ -31,6 +31,7 @@ import numpy as np
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
+from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
 __all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
 
@@ -94,7 +95,7 @@ class CouplingModel(object):
         if self.bc_coupling.shape != (self.lat.dim, ):
             raise ValueError("Wrong len of bc_coupling")
         assert self.bc_coupling.dtype == np.bool
-        assert int(_bc_coupling_choices['open']) == 1
+        assert int(_bc_coupling_choices['open']) == 1  # this is used explicitly
         assert int(_bc_coupling_choices['periodic']) == 0
         # TODO : need more checks
 
@@ -142,15 +143,16 @@ class CouplingModel(object):
         u1 : int
             Picks the site ``lat.unit_cell[u]`` for OP1.
         op1 : str
-            valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1.
+            Valid operator name of an onsite operator in ``lat.unit_cell[u1]`` for OP1.
         u2 : int
             Picks the site ``lat.unit_cell[u]`` for OP2.
         op2 : str
-            valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2.
+            Valid operator name of an onsite operator in ``lat.unit_cell[u2]`` for OP2.
         dx : iterable of int
-            translation vector between OP1 and OP2. For a 1D lattice, a single int is also fine.
+            Translation vector (of the unit cell) between OP1 and OP2.
+            For a 1D lattice, a single int is also fine.
         op_string : str
-            name of an operator to be used inbewteen OP1 and OP2.
+            Name of an operator to be used between OP1 and OP2.
             Typical use case is the phase for a Jordan-Wigner transformation.
             (This operator should be defined on all sites in the unit cell.)
         """
@@ -187,7 +189,6 @@ class CouplingModel(object):
             else:  # finite MPS
                 swap = (j < i)  # ensure i < j
             if swap:
-                print "swap ", i, j
                 i, o1, j, o2 = j, op2, i, op1  # swap OP1 <-> OP2
             d1 = self.coupling_terms[i]
             # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
@@ -268,10 +269,43 @@ class CouplingModel(object):
             assert(res[0].norm(np.inf) <= tol_zero)
         return res
 
-    def calc_H_MPO(self):
-        """calculate MPO representation of self."""
-        return None   # TODO. (Just pass on for now to allow testing with XXZChain).
-        raise NotImplementedError()  # TODO
+    def calc_H_MPO(self, tol_zero=1.e-15):
+        """Calculate MPO representation of the Hamiltonian.
+
+        Uses :attr:`onsite_terms` and :attr:`coupling_terms` to build an MPO graph
+        (and then an MPO).
+
+        Parameters
+        ----------
+        tol_zero : float
+            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
+
+        Returns
+        -------
+        H_MPO : :class:`~tenpy.networks.mpo.MPO`
+            MPO representation of the Hamiltonian.
+        """
+        graph = mpo.MPOGraph(self.lat.mps_sites(), self.lat.bc_MPS)
+        # onsite terms
+        self._remove_onsite_terms_zeros(tol_zero)
+        for i, terms in enumerate(self.onsite_terms):
+            for opname, strength in terms.iteritems():
+                graph.add(i, 'IdL', 'IdR', opname, strength)
+        # coupling terms
+        self._remove_coupling_terms_zeros(tol_zero)
+        for i, d1 in enumerate(self.coupling_terms):
+            for (opname_i, op_string), d2 in d1.iteritems():
+                label = (i, opname_i, op_string)
+                graph.add(i, 'IdL', label, opname_i, 1.)
+                for j, d3 in d2.iteritems():
+                    j2 = j if j > i else j + graph.L
+                    graph.add_string(i, j2, label, op_string)
+                    for opname_j, strength in d3.iteritems():
+                        graph.add(j, label, 'IdR', opname_j, strength)
+        # add 'IdL' and 'IdR' and convert the graph to an MPO
+        graph.add_missing_IdL_IdR()
+        H_MPO = graph.build_MPO()
+        return H_MPO
 
     def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
         """remove entries of strength `0` from ``self.onsite_terms``."""
@@ -283,8 +317,6 @@ class CouplingModel(object):
 
     def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
         """remove entries of strength `0` from ``self.coupling_terms``."""
-        from pprint import pprint
-        pprint(self.coupling_terms)
         for d1 in self.coupling_terms:
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             for op_i_op_str, d2 in d1.iteritems():
@@ -311,7 +343,7 @@ class NearestNeighborModel(object):
 
     Parameters
     ----------
-    lat : :class:`tenpy.model.lattice.Lattice`
+    lattice : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
@@ -372,6 +404,13 @@ class MPOModel(object):
 
     Suitable for MPO-based algorithms, e.g. DMRG and MPO time evolution.
 
+    Parameters
+    ----------
+    lattice : :class:`tenpy.model.lattice.Lattice`
+        The lattice defining the geometry and the local Hilbert space(s).
+    H_MPO : :class:`~tenpy.networks.mpo.MPO`
+        The Hamiltonian rewritten as an MPO.
+
     Attributes
     ----------
     lat : :class:`tenpy.model.lattice.Lattice`
@@ -380,9 +419,15 @@ class MPOModel(object):
         MPO representation of the Hamiltonian.
 
     .. todo ::
-        implement.
-        Should it host the environment, similar as NearestNeighborModel hosts U?
+        Should the class host the environment, similar as NearestNeighborModel hosts U?
+        implement: provide (function to calculate) the MPO for time evolution.
     """
-    def __init__(self, H_MPO):
+    def __init__(self, lat, H_MPO):
+        self.lat = lat
         self.H_MPO = H_MPO
-        # self.lat = H_MPO.lat # TODO or similar. Implement MPO class first.
+        MPOModel.test_sanity(self)
+        # like self.test_sanity(), but use the version defined below even for derived class
+
+    def test_sanity(self):
+        if self.H_MPO.sites != self.lat.MPS_sites():
+            raise ValueError("lattice incompatible with H_MPO.sites")
