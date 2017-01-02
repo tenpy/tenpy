@@ -1,5 +1,6 @@
 *.swp
 ./*.py
+*.pyc
 *.dat
 .DS_Store
 ._*
