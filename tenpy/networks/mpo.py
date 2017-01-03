@@ -33,10 +33,6 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
-
-
-.. todo ::
-    implement & test, test, test !!!
 """
 
 from __future__ import division
@@ -76,7 +72,8 @@ class MPO(object):
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
     bc : {'finite' | 'segment' | 'infinite'}
-        Boundary conditions.
+        Boundary conditions as described in :mod:`~tenpy.networks.mps`.
+        ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
     IdL : list of {int | None}
         Indices on the bonds, which correpond to 'only identities to the left'.
         ``None`` for bonds where it is not set.
@@ -542,10 +539,9 @@ class MPOGraph(object):
                             raise ValueError("incompatible charges while creating the MPO")
             if all([len(qs) == chi for qs, chi in itertools.izip(charges, chis)]):
                 break
-        else:  # no break
+        else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
             # this should not happen (if we have no bugs), but who knows ^_^
-            assert(False)  # maybe some error in the connections of the graph?
-            # raise ValueError("Unable to determine the grid legcharges.")
+            assert(False)  # maybe some unconnected parts in the graph?
         # finally generate LegCharge from the dictionaries
         self._grid_legs = []
         for qs, st in itertools.izip(charges, states):

@@ -40,7 +40,7 @@ _bc_coupling_choices = {'open': True, 'periodic': False}
 
 
 class CouplingModel(object):
-    """Base class for a general Model of a Hamiltonian consisting of two-site couplings.
+    """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
     terms.
@@ -98,7 +98,20 @@ class CouplingModel(object):
         assert self.bc_coupling.dtype == np.bool
         assert int(_bc_coupling_choices['open']) == 1  # this is used explicitly
         assert int(_bc_coupling_choices['periodic']) == 0
-        # TODO : need more checks
+        sites = self.lat.mps_sites()
+        for site, terms in zip(sites, self.onsite_terms):
+            for opname, strength in terms.iteritems():
+                if opname not in site.opnames:
+                    raise ValueError("Operator {op!r} not in site".format(op=opname))
+        for site_i, d1 in zip(sites, self.coupling_terms):
+            for (op_i, opstring), d2 in d1.iteritems():
+                if op_i not in site_i.opnames:
+                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                for j, d3 in d2.iteritems():
+                    for op_j in d3.keys():
+                        if op_j not in sites[j].opnames:
+                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
+        # done
 
     def add_onsite(self, strength, u, opname):
         """Add onsite terms to self.
@@ -132,8 +145,8 @@ class CouplingModel(object):
         where ``OP1 := lat.unit_cell[u1].opname1`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``
         and ``OP2 := lat.unit_cell[u2].opname2`` acts on the site
         ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
-        If ``bc_coupling[a] == 'periodic'``, the index ``x_a`` is taken modulo ``lat.Ls[a]``
-        and runs through ``range(lat.Ls[a])``.
+        For periodic boundary conditions (``bc_coupling[a] == False``)
+        the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
         ``0 <= x_a+dx < lat.Ls[a]``.
 
@@ -377,7 +390,6 @@ class NearestNeighborModel(object):
         self.calc_bond_eig()
         self.U_bond = None
         self.U_param = dict()
-        # raise NotImplementedError()  # TODO
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -476,5 +488,5 @@ class MPOModel(object):
         # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
-        if self.H_MPO.sites != self.lat.MPS_sites():
+        if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")

@@ -478,7 +478,7 @@ class LegCharge(object):
             the permutation of the qindices (before bunching) used for the sorting.
             To obtain the flat permuation such that
             ``sorted_array[..., :] = unsorted_array[..., perm_flat]``, use
-            ``perm_flat = unsorted_array.perm_flat_from_perm_qind(perm_qind)``
+            ``perm_flat = unsorted_leg.perm_flat_from_perm_qind(perm_qind)``
         sorted_copy : :class:`LegCharge`
             a shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
 
@@ -634,9 +634,6 @@ class LegPipe(LegCharge):
     qconj : {+1, -1}
         A flag telling whether the charge of the *resulting* pipe points inwards
         (+1, default) or outwards (-1).
-    block : bool
-        Wheter `self.sort` should be called at the end of initializition in order
-        to ensure complete blocking.
     sort : bool
         Whether the outgoing pipe should be sorted. Defaults ``True``; recommended.
         Note: calling :meth:`sort` after initialization converts to a LegCharge.

@@ -311,6 +311,7 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
     r"""Create a :class:`Site` for up to `Nmax` bosons.
 
     Local states are ``vac, 1, 2, ... , Nc``.
+    (Exception: for parity conservation, we sort as ``vac, 2, 4, ..., 1, 3, 5, ...``.)
     Local operators can be built from creation operators.
 
 
@@ -349,9 +350,6 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
     -------
     site : class:`Site`
         Bosonic site with `leg`, `leg.chinfo` and onsite operators.
-
-    .. todo ::
-        should sort by charges for ``conserve='parity'``!
     """
     if conserve not in ['N', 'parity', None]:
         raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -375,8 +373,13 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
         leg = npc.LegCharge.from_qflat(chinfo, range(dim))
     elif conserve == 'parity':
         chinfo = npc.ChargeInfo([2], ['parity'])
-        leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-        # TODO: sort. Maybe use a pipe?
+        leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
+        # sort by charges
+        perm_qind, leg = leg_unsorted.sort()
+        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+        # permute operators accordingly
+        for opname in ops:
+            ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
     else:
         leg = npc.LegCharge.from_trivial(dim)
     return Site(leg, ['vac'] + [str(n) for n in range(1, dim)], **ops)

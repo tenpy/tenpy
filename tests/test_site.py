@@ -48,7 +48,7 @@ def test_fermion_site():
 
 
 def test_boson_site():
-    for Nmax in [2, 5, 10]:
+    for Nmax in [1, 2, 5, 10]:
         for conserve in ['N', 'parity', None]:
             S = site.boson_site(Nmax, conserve=conserve)
             S.test_sanity()

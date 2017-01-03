@@ -30,21 +30,26 @@ def test_MPO():
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 2:3, :, :]
-            H = mpo.MPO([site_spin_half]*L, Ws, bc=bc, IdL=[0]*L+[None], IdR=[None] +[-1]*(L))
+            H = mpo.MPO([site_spin_half]*L, Ws, bc=bc, IdL=[0]*L+[None], IdR=[None]+[-1]*(L))
             print H.dim
             print H.chi
 
 
 def test_MPOGraph():
     for bc in mpo.MPO._valid_bc:
-        for L in [4, 2, 1]:  # TODO: also 1?
+        for L in [1, 2, 4]:
             print "L =", L
             g = mpo.MPOGraph([site_spin_half]*L, 'finite')
-            g.test_sanity()
             g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
             if L > 1:
                 g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
+                g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
+                g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
+            if L > 2:
+                g.add_string(0, 3, (0, 'Sp'), 'Id')
+                g.add(3, (0, 'Sp'), 'IdR', 'Sm', 0.1)
             g.add_missing_IdL_IdR()
+            g.test_sanity()
             print repr(g)
             print str(g)
             g_mpo = g.build_MPO()
