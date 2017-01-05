@@ -55,7 +55,7 @@ def time_evolution(psi, TEBD_params):
     psi : MPS
         Initial state. Modified in place.
     TEBD_parameters : dict
-        Further parameters as described in the following table.
+        Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
 
         ======= ====== ==============================================

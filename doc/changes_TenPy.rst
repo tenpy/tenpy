@@ -34,11 +34,22 @@ np_conserved
 - more functions, e.g. :func:`~tenpy.linalg.np_conserved.grid_outer`
 
 
+
 TEBD
 ----
 - Introduced TruncationError for easy handling of total truncation error.
 - some truncation parameters are renamed and may have a different meaning, e.g. `svd_max` -> `svd_min` 
   has no 'log' in the definition.
+
+
+DMRG
+----
+- separate Lanczos module in `tenpy/linalg/`. Strangely, the old version orthoganalized
+  against the complex conjugates of `orthogonal_to` (contrary to it's doc string!)
+  (and thus calculated 'theta_o' as bra, not ket).
+- cleaned up, provide prototypes for DMRG engine and mixer.
+
+
 
 tools
 -----

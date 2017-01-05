@@ -2714,7 +2714,7 @@ def inner(a, b, axes=None, do_conj=False):
         The arrays for which to calculate the product.
         Must have same rank, and compatible LegCharges.
     axes : ``(axes_a, axes_b)`` | ``None``
-        ``None`` is equivalent to ``(range(-axes, 0), range(axes))``.
+        ``None`` is equivalent to ``(range(rank), range(rank))``.
         Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
         Contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
@@ -2733,6 +2733,8 @@ def inner(a, b, axes=None, do_conj=False):
         axes_a, axes_b = axes
         axes_a = a.get_leg_indices(to_iterable(axes_a))
         axes_b = b.get_leg_indices(to_iterable(axes_b))
+        if len(axes_a) != a.rank or len(axes_b) != b.rank:
+            raise ValueError("no full contraction. Use tensordot instead!")
         # we can permute axes_a and axes_b. Use that to ensure axes_b = range(b.rank)
         sort_axes_b = np.argsort(axes_b)
         axes_a = [axes_a[i] for i in sort_axes_b]
