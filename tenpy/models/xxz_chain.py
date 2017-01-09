@@ -45,7 +45,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 0) read out/set default parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)
         Jxx = get_parameter(model_param, 'Jxx', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jxx', 1., self.__class__)
+        Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         # 1) charges of the physical Leg. The only time that we actually define charges!
