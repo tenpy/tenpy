@@ -83,20 +83,22 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
 
-        ======= ====== ====================================================
+        ======= ====== ===============================================================
         key     type   description
-        ======= ====== ====================================================
+        ======= ====== ===============================================================
         N_min   int    Minimum number of steps to perform.
-        ------- ------ ----------------------------------------------------
+        ------- ------ ---------------------------------------------------------------
         N_max   int    Maximum number of steps to perform.
-        ------- ------ ----------------------------------------------------
-        e_tol   float  Stop if energy difference per step < `e_tol`
-        ------- ------ ----------------------------------------------------
-        p_tol   float  Tolerance for the error estimate from the
-                       Ritz Residual, stop if ``(RitzRes/gap)**2 < p_tol``
-        ------- ------ ----------------------------------------------------
+        ------- ------ ---------------------------------------------------------------
+        E_tol   float  Stop if energy difference per step < `E_tol`
+        ------- ------ ---------------------------------------------------------------
+        P_tol   float  Tolerance for the error estimate from the
+                       Ritz Residual, stop if ``(RitzRes/gap)**2 < P_tol``
+        ------- ------ ---------------------------------------------------------------
+        min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
+        ------- ------ ---------------------------------------------------------------
         N_cache int    The maximum number of `psi` to keep in memory.
-        ======= ====== ====================================================
+        ======= ====== ===============================================================
 
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
         or if the maximum number of steps was reached.
@@ -139,8 +141,9 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
 
     N_min = get_parameter(lanczos_params, 'N_min', 2, "Lanczos")
     N_max = get_parameter(lanczos_params, 'N_max', 20, "Lanczos")
-    E_tol = get_parameter(lanczos_params, 'e_tol', 5.e-15, "Lanczos")
-    P_tol = get_parameter(lanczos_params, 'p_tol', 0., "Lanczos")
+    E_tol = get_parameter(lanczos_params, 'E_tol', 5.e-15, "Lanczos")
+    P_tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
+    min_gap = get_parameter(lanczos_params, 'min_gap', 1.e-12, "Lanczos")
     verbose = lanczos_params.get('verbose', 0)
     Delta_E0 = 2.
     P_err = 2.
@@ -179,18 +182,12 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         if k == 0:
             E_T = [alpha]
         else:
-            E_T, v_T = np.linalg.eigh(T[0:k+1, 0:k+1])
-            piv = np.argsort(E_T)  # TODO: unnecessary: eigh returns in ascending order
-            assert np.all(piv == np.arange(len(piv), dtype=np.int))  # TODO: this is the check
-            # E_T = E_T[piv]
-            # v_T = v_T[:, piv]
+            E_T, v_T = np.linalg.eigh(T[0:k+1, 0:k+1])   # returns eigenvalues sorted ascending
             RitzRes = np.abs(v_T[k, 0] * T[k, k+1])
             Delta_E0 = (Es[-1][0] - E_T[0])
-            gap = max(E_T[1] - E_T[0], 1.e-10) # TODO: magic number
+            gap = max(E_T[1] - E_T[0], min_gap)
             P_err = (RitzRes/gap)**2
-            #print 1. - np.abs(np.inner(np.conj(v_T[0:k-1, 0]), v0_T_old))
         Es.append(E_T)
-        #v0_T_old = v_T[:, 0]
         if not above_ULP or (k+1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
             break
     N = k + 1  # == len(Es)
@@ -239,10 +236,10 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     if abs(1. - psi0_norm) > 1.e-3:
         warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:d}".format(psi0_norm))
     psi0 /= psi0_norm
-    #print "Ortho:",  #  TODO: check/test that!!!
-    #for o in orthogonal_to:
-    #   print np.abs(npc.inner(o, psi0, do_conj=False)),
-    #print
+    if verbose > 1.:
+        print ''.join(["Lanczos orthogonality:"] +
+                      [" {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True)))
+                       for o in orthogonal_to])
     return E_T[0], psi0, N
 
 
@@ -251,6 +248,7 @@ def _to_cache(psi, cache, N):
     cache.append(psi)
     if len(cache) > N:
         cache.pop(0)
+
 
 def _plot_stats(Es):
     import matplot.pyplot as plt
