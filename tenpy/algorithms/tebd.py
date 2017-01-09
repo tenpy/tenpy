@@ -45,6 +45,49 @@ import numpy as np
 
 from ..linalg import np_conserved as npc
 from ..networks import mps
+from .truncation import truncate
+
+
+def update_bond(psi,i,U_bond,truncation_par):
+    """Updates the B matrices on a given bond.
+
+    Function that updates the B matrices, the bond matrix s between and the bond dimension chi for bond i1. This would look something like::
+
+    |     ... - B1  -  s  -  B2 - ...
+    |           |             |
+    |           |-------------|
+    |           |      U      |
+    |           |-------------|
+    |         - B1* -  s* -  B2* - ...
+
+
+    """
+    #TODO: Did not include the protocol distinction
+
+    #Construct the theta matrix
+    theta = psi.get_theta(i).replace_label('p0','pL').ireplace_label('p1','pR')
+    theta = npc.tensordot(theta,U_bond,axes=(['pL', 'pR'], ['pL*', 'pR*']))
+
+    #Perform the SVD and truncate the wavefunction
+    theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
+    U, S, V = npc.svd(theta, inner_labels=['vR', 'vL'])
+    piv,norm,err = truncate(S,truncation_par)
+
+    #Split tensor and update matrices
+    #s
+    S = S[piv]
+    invsq = np.linalg.norm(S)
+    psi.set_SR(i, S/invsq)
+    #B_L
+    U = U.iscale_axis(S/invsq, 'vR')
+    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)**-1, 'vL').ireplace_label('pL', 'p')
+    #B_R
+    B_R = V.split_legs(1).ireplace_label('pR', 'p')
+    psi.set_B(i, B_L)
+    psi.set_B(i + 1, B_R)
+
+    return err,norm
+
 
 
 def time_evolution(psi, TEBD_params):
