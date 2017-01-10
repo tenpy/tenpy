@@ -51,7 +51,7 @@ from .truncation import truncate
 def update_bond(psi,i,U_bond,truncation_par):
     """Updates the B matrices on a given bond.
 
-    Function that updates the B matrices, the bond matrix s between and the bond dimension chi for bond i1. This would look something like::
+    Function that updates the B matrices, the bond matrix s between and the bond dimension chi for bond i. This would look something like::
 
     |     ... - B1  -  s  -  B2 - ...
     |           |             |
@@ -60,7 +60,25 @@ def update_bond(psi,i,U_bond,truncation_par):
     |           |-------------|
     |         - B1* -  s* -  B2* - ...
 
+    Parameters
+    ----------
+    psi : MPS class
+        The wavefunction represented in the form of an MPS
+    i: int
+        The bond which will be updated
+    U_bond:
+        The bond operator with which we update the bond
+    truncation_par: dict
+        The truncation parameters as explained in truncate
 
+
+    Returns
+    -------
+    truncErr : :class:`TruncationError`
+        The error of the represented state which is introduced due to the truncation during this update step.
+    norm : float
+        The norm of the truncated Schmidt values, ``np.linalg.norm(S[mask])``.
+        Useful for re-normalization.
     """
     #TODO: Did not include the protocol distinction
 
@@ -71,23 +89,43 @@ def update_bond(psi,i,U_bond,truncation_par):
     #Perform the SVD and truncate the wavefunction
     theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
     U, S, V = npc.svd(theta, inner_labels=['vR', 'vL'])
-    piv,norm,err = truncate(S,truncation_par)
+    piv,norm,truncErr = truncate(S,truncation_par)
 
     #Split tensor and update matrices
     #s
     S = S[piv]
-    invsq = np.linalg.norm(S)
-    psi.set_SR(i, S/invsq)
+    psi.set_SR(i, S/norm)
     #B_L
-    U = U.iscale_axis(S/invsq, 'vR')
+    U = U.iscale_axis(S/norm, 'vR')
     B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)**-1, 'vL').ireplace_label('pL', 'p')
     #B_R
     B_R = V.split_legs(1).ireplace_label('pR', 'p')
     psi.set_B(i, B_L)
     psi.set_B(i + 1, B_R)
 
-    return err,norm
+    return truncErr,norm
 
+def update(psi,model,N_steps,truncation_par):
+    """Update a single time step with a given U
+
+        The form of M.U depends on desired Trotter Order:
+
+        1st order - M.U = [  [U_bond]*L ], a len1 list, whose element is list of bond ops
+
+        2nd order - M.U = [ [U_bond]*L, [U_bond**2]*L], len2 list, whose elements are list of bond ops and bond ops squared
+
+        4th order - M.U = [ [U_bond]*L,[U_bond]*L,[U_bond]*L, [U_bond**2]*L], len4 list, whose elements are list of bond ops and bond ops squared for the two dts needed for the 4th o. Trotter decomposion
+
+        #TODO: more to write here!
+    """
+
+def update_step(psi,U,p,truncation_par):
+    """Updates all bonds in unit cell.
+
+        #TODO: More to write here!
+
+    """
+    
 
 
 def time_evolution(psi, TEBD_params):
