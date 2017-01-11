@@ -2880,7 +2880,6 @@ def svd(a,
         Shape ``(M, M)`` or ``(M, K)`` depending on `full_matrices`.
     S : 1D ndarray
         The singluar values of the array. If no `cutoff` is given, it has lenght ``min(M, N)``.
-        Otherwise, the length is reduced by
     VH : :class:`Array`
         Matrix with right singular vectors as rows.
         Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.

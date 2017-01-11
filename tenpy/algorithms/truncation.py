@@ -52,6 +52,7 @@ is the discarded part (orthogonal to the kept part) and the
 """
 
 import numpy as np
+from ..linalg import np_conserved as npc
 import warnings
 from ..tools.params import get_parameter
 
@@ -121,7 +122,7 @@ class TruncationError(object):
 
 
 def truncate(S, trunc_par):
-    """Given a schmidt spectrum Y, determine which values to keep.
+    """Given a Schmidt spectrum Y, determine which values to keep.
 
     Parameters
     ----------
@@ -215,6 +216,63 @@ def truncate(S, trunc_par):
     np.put(mask, piv[cut:], True)
     norm_new = np.linalg.norm(S[mask])
     return mask, norm_new, TruncationError.from_norm(norm_new, np.linalg.norm(S)),
+
+
+def svd_theta(theta, trunc_par, qtotalLR=[None, None], inner_labels=['b*', 'b']):
+    """Performs SVD of a matrix `theta` (= the wavefunction) and truncates it.
+
+    Perform a singular value decomposition (SVD) with :func:`~tenpy.linalg.np_conserved.svd`
+    and truncates with :func:`truncate`.
+    The result is an approximation ``theta ~=~ tensordot(U.scale_axis(S, 1), VH, axes=1)``
+    (up to the renormalization, if `theta` was not normalized).
+
+    Parameters
+    ----------
+    theta : :class:`~tenpy.linalg.np_conserved.Array`, shape ``(M, N)``
+        The matrix, on which the singular value decomposition (SVD) is performed.
+        Usually, `theta` represents the wavefunction, such that the SVD is a Schmidt decomposition.
+    trunc_par : dict
+        truncation parameters as described in :func:`truncate`.
+    qtotalLR : (charges, charges)
+        The total charges for the returned `U` and `VH`.
+    inner_labels : (string, string)
+        Labels for the `U` and `VH` on the newly-created bond.
+
+    Returns
+    -------
+    U : :class:`~tenpy.linalg.np_conserved.Array`
+        Matrix with left singular vectors as columns.
+        Shape ``(M, M)`` or ``(M, K)`` depending on `full_matrices`.
+    S : 1D ndarray
+        The singluar values of the array.
+        If no `cutoff` is given, it has lenght ``min(M, N)``.
+        Normalized to ``np.linalg.norm(S)==1``.
+    VH : :class:`~tenpy.linalg.np_conserved.Array`
+        Matrix with right singular vectors as rows.
+        Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
+    err : :class:`TruncationError`
+        The truncation error introduced.
+
+    .. todo : do we need new_norm?
+    """
+    U, S, VH = npc.svd(theta, full_matrices=False, compute_uv=True,
+                       qtotalLR=qtotalLR, inner_labels=inner_labels)
+    S = S / np.linalg.norm(theta)
+    piv, new_norm, err = truncate(S, trunc_par)
+    new_len_S = np.sum(piv, dtype=np.int_)
+    if new_len_S * 100 < len(S):
+        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}, str(len(Y))\n".format(
+            len(S), new_len_S)
+        # NANs are excluded in npc.svd
+        UHU = npc.tensordot(U.conj(), U, axes=[[0], [0]])
+        msg += " |U^d U - 1| = {0:f}".format(npc.norm(UHU - npc.eye_like(UHU)))
+        VHV = npc.tensordot(VH, VH.conj(), axes=[[1], [1]])
+        msg += " |V V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
+        warnings.warn(msg)
+    S = S[piv] / new_norm
+    U.iproject(piv, axes=1)     # U = U[:, piv]
+    VH.iproject(piv, axes=0)    # VH = VH[piv, :]
+    return U, S, VH, err
 
 
 def _combine_constraints(good1, good2, warn):
