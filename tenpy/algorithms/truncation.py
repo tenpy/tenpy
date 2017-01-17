@@ -257,7 +257,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['b*', 'b']
     """
     U, S, VH = npc.svd(theta, full_matrices=False, compute_uv=True,
                        qtotal_LR=qtotal_LR, inner_labels=inner_labels)
-    S = S / np.linalg.norm(theta.to_ndarray())
+    S = S / np.linalg.norm(S)
     piv, new_norm, err = truncate(S, trunc_par)
     new_len_S = np.sum(piv, dtype=np.int_)
     if new_len_S * 100 < len(S):
