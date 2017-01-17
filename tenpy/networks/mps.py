@@ -122,7 +122,7 @@ class MPS(object):
         ``None`` means non-canonical form.
         For ``form = (nuL, nuR)``, the stored ``_B[i]`` are
         ``s**form[0] -- Gamma -- s**form[1]`` (in Vidal's notation).
-    dtype : type or string
+    dtype : type | string
         The data type of the `_Bs`.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
@@ -183,9 +183,9 @@ class MPS(object):
             if not set(['vL', 'vR', 'p']) <= set(B.get_leg_labels()):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
             B.test_sanity()  # recursive...
-            if len(self._S[i]) != B.get_leg('vL').ind_len or \
-                    len(self._S[i+1]) != B.get_leg('vL').ind_len:
-                raise ValueError("shape of B incompatible with len of singu")
+            if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
+                    self._S[i+1].shape[0] != B.get_leg('vL').ind_len:
+                raise ValueError("shape of B incompatible with len of singular values")
             if not self.finite or i + 1 < self.L:
                 B2 = self._B[(i+1) % self.L]
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
@@ -195,7 +195,6 @@ class MPS(object):
         elif self.bc == 'infinite':
             if self._S[self.L] != self._S[0]:
                 raise ValueError("iMPS with S[0] != S[L]")
-
         assert len(self.form) == self.L
         for f in self.form:
             if f is not None:
@@ -284,7 +283,8 @@ class MPS(object):
     @property
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
-        return [len(s) for s in self._S[self._nontrivial_bonds()]]
+        # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
+        return [s.shape[0] for s in self._S[self._nontrivial_bonds()]]
 
     @property
     def nontrivial_bonds(self):
@@ -306,7 +306,7 @@ class MPS(object):
             raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
 
-    def get_B(self, i, form='B', copy=False):
+    def get_B(self, i, form='B', copy=False, cutoff=1.e-16):
         """return (view of) `B` at site `i` in canonical form.
 
         Parameters
@@ -318,6 +318,10 @@ class MPS(object):
             For ``None``, return the matrix in whatever form it is.
         copy : bool
             Whether to return a copy even if `form` matches the current form.
+        cutoff : float
+            During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
+            This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
+            singular values.
 
         Returns
         -------
@@ -332,7 +336,7 @@ class MPS(object):
         """
         i = self._to_valid_index(i)
         form = self._to_valid_form(form)
-        return self._convert_form_i(self._B[i], i, self.form[i], form, copy)
+        return self._convert_form_i(self._B[i], i, self.form[i], form, copy, cutoff)
 
     def set_B(self, i, B, form='B'):
         """set `B` at site `i`.
@@ -369,13 +373,13 @@ class MPS(object):
             self._S[self.L] = S
 
     def set_SR(self, i, S):
-        """set singular values on the left of site `i`"""
+        """set singular values on the right of site `i`"""
         i = self._to_valid_index(i)
         self._S[i + 1] = S
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
-    def get_theta(self, i, n=2):
+    def get_theta(self, i, n=2, cutoff=1.e-16):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
         Parameters
@@ -384,6 +388,10 @@ class MPS(object):
             Site index.
         n : int
             Number of sites. The result lives on ``sites[i:i+n]``.
+        cutoff : float
+            During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
+            This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
+            singular values.
 
         Returns
         -------
@@ -420,24 +428,22 @@ class MPS(object):
         copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
         theta = self.get_B(i, form=None, copy=copy)  # in the current form
         if fL != 1.:
-            theta = theta.scale_axis(self.get_SL(i)**(1.-fL), axis='vL')
+            theta = self._scale_axis_B(theta, self.get_SL(i), 1.-fL, 'vL')
         theta = theta.replace_label('p', 'p0')
         for k in range(1, n):  # nothing if n=1.
             j = (i + k) % self.L
             B = self.get_B(j, None, False).replace_label('p', 'p'+str(k))
-            if self.form[j] is not None and fR is not None:
+            if self.form[j] is not None:
                 fL_j, fR_j = self.form[j]
-                need_fL = 1. - fL_j - fR
-                if need_fL != 0.:  # only True if ``self.form[j-1] != self.form[j]``.
-                    B = B.scale_axis(self.get_SL(i)**need_fL, axis='vL')
+                if fR is not None:
+                    B = self._scale_axis_B(theta, self.get_SL(i), 1.-fL_j-fR, 'vL')
+                # otherwise we can just hope it's fine.
                 fR = fR_j
             else:
-                # for `self.form[j]=None`, we can just assume
-                # that it's fine to not include any further `s`.
-                fR is None
+                fR = None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
         if fR != 1:  # fR = self.form[i+n-1][1]
-            theta = theta.scale_axis(self.get_SR(i)**(1.-fL), axis='vR')
+            theta = self._scale_axis_B(theta, self.get_SR((i+n-1) % self.L), 1.-fL, 'vR')
         return theta
 
     def convert_form(self, new_form='B'):
@@ -475,15 +481,15 @@ class MPS(object):
             return form
         return self._valid_forms[form]
 
-    def _convert_form_i(self, B, i, form, new_form, copy=True):
-        """transform `B` of form `form` into canonical form `new_form`.
+    def _convert_form_i(self, B, i, form, new_form, copy=True, cutoff=1.e-16):
+        """transform `B[i]` from canonical form `form` into canonical form `new_form`.
 
         ======== ======== ================================================
         form     new_form action
         ======== ======== ================================================
         *        ``None`` return (copy of) B
         tuple    tuple    scale the legs 'vL' and 'vR' of B appropriately
-                          with ``self.get_SL(i)`` and ``self.get_SR(i)``
+                          with ``self.get_SL(i)`` and ``self.get_SR(i)``.
         ``None`` tuple    raise ValueError
         ======== ======== ================================================
         """
@@ -495,10 +501,38 @@ class MPS(object):
             raise ValueError("can't convert form of non-canonical state!")
         old_L, old_R = form
         new_L, new_R = new_form
-        diff_L = new_L - old_L
-        diff_R = new_R - old_R
-        if diff_L != 0.:
-            B = B.scale_axis(self.get_SL(i)**diff_L, 'vL')  # copies
-        if diff_R != 0.:
-            B = B.scale_axis(self.get_SR(i)**diff_R, 'vR')
+        B = self._scale_axis_B(B, self.get_SL(i), new_L - old_L, 'vL', cutoff)
+        B = self._scale_axis_B(B, self.get_SR(i), new_R - old_R, 'vR', cutoff)
         return B
+
+    def _scale_axis_B(self, B, S, form_diff, axis_B, cutoff):
+        """Scale an axis of B with S to bring it in desired form.
+
+        If S is just 1D (as usual, e.g. during TEBD), this function just performs
+        ``B.scale_axis(S**form_diff, axis_B)``.
+
+        However, during the DMRG with mixer, S might acutally be a 2D matrix.
+        For ``form_diff = -1``, we need to calculate the inverse of S, more precisely the
+        (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
+        The cutoff is only used in that case.
+
+        Returns scaled B."""
+        if form_diff == 0:
+            return B  # nothing to do
+        if isinstance(S, npc.Array):
+            if S.ndim != 2:
+                raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
+            if form_diff == -1:
+                S = npc.pinv(S, cutoff)
+            elif form_diff != 1.:
+                raise ValueError("Can't scale/tensordot a 2D `S` for non-integer `form_diff`")
+
+            if axis_B == 'vL':
+                B = npc.tensordot(S, B, axes=[1, 'vL'])
+            elif axis_B == 'vR':
+                B = npc.tensordot(B, S, axes=['vR', 0])
+            else:
+                raise ValueError("This should never happenunexpected leg for scaling with S")
+            return B
+        else:
+            return B.scale_axis(S**form_diff, axis_B)

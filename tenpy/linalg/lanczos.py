@@ -10,6 +10,8 @@ class LinearOperator(object):
     """Generic Linear Operator for :class:`~tenpy.linalg.np_conserved.Array`.
 
     This is a prototype for a Linear Operator as required by the Lanczos algorithm.
+    Note that ``__init__`` is not used by :func:`lanczos`; so any class
+    implementing the :meth:`matvec` method can be used as effective linear operator.
 
     Parameters
     ----------
@@ -79,7 +81,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         :class:`~tenpy.linalg.np_conserved.Array`.
     psi : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector. Should be the best guess available.
-    TEBD_parameters : dict
+    lanczos_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
 

@@ -479,6 +479,13 @@ class Array(object):
         """return a shallow copy with the leg label `old_label` replaced by `new_label`."""
         return self.copy(deep=False).ireplace_label(old_label, new_label)
 
+    def replace_labels(self, old_labels, new_labels):
+        """return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
+        res = self.copy(deep=False)
+        for old_l, new_l in zip(old_labels, new_labels):
+            res.ireplace_label(old_l, new_l)
+        return res
+
     # string output ===========================================================
 
     def __repr__(self):

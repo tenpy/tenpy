@@ -218,7 +218,7 @@ def truncate(S, trunc_par):
     return mask, norm_new, TruncationError.from_norm(norm_new, np.linalg.norm(S)),
 
 
-def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['b*', 'b']):
+def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL']):
     """Performs SVD of a matrix `theta` (= the wavefunction) and truncates it.
 
     Perform a singular value decomposition (SVD) with :func:`~tenpy.linalg.np_conserved.svd`
