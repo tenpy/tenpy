@@ -15,22 +15,22 @@ from tenpy.models.xxz_chain import XXZChain
 
 
 def test_XXZChain():
-    pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite')
+    pars = dict(L=4, Jxx=1., Jz=1., hz=0., bc_MPS='finite')
     chain = XXZChain(pars)
     chain.test_sanity()
     for Hb in chain.H_bond[1:]:   # check bond eigenvalues
         Hb2 = Hb.combine_legs([['pL', 'pR'], ['pL*', 'pR*']], qconj=[+1, -1])
         print Hb2.to_ndarray()
         W = npc.eigvalsh(Hb2)
-        # TODO check eigenvalues for nozero hz, ...?
         npt.assert_array_almost_equal_nulp(np.sort(W),
                                            np.sort([-0.75, 0.25, 0.25, 0.25]),
                                            16**3)
+    # now check with non-trivial onsite terms
     pars['hz'] = 0.2
     print "hz =", pars['hz']
     chain = XXZChain(pars)
     chain.test_sanity()
-    Hb = chain.H_bond[2]  # the only central bonds: boundaries have different hz
+    Hb = chain.H_bond[2]  # the only central bonds: boundaries have different hz.
     Hb2 = Hb.combine_legs([['pL', 'pR'], ['pL*', 'pR*']], qconj=[+1, -1])
     print Hb2.to_ndarray()
     W = npc.eigvalsh(Hb2)
