@@ -9,10 +9,11 @@ from __future__ import division
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
+from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.linalg import np_conserved as npc
 
-from tenpy.networks import mpo, site
+from tenpy.networks import mps, mpo, site
 
 site_spin_half = site.spin_half_site(conserve='Sz')
 
@@ -54,3 +55,13 @@ def test_MPOGraph():
             print str(g)
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
+
+def test_MPOEnvironment():
+    xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
+    L = xxz_pars['L']
+    M = XXZChain(xxz_pars)
+    state = ([0, 1]*L)[:L]  # Neel
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite')
+    env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
+    env.test_sanity()
+

@@ -1980,7 +1980,7 @@ class Array(object):
                 pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj[i])
             else:
                 # test for compatibility
-                legs = [self.legs[a] for a in combine_legs[i]]
+                legs = [self.get_leg(a) for a in combine_legs[i]]
                 if pipe.nlegs != len(legs):
                     raise ValueError("pipe has wrong number of legs")
                 if legs[0].qconj != pipe.legs[0].qconj:
@@ -2909,8 +2909,8 @@ def svd(a,
         qtotal_R = a.qtotal
     if qtotal_L is None:
         qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
-    elif qtotal_L is None:
-        qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
+    elif qtotal_R is None:
+        qtotal_R = a.chinfo.make_valid(a.qtotal - qtotal_L)
     elif np.any(a.qtotal != a.chinfo.make_valid(qtotal_L + qtotal_R)):
         raise ValueError("The entries of `qtotal_LR` have to add up to ``a.qtotal``!")
     qtotal_LR = qtotal_L, qtotal_R

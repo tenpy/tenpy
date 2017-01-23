@@ -109,7 +109,7 @@ def run(psi, model, DMRG_params):
     min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 4, 'DMRG')
     max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
     N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
-    max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24*365)
+    max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24*365, 'DMRG')
     start_time = time.time()
     shelve = False
 
@@ -219,6 +219,7 @@ class Engine(object):
 
         # the actual sweep
         for i0, upd_env in itertools.izip(schedule_i0, update_env):
+            print "sweep", i0, upd_env # TODO
             self.update_bond(i0, upd_env[0], upd_env[1])
 
         # update mixer
@@ -240,10 +241,9 @@ class Engine(object):
         update_LP : bool
             Whether to calculate the next ``env.RP[i0]``.
         """
-        raise NotImplementedError()
-        theta = self.prepare_diag(i0)
+        theta = self.prepare_diag(i0, update_LP, update_RP)
         if optimize:
-            theta = self.diag(theta)
+            E0, theta, N = self.diag(theta)
         theta = self.prepare_svd(theta)
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)  # needs to be called before update_{L,R}P
@@ -251,6 +251,8 @@ class Engine(object):
             self.update_LP(i0, U)
         if update_RP:
             self.update_RP(i0, VH)
+        return err  # TODO
+
 
     def prepare_diag(self, i0):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
@@ -284,7 +286,7 @@ class Engine(object):
         N : int
             Number of Lanczos iterations used.
         """
-        return lanczos(self, theta_guess, self.lanczos_param)
+        return lanczos(self, theta_guess, self.lanczos_params)
 
     def matvec(self, theta):
         r"""Apply the effective Hamiltonian to `theta`.
@@ -558,14 +560,13 @@ class EngineCombine(Engine):
                                         new_axes=[0, -1])  # avoid transpositions during matvec
         # calculate RHeff
         RHeff = npc.tensordot(RP, H2, axes=['wR*', 'wR'])
-        pipeR = RHeff.make_pipe(['vR', 'p'])
+        pipeR = RHeff.make_pipe(['vR', 'p1'])
         self.RHeff = RHeff.combine_legs([['vR', 'p1'], ['vR*', 'p1*']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[-1, 0])  # avoid transpositions during matvec
         # make theta
         theta = env.ket.get_theta(i0, n=2)  # labels ('vL', 'vR', 'p0', 'p1')
-        theta.combine_legs([['vL', 'p0'], ['vR', 'p1']],
-                           pipes=[pipeL, pipeR])
+        theta = theta.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
         return theta
 
     def matvec(self, theta):
@@ -583,7 +584,7 @@ class EngineCombine(Engine):
             Wave function to apply the effective Hamiltonian to,  :math:`H |\theta>`
         """
         theta = npc.tensordot(self.LHeff, theta, axes=['(vL*.p0*)', '(vL.p0)'])
-        theta = npc.tensordot(theta, self.RHeff, axes=['(vR.p1)', '(vR*.p1*)'])
+        theta = npc.tensordot(theta, self.RHeff, axes=[['(vR.p1)', 'wR'] , ['(vR*.p1*)', 'wL']])
         return theta
 
     def prepare_svd(self, theta):
@@ -693,6 +694,7 @@ class EngineCombine(Engine):
         # make use of self.LHeff
         LP = npc.tensordot(self.LHeff, U, axes=['(vL*.p0*)', '(vL.p0)'])
         LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vL.p0)'])
+        LP = LP.replace_labels(['vR*', 'wR', 'vR'], ['vL', 'wL*', 'vL*'])
         self.env.set_LP(i0+1, LP, age=self.env.get_LP_age(i0)+1)
 
     def update_RP(self, i0, VH):
@@ -708,6 +710,7 @@ class EngineCombine(Engine):
         # make use of self.RHeff
         RP = npc.tensordot(self.RHeff, VH, axes=['(vR*.p1*)', '(vR.p1)'])
         RP = npc.tensordot(VH.conj(), RP, axes=['(vR*.p1*)', '(vR.p1)'])
+        RP = RP.replace_labels(['vL*', 'wL', 'vL'], ['vR', 'wR*', 'vR*'])
         self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0+1)+1)
 
 

@@ -236,7 +236,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         psi0 += q1 * v_T[k+1, 0]
     psi0_norm = npc.norm(psi0)
     if abs(1. - psi0_norm) > 1.e-3:
-        warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:d}".format(psi0_norm))
+        warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
     psi0 /= psi0_norm
     if verbose > 1.:
         print ''.join(["Lanczos orthogonality:"] +

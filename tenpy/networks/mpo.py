@@ -74,6 +74,8 @@ class MPO(object):
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
+    dtype : type
+        The data type of the `_W`.
     bc : {'finite' | 'segment' | 'infinite'}
         Boundary conditions as described in :mod:`~tenpy.networks.mps`.
         ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
@@ -84,7 +86,7 @@ class MPO(object):
         Indices on the bonds, which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The matrices of the MPO. Labels are ``wL, wR, p, p*``
+        The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
         Valid boundary conditions. The same as for an MPS.
     """
@@ -94,7 +96,8 @@ class MPO(object):
     def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self._W = list(Ws)
+        self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
+        self._W = [W.astype(dtype, copy=True) for W in Ws]
         if IdL is None:
             self.IdL = [None]*(self.L+1)
         else:
@@ -573,11 +576,12 @@ class MPOEnvironment(object):
     Label convetion::
     We use the following label convention  (where arrows indicate `qconj`)::
 
-        |    .-->- vL*          vL ->-.
+        |    .-->- vL*         vR* ->-.
         |    |                        |
-        |    LP->- wL*          wL ->-RP
+        |    LP->- wL*         wR* ->-RP
         |    |                        |
-        |    .-->- vL          vL* ->-.
+        |    .-->- vL           vR ->-.
+
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.
     For DMRG (i.e. ``bc='finite','segment'``), the very left and right part ``LP[0]`` and
@@ -590,7 +594,6 @@ class MPOEnvironment(object):
     In other words, we contract left-canonical `A` to the left parts `LP`
     and right-canonical `B` to the right parts `RP`.
 
-    F
 
     Parameters
     ----------
@@ -646,7 +649,7 @@ class MPOEnvironment(object):
         self.H = H
         self.L = L = bra.L
         self.finite = bra.finite
-        self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype])
+        self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
         self._LP = [None]*L
         self._RP = [None]*L
         self._LP_age = [None]*L
@@ -657,9 +660,9 @@ class MPOEnvironment(object):
             leg_mpo = H.get_W(0).get_leg('wL').conj()
             leg_ket = ket.get_B(0).get_leg('vL').conj()
             leg_ket.test_contractible(leg_bra)
-            firstLP = npc.zeros(leg_ket.chinfo, [leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
+            firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             # TODO: should work for both finite and segment bc ?
-            firstLP[:, H.IdL[0], :] = npc.diag(1., dtype=self.dtype)
+            firstLP[:, H.IdL[0], :] = npc.diag(1., leg_ket, dtype=self.dtype)
             firstLP.set_leg_labels(['vL', 'wL*', 'vL*'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
@@ -668,7 +671,7 @@ class MPOEnvironment(object):
             leg_mpo = H.get_W(L-1).get_leg('wR').conj()
             leg_ket = ket.get_B(L-1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
-            lastRP = npc.zeros(leg_ket.chinfo, [leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
+            lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             lastRP[:, H.IdR[L], :] = npc.diag(1., leg_ket, dtype=self.dtype)
             lastRP.set_leg_labels(['vR', 'wR*', 'vR*'])
         self.set_RP(L-1, lastRP, age=age_RP)
@@ -776,13 +779,15 @@ class MPOEnvironment(object):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vL*', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wL*']))
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP,
-                           axes=(['p*', 'vL'], ['p', 'vL*']))
+                           axes=(['p*', 'vL*'], ['p', 'vL']))
+        LP = LP.replace_labels(['vR', 'wR', 'vR*'], ['vL*', 'wL*', 'vL'])
         return LP
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
-        RP = npc.tensordot(RP, self.ket.get_B(i, form='B'), axes=('vR*', 'vR'))
-        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wL'], ['p', 'wL*']))
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vR*'))
+        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wR*']))
         RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP,
-                           axes=(['p*', 'vL'], ['p', 'vL*']))
+                           axes=(['p*', 'vR*'], ['p', 'vR']))
+        RP = RP.replace_labels(['vL', 'wL', 'vL*'], ['vR*', 'wR*', 'vR'])
         return RP

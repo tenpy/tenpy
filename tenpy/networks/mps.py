@@ -122,8 +122,8 @@ class MPS(object):
         ``None`` means non-canonical form.
         For ``form = (nuL, nuR)``, the stored ``_B[i]`` are
         ``s**form[0] -- Gamma -- s**form[1]`` (in Vidal's notation).
-    dtype : type | string
-        The data type of the `_Bs`.
+    dtype : type
+        The data type of the `_B`.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
@@ -157,7 +157,7 @@ class MPS(object):
     def __init__(self, sites, Bs, SVs, bc='finite', form='B'):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = Bs[0].dtype
+        self.dtype = dtype = np.find_common_type([B.dtype for B in Bs], [])
         self.form = self._parse_form(form)
         self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
 
@@ -428,7 +428,7 @@ class MPS(object):
         copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
         theta = self.get_B(i, form=None, copy=copy)  # in the current form
         if fL != 1.:
-            theta = self._scale_axis_B(theta, self.get_SL(i), 1.-fL, 'vL')
+            theta = self._scale_axis_B(theta, self.get_SL(i), 1.-fL, 'vL', cutoff)
         theta = theta.replace_label('p', 'p0')
         for k in range(1, n):  # nothing if n=1.
             j = (i + k) % self.L
@@ -436,14 +436,14 @@ class MPS(object):
             if self.form[j] is not None:
                 fL_j, fR_j = self.form[j]
                 if fR is not None:
-                    B = self._scale_axis_B(theta, self.get_SL(i), 1.-fL_j-fR, 'vL')
+                    B = self._scale_axis_B(B, self.get_SL(i), 1.-fL_j-fR, 'vL', cutoff)
                 # otherwise we can just hope it's fine.
                 fR = fR_j
             else:
                 fR = None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
         if fR != 1:  # fR = self.form[i+n-1][1]
-            theta = self._scale_axis_B(theta, self.get_SR((i+n-1) % self.L), 1.-fL, 'vR')
+            theta = self._scale_axis_B(theta, self.get_SR((i+n-1) % self.L), 1.-fL, 'vR', cutoff)
         return theta
 
     def convert_form(self, new_form='B'):
