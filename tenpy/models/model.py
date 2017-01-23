@@ -229,11 +229,11 @@ class CouplingModel(object):
             s = self.lat.site(i)
             H = npc.zeros([s.leg, s.leg.conj()])
             for opname, strength in terms.iteritems():
-                H = H + getattr(s, terms[0])  # (can't use ``+=``: may change dtype)
+                H = H + strength * s.get_op(opname)  # (can't use ``+=``: may change dtype)
             res.append(H)
         return res
 
-    def calc_H_bond(self, tol_zero=1.e-15):
+    def calc_H_bond(self, tol_zero=1.e-14):
         """calculate `H_bond` from `self.coupling_terms` and `self.H_onsite`.
 
         If ``self.H_onsite is None``, it is calculated with :meth:`self.calc_H_onsite`.
@@ -263,11 +263,12 @@ class CouplingModel(object):
             d1 = self.coupling_terms[i]
             site_i = self.lat.site(i)
             site_j = self.lat.site(j)
-            strength = 0.5 if i > 0 or i == 0 and not finite else 1.
-            H = npc.outer(strength * self.H_onsite[i], site_j.Id)
-            strength = 0.5 if j < self.lat.N_sites - 1 or (j == self.lat.N_sites - 1
-                                                           and not finite) else 1.
-            H = H + npc.outer(site_i.Id, strength * self.H_onsite[j])
+            strength_i = 1. if finite and i == 0 else 0.5
+            strength_j = 1. if finite and j == self.lat.N_sites - 1 else 0.5
+            if finite and j == 0:  # over the boundary
+                strength_i, strength_j = 0., 0.  # just to make the assert below happy
+            H = npc.outer(strength_i * self.H_onsite[i], site_j.Id)
+            H = H + npc.outer(site_i.Id, strength_j * self.H_onsite[j])
             for (op1, op_str), d2 in d1.iteritems():
                 for j2, d3 in d2.iteritems():
                     # i, j in terms are defined such that we expect j = j2,
