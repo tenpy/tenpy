@@ -745,7 +745,6 @@ class LegPipe(LegCharge):
     def to_LegCharge(self):
         """convert self to a LegCharge, discarding the information how to split the legs.
         Usually not needed, but called by functions, which are not implemented for a LegPipe."""
-        warnings.warn("Converting LegPipe to LegCharge")
         return LegCharge(self.chinfo, self.slices, self.charges, self.qconj)
 
     def conj(self):
@@ -766,18 +765,21 @@ class LegPipe(LegCharge):
     def sort(self, *args, **kwargs):
         """convert to LegCharge and call :meth:`LegCharge.sort`"""
         # could be implemented for a LegPipe, but who needs it?
+        warnings.warn("Converting LegPipe to LegCharge for `sort`")
         res = self.to_LegCharge()
         return res.sort(*args, **kwargs)
 
     def bunch(self, *args, **kwargs):
         """convert to LegCharge and call :meth:`LegCharge.bunch`"""
         # could be implemented for a LegPipe, but who needs it?
+        warnings.warn("Converting LegPipe to LegCharge for `bunch`")
         res = self.to_LegCharge()
         return res.bunch(*args, **kwargs)
 
     def project(self, *args, **kwargs):
         """convert self to LegCharge and call :meth:`LegCharge.project`"""
         # could be implemented for a LegPipe, but who needs it?
+        warnings.warn("Converting LegPipe to LegCharge for `project`")
         res = self.to_LegCharge()
         return res.project(*args, **kwargs)
 

@@ -319,6 +319,7 @@ class CouplingModel(object):
                         graph.add(j, label, 'IdR', opname_j, strength)
         # add 'IdL' and 'IdR' and convert the graph to an MPO
         graph.add_missing_IdL_IdR()
+        self.H_MPO_graph = graph
         H_MPO = graph.build_MPO()
         return H_MPO
 
@@ -334,9 +335,9 @@ class CouplingModel(object):
         """remove entries of strength `0` from ``self.coupling_terms``."""
         for d1 in self.coupling_terms:
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
-            for op_i_op_str, d2 in d1.iteritems():
-                for j, d3 in d2.iteritems():
-                    for op_j, st in d3.iteritems():
+            for op_i_op_str, d2 in d1.items():
+                for j, d3 in d2.items():
+                    for op_j, st in d3.items():
                         if abs(st) < tol_zero:
                             del d3[op_j]
                     if len(d3) == 0:

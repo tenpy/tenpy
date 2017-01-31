@@ -402,7 +402,8 @@ class Array(object):
         try:
             res = int(res)
         except:
-            raise KeyError("label not found: " + repr(label))
+            raise KeyError("label not found: " + repr(label) + ", current labels" +
+                           repr(self.get_leg_labels()))
         if res > self.rank:
             raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         elif res < 0:
@@ -462,13 +463,15 @@ class Array(object):
         return tuple(lb)
 
     def get_leg(self, label):
-        """return self.legs[self.get_leg_index(label)].
+        """Return self.legs[self.get_leg_index(label)].
 
         Convenient function returning the leg corresponding to a leg label/index."""
         return self.legs[self.get_leg_index(label)]
 
     def ireplace_label(self, old_label, new_label):
-        """replace the leg label `old_label` with `new_label`. In place."""
+        """Replace the leg label `old_label` with `new_label`. In place."""
+        if isinstance(old_label, int):
+            old_label = self.get_leg_labels()[old_label]
         old_label, new_label = str(old_label), str(new_label)
         self.labels[new_label] = self.labels[old_label]
         if new_label != old_label:
@@ -476,11 +479,17 @@ class Array(object):
         return self
 
     def replace_label(self, old_label, new_label):
-        """return a shallow copy with the leg label `old_label` replaced by `new_label`."""
+        """Return a shallow copy with the leg label `old_label` replaced by `new_label`."""
         return self.copy(deep=False).ireplace_label(old_label, new_label)
 
+    def ireplace_labels(self, old_labels, new_labels):
+        """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
+        for old_l, new_l in zip(old_labels, new_labels):
+            self.ireplace_label(old_l, new_l)
+        return self
+
     def replace_labels(self, old_labels, new_labels):
-        """return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
+        """Return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
         res = self.copy(deep=False)
         for old_l, new_l in zip(old_labels, new_labels):
             res.ireplace_label(old_l, new_l)
@@ -1325,7 +1334,7 @@ class Array(object):
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
         if s.shape != (self.shape[axis], ):
-            raise ValueError("s has wrong shape: ", str(s.shape))
+            raise ValueError("s has wrong shape: " + str(s.shape))
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:

@@ -16,7 +16,7 @@ We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of th
 ``0 <= i < L``.
 Additionally, we store ``L+1`` singular value arrays `_S[ib]` on each bond ``0 <= ib <= L``,
 independent of the boundary conditions.
-``_Ss[ib]`` gives the singlur values on the bond ``i-1, i``.
+``_S[ib]`` gives the singlur values on the bond ``i-1, i``.
 However, be aware that e.g. :attr:`MPS.chi` returns only the dimensions of the
 :attr:`MPS.nontrivial_bonds` depending on the boundary conditions.
 
@@ -75,6 +75,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
     - canonicalize()
     - much much more ....
     - proper documentation
+    - copy
 
 References
 ----------
@@ -168,7 +169,7 @@ class MPS(object):
         for i in range(self.L+1)[self.nontrivial_bonds]:
             self._S[i] = np.array(SVs[i], dtype=np.float)
         if self.bc == 'infinite':
-            self._S[-1] = self.S[0]
+            self._S[-1] = self._S[0]
         self.test_sanity()
 
     def test_sanity(self):
@@ -184,7 +185,7 @@ class MPS(object):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
             B.test_sanity()  # recursive...
             if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
-                    self._S[i+1].shape[0] != B.get_leg('vL').ind_len:
+                    self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
                 raise ValueError("shape of B incompatible with len of singular values")
             if not self.finite or i + 1 < self.L:
                 B2 = self._B[(i+1) % self.L]
@@ -193,7 +194,7 @@ class MPS(object):
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
                 raise ValueError("non-trivial outer bonds for finite MPS")
         elif self.bc == 'infinite':
-            if self._S[self.L] != self._S[0]:
+            if np.any(self._S[self.L] != self._S[0]):
                 raise ValueError("iMPS with S[0] != S[L]")
         assert len(self.form) == self.L
         for f in self.form:
@@ -260,7 +261,7 @@ class MPS(object):
             # for an iMPS, the last leg has to match the first one.
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
-            Bs[-1] = Bs[-1].gauge_qtotal('vR', ci.make_valid(chdiff))
+            Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
         SVs = [[1.]] * (L + 1)
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
@@ -284,7 +285,7 @@ class MPS(object):
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
         # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-        return [s.shape[0] for s in self._S[self._nontrivial_bonds()]]
+        return [s.shape[0] for s in self._S[self.nontrivial_bonds]]
 
     @property
     def nontrivial_bonds(self):
@@ -436,14 +437,14 @@ class MPS(object):
             if self.form[j] is not None:
                 fL_j, fR_j = self.form[j]
                 if fR is not None:
-                    B = self._scale_axis_B(B, self.get_SL(i), 1.-fL_j-fR, 'vL', cutoff)
+                    B = self._scale_axis_B(B, self.get_SL(j), 1.-fL_j-fR, 'vL', cutoff)
                 # otherwise we can just hope it's fine.
                 fR = fR_j
             else:
                 fR = None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
         if fR != 1:  # fR = self.form[i+n-1][1]
-            theta = self._scale_axis_B(theta, self.get_SR((i+n-1) % self.L), 1.-fL, 'vR', cutoff)
+            theta = self._scale_axis_B(theta, self.get_SR(i+n-1), 1.-fR, 'vR', cutoff)
         return theta
 
     def convert_form(self, new_form='B'):
@@ -520,19 +521,22 @@ class MPS(object):
         if form_diff == 0:
             return B  # nothing to do
         if isinstance(S, npc.Array):
-            if S.ndim != 2:
+            if S.rank != 2:
                 raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
             if form_diff == -1:
                 S = npc.pinv(S, cutoff)
             elif form_diff != 1.:
                 raise ValueError("Can't scale/tensordot a 2D `S` for non-integer `form_diff`")
 
-            if axis_B == 'vL':
-                B = npc.tensordot(S, B, axes=[1, 'vL'])
-            elif axis_B == 'vR':
-                B = npc.tensordot(B, S, axes=['vR', 0])
+            # Hack: mpo.MPOEnvironment.full_contraction uses ``axis_B == 'vL*'``
+            if axis_B == 'vL' or axis_B == 'vL*':
+                B = npc.tensordot(S, B, axes=[1, axis_B]).replace_label(0, axis_B)
+            elif axis_B == 'vR' or axis_B == 'vR*':
+                B = npc.tensordot(B, S, axes=[axis_B, 0]).replace_label(-1, axis_B)
             else:
-                raise ValueError("This should never happenunexpected leg for scaling with S")
+                raise ValueError("This should never happen: unexpected leg for scaling with S")
             return B
         else:
-            return B.scale_axis(S**form_diff, axis_B)
+            if form_diff != 1.:
+                S = S**form_diff
+            return B.scale_axis(S, axis_B)

@@ -56,6 +56,7 @@ def test_MPOGraph():
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
 
+
 def test_MPOEnvironment():
     xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
     L = xxz_pars['L']
@@ -63,5 +64,6 @@ def test_MPOEnvironment():
     state = ([0, 1]*L)[:L]  # Neel
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite')
     env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
+    env.get_LP(3, True)
+    env.get_RP(0, True)
     env.test_sanity()
-

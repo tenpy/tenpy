@@ -252,8 +252,6 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
     err : :class:`TruncationError`
         The truncation error introduced.
-
-    .. todo : do we need new_norm?
     """
     U, S, VH = npc.svd(theta, full_matrices=False, compute_uv=True,
                        qtotal_LR=qtotal_LR, inner_labels=inner_labels)

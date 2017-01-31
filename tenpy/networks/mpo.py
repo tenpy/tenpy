@@ -165,14 +165,14 @@ class MPO(object):
         """Return index of `IdL` at bond to the *left* of site `i`.
 
         May be ``None``."""
-        i = self._valid_index(i)
+        i = self._to_valid_index(i)
         return self.IdL[i]
 
     def get_IdR(self, i):
         """Return index of `IdR` at bond to the *right* of site `i`.
 
         May be ``None``."""
-        i = self._valid_index(i)
+        i = self._to_valid_index(i)
         return self.IdR[i+1]
 
     def _to_valid_index(self, i):
@@ -576,11 +576,11 @@ class MPOEnvironment(object):
     Label convetion::
     We use the following label convention  (where arrows indicate `qconj`)::
 
-        |    .-->- vL*         vR* ->-.
+        |    .-->- vR           vL ->-.
         |    |                        |
-        |    LP->- wL*         wR* ->-RP
+        |    LP->- wR           wL ->-RP
         |    |                        |
-        |    .-->- vL           vR ->-.
+        |    .-->- vR*         vL* ->-.
 
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.
@@ -661,9 +661,9 @@ class MPOEnvironment(object):
             leg_ket = ket.get_B(0).get_leg('vL').conj()
             leg_ket.test_contractible(leg_bra)
             firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
-            # TODO: should work for both finite and segment bc ?
+            # should work for both finite and segment bc
             firstLP[:, H.IdL[0], :] = npc.diag(1., leg_ket, dtype=self.dtype)
-            firstLP.set_leg_labels(['vL', 'wL*', 'vL*'])
+            firstLP.set_leg_labels(['vR*', 'wR', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
             # Build trivial verly last RP
@@ -673,7 +673,7 @@ class MPOEnvironment(object):
             leg_ket.test_contractible(leg_bra)
             lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             lastRP[:, H.IdR[L], :] = npc.diag(1., leg_ket, dtype=self.dtype)
-            lastRP.set_leg_labels(['vR', 'wR*', 'vR*'])
+            lastRP.set_leg_labels(['vL*', 'wL', 'vL'])
         self.set_RP(L-1, lastRP, age=age_RP)
         self.test_sanity()
 
@@ -687,7 +687,7 @@ class MPOEnvironment(object):
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
 
-    def get_LP(self, i, store):
+    def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
 
         Parameters
@@ -701,24 +701,24 @@ class MPOEnvironment(object):
         -------
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vL', 'wL*', 'vL*'`` for `bra`, `H`, `ket`.
+            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
         """
         # find nearest available LP to the left.
         for i0 in range(i, i-self.L, -1):
-            LP = self._LP[i0]
+            LP = self._LP[self._to_valid_index(i0)]
             if LP is not None:
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
             raise ValueError("No left part in the system???")
         age_i0 = self.get_LP_age(i0)
-        for j in range(i0+1, i+1):
+        for j in range(i0, i):
             LP = self._contract_LP(j, LP)
             if store:
-                self.set_LP(j, LP, age=age_i0 + j - i0)
+                self.set_LP(j+1, LP, age=age_i0 + j - i0 + 1)
         return LP
 
-    def get_RP(self, i, store):
+    def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
 
         Parameters
@@ -732,62 +732,97 @@ class MPOEnvironment(object):
         -------
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vR', 'wR*', 'vR*'`` for `bra`, `H`, `ket`.
+            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
         """
         # find nearest available RP to the right.
         for i0 in range(i, i+self.L):
-            RP = self._RP[i0]
+            RP = self._RP[self._to_valid_index(i0)]
             if RP is not None:
                 break
             # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
+        age_i0 = self.get_RP_age(i0)
         for j in range(i0, i, -1):
             RP = self._contract_RP(j, RP)
             if store:
-                self.set_RP(j-1, RP)
+                self.set_RP(j-1, RP, age=age_i0 + i0 - j + 1)
         return RP
 
     def get_LP_age(self, i):
         """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
-        return self._LP_age[i]
+        return self._LP_age[self._to_valid_index(i)]
 
     def get_RP_age(self, i):
         """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
-        return self._RP_age[i]
+        return self._RP_age[self._to_valid_index(i)]
 
     def set_LP(self, i, LP, age):
         """Store part to the left of site `i`."""
+        i = self._to_valid_index(i)
         self._LP[i] = LP
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
         """Store part to the right of site 1i1."""
+        i = self._to_valid_index(i)
         self._RP[i] = RP
         self._RP_age[i] = age
 
     def del_LP(self, i):
         """Delete stored part strictly to the left of site `i`."""
+        i = self._to_valid_index(i)
         self._LP[i] = None
         self._LP_age[i] = None
 
     def del_RP(self, i):
         """Delete storde part scrictly to the right of site `i`."""
+        i = self._to_valid_index(i)
         self._RP[i] = None
         self._RP_age[i] = None
 
+    def full_contraction(self, i0):
+        """Calculate the energy by a full contraction of the network.
+
+        The full contraction of the environments gives the value ``<bra|H|ket>``,
+        i.e. if `bra` is `ket`, the total energy. For this purpose, this function contracts
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index.
+        """
+        if self.ket.finite and i0+1 == self.L:
+            # special case to handle `_to_valid_index` correctly:
+            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
+            LP = self.get_LP(i0, store=False)
+            LP = self._contract_LP(self, i0, LP)
+        else:
+            LP = self.get_LP(i0+1, store=False)
+        # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
+        S_bra = self.bra.get_SR(i0).conj()
+        LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
+        # cutoff is not used for form_diff = 1
+        S_ket = self.ket.get_SR(i0)
+        LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
+        RP = self.get_RP(i0, store=False)
+        return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vL*', 'vL'))
-        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wL*']))
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP,
-                           axes=(['p*', 'vL*'], ['p', 'vL']))
-        LP = LP.replace_labels(['vR', 'wR', 'vR*'], ['vL*', 'wL*', 'vL'])
-        return LP
+                           axes=(['p*', 'vL*'], ['p', 'vR*']))
+        return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vR*'))
-        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wR*']))
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
         RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP,
-                           axes=(['p*', 'vR*'], ['p', 'vR']))
-        RP = RP.replace_labels(['vL', 'wL', 'vL*'], ['vR*', 'wR*', 'vR'])
-        return RP
+                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        return RP  # labels ['vL', 'wL', 'vL*']
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `ket.bc`)."""
+        return self.ket._to_valid_index(i)
