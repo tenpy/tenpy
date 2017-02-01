@@ -33,9 +33,6 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
-
-The MPOEnvironment parts have the following label convention::
-
 """
 
 from __future__ import division
@@ -573,8 +570,7 @@ class MPOEnvironment(object):
         |     |         |        |        |                 |
         |     .------>- N[0]*->- N[1]*->- N[2]*->- ...  ->--.
 
-    Label convetion::
-    We use the following label convention  (where arrows indicate `qconj`)::
+    We use the following label convention (where arrows indicate `qconj`)::
 
         |    .-->- vR           vL ->-.
         |    |                        |

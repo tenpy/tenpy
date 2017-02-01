@@ -431,7 +431,7 @@ class Array(object):
         return [self.get_leg_index(l) for l in labels]
 
     def set_leg_labels(self, labels):
-        """Return labels for the legs.
+        """Set labels for the different axes/legs.
 
         Introduction to leg labeling can be found in :doc:`../IntroNpc`.
 
@@ -659,14 +659,14 @@ class Array(object):
         Parameters
         ----------
         indices : (iterable of) int
-            the (flat) index for each of the legs specified by `axes`
+            The (flat) index for each of the legs specified by `axes`
         axes : (iterable of) str/int
-            leg labels or indices to specify the legs for which the indices are given.
+            Leg labels or indices to specify the legs for which the indices are given.
 
         Returns
         -------
-        slided_self : :class:`Array`
-            a copy of self, equivalent to taking slices with indices inserted in axes.
+        sliced_self : :class:`Array`
+            A copy of self, equivalent to taking slices with indices inserted in axes.
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)

@@ -1,10 +1,10 @@
 """Density Matrix Renormalization Group (DMRG).
 
 Although it was originally not formulated with tensor networks,
-the DMRG algorithm (invented by Steven White in 1992 [1]_, [2]_) opened the whole field
+the DMRG algorithm (invented by Steven White in 1992 [1]_) opened the whole field
 with its enormous success in finding ground states in 1D.
 
-We implement DMRG in the modern formulation of matrix product states [3]_,
+We implement DMRG in the modern formulation of matrix product states [2]_,
 both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
 and in the thermodynamic limit (``'periodic'`` b.c.).
 
@@ -131,6 +131,9 @@ def run(psi, model, DMRG_params):
                                  ``max_E_trunc*E_tol_to_trunc``,
                                  restricted to the interval [`E_tol_min`,`E_tol_max`].
         ============== ========= ===============================================================
+
+    Returns
+    -------
     """
     # initialize the engine
     Engine_class = get_parameter(DMRG_params, 'engine', 'EngineCombine', 'DMRG')
@@ -263,7 +266,6 @@ def run(psi, model, DMRG_params):
                              )
     # cleanup
     engine.mixer_cleanup()
-    # raise NotImplementedError()
     return {'E': E,
             'shelve': shelve,
             'bond_statistics': engine.statistics,
@@ -1193,8 +1195,7 @@ class Mixer(object):
                                  after each sweep.
         -------------- --------- ---------------------------------------------------------------
         disable_after  int       We disable the mixer completely after this number of sweeps.
-        -------------- --------- ---------------------------------------------------------------
-
+        ============== ========= ===============================================================
 
     Attributes
     ----------
