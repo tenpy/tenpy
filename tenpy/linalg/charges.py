@@ -195,7 +195,7 @@ class LegCharge(object):
 
     Notes
     -----
-    Instances of this class can be shared between different `npc.Array`s.
+    Instances of this class can be shared between different `npc.Array`.
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
     """
@@ -660,19 +660,6 @@ class LegPipe(LegCharge):
     _strides : 1D array
         strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
 
-    Methods
-    -------
-    :meth:`to_LegCharge`
-        converts to a :class:`LegCharge`
-    :meth:`test_sanity`
-    :meth:`conj`
-        flip ``qconj`` for all incoming legs and the outgoing leg.
-    :meth:`outer_conj`
-        flip the outgoing `qconj` and outgoing charges
-    modify blocks
-        (these convert to LegCharge)
-        :meth:`sort`, :meth:`bunch`, :meth:`project`
-
     Notes
     -----
     For np.reshape, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
@@ -695,7 +682,7 @@ class LegPipe(LegCharge):
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
     the total block `I_s`, i.e., ``b_j = a_j - self.qind[I_s, 0]``.
 
-    The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``s.
+    The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``.
     Each ``I_s`` will have multiple rows,
     and the order in which they are stored in `q_map` is the order the data is stored
     in the actual tensor, i.e., it might look like ::
@@ -777,8 +764,19 @@ class LegPipe(LegCharge):
         return res.bunch(*args, **kwargs)
 
     def project(self, *args, **kwargs):
-        """convert self to LegCharge and call :meth:`LegCharge.project`"""
-        # could be implemented for a LegPipe, but who needs it?
+        """convert self to LegCharge and call :meth:`LegCharge.project`.
+
+        In general, this could be implemented for a LegPipe, but would make
+        :meth:`~tenpy.linalg.np_conserved.Array.split_legs` more complicated, thus we keep it
+        simple.  If you really want to project and split afterwards, use the following work-around,
+        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
+            Create the full pipe and save it separetely
+            Convert the Pipe to a Leg & project the array with it.
+            (... do calculations ...)
+            To split the 'projected pipe' of `A`, create and empty array `B` with the legs of A,
+            except the projected legs replaced by the full pipe, set `A` as a slice of `B`.
+            Then split the pipes.
+        """
         warnings.warn("Converting LegPipe to LegCharge for `project`")
         res = self.to_LegCharge()
         return res.project(*args, **kwargs)
@@ -909,9 +907,6 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
-
-
-# ===== functions =====
 
 
 def _find_row_differences(qflat):

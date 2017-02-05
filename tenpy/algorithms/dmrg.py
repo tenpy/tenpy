@@ -25,6 +25,8 @@ and then slowly turned off in the end.
 .. todo :
     abort on too large NormErr -> need MPS.normerr()
     Need function to plot the statistics in the end
+    Write UserGuide/Example!!!
+    Allow to keep MPS orthogonal to other states, for finding excited states
 
 References
 ----------
@@ -104,7 +106,8 @@ def run(psi, model, DMRG_params):
         -------------- --------- ---------------------------------------------------------------
         max_sweeps     int       Maximum number of sweeps to be performed.
         -------------- --------- ---------------------------------------------------------------
-        min_sweep      int       Minimum number of sweeps to be performed.
+        min_sweeps     int       Minimum number of sweeps to be performed.
+                                 Defaults to 1.5*N_sweeps_check.
         -------------- --------- ---------------------------------------------------------------
         max_E_err      int       Convergence if the change of the energy in each step
                                  satisfies ``-\Delta E / |E| < max_E_err``. Note that this is
@@ -134,6 +137,8 @@ def run(psi, model, DMRG_params):
 
     Returns
     -------
+    info : dict
+        A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
     """
     # initialize the engine
     Engine_class = get_parameter(DMRG_params, 'engine', 'EngineCombine', 'DMRG')
@@ -159,11 +164,11 @@ def run(psi, model, DMRG_params):
         e_tol_max = get_parameter(DMRG_params, 'E_tol_max', None, 'DMRG')
 
     # get parameters for DMRG convergence criteria
-    min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 4, 'DMRG')
+    N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
+    min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 1.5*N_sweeps_check, 'DMRG')
     max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
     max_E_err = get_parameter(DMRG_params, 'max_E_err', 0.1, 'DMRG')
     max_S_err = get_parameter(DMRG_params, 'max_S_err', 0.1, 'DMRG')
-    N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
     max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24*365, 'DMRG')
     start_time = time.time()
 
@@ -264,6 +269,15 @@ def run(psi, model, DMRG_params):
                              trerr=max_trunc_err,
                              Eerr=max_E_err
                              )
+    if verbose > 1:
+        print "="*80
+        msg = "DMRG finished after {sweep:d} sweeps.\n"
+        msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
+        print msg.format(sweep=engine.sweeps,
+                         age=engine.statistics['age'][-1],
+                         chimax=np.max(engine.env.ket.chi))
+        print "="*80
+
     # cleanup
     engine.mixer_cleanup()
     return {'E': E,
@@ -354,7 +368,7 @@ class Engine(object):
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(DMRG_params, 'mixer_params', {}, 'DMRG')
             mixer_params.setdefault('verbose', self.verbose/10)  # reduced verbosity
-            self.mixer = Mixer_class(self.env, mixer_params)
+            self.mixer = Mixer_class(mixer_params)
 
         self.lanczos_params = get_parameter(DMRG_params, 'lanczos_params', {}, 'DMRG')
         self.lanczos_params.setdefault('verbose', self.verbose/10)  # reduced verbosity
@@ -458,16 +472,16 @@ class Engine(object):
         Returns
         -------
         E_total : float
-            Total energy, obtained *before* truncation (if `optimize`=True),
-            or *after* truncation (if `optimize`=False) (but never ``None``).
+            Total energy, obtained *before* truncation (if ``optimize=True``),
+            or *after* truncation (if ``optimize=False``) (but never ``None``).
         E_trunc : float | ``None``
             The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if `meas_E_trunc`=False.
+            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced after bond optimization.
         N_lanczos : int
             Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if optimize = False.
+            0 if ``optimize=False``.
         age : int
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
@@ -570,7 +584,7 @@ class Engine(object):
     def mixed_svd(self, theta, i0, update_LP, update_RP):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
-        The goal ist to split theta and truncate it:
+        The goal ist to split theta and truncate it::
 
             |   -- theta --   ==>    -- U -- S --  VH -
             |      |   |                |          |
@@ -649,7 +663,7 @@ class Engine(object):
     def mix_rho_L(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -683,7 +697,7 @@ class Engine(object):
     def mix_rho_R(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -856,7 +870,7 @@ class EngineCombine(Engine):
     def mix_rho_L(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -905,7 +919,7 @@ class EngineCombine(Engine):
     def mix_rho_R(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -1055,7 +1069,7 @@ class EngineFracture(Engine):
     def mix_rho_L(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -1104,7 +1118,7 @@ class EngineFracture(Engine):
     def mix_rho_R(self, theta, i0, mix_enabled):
         """Calculated mixed reduced density matrix for left site.
 
-        Pictorially:
+        Pictorially::
 
             |     mix_enabled=False           mix_enabled=True
             |
@@ -1178,6 +1192,9 @@ class EngineFracture(Engine):
 class Mixer(object):
     """Mixer class.
 
+    .. todo :
+        documentation/reference
+
     Parameters
     ----------
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
@@ -1199,19 +1216,20 @@ class Mixer(object):
 
     Attributes
     ----------
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Provides the environment.
     amplitude : float
         Current amplitude for mixing.
     decay : float
         Factor by which `amplitude` is divided after each sweep.
-    .. todo : documentation/reference
+    disable_after : int
+        The number of sweeps after which the mixer should be disabled.
+    verbose : int
+        Level of output vebosity.
     """
-    def __init__(self, env, mixer_params):
-        self.env = env
+    def __init__(self, mixer_params):
         self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-2, 'Mixer')
         self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')
         self.disable_after = get_parameter(mixer_params, 'disable_after', 15, 'Mixer')
+        self.verbose = mixer_params.get('verbose', 0)
 
     def update_amplitude(self, sweeps):
         """Update the amplitude, possibly disable the mixer.
@@ -1229,6 +1247,8 @@ class Mixer(object):
         """
         self.amplitude /= self.decay
         if sweeps >= self.disable_after and self.amplitude >= np.finfo('float').eps:
+            if self.verbose > 0.1:  # increased verbosity: the same level as DMRG
+                print "disable mixer"
             return None  # disable mixer
         return self
 

@@ -278,6 +278,10 @@ def test_npc_Array_reshape():
     else:
         idx = tuple([0] * b.rank)
     nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
+    print "test add_trivial_leg"
+    be = bs.copy(deep=True).add_trivial_leg(1, 'tr1', +1).add_trivial_leg(3, 'tr2', -1)
+    be.test_sanity()
+    npt.assert_equal(be.to_ndarray(), bflat)
     print "test concatenate"
     # create array `c` to concatenate with b along axis 2
     legs = b.legs[:]

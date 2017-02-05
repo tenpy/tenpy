@@ -5,10 +5,8 @@ import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms import dmrg
+from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
-
-import warnings
-warnings.simplefilter("error")
 
 
 def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
@@ -17,12 +15,22 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
     M = XXZChain(xxz_pars)
     state = ([0, 1]*L)[:L]  # Neel
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
-    dmrg_pars = {'verbose': 50, 'engine': engine, 'mixer': mixer,
-                 'chi_list': {0: 20, 10: 40},
-                 'N_sweep_update': 3,
-                 'max_sweeps': 20,
+    dmrg_pars = {'verbose': 5, 'engine': engine, 'mixer': mixer,
+                 'chi_list': {0: 20, 5: 40},
+                 'N_sweeps_check': 4,
+                 'mixer_params': {'disable_after': 6},
+                 'max_sweeps': 40,
                  }
     dmrg.run(psi, M, dmrg_pars)
+    if bc_MPS == 'finite':
+        ED = ExactDiag(M)
+        ED.build_full_H_from_mpo()
+        ED.full_diagonalization()
+        psi_ED = ED.groundstate()
+        ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
+        print "compare with ED: overlap = ", abs(ov)**2
+        assert(abs(abs(ov) - 1.) < 1.e-10)
+
     # TODO: compare with known ground state (energy) / ED !
 
 
@@ -36,4 +44,7 @@ def test_dmrg():
 if __name__ == "__main__":
     for f_args in test_dmrg():
         f = f_args[0]
+        print "="*80
+        print ' '.join([str(a) for a in f_args])
+        print "="*80
         f(*f_args[1:])

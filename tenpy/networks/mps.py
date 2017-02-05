@@ -165,11 +165,12 @@ class MPS(object):
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True) for B in Bs]
         self._S = [None]*(self.L + 1)
-        self._S[0] = self._S[-1] = np.ones([1])
         for i in range(self.L+1)[self.nontrivial_bonds]:
             self._S[i] = np.array(SVs[i], dtype=np.float)
         if self.bc == 'infinite':
             self._S[-1] = self._S[0]
+        elif self.bc == 'finite':
+            self._S[0] = self._S[-1] = np.ones([1])
         self.test_sanity()
 
     def test_sanity(self):
@@ -264,6 +265,66 @@ class MPS(object):
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
         SVs = [[1.]] * (L + 1)
         return cls(sites, Bs, SVs, form=form, bc=bc)
+
+    @classmethod
+    def from_full(cls, sites, psi, form='B', cutoff=1.e-16):
+        """Construct an MPS from a single tensor `psi` with one leg per physical site.
+
+        Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
+        values, the result will be in canonical form.
+        Obviously, this is only well-defined for `finite` boundary conditions.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        psi : :class:`~tenpy.linalg.np_conserved.Array`
+            The full wave function to be represented as an MPS.
+            Should have labels ``'p0', 'p1', ...,  'p{L-1}'``.
+        form  : ``'B' | 'A' | 'C' | 'G'``
+            The canonical form of the resulting MPS, see module doc-string.
+        cutoff : float
+            Cutoff of singular values used in the SVDs.
+
+        Returns
+        -------
+        psi_mps : :class:`MPS`
+            MPS representation of `psi`, normalized and in canonical form.
+        """
+        if form not in ['B', 'A', 'C', 'G']:
+            raise ValueError("Invalid form: " + repr(form))
+        # perform SVDs to bring it into 'B' form, afterwards change the form.
+        L = len(sites)
+        assert(L >= 2)
+        B_list = [None] * L
+        S_list = [1] * (L+1)
+        labels = ['p'+str(i) for i in range(L)]
+        psi.itranspose(labels)
+        # combine legs from left
+        psi = psi.add_trivial_leg(0, label='vL', qconj=+1)
+        for i in range(0, L-1):
+            psi = psi.combine_legs([0, 1])  # combines the legs until `i`
+        psi = psi.add_trivial_leg(2, label='vR', qconj=-1)
+        # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
+        for i in range(L-1, 0, -1):
+            # split off B[i]
+            psi = psi.combine_legs([labels[i], 'vR'])
+            psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
+            S /= np.linalg.norm(S)  # normalize
+            psi.iscale_axis(S, 1)
+            B_list[i] = B.split_legs(1).replace_label(labels[i], 'p')
+            S_list[i] = S
+            psi = psi.split_legs(0)
+        psi = psi.combine_legs([labels[0], 'vR'])
+        psi, S, B = npc.svd(psi, qtotal_LR=[None, psi.qtotal],
+                            inner_labels=['vR', 'vL'], cutoff=cutoff)
+        assert(psi.shape == (1, 1))
+        S_list[0] = np.ones([1], dtype=np.float)
+        B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
+        res = cls(sites, B_list, S_list, bc='finite', form='B')
+        if form != 'B':
+            res.convert_form(form)
+        return res
 
     @property
     def L(self):
@@ -464,6 +525,19 @@ class MPS(object):
         for i, form in enumerate(new_forms):
             new_B = self.get_B(i, form=form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=form)
+
+    def overlap(self, other):
+        """Compute overlap :math:`<self | other>`.
+
+        Parameters
+        ----------
+        other : :class:`MPS`
+            An MPS of the same
+
+        .. todo :
+            implement
+        """
+        raise NotImplementedError("TODO")
 
     def _parse_form(self, form):
         """parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""

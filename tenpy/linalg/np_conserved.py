@@ -38,6 +38,8 @@ Eigen systems:
 :func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
 
 ----------------------------------------------------------------------------
+.. todo ::
+    QR decomposition
 """
 
 from __future__ import division
@@ -704,6 +706,40 @@ class Array(object):
         res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
         return res
 
+    def add_trivial_leg(self, i, label=None, qconj=1):
+        """Add a trivial leg (with just one entry) to `self`.
+
+        Parameters
+        ----------
+        i : int
+            The new leg is inserted before index `i`.
+        label : str | ``None``
+            If not ``None``, use it as label for the new leg.
+        qconj : +1 | -1
+            The direction of the new leg.
+
+        Returns
+        -------
+        extended : :class:`Array`
+            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 & charge 0.
+        """
+        if i < 0:
+            i += self.rank
+        res = self.copy(deep=False)
+        leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
+        res.legs.insert(i, leg)
+        res._set_shape()
+        for j, T in enumerate(res._data):
+            res._data[j] = T.reshape(T.shape[:i] + (1,) + T.shape[i:])
+        res._qdata = np.hstack([res._qdata[:, :i],
+                                np.zeros([len(res._data), 1], np.intp),
+                                res._qdata[:, i:]])
+        if label is not None:
+            labs = list(self.get_leg_labels())
+            labs.insert(i, label)
+            res.set_leg_labels(labs)
+        return res
+
     # handling of charges =====================================================
 
     def gauge_total_charge(self, axis, newqtotal=None, new_qconj=None):
@@ -1060,7 +1096,7 @@ class Array(object):
             return self[index]
         res = self.copy(deep=False)
         # adjust qtotal
-        res.legs = tuple([self.legs[a] for a in keep])
+        res.legs = [self.legs[a] for a in keep]
         res._set_shape()
         for a in axes:
             res.qtotal -= self.legs[a].get_charge(0)
@@ -1795,7 +1831,7 @@ class Array(object):
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
         """
         if type(inds) != tuple:  # for rank 1
-            inds = tuple(inds)
+            inds = (inds, )
         if len(inds) < self.rank:
             inds = inds + (Ellipsis, )
         if any([(i is Ellipsis) for i in inds]):
@@ -1806,7 +1842,8 @@ class Array(object):
             raise IndexError("too many indices for Array")
         # do we have only integer entries in `inds`?
         try:
-            np.array(inds, dtype=np.intp)
+            only_int = np.array(inds, dtype=np.intp)
+            assert(only_int.shape == (len(inds),))
         except:
             return False, inds
         else:
@@ -1938,8 +1975,11 @@ class Array(object):
     def _advanced_setitem_npc(self, inds, other):
         """self[inds] = other for non-integer `inds` and :class:`Array` `other`.
         This function is called by self.__setitem__(inds, other)."""
-        map_part2self, permutations, self_part = self._advanced_getitem(
-            inds, calc_map_qind=True, permute=False)
+        # suppress warning if we project a pipe
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            map_part2self, permutations, self_part = self._advanced_getitem(
+                inds, calc_map_qind=True, permute=False)
         # permuations are ignored by map_part2self.
         # instead of figuring out permuations in self, apply the *reversed* permutations ot other
         for ax, perm in permutations:
@@ -2170,7 +2210,8 @@ class Array(object):
         ['a', 'b', '(c.d)']
         """
         if label[0] != '(' or label[-1] != ')':
-            raise ValueError("split label, which is not of the Form '(...)'")
+            warnings.warn("split leg with label not in Form '(...)': " + label)
+            return [None]*count
         beg = 1
         depth = 0  # number of non-closed '(' to the left
         res = []
