@@ -426,7 +426,7 @@ class NearestNeighborModel(object):
                 if np.allclose(Hnp, Hp) != True:
                     raise ValueError("Diagonalisation of bond did not work!")
 
-    def calc_U(self, param):
+    def calc_U(self, param,type_evo = None):
         #TODO: Old TenPy has E_offset
         #TODO: Document!!
         if (param == self.U_param):
@@ -434,34 +434,117 @@ class NearestNeighborModel(object):
         self.U_param = param
 
         TrotterOrder = get_parameter(param, 'order', 2, 'TrotterDecomp')
-        dt = get_parameter(param, 'dt', 0.1, 'TrotterDecomp')
-        type = get_parameter(param, 'type', 'REAL', 'TrotterDecomp')
+        delta_t = get_parameter(param, 'dt', 0.1, 'TrotterDecomp')
+        if type_evo == None:
+            type_evo = get_parameter(param, 'type_evo', 'REAL', 'TrotterDecomp')
 
         if TrotterOrder == 1:
             self.U_bond = [[None] * len(self.H_bond)]
             for i_bond in range(len(self.H_bond)):
+                dt = delta_t
                 if self.bond_eig_vals[i_bond] != None:
-                    if (type == 'IMAG'):
+                    if (type_evo == 'IMAG'):
                         s = np.exp(-dt * self.bond_eig_vals[i_bond])
-                    elif (type == 'REAL'):
+                    elif (type_evo == 'REAL'):
                         s = np.exp(-1j * dt * (self.bond_eig_vals[i_bond]))
                     else:
                         raise ValueError(
                             "Need to have either real time (REAL) or imaginary time (IMAG)")
                     V = self.bond_eig_vecs[i_bond]
-                    #U = V s V^dag, s = e^(- tau E )
+                    # U = V s V^dag, s = e^(- tau E )
                     U = V.scale_axis(s, axis=1)
                     U = npc.tensordot(U, V.conj(), axes=(1, 1))
-                    labels = self.H_bond[i_bond].combine_legs(
-                        [('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1]).get_leg_labels()
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
                     U.set_leg_labels(labels)
-                    #TODO: Not nice!!
                     self.U_bond[0][i_bond] = U.split_legs()
         elif TrotterOrder == 2:
-            raise NotImplementedError()
+            self.U_bond = [[None] * len(self.H_bond), [None] * len(self.H_bond)]
+            for i_bond in range(len(self.H_bond)):
+                dt = delta_t/2.
+                if self.bond_eig_vals[i_bond] != None:
+                    if (type_evo == 'IMAG'):
+                        s = np.exp(-dt * self.bond_eig_vals[i_bond])
+                    elif (type_evo == 'REAL'):
+                        s = np.exp(-1j * dt * (self.bond_eig_vals[i_bond]))
+                    else:
+                        raise ValueError(
+                            "Need to have either real time (REAL) or imaginary time (IMAG)")
+                    V = self.bond_eig_vecs[i_bond]
+
+                    # U = V s V^dag, s = e^(- tau E )
+
+                    U = V.scale_axis(s, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[0][i_bond] = U.split_legs()
+
+                    s = s*s
+                    U = V.scale_axis(s, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[1][i_bond] = U.split_legs()
         elif TrotterOrder == 4:
-            raise NotImplementedError()
-        # TODO ....
+            # adapted from Schollwock2011 notation ...
+            # U operators in the following order :
+            # a  : exp( Hodd t1 / 2   )
+            # 2a : exp( Heven t1    )
+            # b  : exp(  Hodd t1    )
+            # c  : exp(  Hodd (t-3*t1)/2  )
+            # d  : exp(  Hodd t3  )
+            # 2a and b use the same slot!
+            self.U_bond = [[None] * len(self.H_bond),
+                [None] * len(self.H_bond),[None] * len(self.H_bond),
+                [None] * len(self.H_bond)]
+
+            for i_bond in range(len(self.H_bond)):
+                dt1 = 1. / (4. - 4.**(1/3) ) * delta_t /2.
+                dt3 = delta_t - 4* (dt1*2)
+                if self.bond_eig_vals[i_bond] != None:
+                    if (type_evo == 'IMAG'):
+                        s1 = np.exp(-dt1 * self.bond_eig_vals[i_bond])
+                        s13 = np.exp(- ( dt3 + 2*dt1)/2. * self.bond_eig_vals[i_bond])
+                        s3 = np.exp(-dt3 * self.bond_eig_vals[i_bond])
+                    elif (type_evo == 'REAL'):
+                        s1 = np.exp(-1j * dt1 * self.bond_eig_vals[i_bond])
+                        s13 = np.exp(-1j * ( dt3 + 2*dt1)/2. * self.bond_eig_vals[i_bond])
+                        s3 = np.exp(-1j *dt3 * self.bond_eig_vals[i_bond])
+                    else:
+                        raise ValueError(
+                            "Need to have either real time (REAL) or imaginary time (IMAG)")
+                    V = self.bond_eig_vecs[i_bond]
+
+                    # U = V s V^dag, s = e^(- tau E )
+
+                    # a
+                    U = V.scale_axis(s1, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[0][i_bond] = U.split_legs()
+
+                    # 2a
+                    s1 = s1*s1
+                    U = V.scale_axis(s1, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[1][i_bond] = U.split_legs()
+
+                    # c
+                    U = V.scale_axis(s13, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[2][i_bond] = U.split_legs()
+
+                    # d
+                    U = V.scale_axis(s3, axis=1)
+                    U = npc.tensordot(U, V.conj(), axes=(1, 1))
+                    labels = tuple(('(pL.pR)','(pL*.pR*)'))
+                    U.set_leg_labels(labels)
+                    self.U_bond[3][i_bond] = U.split_legs()
         else:
             raise NotImplementedError('Only 4th order Trotter has been implemented')
 
