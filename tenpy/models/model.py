@@ -412,7 +412,7 @@ class NearestNeighborModel(object):
             else:
                 H2 = h.combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1])
                 w,v = npc.eigh(H2)
-            self.bond_eig_vals.append(w)  #The eigensystem
+            self.bond_eig_vals.append(w)
             self.bond_eig_vecs.append(v)
 
             # check if the diagonalisation worked, as in TenPy
@@ -425,9 +425,11 @@ class NearestNeighborModel(object):
 
     def calc_U(self, param):
         #TODO: Old TenPy has E_offset
+        #TODO: Document!!
         if (param == self.U_param):
             return
         self.U_param = param
+
         TrotterOrder = get_parameter(param, 'order',2,'TrotterDecomp')
         dt = get_parameter(param,'dt',0.1,'TrotterDecomp')
         type = get_parameter(param,'type','REAL','TrotterDecomp')

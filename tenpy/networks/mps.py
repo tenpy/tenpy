@@ -502,3 +502,90 @@ class MPS(object):
         if diff_R != 0.:
             B = B.scale_axis(self.get_SR(i)**diff_R, 'vR')
         return B
+
+    def expectation_value(self, Op,labels, sites = None,):
+        """Expectation value for an n-site operator at ``sites`` (which denote
+        the left-most sites involved in each expectation value).
+
+        Labels must be provided, and they need to comply with the general
+        conventions for physical leg labelling, i.e ['p0','p0*','p1','p1*']
+        for a 2-site operator. Below an example:
+
+        A 2-site operator should have 4 legs, O_{p0 p1, p0* p1*}, and acts
+        on two site states as
+
+        (O.th)_{p0 p1} = O_{p0 p1, p0* p1*} th_{p0* p1*}
+
+        where indices p0/p0* refer to the left site, p1/p1* to the right,
+        and similarly for larger n.
+
+        (Note: I think it is a good idea to force the use of labels, it really
+        makes people aware of what they are doing and it leaves not room for
+        error.)
+
+
+        If sites is ``None``, sets sites = range(L), clipped appropriately
+        for finite bc.
+
+        If a single operator is provided, a list is returned of its
+        evaluated on each site.
+
+        If a list of operators is provided, the chosen operators vary
+        cyclically through the list across the unit cell.
+
+        One site example:
+
+        >>>    psi.site_expectation_value(Sz)
+        -->  [Sz0, Sz1, ... Sz(l-1)]
+
+        >>>    psi.site_expectation_value([Sz, Sx])
+        -->  [Sz0, Sx1, Sz2, . . . ]
+
+        >>>    psi.site_expectation_value(Sz, sites = [0, 2, 3])
+        --> [Sz0, Sz2, Sz3, . . . ]
+
+
+        Parameters
+        ----------
+        i :
+            Operator or list of operators
+        sites : list
+            List of ``sites``. Expectation values evaluated there. If ``None``
+            (default), then entire chain is taken.
+        labels : list
+            List of labels that determine the physical legs of the operator.
+            Needs to be of form 'p0' and 'p0*'.
+
+        Returns
+        -------
+        list : List of floats that are the expectation values evaluated at the
+            chosen sites.
+        """
+        if type(Op) != list:
+            Op = [Op]
+
+        op_size = int(Op[0].rank/2)
+        th_labels = tuple(['p'+str(e) for e in range(op_size)]+['vL','vR'])
+        op_labels = [ 'p'+str(e)+'*' for e in range(op_size)]
+
+        Lop = len(Op)
+        L = self.L
+
+        if sites is None:
+            if self.finite:
+                sites = range(L - (op_size - 1))
+            else:
+                sites = range(L)
+
+        E=[]
+
+        for i2 in sites:
+            o = Op[i2%Lop].copy() #TODO: Should we define a get() function?
+            th = self.get_theta(i2, op_size)
+            #TODO: should we check provided labels for validity?
+            o.set_leg_labels(labels)
+            C = npc.tensordot(o, th, axes = [op_labels,th_labels[:-2]])
+            E.append(npc.inner(th, C,axes = [th_labels,th_labels]
+                    , do_conj = True))
+
+        return np.array(E)
