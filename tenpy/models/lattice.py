@@ -98,12 +98,8 @@ class Lattice(object):
     .. todo ::
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
-    def __init__(self,
-                 Ls,
-                 unit_cell,
-                 order='default',
-                 bc_MPS='finite',
-                 basis=None,
+
+    def __init__(self, Ls, unit_cell, order='default', bc_MPS='finite', basis=None,
                  positions=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
@@ -138,7 +134,7 @@ class Lattice(object):
         # calculate _strides
         strides = [1]
         for L in self.Ls:
-            strides.append(strides[-1]*L)
+            strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
         self.test_sanity()  # check consistency
 
@@ -161,8 +157,9 @@ class Lattice(object):
             raise ValueError("Different space dimensions of `basis` and `unit_cell_positions`")
         # if one of the following assert fails, the `ordering` function returned an invalid array
         assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
-        assert np.all(np.sum(self.order * self._strides, axis=1)[self._perm]
-                      == np.arange(self.N_sites))  # rows of `order` unique?
+        assert np.all(
+            np.sum(self.order * self._strides, axis=1)[self._perm] ==
+            np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
 
@@ -204,21 +201,21 @@ class Lattice(object):
         --------
         plot_ordering : visualizes the ordering
         """
-        res = np.empty((self.N_sites, self.dim+1), np.intp)
+        res = np.empty((self.N_sites, self.dim + 1), np.intp)
         if name in ["default", "Cstyle"]:
             res = np.mgrid[tuple([slice(0, L) for L in self.shape])]
-            return res.reshape((self.dim+1, self.N_sites)).T
+            return res.reshape((self.dim + 1, self.N_sites)).T
         elif name == "Fstyle":
             shape = self.Ls[::-1] + (len(self.unit_cell), )
             res = np.mgrid[tuple([slice(0, L) for L in shape])]
-            res = res.reshape((self.dim+1, self.N_sites)).T
+            res = res.reshape((self.dim + 1, self.N_sites)).T
             perm = np.array(range(self.dim)[::-1] + [-1])
             return res[:, perm]
         elif name in ["snake", "snakeCstyle"]:
             return _ordering_snake(self.shape)
         elif name == "snakeFstyle":
             res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
-            perm = np.array(range(self.dim)[::-1]+[-1])
+            perm = np.array(range(self.dim)[::-1] + [-1])
             return res[:, perm]
         # in a derived lattice ``class DerivedLattice(Lattice)``, use:
         # return super(DerivedLattice, self).ordering(name)
@@ -294,7 +291,7 @@ class Lattice(object):
 
     def lat2mps_idx(self, lat_idx):
         """translate lattice indices ``(x_0, ..., x_{D-1}, u)`` to MPS index `i`."""
-        i = np.sum(self._asvalid_latidx(lat_idx)*self._strides, axis=-1)
+        i = np.sum(self._asvalid_latidx(lat_idx) * self._strides, axis=-1)
         return self._perm[i]
 
     def mps_idx_fix_u(self, u=None):
@@ -449,6 +446,7 @@ class SimpleLattice(Lattice):
     position : 1D array
         The position of the site within the unit cell. Defaults to ``np.zeros(dim))``.
     """
+
     def __init__(self, Ls, site, order='default', bc_MPS='finite', basis=None, position=None):
         if position is not None:
             position = [position]
@@ -471,12 +469,14 @@ class Chain(SimpleLattice):
     bc_MPS : {'finite', 'segment', 'infinite'}
         MPS boundary conditions.
     """
+
     def __init__(self, L, site, bc_MPS='finite'):
         super(Chain, self).__init__([L], site, bc_MPS=bc_MPS)  # and otherwise default values.
 
 
 class SquareLattice(SimpleLattice):
     """A simple uniform square lattice of `Lx` by `Lx` sites."""
+
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
         super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
 
@@ -488,17 +488,17 @@ def _ordering_snake(Ls):
     while len(Ls) > 0:
         L = Ls.pop()
         L0, D = order.shape
-        new_order = np.empty((L*L0, D+1), dtype=np.intp)
+        new_order = np.empty((L * L0, D + 1), dtype=np.intp)
         print order.shape, "- L =", L, "-->", new_order.shape
         new_order[:, 0] = np.repeat(np.arange(L), L0)
         new_order[:L0, 1:] = order
         if L > 1:
             # reverse order to go back for second index
-            new_order[L0:2*L0, 1:] = order[::-1]
+            new_order[L0:2 * L0, 1:] = order[::-1]
         if L > 2:
             # repeat (ascending, descending) up to length L
             rep = L // 2 - 1
-            new_order[2*L0:(rep+1)*2*L0, 1:] = np.tile(new_order[:2*L0, 1:], [rep, 1])
+            new_order[2 * L0:(rep + 1) * 2 * L0, 1:] = np.tile(new_order[:2 * L0, 1:], [rep, 1])
             if L % 2 == 1:
                 new_order[-L0:, 1:] = order
         order = new_order

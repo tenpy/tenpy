@@ -82,8 +82,7 @@ class ExactDiag(object):
         self._pipe_conj = self._pipe.conj()
         if charge_sector is not None:
             self.charge_sector = self.chinfo.make_valid(charge_sector)
-            self._mask = np.all(self._pipe.to_qflat() == self.charge_sector[np.newaxis, :],
-                                axis=1)
+            self._mask = np.all(self._pipe.to_qflat() == self.charge_sector[np.newaxis, :], axis=1)
         else:
             self.charge_sector = None
             self._mask = None
@@ -99,9 +98,10 @@ class ExactDiag(object):
             if i == mpo.L - 1:
                 W = W.take_slice(mpo.get_IdR(mpo.L - 1), 'wR')
             full_H = npc.tensordot(full_H, W, axes=['wR', 'wL'])
-        full_H = full_H.combine_legs([self._labels_p, self._labels_pconj],
-                                     new_axes=[0, 1],
-                                     pipes=[self._pipe, self._pipe_conj])
+        full_H = full_H.combine_legs(
+            [self._labels_p, self._labels_pconj],
+            new_axes=[0, 1],
+            pipes=[self._pipe, self._pipe_conj])
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
@@ -113,21 +113,23 @@ class ExactDiag(object):
                for i, s in enumerate(sites)]
         Ids_L = [Ids[0]]  # Ids_L[j] has identity up to (including) site j
         Ids_R = [Ids[-1]]  # Ids_R[j] is identity starting from (including) site L-1-j
-        for j in range(1, L-2):
+        for j in range(1, L - 2):
             Ids_L.append(npc.outer(Ids_L[-1], Ids[j]))
-            Ids_R.append(npc.outer(Ids[L-j-1], Ids_R[-1]))
+            Ids_R.append(npc.outer(Ids[L - j - 1], Ids_R[-1]))
         full_H = None
         for i in range(1, L):
             # H_bond[i] lifes on sites (i-1, i)
-            lL, lLc = self._labels_p[i-1], self._labels_pconj[i-1]
+            lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
             lR, lRc = self._labels_p[i], self._labels_pconj[i]
             Hb = H_bond[i].replace_labels(['pL', 'pL*', 'pR', 'pR*'], [lL, lLc, lR, lRc])
             if i > 1:
-                Hb = npc.outer(Ids_L[i-2], Hb)      # need i-2 == j
-            if i < L-1:
-                Hb = npc.outer(Hb, Ids_R[L-2-i])    # need i+1 == L-1-j   =>   j = L-2-i
-            Hb = Hb.combine_legs([self._labels_p, self._labels_pconj], new_axes=[0, 1],
-                                 pipes=[self._pipe, self._pipe_conj])
+                Hb = npc.outer(Ids_L[i - 2], Hb)  # need i-2 == j
+            if i < L - 1:
+                Hb = npc.outer(Hb, Ids_R[L - 2 - i])  # need i+1 == L-1-j   =>   j = L-2-i
+            Hb = Hb.combine_legs(
+                [self._labels_p, self._labels_pconj],
+                new_axes=[0, 1],
+                pipes=[self._pipe, self._pipe_conj])
             if full_H is None:
                 full_H = Hb
             else:

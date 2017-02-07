@@ -68,6 +68,7 @@ class Site(object):
         add option to sort by charges and save the resulting permutation.
         Use it where helpful, e.g. for boson_site(conserve=parity) and co.
     """
+
     def __init__(self, charges, state_labels=None, **site_ops):
         self.leg = charges
         self.state_labels = dict()
@@ -184,7 +185,6 @@ class Site(object):
         """Return operator of given name."""
         return getattr(self, name)
 
-
 # ------------------------------------------------------------------------------
 # functions for generating the most common local sites.
 
@@ -296,8 +296,8 @@ def fermion_site(conserve='N', filling=0.5):
     C = np.array([[0., 1.], [0., 0.]])
     Cd = np.array([[0., 0.], [1., 0.]])
     N = np.array([[0., 0.], [0., 1.]])
-    dN = np.array([[-filling, 0.], [0., 1.-filling]])
-    dNdN = dN**2   # (element wise power is fine since dN is diagonal)
+    dN = np.array([[-filling, 0.], [0., 1. - filling]])
+    dNdN = dN**2  # (element wise power is fine since dN is diagonal)
     ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
     if conserve == 'N':
         chinfo = npc.ChargeInfo([1], ['N'])
@@ -361,15 +361,15 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
         raise ValueError("local dimension should be larger than 1....")
     B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
     for n in xrange(1, dim):
-        B[n-1, n] = np.sqrt(n)
-    Bd = np.transpose(B)   # .conj() wouldn't do anything
+        B[n - 1, n] = np.sqrt(n)
+    Bd = np.transpose(B)  # .conj() wouldn't do anything
     # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
     Ndiag = np.arange(dim, dtype=np.float)
     N = np.diag(Ndiag)
     NN = np.diag(Ndiag**2)
     dN = np.diag(Ndiag - filling)
     dNdN = np.diag((Ndiag - filling)**2)
-    P = np.diag(1.-2.*np.mod(Ndiag, 2))
+    P = np.diag(1. - 2. * np.mod(Ndiag, 2))
     ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
     if conserve == 'N':
         chinfo = npc.ChargeInfo([1], ['N'])

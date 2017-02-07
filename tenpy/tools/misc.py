@@ -53,7 +53,7 @@ def to_array(a, shape=(None, )):
     a = np.array(a)  # copy
     if a.ndim != len(shape):
         if a.size == 1:
-            a = np.reshape(a, [1]*len(shape))
+            a = np.reshape(a, [1] * len(shape))
         else:  # extending dimensions is ambiguous, so we better raise an Error.
             raise ValueError("don't know how to cast `a` to required dimensions.")
     reps = [1] * a.ndim
@@ -61,8 +61,8 @@ def to_array(a, shape=(None, )):
         if shape[i] is None:
             continue
         if shape[i] % a.shape[i] != 0:
-            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
-                a.shape[i], shape[i]))
+            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(a.shape[i],
+                                                                                       shape[i]))
         reps[i] = shape[i] // a.shape[i]
     return np.tile(a, reps)
 

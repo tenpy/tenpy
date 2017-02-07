@@ -60,7 +60,7 @@ def test_omp(n=2):
         if tools.process.omp_set_nthreads(n):
             nthreads = tools.process.omp_get_nthreads()
             print nthreads
-            assert(nthreads == n)
+            assert (nthreads == n)
         else:
             print "test_omp failed to import the OpenMP libaray."
 
@@ -71,7 +71,7 @@ def test_mkl(n=2):
         if tools.process.mkl_set_nthreads(n):
             nthreads = tools.process.mkl_get_nthreads()
             print nthreads
-            assert(nthreads == n)
+            assert (nthreads == n)
         else:
             print "test_mkl failed to import the shared MKL libaray."
 

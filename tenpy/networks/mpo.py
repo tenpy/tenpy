@@ -40,7 +40,7 @@ import itertools
 import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.string import vert_join
-from .mps import MPS as _MPS   # only for MPS._valid_bc
+from .mps import MPS as _MPS  # only for MPS._valid_bc
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment']
 
@@ -88,7 +88,7 @@ class MPO(object):
         Valid boundary conditions. The same as for an MPS.
     """
 
-    _valid_bc = _MPS._valid_bc   # same valid boundary conditions as an MPS.
+    _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
     def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None):
         self.sites = list(sites)
@@ -96,11 +96,11 @@ class MPO(object):
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
         if IdL is None:
-            self.IdL = [None]*(self.L+1)
+            self.IdL = [None] * (self.L + 1)
         else:
             self.IdL = list(IdL)
         if IdR is None:
-            self.IdR = [None]*(self.L+1)
+            self.IdR = [None] * (self.L + 1)
         else:
             self.IdR = list(IdR)
         self.bc = bc
@@ -117,13 +117,13 @@ class MPO(object):
             S.leg.test_equal(W.get_leg('p'))
             S.leg.test_contractible(W.get_leg('p*'))
             if self.bc == 'infinite' or i + 1 < self.L:
-                W2 = self.get_W(i+1)
+                W2 = self.get_W(i + 1)
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
         if self.bc == 'finite':
-            assert(self._W[0].get_leg('wL').ind_len == 1)
-            assert(self._W[-1].get_leg('wR').ind_len == 1)
-        if not (len(self.IdL) == len(self.IdR) == self.L+1):
-                raise ValueError("wrong len of `IdL`/`IdR`")
+            assert (self._W[0].get_leg('wL').ind_len == 1)
+            assert (self._W[-1].get_leg('wR').ind_len == 1)
+        if not (len(self.IdL) == len(self.IdR) == self.L + 1):
+            raise ValueError("wrong len of `IdL`/`IdR`")
 
     @property
     def L(self):
@@ -170,7 +170,7 @@ class MPO(object):
 
         May be ``None``."""
         i = self._to_valid_index(i)
-        return self.IdR[i+1]
+        return self.IdR[i + 1]
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
@@ -229,12 +229,13 @@ class MPOGraph(object):
         might be useful to add a "cleanup" function which removes operators cancelling each other
         and/or unused states. Or better use a 'compress' of the MPO?
     """
+
     def __init__(self, sites, bc='finite'):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         # empty graph
-        self.states = [set() for _ in xrange(self.L+1)]
+        self.states = [set() for _ in xrange(self.L + 1)]
         self.graph = [{} for _ in xrange(self.L)]
         self._ordered_states = None
         self._grids = None
@@ -244,13 +245,13 @@ class MPOGraph(object):
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         assert len(self.graph) == self.L
-        assert len(self.states) == self.L+1
+        assert len(self.states) == self.L + 1
         if self.bc not in MPO._valid_bc:
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
         for i, site in enumerate(self.sites):
             if site.leg.chinfo != self.chinfo:
                 raise ValueError("invalid ChargeInfo for site {i:d}".format(i=i))
-            stL, stR = self.states[i:i+2]
+            stL, stR = self.states[i:i + 2]
             # check graph
             gr = self.graph[i]
             for keyL in gr:
@@ -291,8 +292,8 @@ class MPOGraph(object):
         G = self.graph[i]
         if keyL not in self.states[i]:
             self.states[i].add(keyL)
-        if keyR not in self.states[i+1]:
-            self.states[i+1].add(keyR)
+        if keyR not in self.states[i + 1]:
+            self.states[i + 1].add(keyR)
         D = G.setdefault(keyL, {})
         if keyR not in D:
             D[keyR] = [(opname, strength)]
@@ -322,7 +323,7 @@ class MPOGraph(object):
             if self.bc != 'infinite':
                 raise ValueError("j < i not allowed for finite boundary conditions")
             j += self.L
-        for k in range(i+1, j):
+        for k in range(i + 1, j):
             k = k % self.L
             if not self.has_edge(k, key, key):
                 self.add(k, key, key, opname, 1., check_op=check_op)
@@ -376,7 +377,7 @@ class MPOGraph(object):
         # now build the `W` from the grid
         Ws = []
         for i in xrange(self.L):
-            legs = [self._grid_legs[i], self._grid_legs[i+1].conj()]
+            legs = [self._grid_legs[i], self._grid_legs[i + 1].conj()]
             W = npc.grid_outer(self._grids[i], legs, W_qtotal)
             W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws.append(W)
@@ -395,7 +396,7 @@ class MPOGraph(object):
             strs = []
             for keyL in self.states[i]:
                 s = [repr(keyL)]
-                s.append("-"*len(s[-1]))
+                s.append("-" * len(s[-1]))
                 D = G.get(keyL, [])
                 for keyR in D:
                     s.append(repr(keyR) + ":")
@@ -431,12 +432,12 @@ class MPOGraph(object):
     def _build_grids(self):
         """translate the graph dictionaries into grids for the `Ws`."""
         states = self._ordered_states
-        assert(states is not None)   # make sure that _set_ordered_states was called
+        assert (states is not None)  # make sure that _set_ordered_states was called
         grids = []
         for i in range(self.L):
-            stL, stR = states[i:i+2]
+            stL, stR = states[i:i + 2]
             graph = self.graph[i]  # ``{keyL: {keyR: [(opname, strength)]}}``
-            grid = [None]*len(stL)
+            grid = [None] * len(stL)
             for sL, a in stL.iteritems():
                 row = [None] * len(stR)
                 for sR, lst in graph[sL].iteritems():
@@ -477,7 +478,7 @@ class MPOGraph(object):
     def _calc_grid_legs(self, W_qtotal, leg0):
         """calculate LegCharges for the grids from self.grid"""
         grids = self._grids
-        assert(grids is not None)  # make sure _grid_insert_ops was called
+        assert (grids is not None)  # make sure _grid_insert_ops was called
         if self.bc != 'infinite':
             self._calc_grid_legs_finite(grids, W_qtotal, leg0)
         else:
@@ -496,8 +497,8 @@ class MPOGraph(object):
         legs = [leg0]
         for i, gr in enumerate(grids):
             gr_legs = [legs[-1], None]
-            gr_legs = npc.detect_grid_outer_legcharge(gr, gr_legs, qtotal=W_qtotal, qconj=-1,
-                                                      bunch=False)
+            gr_legs = npc.detect_grid_outer_legcharge(
+                gr, gr_legs, qtotal=W_qtotal, qconj=-1, bunch=False)
             legs.append(gr_legs[1].conj())
         self._grid_legs = legs
 
@@ -519,22 +520,23 @@ class MPOGraph(object):
         chinfo = self.chinfo
         W_qtotal = chinfo.make_valid(W_qtotal)
         states = self._ordered_states
-        assert(states is not None)  # make sure self._set_ordered_states() was called
+        assert (states is not None)  # make sure self._set_ordered_states() was called
         charges = [{} for _ in xrange(self.L)]
         charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
         charges[0]['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
         chis = [len(s) for s in self.states]
-        for _ in xrange(1000*self.L):  # I don't expect interactions with larger range than that...
+        for _ in xrange(1000 *
+                        self.L):  # I don't expect interactions with larger range than that...
             for i in xrange(self.L):
-                chL, chR = charges[i:i+2]
-                stL, stR = states[i:i+2]
+                chL, chR = charges[i:i + 2]
+                stL, stR = states[i:i + 2]
                 graph = self.graph[i]
                 grid = self._grids[i]
                 for keyL, qL in chL.iteritems():
                     for keyR in graph[keyL]:
                         # calculate charge qR from the entry of the grid
                         op = grid[stL[keyL]][stR[keyR]]
-                        assert(op is not None)
+                        assert (op is not None)
                         qR = chinfo.make_valid(qL + op.qtotal - W_qtotal)
                         if keyR not in chR:
                             chR[keyR] = qR
@@ -544,11 +546,11 @@ class MPOGraph(object):
                 break
         else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
             # this should not happen (if we have no bugs), but who knows ^_^
-            assert(False)  # maybe some unconnected parts in the graph?
+            assert (False)  # maybe some unconnected parts in the graph?
         # finally generate LegCharge from the dictionaries
         self._grid_legs = []
         for qs, st in itertools.izip(charges, states):
-            qfl = [None]*len(qs)
+            qfl = [None] * len(qs)
             for key, q in qs.iteritems():
                 qfl[st[key]] = q
             leg = npc.LegCharge.from_qflat(chinfo, qfl, qconj=+1)
@@ -637,6 +639,7 @@ class MPOEnvironment(object):
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
+
     def __init__(self, bra, H, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
@@ -646,10 +649,10 @@ class MPOEnvironment(object):
         self.L = L = bra.L
         self.finite = bra.finite
         self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
-        self._LP = [None]*L
-        self._RP = [None]*L
-        self._LP_age = [None]*L
-        self._RP_age = [None]*L
+        self._LP = [None] * L
+        self._RP = [None] * L
+        self._LP_age = [None] * L
+        self._RP_age = [None] * L
         if firstLP is None:
             # Build trivial verly first LP
             leg_bra = bra.get_B(0).get_leg('vL')
@@ -663,19 +666,19 @@ class MPOEnvironment(object):
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
             # Build trivial verly last RP
-            leg_bra = bra.get_B(L-1).get_leg('vR')
-            leg_mpo = H.get_W(L-1).get_leg('wR').conj()
-            leg_ket = ket.get_B(L-1).get_leg('vR').conj()
+            leg_bra = bra.get_B(L - 1).get_leg('vR')
+            leg_mpo = H.get_W(L - 1).get_leg('wR').conj()
+            leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
             lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             lastRP[:, H.IdR[L], :] = npc.diag(1., leg_ket, dtype=self.dtype)
             lastRP.set_leg_labels(['vL*', 'wL', 'vL'])
-        self.set_RP(L-1, lastRP, age=age_RP)
+        self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()
 
     def test_sanity(self):
-        assert(self.bra.L == self.ket.L == self.H.L)
-        assert(self.bra.finite == self.ket.finite == self.H.finite)
+        assert (self.bra.L == self.ket.L == self.H.L)
+        assert (self.bra.finite == self.ket.finite == self.H.finite)
         # check that the network is contractable
         for b_s, H_s, k_s in itertools.izip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
@@ -700,7 +703,7 @@ class MPOEnvironment(object):
             with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
         """
         # find nearest available LP to the left.
-        for i0 in range(i, i-self.L, -1):
+        for i0 in range(i, i - self.L, -1):
             LP = self._LP[self._to_valid_index(i0)]
             if LP is not None:
                 break
@@ -711,7 +714,7 @@ class MPOEnvironment(object):
         for j in range(i0, i):
             LP = self._contract_LP(j, LP)
             if store:
-                self.set_LP(j+1, LP, age=age_i0 + j - i0 + 1)
+                self.set_LP(j + 1, LP, age=age_i0 + j - i0 + 1)
         return LP
 
     def get_RP(self, i, store=True):
@@ -731,7 +734,7 @@ class MPOEnvironment(object):
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
         """
         # find nearest available RP to the right.
-        for i0 in range(i, i+self.L):
+        for i0 in range(i, i + self.L):
             RP = self._RP[self._to_valid_index(i0)]
             if RP is not None:
                 break
@@ -740,7 +743,7 @@ class MPOEnvironment(object):
         for j in range(i0, i, -1):
             RP = self._contract_RP(j, RP)
             if store:
-                self.set_RP(j-1, RP, age=age_i0 + i0 - j + 1)
+                self.set_RP(j - 1, RP, age=age_i0 + i0 - j + 1)
         return RP
 
     def get_LP_age(self, i):
@@ -787,13 +790,13 @@ class MPOEnvironment(object):
         i0 : int
             Site index.
         """
-        if self.ket.finite and i0+1 == self.L:
+        if self.ket.finite and i0 + 1 == self.L:
             # special case to handle `_to_valid_index` correctly:
             # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
             LP = self.get_LP(i0, store=False)
             LP = self._contract_LP(self, i0, LP)
         else:
-            LP = self.get_LP(i0+1, store=False)
+            LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
         S_bra = self.bra.get_SR(i0).conj()
         LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
@@ -807,16 +810,18 @@ class MPOEnvironment(object):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP,
-                           axes=(['p*', 'vL*'], ['p', 'vR*']))
+        LP = npc.tensordot(
+            self.bra.get_B(
+                i, form='A').conj(), LP, axes=(['p*', 'vL*'], ['p', 'vR*']))
         return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP,
-                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        RP = npc.tensordot(
+            self.bra.get_B(
+                i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
         return RP  # labels ['vL', 'wL', 'vL*']
 
     def _to_valid_index(self, i):

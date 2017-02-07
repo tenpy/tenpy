@@ -18,6 +18,7 @@ class LinearOperator(object):
     M : :class:`~tenpy.linalg.np_conserved.Array`
         A square matrix defining the `matvec` function as contraction
     """
+
     def __init__(self, M):
         self.M = M
 
@@ -52,8 +53,8 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     for j in range(k):
         n = ov[j, j] = npc.norm(vecs[j])
         if n > rcond:
-            vecs[j] *= 1./n
-            for i in range(j+1, k):
+            vecs[j] *= 1. / n
+            for i in range(j + 1, k):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
                 vecs[i] -= ov_ji * vecs[j]
         else:
@@ -67,7 +68,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         for i, v in enumerate(vecs):
             for j, w in enumerate(vecs):
                 G[i, j] = npc.inner(v, w, do_conj=True)
-        print "GramSchmidt:", k, np.diag(ov),  np.linalg.norm(G - np.eye(k))
+        print "GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k))
     return vecs, ov
 
 
@@ -136,7 +137,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     """
     verbose = lanczos_params.get('verbose', 0)
     if len(orthogonal_to) > 0:
-        orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose/10)
+        orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose / 10)
     N_cache = get_parameter(lanczos_params, 'N_cache', 6, "Lanczos")
     if N_cache < 2:
         raise ValueError("Need to cache at least two vectors.")
@@ -152,7 +153,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     Es = []
 
     # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
-    T = np.zeros([N_max+1, N_max+1], dtype=np.float)
+    T = np.zeros([N_max + 1, N_max + 1], dtype=np.float)
     ULP = 5.e-15  # Cutoff (ULP=unit last place) to abort if beta (= norm of next v) is too small.
     # This is necessary if the rank of A is smaller than N_max - then we get a complete
     # basis of the Krylov space, and beta will be zero.
@@ -178,19 +179,19 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         beta = npc.norm(w)
         above_ULP = abs(beta) > ULP
         if above_ULP:
-            T[k, k+1] = T[k+1, k] = beta
+            T[k, k + 1] = T[k + 1, k] = beta
 
         # Diagonalize T
         if k == 0:
             E_T = [alpha]
         else:
-            E_T, v_T = np.linalg.eigh(T[0:k+1, 0:k+1])   # returns eigenvalues sorted ascending
-            RitzRes = np.abs(v_T[k, 0] * T[k, k+1])
+            E_T, v_T = np.linalg.eigh(T[0:k + 1, 0:k + 1])  # returns eigenvalues sorted ascending
+            RitzRes = np.abs(v_T[k, 0] * T[k, k + 1])
             Delta_E0 = (Es[-1][0] - E_T[0])
             gap = max(E_T[1] - E_T[0], min_gap)
-            P_err = (RitzRes/gap)**2
+            P_err = (RitzRes / gap)**2
         Es.append(E_T)
-        if not above_ULP or (k+1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
+        if not above_ULP or (k + 1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
             break
     N = k + 1  # == len(Es)
     if verbose > 1:
@@ -211,16 +212,16 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     # construct the actual vector ``psi0 = sum_k  v_T[k, 0] vec[k]``,
     # where ``vec[k]`` is the k-th vector of the iteration.
 
-    psi0 = psi*v_T[0, 0]  # the start vector is still known
+    psi0 = psi * v_T[0, 0]  # the start vector is still known
     # and the last len(cache) vectors have been cached
     for k in range(1, min(len(cache) + 1, N)):
-        psi0 += v_T[N-k, 0] * cache[-k]
+        psi0 += v_T[N - k, 0] * cache[-k]
     len_cache = len(cache)
     del cache  # free memory: we need at least two more vectors
     # other vectors are not cached, so we need to restart the Lanczos iteration.
     q0 = None
     q1 = psi  # start vector; normalized above in place
-    for k in range(0, N-len_cache-1):
+    for k in range(0, N - len_cache - 1):
         w = q1.copy()
         for o in orthogonal_to:  # Project out
             w -= o * npc.inner(o, w, do_conj=True)
@@ -231,19 +232,19 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
             w -= beta * q0
         alpha = T[k, k]
         w -= alpha * q1
-        beta = T[k, k+1]
+        beta = T[k, k + 1]
         w /= beta
         q0 = q1
         q1 = w
-        psi0 += q1 * v_T[k+1, 0]
+        psi0 += q1 * v_T[k + 1, 0]
     psi0_norm = npc.norm(psi0)
     if abs(1. - psi0_norm) > 1.e-3:
         warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
     psi0 /= psi0_norm
     if verbose > 1. and len(orthogonal_to) > 0:
-        print ''.join(["Lanczos orthogonality:"] +
-                      [" {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True)))
-                       for o in orthogonal_to])
+        print ''.join(["Lanczos orthogonality:"] + [" {0:.3e}".format(
+            np.abs(npc.inner(
+                o, psi0, do_conj=True))) for o in orthogonal_to])
     return E_T[0], psi0, N
 
 
@@ -256,7 +257,7 @@ def _to_cache(psi, cache, N):
 
 def _plot_stats(Es):
     import matplotlib.pyplot as plt
-    ks = [[k]*len(E) for k, E in enumerate(Es)]
+    ks = [[k] * len(E) for k, E in enumerate(Es)]
     ks = np.array(sum(ks, []))
     Es = np.array(sum([list(E) for E in Es], []))
     plt.scatter(ks, np.array(Es))

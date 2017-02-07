@@ -14,7 +14,6 @@ import tenpy.linalg.np_conserved as npc
 from tenpy.models import model, lattice
 import tenpy.networks.site
 
-
 site_spin_half = tenpy.networks.site.spin_half_site('Sz')
 lat_spin_half = lattice.Chain(2, site_spin_half)
 

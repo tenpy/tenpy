@@ -53,7 +53,6 @@ def project_multiple_axes(flat_array, perms, axes):
         flat_array = flat_array[tuple(idx)]
     return flat_array
 
-
 # ------- test functions -------------------
 
 
@@ -477,8 +476,7 @@ def test_npc_inner():
         a = random_Array((10, 7, 5), chinfo3, sort=sort)
         aflat = a.to_ndarray()
         legs_b = [l.conj() for l in a.legs[::-1]]
-        b = npc.Array.from_func(
-            np.random.random, legs_b, qtotal=-a.qtotal, shape_kw='size')
+        b = npc.Array.from_func(np.random.random, legs_b, qtotal=-a.qtotal, shape_kw='size')
         bflat = b.to_ndarray()
         c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
         nst.eq_(type(c), np.dtype(float))

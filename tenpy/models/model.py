@@ -77,6 +77,7 @@ class CouplingModel(object):
         implement ...
         Some way to generalize to couplings involving multiple sites?
     """
+
     def __init__(self, lattice, bc_coupling='open'):
         self.lat = lattice
         global _bc_coupling_choices
@@ -187,11 +188,11 @@ class CouplingModel(object):
         idx_i = idx_i[keep]
         idx_i_lat = idx_i_lat[keep]
         idx_j_lat = idx_j_lat[keep]
-        idx_j = self.lat.lat2mps_idx(np.hstack([idx_j_lat, [[u2]]*len(idx_i_lat)]))
+        idx_j = self.lat.lat2mps_idx(np.hstack([idx_j_lat, [[u2]] * len(idx_i_lat)]))
         for i, i_lat, j in zip(idx_i, idx_i_lat, idx_j):
             o1, o2 = op1, op2
             if self.lat.bc_MPS == 'infinite':
-                d_in = abs(i-j)  # distance within the chain
+                d_in = abs(i - j)  # distance within the chain
                 d_out = self.lat.N_sites - d_in  # distance over the boundary
                 if d_in < d_out:
                     swap = (j < i)  # ensure coupling within the chain
@@ -257,9 +258,9 @@ class CouplingModel(object):
         if self.H_onsite is None:
             self.H_onsite = self.calc_H_onsite(tol_zero)
         finite = (self.lat.bc_MPS != 'infinite')
-        res = [None]*self.lat.N_sites
+        res = [None] * self.lat.N_sites
         for i, d1 in enumerate(self.coupling_terms):
-            j = (i+1) % self.lat.N_sites
+            j = (i + 1) % self.lat.N_sites
             d1 = self.coupling_terms[i]
             site_i = self.lat.site(i)
             site_j = self.lat.site(j)
@@ -281,7 +282,7 @@ class CouplingModel(object):
             H.set_leg_labels(['pL', 'pL*', 'pR', 'pR*'])
             res[j] = H
         if finite:
-            assert(res[0].norm(np.inf) <= tol_zero)
+            assert (res[0].norm(np.inf) <= tol_zero)
         return res
 
     def calc_H_MPO(self, tol_zero=1.e-15):
@@ -384,6 +385,7 @@ class NearestNeighborModel(object):
     .. todo ::
         implement
     """
+
     def __init__(self, lat, H_bond):
         self.lat = lat
         self.H_bond = list(H_bond)
@@ -412,7 +414,7 @@ class NearestNeighborModel(object):
                 w = v = None
             else:
                 H2 = h.combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1])
-                w,v = npc.eigh(H2)
+                w, v = npc.eigh(H2)
             self.bond_eig_vals.append(w)
             self.bond_eig_vecs.append(v)
 
@@ -420,8 +422,8 @@ class NearestNeighborModel(object):
             if h != None:
                 Hnp = H2.to_ndarray()
                 vnp = v.to_ndarray()
-                Hp = np.dot(np.dot(vnp,np.diag(w)),np.conj(vnp.T))
-                if np.allclose(Hnp,Hp) != True:
+                Hp = np.dot(np.dot(vnp, np.diag(w)), np.conj(vnp.T))
+                if np.allclose(Hnp, Hp) != True:
                     raise ValueError("Diagonalisation of bond did not work!")
 
     def calc_U(self, param):
@@ -431,25 +433,27 @@ class NearestNeighborModel(object):
             return
         self.U_param = param
 
-        TrotterOrder = get_parameter(param, 'order',2,'TrotterDecomp')
-        dt = get_parameter(param,'dt',0.1,'TrotterDecomp')
-        type = get_parameter(param,'type','REAL','TrotterDecomp')
+        TrotterOrder = get_parameter(param, 'order', 2, 'TrotterDecomp')
+        dt = get_parameter(param, 'dt', 0.1, 'TrotterDecomp')
+        type = get_parameter(param, 'type', 'REAL', 'TrotterDecomp')
 
         if TrotterOrder == 1:
-            self.U_bond = [[None]*len(self.H_bond)]
+            self.U_bond = [[None] * len(self.H_bond)]
             for i_bond in range(len(self.H_bond)):
                 if self.bond_eig_vals[i_bond] != None:
                     if (type == 'IMAG'):
-                        s = np.exp(-dt*self.bond_eig_vals[i_bond])
+                        s = np.exp(-dt * self.bond_eig_vals[i_bond])
                     elif (type == 'REAL'):
-                        s = np.exp(-1j*dt*( self.bond_eig_vals[i_bond]))
+                        s = np.exp(-1j * dt * (self.bond_eig_vals[i_bond]))
                     else:
-                        raise ValueError("Need to have either real time (REAL) or imaginary time (IMAG)")
+                        raise ValueError(
+                            "Need to have either real time (REAL) or imaginary time (IMAG)")
                     V = self.bond_eig_vecs[i_bond]
                     #U = V s V^dag, s = e^(- tau E )
                     U = V.scale_axis(s, axis=1)
                     U = npc.tensordot(U, V.conj(), axes=(1, 1))
-                    labels = self.H_bond[i_bond].combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1]).get_leg_labels()
+                    labels = self.H_bond[i_bond].combine_legs(
+                        [('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1]).get_leg_labels()
                     U.set_leg_labels(labels)
                     #TODO: Not nice!!
                     self.U_bond[0][i_bond] = U.split_legs()
@@ -485,6 +489,7 @@ class MPOModel(object):
         Should the class host the environment, similar as NearestNeighborModel hosts U?
         implement: provide (function to calculate) the MPO for time evolution.
     """
+
     def __init__(self, lat, H_MPO):
         self.lat = lat
         self.H_MPO = H_MPO

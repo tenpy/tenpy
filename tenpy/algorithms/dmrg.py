@@ -165,11 +165,11 @@ def run(psi, model, DMRG_params):
 
     # get parameters for DMRG convergence criteria
     N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
-    min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 1.5*N_sweeps_check, 'DMRG')
+    min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 1.5 * N_sweeps_check, 'DMRG')
     max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
     max_E_err = get_parameter(DMRG_params, 'max_E_err', 0.1, 'DMRG')
     max_S_err = get_parameter(DMRG_params, 'max_S_err', 0.1, 'DMRG')
-    max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24*365, 'DMRG')
+    max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
     start_time = time.time()
 
     # initial sweeps of the environment
@@ -186,14 +186,19 @@ def run(psi, model, DMRG_params):
     E_old, S_old = np.nan, np.nan  # initial dummy values
     E, Delta_E, Delta_S = 1., 1., 1.
 
-    sweep_statistics = {'sweep': [], 'E': [], 'S': [], 'max_trunc_err': [], 'max_E_trunc': [],
+    sweep_statistics = {'sweep': [],
+                        'E': [],
+                        'S': [],
+                        'max_trunc_err': [],
+                        'max_E_trunc': [],
                         'max_chi': []}
 
     while True:
         # check abortion criteria
         if engine.sweeps >= max_sweeps:
             break
-        if engine.sweeps > min_sweeps and -Delta_E/abs(E) < max_E_err and abs(Delta_S) < max_S_err:
+        if engine.sweeps > min_sweeps and -Delta_E / abs(E) < max_E_err and abs(
+                Delta_S) < max_S_err:
             if engine.mixer is None:
                 break
             else:
@@ -209,7 +214,7 @@ def run(psi, model, DMRG_params):
         # the time-consuming part: the actual sweeps
         for i in range(N_sweeps_check):
             # --------- the main work --------------
-            max_trunc_err, max_E_trunc = engine.sweep(meas_E_trunc=(i+1 == N_sweeps_check))
+            max_trunc_err, max_E_trunc = engine.sweep(meas_E_trunc=(i + 1 == N_sweeps_check))
             # --------------------------------------
             if engine.sweeps in chi_list:
                 engine.trunc_params['chi_max'] = chi_list[engine.sweeps]
@@ -218,10 +223,10 @@ def run(psi, model, DMRG_params):
         # update lancos_params depending on truncation error(s)
         if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
             engine.lanczos_params['P_tol'] = max(p_tol_min, min(p_tol_max,
-                                                                max_trunc_err*p_tol_to_trunc))
+                                                                max_trunc_err * p_tol_to_trunc))
         if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
             engine.lanczos_params['P_tol'] = max(e_tol_min, min(e_tol_max,
-                                                                max_E_trunc*p_tol_to_trunc))
+                                                                max_E_trunc * p_tol_to_trunc))
         # update environment
         engine.environment_sweeps(update_env)
         try:
@@ -235,7 +240,7 @@ def run(psi, model, DMRG_params):
             try:
                 Es = engine.statistics['E_total']
                 age = engine.statistics['age']
-                E = (Es[-1] - Es[-1-2*engine.env.L]) / (age[-1] - age[-1-2*engine.env.L])
+                E = (Es[-1] - Es[-1 - 2 * engine.env.L]) / (age[-1] - age[-1 - 2 * engine.env.L])
             except:
                 E = np.nan
         else:
@@ -251,40 +256,35 @@ def run(psi, model, DMRG_params):
 
         if verbose > 1:
             # print a status update
-            print "="*80
+            print "=" * 80
             msg = "sweep {sweep:d}, age = {age:d}\n"
             msg += "Energy = {E:.16f}\n"
             msg += "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
             msg += "MPS bond dimensions: {chi!s}"
-            print msg.format(sweep=engine.sweeps,
-                             time=time.time() - start_time,
-                             mem=memory_usage(),
-                             chi=engine.env.ket.chi,
-                             age=engine.statistics['age'][-1],
-                             E=E,
-                             DE=Delta_E,
-                             DS=Delta_S,
-                             trerr=max_trunc_err,
-                             Eerr=max_E_err
-                             )
+            print msg.format(
+                sweep=engine.sweeps,
+                time=time.time() - start_time,
+                mem=memory_usage(),
+                chi=engine.env.ket.chi,
+                age=engine.statistics['age'][-1], E=E, DE=Delta_E, DS=Delta_S, trerr=max_trunc_err,
+                Eerr=max_E_err)
     if verbose > 1:
-        print "="*80
+        print "=" * 80
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
-        print msg.format(sweep=engine.sweeps,
-                         age=engine.statistics['age'][-1],
-                         chimax=np.max(engine.env.ket.chi))
-        print "="*80
+        print msg.format(
+            sweep=engine.sweeps,
+            age=engine.statistics['age'][-1], chimax=np.max(engine.env.ket.chi))
+        print "=" * 80
 
     # cleanup
     engine.mixer_cleanup()
     return {'E': E,
             'shelve': shelve,
             'bond_statistics': engine.statistics,
-            'sweep_statistics': sweep_statistics
-            }
+            'sweep_statistics': sweep_statistics}
 
 
 class Engine(object):
@@ -347,6 +347,7 @@ class Engine(object):
     trunc_params : dict
         Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
     """
+
     def __init__(self, psi, model, DMRG_params):
         self.verbose = get_parameter(DMRG_params, 'verbose', 1, 'DMRG')
         self.sweeps = get_parameter(DMRG_params, 'sweep_0', 0, 'DMRG')
@@ -367,14 +368,14 @@ class Engine(object):
             if isinstance(Mixer_class, str):
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(DMRG_params, 'mixer_params', {}, 'DMRG')
-            mixer_params.setdefault('verbose', self.verbose/10)  # reduced verbosity
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
         self.lanczos_params = get_parameter(DMRG_params, 'lanczos_params', {}, 'DMRG')
-        self.lanczos_params.setdefault('verbose', self.verbose/10)  # reduced verbosity
+        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
 
         self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
-        self.trunc_params.setdefault('verbose', self.verbose/10)  # reduced verbosity
+        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
 
     def environment_sweeps(self, N_sweeps):
         """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
@@ -418,10 +419,10 @@ class Engine(object):
         # get schedule
         L = self.env.L
         if self.env.finite:
-            schedule_i0 = range(0, L-1) + range(L-3, 0, -1)
-            update_env = [[True, False]] * (L-2) + [[False, True]] * (L-2)
+            schedule_i0 = range(0, L - 1) + range(L - 3, 0, -1)
+            update_env = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
         else:
-            assert(L >= 2)
+            assert (L >= 2)
             schedule_i0 = range(0, L) + range(L, 0, -1)
             update_env = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                          [[True, True]] * 2 + [[False, True]] * (L-2)
@@ -487,7 +488,7 @@ class Engine(object):
             into the contraction.
         """
         theta = self.prepare_diag(i0, update_LP, update_RP)
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0+1)
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
             E0, theta, N = self.diag(theta)
         else:
@@ -624,8 +625,8 @@ class Engine(object):
         qtotal_i0 = self.env.ket.get_B(i0, form=None).qtotal
         if self.mixer is None:
             # simple case: real svd, devined elsewhere.
-            return svd_theta(theta, self.trunc_params, qtotal_LR=[qtotal_i0, None],
-                             inner_labels=['vR', 'vL'])
+            return svd_theta(
+                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
         rho_L = self.mix_rho_L(theta, i0, update_LP)
         # don't mix left parts, when we're going to the right
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
@@ -736,8 +737,8 @@ class Engine(object):
         """
         if self.mixer is not None:
             mixer = self.mixer
-            self.mixer = None   # disable the mixer
-            self.sweep(*args)   # (discard return value)
+            self.mixer = None  # disable the mixer
+            self.sweep(*args)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
 
     def set_B(self, i0, U, S, VH):
@@ -756,8 +757,8 @@ class Engine(object):
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(vR.p1)']).replace_label('p1', 'p')
         self.env.ket.set_B(i0, B0, form='A')  # left-canonical
-        self.env.ket.set_B(i0+1, B1, form='B')  # right-canonical
-        self.env.del_LP(i0+1)  # the old stored environments are now invalid
+        self.env.ket.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.env.del_LP(i0 + 1)  # the old stored environments are now invalid
         self.env.del_RP(i0)
         self.env.ket.set_SR(i0, S)
 
@@ -818,24 +819,21 @@ class EngineCombine(Engine):
             Labels ``'(vL.p0)', '(vR.p1)'``.
         """
         env = self.env
-        LP = env.get_LP(i0, store=True)      # labels 'vR*', 'wR', 'vR'
-        H1 = env.H.get_W(i0).replace_labels(['p', 'p*'],
-                                            ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        RP = env.get_RP(i0+1, store=True)    # labels 'vL*', 'wL', 'vL'
-        H2 = env.H.get_W(i0+1).replace_labels(['p', 'p*'],
-                                              ['p1', 'p1*'])  # ('wL', 'wR', 'p1', 'p1*')
+        LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
+        H1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
+        RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
+        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
+                                                ['p1', 'p1*'])  # ('wL', 'wR', 'p1', 'p1*')
         # calculate LHeff
         LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, -1])
+        self.LHeff = LHeff.combine_legs(
+            [['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, -1])
         # calculate RHeff
         RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
         pipeR = RHeff.make_pipe(['vL*', 'p1'])
-        self.RHeff = RHeff.combine_legs([['vL*', 'p1'], ['vL', 'p1*']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
+        self.RHeff = RHeff.combine_legs(
+            [['vL*', 'p1'], ['vL', 'p1*']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = env.ket.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
@@ -902,15 +900,14 @@ class EngineCombine(Engine):
         if not mix_enabled:
             return npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
         H = self.env.H
-        H1 = H.get_W(i0+1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        mixer_xR, add_separate_Id = self.mixer.get_xR(H1.get_leg('wR'),
-                                                      H.get_IdL(i0+2), H.get_IdR(i0+1))
-        rho = npc.tensordot(self.LHeff, theta.split_legs('(vR.p1)'),
-                            axes=['(vR.p0*)', '(vL.p0)'])
+        H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+        mixer_xR, add_separate_Id = self.mixer.get_xR(
+            H1.get_leg('wR'), H.get_IdL(i0 + 2), H.get_IdR(i0 + 1))
+        rho = npc.tensordot(self.LHeff, theta.split_legs('(vR.p1)'), axes=['(vR.p0*)', '(vL.p0)'])
         rho = npc.tensordot(rho, H1, axes=[['p1', 'wR'], ['p1*', 'wL']])
         rho_c = rho.conj()
         rho = npc.tensordot(rho, mixer_xR, axes=['wR', 'wL'])
-        rho = npc.tensordot(rho, rho_c,  axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
+        rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
         rho = rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
         if add_separate_Id:
             rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
@@ -952,8 +949,8 @@ class EngineCombine(Engine):
             return npc.tensordot(theta, theta.conj(), axes=['(vL.p0)', '(vL*.p0*)'])
         H = self.env.H
         H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        mixer_xL, add_separate_Id = self.mixer.get_xL(H0.get_leg('wL'),
-                                                      H.get_IdL(i0), H.get_IdR(i0-1))
+        mixer_xL, add_separate_Id = self.mixer.get_xL(
+            H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
         rho = npc.tensordot(self.RHeff, theta.split_legs('(vL.p0)'), axes=['(vL.p1*)', '(vR.p1)'])
         rho = npc.tensordot(rho, H0, axes=[['p0', 'wL'], ['p0*', 'wR']])
         rho_c = rho.conj()
@@ -977,7 +974,7 @@ class EngineCombine(Engine):
         # make use of self.LHeff
         LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
         LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
-        self.env.set_LP(i0+1, LP, age=self.env.get_LP_age(i0)+1)
+        self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
 
     def update_RP(self, i0, VH):
         """Update right part of the environment.
@@ -992,7 +989,7 @@ class EngineCombine(Engine):
         # make use of self.RHeff
         RP = npc.tensordot(self.RHeff, VH, axes=['(vL.p1*)', '(vR.p1)'])
         RP = npc.tensordot(VH.conj(), RP, axes=['(vR*.p1*)', '(vL*.p1)'])
-        self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0+1)+1)
+        self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
 
 
 class EngineFracture(Engine):
@@ -1028,12 +1025,12 @@ class EngineFracture(Engine):
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         """
         env = self.env
-        self.LP = env.get_LP(i0, store=True)      # labels 'vR*', 'wR', 'vR'
+        self.LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
         self.H0 = env.H.get_W(i0).replace_labels(['p', 'p*'],
                                                  ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        self.RP = env.get_RP(i0+1, store=True)    # labels 'vL*', 'wL', 'vL'
-        self.H1 = env.H.get_W(i0+1).replace_labels(['p', 'p*'],
-                                                   ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
+        self.RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
+        self.H1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
+                                                     ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = env.ket.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
@@ -1101,8 +1098,8 @@ class EngineFracture(Engine):
         if not mix_enabled:
             return npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
         H = self.env.H
-        mixer_xR, add_separate_Id = self.mixer.get_xR(self.H1.get_leg('wR'),
-                                                      H.get_IdL(i0+2), H.get_IdR(i0+1))
+        mixer_xR, add_separate_Id = self.mixer.get_xR(
+            self.H1.get_leg('wR'), H.get_IdL(i0 + 2), H.get_IdR(i0 + 1))
         rho = npc.tensordot(self.LP, theta.split_legs(['(vL.p0)', '(vR.p1)']), axes=['vR', 'vL'])
         rho = npc.tensordot(rho, self.H0, axes=[['wR', 'p0'], ['wL', 'p0*']])
         H1m = npc.tensordot(self.H1, mixer_xR, axes=['wR', 'wL'])
@@ -1150,11 +1147,11 @@ class EngineFracture(Engine):
         if not mix_enabled:
             return npc.tensordot(theta, theta.conj(), axes=[['(vL.p0)'], ['(vL*.p0*)']])
         H = self.env.H
-        mixer_xL, add_separate_Id = self.mixer.get_xL(self.H0.get_leg('wL'),
-                                                      H.get_IdL(i0), H.get_IdR(i0-1))
+        mixer_xL, add_separate_Id = self.mixer.get_xL(
+            self.H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
         rho = npc.tensordot(theta.split_legs(['(vL.p0)', '(vR.p1)']), self.RP, axes=['vR', 'vL'])
         rho = npc.tensordot(rho, self.H1, axes=[['wL', 'p1'], ['wR', 'p1*']])
-        H0m = npc.tensordot(mixer_xL, self.H0,  axes=['wR', 'wL'])
+        H0m = npc.tensordot(mixer_xL, self.H0, axes=['wR', 'wL'])
         H0m = npc.tensordot(H0m, self.H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
         rho = rho.ireplace_label('vL*', 'vR').combine_legs(['vR', 'p1'])
         rho_c = rho.conj()
@@ -1174,7 +1171,7 @@ class EngineFracture(Engine):
         U : :class:`~tenpy.linalg.np_conserved.Array`
             The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
         """
-        self.env.get_LP(i0+1, store=True)  # as implemented directly in the environment
+        self.env.get_LP(i0 + 1, store=True)  # as implemented directly in the environment
 
     def update_RP(self, i0, VH):
         """Update right part of the environment.
@@ -1225,6 +1222,7 @@ class Mixer(object):
     verbose : int
         Level of output vebosity.
     """
+
     def __init__(self, mixer_params):
         self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-2, 'Mixer')
         self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')

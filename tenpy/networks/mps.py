@@ -164,8 +164,8 @@ class MPS(object):
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True) for B in Bs]
-        self._S = [None]*(self.L + 1)
-        for i in range(self.L+1)[self.nontrivial_bonds]:
+        self._S = [None] * (self.L + 1)
+        for i in range(self.L + 1)[self.nontrivial_bonds]:
             self._S[i] = np.array(SVs[i], dtype=np.float)
         if self.bc == 'infinite':
             self._S[-1] = self._S[0]
@@ -189,7 +189,7 @@ class MPS(object):
                     self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
                 raise ValueError("shape of B incompatible with len of singular values")
             if not self.finite or i + 1 < self.L:
-                B2 = self._B[(i+1) % self.L]
+                B2 = self._B[(i + 1) % self.L]
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
         if self.bc == 'finite':
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
@@ -295,18 +295,18 @@ class MPS(object):
             raise ValueError("Invalid form: " + repr(form))
         # perform SVDs to bring it into 'B' form, afterwards change the form.
         L = len(sites)
-        assert(L >= 2)
+        assert (L >= 2)
         B_list = [None] * L
-        S_list = [1] * (L+1)
-        labels = ['p'+str(i) for i in range(L)]
+        S_list = [1] * (L + 1)
+        labels = ['p' + str(i) for i in range(L)]
         psi.itranspose(labels)
         # combine legs from left
         psi = psi.add_trivial_leg(0, label='vL', qconj=+1)
-        for i in range(0, L-1):
+        for i in range(0, L - 1):
             psi = psi.combine_legs([0, 1])  # combines the legs until `i`
         psi = psi.add_trivial_leg(2, label='vR', qconj=-1)
         # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
-        for i in range(L-1, 0, -1):
+        for i in range(L - 1, 0, -1):
             # split off B[i]
             psi = psi.combine_legs([labels[i], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
@@ -316,9 +316,11 @@ class MPS(object):
             S_list[i] = S
             psi = psi.split_legs(0)
         psi = psi.combine_legs([labels[0], 'vR'])
-        psi, S, B = npc.svd(psi, qtotal_LR=[None, psi.qtotal],
-                            inner_labels=['vR', 'vL'], cutoff=cutoff)
-        assert(psi.shape == (1, 1))
+        psi, S, B = npc.svd(psi,
+                            qtotal_LR=[None, psi.qtotal],
+                            inner_labels=['vR', 'vL'],
+                            cutoff=cutoff)
+        assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
         B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
         res = cls(sites, B_list, S_list, bc='finite', form='B')
@@ -354,7 +356,7 @@ class MPS(object):
         if self.bc == 'finite':
             return slice(1, self.L)
         elif self.bc == 'segment':
-            return slice(0, self.L+1)
+            return slice(0, self.L + 1)
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
@@ -490,22 +492,22 @@ class MPS(object):
         copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
         theta = self.get_B(i, form=None, copy=copy)  # in the current form
         if fL != 1.:
-            theta = self._scale_axis_B(theta, self.get_SL(i), 1.-fL, 'vL', cutoff)
+            theta = self._scale_axis_B(theta, self.get_SL(i), 1. - fL, 'vL', cutoff)
         theta = theta.replace_label('p', 'p0')
         for k in range(1, n):  # nothing if n=1.
             j = (i + k) % self.L
-            B = self.get_B(j, None, False).replace_label('p', 'p'+str(k))
+            B = self.get_B(j, None, False).replace_label('p', 'p' + str(k))
             if self.form[j] is not None:
                 fL_j, fR_j = self.form[j]
                 if fR is not None:
-                    B = self._scale_axis_B(B, self.get_SL(j), 1.-fL_j-fR, 'vL', cutoff)
+                    B = self._scale_axis_B(B, self.get_SL(j), 1. - fL_j - fR, 'vL', cutoff)
                 # otherwise we can just hope it's fine.
                 fR = fR_j
             else:
                 fR = None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
         if fR != 1:  # fR = self.form[i+n-1][1]
-            theta = self._scale_axis_B(theta, self.get_SR(i+n-1), 1.-fR, 'vR', cutoff)
+            theta = self._scale_axis_B(theta, self.get_SR(i + n - 1), 1. - fR, 'vR', cutoff)
         return theta
 
     def convert_form(self, new_form='B'):
@@ -542,10 +544,10 @@ class MPS(object):
     def _parse_form(self, form):
         """parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
         if isinstance(form, tuple):
-            return [form]*self.L
+            return [form] * self.L
         form = to_iterable(form)
         if len(form) == 1:
-            form = [form[0]]*self.L
+            form = [form[0]] * self.L
         if len(form) != self.L:
             raise ValueError("Wrong len of `form`: " + repr(form))
         return [self._to_valid_form(f) for f in form]
@@ -580,7 +582,10 @@ class MPS(object):
         B = self._scale_axis_B(B, self.get_SR(i), new_R - old_R, 'vR', cutoff)
         return B
 
-    def expectation_value(self, Op,labels, sites = None,):
+    def expectation_value(self,
+                          Op,
+                          labels,
+                          sites=None, ):
         """Expectation value for an n-site operator at ``sites`` (which denote
         the left-most sites involved in each expectation value).
 
@@ -641,9 +646,9 @@ class MPS(object):
         if type(Op) != list:
             Op = [Op]
 
-        op_size = int(Op[0].rank/2)
-        th_labels = tuple(['p'+str(e) for e in range(op_size)]+['vL','vR'])
-        op_labels = [ 'p'+str(e)+'*' for e in range(op_size)]
+        op_size = int(Op[0].rank / 2)
+        th_labels = tuple(['p' + str(e) for e in range(op_size)] + ['vL', 'vR'])
+        op_labels = ['p' + str(e) + '*' for e in range(op_size)]
 
         Lop = len(Op)
         L = self.L
@@ -654,16 +659,15 @@ class MPS(object):
             else:
                 sites = range(L)
 
-        E=[]
+        E = []
 
         for i2 in sites:
-            o = Op[i2%Lop].copy() #TODO: Should we define a get() function?
+            o = Op[i2 % Lop].copy()  #TODO: Should we define a get() function?
             th = self.get_theta(i2, op_size)
             #TODO: should we check provided labels for validity?
             o.set_leg_labels(labels)
-            C = npc.tensordot(o, th, axes = [op_labels,th_labels[:-2]])
-            E.append(npc.inner(th, C,axes = [th_labels,th_labels]
-                    , do_conj = True))
+            C = npc.tensordot(o, th, axes=[op_labels, th_labels[:-2]])
+            E.append(npc.inner(th, C, axes=[th_labels, th_labels], do_conj=True))
 
         return np.array(E)
 

@@ -20,6 +20,7 @@ from ..tools.params import get_parameter
 
 __all__ = ['XXZChain']
 
+
 class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     r"""Spin-1/2 XXZ chain with Sz conservation.
 
@@ -41,6 +42,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     All parameters are
     """
+
     def __init__(self, model_param):
         # 0) read out/set default parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)
@@ -69,7 +71,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(hz, 0, 'Sz')
-        Jxx_half = np.asarray(Jxx)*0.5  # convert to array: allow `array_like` Jxx
+        Jxx_half = np.asarray(Jxx) * 0.5  # convert to array: allow `array_like` Jxx
         self.add_coupling(Jxx_half, 0, 'Sp', 0, 'Sm', 1)
         self.add_coupling(Jxx_half, 0, 'Sm', 0, 'Sp', 1)
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)

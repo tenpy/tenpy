@@ -52,7 +52,7 @@ from .truncation import TruncationError
 from ..tools.params import get_parameter
 
 
-def update_bond(psi,i,U_bond,truncation_par):
+def update_bond(psi, i, U_bond, truncation_par):
     """Updates the B matrices on a given bond.
 
     Function that updates the B matrices, the bond matrix s between and the
@@ -86,8 +86,8 @@ def update_bond(psi,i,U_bond,truncation_par):
     #TODO: Did not include the protocol distinction
 
     #Construct the theta matrix
-    theta = psi.get_theta(i).replace_label('p0','pL').ireplace_label('p1','pR')
-    theta = npc.tensordot(theta,U_bond,axes=(['pL', 'pR'], ['pL*', 'pR*']))
+    theta = psi.get_theta(i).replace_label('p0', 'pL').ireplace_label('p1', 'pR')
+    theta = npc.tensordot(theta, U_bond, axes=(['pL', 'pR'], ['pL*', 'pR*']))
     theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
 
     #Perform the SVD and truncate the wavefunction
@@ -98,7 +98,7 @@ def update_bond(psi,i,U_bond,truncation_par):
     psi.set_SR(i, S)
     #B_L
     U = U.iscale_axis(S, 'vR')
-    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)**-1, 'vL').ireplace_label('pL', 'p')
+    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)** -1, 'vL').ireplace_label('pL', 'p')
     #B_R
     B_R = V.split_legs(1).ireplace_label('pR', 'p')
     psi.set_B(i, B_L)
@@ -106,7 +106,8 @@ def update_bond(psi,i,U_bond,truncation_par):
 
     return truncErr
 
-def update_step(psi,U,p,truncation_par):
+
+def update_step(psi, U, p, truncation_par):
     """Updates all even OR odd bonds in unit cell.
 
     Depending on the choice of p, this function updates all even (E) (p = 0)
@@ -142,16 +143,17 @@ def update_step(psi,U,p,truncation_par):
         The error of the represented state which is introduced due to the truncation during this sequence of update steps.
     """
     truncErr = TruncationError()
-    for i_bond in np.arange(np.mod(p+1,2),psi.L,2):
-        if U[(i_bond+1)%psi.L] is None:
+    for i_bond in np.arange(np.mod(p + 1, 2), psi.L, 2):
+        if U[(i_bond + 1) % psi.L] is None:
             # print "Skipped",i_bond
             continue
-        truncErr += update_bond(psi,i_bond,U[(i_bond+1)],truncation_par)
+        truncErr += update_bond(psi, i_bond, U[(i_bond + 1)], truncation_par)
         # print "Update sites",i_bond," and ",i_bond+1
         # print "Took U_bond element",(i_bond+1)
     return truncErr
 
-def update(psi,model,N_steps,truncation_par):
+
+def update(psi, model, N_steps, truncation_par):
     """Update a single time step with a given U
 
     The form of M.U depends on desired Trotter Order:
@@ -184,17 +186,18 @@ def update(psi,model,N_steps,truncation_par):
         The error of the represented state which is introduced due to the truncation during this sequence of update steps.
     """
     truncErr = TruncationError()
-    if len(model.U_bond) == 1: #First Order Trotter
+    if len(model.U_bond) == 1:  #First Order Trotter
         for i_step in xrange(N_steps):
             for p in xrange(2):
-                truncErr += update_step(psi,model.U_bond[0],p,truncation_par)
+                truncErr += update_step(psi, model.U_bond[0], p, truncation_par)
             # exit(0)
 
-    elif len(model.U_bond) == 2: #Second Order Trotter
+    elif len(model.U_bond) == 2:  #Second Order Trotter
         #Scheme: [a 2b a]*N = a 2b [2a 2b]*(N-1) a
         raise NotImplementedError
 
-def ground_state(psi,model,TEBD_par):
+
+def ground_state(psi, model, TEBD_par):
     """TEBD algorithm in imaginary time to find the ground state.
 
     An algorithm that finds the ground state and its corresponding energy by
@@ -218,15 +221,11 @@ def ground_state(psi,model,TEBD_par):
 
     """
     delta_tau_list = get_parameter(TEBD_par, 'delta_tau_list',
-                        [0.1,0.01,0.001,10**(-4),10**(-5),10**(-6),10**(-7)],
-                        'imag. time GS')
-    max_error_E = get_parameter(TEBD_par, 'max_error_E',
-                        10**(-12),
-                        'imag. time GS')
+                                   [0.1, 0.01, 0.001, 10**(-4), 10**(-5), 10**(-6), 10**(-7)],
+                                   'imag. time GS')
+    max_error_E = get_parameter(TEBD_par, 'max_error_E', 10**(-12), 'imag. time GS')
 
-    N_steps = get_parameter(TEBD_par, 'N_steps',
-                        10,
-                        'imag. time GS')
+    N_steps = get_parameter(TEBD_par, 'N_steps', 10, 'imag. time GS')
     #Need imaginary time evolution
     if TEBD_par['type'] != 'IMAG':
         print "Switched to imag. time evolution for GS!"
@@ -239,38 +238,35 @@ def ground_state(psi,model,TEBD_par):
     #                     'trunc_cut': TEBD_par['trunc_cut']}
     #TODO: N_STEPS, verbose etc.
     H_bond = copy.deepcopy(model.H_bond)
-    H_bond.append(H_bond.pop(0)) #None entry should not be picked if finite
+    H_bond.append(H_bond.pop(0))  #None entry should not be picked if finite
     for delta_t in delta_tau_list:
         model.calc_U(TEBD_par)
-        DeltaE = 2*TEBD_par['max_error_E']
-        DeltaS = 2*TEBD_par['max_error_E']
+        DeltaE = 2 * TEBD_par['max_error_E']
+        DeltaS = 2 * TEBD_par['max_error_E']
 
-        Eold = np.average(psi.expectation_value(H_bond,
-            labels = ['p0','p0*','p1','p1*'])).real
-            #TODO: what if different leg order?
+        Eold = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
+        #TODO: what if different leg order?
         # Sold= np.average(psi.entanglement_entropy())
         step = 1
-        while(DeltaE > max_error_E):
-            update(psi,model,N_steps, TEBD_par)
-            E = np.average(psi.expectation_value(H_bond,labels = ['p0','p0*','p1','p1*'])).real
+        while (DeltaE > max_error_E):
+            update(psi, model, N_steps, TEBD_par)
+            E = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
             # S = np.average(psi.entanglement_entropy())
-            DeltaE=np.abs(Eold-E)
+            DeltaE = np.abs(Eold - E)
             # DeltaS=np.abs(Sold-S)
-            Eold=E
+            Eold = E
             # Sold=S
 
             step += N_steps
 
-            if True:#TEBD_par['VERBOSE']:#TODO: How to incorporate
-                print "--> step = %6.0f " %(step-1),
+            if True:  #TEBD_par['VERBOSE']:#TODO: How to incorporate
+                print "--> step = %6.0f " % (step - 1),
                 # print " Chi ", psi.chi,
-                print " Delta_tau = %.10f " %delta_t,
-                print " Delta_E = %.10f " %DeltaE,
-                print " Ebond = %.10f "  %E.real
+                print " Delta_tau = %.10f " % delta_t,
+                print " Delta_E = %.10f " % DeltaE,
+                print " Ebond = %.10f " % E.real
                 # print " Delta_S = %.10f " %DeltaS,
                 # print " Sbond = %.10f "  %S.real
-
-
 
 
 def time_evolution(psi, TEBD_par):

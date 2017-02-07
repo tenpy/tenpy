@@ -412,8 +412,8 @@ class LegCharge(object):
         """
 
         if self.chinfo != other.chinfo:
-            raise ValueError(''.join(
-                ["incompatible ChargeInfo\n", str(self.chinfo), str(other.chinfo)]))
+            raise ValueError(''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(
+                other.chinfo)]))
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return  # optimize: don't need to check all charges explicitly

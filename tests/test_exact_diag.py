@@ -16,7 +16,7 @@ def test_ED():
     H, ED.full_H = ED.full_H, None
     ED.build_full_H_from_bonds()
     H2 = ED.full_H
-    assert(npc.norm(H-H2, np.inf) < 1.e-14)
+    assert (npc.norm(H - H2, np.inf) < 1.e-14)
     ED.full_diagonalization()
     psi = ED.groundstate()
     print "select charge_sector =", psi.qtotal
@@ -27,5 +27,5 @@ def test_ED():
     full_psi2 = psi.zeros_like()
     full_psi2[ED2._mask] = psi2
     ov = npc.inner(psi, full_psi2, do_conj=True)
-    print "overlab <psi | psi2> = 1. -", 1.-ov
-    assert(abs(abs(ov)-1) < 1.e-15)
+    print "overlab <psi | psi2> = 1. -", 1. - ov
+    assert (abs(abs(ov) - 1) < 1.e-15)

@@ -26,7 +26,6 @@ def git_version():
         pass
     return 'v' + '.'.join(map(str, version)) + ' git=?'
 
-
 # git descritpion of the version
 git_version = git_version()
 

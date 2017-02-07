@@ -25,7 +25,7 @@ def test_lattice():
         pos = [[0.1, 0.], [0.2, 0.]]
         lat = lattice.Lattice(Ls, [site1, site2], order=order, basis=basis, positions=pos)
         nst.eq_(lat.dim, len(Ls))
-        nst.eq_(lat.N_sites, np.prod(Ls)*2)
+        nst.eq_(lat.N_sites, np.prod(Ls) * 2)
         for i in range(lat.N_sites):
             nst.eq_(lat.lat2mps_idx(lat.mps2lat_idx(i)), i)
         idx = (4, 1, 0)

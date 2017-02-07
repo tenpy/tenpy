@@ -404,8 +404,8 @@ class Array(object):
         try:
             res = int(res)
         except:
-            raise KeyError("label not found: " + repr(label) + ", current labels" +
-                           repr(self.get_leg_labels()))
+            raise KeyError("label not found: " + repr(label) + ", current labels" + repr(
+                self.get_leg_labels()))
         if res > self.rank:
             raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         elif res < 0:
@@ -730,9 +730,8 @@ class Array(object):
         res.legs.insert(i, leg)
         res._set_shape()
         for j, T in enumerate(res._data):
-            res._data[j] = T.reshape(T.shape[:i] + (1,) + T.shape[i:])
-        res._qdata = np.hstack([res._qdata[:, :i],
-                                np.zeros([len(res._data), 1], np.intp),
+            res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
+        res._qdata = np.hstack([res._qdata[:, :i], np.zeros([len(res._data), 1], np.intp),
                                 res._qdata[:, i:]])
         if label is not None:
             labs = list(self.get_leg_labels())
@@ -1843,7 +1842,7 @@ class Array(object):
         # do we have only integer entries in `inds`?
         try:
             only_int = np.array(inds, dtype=np.intp)
-            assert(only_int.shape == (len(inds),))
+            assert (only_int.shape == (len(inds), ))
         except:
             return False, inds
         else:
@@ -2211,7 +2210,7 @@ class Array(object):
         """
         if label[0] != '(' or label[-1] != ')':
             warnings.warn("split leg with label not in Form '(...)': " + label)
-            return [None]*count
+            return [None] * count
         beg = 1
         depth = 0  # number of non-closed '(' to the left
         res = []
@@ -2650,7 +2649,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         legs[axis] = LegCharge.from_trivial(axis_len, chargeinfo, qconj=qconj)
         return legs
     qtotal = chargeinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
-    legs_known = legs[:axis] + legs[axis+1:]
+    legs_known = legs[:axis] + legs[axis + 1:]
     qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=chargeinfo.qtype)
     for i in range(axis_len):
         A_i = np.take(flat_array, i, axis=axis)

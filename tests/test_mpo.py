@@ -27,11 +27,12 @@ def test_MPO():
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()])
             W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
-            Ws = [W]*L
+            Ws = [W] * L
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 2:3, :, :]
-            H = mpo.MPO([site_spin_half]*L, Ws, bc=bc, IdL=[0]*L+[None], IdR=[None]+[-1]*(L))
+            H = mpo.MPO(
+                [site_spin_half] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
             print H.dim
             print H.chi
 
@@ -40,7 +41,7 @@ def test_MPOGraph():
     for bc in mpo.MPO._valid_bc:
         for L in [1, 2, 4]:
             print "L =", L
-            g = mpo.MPOGraph([site_spin_half]*L, 'finite')
+            g = mpo.MPOGraph([site_spin_half] * L, 'finite')
             g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
             if L > 1:
                 g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
@@ -61,7 +62,7 @@ def test_MPOEnvironment():
     xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
-    state = ([0, 1]*L)[:L]  # Neel
+    state = ([0, 1] * L)[:L]  # Neel
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite')
     env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
     env.get_LP(3, True)

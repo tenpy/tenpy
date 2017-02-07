@@ -34,10 +34,8 @@ site = Site(p_leg, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
 # make lattice from unit cell and create product MPS 'on lattice'
 print "1) create Arrays for an Neel MPS"
 lat = Lattice([L, 1], [site], order='default', bc_MPS='finite')
-psi = MPS.from_product_state(
-    lat.mps_sites(),
-    [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    )
+psi = MPS.from_product_state(lat.mps_sites(),
+                             [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0], )
 
 print "2) create an MPO representing the AFM Heisenberg Hamiltonian"
 
@@ -120,9 +118,9 @@ for even_odd in [0, 1]:
         keep = S > cutoff
         S = S[keep]
         invsq = np.linalg.norm(S)
-        psi.set_SR(i, S/invsq)
+        psi.set_SR(i, S / invsq)
         U = U.iscale_axis(S / invsq, 'vR')
-        B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)**-1, 'vL').ireplace_label('p2', 'p')
+        B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)** -1, 'vL').ireplace_label('p2', 'p')
         B_R = V.split_legs(1).ireplace_label('q2', 'p')
         psi.set_B(i, B_L)
         psi.set_B(i + 1, B_R)

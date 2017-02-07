@@ -85,6 +85,7 @@ class TruncationError(object):
     .. todo :
         what if eps < 1.e-16? in that case 1.-eps = 1 to machine precision. Just ignore that?
     """
+
     def __init__(self):
         self.eps = 0.
         self.Ov = 1.
@@ -103,7 +104,7 @@ class TruncationError(object):
         """
         res = cls()
         res.eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
-        res.Ov = 1. - 2.*res.eps  # TODO: include factor of 2? See above link to wikipedia
+        res.Ov = 1. - 2. * res.eps  # TODO: include factor of 2? See above link to wikipedia
         return res
 
     def __add__(self, other):
@@ -177,7 +178,7 @@ def truncate(S, trunc_par):
         warnings.warn("negative Schmidt values!")
 
     # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
-    logS = np.log(np.choose(S <= 0., [S, 1.e-100*np.ones(len(S))]))
+    logS = np.log(np.choose(S <= 0., [S, 1.e-100 * np.ones(len(S))]))
     piv = np.argsort(logS)  # sort *ascending*.
     # goal: find an index 'cut' such that we keep piv[cut:].
     logS = logS[piv]
@@ -193,7 +194,7 @@ def truncate(S, trunc_par):
     if chi_min is not None and chi_min > 1:
         # keep at most chi_max values
         good2 = np.ones(len(piv), dtype=np.bool)
-        good2[-chi_min+1:] = False
+        good2[-chi_min + 1:] = False
         good = _combine_constraints(good, good2, "chi_min")
 
     if sym_tol:
@@ -254,8 +255,11 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     err : :class:`TruncationError`
         The truncation error introduced.
     """
-    U, S, VH = npc.svd(theta, full_matrices=False, compute_uv=True,
-                       qtotal_LR=qtotal_LR, inner_labels=inner_labels)
+    U, S, VH = npc.svd(theta,
+                       full_matrices=False,
+                       compute_uv=True,
+                       qtotal_LR=qtotal_LR,
+                       inner_labels=inner_labels)
     S = S / np.linalg.norm(S)
     piv, new_norm, err = truncate(S, trunc_par)
     new_len_S = np.sum(piv, dtype=np.int_)
@@ -269,8 +273,8 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         msg += " |V V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
         warnings.warn(msg)
     S = S[piv] / new_norm
-    U.iproject(piv, axes=1)     # U = U[:, piv]
-    VH.iproject(piv, axes=0)    # VH = VH[piv, :]
+    U.iproject(piv, axes=1)  # U = U[:, piv]
+    VH.iproject(piv, axes=0)  # VH = VH[piv, :]
     return U, S, VH, err
 
 

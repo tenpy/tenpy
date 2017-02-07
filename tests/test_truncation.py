@@ -7,8 +7,9 @@ import nose.tools as nst
 
 from tenpy.algorithms import truncation
 
+
 def test_truncate():
-    S = np.exp(-np.arange(20) - 0.1*np.random.rand(20))
+    S = np.exp(-np.arange(20) - 0.1 * np.random.rand(20))
     np.random.shuffle(S)
     # default arguments
     pars = dict(verbose=1)
@@ -24,11 +25,11 @@ def test_truncate():
     mask, norm_new, TE = truncation.truncate(S, pars)
     print S[mask]
     assert (pars['chi_min'] <= np.sum(mask) <= pars['chi_max'])
-    assert(TE.eps <= pars['trunc_cut'])
+    assert (TE.eps <= pars['trunc_cut'])
     pars['svd_min'] = 0.005  # 10 times as large as trunc_cut -> allows to discard more
     mask, norm_new, TE = truncation.truncate(S, pars)
     print S[mask]
     print S[~mask]
     assert (pars['chi_min'] <= np.sum(mask) <= pars['chi_max'])
-    assert(np.all(S[~mask] < pars['svd_min']))
-    assert(np.all(S[mask] >= pars['svd_min']))
+    assert (np.all(S[~mask] < pars['svd_min']))
+    assert (np.all(S[mask] >= pars['svd_min']))
