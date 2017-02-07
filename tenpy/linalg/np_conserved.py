@@ -38,6 +38,8 @@ Eigen systems:
 :func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
 
 ----------------------------------------------------------------------------
+.. todo ::
+    QR decomposition
 """
 
 from __future__ import division
@@ -402,7 +404,8 @@ class Array(object):
         try:
             res = int(res)
         except:
-            raise KeyError("label not found: " + repr(label))
+            raise KeyError("label not found: " + repr(label) + ", current labels" +
+                           repr(self.get_leg_labels()))
         if res > self.rank:
             raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         elif res < 0:
@@ -430,7 +433,7 @@ class Array(object):
         return [self.get_leg_index(l) for l in labels]
 
     def set_leg_labels(self, labels):
-        """Return labels for the legs.
+        """Set labels for the different axes/legs.
 
         Introduction to leg labeling can be found in :doc:`../IntroNpc`.
 
@@ -462,13 +465,15 @@ class Array(object):
         return tuple(lb)
 
     def get_leg(self, label):
-        """return self.legs[self.get_leg_index(label)].
+        """Return self.legs[self.get_leg_index(label)].
 
         Convenient function returning the leg corresponding to a leg label/index."""
         return self.legs[self.get_leg_index(label)]
 
     def ireplace_label(self, old_label, new_label):
-        """replace the leg label `old_label` with `new_label`. In place."""
+        """Replace the leg label `old_label` with `new_label`. In place."""
+        if isinstance(old_label, int):
+            old_label = self.get_leg_labels()[old_label]
         old_label, new_label = str(old_label), str(new_label)
         self.labels[new_label] = self.labels[old_label]
         if new_label != old_label:
@@ -476,8 +481,21 @@ class Array(object):
         return self
 
     def replace_label(self, old_label, new_label):
-        """return a shallow copy with the leg label `old_label` replaced by `new_label`."""
+        """Return a shallow copy with the leg label `old_label` replaced by `new_label`."""
         return self.copy(deep=False).ireplace_label(old_label, new_label)
+
+    def ireplace_labels(self, old_labels, new_labels):
+        """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
+        for old_l, new_l in zip(old_labels, new_labels):
+            self.ireplace_label(old_l, new_l)
+        return self
+
+    def replace_labels(self, old_labels, new_labels):
+        """Return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
+        res = self.copy(deep=False)
+        for old_l, new_l in zip(old_labels, new_labels):
+            res.ireplace_label(old_l, new_l)
+        return res
 
     # string output ===========================================================
 
@@ -643,14 +661,14 @@ class Array(object):
         Parameters
         ----------
         indices : (iterable of) int
-            the (flat) index for each of the legs specified by `axes`
+            The (flat) index for each of the legs specified by `axes`
         axes : (iterable of) str/int
-            leg labels or indices to specify the legs for which the indices are given.
+            Leg labels or indices to specify the legs for which the indices are given.
 
         Returns
         -------
-        slided_self : :class:`Array`
-            a copy of self, equivalent to taking slices with indices inserted in axes.
+        sliced_self : :class:`Array`
+            A copy of self, equivalent to taking slices with indices inserted in axes.
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)
@@ -686,6 +704,40 @@ class Array(object):
         sl = tuple(sl)
         # finally take slices on _data
         res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
+        return res
+
+    def add_trivial_leg(self, i, label=None, qconj=1):
+        """Add a trivial leg (with just one entry) to `self`.
+
+        Parameters
+        ----------
+        i : int
+            The new leg is inserted before index `i`.
+        label : str | ``None``
+            If not ``None``, use it as label for the new leg.
+        qconj : +1 | -1
+            The direction of the new leg.
+
+        Returns
+        -------
+        extended : :class:`Array`
+            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 & charge 0.
+        """
+        if i < 0:
+            i += self.rank
+        res = self.copy(deep=False)
+        leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
+        res.legs.insert(i, leg)
+        res._set_shape()
+        for j, T in enumerate(res._data):
+            res._data[j] = T.reshape(T.shape[:i] + (1,) + T.shape[i:])
+        res._qdata = np.hstack([res._qdata[:, :i],
+                                np.zeros([len(res._data), 1], np.intp),
+                                res._qdata[:, i:]])
+        if label is not None:
+            labs = list(self.get_leg_labels())
+            labs.insert(i, label)
+            res.set_leg_labels(labs)
         return res
 
     # handling of charges =====================================================
@@ -1044,7 +1096,7 @@ class Array(object):
             return self[index]
         res = self.copy(deep=False)
         # adjust qtotal
-        res.legs = tuple([self.legs[a] for a in keep])
+        res.legs = [self.legs[a] for a in keep]
         res._set_shape()
         for a in axes:
             res.qtotal -= self.legs[a].get_charge(0)
@@ -1318,7 +1370,7 @@ class Array(object):
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
         if s.shape != (self.shape[axis], ):
-            raise ValueError("s has wrong shape: ", str(s.shape))
+            raise ValueError("s has wrong shape: " + str(s.shape))
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:
@@ -1779,7 +1831,7 @@ class Array(object):
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
         """
         if type(inds) != tuple:  # for rank 1
-            inds = tuple(inds)
+            inds = (inds, )
         if len(inds) < self.rank:
             inds = inds + (Ellipsis, )
         if any([(i is Ellipsis) for i in inds]):
@@ -1790,7 +1842,8 @@ class Array(object):
             raise IndexError("too many indices for Array")
         # do we have only integer entries in `inds`?
         try:
-            np.array(inds, dtype=np.intp)
+            only_int = np.array(inds, dtype=np.intp)
+            assert(only_int.shape == (len(inds),))
         except:
             return False, inds
         else:
@@ -1922,8 +1975,11 @@ class Array(object):
     def _advanced_setitem_npc(self, inds, other):
         """self[inds] = other for non-integer `inds` and :class:`Array` `other`.
         This function is called by self.__setitem__(inds, other)."""
-        map_part2self, permutations, self_part = self._advanced_getitem(
-            inds, calc_map_qind=True, permute=False)
+        # suppress warning if we project a pipe
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            map_part2self, permutations, self_part = self._advanced_getitem(
+                inds, calc_map_qind=True, permute=False)
         # permuations are ignored by map_part2self.
         # instead of figuring out permuations in self, apply the *reversed* permutations ot other
         for ax, perm in permutations:
@@ -1973,7 +2029,7 @@ class Array(object):
                 pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj[i])
             else:
                 # test for compatibility
-                legs = [self.legs[a] for a in combine_legs[i]]
+                legs = [self.get_leg(a) for a in combine_legs[i]]
                 if pipe.nlegs != len(legs):
                     raise ValueError("pipe has wrong number of legs")
                 if legs[0].qconj != pipe.legs[0].qconj:
@@ -2154,7 +2210,8 @@ class Array(object):
         ['a', 'b', '(c.d)']
         """
         if label[0] != '(' or label[-1] != ')':
-            raise ValueError("split label, which is not of the Form '(...)'")
+            warnings.warn("split leg with label not in Form '(...)': " + label)
+            return [None]*count
         beg = 1
         depth = 0  # number of non-closed '(' to the left
         res = []
@@ -2902,8 +2959,8 @@ def svd(a,
         qtotal_R = a.qtotal
     if qtotal_L is None:
         qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
-    elif qtotal_L is None:
-        qtotal_L = a.chinfo.make_valid(a.qtotal - qtotal_R)
+    elif qtotal_R is None:
+        qtotal_R = a.chinfo.make_valid(a.qtotal - qtotal_L)
     elif np.any(a.qtotal != a.chinfo.make_valid(qtotal_L + qtotal_R)):
         raise ValueError("The entries of `qtotal_LR` have to add up to ``a.qtotal``!")
     qtotal_LR = qtotal_L, qtotal_R

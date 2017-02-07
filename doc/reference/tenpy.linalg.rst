@@ -7,6 +7,7 @@ Submodules
 .. toctree::
 
    tenpy.linalg.charges
+   tenpy.linalg.lanczos
    tenpy.linalg.np_conserved
    tenpy.linalg.svd_robust
 

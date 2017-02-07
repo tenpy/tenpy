@@ -52,3 +52,6 @@ def test_XXZChain():
         Hb0 = chain.H_bond[0]
         for Hb in chain.H_bond[1:]:
             assert(npc.norm(Hb - Hb0, np.inf) == 0.)  # exactly equal
+    pars['Jxx'] = 0.
+    chain = XXZChain(pars)
+    chain.test_sanity()

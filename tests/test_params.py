@@ -19,6 +19,7 @@ def test_paramters():
     pars = dict(a=None, b=2.5, c="non-used")
     example_function(pars)
     with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
         pars = dict(miss_spelled=1.23)
         example_function(pars)
         unused = params.unused_parameters(pars, "testing")

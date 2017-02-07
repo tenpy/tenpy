@@ -10,6 +10,8 @@ class LinearOperator(object):
     """Generic Linear Operator for :class:`~tenpy.linalg.np_conserved.Array`.
 
     This is a prototype for a Linear Operator as required by the Lanczos algorithm.
+    Note that ``__init__`` is not used by :func:`lanczos`; so any class
+    implementing the :meth:`matvec` method can be used as effective linear operator.
 
     Parameters
     ----------
@@ -35,7 +37,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
     verbose : int
-        Print additional output if verbose > 0.
+        Print additional output if verbose > 1.
 
     Returns
     -------
@@ -55,11 +57,11 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
                 vecs[i] -= ov_ji * vecs[j]
         else:
-            if verbose > 0:
+            if verbose > 1:
                 print "GramSchmidt: Rank defficient", n
             vecs[j] = None
     vecs = [q for q in vecs if q is not None]
-    if verbose > 0:
+    if verbose > 1:
         k = len(vecs)
         G = np.empty((k, k), dtype=vecs[0].dtype)
         for i, v in enumerate(vecs):
@@ -79,7 +81,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         :class:`~tenpy.linalg.np_conserved.Array`.
     psi : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector. Should be the best guess available.
-    TEBD_parameters : dict
+    lanczos_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
 
@@ -132,8 +134,9 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         At least orthogonalize against the cached states?
         (it should be much faster than applying A)
     """
+    verbose = lanczos_params.get('verbose', 0)
     if len(orthogonal_to) > 0:
-        orthogonal_to, _ = gram_schmidt(orthogonal_to)
+        orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose/10)
     N_cache = get_parameter(lanczos_params, 'N_cache', 6, "Lanczos")
     if N_cache < 2:
         raise ValueError("Need to cache at least two vectors.")
@@ -144,7 +147,6 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     E_tol = get_parameter(lanczos_params, 'E_tol', 5.e-15, "Lanczos")
     P_tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
     min_gap = get_parameter(lanczos_params, 'min_gap', 1.e-12, "Lanczos")
-    verbose = lanczos_params.get('verbose', 0)
     Delta_E0 = 2.
     P_err = 2.
     Es = []
@@ -168,7 +170,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         w = A.matvec(w)
         for o in orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
             w -= o * npc.inner(o, w, do_conj=True)
-        alpha = np.real(npc.inner(w, cache[-1], do_conj=True))
+        alpha = np.real(npc.inner(w, cache[-1], do_conj=True)).item()
         T[k, k] = alpha
         if k > 0:
             w -= beta * cache[-2]
@@ -191,13 +193,15 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         if not above_ULP or (k+1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
             break
     N = k + 1  # == len(Es)
-    if verbose > 0:
+    if verbose > 1:
         if verbose > 10:
             _plot_stats(Es)
         if k > 1:
-            print "Lanczos", N, gap, "|", Delta_E0, E_tol, "|", P_err, P_tol
+            print ''.join(["Lanczos N={0:d}, gap={1:.3e} ".format(N, gap),
+                           "| DeltaE0={0:.3e} E_tol={1:e} ".format(Delta_E0, E_tol),
+                           "| P_err={0:.3e} P_tol={1:e}".format(P_err, P_tol)])
         else:
-            print "Lanczos", N, alpha, beta
+            print "Lanczos N={0:d}, alpha={1:.3e}, beta={2:.3e}".format(N, alpha, beta)
 
     if N == 1:
         return E_T[0], psi.copy(), N  # no better estimate available
@@ -209,7 +213,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
 
     psi0 = psi*v_T[0, 0]  # the start vector is still known
     # and the last len(cache) vectors have been cached
-    for k in range(1, len(cache) + 1):
+    for k in range(1, min(len(cache) + 1, N)):
         psi0 += v_T[N-k, 0] * cache[-k]
     len_cache = len(cache)
     del cache  # free memory: we need at least two more vectors
@@ -234,9 +238,9 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         psi0 += q1 * v_T[k+1, 0]
     psi0_norm = npc.norm(psi0)
     if abs(1. - psi0_norm) > 1.e-3:
-        warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:d}".format(psi0_norm))
+        warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
     psi0 /= psi0_norm
-    if verbose > 1.:
+    if verbose > 1. and len(orthogonal_to) > 0:
         print ''.join(["Lanczos orthogonality:"] +
                       [" {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True)))
                        for o in orthogonal_to])
@@ -251,9 +255,11 @@ def _to_cache(psi, cache, N):
 
 
 def _plot_stats(Es):
-    import matplot.pyplot as plt
-    ks = np.flatten([[k]*len(E) for k, E in enumerate(Es)])
-    plt.scatter(np.flatten(ks), np.flatten(Es))
+    import matplotlib.pyplot as plt
+    ks = [[k]*len(E) for k, E in enumerate(Es)]
+    ks = np.array(sum(ks, []))
+    Es = np.array(sum([list(E) for E in Es], []))
+    plt.scatter(ks, np.array(Es))
     plt.xlabel("Lanczos step")
     plt.ylabel("Ritz Values (= energy estimates)")
     plt.show()

@@ -37,12 +37,12 @@ i.e. between sites ``i-1`` and ``i``.
 
 from __future__ import division
 import itertools
-
+import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.string import vert_join
 from .mps import MPS as _MPS   # only for MPS._valid_bc
 
-__all__ = ['MPO', 'MPOGraph']
+__all__ = ['MPO', 'MPOGraph', 'MPOEnvironment']
 
 
 class MPO(object):
@@ -71,6 +71,8 @@ class MPO(object):
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
+    dtype : type
+        The data type of the `_W`.
     bc : {'finite' | 'segment' | 'infinite'}
         Boundary conditions as described in :mod:`~tenpy.networks.mps`.
         ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
@@ -81,7 +83,7 @@ class MPO(object):
         Indices on the bonds, which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The matrices of the MPO. Labels are ``wL, wR, p, p*``
+        The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
         Valid boundary conditions. The same as for an MPS.
     """
@@ -91,7 +93,8 @@ class MPO(object):
     def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self._W = list(Ws)
+        self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
+        self._W = [W.astype(dtype, copy=True) for W in Ws]
         if IdL is None:
             self.IdL = [None]*(self.L+1)
         else:
@@ -159,14 +162,14 @@ class MPO(object):
         """Return index of `IdL` at bond to the *left* of site `i`.
 
         May be ``None``."""
-        i = self._valid_index(i)
+        i = self._to_valid_index(i)
         return self.IdL[i]
 
     def get_IdR(self, i):
-        """Return index of `IdL` at bond to the *right* of site `i`.
+        """Return index of `IdR` at bond to the *right* of site `i`.
 
         May be ``None``."""
-        i = self._valid_index(i)
+        i = self._to_valid_index(i)
         return self.IdR[i+1]
 
     def _to_valid_index(self, i):
@@ -176,7 +179,7 @@ class MPO(object):
         if i < 0:
             i += self.L
         if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
+            raise ValueError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
 
 
@@ -550,3 +553,272 @@ class MPOGraph(object):
                 qfl[st[key]] = q
             leg = npc.LegCharge.from_qflat(chinfo, qfl, qconj=+1)
             self._grid_legs.append(leg)
+
+
+class MPOEnvironment(object):
+    """Stores partial contractions of :math:`<bra|H|ket>`.
+
+    The network for a contraction :math:`<bra|H|ket>` of an MPO `H` bewteen two MPS looks like::
+
+        |     .------>- M[0] ->- M[1] ->- M[2] ->- ...  ->--.
+        |     |         |        |        |                 |
+        |     |         ^        ^        ^                 |
+        |     |         |        |        |                 |
+        |     LP[0] ->- W[0] ->- W[1] ->- W[2] ->- ...  ->- Rp[-1]
+        |     |         |        |        |                 |
+        |     |         ^        ^        ^                 |
+        |     |         |        |        |                 |
+        |     .------>- N[0]*->- N[1]*->- N[2]*->- ...  ->--.
+
+    We use the following label convention (where arrows indicate `qconj`)::
+
+        |    .-->- vR           vL ->-.
+        |    |                        |
+        |    LP->- wR           wL ->-RP
+        |    |                        |
+        |    .-->- vR*         vL* ->-.
+
+    To avoid recalculations of the whole network e.g. in the DMRG sweeps,
+    we store the contractions up to some site index in this class.
+    For DMRG (i.e. ``bc='finite','segment'``), the very left and right part ``LP[0]`` and
+    ``RP[-1]`` are trivial and don't change in the DMRG algorithm,
+    but for iDMRG (i.e. ``bc='infinite'``) they are also updated
+    (by inserting another unit cell to the left/right).
+
+    The MPS `bra` and `ket` have to be in canonical form.
+    All the environments are constructed without the 'lambda' on the open bond.
+    In other words, we contract left-canonical `A` to the left parts `LP`
+    and right-canonical `B` to the right parts `RP`.
+
+
+    Parameters
+    ----------
+    bra : :class:`~tenpy.networks.mps.MPS`
+        The MPS to project on. Should be given in usual 'ket' form;
+        we call `conj()` on the matrices directly.
+    H : :class:`~tenpy.networks.mpo.MPO`
+        The MPO sandwiched between `bra` and `ket`.
+        Should have 'IdL' and 'IdR' set on the first and last bond.
+    ket : :class:`~tenpy.networks.mpo.MPO`
+        The MPS on which `H` acts. May be identical with `bra`.
+    firstLP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very left part. If ``None``, build trivial one.
+    rightRP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very right part. If ``None``, build trivial one.
+    age_LP : int
+        The number of physical sites involved into the contraction yielding `firstLP`.
+    age_RP : int
+        The number of physical sites involved into the contraction yielding `lastRP`.
+
+    Attributes
+    ----------
+    L : int
+        Number of physical sites. For iMPS the len of the MPS unit cell.
+    dtype : type | string
+        The data type of the Array entries.
+    bra, ket: :class:`~tenpy.networks.mps.MPS`
+        The two MPS for the contraction.
+    H : :class:`~tenpy.networks.mpo.MPO`
+        The MPO sandwiched between `bra` and `ket`.
+    _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
+        Left parts of the environment, len `L`.
+        ``LP[i]`` contains the contraction strictly left of site `i`
+        (or ``None``, if we don't have it calculated).
+    _RP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
+        Right parts of the environment, len `L`.
+        ``RP[i]`` contains the contraction strictly right of site `i`
+        (or ``None``, if we don't have it calculated).
+    _LP_age : list of int|``None``
+        Used for book-keeping, how large the DMRG system grew:
+        ``_LP_age[i]`` stores the number of physical sites invovled into the contraction
+        network which yields ``self._LP[i]``.
+    _RP_age : list of int|``None``
+        Used for book-keeping, how large the DMRG system grew:
+        ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
+        network which yields ``self._RP[i]``.
+    """
+    def __init__(self, bra, H, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
+        if ket is None:
+            ket = bra
+        self.bra = bra
+        self.ket = ket
+        self.H = H
+        self.L = L = bra.L
+        self.finite = bra.finite
+        self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
+        self._LP = [None]*L
+        self._RP = [None]*L
+        self._LP_age = [None]*L
+        self._RP_age = [None]*L
+        if firstLP is None:
+            # Build trivial verly first LP
+            leg_bra = bra.get_B(0).get_leg('vL')
+            leg_mpo = H.get_W(0).get_leg('wL').conj()
+            leg_ket = ket.get_B(0).get_leg('vL').conj()
+            leg_ket.test_contractible(leg_bra)
+            firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
+            # should work for both finite and segment bc
+            firstLP[:, H.IdL[0], :] = npc.diag(1., leg_ket, dtype=self.dtype)
+            firstLP.set_leg_labels(['vR*', 'wR', 'vR'])
+        self.set_LP(0, firstLP, age=age_LP)
+        if lastRP is None:
+            # Build trivial verly last RP
+            leg_bra = bra.get_B(L-1).get_leg('vR')
+            leg_mpo = H.get_W(L-1).get_leg('wR').conj()
+            leg_ket = ket.get_B(L-1).get_leg('vR').conj()
+            leg_ket.test_contractible(leg_bra)
+            lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
+            lastRP[:, H.IdR[L], :] = npc.diag(1., leg_ket, dtype=self.dtype)
+            lastRP.set_leg_labels(['vL*', 'wL', 'vL'])
+        self.set_RP(L-1, lastRP, age=age_RP)
+        self.test_sanity()
+
+    def test_sanity(self):
+        assert(self.bra.L == self.ket.L == self.H.L)
+        assert(self.bra.finite == self.ket.finite == self.H.finite)
+        # check that the network is contractable
+        for b_s, H_s, k_s in itertools.izip(self.bra.sites, self.H.sites, self.ket.sites):
+            b_s.leg.test_equal(k_s.leg)
+            b_s.leg.test_equal(H_s.leg)
+        assert any([LP is not None for LP in self._LP])
+        assert any([RP is not None for RP in self._RP])
+
+    def get_LP(self, i, store=True):
+        """Calculate LP at given site from nearest available one (including `i`).
+
+        Parameters
+        ----------
+        i : int
+            The returned `LP` will contain the contraction *strictly* left of site `i`.
+        store : bool
+            Wheter to store the calculated `LP` in `self` (``True``) or discard them (``False``).
+
+        Returns
+        -------
+        LP_i : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of everything left of site `i`,
+            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+        """
+        # find nearest available LP to the left.
+        for i0 in range(i, i-self.L, -1):
+            LP = self._LP[self._to_valid_index(i0)]
+            if LP is not None:
+                break
+            # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
+        else:  # no break called
+            raise ValueError("No left part in the system???")
+        age_i0 = self.get_LP_age(i0)
+        for j in range(i0, i):
+            LP = self._contract_LP(j, LP)
+            if store:
+                self.set_LP(j+1, LP, age=age_i0 + j - i0 + 1)
+        return LP
+
+    def get_RP(self, i, store=True):
+        """Calculate RP at given site from nearest available one (including `i`).
+
+        Parameters
+        ----------
+        i : int
+            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
+        store : bool
+            Wheter to store the calculated `RP` in `self` (``True``) or discard them (``False``).
+
+        Returns
+        -------
+        RP_i : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of everything left of site `i`,
+            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+        """
+        # find nearest available RP to the right.
+        for i0 in range(i, i+self.L):
+            RP = self._RP[self._to_valid_index(i0)]
+            if RP is not None:
+                break
+            # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
+        age_i0 = self.get_RP_age(i0)
+        for j in range(i0, i, -1):
+            RP = self._contract_RP(j, RP)
+            if store:
+                self.set_RP(j-1, RP, age=age_i0 + i0 - j + 1)
+        return RP
+
+    def get_LP_age(self, i):
+        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        return self._LP_age[self._to_valid_index(i)]
+
+    def get_RP_age(self, i):
+        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        return self._RP_age[self._to_valid_index(i)]
+
+    def set_LP(self, i, LP, age):
+        """Store part to the left of site `i`."""
+        i = self._to_valid_index(i)
+        self._LP[i] = LP
+        self._LP_age[i] = age
+
+    def set_RP(self, i, RP, age):
+        """Store part to the right of site 1i1."""
+        i = self._to_valid_index(i)
+        self._RP[i] = RP
+        self._RP_age[i] = age
+
+    def del_LP(self, i):
+        """Delete stored part strictly to the left of site `i`."""
+        i = self._to_valid_index(i)
+        self._LP[i] = None
+        self._LP_age[i] = None
+
+    def del_RP(self, i):
+        """Delete storde part scrictly to the right of site `i`."""
+        i = self._to_valid_index(i)
+        self._RP[i] = None
+        self._RP_age[i] = None
+
+    def full_contraction(self, i0):
+        """Calculate the energy by a full contraction of the network.
+
+        The full contraction of the environments gives the value ``<bra|H|ket>``,
+        i.e. if `bra` is `ket`, the total energy. For this purpose, this function contracts
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index.
+        """
+        if self.ket.finite and i0+1 == self.L:
+            # special case to handle `_to_valid_index` correctly:
+            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
+            LP = self.get_LP(i0, store=False)
+            LP = self._contract_LP(self, i0, LP)
+        else:
+            LP = self.get_LP(i0+1, store=False)
+        # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
+        S_bra = self.bra.get_SR(i0).conj()
+        LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
+        # cutoff is not used for form_diff = 1
+        S_ket = self.ket.get_SR(i0)
+        LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
+        RP = self.get_RP(i0, store=False)
+        return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+
+    def _contract_LP(self, i, LP):
+        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP,
+                           axes=(['p*', 'vL*'], ['p', 'vR*']))
+        return LP  # labels 'vR*', 'wR', 'vR'
+
+    def _contract_RP(self, i, RP):
+        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
+        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP,
+                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        return RP  # labels ['vL', 'wL', 'vL*']
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `ket.bc`)."""
+        return self.ket._to_valid_index(i)

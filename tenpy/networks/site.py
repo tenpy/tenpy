@@ -41,6 +41,7 @@ class Site(object):
     ops : :class:`npc.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
+        All onsite operators have labels ``'p', 'p*'``.
 
     Examples
     --------
@@ -104,13 +105,13 @@ class Site(object):
 
     @property
     def onsite_ops(self):
-        """dictionary of on-site operators for iteration.
+        """Dictionary of on-site operators for iteration.
 
         (single operators are accessible as attributes.)"""
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
     def add_op(self, name, op):
-        """add one or multiple on-site operators
+        """Add one on-site operators
 
         Parameters
         ----------
@@ -121,6 +122,7 @@ class Site(object):
             A matrix acting on the local hilbert space representing the local operator.
             Dense numpy arrays are automatically converted to :class:`npc.Array`.
             LegCharges have to be [leg, leg.conj()].
+            We set labels ``'p', 'p*'``.
         """
         name = str(name)
         if name in self.opnames:
@@ -138,6 +140,7 @@ class Site(object):
         op.legs[0].test_equal(self.leg)
         op.legs[1].test_contractible(self.leg)
         op.test_sanity()
+        op.set_leg_labels(['p', 'p*'])
         setattr(self, name, op)
         self.opnames.add(name)
 
@@ -158,7 +161,7 @@ class Site(object):
         delattr(self, old_name)
 
     def get_state_index(self, label):
-        """return index of a basis state from its label.
+        """Return index of a basis state from its label.
 
         Parameters
         ----------
@@ -178,7 +181,7 @@ class Site(object):
         return res
 
     def get_op(self, name):
-        """return operator of given name."""
+        """Return operator of given name."""
         return getattr(self, name)
 
 
