@@ -443,7 +443,7 @@ class MPS(object):
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
-    def get_theta(self, i, n=2, cutoff=1.e-16):
+    def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
         Parameters
@@ -456,14 +456,18 @@ class MPS(object):
             During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
             This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
             singular values.
+        formL : float
+            Exponent for the singular values to the left.
+        formR : float
+            Exponent for the singular values to the right.
 
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The n-site wave function with leg labels ``vL, vR, p0, p1, .... p{n-1}``
-            (undefined order).
+            (in undefined order).
             In Vidal's notation (with s=lambda, G=Gamma):
-            ``theta = s G_i s G_{i+1} s ... G_{i+n-1} s``.
+            ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
         i = self._to_valid_index(i)
         if self.finite:
@@ -477,11 +481,12 @@ class MPS(object):
         # the following code is an equivalent to::
         #
         #   theta = self.get_B(i, form='B').replace_label('p', 'p0')
-        #   theta.iscale_axis(self.get_SL(i), 'vL')
+        #   theta.iscale_axis(self.get_SL(i)** formL, 'vL')
         #   for k in range(1, n):
         #       j = (i + n) % self.L
         #       B = self.get_B(j, form='B').replace_label('p', 'p'+str(k))
         #       theta = npc.tensordot(theta, B, ['vR', 'vL'])
+        #   theta.iscale_axis(self.get_SR(i + n - 1)** (formR-1.), 'vR')
         #   return theta
         #
         # However, the following code is nummerically more stable if ``self.form`` is not `B`
@@ -491,9 +496,8 @@ class MPS(object):
         fL, fR = self.form[i]  # left / right form exponent
         copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
         theta = self.get_B(i, form=None, copy=copy)  # in the current form
-        if fL != 1.:
-            theta = self._scale_axis_B(theta, self.get_SL(i), 1. - fL, 'vL', cutoff)
         theta = theta.replace_label('p', 'p0')
+        theta = self._scale_axis_B(theta, self.get_SL(i), formL - fL, 'vL', cutoff)
         for k in range(1, n):  # nothing if n=1.
             j = (i + k) % self.L
             B = self.get_B(j, None, False).replace_label('p', 'p' + str(k))
@@ -506,8 +510,8 @@ class MPS(object):
             else:
                 fR = None
             theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
-        if fR != 1:  # fR = self.form[i+n-1][1]
-            theta = self._scale_axis_B(theta, self.get_SR(i + n - 1), 1. - fR, 'vR', cutoff)
+        # here, fR = self.form[i+n-1][1]
+        theta = self._scale_axis_B(theta, self.get_SR(i + n - 1), formR - fR, 'vR', cutoff)
         return theta
 
     def convert_form(self, new_form='B'):
