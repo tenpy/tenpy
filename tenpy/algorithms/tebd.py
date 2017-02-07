@@ -150,15 +150,15 @@ def update_step(psi, U, p, truncation_par):
 def update(psi, model, N_steps, truncation_par):
     """Update a single time step with a given U
 
-    The form of M.U depends on desired Trotter Order:
+    The form of model.U_bond depends on desired Trotter Order:
 
-    1st order - M.U = [  [U_bond]*L ], a len1 list, whose element is list of
+    1st order - model.U_bond = [  [U_bond]*L ], a len1 list, whose element is list of
     bond ops
 
-    2nd order - M.U = [ [U_bond]*L, [U_bond**2]*L], len2 list, whose elements
+    2nd order - model.U_bond = [ [U_bond]*L, [U_bond**2]*L], len2 list, whose elements
     are list of bond ops and bond ops squared
 
-    4th order - M.U = [ [U_bond]*L,[U_bond]*L,[U_bond]*L, [U_bond**2]*L],
+    4th order - model.U_bond = [ [U_bond]*L,[U_bond]*L,[U_bond]*L, [U_bond**2]*L],
     len4 list, whose elements are list of bond ops and bond ops squared for the
     two dts needed for the 4th o. Trotter decomposion
 
@@ -184,11 +184,54 @@ def update(psi, model, N_steps, truncation_par):
         for i_step in xrange(N_steps):
             for p in xrange(2):
                 truncErr += update_step(psi, model.U_bond[0], p, truncation_par)
-            # exit(0)
 
     elif len(model.U_bond) == 2:  #Second Order Trotter
-        #Scheme: [a 2b a]*N = a 2b [2a 2b]*(N-1) a
-        raise NotImplementedError
+        # Scheme: [a 2b a]*N = a 2b [2a 2b]*(N-1) a
+
+        # model.U_bond[0] a  : exp( H t1 / 2   )
+        # model.U_bond[1] b  : exp( H t1    )
+
+        truncErr = update_step(psi, model.U_bond[0], 0, truncation_par)
+        truncErr = update_step(psi, model.U_bond[1], 1, truncation_par)
+
+        for i_step in xrange(N_steps - 1):
+            for p in xrange(2):
+                truncErr = update_step(psi, model.U_bond[1], p, truncation_par)
+        truncErr = update_step(psi, model.U_bond[0], 0, truncation_par)
+
+    elif len(model.U_bond) == 4: #Fourth Order Trotter
+        #Scheme: [ a b 2a b c d c b 2a b a] * N =
+        #  a b 2a b c d c b 2a b [ 2a b 2a b c d c b 2a b ] * (N-1) a
+
+        # model.U_bond[0] a  : exp(  Hodd t1 / 2   )
+        # model.U_bond[1] 2a : exp(  Hodd t1    )
+        # model.U_bond[1] b  : exp(  Heven t1    )
+        # model.U_bond[2] c  : exp(  Hodd (t3+t1)/2  )
+        # model.U_bond[3] d  : exp(  Heven t3  )
+
+        truncErr = update_step(psi, model.U_bond[0], 0, truncation_par)
+        for p in xrange(3):
+            truncErr = update_step(psi, model.U_bond[1], np.mod(p+1,2), truncation_par)
+
+        truncErr = update_step(psi, model.U_bond[2], 0, truncation_par)
+        truncErr = update_step(psi, model.U_bond[3], 1, truncation_par)
+        truncErr = update_step(psi, model.U_bond[2], 0, truncation_par)
+
+        for p in xrange(3):
+            truncErr = update_step(psi, model.U_bond[1], np.mod(p+1,2), truncation_par)
+
+        for i_step in xrange(N_steps - 1):
+            for p in xrange(4):
+                truncErr = update_step(psi, model.U_bond[1], np.mod(p,2), truncation_par)
+
+            truncErr = update_step(psi, model.U_bond[2], 0, truncation_par)
+            truncErr = update_step(psi, model.U_bond[3], 1, truncation_par)
+            truncErr = update_step(psi, model.U_bond[2], 0, truncation_par)
+
+            for p in xrange(3):
+                truncErr = update_step(psi, model.U_bond[1], np.mod(p+1,2), truncation_par)
+
+        truncErr = update_step(psi, model.U_bond[0], 0, truncation_par)
 
 
 def ground_state(psi, model, TEBD_par):
@@ -220,10 +263,7 @@ def ground_state(psi, model, TEBD_par):
     max_error_E = get_parameter(TEBD_par, 'max_error_E', 1.e-12, 'imag. time GS')
 
     N_steps = get_parameter(TEBD_par, 'N_steps', 10, 'imag. time GS')
-    # Need imaginary time evolution
-    if TEBD_par['type'] != 'IMAG':  # TODO: doesn't make
-        print "Switched to imag. time evolution for GS!"
-        TEBD_par['type'] != 'IMAG'
+
     #Take away for now and directly pass TEBD_par
     # truncation_par = {'chi_max': TEBD_par['chi_max'],
     #                   'chi_min': TEBD_par['chi_min'],
@@ -234,7 +274,7 @@ def ground_state(psi, model, TEBD_par):
     H_bond = copy.deepcopy(model.H_bond)  # TODO: should work without copies!!!!
     H_bond.append(H_bond.pop(0))  #None entry should not be picked if finite
     for delta_t in delta_tau_list:
-        model.calc_U(TEBD_par)
+        model.calc_U(TEBD_par,type_evo = 'IMAG')
         DeltaE = 2 * TEBD_par['max_error_E']
         DeltaS = 2 * TEBD_par['max_error_E']
 
