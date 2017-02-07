@@ -1,5 +1,6 @@
 r"""Time evolving block decimation (TEBD).
 
+
 The TEBD algorithm (proposed in [1]_) uses a trotter decomposition of the
 Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neigbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.NearestNeighborModel`),
@@ -45,10 +46,7 @@ import numpy as np
 import copy
 
 from ..linalg import np_conserved as npc
-from ..networks import mps
-from .truncation import truncate
-from .truncation import svd_theta
-from .truncation import TruncationError
+from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter
 
 
@@ -64,48 +62,43 @@ def update_bond(psi, i, U_bond, truncation_par):
     |           |      U      |
     |           |-------------|
     |           |             |
-    |         - B1* -  s* -  B2* - ...
 
     Parameters
     ----------
     psi : :class:`MPS`
-        The wavefunction represented in the form of an MPS
+        The wavefunction represented in the form of an MPS.
     i: int
-        The bond which will be updated
-    U_bond: #TODO
-        The bond operator with which we update the bond
+        Bond index; we update the matrices at sites ``i-1, i``.
+    U_bond:
+        The bond operator which we apply to the wave function.
     truncation_par: dict
-        The truncation parameters as explained in truncate
-
+        The truncation parameters as explained in :func:`~tenpy.algorithms.truncation.truncate`.
 
     Returns
     -------
-    truncErr : :class:`TruncationError`
-        The error of the represented state which is introduced due to the truncation during this update step.
+    trunc_err : :class:`TruncationError`
+        The error of the represented state which is introduced by the truncation
+        during this update step.
     """
-    #TODO: Did not include the protocol distinction
-
-    #Construct the theta matrix
-    theta = psi.get_theta(i).replace_label('p0', 'pL').ireplace_label('p1', 'pR')
-    theta = npc.tensordot(theta, U_bond, axes=(['pL', 'pR'], ['pL*', 'pR*']))
+    i0, i1 = i-1, i
+    # Construct the theta matrix
+    theta = psi.get_theta(i0, n=2).ireplace_label('p0', 'pL').ireplace_label('p1', 'pR')
+    theta = npc.tensordot(U_bond, theta, axes=(['pL*', 'pR*'], ['pL', 'pR']))
     theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
 
-    #Perform the SVD and truncate the wavefunction
+    # Perform the SVD and truncate the wavefunction
     U, S, V, truncErr = svd_theta(theta, truncation_par, inner_labels=['vR', 'vL'])
 
-    #Split tensor and update matrices
-    #s
-    psi.set_SR(i, S)
-    #B_L
+    # Split tensor and update matrices
+    psi.set_SR(i0, S)
     U = U.iscale_axis(S, 'vR')
-    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i)** -1, 'vL').ireplace_label('pL', 'p')
-    #B_R
+    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i0)** -1, 'vL').ireplace_label('pL', 'p')
+    # TODO: using the inverse S is numerically bad.
+    # instead use B = BL.BR.V^dagger (works since V^dagger V = Identity)
     B_R = V.split_legs(1).ireplace_label('pR', 'p')
-    psi.set_B(i, B_L)
-    psi.set_B(i + 1, B_R)
-
+    psi.set_B(i0, B_L, form ='B')
+    psi.set_B(i1, B_R, form='B')
     return truncErr
-
 
 def update_step(psi, U, p, truncation_par):
     """Updates all even OR odd bonds in unit cell.
@@ -140,14 +133,15 @@ def update_step(psi, U, p, truncation_par):
     Returns
     -------
     truncErr : :class:`TruncationError`
-        The error of the represented state which is introduced due to the truncation during this sequence of update steps.
+        The error of the represented state which is introduced due to the truncation
+        during this sequence of update steps.
     """
     truncErr = TruncationError()
-    for i_bond in np.arange(np.mod(p + 1, 2), psi.L, 2):
-        if U[(i_bond + 1) % psi.L] is None:
-            # print "Skipped",i_bond
-            continue
-        truncErr += update_bond(psi, i_bond, U[(i_bond + 1)], truncation_par)
+    for i_bond in np.arange(p % 2, psi.L, 2):
+        if U[i_bond] is None:
+            continue  # handles finite vs. infinite boundary conditions
+        truncErr += update_bond(psi, i_bond, U[i_bond], truncation_par)
+        # TODO : if verbose > ...
         # print "Update sites",i_bond," and ",i_bond+1
         # print "Took U_bond element",(i_bond+1)
     return truncErr
@@ -179,13 +173,13 @@ def update(psi, model, N_steps, truncation_par):
     truncation_par: dict
         The truncation parameters as explained in truncate
 
-
     Returns
     -------
     truncErr : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation during this sequence of update steps.
     """
     truncErr = TruncationError()
+    # TODO: for p, U_list in enumerate(model.U_bond):
     if len(model.U_bond) == 1:  #First Order Trotter
         for i_step in xrange(N_steps):
             for p in xrange(2):
@@ -221,23 +215,23 @@ def ground_state(psi, model, TEBD_par):
 
     """
     delta_tau_list = get_parameter(TEBD_par, 'delta_tau_list',
-                                   [0.1, 0.01, 0.001, 10**(-4), 10**(-5), 10**(-6), 10**(-7)],
+                                   [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7],
                                    'imag. time GS')
-    max_error_E = get_parameter(TEBD_par, 'max_error_E', 10**(-12), 'imag. time GS')
+    max_error_E = get_parameter(TEBD_par, 'max_error_E', 1.e-12, 'imag. time GS')
 
     N_steps = get_parameter(TEBD_par, 'N_steps', 10, 'imag. time GS')
-    #Need imaginary time evolution
-    if TEBD_par['type'] != 'IMAG':
+    # Need imaginary time evolution
+    if TEBD_par['type'] != 'IMAG':  # TODO: doesn't make
         print "Switched to imag. time evolution for GS!"
         TEBD_par['type'] != 'IMAG'
     #Take away for now and directly pass TEBD_par
     # truncation_par = {'chi_max': TEBD_par['chi_max'],
-    #                     'chi_min': TEBD_par['chi_min'],
-    #                     'symmetry_tol': TEBD_par['symmetry_tol'],
-    #                     'svd_min': TEBD_par['svd_min'],
-    #                     'trunc_cut': TEBD_par['trunc_cut']}
+    #                   'chi_min': TEBD_par['chi_min'],
+    #                   'symmetry_tol': TEBD_par['symmetry_tol'],
+    #                   'svd_min': TEBD_par['svd_min'],
+    #                   'trunc_cut': TEBD_par['trunc_cut']}
     #TODO: N_STEPS, verbose etc.
-    H_bond = copy.deepcopy(model.H_bond)
+    H_bond = copy.deepcopy(model.H_bond)  # TODO: should work without copies!!!!
     H_bond.append(H_bond.pop(0))  #None entry should not be picked if finite
     for delta_t in delta_tau_list:
         model.calc_U(TEBD_par)
