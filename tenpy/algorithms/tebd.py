@@ -258,7 +258,7 @@ def ground_state(psi, model, TEBD_par):
 
     """
     delta_tau_list = get_parameter(TEBD_par, 'delta_tau_list',
-                                   [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7],
+                                   [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7,0.],
                                    'imag. time GS')
     max_error_E = get_parameter(TEBD_par, 'max_error_E', 1.e-12, 'imag. time GS')
 
