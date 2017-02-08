@@ -38,6 +38,7 @@ Eigen systems:
 :func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
 
 ----------------------------------------------------------------------------
+
 .. todo ::
     QR decomposition
 """

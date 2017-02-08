@@ -87,7 +87,7 @@ def update_bond(psi, i, U_bond, truncation_par):
     theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
 
     # Perform the SVD and truncate the wavefunction
-    U, S, V, truncErr, renorm = svd_theta(theta, truncation_par, inner_labels=['vR', 'vL'])
+    U, S, V, truncErr, renormalize = svd_theta(theta, truncation_par, inner_labels=['vR', 'vL'])
 
     # Split tensor and update matrices
     B_R = V.split_legs(1).ireplace_label('pR', 'p')
@@ -106,8 +106,8 @@ def update_bond(psi, i, U_bond, truncation_par):
     B_L = npc.tensordot(
         C.combine_legs(
             ('vR', 'pR'), pipes=theta.legs[1]), V.conj(), axes=['(vR.pR)', '(vR*.pR*)'])
-    B_L.ireplace_labels(['vL*', 'pL'], ['vR', 'p']) / renorm
-    # (the factor is important for normalization)
+    B_L.ireplace_labels(['vL*', 'pL'], ['vR', 'p'])
+    B_L /= renormalize  # re-normalize to <psi|psi> = 1
     psi.set_SR(i0, S)
     psi.set_B(i0, B_L, form='B')
     psi.set_B(i1, B_R, form='B')
@@ -278,27 +278,25 @@ def ground_state(psi, model, TEBD_par):
 
     N_steps = get_parameter(TEBD_par, 'N_steps', 10, 'imag. time GS')
 
-    #Take away for now and directly pass TEBD_par
+    # Take away for now and directly pass TEBD_par
     # truncation_par = {'chi_max': TEBD_par['chi_max'],
     #                   'chi_min': TEBD_par['chi_min'],
     #                   'symmetry_tol': TEBD_par['symmetry_tol'],
     #                   'svd_min': TEBD_par['svd_min'],
     #                   'trunc_cut': TEBD_par['trunc_cut']}
-    #TODO: N_STEPS, verbose etc.
-    H_bond = copy.deepcopy(model.H_bond)  # TODO: should work without copies!!!!
-    H_bond.append(H_bond.pop(0))  #None entry should not be picked if finite
+    # TODO: N_STEPS, verbose etc.
     for delta_t in delta_tau_list:
         model.calc_U(TEBD_par,type_evo = 'IMAG')
         DeltaE = 2 * TEBD_par['max_error_E']
         DeltaS = 2 * TEBD_par['max_error_E']
 
-        Eold = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
+        Eold = np.average(model.bond_energies(psi))
         #TODO: what if different leg order?
         # Sold= np.average(psi.entanglement_entropy())
         step = 1
         while (DeltaE > max_error_E):
             update(psi, model, N_steps, TEBD_par)
-            E = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
+            E = np.average(model.bond_energies(psi))
             # S = np.average(psi.entanglement_entropy())
             DeltaE = np.abs(Eold - E)
             # DeltaS=np.abs(Sold-S)

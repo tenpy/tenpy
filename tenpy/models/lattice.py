@@ -93,9 +93,6 @@ class Lattice(object):
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
 
     .. todo ::
-        what are valid values for MPS boundary conditions? -> need to define MPS class first...
-        write & use a function `_valid_bc_MPS`.
-    .. todo ::
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
 

@@ -770,12 +770,13 @@ class LegPipe(LegCharge):
         :meth:`~tenpy.linalg.np_conserved.Array.split_legs` more complicated, thus we keep it
         simple.  If you really want to project and split afterwards, use the following work-around,
         which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
-            Create the full pipe and save it separetely
-            Convert the Pipe to a Leg & project the array with it.
-            (... do calculations ...)
-            To split the 'projected pipe' of `A`, create and empty array `B` with the legs of A,
-            except the projected legs replaced by the full pipe, set `A` as a slice of `B`.
-            Then split the pipes.
+
+        1) Create the full pipe and save it separetely.
+        2) Convert the Pipe to a Leg & project the array with it.
+        3) [... do calculations ...]
+        4) To split the 'projected pipe' of `A`, create and empty array `B` with the legs of A,
+           but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
+           Finally split the pipe.
         """
         warnings.warn("Converting LegPipe to LegCharge for `project`")
         res = self.to_LegCharge()

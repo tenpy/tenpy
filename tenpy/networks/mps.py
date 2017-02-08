@@ -360,16 +360,6 @@ class MPS(object):
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
-    def _to_valid_index(self, i):
-        """make sure `i` is a valid index (depending on `self.bc`)."""
-        if not self.finite:
-            return i % self.L
-        if i < 0:
-            i += self.L
-        if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
-        return i
-
     def get_B(self, i, form='B', copy=False, cutoff=1.e-16):
         """return (view of) `B` at site `i` in canonical form.
 
@@ -545,6 +535,103 @@ class MPS(object):
         """
         raise NotImplementedError("TODO")
 
+    def expectation_value(self, ops, sites=None, axes=None):
+        """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
+
+        Given the MPS in canonical form, it calculates n-site expectation values.
+        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+
+            |          .--S--B[i]--B[i+1]--.
+            |          |     |     |       |
+            |          |     |-----|       |
+            |          |     | op  |       |
+            |          |     |-----|       |
+            |          |     |     |       |
+            |          .--S--B*[i]-B*[i+1]-.
+
+        Parameters
+        ----------
+        ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            The operators, for wich the expectation value should be taken,
+            All operators should all have the same number of legs (namely `2 n`).
+            If less than ``len(sites)`` operators are given, we repeat them periodically.
+            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by the `self.sites`.
+            with ``self.sites[i]
+        sites : list
+            List of site indices. ``sites``. Expectation values are evaluated there.
+            If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
+        axes : None | (list of str, list of str)
+            Two lists of each `n` leg labels giving the physical legs of the operator used for
+            contaction. The first `n` legs are contracted with conjugated B`s,
+            the second `n` legs with the non-conjugated `B`.
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
+            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
+
+        Returns
+        -------
+        exp_vals : 1D ndarray
+            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
+            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
+
+        Examples
+        --------
+        One site examples (`n` = 1):
+        >>> psi.expectation_value('Sz')
+        [Sz0, Sz1, ..., Sz{L-1}]
+        >>> psi.expectation_value(['Sz', 'Sx'])
+        [Sz0, Sx1, Sz2, Sx3, ... ]
+        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
+        [Sz0, Sz3, Sz4]
+
+        Two site example (`n` = 2):
+        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+        >>> psi.expectation_value(SzSx)
+        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
+        """
+        ops = to_iterable(ops)
+        if isinstance(ops, npc.Array):  # an npc.Array is iterable...
+            ops = [ops]  # ... so we need to do this manually
+        if type(ops[0]) == str:
+            n = 1
+        else:
+            n = ops[0].rank // 2  # same as int(ops[0].rank/2)
+        L_ops = len(ops)
+        L = self.L
+        if sites is None:
+            if self.finite:
+                sites = range(L - (n - 1))
+            else:
+                sites = range(L)
+
+        th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
+        if axes is None:
+            axes = (th_labels[2:], [lbl+'*' for lbl in th_labels[2:]])
+        axes_p, axes_pstar = axes
+        if len(axes_p) != n or len(axes_pstar) != n:
+            raise ValueError("Len of axes does not match operator n=" + len(n))
+        vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
+
+        E = []
+        for i in sites:
+            op = ops[i % L_ops]
+            if type(op) == str:
+                op = self.sites[i].get_op(op)
+            theta = self.get_theta(i, n)
+            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
+            E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+        return np.array(E)
+
+    def _to_valid_index(self, i):
+        """make sure `i` is a valid index (depending on `self.bc`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
+
     def _parse_form(self, form):
         """parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
         if isinstance(form, tuple):
@@ -585,95 +672,6 @@ class MPS(object):
         B = self._scale_axis_B(B, self.get_SL(i), new_L - old_L, 'vL', cutoff)
         B = self._scale_axis_B(B, self.get_SR(i), new_R - old_R, 'vR', cutoff)
         return B
-
-    def expectation_value(self,
-                          Op,
-                          labels,
-                          sites=None, ):
-        """Expectation value for an n-site operator at ``sites`` (which denote
-        the left-most sites involved in each expectation value).
-
-        Labels must be provided, and they need to comply with the general
-        conventions for physical leg labelling, i.e ['p0','p0*','p1','p1*']
-        for a 2-site operator. Below an example:
-
-        A 2-site operator should have 4 legs, O_{p0 p1, p0* p1*}, and acts
-        on two site states as
-
-        (O.th)_{p0 p1} = O_{p0 p1, p0* p1*} th_{p0* p1*}
-
-        where indices p0/p0* refer to the left site, p1/p1* to the right,
-        and similarly for larger n.
-
-        (Note: I think it is a good idea to force the use of labels, it really
-        makes people aware of what they are doing and it leaves not room for
-        error.)
-
-
-        If sites is ``None``, sets sites = range(L), clipped appropriately
-        for finite bc.
-
-        If a single operator is provided, a list is returned of its
-        evaluated on each site.
-
-        If a list of operators is provided, the chosen operators vary
-        cyclically through the list across the unit cell.
-
-        One site example:
-
-        >>>    psi.site_expectation_value(Sz)
-        -->  [Sz0, Sz1, ... Sz(l-1)]
-
-        >>>    psi.site_expectation_value([Sz, Sx])
-        -->  [Sz0, Sx1, Sz2, . . . ]
-
-        >>>    psi.site_expectation_value(Sz, sites = [0, 2, 3])
-        --> [Sz0, Sz2, Sz3, . . . ]
-
-
-        Parameters
-        ----------
-        i :
-            Operator or list of operators
-        sites : list
-            List of ``sites``. Expectation values evaluated there. If ``None``
-            (default), then entire chain is taken.
-        labels : list
-            List of labels that determine the physical legs of the operator.
-            Needs to be of form 'p0' and 'p0*'.
-
-        Returns
-        -------
-        list : List of floats that are the expectation values evaluated at the
-            chosen sites.
-        """
-        if type(Op) != list:
-            Op = [Op]
-
-        op_size = int(Op[0].rank / 2)
-        th_labels = tuple(['p' + str(e) for e in range(op_size)] + ['vL', 'vR'])
-        op_labels = ['p' + str(e) + '*' for e in range(op_size)]
-
-        Lop = len(Op)
-        L = self.L
-
-        if sites is None:
-            if self.finite:
-                sites = range(L - (op_size - 1))
-            else:
-                sites = range(L)
-
-        E = []
-
-        for i2 in sites:
-            o = Op[i2 % Lop].copy()  #TODO: Should we define a get() function?
-            th = self.get_theta(i2, op_size)
-            #TODO: should we check provided labels for validity?
-            o.set_leg_labels(labels)
-            C = npc.tensordot(o, th, axes=[op_labels, th_labels[:-2]])
-            E.append(npc.inner(th, C, axes=[th_labels, th_labels], do_conj=True))
-
-        return np.array(E)
 
     def _scale_axis_B(self, B, S, form_diff, axis_B, cutoff):
         """Scale an axis of B with S to bring it in desired form.

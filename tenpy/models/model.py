@@ -383,7 +383,8 @@ class NearestNeighborModel(object):
         TEBD parameters for which `U_bond` was calculated.
 
     .. todo ::
-        implement
+        Make a TEBD algorithm class, which should store U_bond internally.
+        Still, this class might store the bond_eig_vals and bond_eig_vecs...
     """
 
     def __init__(self, lat, H_bond):
@@ -410,21 +411,14 @@ class NearestNeighborModel(object):
         self.bond_eig_vecs = []
         for h in self.H_bond:
             #TODO: Check if hermitian?!
-            if h == None:
+            if h is None:
                 w = v = None
             else:
                 H2 = h.combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1])
                 w, v = npc.eigh(H2)
             self.bond_eig_vals.append(w)
             self.bond_eig_vecs.append(v)
-
-            # check if the diagonalisation worked, as in TenPy
-            if h != None:
-                Hnp = H2.to_ndarray()
-                vnp = v.to_ndarray()
-                Hp = np.dot(np.dot(vnp, np.diag(w)), np.conj(vnp.T))
-                if np.allclose(Hnp, Hp) != True:
-                    raise ValueError("Diagonalisation of bond did not work!")
+        # done
 
     def calc_U(self, param,type_evo = None):
         #TODO: Old TenPy has E_offset
@@ -547,6 +541,26 @@ class NearestNeighborModel(object):
                     self.U_bond[3][i_bond] = U.split_legs()
         else:
             raise NotImplementedError('Only 4th order Trotter has been implemented')
+
+    def bond_energies(self, psi):
+        """Calculate bond energies <psi|H_bond|psi>.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS for which the bond energies should be calculated.
+
+        Returns
+        -------
+        E_bond : 1D ndarray
+            List of bond energies: for finite bc, ``E_Bond[i]`` is the energy of bond ``i, i+1``.
+            (i.e. we omit bond 0 between sites L-1 and 0);
+            for infinite bc ``E_bond[i]`` is the energy of bond ``i-1, i``.
+        """
+        if self.lat.bc_MPS == 'infinite':
+            return psi.expectation_value(self.H_bond, axes=(['pL', 'pR'], ['pL*', 'pR*']))
+        # else
+        return psi.expectation_value(self.H_bond[1:], axes=(['pL', 'pR'], ['pL*', 'pR*']))
 
 
 class MPOModel(object):
