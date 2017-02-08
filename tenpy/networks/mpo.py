@@ -41,6 +41,7 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
+from .mps import MPSEnvironment
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment']
 
@@ -557,20 +558,20 @@ class MPOGraph(object):
             self._grid_legs.append(leg)
 
 
-class MPOEnvironment(object):
-    """Stores partial contractions of :math:`<bra|H|ket>`.
+class MPOEnvironment(MPSEnvironment):
+    """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` bewteen two MPS looks like::
 
-        |     .------>- M[0] ->- M[1] ->- M[2] ->- ...  ->--.
-        |     |         |        |        |                 |
-        |     |         ^        ^        ^                 |
-        |     |         |        |        |                 |
-        |     LP[0] ->- W[0] ->- W[1] ->- W[2] ->- ...  ->- Rp[-1]
-        |     |         |        |        |                 |
-        |     |         ^        ^        ^                 |
-        |     |         |        |        |                 |
-        |     .------>- N[0]*->- N[1]*->- N[2]*->- ...  ->--.
+        |     .------>-M[0]-->-M[1]-->-M[2]-->- ...  ->--.
+        |     |        |       |       |                 |
+        |     |        ^       ^       ^                 |
+        |     |        |       |       |                 |
+        |     LP[0] ->-W[0]-->-W[1]-->-W[2]-->- ...  ->- Rp[-1]
+        |     |        |       |       |                 |
+        |     |        ^       ^       ^                 |
+        |     |        |       |       |                 |
+        |     .------>-N[0]*->-N[1]*->-N[2]*->- ...  ->--.
 
     We use the following label convention (where arrows indicate `qconj`)::
 
@@ -582,13 +583,13 @@ class MPOEnvironment(object):
 
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.
-    For DMRG (i.e. ``bc='finite','segment'``), the very left and right part ``LP[0]`` and
+    For ``bc='finite','segment'``, the very left and right part ``LP[0]`` and
     ``RP[-1]`` are trivial and don't change in the DMRG algorithm,
-    but for iDMRG (i.e. ``bc='infinite'``) they are also updated
+    but for iDMRG (``bc='infinite'``) they are also updated
     (by inserting another unit cell to the left/right).
 
     The MPS `bra` and `ket` have to be in canonical form.
-    All the environments are constructed without the 'lambda' on the open bond.
+    All the environments are constructed without the singular values on the open bond.
     In other words, we contract left-canonical `A` to the left parts `LP`
     and right-canonical `B` to the right parts `RP`.
 
@@ -614,30 +615,8 @@ class MPOEnvironment(object):
 
     Attributes
     ----------
-    L : int
-        Number of physical sites. For iMPS the len of the MPS unit cell.
-    dtype : type | string
-        The data type of the Array entries.
-    bra, ket: :class:`~tenpy.networks.mps.MPS`
-        The two MPS for the contraction.
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
-    _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
-        Left parts of the environment, len `L`.
-        ``LP[i]`` contains the contraction strictly left of site `i`
-        (or ``None``, if we don't have it calculated).
-    _RP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
-        Right parts of the environment, len `L`.
-        ``RP[i]`` contains the contraction strictly right of site `i`
-        (or ``None``, if we don't have it calculated).
-    _LP_age : list of int|``None``
-        Used for book-keeping, how large the DMRG system grew:
-        ``_LP_age[i]`` stores the number of physical sites invovled into the contraction
-        network which yields ``self._LP[i]``.
-    _RP_age : list of int|``None``
-        Used for book-keeping, how large the DMRG system grew:
-        ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
-        network which yields ``self._RP[i]``.
     """
 
     def __init__(self, bra, H, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
@@ -700,22 +679,10 @@ class MPOEnvironment(object):
         -------
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+            with labels ``'vR*', 'vR'`` for `bra`, `ket`.
         """
-        # find nearest available LP to the left.
-        for i0 in range(i, i - self.L, -1):
-            LP = self._LP[self._to_valid_index(i0)]
-            if LP is not None:
-                break
-            # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
-        else:  # no break called
-            raise ValueError("No left part in the system???")
-        age_i0 = self.get_LP_age(i0)
-        for j in range(i0, i):
-            LP = self._contract_LP(j, LP)
-            if store:
-                self.set_LP(j + 1, LP, age=age_i0 + j - i0 + 1)
-        return LP
+        # actually same as MPSEnvironment, just updated the labels in the doc string.
+        return super(MPOEnvironment, self).get_LP(i, store=True)
 
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
@@ -733,50 +700,8 @@ class MPOEnvironment(object):
             Contraction of everything left of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
         """
-        # find nearest available RP to the right.
-        for i0 in range(i, i + self.L):
-            RP = self._RP[self._to_valid_index(i0)]
-            if RP is not None:
-                break
-            # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
-        age_i0 = self.get_RP_age(i0)
-        for j in range(i0, i, -1):
-            RP = self._contract_RP(j, RP)
-            if store:
-                self.set_RP(j - 1, RP, age=age_i0 + i0 - j + 1)
-        return RP
-
-    def get_LP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
-        return self._LP_age[self._to_valid_index(i)]
-
-    def get_RP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
-        return self._RP_age[self._to_valid_index(i)]
-
-    def set_LP(self, i, LP, age):
-        """Store part to the left of site `i`."""
-        i = self._to_valid_index(i)
-        self._LP[i] = LP
-        self._LP_age[i] = age
-
-    def set_RP(self, i, RP, age):
-        """Store part to the right of site 1i1."""
-        i = self._to_valid_index(i)
-        self._RP[i] = RP
-        self._RP_age[i] = age
-
-    def del_LP(self, i):
-        """Delete stored part strictly to the left of site `i`."""
-        i = self._to_valid_index(i)
-        self._LP[i] = None
-        self._LP_age[i] = None
-
-    def del_RP(self, i):
-        """Delete storde part scrictly to the right of site `i`."""
-        i = self._to_valid_index(i)
-        self._RP[i] = None
-        self._RP_age[i] = None
+        # actually same as MPSEnvironment, just updated the labels in the doc string.
+        return super(MPOEnvironment, self).get_RP(i, store=True)
 
     def full_contraction(self, i0):
         """Calculate the energy by a full contraction of the network.
@@ -790,11 +715,12 @@ class MPOEnvironment(object):
         i0 : int
             Site index.
         """
+        # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
         if self.ket.finite and i0 + 1 == self.L:
             # special case to handle `_to_valid_index` correctly:
             # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
             LP = self.get_LP(i0, store=False)
-            LP = self._contract_LP(self, i0, LP)
+            LP = self._contract_LP(i0, LP)
         else:
             LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
@@ -808,6 +734,7 @@ class MPOEnvironment(object):
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
+        # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
         LP = npc.tensordot(
@@ -817,13 +744,10 @@ class MPOEnvironment(object):
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
+        # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
         RP = npc.tensordot(
             self.bra.get_B(
                 i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
-        return RP  # labels ['vL', 'wL', 'vL*']
-
-    def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `ket.bc`)."""
-        return self.ket._to_valid_index(i)
+        return RP  # labels 'vL', 'wL', 'vL*'

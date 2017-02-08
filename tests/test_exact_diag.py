@@ -5,6 +5,7 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms.exact_diag import ExactDiag
+from tenpy.linalg.lanczos import lanczos
 
 
 def test_ED():
@@ -28,4 +29,12 @@ def test_ED():
     full_psi2[ED2._mask] = psi2
     ov = npc.inner(psi, full_psi2, do_conj=True)
     print "overlab <psi | psi2> = 1. -", 1. - ov
-    assert (abs(abs(ov) - 1) < 1.e-15)
+    assert (abs(abs(ov) - 1.) < 1.e-15)
+    # starting from a random guess, check if we can also do lanczos.
+    np.random.seed(123455)
+    psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
+    E0, psi3, N = lanczos(ED2, psi3)
+    print "Lanczos E0 =", E0
+    ov = npc.inner(psi3, psi2, do_conj=True)
+    print "overlab <psi2 | psi3> = 1. -", 1. - ov
+    assert (abs(abs(ov) - 1.) < 1.e-15)

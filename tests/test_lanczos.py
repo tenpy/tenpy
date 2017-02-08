@@ -51,8 +51,15 @@ def test_lanczos(n=30, k=5, tol=5.e-15):
     assert (abs(1. - abs(ov)) < tol)
 
     # now repeat, but keep orthogonal to original ground state
-    # -> should give second eigenvector psi1
-    E1_flat, psi1_flat = E_flat[1], psi_flat[:, 1]
+    # -> should give second eigenvector psi1 in the same charge sector
+    for i in range(1, len(E_flat)):
+        E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
+        qtotal = npc.detect_qtotal(psi1_flat, psi0.legs)
+        if np.all(qtotal == psi0.qtotal):
+            break  # found psi1 in same charge sector
+    else:
+        print "warning: test didn't find a second eigenvector in the same charge sector!"
+        return  # just ignore the rest....
     E1, psi1, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1}, orthogonal_to=[psi0])
     print "E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat)
     print "|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat)
