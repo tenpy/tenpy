@@ -24,6 +24,10 @@ def test_mps():
         psi.test_sanity()
         print repr(psi)
         print str(psi)
+        psi2 = psi.copy()
+        ov, env = psi.overlap(psi2)
+        assert(abs(ov - 1.) < 1.e-15)
+        psi.expectation_value('Sz')
 
 
 def test_MPSEnvironment():
@@ -40,3 +44,8 @@ def test_MPSEnvironment():
         ov = env.full_contraction(i)  # should be one
         print "total contraction on site", i, ": ov = 1. - ", ov - 1.
         assert(abs(abs(ov)-1.) < 1.e-14)
+    env.expectation_value('Sz')
+
+if __name__ == "__main__":
+    test_mps()
+    test_MPSEnvironment()

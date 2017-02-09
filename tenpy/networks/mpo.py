@@ -640,7 +640,7 @@ class MPOEnvironment(MPSEnvironment):
             leg_ket.test_contractible(leg_bra)
             firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             # should work for both finite and segment bc
-            firstLP[:, H.IdL[0], :] = npc.diag(1., leg_ket, dtype=self.dtype)
+            firstLP[:, H.IdL[0], :] = npc.diag(1., leg_bra, dtype=self.dtype)
             firstLP.set_leg_labels(['vR*', 'wR', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
@@ -650,7 +650,7 @@ class MPOEnvironment(MPSEnvironment):
             leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
             lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
-            lastRP[:, H.IdR[L], :] = npc.diag(1., leg_ket, dtype=self.dtype)
+            lastRP[:, H.IdR[L], :] = npc.diag(1., leg_bra, dtype=self.dtype)
             lastRP.set_leg_labels(['vL*', 'wL', 'vL'])
         self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()

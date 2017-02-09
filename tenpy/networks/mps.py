@@ -75,7 +75,6 @@ as they return the `B` in the desired form (which can be chosed as an argument).
     - canonicalize()
     - much much more ....
     - proper documentation
-    - copy
 
 References
 ----------
@@ -547,7 +546,7 @@ class MPS(object):
             The environment (storing the LP and RP) used to calculate the overlap.
         """
         if not self.finite:
-            # requires finding the transfer matrix and diagonalizing it....
+            # requires MPSTransferMatrix for finding dominant left/right parts
             raise NotImplementedError("TODO")
         env = MPSEnvironment(self, other)
         return env.full_contraction(0), env
@@ -614,32 +613,14 @@ class MPS(object):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
 
         """
-        ops = to_iterable(ops)
-        if isinstance(ops, npc.Array):  # an npc.Array is iterable...
-            ops = [ops]  # ... so we need to do this manually
-        if type(ops[0]) == str:
-            n = 1
-        else:
-            n = ops[0].rank // 2  # same as int(ops[0].rank/2)
-        L_ops = len(ops)
-        L = self.L
-        if sites is None:
-            if self.finite:
-                sites = range(L - (n - 1))
-            else:
-                sites = range(L)
-
-        th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
-        if axes is None:
-            axes = (th_labels[2:], [lbl + '*' for lbl in th_labels[2:]])
-        axes_p, axes_pstar = axes
+        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(
+            ops, sites, axes)
         if len(axes_p) != n or len(axes_pstar) != n:
             raise ValueError("Len of axes does not match operator n=" + len(n))
         vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
-
         E = []
         for i in sites:
-            op = ops[i % L_ops]
+            op = ops[i % len(ops)]
             if type(op) == str:
                 op = self.sites[i].get_op(op)
             theta = self.get_theta(i, n)
@@ -733,6 +714,32 @@ class MPS(object):
                 S = S**form_diff
             return B.scale_axis(S, axis_B)
 
+    def _expectation_value_args(self, ops, sites, axes):
+        """parse the arguments of self.expectation_value()"""
+        ops = to_iterable(ops)
+        if isinstance(ops, npc.Array):  # an npc.Array is iterable...
+            ops = [ops]  # ... so we need to do this manually
+        if type(ops[0]) == str:
+            n = 1
+        else:
+            n = ops[0].rank // 2  # same as int(ops[0].rank/2)
+        L = self.L
+        if sites is None:
+            if self.finite:
+                sites = range(L - (n - 1))
+            else:
+                sites = range(L)
+        th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
+        if axes is None:
+            if n == 1:
+                axes = (['p'], ['p*'])
+            else:
+                axes = (th_labels[2:], [lbl + '*' for lbl in th_labels[2:]])
+        axes_p, axes_pstar = axes
+        if len(axes_p) != n or len(axes_pstar) != n:
+            raise ValueError("Len of axes does not match operator n=" + len(n))
+        return ops, sites, n, th_labels, axes
+
 
 class MPSEnvironment(object):
     """Stores partial contractions of :math:`<bra|Op|ket>` for local operators `Op`.
@@ -813,7 +820,6 @@ class MPSEnvironment(object):
         network which yields ``self._RP[i]``.
 
     .. todo :
-        Expectation values, with same call structure as psi.expectation_values.
         Functionality to find the dominant LP/RP in the TD limit -> requires MPSTransferMatrix
     """
 
@@ -835,7 +841,7 @@ class MPSEnvironment(object):
             leg_ket = ket.get_B(0).get_leg('vL').conj()
             leg_ket.test_contractible(leg_bra)
             # should work for both finite and segment bc
-            firstLP = npc.diag(1., leg_ket, dtype=self.dtype)
+            firstLP = npc.diag(1., leg_bra, dtype=self.dtype)
             firstLP.set_leg_labels(['vR*', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
@@ -843,7 +849,7 @@ class MPSEnvironment(object):
             leg_bra = bra.get_B(L - 1).get_leg('vR')
             leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
-            lastRP = npc.diag(1., leg_ket, dtype=self.dtype)
+            lastRP = npc.diag(1., leg_bra, dtype=self.dtype)  # (leg_bra, leg_ket)
             lastRP.set_leg_labels(['vL*', 'vL'])
         self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()
@@ -976,6 +982,88 @@ class MPSEnvironment(object):
         LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
         RP = self.get_RP(i0, store=False)
         return npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+
+    def expectation_value(self, ops, sites=None, axes=None):
+        """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
+
+        Calculates n-site expectation values of operators sandwiched between bra and ket.
+        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+
+            |          .--S--B[i]--B[i+1]--.
+            |          |     |     |       |
+            |          |     |-----|       |
+            |          LP[i] | op  |       RP[i+1]
+            |          |     |-----|       |
+            |          |     |     |       |
+            |          .--S--B*[i]-B*[i+1]-.
+
+        The call structure is the same as for :meth:`MPS.expectation_value`.
+
+        Parameters
+        ----------
+        ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            The operators, for wich the expectation value should be taken,
+            All operators should all have the same number of legs (namely `2 n`).
+            If less than ``len(sites)`` operators are given, we repeat them periodically.
+            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
+            `self.sites`.
+        sites : list
+            List of site indices. ``sites``. Expectation values are evaluated there.
+            If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
+        axes : None | (list of str, list of str)
+            Two lists of each `n` leg labels giving the physical legs of the operator used for
+            contaction. The first `n` legs are contracted with conjugated B`s,
+            the second `n` legs with the non-conjugated `B`.
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
+            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
+
+        Returns
+        -------
+        exp_vals : 1D ndarray
+            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
+            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
+
+        Examples
+        --------
+        One site examples (`n` = 1):
+        >>> psi.expectation_value('Sz')
+        [Sz0, Sz1, ..., Sz{L-1}]
+        >>> psi.expectation_value(['Sz', 'Sx'])
+        [Sz0, Sx1, Sz2, Sx3, ... ]
+        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
+        [Sz0, Sz3, Sz4]
+
+        Two site example (`n` = 2), assuming homogeneous `sites`:
+        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+        >>> psi.expectation_value(SzSx)
+        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
+
+        Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+        >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                                   psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+                         for i in range(0, psi.L-1, 2)]
+        >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
+        [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
+
+        """
+        ops, sites, n, th_labels, (axes_p, axes_pstar) = self.bra._expectation_value_args(
+            ops, sites, axes)
+        vLvR_axes_p = ('vR*', 'vL*') + tuple(axes_p)
+        E = []
+        for i in sites:
+            LP = self.get_LP(i, store=True)
+            RP = self.get_RP(i, store=True)
+            op = ops[i % len(ops)]
+            if type(op) == str:
+                op = self.ket.sites[i].get_op(op)
+            C = self.bra.get_theta(i, n)  # vL, vR, p0, p1, ...
+            C = npc.tensordot(op, C, axes=[axes_pstar, th_labels[2:]])  # axes_p + (vL, vR)
+            C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
+            C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
+            theta_bra = self.bra.get_theta(i, n)  # th_labels == (vL, vR, p0, p1, ...
+            E.append(npc.inner(theta_bra, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+        return np.array(E)
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
