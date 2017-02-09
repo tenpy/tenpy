@@ -85,6 +85,7 @@ References
 from __future__ import division
 import numpy as np
 import itertools
+import warnings
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_iterable
@@ -529,6 +530,61 @@ class MPS(object):
         for i, form in enumerate(new_forms):
             new_B = self.get_B(i, form=form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=form)
+
+    def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
+        r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
+
+        Consider a cut of the sytem in to :math:`A = \{ j: j < i \}` and :math:`B = \{ j : j > i}`.
+        This defines the von-Neumann entanglement entropy as
+        :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
+        The generalization for ``n != 1, n>0` are the Renyi entropies:
+        :math:`S(A, n) = \frac{1}{1-n} \log(tr(\rho_A^2)) = S(B, n=1)`
+
+        This function calculates the entropy for a cut at different bonds `i`, for which the
+        the eigenvalues of the reduced density matrix :math:`\rho_A` and :math:`\rho_B` is given
+        by the squared schmidt values `S` of the bond.
+
+        Parameters
+        ----------
+        n : int/float
+            Selects which entropy to calculate;
+            `n=1` (default) is the ususal von-Neumann entanglement entropy.
+        bonds : ``None`` | (iterable of) int
+            Selects the bonds at which the entropy should be calculated.
+            ``None`` defaults to ``range(0, L+1)[self.nontrivial_bonds]``.
+        for_matrix_S : bool
+            Switch calculate the entanglement entropy even if the `_S` are matrices.
+            Since :math:`O(\chi^3)` is expensive compared to the ususal :math:`O(\chi)`,
+            we raise an error by default.
+
+        Returns
+        -------
+        entropies : 1D ndarray
+            Entanglement entropies for half-cuts.
+            `entropies[j]` contains the entropy for a cut at bond ``bonds[j]``
+            (i.e. left to site ``bonds[j]``).
+        """
+        if bonds is None:
+            nt = self.nontrivial_bonds
+            bonds = range(nt.start, nt.stop)
+        res = []
+        for ib in bonds:
+            s = self._S[ib]
+            if len(s.shape) > 1:
+                if for_matrix_S:
+                    # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
+                    s = npc.eigvals(npc.tensordot(s.conj(), s, axes=[0, 0]))
+                    s = np.sqrt(s[s > 1.e-40])
+                else:
+                    raise ValueError("entropy with non-diagonal schmidt values")
+            s = s[s > 1.e-20]  # just for stability reasons / to avoid NaN in log
+            if n == 1:
+                res.append(-np.inner(np.log(s), s))
+            elif n == np.inf:
+                res.append(-2.*np.log(np.max(s)))
+            else:   # general n != 1, inf
+                res.append(np.log(np.sum(s**(2*n)))/(1.-n))
+        return np.array(res)
 
     def overlap(self, other):
         """Compute overlap :math:`<self|other>`.

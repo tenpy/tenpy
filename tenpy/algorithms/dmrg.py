@@ -232,7 +232,7 @@ def run(psi, model, DMRG_params):
         try:
             S = np.average(psi.entanglement_entropy())
             Delta_S = (S - S_old) / N_sweeps_check
-        except:
+        except ValueError:
             S = np.nan
             Delta_S = 0.
         S_old = S
