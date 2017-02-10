@@ -225,8 +225,8 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
 
     Perform a singular value decomposition (SVD) with :func:`~tenpy.linalg.np_conserved.svd`
     and truncates with :func:`truncate`.
-    The result is an approximation ``theta ~=~ tensordot(U.scale_axis(S, 1), VH, axes=1)``
-    (up to the renormalization, if `theta` was not normalized).
+    The result is an approximation
+    ``theta ~= tensordot(U.scale_axis(S*renormalization, 1), VH, axes=1)``
 
     Parameters
     ----------
@@ -254,13 +254,16 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         Shape ``(N, N)`` or ``(K, N)`` depending on `full_matrices`.
     err : :class:`TruncationError`
         The truncation error introduced.
+    renormalization : float
+        Factor, by which S was renormalized.
     """
     U, S, VH = npc.svd(theta,
                        full_matrices=False,
                        compute_uv=True,
                        qtotal_LR=qtotal_LR,
                        inner_labels=inner_labels)
-    S = S / np.linalg.norm(S)
+    renormalization = np.linalg.norm(S)
+    S = S / renormalization
     piv, new_norm, err = truncate(S, trunc_par)
     new_len_S = np.sum(piv, dtype=np.int_)
     if new_len_S * 100 < len(S):
@@ -273,9 +276,10 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         msg += " |V V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
         warnings.warn(msg)
     S = S[piv] / new_norm
+    renormalization *= new_norm
     U.iproject(piv, axes=1)  # U = U[:, piv]
     VH.iproject(piv, axes=0)  # VH = VH[piv, :]
-    return U, S, VH, err
+    return U, S, VH, err, renormalization
 
 
 def _combine_constraints(good1, good2, warn):

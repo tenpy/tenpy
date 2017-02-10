@@ -33,16 +33,17 @@ def to_array(a, shape=(None, )):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
-    Only scalars are broadcasted to higher dimensions, wh
-    For a non-scalar, we require the dimension to match.
-    Note that this is generalization of numpys 'broadcast'.
+    Only scalars are broadcasted to higher dimensions,
+    for a non-scalar, we require the number of dimension to match.
+    If the shape does not match, we repeat periodically, e.g. we tile ``(3, 4) -> (6, 16)``,
+    but ``(4, 4) -> (6, 16)`` will raise an error.
 
     Parameters
     ----------
     a : scalar | array_like
         The input to be converted to an array. A scalar is reshaped to the desired dimension.
     shape : tuple of {None | int}
-        the desired shape of the array. An entry ``None`` indicates arbitrary len >=1.
+        The desired shape of the array. An entry ``None`` indicates arbitrary len >=1.
         For int entries, tile the array periodically to fit the len.
 
     Returns

@@ -3,12 +3,13 @@
 The `test_examples` (in combination with `nose`)
 runs *all* the 'examples/*.py' (except files listed in `exclude`).
 However, the files are only imported, so you can protect example code from running with
-``if __name__ == "__main__": ... `` clauses, if you want to demonstrate a long running code.
+``if __name__ == "__main__": ... `` clauses, if you want to demonstrate an interactive code.
 """
 
 import sys
 import os
 import importlib
+from nose.plugins.attrib import attr
 
 # get directory where the examples can be found
 ex_dir = os.path.join(os.path.dirname(__file__), '../examples')
@@ -40,6 +41,8 @@ def run_example(filename='npc_intro'):
     return mod
 
 
+@attr('example')  # allow to skip the examples with ``$> nosetest -a '!example'``
+@attr('slow')
 def test_examples():
     """test generator to run all *.py files in ``ex_dir``.
 

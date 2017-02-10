@@ -80,25 +80,39 @@ def update_bond(psi, i, U_bond, truncation_par):
         The error of the represented state which is introduced by the truncation
         during this update step.
     """
-    i0, i1 = i-1, i
+    i0, i1 = i - 1, i
     # Construct the theta matrix
-    theta = psi.get_theta(i0, n=2).ireplace_label('p0', 'pL').ireplace_label('p1', 'pR')
-    theta = npc.tensordot(U_bond, theta, axes=(['pL*', 'pR*'], ['pL', 'pR']))
+    theta = psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
+    theta = npc.tensordot(U_bond, theta, axes=(['pL*', 'pR*'], ['p0', 'p1']))
     theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
 
     # Perform the SVD and truncate the wavefunction
-    U, S, V, truncErr = svd_theta(theta, truncation_par, inner_labels=['vR', 'vL'])
+    U, S, V, truncErr, renormalize = svd_theta(theta, truncation_par, inner_labels=['vR', 'vL'])
 
     # Split tensor and update matrices
-    psi.set_SR(i0, S)
-    U = U.iscale_axis(S, 'vR')
-    B_L = U.split_legs(0).iscale_axis(psi.get_SL(i0)** -1, 'vL').ireplace_label('pL', 'p')
-    # TODO: using the inverse S is numerically bad.
-    # instead use B = BL.BR.V^dagger (works since V^dagger V = Identity)
     B_R = V.split_legs(1).ireplace_label('pR', 'p')
-    psi.set_B(i0, B_L, form ='B')
+    #  U = U.iscale_axis(S, 'vR')
+    #  B_L = U.split_legs(0).iscale_axis(psi.get_SL(i0)** -1, 'vL').ireplace_label('pL', 'p')
+    # In general, we want to do the following:
+    #     U = U.iscale_axis(S, 'vR')
+    #     B_L = U.split_legs(0).iscale_axis(psi.get_SL(i0)** -1, 'vL').ireplace_label('pL', 'p')
+    # i.e. with SL = psi.get_SL(i0), we have   B_L = SL**(-1) U S
+    # However, the inverse of SL is problematic, as it might contain very small singular values.
+    # instead, we calculate C == SL**-1 theta == SL**-1 U S V,
+    # such that we obtain B_L = SL**-1 U S = SL**-1 U S V V^dagger = C V^dagger
+    C = psi.get_theta(i0, n=2, formL=0.)  # same as theta, but without the `S` on the very left
+    # (Note: this requires no inverse if the MPS is initiall in 'B' canonical form)
+    C = npc.tensordot(U_bond, C, axes=(['pL*', 'pR*'], ['p0', 'p1']))  # apply U as for theta
+    B_L = npc.tensordot(
+        C.combine_legs(
+            ('vR', 'pR'), pipes=theta.legs[1]), V.conj(), axes=['(vR.pR)', '(vR*.pR*)'])
+    B_L.ireplace_labels(['vL*', 'pL'], ['vR', 'p'])
+    B_L /= renormalize  # re-normalize to <psi|psi> = 1
+    psi.set_SR(i0, S)
+    psi.set_B(i0, B_L, form='B')
     psi.set_B(i1, B_R, form='B')
     return truncErr
+
 
 def update_step(psi, U, p, truncation_par):
     """Updates all even OR odd bonds in unit cell.
@@ -176,7 +190,8 @@ def update(psi, model, N_steps, truncation_par):
     Returns
     -------
     truncErr : :class:`TruncationError`
-        The error of the represented state which is introduced due to the truncation during this sequence of update steps.
+        The error of the represented state which is introduced due to the truncation during
+        this sequence of update steps.
     """
     truncErr = TruncationError()
     # TODO: for p, U_list in enumerate(model.U_bond):
@@ -258,33 +273,30 @@ def ground_state(psi, model, TEBD_par):
 
     """
     delta_tau_list = get_parameter(TEBD_par, 'delta_tau_list',
-                                   [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7,0.],
-                                   'imag. time GS')
+                                   [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7], 'imag. time GS')
     max_error_E = get_parameter(TEBD_par, 'max_error_E', 1.e-12, 'imag. time GS')
 
     N_steps = get_parameter(TEBD_par, 'N_steps', 10, 'imag. time GS')
 
-    #Take away for now and directly pass TEBD_par
+    # Take away for now and directly pass TEBD_par
     # truncation_par = {'chi_max': TEBD_par['chi_max'],
     #                   'chi_min': TEBD_par['chi_min'],
     #                   'symmetry_tol': TEBD_par['symmetry_tol'],
     #                   'svd_min': TEBD_par['svd_min'],
     #                   'trunc_cut': TEBD_par['trunc_cut']}
-    #TODO: N_STEPS, verbose etc.
-    H_bond = copy.deepcopy(model.H_bond)  # TODO: should work without copies!!!!
-    H_bond.append(H_bond.pop(0))  #None entry should not be picked if finite
+    # TODO: N_STEPS, verbose etc.
     for delta_t in delta_tau_list:
         model.calc_U(TEBD_par,type_evo = 'IMAG')
         DeltaE = 2 * TEBD_par['max_error_E']
         DeltaS = 2 * TEBD_par['max_error_E']
 
-        Eold = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
+        Eold = np.average(model.bond_energies(psi))
         #TODO: what if different leg order?
         # Sold= np.average(psi.entanglement_entropy())
         step = 1
         while (DeltaE > max_error_E):
             update(psi, model, N_steps, TEBD_par)
-            E = np.average(psi.expectation_value(H_bond, labels=['p0', 'p0*', 'p1', 'p1*'])).real
+            E = np.average(model.bond_energies(psi))
             # S = np.average(psi.entanglement_entropy())
             DeltaE = np.abs(Eold - E)
             # DeltaS=np.abs(Sold-S)

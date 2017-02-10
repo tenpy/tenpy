@@ -7,6 +7,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms import dmrg
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
+from nose.plugins.attrib import attr
 
 
 def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
@@ -37,7 +38,7 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
 
     # TODO: compare with known ground state (energy) / ED !
 
-
+@attr('slow')
 def test_dmrg():
     for bc_MPS, engine, mixer in it.product(['finite', 'infinite'],
                                             ['EngineCombine', 'EngineFracture'], [None, 'Mixer']):

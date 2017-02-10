@@ -232,7 +232,7 @@ def run(psi, model, DMRG_params):
         try:
             S = np.average(psi.entanglement_entropy())
             Delta_S = (S - S_old) / N_sweeps_check
-        except:
+        except ValueError:
             S = np.nan
             Delta_S = 0.
         S_old = S
@@ -625,8 +625,9 @@ class Engine(object):
         qtotal_i0 = self.env.ket.get_B(i0, form=None).qtotal
         if self.mixer is None:
             # simple case: real svd, devined elsewhere.
-            return svd_theta(
+            U, S, VH, err, _ = svd_theta(
                 theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+            return U, S, VH, err
         rho_L = self.mix_rho_L(theta, i0, update_LP)
         # don't mix left parts, when we're going to the right
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order

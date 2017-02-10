@@ -69,6 +69,8 @@ However, to keep consistency, we ask you to comply with the following guidelines
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
+  Long-running tests are marked with the attribute `slow`, so you can also run
+  ``nosetest -a '!slow'``
 - Reversely, if you write new functions, please also include suitable tests!
 - A To-Do list can be found in :doc:`doc/todo.rst <todo>`. It also contains a bug list.
   Sphinx also extract blocks following ``.. todo ::`` from doc-strings, 
