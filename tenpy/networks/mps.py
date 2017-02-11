@@ -442,6 +442,29 @@ class MPS(object):
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
+    def get_op(self, op_list, i):
+        """Given a list of operators, select the one corresponding to site `i`.
+
+        Parameters
+        ----------
+        op_list : (list of) {str | npc.array}
+            List of operators from which we choose. We assume that ``op_list[j]`` acts on site
+            ``j``. If the length is shorter than `L`, we repeat it periodically.
+            Strings are translated using :meth:`~tenpy.networks.site.Site.get_op` of site `i`.
+        i : int
+            Index of the site on which the operator acts.
+
+        Returns
+        -------
+        op : npc.array
+            One of the entries in `op_list`, not copied.
+        """
+        i = self._to_valid_index(i)
+        op = op_list[i % len(op_list)]
+        if (type(op) == str):
+            op = self.sites[i].get_op(op)
+        return op
+
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
@@ -611,7 +634,7 @@ class MPS(object):
         """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For example the contraction for a two-site (`n`=2) operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -629,12 +652,12 @@ class MPS(object):
             If less than ``len(sites)`` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
-        sites : list
+        sites : None | list of int
             List of site indices. ``sites``. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contaction. The first `n` legs are contracted with conjugated B`s,
+            contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
@@ -676,13 +699,128 @@ class MPS(object):
         vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
         E = []
         for i in sites:
-            op = ops[i % len(ops)]
-            if type(op) == str:
-                op = self.sites[i].get_op(op)
+            op = self.get_op(ops, i)
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
             E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
         return np.array(E)
+
+    def correlation_function(self,
+                             ops1,
+                             ops2,
+                             sites1=None,
+                             sites2=None,
+                             opstr=None,
+                             str_on_first=False,
+                             hermitian=False):
+        """Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
+
+        Given the MPS in canonical form, it calculates n-site expectation values.
+        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+
+            |          .--S--B[i]--B[i+1]--...--B[j]---.
+            |          |     |     |            |      |
+            |          |     |     |            op2    |
+            |          |     op1   |            |      |
+            |          |     |     |            |      |
+            |          .--S--B*[i]-B*[i+1]-...--B*[j]--.
+
+        Onsite terms are taken in the order ``<psi | op1 op2 | psi>``.
+
+        If `opstr` is given and ``str_on_first=True``, it calculates::
+
+            |           for i < j                               for i > j
+            |
+            |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
+            |          |     |      |            |      |     |     |      |            |      |
+            |          |     opstr  opstr        op2    |     |     op2    |            |      |
+            |          |     |      |            |      |     |     |      |            |      |
+            |          |     op1    |            |      |     |     opstr  opstr        op1    |
+            |          |     |      |            |      |     |     |      |            |      |
+            |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
+
+        For ``i==j``, no `opstr` is included.
+        For ``str_on_first=False`` (default), the `opstr` on site ``min(i, j)`` is always left out.
+
+        Strings (like ``'Id', 'Sz'``) in the operator lists are translated into single-site
+        operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
+        Each operator should have the two legs ``'p', 'p*'``.
+
+        Parameters
+        ----------
+        ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            First operator of the correlation function (acting after ops2).
+            ``ops1[x]`` acts on site ``sites1[x]``.
+            If less than ``len(sites1)`` operators are given, we repeat them periodically.
+        ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            Second operator of the correlation function (acting before ops1).
+            ``ops2[y]`` acts on site ``sites2[y]``.
+            If less than ``len(sites2)`` operators are given, we repeat them periodically.
+        sites1 : None | int | list of int
+            List of site indices; a single `int` is translated to ``range(0, sites1)``.
+            ``None`` defaults to all sites ``range(0, L)``.
+            Is sorted before use, i.e. the order is ignored.
+        sites2 : None | int | list of int
+            List of site indices; a single `int` is translated to ``range(0, sites2)``.
+            ``None`` defaults to all sites ``range(0, L)``.
+            Is sorted before use, i.e. the order is ignored.
+        opstr : None | (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            Ignored by default (``None``).
+            Operator(s) to be inserted between ``ops1`` and ``ops2``.
+            If given as a list, ``opstr[r]`` is inserted at site `r` (independent of `sites1` and
+            `sites2`).
+        str_on_first : bool
+            Whether the `opstr` is included on the site ``min(i, j)``.
+            Note the order, which is chosen that way to handle fermionic Jordan-Wigner strings
+            correctly. (In other words: choose ``str_on_first=True`` for fermions!)
+        hermitian : bool
+            Optimization flag: if ``sites1 == sites2`` and ``Ops1[i]^\dagger == Ops2[i]``
+            (which is not checked explicitly!), the resulting ``C[x, y]`` will be hermitian.
+            We can use that to avoid calculations, so ``hermitian=True`` will run faster.
+
+        Returns
+        -------
+        C : 2D ndarray
+            The correlation function ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``,
+            where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
+            If opstr is given, it gives (for ``opstr_on_first=True``):
+
+            *) For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
+            *) For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
+            *) For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
+
+            The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
+        """
+        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
+            ops1, ops2, sites1, sites2, opstr)
+        if hermitian and sites1 != sites2:
+            warnings.warn("MPS correlation function can't use the hermitian flag")
+            hermitian = False
+        C = np.empty((len(sites1), len(sites2)), dtype=np.complex)
+        for x, i in enumerate(sites1):
+            # j > i
+            j_gtr = sites2[sites2 > i]
+            if len(j_gtr) > 0:
+                C_gtr = self._corr_up_diag(ops1, ops2, i, j_gtr, opstr, str_on_first, True)
+                C[x, (sites2 > i)] = C_gtr
+                if hermitian:
+                    C[x+1:, x] = np.conj(C_gtr)
+            # j == i
+            j_eq = sites2[sites2 == i]
+            if len(j_eq) > 0:
+                # on-site correlation function
+                op12 = npc.tensordot(self.get_op(ops1, i), self.get_op(ops2, i), axes=['p*', 'p'])
+                C[x, (sites2 == i)] = self.expectation_value(op12, i, [['p'], ['p*']])
+        if not hermitian:
+            #  j < i
+            for y, j in enumerate(sites2):
+                i_gtr = sites1[sites1 > j]
+                if len(i_gtr) > 0:
+                    C[(sites1 > j), y] = self._corr_up_diag(
+                        ops2, ops1, j, i_gtr, opstr, str_on_first, False)
+                    # exchange ops1 and ops2 : they commute on different sites,
+                    # but we apply opstr after op1 (using the last argument = False)
+        return np.real_if_close(C)
 
     def _to_valid_index(self, i):
         """make sure `i` is a valid index (depending on `self.bc`)."""
@@ -772,19 +910,15 @@ class MPS(object):
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
-        ops = to_iterable(ops)
-        if isinstance(ops, npc.Array):  # an npc.Array is iterable...
-            ops = [ops]  # ... so we need to do this manually
-        if type(ops[0]) == str:
-            n = 1
-        else:
-            n = ops[0].rank // 2  # same as int(ops[0].rank/2)
+        ops = npc.to_iterable_arrays(ops)
+        n = self.get_op(ops, 0).rank // 2   # same as int(rank/2)
         L = self.L
         if sites is None:
             if self.finite:
                 sites = range(L - (n - 1))
             else:
                 sites = range(L)
+        sites = to_iterable(sites)
         th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
         if axes is None:
             if n == 1:
@@ -795,6 +929,51 @@ class MPS(object):
         if len(axes_p) != n or len(axes_pstar) != n:
             raise ValueError("Len of axes does not match operator n=" + len(n))
         return ops, sites, n, th_labels, axes
+
+    def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
+        """get default arguments of self.correlation_function()"""
+        if sites1 is None:
+            sites1 = range(0, self.L)
+        elif type(sites1) == int:
+            sites1 = range(0, sites1)
+        if sites2 is None:
+            sites2 = range(0, self.L)
+        elif type(sites2) == int:
+            sites2 = range(0, sites2)
+        ops1 = npc.to_iterable_arrays(ops1)
+        ops2 = npc.to_iterable_arrays(ops2)
+        opstr = npc.to_iterable_arrays(opstr)
+        sites1 = np.sort(sites1)
+        sites2 = np.sort(sites2)
+        return ops1, ops2, sites1, sites2, opstr
+
+    def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
+        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
+        op1 = self.get_op(ops1, i)
+        opstr1 = self.get_op(opstr, i)
+        if opstr1 is not None:
+            axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
+            op1 = npc.tensordot(op1, opstr1, axes=axes)
+        theta = self.get_theta(i, n=1)
+        C = npc.tensordot(op1, theta, axes=['p*', 'p0'])
+        C = npc.tensordot(theta.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vL']])
+        # C has legs 'vR*', 'vR'
+        js = list(j_gtr[::-1])  # stack of j, sorted *descending*
+        res = []
+        for r in range(i+1, js[0]+1):  # js[0] is the maximum
+            B = self.get_B(r, form='B')
+            C = npc.tensordot(C, B, axes=['vR', 'vL'])
+            if r == js[-1]:
+                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
+                Cij = npc.inner(B.conj(), Cij, axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vR']])
+                res.append(Cij)
+                js.pop()
+            if len(js) > 0:
+                op = self.get_op(opstr, r)
+                if op is not None:
+                    C = npc.tensordot(op, C, axes=['p*', 'p'])
+                C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
+        return res
 
 
 class MPSEnvironment(object):
@@ -811,8 +990,8 @@ class MPSEnvironment(object):
         |     |     |             |      |               |
         |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... ->--.
 
-    Of course, as a special case, we can also calculate the overlap `<bra|ket>` by using the
-    special case ``Op = Id``.
+    Of course, we can also calculate the overlap `<bra|ket>` by using the special case ``Op = Id``.
+
     We use the following label convention (where arrows indicate `qconj`)::
 
         |    .-->- vR           vL ->-.
@@ -1053,6 +1232,7 @@ class MPSEnvironment(object):
             |          |     |     |       |
             |          .--S--B*[i]-B*[i+1]-.
 
+        Here, the `B` are taken from `ket`, the `B*` from `bra`.
         The call structure is the same as for :meth:`MPS.expectation_value`.
 
         Parameters
@@ -1068,7 +1248,7 @@ class MPSEnvironment(object):
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contaction. The first `n` legs are contracted with conjugated B`s,
+            contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
@@ -1076,7 +1256,7 @@ class MPSEnvironment(object):
         Returns
         -------
         exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
+            Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
 
         Examples
