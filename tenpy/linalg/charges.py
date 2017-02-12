@@ -137,7 +137,7 @@ class ChargeInfo(object):
         return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
 
     def __eq__(self, other):
-        r"""compare self.mod and self.names for equality, ignoring missin names."""
+        r"""compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
         if not np.all(self.mod == other.mod):
@@ -557,6 +557,20 @@ class LegCharge(object):
         cp._set_block_sizes(np.array(new_block_lens)[keep])
         cp.bunched = self.is_blocked()  # no, it's not `is_bunched`
         return map_qind, block_masks, cp
+
+    def charge_sectors(self):
+        """Return unique rows of self.charges.
+
+        Returns
+        -------
+        charges : 2D array
+            Rows are the rows of self.charges lexsorted and without duplicates.
+        """
+        charges = self.charges.copy()
+        if not self.sorted:
+            charges = charges[np.lexsort(self.charges.T), :]
+        charges = charges[_find_row_differences(charges)[:-1], :]
+        return charges
 
     def __str__(self):
         """return a string of nicely formatted slices & charges"""
