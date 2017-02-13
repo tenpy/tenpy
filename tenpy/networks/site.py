@@ -161,7 +161,7 @@ class Site(object):
         setattr(self, new_name, op)
         delattr(self, old_name)
 
-    def get_state_index(self, label):
+    def state_index(self, label):
         """Return index of a basis state from its label.
 
         Parameters
@@ -180,6 +180,10 @@ class Site(object):
         except:
             raise KeyError("label not found: " + repr(label))
         return res
+
+    def state_indices(self, labels):
+        """Same as :meth:`state_index`, but for multiple labels."""
+        return [self.state_index(lbl) for lbl in labels]
 
     def get_op(self, name):
         """Return operator of given name."""

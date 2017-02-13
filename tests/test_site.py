@@ -19,8 +19,8 @@ def test_site():
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     labels = ['up'] + [None] * 6 + ['down']
     s = site.Site(leg, labels, silly_op=op1)
-    nst.eq_(s.get_state_index('up'), 0)
-    nst.eq_(s.get_state_index('down'), 8 - 1)
+    nst.eq_(s.state_index('up'), 0)
+    nst.eq_(s.state_index('down'), 8 - 1)
     nst.eq_(s.opnames, set(['silly_op', 'Id']))
     assert (s.silly_op is op1)
     s.add_op('op2', op2)

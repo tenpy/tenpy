@@ -579,7 +579,7 @@ class MPOEnvironment(MPSEnvironment):
         |    |                        |
         |    LP->- wR           wL ->-RP
         |    |                        |
-        |    .-->- vR*         vL* ->-.
+        |    .--<- vR*         vL* -<-.
 
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.

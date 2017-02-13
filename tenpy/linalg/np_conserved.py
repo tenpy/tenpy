@@ -65,7 +65,7 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs'
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'to_iterable_arrays'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -3247,7 +3247,13 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     else:
         return W
 
-# private functions ============================================================
+
+def to_iterable_arrays(array_list):
+    """similar as :func:`~tenpy.tools.misc.to_iterable`, but also enclose npc Arrays in a list."""
+    if isinstance(array_list, Array):
+        array_list = [array_list]
+    array_list = to_iterable(array_list)
+    return array_list
 
 
 def _nontrivial_grid_entries(grid):

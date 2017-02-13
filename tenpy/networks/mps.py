@@ -86,9 +86,12 @@ from __future__ import division
 import numpy as np
 import itertools
 import warnings
+import scipy.sparse as sparse
+import scipy.sparse.linalg.eigen.arpack
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, argsort
+from ..tools.math import lcm, speigs
 
 
 class MPS(object):
@@ -124,6 +127,8 @@ class MPS(object):
         ``None`` means non-canonical form.
         For ``form = (nuL, nuR)``, the stored ``_B[i]`` are
         ``s**form[0] -- Gamma -- s**form[1]`` (in Vidal's notation).
+    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
+        The nature of the charge.
     dtype : type
         The data type of the `_B`.
     _B : list of :class:`npc.Array`
@@ -442,6 +447,29 @@ class MPS(object):
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
+    def get_op(self, op_list, i):
+        """Given a list of operators, select the one corresponding to site `i`.
+
+        Parameters
+        ----------
+        op_list : (list of) {str | npc.array}
+            List of operators from which we choose. We assume that ``op_list[j]`` acts on site
+            ``j``. If the length is shorter than `L`, we repeat it periodically.
+            Strings are translated using :meth:`~tenpy.networks.site.Site.get_op` of site `i`.
+        i : int
+            Index of the site on which the operator acts.
+
+        Returns
+        -------
+        op : npc.array
+            One of the entries in `op_list`, not copied.
+        """
+        i = self._to_valid_index(i)
+        op = op_list[i % len(op_list)]
+        if (type(op) == str):
+            op = self.sites[i].get_op(op)
+        return op
+
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
@@ -611,7 +639,7 @@ class MPS(object):
         """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For example the contraction for a two-site (`n`=2) operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -629,12 +657,12 @@ class MPS(object):
             If less than ``len(sites)`` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
-        sites : list
+        sites : None | list of int
             List of site indices. ``sites``. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contaction. The first `n` legs are contracted with conjugated B`s,
+            contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
@@ -676,13 +704,128 @@ class MPS(object):
         vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
         E = []
         for i in sites:
-            op = ops[i % len(ops)]
-            if type(op) == str:
-                op = self.sites[i].get_op(op)
+            op = self.get_op(ops, i)
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
             E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
         return np.array(E)
+
+    def correlation_function(self,
+                             ops1,
+                             ops2,
+                             sites1=None,
+                             sites2=None,
+                             opstr=None,
+                             str_on_first=False,
+                             hermitian=False):
+        """Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
+
+        Given the MPS in canonical form, it calculates n-site expectation values.
+        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+
+            |          .--S--B[i]--B[i+1]--...--B[j]---.
+            |          |     |     |            |      |
+            |          |     |     |            op2    |
+            |          |     op1   |            |      |
+            |          |     |     |            |      |
+            |          .--S--B*[i]-B*[i+1]-...--B*[j]--.
+
+        Onsite terms are taken in the order ``<psi | op1 op2 | psi>``.
+
+        If `opstr` is given and ``str_on_first=True``, it calculates::
+
+            |           for i < j                               for i > j
+            |
+            |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
+            |          |     |      |            |      |     |     |      |            |      |
+            |          |     opstr  opstr        op2    |     |     op2    |            |      |
+            |          |     |      |            |      |     |     |      |            |      |
+            |          |     op1    |            |      |     |     opstr  opstr        op1    |
+            |          |     |      |            |      |     |     |      |            |      |
+            |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
+
+        For ``i==j``, no `opstr` is included.
+        For ``str_on_first=False`` (default), the `opstr` on site ``min(i, j)`` is always left out.
+
+        Strings (like ``'Id', 'Sz'``) in the operator lists are translated into single-site
+        operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
+        Each operator should have the two legs ``'p', 'p*'``.
+
+        Parameters
+        ----------
+        ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            First operator of the correlation function (acting after ops2).
+            ``ops1[x]`` acts on site ``sites1[x]``.
+            If less than ``len(sites1)`` operators are given, we repeat them periodically.
+        ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            Second operator of the correlation function (acting before ops1).
+            ``ops2[y]`` acts on site ``sites2[y]``.
+            If less than ``len(sites2)`` operators are given, we repeat them periodically.
+        sites1 : None | int | list of int
+            List of site indices; a single `int` is translated to ``range(0, sites1)``.
+            ``None`` defaults to all sites ``range(0, L)``.
+            Is sorted before use, i.e. the order is ignored.
+        sites2 : None | int | list of int
+            List of site indices; a single `int` is translated to ``range(0, sites2)``.
+            ``None`` defaults to all sites ``range(0, L)``.
+            Is sorted before use, i.e. the order is ignored.
+        opstr : None | (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            Ignored by default (``None``).
+            Operator(s) to be inserted between ``ops1`` and ``ops2``.
+            If given as a list, ``opstr[r]`` is inserted at site `r` (independent of `sites1` and
+            `sites2`).
+        str_on_first : bool
+            Whether the `opstr` is included on the site ``min(i, j)``.
+            Note the order, which is chosen that way to handle fermionic Jordan-Wigner strings
+            correctly. (In other words: choose ``str_on_first=True`` for fermions!)
+        hermitian : bool
+            Optimization flag: if ``sites1 == sites2`` and ``Ops1[i]^\dagger == Ops2[i]``
+            (which is not checked explicitly!), the resulting ``C[x, y]`` will be hermitian.
+            We can use that to avoid calculations, so ``hermitian=True`` will run faster.
+
+        Returns
+        -------
+        C : 2D ndarray
+            The correlation function ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``,
+            where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
+            If opstr is given, it gives (for ``opstr_on_first=True``):
+
+            *) For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
+            *) For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
+            *) For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
+
+            The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
+        """
+        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
+            ops1, ops2, sites1, sites2, opstr)
+        if hermitian and sites1 != sites2:
+            warnings.warn("MPS correlation function can't use the hermitian flag")
+            hermitian = False
+        C = np.empty((len(sites1), len(sites2)), dtype=np.complex)
+        for x, i in enumerate(sites1):
+            # j > i
+            j_gtr = sites2[sites2 > i]
+            if len(j_gtr) > 0:
+                C_gtr = self._corr_up_diag(ops1, ops2, i, j_gtr, opstr, str_on_first, True)
+                C[x, (sites2 > i)] = C_gtr
+                if hermitian:
+                    C[x+1:, x] = np.conj(C_gtr)
+            # j == i
+            j_eq = sites2[sites2 == i]
+            if len(j_eq) > 0:
+                # on-site correlation function
+                op12 = npc.tensordot(self.get_op(ops1, i), self.get_op(ops2, i), axes=['p*', 'p'])
+                C[x, (sites2 == i)] = self.expectation_value(op12, i, [['p'], ['p*']])
+        if not hermitian:
+            #  j < i
+            for y, j in enumerate(sites2):
+                i_gtr = sites1[sites1 > j]
+                if len(i_gtr) > 0:
+                    C[(sites1 > j), y] = self._corr_up_diag(
+                        ops2, ops1, j, i_gtr, opstr, str_on_first, False)
+                    # exchange ops1 and ops2 : they commute on different sites,
+                    # but we apply opstr after op1 (using the last argument = False)
+        return np.real_if_close(C)
 
     def _to_valid_index(self, i):
         """make sure `i` is a valid index (depending on `self.bc`)."""
@@ -772,19 +915,15 @@ class MPS(object):
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
-        ops = to_iterable(ops)
-        if isinstance(ops, npc.Array):  # an npc.Array is iterable...
-            ops = [ops]  # ... so we need to do this manually
-        if type(ops[0]) == str:
-            n = 1
-        else:
-            n = ops[0].rank // 2  # same as int(ops[0].rank/2)
+        ops = npc.to_iterable_arrays(ops)
+        n = self.get_op(ops, 0).rank // 2   # same as int(rank/2)
         L = self.L
         if sites is None:
             if self.finite:
                 sites = range(L - (n - 1))
             else:
                 sites = range(L)
+        sites = to_iterable(sites)
         th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
         if axes is None:
             if n == 1:
@@ -795,6 +934,51 @@ class MPS(object):
         if len(axes_p) != n or len(axes_pstar) != n:
             raise ValueError("Len of axes does not match operator n=" + len(n))
         return ops, sites, n, th_labels, axes
+
+    def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
+        """get default arguments of self.correlation_function()"""
+        if sites1 is None:
+            sites1 = range(0, self.L)
+        elif type(sites1) == int:
+            sites1 = range(0, sites1)
+        if sites2 is None:
+            sites2 = range(0, self.L)
+        elif type(sites2) == int:
+            sites2 = range(0, sites2)
+        ops1 = npc.to_iterable_arrays(ops1)
+        ops2 = npc.to_iterable_arrays(ops2)
+        opstr = npc.to_iterable_arrays(opstr)
+        sites1 = np.sort(sites1)
+        sites2 = np.sort(sites2)
+        return ops1, ops2, sites1, sites2, opstr
+
+    def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
+        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
+        op1 = self.get_op(ops1, i)
+        opstr1 = self.get_op(opstr, i)
+        if opstr1 is not None:
+            axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
+            op1 = npc.tensordot(op1, opstr1, axes=axes)
+        theta = self.get_theta(i, n=1)
+        C = npc.tensordot(op1, theta, axes=['p*', 'p0'])
+        C = npc.tensordot(theta.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vL']])
+        # C has legs 'vR*', 'vR'
+        js = list(j_gtr[::-1])  # stack of j, sorted *descending*
+        res = []
+        for r in range(i+1, js[0]+1):  # js[0] is the maximum
+            B = self.get_B(r, form='B')
+            C = npc.tensordot(C, B, axes=['vR', 'vL'])
+            if r == js[-1]:
+                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
+                Cij = npc.inner(B.conj(), Cij, axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vR']])
+                res.append(Cij)
+                js.pop()
+            if len(js) > 0:
+                op = self.get_op(opstr, r)
+                if op is not None:
+                    C = npc.tensordot(op, C, axes=['p*', 'p'])
+                C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
+        return res
 
 
 class MPSEnvironment(object):
@@ -809,17 +993,17 @@ class MPSEnvironment(object):
         |     LP[0] |             |  Op  |               RP[-1]
         |     |     |             |------|               |
         |     |     |             |      |               |
-        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... ->--.
+        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... -<--.
 
-    Of course, as a special case, we can also calculate the overlap `<bra|ket>` by using the
-    special case ``Op = Id``.
+    Of course, we can also calculate the overlap `<bra|ket>` by using the special case ``Op = Id``.
+
     We use the following label convention (where arrows indicate `qconj`)::
 
         |    .-->- vR           vL ->-.
         |    |                        |
         |    LP                       RP
         |    |                        |
-        |    .-->- vR*         vL* ->-.
+        |    .--<- vR*         vL* -<-.
 
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.
@@ -1053,6 +1237,7 @@ class MPSEnvironment(object):
             |          |     |     |       |
             |          .--S--B*[i]-B*[i+1]-.
 
+        Here, the `B` are taken from `ket`, the `B*` from `bra`.
         The call structure is the same as for :meth:`MPS.expectation_value`.
 
         Parameters
@@ -1068,7 +1253,7 @@ class MPSEnvironment(object):
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contaction. The first `n` legs are contracted with conjugated B`s,
+            contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
             ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
@@ -1076,7 +1261,7 @@ class MPSEnvironment(object):
         Returns
         -------
         exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
+            Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
 
         Examples
@@ -1140,3 +1325,285 @@ class MPSEnvironment(object):
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `ket.bc`)."""
         return self.ket._to_valid_index(i)
+
+
+class TransferMatrix(sparse.linalg.LinearOperator):
+    r"""Transfer matrix of two MPS (bra & ket).
+
+    For an iMPS in the thermodynamic limit, we need to find the 'dominant `LP`' (and `RP`).
+    This mean nothing else than to take the transfer matrix of the unit cell and find the
+    (left/right) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
+    :math:` LP (TM)^n` (or :math:`(TM)^n RP`) in the limit :math:`n \rightarrow \infty` - whatever
+    the initial `LP` is. This class provides exactly that functionality with :meth:`dominant_vec`
+
+    Given two MPS, we define the transfer matrix as::
+
+        |    ---M[i]---M[i+1]- ... --M[i+L]---
+        |       |      |             |
+        |    ---N[j]*--N[j+1]* ... --N[j+L]*--
+
+    Here the `M` denotes the `B` of the bra (which are not necessarily in canonical form)
+    and `N` the ones of the ket, respectively.
+
+    To view it as a `matrix`, we combine the left and right indices to pipes::
+
+        |  (vL.vL*) ->-TM->- (vR.vR*)
+
+    In general, the transfer matrix is not Hermitian; thus you shouldn't use lanczos.
+    Instead, we support to select a charge sector and act on numpy arrays, which allows to use the
+    scipy.sparse routines.
+
+    Parameters
+    ----------
+    bra : MPS
+        The MPS which is to be (complex) conjugated
+    ket : MPS
+        The MPS which is not (complex) conjugated.
+    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
+        The nature of the charge.
+    shift_bra : int
+        We start the `N` of the bra at site `shift_bra`.
+    shift_ket : int | None
+        We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
+    transpose : bool
+        Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+    charge_sector : None | charges | ``0``
+        Selects the charge sector of `RP` (for `transpose`=False) which is used for the `matvec`
+        with a dense ndarray.
+        ``None`` (default) stands for *all* sectors, ``0`` stands for the zero-charge sector.
+        Defaults to ``0``, i.e. assumes the dominant eigenvector is in charge sector 0.
+
+
+    Attributes
+    ----------
+    L : int
+        Number of physical sites involved in the transfer matrix, i.e. the least common multiple
+        of `bra.L` and `ket.L`.
+    shape : (int, int)
+        The dimensions for the selected charge sector.
+    transpose : bool
+        Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+    qtotal : charges
+        Total charge of the transfer matrix (which is gauged away in matvec).
+    matvec_count : int
+        The number of `matvec` operations performed.
+    _bra_N : list of npc.Array
+        The matrices of the ket, transposed for fast `matvec`.
+    _ket_M : list of npc.Array
+        Complex conjugated matrices of the bra, transposed for fast `matvec`.
+    _pipe : :class:`~tenpy.linalg.charges.LegPipe`
+        Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
+        or to ``'(vR.vR*)'`` for ``transpose=True``.
+    _charge_sector : None | charges
+        The charge sector of `RP` (`LP` for `transpose`) which is used for the :meth:`matvec`
+        with a dense ndarray. ``None`` stands for *all* sectors.
+    _mask : bool ndarray
+        Selects the indices of the pipe which are used in `matvec`, mapping from
+
+    .. todo :
+        One could create a separate `LinearOperator` class working for both numpy and npc arrays,
+        checking the type of `vec`. Should implement `matvec` exactly as here.
+        Problem: At the time of writing this, the npc.Lanczos.LinalgOperator takes also
+        rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
+        Still, might also be useful in algorithms.exact_diag
+    """
+    def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0):
+        L = self.L = lcm(bra.L, ket.L)
+        if shift_ket is None:
+            shift_ket = shift_bra
+        self.shift_bra = shift_bra
+        self.shift_ket = shift_ket
+        self.transpose = transpose
+        if not transpose:
+            M = self._ket_M = [ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                               for i in range(shift_ket, shift_ket+L)]
+            N = self._bra_N = [bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                               for i in range(shift_bra, shift_bra+L)]
+        else:
+            M = self._ket_M = [ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                               for i in range(shift_ket, shift_ket+L)]
+            N = self._bra_N = [bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                               for i in range(shift_bra, shift_bra+L)]
+        self.chinfo = bra.chinfo
+        if ket.chinfo != bra.chinfo:
+            raise ValueError("incompatible charges")
+        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N]))
+        self._pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1)
+        if transpose:
+            self._pipe = self._pipe.conj()
+        self.shape = (self._pipe_L.ind_len, self._pipe_R.ind_len)
+        self.dtype = np.promote_types(bra.dtype, ket.dtype)
+        self.matvec_count = 0
+        self._charge_sector = None
+        self._mask = None
+        self.charge_sector = charge_sector  # uses the setter
+
+    @property
+    def charge_sector(self, value):
+        """Charge sector of `RP` (`LP` for `transpose) which is used for `matvec` with ndarray."""
+        return self._charge_sector
+
+    @charge_sector.setter
+    def charge_sector(self, value):
+        if type(value) == int and value == 0:
+            value = self.chinfo.make_valid()  # zero charges
+        elif value is not None:
+            value = self.chinfo.make_valid(value)
+        self._charge_sector = value
+        if value is not None:
+            self._mask = np.all(self._pipe.to_qflat() == value[np.newaxis, :], axis=1)
+            self.shape = tuple([np.sum(self._mask)]*2)
+        else:
+            chi2 = self._pipe.ind_len
+            self.shape = (chi2, chi2)
+            self._mask = np.ones([chi2], dtype=np.bool)
+
+    def matvec(self, vec):
+        """Apply the transfer matrix to `vec`.
+
+        Parameters
+        ----------
+        vec : ndarray | :class:`~tenpy.linalg.np_conserved.Array`
+
+
+        Returns
+        -------
+        TM_vec : ndarray | :class:`~tenpy.linalg.np_conserved.Array`
+            The transfer matrix applied to `vec`, in the same type/form as `vec` was given.
+        """
+        self.matvec_count += 1
+        # handle both npc Arrays and ndarray....
+        if isinstance(vec, npc.Array):
+            return self._matvec_npc(vec)
+        return self._matvec_flat(vec)
+
+    def _matvec_flat(self, vec):
+        """matvec operation for a numpy ndarray corresponding to the selected charge sector."""
+        # convert into npc Array
+        npc_vec = self._flat_to_npc(vec)
+        # apply the transfer matrix
+        npc_vec = self._matvec_npc(npc_vec)
+        # convert back into numpy ndarray.
+        return self._npc_to_flat(npc_vec)
+
+    def _matvec_npc(self, vec):
+        """Given `vec` as an npc.Array, apply the transfer matrix.
+
+        The bra/ket legs of `vec` may be in a pipe, but don't have to be.
+        We return it the same way as we got it (with the same legs and charges)."""
+        pipe = None
+        if vec.rank == 1:
+            vec.split_legs(0)
+            pipe = self._pipe
+        qtotal = vec.qtotal
+        legs = vec.legs
+        # the actual work
+        if not self.transpose:
+            for N, M in itertools.izip(self._bra_N, self._ket_M):
+                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
+                vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
+        else:
+            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
+                vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
+                vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
+        if np.any(self.qtotal != 0):
+            # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
+            vec.qtotal = qtotal
+            vec.legs = legs
+            vec.test_sanity()  # Should be fine, but who knows...
+        if pipe is not None:
+            vec = vec.combine_legs([0, 1], pipes=pipe)
+        return vec
+
+    def _flat_to_npc(self, vec):
+        """Convert flat vector of selected charge sector into npc Array.
+
+        Parameters
+        ----------
+        vec : 1D ndarray
+            Numpy vector to be converted. Should have the entries according to self.charge_sector.
+
+        Returns
+        -------
+        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Same as `vec`, but converted into a flat array.
+        """
+        full_vec = np.zeros(self._pipe.ind_len)
+        full_vec[self._mask] = vec
+        return npc.Array.from_ndarray(full_vec, [self._pipe])
+
+    def _npc_to_flat(self, npc_vec):
+        """Convert npc Array with qtotal = self.charge_sector into ndarray.
+
+        Parameters
+        ----------
+        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Npc Array to be converted. Should have the entries according to self.charge_sector.
+
+        Returns
+        -------
+        vec : 1D ndarray
+            Same as `npc_vec`, but converted into a flat array.
+        """
+        if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
+            raise ValueError("npc_vec.qtotal and charge sector don't match!")
+        return npc_vec.to_ndarray()[self._mask]
+
+    def eigenvectors(self, num_ev=1, max_num_ev=None, max_tol=1.e-12, which='LM', **kwargs):
+        """Find (dominant) eigenvector(s) of self using scipy.sparse.
+
+        If no charge_sector was selected, we look in *all* charge sectors.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for.
+        max_num_ev : int
+            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
+            we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
+            ``None`` defaults to ``num_ev + 2``.
+        max_tol : float
+            After the first `NoConvergenceError` we increase the `tol` argument to that value.
+        which : str
+            Which eigenvalues to look for, see `scipy.sparse.linalg.speigs`.
+        **kwargs :
+            Further keyword arguments are given to :func:`~tenpy.tools.math.speigs`.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted according to `which`.
+        w : list of :class:`~tenpy.linalg.np_conserved.Array`
+            The eigenvectors corresponding to `eta`, as npc.Array with LegPipe.
+        """
+        if max_num_ev is None:
+            max_num_ev = num_ev + 2
+        if self.charge_sector is None:
+            # Try for all charge sectors
+            eta = []
+            A = []
+            for chsect in self._pipe.charge_sectors():
+                self.charge_sector = chsect
+                eta_cs, A_cs = self.eigenvectors(num_ev, max_num_ev, max_tol, which, **kwargs)
+                eta.extend(eta_cs)
+                A.extend(A_cs)
+            self.charge_sector = None
+        else:
+            # for given charge sector
+            for k in xrange(num_ev, max_num_ev + 1):
+                if k > num_ev:
+                    warnings.warn("increased `num_ev` to " + str(k+1))
+                try:
+                    eta, A = speigs(self, k=k, which='LM', **kwargs)
+                    A = np.real_if_close(A)
+                    A = [self._flat_to_npc(A[:, j]) for j in range(A.shape[1])]
+                    break
+                except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+                    if k == max_num_ev:
+                        raise
+                    # just retry with larger k and 'tol'
+                    kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        # sort
+        perm = argsort(eta, which)
+        return np.array(eta)[perm], [A[j] for j in perm]
