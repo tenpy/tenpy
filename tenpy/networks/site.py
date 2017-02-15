@@ -296,7 +296,7 @@ def fermion_site(conserve='N', filling=0.5):
     """
     if conserve not in ['N', 'parity', None]:
         raise ValueError("invalid `conserve`: " + repr(conserve))
-    JW = np.array([[0., 0.], [0., 1.]])
+    JW = np.array([[1., 0.], [0., -1.]])
     C = np.array([[0., 1.], [0., 0.]])
     Cd = np.array([[0., 0.], [1., 0.]])
     N = np.array([[0., 0.], [0., 1.]])

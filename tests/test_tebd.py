@@ -11,20 +11,19 @@ from tenpy.algorithms.exact_diag import ExactDiag
 
 
 def check_tebd(bc_MPS='finite'):
-    xxz_pars = dict(L=4, Jxx=1.7, Jz=1.3, hz = 0.,bc_MPS=bc_MPS)
+    xxz_pars = dict(L=2, Jxx=1., Jz=3., hz = 0.,bc_MPS=bc_MPS)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
     tebd_param = {
-        'dt':0.01,
-        'order':4,
-        'type':'IMAG',
-        'svd_min':10**(-12)
+        'verbose': 2,
+        'chi_max':100
         }
 
-    tebd.ground_state(psi,M,tebd_param)
+    engine = tebd.Engine(psi,M,tebd_param)
+    engine.run_GS()
 
     if bc_MPS == 'finite':
         ED = ExactDiag(M)
@@ -35,11 +34,15 @@ def check_tebd(bc_MPS='finite'):
         print "compare with ED: overlap = ", abs(ov)**2
         assert (abs(abs(ov) - 1.) < 1.e-10)
 
+    for i in range(13):
+        engine.run()
+    # TODO: time evolve mit TEBD
+
     # TODO: compare with known ground state (energy) / ED !
 
 
 def test_tebd():
-    for bc_MPS in ['finite', 'infinite']:
+    for bc_MPS in ['finite']:
         yield check_tebd, bc_MPS
 
 

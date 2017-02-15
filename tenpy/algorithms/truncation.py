@@ -132,7 +132,7 @@ def truncate(S, trunc_par):
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
-        All parameters default to ``None``, in which case the constraint is ignored. (Note: exception svd_min! (for stability))
+        All parameters default to ``None``, in which case the constraint is ignored.
 
         ============ ====== ====================================================
         key          type   constraint
@@ -166,7 +166,7 @@ def truncate(S, trunc_par):
     chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
     chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
     sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
-    svd_min = get_parameter(trunc_par, 'svd_min', 10**(-14), 'truncation')
+    svd_min = get_parameter(trunc_par, 'svd_min', None, 'truncation')
     #For stability reasons
     trunc_cut = get_parameter(trunc_par, 'trunc_cut', None, 'truncation')
 

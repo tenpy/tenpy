@@ -491,11 +491,11 @@ class NearestNeighborModel(object):
             self.U_bond = [[None] * len(self.H_bond),
                 [None] * len(self.H_bond),[None] * len(self.H_bond),
                 [None] * len(self.H_bond)]
-
+            print "deltaaa",delta_t
             for i_bond in range(len(self.H_bond)):
                 dt1 = 1. / (4. - 4.**(1/3) ) * delta_t /2.
                 dt3 = delta_t - 4* (dt1*2)
-                if self.bond_eig_vals[i_bond] != None:
+                if self.bond_eig_vals[i_bond] is not None:
                     if (type_evo == 'IMAG'):
                         s1 = np.exp(-dt1 * self.bond_eig_vals[i_bond])
                         s13 = np.exp(- ( dt3 + 2*dt1)/2. * self.bond_eig_vals[i_bond])

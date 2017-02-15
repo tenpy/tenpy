@@ -676,20 +676,25 @@ class MPS(object):
         Examples
         --------
         One site examples (`n` = 1):
+
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
+
         >>> psi.expectation_value(['Sz', 'Sx'])
         [Sz0, Sx1, Sz2, Sx3, ... ]
+
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
         Two site example (`n` = 2), assuming homogeneous `sites`:
+
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
@@ -1267,20 +1272,25 @@ class MPSEnvironment(object):
         Examples
         --------
         One site examples (`n` = 1):
+
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
+
         >>> psi.expectation_value(['Sz', 'Sx'])
         [Sz0, Sx1, Sz2, Sx3, ... ]
+
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
         Two site example (`n` = 2), assuming homogeneous `sites`:
+
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
