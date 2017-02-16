@@ -1,4 +1,8 @@
-"""A collection of tests for :mod:`tenpy.models.site`."""
+"""A collection of tests for :mod:`tenpy.models.site`.
+
+.. todo ::
+    More tests of commutators for the various special sites!
+"""
 
 from __future__ import division
 
@@ -29,7 +33,7 @@ def test_site():
 
 def test_spin_half_site():
     for conserve in ['Sz', 'parity', None]:
-        S = site.spin_half_site(conserve)
+        S = site.SpinHalfSite(conserve)
         S.test_sanity()
     npt.assert_equal((S.Sx + 1.j * S.Sy).to_ndarray(), S.Sp.to_ndarray())
     npt.assert_equal((S.Sx - 1.j * S.Sy).to_ndarray(), S.Sm.to_ndarray())
@@ -42,7 +46,7 @@ def test_spin_half_site():
 
 def test_fermion_site():
     for conserve in ['N', 'parity', None]:
-        S = site.fermion_site(conserve)
+        S = site.FermionSite(conserve)
         S.test_sanity()
     npt.assert_equal(np.dot(S.Cd.to_ndarray(), S.C.to_ndarray()), S.N.to_ndarray())
 
@@ -50,7 +54,7 @@ def test_fermion_site():
 def test_boson_site():
     for Nmax in [1, 2, 5, 10]:
         for conserve in ['N', 'parity', None]:
-            S = site.boson_site(Nmax, conserve=conserve)
+            S = site.BosonSite(Nmax, conserve=conserve)
             S.test_sanity()
         npt.assert_array_almost_equal_nulp(
             np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()), S.N.to_ndarray(), 2)

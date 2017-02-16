@@ -14,14 +14,16 @@ import tenpy.linalg.np_conserved as npc
 from tenpy.models import model, lattice
 import tenpy.networks.site
 
-site_spin_half = tenpy.networks.site.spin_half_site('Sz')
-lat_spin_half = lattice.Chain(2, site_spin_half)
+spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
+spin_half_lat = lattice.Chain(2, spin_half_site)
 
-site_fermion = tenpy.networks.site.fermion_site('N')
-lat_spin_half = lattice.Chain(5, site_fermion)
+fermion_site = tenpy.networks.site.FermionSite('N')
+fermion_lat = lattice.Chain(5, fermion_site)
 
 
 def test_CouplingModel():
     for bc in ['open', 'periodic']:
-        M = model.CouplingModel(lat_spin_half, 'open')
+        M = model.CouplingModel(spin_half_lat, bc)
+        M.test_sanity()
+        M = model.CouplingModel(fermion_lat, bc)
         M.test_sanity()

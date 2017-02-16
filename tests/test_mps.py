@@ -12,14 +12,14 @@ from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import mps, site
 
-site_spin_half = site.spin_half_site(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz')
 
 
 def test_mps():
     for L in [4, 2, 1]:
         print L
-        state = (site_spin_half.state_indices(['up', 'down']) * L)[:L]
-        psi = mps.MPS.from_product_state([site_spin_half] * L, state, bc='finite')
+        state = (spin_half.state_indices(['up', 'down']) * L)[:L]
+        psi = mps.MPS.from_product_state([spin_half] * L, state, bc='finite')
         psi.test_sanity()
         print repr(psi)
         print str(psi)

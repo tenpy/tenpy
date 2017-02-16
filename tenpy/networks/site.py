@@ -23,7 +23,7 @@ class Site(object):
     leg : :class:`npc.LegCharge`
         Charges of the physical states, to be used for the physical leg of MPS & co).
     state_labels : None | list of str
-        Optinally a label for each local basis states. ``None`` entries are ignored / not set.
+        Optionally a label for each local basis states. ``None`` entries are ignored / not set.
     **site_ops :
         Additional keyword arguments of the form ``name=op`` given to :meth:`add_op`.
         The identity operator 'Id' is always included.
@@ -69,8 +69,8 @@ class Site(object):
         Use it where helpful, e.g. for boson_site(conserve=parity) and co.
     """
 
-    def __init__(self, charges, state_labels=None, **site_ops):
-        self.leg = charges
+    def __init__(self, leg, state_labels=None, **site_ops):
+        self.leg = leg
         self.state_labels = dict()
         if state_labels is not None:
             for i, v in enumerate(state_labels):
@@ -189,12 +189,16 @@ class Site(object):
         """Return operator of given name."""
         return getattr(self, name)
 
+    def __repr__(self):
+        """Debug representation of self"""
+        return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
+
+
 # ------------------------------------------------------------------------------
-# functions for generating the most common local sites.
+# The most common local sites.
 
-
-def spin_half_site(conserve='Sz'):
-    """Generate spin-1/2 site.
+class SpinHalfSite(Site):
+    """Spin-1/2 site.
 
     Local states are ``up``(0) and ``down``(1).
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
@@ -222,34 +226,39 @@ def spin_half_site(conserve='Sz'):
     conserve : str
         Defines what is conserved, see table above.
 
-    Returns
-    -------
-    site : class:`Site`
-        Spin-1/2 site with `leg`, `leg.chinfo` and onsite operators.
+    Attributes
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
     """
-    if conserve not in ['Sz', 'parity', None]:
-        raise ValueError("invalid `conserve`: " + repr(conserve))
-    Sx = [[0., 0.5], [0.5, 0.]]
-    Sy = [[0., -0.5j], [+0.5j, 0.]]
-    Sz = [[0.5, 0.], [0., -0.5]]
-    Sp = [[0., 1.], [0., 0.]]  # == Sx + i Sy
-    Sm = [[0., 0.], [1., 0.]]  # == Sx - i Sy
-    ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
-    if conserve == 'Sz':
-        chinfo = npc.ChargeInfo([1], ['2*Sz'])
-        leg = npc.LegCharge.from_qflat(chinfo, [1, -1])
-    else:
-        ops.update(Sx=Sx, Sy=Sy)
-        if conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
-            leg = npc.LegCharge.from_qflat(chinfo, [1, 0])  # [1, -1] would need ``qmod=[4]``...
+    def __init__(self, conserve='Sz'):
+        if conserve not in ['Sz', 'parity', None]:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        Sx = [[0., 0.5], [0.5, 0.]]
+        Sy = [[0., -0.5j], [+0.5j, 0.]]
+        Sz = [[0.5, 0.], [0., -0.5]]
+        Sp = [[0., 1.], [0., 0.]]  # == Sx + i Sy
+        Sm = [[0., 0.], [1., 0.]]  # == Sx - i Sy
+        ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
+        if conserve == 'Sz':
+            chinfo = npc.ChargeInfo([1], ['2*Sz'])
+            leg = npc.LegCharge.from_qflat(chinfo, [1, -1])
         else:
-            leg = npc.LegCharge.from_trivial(2)
-    site = Site(leg, ['up', 'down'], **ops)
-    return site
+            ops.update(Sx=Sx, Sy=Sy)
+            if conserve == 'parity':
+                chinfo = npc.ChargeInfo([2], ['parity'])
+                leg = npc.LegCharge.from_qflat(chinfo, [1, 0])  # ([1, -1] would need ``qmod=[4]``)
+            else:
+                leg = npc.LegCharge.from_trivial(2)
+        self.conserve = conserve
+        super(SpinHalfSite, self).__init__(leg, ['up', 'down'], **ops)
+
+    def __repr__(self):
+        """Debug representation of self"""
+        return "SpinHalfSite({c!r})".format(c=self.conserve)
 
 
-def fermion_site(conserve='N', filling=0.5):
+class FermionSite(Site):
     r"""Create a :class:`Site` for spin-less fermions.
 
     Local states are ``empty`` and ``occupied``.
@@ -286,35 +295,44 @@ def fermion_site(conserve='N', filling=0.5):
     filling : float
         Average filling. Used to define ``dN``.
 
-    Returns
-    -------
-    site : class:`Site`
-        (Spin-less) fermion site with `leg`, `leg.chinfo` and onsite operators.
+    Attributes
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
 
     .. todo ::
         Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
     """
-    if conserve not in ['N', 'parity', None]:
-        raise ValueError("invalid `conserve`: " + repr(conserve))
-    JW = np.array([[1., 0.], [0., -1.]])
-    C = np.array([[0., 1.], [0., 0.]])
-    Cd = np.array([[0., 0.], [1., 0.]])
-    N = np.array([[0., 0.], [0., 1.]])
-    dN = np.array([[-filling, 0.], [0., 1. - filling]])
-    dNdN = dN**2  # (element wise power is fine since dN is diagonal)
-    ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
-    if conserve == 'N':
-        chinfo = npc.ChargeInfo([1], ['N'])
-        leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
-    elif conserve == 'parity':
-        chinfo = npc.ChargeInfo([2], ['parity'])
-        leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
-    else:
-        leg = npc.LegCharge.from_trivial(2)
-    return Site(leg, ['empty', 'occupied'], **ops)
+    def __init__(self, conserve='N', filling=0.5):
+        if conserve not in ['N', 'parity', None]:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        JW = np.array([[1., 0.], [0., -1.]])
+        C = np.array([[0., 1.], [0., 0.]])
+        Cd = np.array([[0., 0.], [1., 0.]])
+        N = np.array([[0., 0.], [0., 1.]])
+        dN = np.array([[-filling, 0.], [0., 1. - filling]])
+        dNdN = dN**2  # (element wise power is fine since dN is diagonal)
+        ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
+        if conserve == 'N':
+            chinfo = npc.ChargeInfo([1], ['N'])
+            leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+        elif conserve == 'parity':
+            chinfo = npc.ChargeInfo([2], ['parity'])
+            leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+        else:
+            leg = npc.LegCharge.from_trivial(2)
+        self.conserve = conserve
+        self.filling = filling
+        super(FermionSite, self).__init__(leg, ['empty', 'occupied'], **ops)
+
+    def __repr__(self):
+        """Debug representation of self"""
+        return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
 
 
-def boson_site(Nmax=1, conserve='N', filling=0.):
+class BosonSite(Site):
     r"""Create a :class:`Site` for up to `Nmax` bosons.
 
     Local states are ``vac, 1, 2, ... , Nc``.
@@ -353,40 +371,51 @@ def boson_site(Nmax=1, conserve='N', filling=0.):
     filling : float
         Average filling. Used to define ``dN``.
 
-    Returns
-    -------
-    site : class:`Site`
-        Bosonic site with `leg`, `leg.chinfo` and onsite operators.
+    Attributes
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
     """
-    if conserve not in ['N', 'parity', None]:
-        raise ValueError("invalid `conserve`: " + repr(conserve))
-    dim = Nmax + 1
-    if dim < 2:
-        raise ValueError("local dimension should be larger than 1....")
-    B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
-    for n in xrange(1, dim):
-        B[n - 1, n] = np.sqrt(n)
-    Bd = np.transpose(B)  # .conj() wouldn't do anything
-    # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
-    Ndiag = np.arange(dim, dtype=np.float)
-    N = np.diag(Ndiag)
-    NN = np.diag(Ndiag**2)
-    dN = np.diag(Ndiag - filling)
-    dNdN = np.diag((Ndiag - filling)**2)
-    P = np.diag(1. - 2. * np.mod(Ndiag, 2))
-    ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
-    if conserve == 'N':
-        chinfo = npc.ChargeInfo([1], ['N'])
-        leg = npc.LegCharge.from_qflat(chinfo, range(dim))
-    elif conserve == 'parity':
-        chinfo = npc.ChargeInfo([2], ['parity'])
-        leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-        # sort by charges
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        # permute operators accordingly
-        for opname in ops:
-            ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
-    else:
-        leg = npc.LegCharge.from_trivial(dim)
-    return Site(leg, ['vac'] + [str(n) for n in range(1, dim)], **ops)
+    def __init__(self, Nmax=1, conserve='N', filling=0.):
+        if conserve not in ['N', 'parity', None]:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        dim = Nmax + 1
+        if dim < 2:
+            raise ValueError("local dimension should be larger than 1....")
+        B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
+        for n in xrange(1, dim):
+            B[n - 1, n] = np.sqrt(n)
+        Bd = np.transpose(B)  # .conj() wouldn't do anything
+        # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
+        Ndiag = np.arange(dim, dtype=np.float)
+        N = np.diag(Ndiag)
+        NN = np.diag(Ndiag**2)
+        dN = np.diag(Ndiag - filling)
+        dNdN = np.diag((Ndiag - filling)**2)
+        P = np.diag(1. - 2. * np.mod(Ndiag, 2))
+        ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
+        if conserve == 'N':
+            chinfo = npc.ChargeInfo([1], ['N'])
+            leg = npc.LegCharge.from_qflat(chinfo, range(dim))
+        elif conserve == 'parity':
+            chinfo = npc.ChargeInfo([2], ['parity'])
+            leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
+            # sort by charges
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            # permute operators accordingly
+            for opname in ops:
+                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
+        else:
+            leg = npc.LegCharge.from_trivial(dim)
+        self.Nmax = Nmax
+        self.conserve = conserve
+        self.filling = filling
+        super(BosonSite, self).__init__(leg, ['vac'] + [str(n) for n in range(1, dim)], **ops)
+
+    def __repr__(self):
+        """Debug representation of self"""
+        return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax, c=self.conserve,
+                                                       f=self.filling)
