@@ -7,6 +7,7 @@ Submodules
 .. toctree::
 
    tenpy.algorithms.dmrg
+   tenpy.algorithms.exact_diag
    tenpy.algorithms.tebd
    tenpy.algorithms.truncation
 

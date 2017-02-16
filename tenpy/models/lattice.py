@@ -2,10 +2,6 @@
 
 .. todo ::
     documentation, how to generate new lattices, examples, ...
-.. todo ::
-    provide a way to generate the most common 'Sites'
-    (spin half, hard-core bosons, bosons, fermions, fermion with spin).
-.. todo ::
     implement some __repr__ and/or __str__...
     equality tests?
 """
@@ -37,6 +33,9 @@ class Lattice(object):
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
     :meth:`mps2lat_values` perform the necessary reshaping and re-ordering from arrays indexed in
     MPS from to arrays indexed in lattice form.
+
+    .. todo ::
+        some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
 
     Parameters
     ----------
@@ -91,9 +90,6 @@ class Lattice(object):
         just np.arange(N_sites, np.intp)
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
-
-    .. todo ::
-        some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
     """
 
     def __init__(self, Ls, unit_cell, order='default', bc_MPS='finite', basis=None,

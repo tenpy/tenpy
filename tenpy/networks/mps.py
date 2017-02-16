@@ -720,7 +720,7 @@ class MPS(object):
         """Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For examples the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--...--B[j]---.
             |          |     |     |            |      |
@@ -789,9 +789,9 @@ class MPS(object):
             where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
             If opstr is given, it gives (for ``opstr_on_first=True``):
 
-            *) For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
-            *) For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
-            *) For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
+            - For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
+            - For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
+            - For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
 
             The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
         """
@@ -1245,7 +1245,7 @@ class MPSEnvironment(object):
         """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
 
         Calculates n-site expectation values of operators sandwiched between bra and ket.
-        For examples the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For examples the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -1273,7 +1273,7 @@ class MPSEnvironment(object):
             Two lists of each `n` leg labels giving the physical legs of the operator used for
             contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site (n=1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
 
         Returns
@@ -1284,7 +1284,7 @@ class MPSEnvironment(object):
 
         Examples
         --------
-        One site examples (`n` = 1):
+        One site examples (n=1):
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
         >>> psi.expectation_value(['Sz', 'Sx'])
@@ -1304,7 +1304,6 @@ class MPSEnvironment(object):
                          for i in range(0, psi.L-1, 2)]
         >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
-
         """
         ops, sites, n, th_labels, (axes_p, axes_pstar) = self.bra._expectation_value_args(
             ops, sites, axes)

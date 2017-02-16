@@ -201,6 +201,10 @@ class MPOGraph(object):
     The keys ``'IdR'`` (for 'idenity left') and ``'IdR'`` (for 'identity right') are reserved to
     represent only ``'Id'`` (=identity) operators to the left and right of the bond, respectively.
 
+    .. todo ::
+        might be useful to add a "cleanup" function which removes operators cancelling each other
+        and/or unused states. Or better use a 'compress' of the MPO?
+
     Parameters
     ----------
     sites : list of :class:`~tenpy.models.lattice.Site`
@@ -224,11 +228,6 @@ class MPOGraph(object):
         ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
     _grid_legs : None | list of LegCharge
         The charges for the MPO
-
-
-    .. todo ::
-        might be useful to add a "cleanup" function which removes operators cancelling each other
-        and/or unused states. Or better use a 'compress' of the MPO?
     """
 
     def __init__(self, sites, bc='finite'):

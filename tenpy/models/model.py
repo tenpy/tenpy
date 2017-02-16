@@ -45,6 +45,10 @@ class CouplingModel(object):
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
     terms.
 
+    .. todo ::
+        implement ...
+        Some way to generalize to couplings involving multiple sites?
+
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
@@ -72,10 +76,6 @@ class CouplingModel(object):
         Filled by :meth:`add_coupling`.
     H_onsite : list of :class:`npc.Array`
         For each site (in MPS order) the onsite part of the Hamiltonian.
-
-    .. todo ::
-        implement ...
-        Some way to generalize to couplings involving multiple sites?
     """
 
     def __init__(self, lattice, bc_coupling='open'):
@@ -358,6 +358,10 @@ class NearestNeighborModel(object):
 
     Suitable for TEBD.
 
+    .. todo ::
+        Make a TEBD algorithm class, which should store U_bond internally.
+        Still, this class might store the bond_eig_vals and bond_eig_vecs...
+
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
@@ -381,10 +385,6 @@ class NearestNeighborModel(object):
         exp(i dt H_bond) depe for TEBD parameters given by `U_parameters`
     U_param : dict
         TEBD parameters for which `U_bond` was calculated.
-
-    .. todo ::
-        Make a TEBD algorithm class, which should store U_bond internally.
-        Still, this class might store the bond_eig_vals and bond_eig_vecs...
     """
 
     def __init__(self, lat, H_bond):
@@ -428,6 +428,9 @@ class MPOModel(object):
 
     Suitable for MPO-based algorithms, e.g. DMRG and MPO time evolution.
 
+    .. todo ::
+        implement: provide (function to calculate) the MPO for time evolution.
+
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
@@ -441,10 +444,6 @@ class MPOModel(object):
         The lattice defining the geometry and the local Hilbert space(s).
     H_MPO : :class:`tenpy.tn.mpo.MPO`
         MPO representation of the Hamiltonian.
-
-    .. todo ::
-        Should the class host the environment, similar as NearestNeighborModel hosts U?
-        implement: provide (function to calculate) the MPO for time evolution.
     """
 
     def __init__(self, lat, H_MPO):
