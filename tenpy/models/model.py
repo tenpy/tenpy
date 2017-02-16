@@ -392,9 +392,6 @@ class NearestNeighborModel(object):
         self.H_bond = list(H_bond)
         if self.lat.bc_MPS != 'infinite':
             self.H_bond[0] = None
-        self.calc_bond_eig()
-        self.U_bond = None
-        self.U_param = dict()
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
