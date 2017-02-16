@@ -50,13 +50,54 @@ from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter
 
 class Engine(object):
+    """TEBD (time evolving block decimation) 'engine'.
+
+    Parameters
+    ----------
+    psi : MPS
+        Initial state. Modified in place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    TEBD_params : dict
+        Further optional parameters as described in the following table.
+        Use ``verbose=1`` to print the used parameters during runtime.
+        See :func:`run` and :func:`run_GS` for more details.
+
+    Attributes
+    ----------
+    verbose : int
+        Level of verbosity (i.e. how much status information to
+        print); higher=more output.
+    U_bond : list
+        A list of exponentiated H_bond (bond Hamiltonian), i.e.
+        exp[-i H_bond dt], with appropriately chosen dt
+    U_param : dict
+        A dictionary containing the information of the latest created U_bond
+    bond_eig_vals : list
+        A list of eigenvalues of H_bond[i]
+    bond_eig_vecs : list
+        A list of eigenvectors of H_bond[i]
+    real_time : float
+        A float indicating how much the the wavefunction has been evolved in
+        real_time = dt*(TEBD_steps)
+    psi: MPS
+        see parameters
+    model: :class:`~tenpy.models.MPOModel`
+        see parameters
+    H_bond: list
+        From model.H_bond (for convenience)
+    TEBD_params: dict
+        see parameters
+
+    """
     def __init__(self, psi, model, TEBD_params):
-        self.verbose = get_parameter(TEBD_params,'verbose',1,'TEBD')
-        self.H_bond = model.H_bond
-        self.model = model
+        self.verbose = get_parameter(TEBD_params,'verbose',2,'TEBD')
         self.psi = psi
+        self.model = model
+        self.H_bond = model.H_bond
         self.calc_bond_eig()
         self.U_bond = None
+        self.U_param = None
         self.TEBD_params = TEBD_params
         self.real_time = None
 
@@ -65,10 +106,9 @@ class Engine(object):
 
         Parameters
         ----------
-        psi : MPS
-            Initial state. Modified in place.
         TEBD_params : dict
-            Further optional parameters as described in the following table.
+            The optional parameters that are used are described in the
+            following table.
             Use ``verbose=1`` to print the used parameters during runtime.
 
             ======= ====== ==============================================
@@ -79,18 +119,25 @@ class Engine(object):
             order   int    Order of the algorithm.
                            The total error scales as O(t, dt^order).
             ------- ------ ----------------------------------------------
-            type    string Imaginary or real time evolution (IMAG,REAL)
+            N_steps int    Number of steps before measurement can be performed,
+                           number of steps that are interlinked for all
+                           Trotter decompositions of order > 1.
             ------- ------ ----------------------------------------------
             ...            Truncation parameters as described in
                            :func:`~tenpy.algorithms.truncation.truncate`
             ======= ====== ==============================================
+
+        Returns
+        -------
         """
         # initialize parameters
         delta_t = get_parameter(self.TEBD_params, 'dt',0.1, 'run')
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run')
 
-        self.calc_U(TrotterOrder, delta_t, type_evo = 'IMAG')
+        U_param = {'dt': delta_t, 'type_evo': 'REAL', 'order': TrotterOrder}
+        if set(self.U_param.items()) != set(U_param.items()):
+            self.calc_U(TrotterOrder, delta_t, type_evo = 'REAL')
 
         Eold = np.average(self.model.bond_energies(self.psi))
         Sold = np.average(self.psi.entanglement_entropy())
@@ -129,6 +176,25 @@ class Engine(object):
 
         Parameters
         ----------
+        TEBD_params : dict
+            The optional parameters that are used are described in the
+            following table.
+            Use ``verbose=1`` to print the used parameters during runtime.
+
+            ============== ====== =============================================
+            key            type   description
+            ============== ====== =============================================
+            delta_tau_list list   A list of floats describing
+            -------------- ------ ---------------------------------------------
+            order          int    Order of the algorithm.
+                                  The total error scales as O(t, dt^order).
+            -------------- ------ ---------------------------------------------
+            N_steps        int    Number of steps before measurement can be
+                                  performed
+            -------------- ------ ---------------------------------------------
+            ...            Truncation parameters as described in
+                           :func:`~tenpy.algorithms.truncation.truncate`
+            ============== ====== =============================================
 
         Returns
         -------
@@ -137,7 +203,9 @@ class Engine(object):
 
         # initialize parameters
         delta_tau_list = get_parameter(self.TEBD_params, 'delta_tau_list',
-                                       [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 0.], 'run_GS')
+                                       [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6,
+                                        1.e-7,1.e-8,1.e-9,1.e-10,1.e-11, 0.],
+                                         'run_GS')
         max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-12, 'run_GS')
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
@@ -171,9 +239,15 @@ class Engine(object):
                     print " Sbond = %.10f "  %S.real
 
     def calc_bond_eig(self):
-        """calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``.
+        """Calculate ``self.bond_eig_{vals,vecs}`` from ``self.H_bond``.
 
         Raises ValueError is 2-site Hamiltonian could not be diagonalized.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
         """
         self.bond_eig_vals = []
         self.bond_eig_vecs = []
@@ -189,9 +263,23 @@ class Engine(object):
         # done
 
     def calc_U(self, order, delta_t,type_evo):
-        #TODO: Old TenPy has E_offset
-        #TODO: Document!!
+        """Calculate ``self.U_bond`` from ``self.bond_eig_{vals,vecs}``
 
+        Parameters
+        ----------
+        order : int
+            Trotter order calculated U_bond. See update for more information.
+        delta_t: float
+            Size of the time-step used in calculating U_bond
+        type_evo: string
+            Has to be 'IMAG' or 'REAL' and determines whether we choose real or
+            imaginary time-evolution
+
+        Returns
+        -------
+        """
+
+        #TODO: Old TenPy has E_offset
         if order == 1:
             self.U_bond = [[None] * len(self.H_bond)]
             for i_bond in range(len(self.H_bond)):
@@ -302,6 +390,10 @@ class Engine(object):
         else:
             raise NotImplementedError('Only 4th order Trotter has been implemented')
 
+        self.U_param = {'dt': delta_t, 'type_evo': type_evo
+            , 'order': order}
+        if self.verbose > 1:
+            print "Calculated U_bond for:",self.U_param
 
     def update(self, N_steps):
         """Update a single time step with a given U
@@ -320,10 +412,8 @@ class Engine(object):
 
         Parameters
         ----------
-        model: :class:`NearestNeighborModel`
-            The model from which the bond operators are taken
-        U_bond:
-            The bond operator with which we update the bond
+        N_steps: int
+            The number of steps for which the whole lattice should be updated
 
         Returns
         -------
@@ -424,7 +514,7 @@ class Engine(object):
                     print "Skipped U_bond element:",i_bond
                 continue  # handles finite vs. infinite boundary conditions
             truncErr += self.update_bond(i_bond, U[i_bond])
-            if self.verbose > 10:
+            if self.verbose/100 > 1:
                 print "Took U_bond element",(i_bond)
         return truncErr
 
@@ -486,7 +576,7 @@ class Engine(object):
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_B(i1, B_R, form='B')
 
-        if self.verbose > 10:
+        if self.verbose/100 > 1:
             print "Update sites",i0," and ",i1
 
         return truncErr
