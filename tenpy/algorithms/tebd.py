@@ -206,7 +206,7 @@ class Engine(object):
                                        [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6,
                                         1.e-7,1.e-8,1.e-9,1.e-10,1.e-11, 0.],
                                          'run_GS')
-        max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-12, 'run_GS')
+        max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-13, 'run_GS')
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
 
