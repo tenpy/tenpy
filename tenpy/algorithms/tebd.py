@@ -192,8 +192,8 @@ class Engine(object):
             N_steps        int    Number of steps before measurement can be
                                   performed
             -------------- ------ ---------------------------------------------
-            ...            Truncation parameters as described in
-                           :func:`~tenpy.algorithms.truncation.truncate`
+            ...                   Truncation parameters as described in
+                                  :func:`~tenpy.algorithms.truncation.truncate`
             ============== ====== =============================================
 
         Returns
