@@ -340,6 +340,7 @@ class MPS(object):
         The copy still shares the sites, chinfo, and LegCharges of the _B,
         but the values of B and S are deeply copied.
         """
+        # __init__ makes deep copies of B, S
         return MPS(self.sites, self._B, self._S, self.bc, self.form)
 
     @property
@@ -523,11 +524,11 @@ class MPS(object):
         fL, fR = self.form[i]  # left / right form exponent
         copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
         theta = self.get_B(i, form=None, copy=copy)  # in the current form
-        theta = theta.replace_label('p', 'p0')
+        theta = self._replace_p_label(theta, 0)
         theta = self._scale_axis_B(theta, self.get_SL(i), formL - fL, 'vL', cutoff)
         for k in range(1, n):  # nothing if n=1.
             j = (i + k) % self.L
-            B = self.get_B(j, None, False).replace_label('p', 'p' + str(k))
+            B = self._replace_p_label(self.get_B(j, None, False), k)
             if self.form[j] is not None:
                 fL_j, fR_j = self.form[j]
                 if fR is not None:
@@ -664,7 +665,7 @@ class MPS(object):
             Two lists of each `n` leg labels giving the physical legs of the operator used for
             contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site operators (`n` = 1), or
             ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
 
         Returns
@@ -676,25 +677,20 @@ class MPS(object):
         Examples
         --------
         One site examples (`n` = 1):
-
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
-
         >>> psi.expectation_value(['Sz', 'Sx'])
         [Sz0, Sx1, Sz2, Sx3, ... ]
-
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
         Two site example (`n` = 2), assuming homogeneous `sites`:
-
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
-
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
@@ -704,8 +700,6 @@ class MPS(object):
         """
         ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(
             ops, sites, axes)
-        if len(axes_p) != n or len(axes_pstar) != n:
-            raise ValueError("Len of axes does not match operator n=" + len(n))
         vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
         E = []
         for i in sites:
@@ -832,6 +826,18 @@ class MPS(object):
                     # but we apply opstr after op1 (using the last argument = False)
         return np.real_if_close(C)
 
+    def __str__(self):
+        """Some status information about the MPS"""
+        res = ["MPS, L={L:d}, bc={bc!r}.".format(L=self.L, bc=self.bc)]
+        res.append("chi: " + str(self.chi))
+        if self.L > 10:
+            res.append("first two sites: " + repr(self.sites[0]) + " " + repr(self.sites[1]))
+            res.append("first two forms:" + " ".join([repr(f) for f in self.form[:2]]))
+        else:
+            res.append("sites: " + " ".join([repr(s) for s in self.sites]))
+            res.append("forms: " + " ".join([repr(f) for f in self.form]))
+        return "\n".join(res)
+
     def _to_valid_index(self, i):
         """make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
@@ -917,6 +923,13 @@ class MPS(object):
             if form_diff != 1.:
                 S = S**form_diff
             return B.scale_axis(S, axis_B)
+
+    def _replace_p_label(self, A, k):
+        """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
+
+        Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
+        implement this function."""
+        return A.replace_label('p', 'p'+str(k))
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
@@ -1272,25 +1285,20 @@ class MPSEnvironment(object):
         Examples
         --------
         One site examples (`n` = 1):
-
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
-
         >>> psi.expectation_value(['Sz', 'Sx'])
         [Sz0, Sx1, Sz2, Sx3, ... ]
-
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
         Two site example (`n` = 2), assuming homogeneous `sites`:
-
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
-
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
