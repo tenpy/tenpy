@@ -563,10 +563,10 @@ class MPS(object):
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
-        Consider a cut of the sytem in to :math:`A = \{ j: j < i \}` and :math:`B = \{ j : j > i}`.
+        Consider a cut of the sytem in to :math:`A = \{ j: j < i \}` and :math:`B = \{ j: j > i\}`.
         This defines the von-Neumann entanglement entropy as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
-        The generalization for ``n != 1, n>0` are the Renyi entropies:
+        The generalization for ``n != 1, n>0`` are the Renyi entropies:
         :math:`S(A, n) = \frac{1}{1-n} \log(tr(\rho_A^2)) = S(B, n=1)`
 
         This function calculates the entropy for a cut at different bonds `i`, for which the
@@ -659,7 +659,7 @@ class MPS(object):
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
         sites : None | list of int
-            List of site indices. ``sites``. Expectation values are evaluated there.
+            List of site indices. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
@@ -676,7 +676,8 @@ class MPS(object):
 
         Examples
         --------
-        One site examples (`n` = 1):
+        One site examples (n=1):
+
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
         >>> psi.expectation_value(['Sz', 'Sx'])
@@ -684,13 +685,15 @@ class MPS(object):
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
-        Two site example (`n` = 2), assuming homogeneous `sites`:
+        Two site example (n=2), assuming homogeneous sites:
+
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
@@ -1003,7 +1006,7 @@ class MPSEnvironment(object):
     """Stores partial contractions of :math:`<bra|Op|ket>` for local operators `Op`.
 
     The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
-    at sites `i, i+1`looks like::
+    at sites `i, i+1` looks like::
 
         |     .-----M[0]--- ... --M[1]---M[2]--- ... ->--.
         |     |     |             |      |               |
@@ -1267,7 +1270,7 @@ class MPSEnvironment(object):
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
         sites : list
-            List of site indices. ``sites``. Expectation values are evaluated there.
+            List of site indices. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
@@ -1285,6 +1288,7 @@ class MPSEnvironment(object):
         Examples
         --------
         One site examples (n=1):
+
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
         >>> psi.expectation_value(['Sz', 'Sx'])
@@ -1292,13 +1296,15 @@ class MPSEnvironment(object):
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
-        Two site example (`n` = 2), assuming homogeneous `sites`:
+        Two site example (n=2), assuming homogeneous sites:
+
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]

@@ -11,9 +11,10 @@ the physical space `P`, we introduce a second 'auxiliar' space `Q` and define th
 of the physical system as :math:`\rho = Tr_Q(|\phi><\phi|)`, where :math:`|\phi>` is a pure state
 in the combined phyisical and auxiliar system.
 
-For :math:`T=\infty`, the density matrix :math`\rho_\infty` is the identity matrix. In other words,
-expectation values are sums over all possible states :math:`<O> = Tr_P(\rho_\infty O) = Tr_P(O)`.
-Saying that each `:` on top is to be connected with the corresponding `:` on the bottom,
+For :math:`T=\infty`, the density matrix :math:`\rho_\infty` is the identity matrix.
+In other words, expectation values are sums over all possible states
+:math:`<O> = Tr_P(\rho_\infty O) = Tr_P(O)`.
+Saying that each ``:`` on top is to be connected with the corresponding ``:`` on the bottom,
 the trace is simply a contraction::
 
     |         :   :   :   :   :   :
@@ -52,7 +53,7 @@ We  use the following label convention::
 You can view the `MPO` as an MPS by combining the `p` and `q` leg and defining every physical
 operator to act trivial on the `q` leg. In expecation values, you would then sum over
 over the `q` legs, which is exactly what we need.
-In other words, the choice math:`B = \delta_{p,q}` with trivial (length-1) virtual bonds yields
+In other words, the choice :math:`B = \delta_{p,q}` with trivial (length-1) virtual bonds yields
 infinite temperature expectation values for operators action only on the `p` legs!
 
 Now, you go a step further and also apply imaginary time evolution (acting only on `p` legs)
@@ -62,8 +63,7 @@ For example, the state :math:`\exp(-\beta/2 H)|\phi>` yields expecation values
 
 
 An additional real-time evolution allows to calculate time correlation functions,
-e.g. :math:`<A(t)B(0)> = <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t)
-                                            B \exp(-\beta H/2) |\phi>`.
+e.g. :math:`<A(t)B(0)> = <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>`.
 
 
 See also [2]_ for additional tricks! On of their crucial observations is, that
@@ -101,7 +101,7 @@ from ..linalg import np_conserved as npc
 
 
 class PurificationMPS(MPS):
-    """An MPS representing a finite-temperature ensemble using purification.
+    r"""An MPS representing a finite-temperature ensemble using purification.
 
     Similar as an MPS, but each `B` has now the four legs ``'vL', 'vR', 'p', 'q'``.
     From the point of algorithms, it is to be considered as a ususal MPS by combining the legs
@@ -166,7 +166,7 @@ class PurificationMPS(MPS):
         """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For example the contraction for a two-site (`n`=2) operator on site `i` would look like
+        For example the contraction for a two-site (n=2) operator on site `i` would look like
         the following picture (where the ``:`` on top are connected with the ones on the bottom)::
 
             |                :     :
@@ -190,14 +190,14 @@ class PurificationMPS(MPS):
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
         sites : None | list of int
-            List of site indices. ``sites``. Expectation values are evaluated there.
+            List of site indices. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
         axes : None | (list of str, list of str)
             Two lists of each `n` leg labels giving the physical legs of the operator used for
             contraction. The first `n` legs are contracted with conjugated B`s,
             the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site (`n` = 1), or
-            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for `n` > 1.
+            ``None`` defaults to ``(['p'], ['p*'])`` for single site operators (n=1), or
+            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for n > 1.
 
         Returns
         -------
@@ -207,7 +207,8 @@ class PurificationMPS(MPS):
 
         Examples
         --------
-        One site examples (`n` = 1):
+        One site examples (n=1):
+
         >>> psi.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
         >>> psi.expectation_value(['Sz', 'Sx'])
@@ -215,13 +216,15 @@ class PurificationMPS(MPS):
         >>> psi.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
-        Two site example (`n` = 2), assuming homogeneous `sites`:
+        Two site example (n=2), assuming homogeneous sites:
+
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
         >>> psi.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
