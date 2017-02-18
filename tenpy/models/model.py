@@ -358,10 +358,6 @@ class NearestNeighborModel(object):
 
     Suitable for TEBD.
 
-    .. todo ::
-        Make a TEBD algorithm class, which should store U_bond internally.
-        Still, this class might store the bond_eig_vals and bond_eig_vecs...
-
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
@@ -377,14 +373,6 @@ class NearestNeighborModel(object):
     H_bond : list of :class:`npc.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
         ``H_bond[i]`` acts on sites ``(i-1, i)``.
-    bond_eig_vals : list of 1D arrays
-        eigenvalues for each entry of H_bond
-    bond_eig_vecs : list of npc.Array
-        eigenvectors for each entry of H_bond
-    U_bond: None | list of tuples
-        exp(i dt H_bond) depe for TEBD parameters given by `U_parameters`
-    U_param : dict
-        TEBD parameters for which `U_bond` was calculated.
     """
 
     def __init__(self, lat, H_bond):

@@ -144,7 +144,7 @@ class PurificationMPS(MPS):
         -------
         infiniteT_MPS : :class:`PurificationMPS`
             Describes the infinite-temperature (grand canonical) ensemble,
-            i.e. expectation values give a trave over all basis states.
+            i.e. expectation values give a trace over all basis states.
         """
         sites = list(sites)
         L = len(sites)

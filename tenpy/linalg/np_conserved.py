@@ -3078,6 +3078,7 @@ def eigh(a, UPLO='L', sort=None):
         the eigenvalues, sorted within the same charge blocks according to `sort`.
     V : :class:`Array`
         Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+        The first label is inherited from `A`, the second label is ``'eig'``.
 
     Notes
     -----
@@ -3087,13 +3088,15 @@ def eigh(a, UPLO='L', sort=None):
     The eigenvectors `V` are then obtained by the reverse permutation,
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
-    return _eig_worker(True, a, sort, UPLO)  # hermitian
+    w, v = _eig_worker(True, a, sort, UPLO)  # hermitian
+    v.set_leg_labels([a.get_leg_labels()[0], 'eig'])
+    return w, v
 
 
 def eig(a, sort=None):
     r"""Calculate eigenvalues and eigenvectors for a non-hermitian matrix.
 
-    ``W, V = eig(a)`` yields :math:`a = V diag(w) V^{\dagger}`.
+    ``W, V = eig(a)`` yields :math:`a V = V diag(w)`.
 
     Parameters
     ----------
@@ -3109,6 +3112,7 @@ def eig(a, sort=None):
         the eigenvalues, sorted within the same charge blocks according to `sort`.
     V : :class:`Array`
         Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
+        The first label is inherited from `A`, the second label is ``'eig'``.
 
     Notes
     -----
@@ -3118,7 +3122,9 @@ def eig(a, sort=None):
     The eigenvectors `V` are then obtained by the reverse permutation,
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
-    return _eig_worker(False, a, sort)  # non-hermitian
+    w, v = _eig_worker(False, a, sort)  # non-hermitian
+    v.set_leg_labels([a.get_leg_labels()[0], 'eig'])
+    return w, v
 
 
 def eigvalsh(a, UPLO='L', sort=None):

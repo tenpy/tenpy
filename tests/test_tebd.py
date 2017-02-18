@@ -2,6 +2,7 @@
 from __future__ import division
 
 import itertools as it
+import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.networks.mps import MPS
@@ -10,9 +11,20 @@ import tenpy.algorithms.tebd as tebd
 from tenpy.algorithms.exact_diag import ExactDiag
 from nose.plugins.attrib import attr
 
-@attr('slow')
+
+def test_trotter_decomposition():
+    # check that the time steps sum up to what we expect
+    for order in [1, 2, 4]:
+        dt = tebd.Engine.suzuki_trotter_time_steps(order)
+        for N in [1, 2, 5]:
+            evolved = [0., 0.]
+            for j, k in tebd.Engine.suzuki_trotter_decomposition(order, N):
+                evolved[k] += dt[j]
+            npt.assert_array_almost_equal_nulp(evolved, N*np.ones([2]), N*2)
+
+
 def check_tebd(bc_MPS='finite'):
-    xxz_pars = dict(L=4, Jxx=1., Jz=3., hz = 0.,bc_MPS=bc_MPS)
+    xxz_pars = dict(L=4, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel
@@ -20,12 +32,11 @@ def check_tebd(bc_MPS='finite'):
 
     tebd_param = {
         'verbose': 2,
-        'chi_max':200,
+        'chi_max': 200,
         'dt': 0.1,
-        'order':4
+        'order': 4
         }
-
-    engine = tebd.Engine(psi,M,tebd_param)
+    engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 
     if bc_MPS == 'finite':
@@ -36,7 +47,7 @@ def check_tebd(bc_MPS='finite'):
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
         print "compare with ED: overlap = ", abs(ov)**2
 
-        #Test real time TEBD
+        # Test real time TEBD
         Eold = np.average(M.bond_energies(psi))
         Sold = np.average(psi.entanglement_entropy())
         for i in range(10):
@@ -62,8 +73,9 @@ def check_tebd(bc_MPS='finite'):
     # TODO: compare with known ground state (energy) / ED !
 
 
+@attr('slow')
 def test_tebd():
-    for bc_MPS in ['finite','infinite']:
+    for bc_MPS in ['finite', 'infinite']:
         yield check_tebd, bc_MPS
 
 
