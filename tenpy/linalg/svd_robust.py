@@ -18,9 +18,6 @@ which is as the time of this writing the latest stable scipy version.
 For scipy version newer than '0.18.0', we make use of the new keyword 'lapack_driver' for svd,
 otherwise we (try to) load `dgesvd` and `zgesvd` from shared LAPACK libraries.
 
-References
-----------
-
 The tribute for the dgesvd wrapper code goes to 'jgarcke', originally posted at
 http://projects.scipy.org/numpy/ticket/990, which is now hosted
 at https://github.com/numpy/numpy/issues/1588
@@ -35,7 +32,6 @@ The idea is that you just import the `svd` from this module and use it as replac
 
 >>> from svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., [1.]])
-
 """
 
 import numpy as np

@@ -66,7 +66,7 @@ An additional real-time evolution allows to calculate time correlation functions
 e.g. :math:`<A(t)B(0)> = <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>`.
 
 
-See also [2]_ for additional tricks! On of their crucial observations is, that
+See also [Karrasch2013]_ for additional tricks! On of their crucial observations is, that
 one can apply arbitrary unitaries on the auxiliar space (i.e. the `q`) without changing the result.
 This can actually be used to reduce the necessary virtual bond dimensions:
 From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to the `p` legs of
@@ -78,8 +78,9 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
 
 
 .. Note :
-    The literature (e.g. section 7.2 of [1]_ or [2]_) suggests to use a `singlet` as a maximally
-    entangled state. Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
+    The literature (e.g. section 7.2 of [Schollwoeck2011]_ or [Karrasch2013]_) suggests to use
+    a `singlet` as a maximally entangled state.
+    Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
     conservation with the above `qconj` convention.
     Moreover, we don't split the physical and auxiliar space into separate sites, which makes
@@ -88,9 +89,6 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
 Of course, we are not only intereseted at infinite-temperature expecation values, but primarily on
 finite temperature expectation values.
 
-
-.. [1] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
-.. [2] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
 """
 
 from __future__ import division

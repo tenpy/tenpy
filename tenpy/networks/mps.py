@@ -49,7 +49,7 @@ Valid MPS boundary conditions (not to confuse with `bc_coupling` of
             bond is identified with the first one.
 ==========  ===================================================================================
 
-An MPS can be in different 'canonical forms' (see [1]_, [2]_).
+An MPS can be in different 'canonical forms' (see [Vidal2004]_, [Schollwoeck2011]_).
 To take care of the different canonical forms, algorithms should use functions like
 :meth:`get_theta`, :meth:`get_B` and :meth:`set_B` instead of accessing them directly,
 as they return the `B` in the desired form (which can be chosed as an argument).
@@ -75,11 +75,6 @@ as they return the `B` in the desired form (which can be chosed as an argument).
     - canonicalize()
     - much much more ....
     - proper documentation
-
-References
-----------
-.. [1] G. Vidal, Phys. Rev. Lett. 93, 040502 (2004), arXiv:quant-ph/0310089
-.. [2] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
 """
 
 from __future__ import division

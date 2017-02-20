@@ -35,7 +35,8 @@ Content
    :maxdepth: 1
 
    INSTALL
+   literature
+   IntroNpc
+   changes_TenPy
    contribution
    todo
-   changes_TenPy
-   IntroNpc

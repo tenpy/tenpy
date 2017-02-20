@@ -1,10 +1,10 @@
 """Density Matrix Renormalization Group (DMRG).
 
 Although it was originally not formulated with tensor networks,
-the DMRG algorithm (invented by Steven White in 1992 [1]_) opened the whole field
+the DMRG algorithm (invented by Steven White in 1992 [White1992]_) opened the whole field
 with its enormous success in finding ground states in 1D.
 
-We implement DMRG in the modern formulation of matrix product states [2]_,
+We implement DMRG in the modern formulation of matrix product states [Schollwoeck2011]_,
 both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
 and in the thermodynamic limit (``'periodic'`` b.c.).
 
@@ -27,12 +27,6 @@ and then slowly turned off in the end.
     Need function to plot the statistics in the end
     Write UserGuide/Example!!!
     Allow to keep MPS orthogonal to other states, for finding excited states
-
-References
-----------
-.. [1] S. White, Phys. Rev. Lett. 69, 2863 (1992),
-       S. White, Phys. Rev. B 84, 10345 (1992)
-.. [2] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
 """
 
 from __future__ import division

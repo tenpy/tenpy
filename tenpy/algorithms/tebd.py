@@ -1,6 +1,6 @@
 r"""Time evolving block decimation (TEBD).
 
-The TEBD algorithm (proposed in [1]_) uses a trotter decomposition of the
+The TEBD algorithm (proposed in [Vidal2004]_) uses a trotter decomposition of the
 Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neigbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
@@ -35,9 +35,6 @@ If one chooses imaginary :math:`dt`, the exponential projects
     The application of DMRG is typically much more efficient than imaginary TEBD!
     Yet, imaginary TEBD might be usefull for cross-checks and testing.
 
-References
-----------
-.. [1] G. Vidal, Phys. Rev. Lett. 93, 040502 (2004), arXiv:quant-ph/0310089
 """
 
 from __future__ import division
