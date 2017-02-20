@@ -250,7 +250,7 @@ class CouplingModel(object):
         -------
         H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
             Bond terms as required by the constructor of :class:`NearestNeighborModel`.
-            Legs are ``['pL', 'pL*', 'pR', 'pR*']``
+            Legs are ``['p0', 'p0*', 'p1', 'p1*']``
 
         Raises
         ------
@@ -281,7 +281,7 @@ class CouplingModel(object):
                             "Can't give H_bond for long-range: {i:d} {j:d}".format(i=i, j=j2))
                     for op2, strength in d3.iteritems():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-            H.set_leg_labels(['pL', 'pL*', 'pR', 'pR*'])
+            H.set_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             res[j] = H
         if finite:
             assert (res[0].norm(np.inf) <= tol_zero)
@@ -405,9 +405,9 @@ class NearestNeighborModel(object):
             for infinite bc ``E_bond[i]`` is the energy of bond ``i-1, i``.
         """
         if self.lat.bc_MPS == 'infinite':
-            return psi.expectation_value(self.H_bond, axes=(['pL', 'pR'], ['pL*', 'pR*']))
+            return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
         # else
-        return psi.expectation_value(self.H_bond[1:], axes=(['pL', 'pR'], ['pL*', 'pR*']))
+        return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
 
 
 class MPOModel(object):

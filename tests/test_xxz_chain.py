@@ -19,7 +19,7 @@ def test_XXZChain():
     chain = XXZChain(pars)
     chain.test_sanity()
     for Hb in chain.H_bond[1:]:  # check bond eigenvalues
-        Hb2 = Hb.combine_legs([['pL', 'pR'], ['pL*', 'pR*']], qconj=[+1, -1])
+        Hb2 = Hb.combine_legs([['p0', 'p1'], ['p0*', 'p1*']], qconj=[+1, -1])
         print Hb2.to_ndarray()
         W = npc.eigvalsh(Hb2)
         npt.assert_array_almost_equal_nulp(np.sort(W), np.sort([-0.75, 0.25, 0.25, 0.25]), 16**3)
@@ -29,7 +29,7 @@ def test_XXZChain():
     chain = XXZChain(pars)
     chain.test_sanity()
     Hb = chain.H_bond[2]  # the only central bonds: boundaries have different hz.
-    Hb2 = Hb.combine_legs([['pL', 'pR'], ['pL*', 'pR*']], qconj=[+1, -1])
+    Hb2 = Hb.combine_legs([['p0', 'p1'], ['p0*', 'p1*']], qconj=[+1, -1])
     print Hb2.to_ndarray()
     W = npc.eigvalsh(Hb2)
     print W

@@ -487,16 +487,20 @@ class Array(object):
 
     def ireplace_labels(self, old_labels, new_labels):
         """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
-        for old_l, new_l in zip(old_labels, new_labels):
-            self.ireplace_label(old_l, new_l)
+        # can't just iterate with `ireplace_label` in case of duplicates:
+        # ireplace_labels(['a', 'b'], ['b', 'a']) has to work as well!
+        labels = self.labels
+        axes = self.get_leg_indices(old_labels)
+        for old_lbl in old_labels:
+            del labels[old_lbl]
+        for new_lbl, ax in zip(new_labels, axes):
+            labels[new_lbl] = ax
         return self
 
     def replace_labels(self, old_labels, new_labels):
         """Return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
         res = self.copy(deep=False)
-        for old_l, new_l in zip(old_labels, new_labels):
-            res.ireplace_label(old_l, new_l)
-        return res
+        return res.ireplace_labels(old_labels, new_labels)
 
     # string output ===========================================================
 

@@ -427,7 +427,7 @@ class Engine(object):
             Bond index; we update the matrices at sites ``i-1, i``.
         U_bond : :class:~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
-            We expect labels ``'pL', 'pR', 'pL*', 'pR*'``.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
 
         Returns
         -------
@@ -440,19 +440,19 @@ class Engine(object):
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
-        theta = npc.tensordot(U_bond, theta, axes=(['pL*', 'pR*'], ['p0', 'p1']))
-        theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
             theta, self.TEBD_params, inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
-        B_R = V.split_legs(1).ireplace_label('pR', 'p')
+        B_R = V.split_legs(1).ireplace_label('p1', 'p')
         # In general, we want to do the following:
         #     U = U.iscale_axis(S, 'vR')
         #     B_L = U.split_legs(0).iscale_axis(self.psi.get_SL(i0)**(-1), 'vL')
-        #     B_L = B_L.ireplace_label('pL', 'p')
+        #     B_L = B_L.ireplace_label('p0', 'p')
         # i.e. with SL = self.psi.get_SL(i0), we have ``B_L = SL**(-1) U S``
         #
         # However, the inverse of SL is problematic, as it might contain very small singular
@@ -461,12 +461,12 @@ class Engine(object):
         C = self.psi.get_theta(i0, n=2, formL=0.)
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
-        C = npc.tensordot(U_bond, C, axes=(['pL*', 'pR*'], ['p0', 'p1']))  # apply U as for theta
+        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         B_L = npc.tensordot(
-            C.combine_legs(('vR', 'pR'), pipes=theta.legs[1]),
+            C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
             V.conj(),
-            axes=['(vR.pR)', '(vR*.pR*)'])
-        B_L.ireplace_labels(['vL*', 'pL'], ['vR', 'p'])
+            axes=['(vR.p1)', '(vR*.p1*)'])
+        B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
@@ -485,7 +485,7 @@ class Engine(object):
             if h is None:
                 w = v = None
             else:
-                H2 = h.combine_legs([('pL', 'pR'), ('pL*', 'pR*')], qconj=[+1, -1])
+                H2 = h.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
                 w, v = npc.eigh(H2)
             self._bond_eig_vals.append(w)
             self._bond_eig_vecs.append(v)
@@ -494,8 +494,8 @@ class Engine(object):
     def _calc_U_bond(self, i_bond, dt, type_evo, E_offset):
         """Calculate exponential of a bond Hamitonian.
 
-        *) ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
-        *) ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
+        * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
+        * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
         """
         V = self._bond_eig_vecs[i_bond]
         E = self._bond_eig_vals[i_bond]
@@ -512,5 +512,5 @@ class Engine(object):
         # U = V s V^dag, s = e^(- tau E )
         U = V.scale_axis(diag, axis=1)
         U = npc.tensordot(U, V.conj(), axes=(1, 1))
-        assert (tuple(U.get_leg_labels()) == ('(pL.pR)', '(pL*.pR*)'))
+        assert (tuple(U.get_leg_labels()) == ('(p0.p1)', '(p0*.p1*)'))
         return U.split_legs()
