@@ -197,6 +197,7 @@ class Site(object):
 # ------------------------------------------------------------------------------
 # The most common local sites.
 
+
 class SpinHalfSite(Site):
     """Spin-1/2 site.
 
@@ -231,6 +232,7 @@ class SpinHalfSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
+
     def __init__(self, conserve='Sz'):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -305,6 +307,7 @@ class FermionSite(Site):
     .. todo ::
         Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
     """
+
     def __init__(self, conserve='N', filling=0.5):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -378,6 +381,7 @@ class BosonSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
+
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -417,5 +421,5 @@ class BosonSite(Site):
 
     def __repr__(self):
         """Debug representation of self"""
-        return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax, c=self.conserve,
-                                                       f=self.filling)
+        return "BosonSite({N:d}, {c!r}, {f:f})".format(
+            N=self.Nmax, c=self.conserve, f=self.filling)

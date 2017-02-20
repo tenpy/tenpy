@@ -159,7 +159,7 @@ html_favicon = "logo.ico"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = [] # ['sphinx_static']   # not needed
+html_static_path = []  # ['sphinx_static']   # not needed
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -176,7 +176,9 @@ html_static_path = [] # ['sphinx_static']   # not needed
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
-html_sidebars = {'**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'], }
+html_sidebars = {
+    '**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'],
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -227,7 +229,9 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
-latex_documents = [('index', 'TenPy.tex', u'TenPy Documentation', u'TenPy community', 'manual'), ]
+latex_documents = [
+    ('index', 'TenPy.tex', u'TenPy Documentation', u'TenPy community', 'manual'),
+]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
@@ -263,8 +267,10 @@ man_pages = [('index', 'tenpylight', u'TenPy Documentation', [u'TenPy community'
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [('index', 'TenPy', u'TenPy Documentation', u'TenPy community', 'TenPy',
-                      'One line description of project.', 'Miscellaneous'), ]
+texinfo_documents = [
+    ('index', 'TenPy', u'TenPy Documentation', u'TenPy community', 'TenPy',
+     'One line description of project.', 'Miscellaneous'),
+]
 
 # Documents to append as an appendix to all manuals.
 #texinfo_appendices = []

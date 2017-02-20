@@ -21,4 +21,4 @@ def test_purification_mps():
         E = psi.expectation_value('Sz')
         npt.assert_array_almost_equal_nulp(E, np.zeros([L]), 100)
         C = psi.correlation_function('Sz', 'Sz')
-        npt.assert_array_almost_equal_nulp(C, 2*0.5*0.5*np.eye(L), 100)
+        npt.assert_array_almost_equal_nulp(C, 2 * 0.5 * 0.5 * np.eye(L), 100)

@@ -282,8 +282,8 @@ def plot_timing_res(data, fn=None):
             if np.any(t != 0.):  # only if we have data
                 pl.plot(sizes, t, col + m + '-', markersize=8, label=lab)
     if 'kwargs' in data:
-        pl.title(', '.join([k + "=" + str(data['kwargs'][k])
-                            for k in sorted(data['kwargs'].keys())]))
+        pl.title(
+            ', '.join([k + "=" + str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
     pl.xlabel('size (of each leg)')
     pl.ylabel('total time [s]')
     pl.loglog()

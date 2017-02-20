@@ -322,10 +322,8 @@ class MPS(object):
             S_list[i] = S
             psi = psi.split_legs(0)
         psi = psi.combine_legs([labels[0], 'vR'])
-        psi, S, B = npc.svd(psi,
-                            qtotal_LR=[None, psi.qtotal],
-                            inner_labels=['vR', 'vL'],
-                            cutoff=cutoff)
+        psi, S, B = npc.svd(
+            psi, qtotal_LR=[None, psi.qtotal], inner_labels=['vR', 'vL'], cutoff=cutoff)
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
         B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
@@ -610,9 +608,9 @@ class MPS(object):
             if n == 1:
                 res.append(-np.inner(np.log(s), s))
             elif n == np.inf:
-                res.append(-2.*np.log(np.max(s)))
-            else:   # general n != 1, inf
-                res.append(np.log(np.sum(s**(2*n)))/(1.-n))
+                res.append(-2. * np.log(np.max(s)))
+            else:  # general n != 1, inf
+                res.append(np.log(np.sum(s**(2 * n))) / (1. - n))
         return np.array(res)
 
     def overlap(self, other):
@@ -701,8 +699,8 @@ class MPS(object):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
 
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(
-            ops, sites, axes)
+        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
+                                                                                      axes)
         vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
         E = []
         for i in sites:
@@ -798,8 +796,8 @@ class MPS(object):
 
             The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
         """
-        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
-            ops1, ops2, sites1, sites2, opstr)
+        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(ops1, ops2, sites1,
+                                                                            sites2, opstr)
         if hermitian and sites1 != sites2:
             warnings.warn("MPS correlation function can't use the hermitian flag")
             hermitian = False
@@ -811,7 +809,7 @@ class MPS(object):
                 C_gtr = self._corr_up_diag(ops1, ops2, i, j_gtr, opstr, str_on_first, True)
                 C[x, (sites2 > i)] = C_gtr
                 if hermitian:
-                    C[x+1:, x] = np.conj(C_gtr)
+                    C[x + 1:, x] = np.conj(C_gtr)
             # j == i
             j_eq = sites2[sites2 == i]
             if len(j_eq) > 0:
@@ -823,8 +821,8 @@ class MPS(object):
             for y, j in enumerate(sites2):
                 i_gtr = sites1[sites1 > j]
                 if len(i_gtr) > 0:
-                    C[(sites1 > j), y] = self._corr_up_diag(
-                        ops2, ops1, j, i_gtr, opstr, str_on_first, False)
+                    C[(sites1 > j), y] = self._corr_up_diag(ops2, ops1, j, i_gtr, opstr,
+                                                            str_on_first, False)
                     # exchange ops1 and ops2 : they commute on different sites,
                     # but we apply opstr after op1 (using the last argument = False)
         return np.real_if_close(C)
@@ -932,12 +930,12 @@ class MPS(object):
 
         Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
         implement this function."""
-        return A.replace_label('p', 'p'+str(k))
+        return A.replace_label('p', 'p' + str(k))
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
         ops = npc.to_iterable_arrays(ops)
-        n = self.get_op(ops, 0).rank // 2   # same as int(rank/2)
+        n = self.get_op(ops, 0).rank // 2  # same as int(rank/2)
         L = self.L
         if sites is None:
             if self.finite:
@@ -986,7 +984,7 @@ class MPS(object):
         # C has legs 'vR*', 'vR'
         js = list(j_gtr[::-1])  # stack of j, sorted *descending*
         res = []
-        for r in range(i+1, js[0]+1):  # js[0] is the maximum
+        for r in range(i + 1, js[0] + 1):  # js[0] is the maximum
             B = self.get_B(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
@@ -1333,16 +1331,14 @@ class MPSEnvironment(object):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(
-            self.bra.get_B(
-                i, form='A').conj(), LP, axes=(['p*', 'vL*'], ['p', 'vR*']))
+            self.bra.get_B(i, form='A').conj(), LP, axes=(['p*', 'vL*'], ['p', 'vR*']))
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(
-            self.bra.get_B(
-                i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
+            self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):
@@ -1430,6 +1426,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
         Still, might also be useful in algorithms.exact_diag
     """
+
     def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0):
         L = self.L = lcm(bra.L, ket.L)
         if shift_ket is None:
@@ -1438,15 +1435,23 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.shift_ket = shift_ket
         self.transpose = transpose
         if not transpose:
-            M = self._ket_M = [ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
-                               for i in range(shift_ket, shift_ket+L)]
-            N = self._bra_N = [bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
-                               for i in range(shift_bra, shift_bra+L)]
+            M = self._ket_M = [
+                ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                for i in range(shift_ket, shift_ket + L)
+            ]
+            N = self._bra_N = [
+                bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                for i in range(shift_bra, shift_bra + L)
+            ]
         else:
-            M = self._ket_M = [ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
-                               for i in range(shift_ket, shift_ket+L)]
-            N = self._bra_N = [bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
-                               for i in range(shift_bra, shift_bra+L)]
+            M = self._ket_M = [
+                ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                for i in range(shift_ket, shift_ket + L)
+            ]
+            N = self._bra_N = [
+                bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                for i in range(shift_bra, shift_bra + L)
+            ]
         self.chinfo = bra.chinfo
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
@@ -1475,7 +1480,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self._charge_sector = value
         if value is not None:
             self._mask = np.all(self._pipe.to_qflat() == value[np.newaxis, :], axis=1)
-            self.shape = tuple([np.sum(self._mask)]*2)
+            self.shape = tuple([np.sum(self._mask)] * 2)
         else:
             chi2 = self._pipe.ind_len
             self.shape = (chi2, chi2)
@@ -1616,7 +1621,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
             # for given charge sector
             for k in xrange(num_ev, max_num_ev + 1):
                 if k > num_ev:
-                    warnings.warn("increased `num_ev` to " + str(k+1))
+                    warnings.warn("increased `num_ev` to " + str(k + 1))
                 try:
                     eta, A = speigs(self, k=k, which='LM', **kwargs)
                     A = np.real_if_close(A)

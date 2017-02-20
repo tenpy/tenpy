@@ -186,12 +186,14 @@ def run(psi, model, DMRG_params):
     E_old, S_old = np.nan, np.nan  # initial dummy values
     E, Delta_E, Delta_S = 1., 1., 1.
 
-    sweep_statistics = {'sweep': [],
-                        'E': [],
-                        'S': [],
-                        'max_trunc_err': [],
-                        'max_E_trunc': [],
-                        'max_chi': []}
+    sweep_statistics = {
+        'sweep': [],
+        'E': [],
+        'S': [],
+        'max_trunc_err': [],
+        'max_E_trunc': [],
+        'max_chi': []
+    }
 
     while True:
         # check abortion criteria
@@ -222,11 +224,11 @@ def run(psi, model, DMRG_params):
                     print "Setting chi_max =", chi_list[engine.sweeps]
         # update lancos_params depending on truncation error(s)
         if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
-            engine.lanczos_params['P_tol'] = max(p_tol_min, min(p_tol_max,
-                                                                max_trunc_err * p_tol_to_trunc))
+            engine.lanczos_params['P_tol'] = max(p_tol_min,
+                                                 min(p_tol_max, max_trunc_err * p_tol_to_trunc))
         if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
-            engine.lanczos_params['P_tol'] = max(e_tol_min, min(e_tol_max,
-                                                                max_E_trunc * p_tol_to_trunc))
+            engine.lanczos_params['P_tol'] = max(e_tol_min,
+                                                 min(e_tol_max, max_E_trunc * p_tol_to_trunc))
         # update environment
         engine.environment_sweeps(update_env)
         try:
@@ -268,7 +270,11 @@ def run(psi, model, DMRG_params):
                 time=time.time() - start_time,
                 mem=memory_usage(),
                 chi=engine.env.ket.chi,
-                age=engine.statistics['age'][-1], E=E, DE=Delta_E, DS=Delta_S, trerr=max_trunc_err,
+                age=engine.statistics['age'][-1],
+                E=E,
+                DE=Delta_E,
+                DS=Delta_S,
+                trerr=max_trunc_err,
                 Eerr=max_E_err)
     if verbose > 1:
         print "=" * 80
@@ -276,15 +282,18 @@ def run(psi, model, DMRG_params):
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
         print msg.format(
             sweep=engine.sweeps,
-            age=engine.statistics['age'][-1], chimax=np.max(engine.env.ket.chi))
+            age=engine.statistics['age'][-1],
+            chimax=np.max(engine.env.ket.chi))
         print "=" * 80
 
     # cleanup
     engine.mixer_cleanup()
-    return {'E': E,
-            'shelve': shelve,
-            'bond_statistics': engine.statistics,
-            'sweep_statistics': sweep_statistics}
+    return {
+        'E': E,
+        'shelve': shelve,
+        'bond_statistics': engine.statistics,
+        'sweep_statistics': sweep_statistics
+    }
 
 
 class Engine(object):

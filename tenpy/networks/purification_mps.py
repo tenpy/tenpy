@@ -122,6 +122,7 @@ class PurificationMPS(MPS):
         different 'sites' (i.e. making a ladder-structure). For TEBD, this requires a `swap` of
         the sites. Also, I'm not sure, how much faster this actually would be....
     """
+
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
     # `get_theta` works thanks to `_replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
@@ -148,8 +149,8 @@ class PurificationMPS(MPS):
         """
         sites = list(sites)
         L = len(sites)
-        S = [[1.]]*(L+1)  # trivial S: product state
-        Bs = [None]*L
+        S = [[1.]] * (L + 1)  # trivial S: product state
+        Bs = [None] * L
         for i in range(L):
             p_leg = sites[i].leg
             B = npc.diag(1., p_leg, np.float)
@@ -232,15 +233,15 @@ class PurificationMPS(MPS):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
 
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(
-            ops, sites, axes)
-        th_labels = th_labels + ['q'+str(j) for j in range(n)]  # additional q0, q1, ...
-        vLvR_axes_p_q = ('vL', 'vR') + tuple(axes_p) + tuple(['q'+str(j) for j in range(n)])
+        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
+                                                                                      axes)
+        th_labels = th_labels + ['q' + str(j) for j in range(n)]  # additional q0, q1, ...
+        vLvR_axes_p_q = ('vL', 'vR') + tuple(axes_p) + tuple(['q' + str(j) for j in range(n)])
         E = []
         for i in sites:
             op = self.get_op(ops, i)
             theta = self.get_theta(i, n)  # vL, vR, p0, q0, p1, q1
-            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:2+n]])  # ignore 'q'
+            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:2 + n]])  # ignore 'q'
             E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p_q], do_conj=True))
         return np.array(E)
 
@@ -249,7 +250,7 @@ class PurificationMPS(MPS):
 
         Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
         implement this function."""
-        return A.replace_labels(['p', 'q'], ['p'+str(k), 'q'+str(k)])
+        return A.replace_labels(['p', 'q'], ['p' + str(k), 'q' + str(k)])
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
@@ -265,13 +266,13 @@ class PurificationMPS(MPS):
         # C has legs 'vR*', 'vR'
         js = list(j_gtr[::-1])  # stack of j, sorted *descending*
         res = []
-        for r in range(i+1, js[0]+1):  # js[0] is the maximum
+        for r in range(i + 1, js[0] + 1):  # js[0] is the maximum
             B = self.get_B(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
                 Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
-                Cij = npc.inner(B.conj(), Cij, axes=[['vL*', 'p*', 'q*', 'vR*'],
-                                                     ['vR*', 'p', 'q', 'vR']])
+                Cij = npc.inner(
+                    B.conj(), Cij, axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:

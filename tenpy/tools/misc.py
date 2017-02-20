@@ -62,8 +62,8 @@ def to_array(a, shape=(None, )):
         if shape[i] is None:
             continue
         if shape[i] % a.shape[i] != 0:
-            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(a.shape[i],
-                                                                                       shape[i]))
+            raise ValueError(
+                "incomensurate len for tiling from {0:d} to {1:d}".format(a.shape[i], shape[i]))
         reps[i] = shape[i] // a.shape[i]
     return np.tile(a, reps)
 

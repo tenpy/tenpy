@@ -87,6 +87,7 @@ class Engine(object):
         A dictionary containing the information of the latest created `_U`.
         We don't recalculate `_U` if those parameters didn't change.
     """
+
     def __init__(self, psi, model, TEBD_params):
         self.TEBD_params = TEBD_params
         self.verbose = get_parameter(TEBD_params, 'verbose', 2, 'TEBD')
@@ -184,10 +185,9 @@ class Engine(object):
         """
 
         # initialize parameters
-        delta_tau_list = get_parameter(self.TEBD_params, 'delta_tau_list',
-                                       [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6,
-                                        1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.],
-                                       'run_GS')
+        delta_tau_list = get_parameter(self.TEBD_params, 'delta_tau_list', [
+            0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.
+        ], 'run_GS')
         max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-13, 'run_GS')
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
@@ -242,9 +242,9 @@ class Engine(object):
         elif order == 2:
             return [0.5, 1.]
         elif order == 4:
-            t1 = 1./(4.-4.**(1/3.))
-            t3 = 1. - 4.*t1
-            return [t1/2., t1, (t1 + t3)/2., t3]
+            t1 = 1. / (4. - 4.**(1 / 3.))
+            t3 = 1. - 4. * t1
+            return [t1 / 2., t1, (t1 + t3) / 2., t3]
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
@@ -252,7 +252,7 @@ class Engine(object):
     def suzuki_trotter_decomposition(order, N_steps):
         r"""Returns list of necessary steps for the suzuki trotter decomposition.
 
-        We split the Hamiltonian as :math:`H = H_{even} + H_{odd} = H[0] + H[1]``
+        We split the Hamiltonian as :math:`H = H_{even} + H_{odd} = H[0] + H[1]`.
         The Suzuki-Trotter decomposition is an approximation
         :math:`\exp(t H) \approx prod_{(j, k) \in ST} \exp(d[j] t H[k]) + O(t^{order+1 })`.
 
@@ -267,7 +267,7 @@ class Engine(object):
             Indices ``j, k`` of the time-steps ``d = suzuki_trotter_time_step(order)`` and
             the decomposition of `H`.
             They are chosen such that a subsequent application of ``exp(d[j] t H[k])`` to a given
-            state `|psi>` yields ``(exp(N_steps t H[k]) + O(N_steps t^{order+1}))|psi>``.
+            state ``|psi>`` yields ``(exp(N_steps t H[k]) + O(N_steps t^{order+1}))|psi>``.
         """
         even, odd = 0, 1
         if N_steps == 0:
@@ -277,18 +277,18 @@ class Engine(object):
             b = (0, even)
             return [a, b] * N_steps
         elif order == 2:
-            a = (0, odd)   # dt/2
+            a = (0, odd)  # dt/2
             a2 = (1, odd)  # dt
-            b = (1, even)    # dt
+            b = (1, even)  # dt
             # U = [a b a]*N
             #   = a b [a2 b]*(N-1) a
-            return [a, b] + [a2, b]*(N_steps-1) + [a]
+            return [a, b] + [a2, b] * (N_steps - 1) + [a]
         elif order == 4:
-            a = (0, odd)    # t1/2
-            a2 = (1, odd)   # t1
-            b = (1, even)   # t1
-            c = (2, odd)    # (t1 + t3) / 2 == (1 - 3 * t1)/2
-            d = (3, even)   # t3 = 1 - 4 * t1
+            a = (0, odd)  # t1/2
+            a2 = (1, odd)  # t1
+            b = (1, even)  # t1
+            c = (2, odd)  # (t1 + t3) / 2 == (1 - 3 * t1)/2
+            d = (3, even)  # t3 = 1 - 4 * t1
             # From Schollwoeck 2011 (arXiv:1008:3477):
             # U = U(t1) U(t2) U(t3) U(t2) U(t1)
             # with U(dt) = U(dt/2, odd) U(dt, even) U(dt/2, odd) and t1 == t2
@@ -303,12 +303,12 @@ class Engine(object):
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
-        """Calculate ``self.U_bond`` from ``self.bond_eig_{vals,vecs}``
+        """Calculate ``self.U_bond`` from ``self.bond_eig_{vals,vecs}``.
 
         This function calculates
 
-        *) ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
-        *) ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
+        * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
+        * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
 
         For first order (in `delta_t`), we need just one ``dt=delta_t``.
         Higher order requires smaller `dt` steps, as given by :meth:`suzuki_trotter_time_steps`.
@@ -317,7 +317,7 @@ class Engine(object):
         ----------
         order : int
             Trotter order calculated U_bond. See update for more information.
-        delta_t: float
+        delta_t : float
             Size of the time-step used in calculating U_bond
         type_evo : ``'imag' | 'real'``
             Determines whether we perform real or imaginary time-evolution.
@@ -343,8 +343,9 @@ class Engine(object):
         L = len(H_bond)
         self._U = []
         for dt in self.suzuki_trotter_time_steps(order):
-            U_bond = [self._calc_U_bond(i_bond, dt*delta_t, type_evo, E_offset)
-                      for i_bond in range(L)]
+            U_bond = [
+                self._calc_U_bond(i_bond, dt * delta_t, type_evo, E_offset) for i_bond in range(L)
+            ]
             self._U.append(U_bond)
         # done
 
@@ -353,21 +354,20 @@ class Engine(object):
 
         Parameters
         ----------
-        N_steps: int
-            The number of steps for which the whole lattice should be updated
+        N_steps : int
+            The number of steps for which the whole lattice should be updated.
 
         Returns
         -------
-        truncErr : :class:`TruncationError`
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
             this sequence of update steps.
-
         """
-        truncErr = TruncationError()
+        trunc_err = TruncationError()
         order = self._U_param['order']
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
-            truncErr += self.update_step(self._U[U_idx_dt], odd)
-        return truncErr
+            trunc_err += self.update_step(self._U[U_idx_dt], odd)
+        return trunc_err
 
     def update_step(self, U, odd):
         """Updates either even *or* odd bonds in unit cell.
@@ -396,20 +396,20 @@ class Engine(object):
 
         Returns
         -------
-        truncErr : :class:`~tenpy.algorithms.truncation.TruncationError`
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
         """
-        truncErr = TruncationError()
+        trunc_err = TruncationError()
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
             if U[i_bond] is None:
                 if self.verbose > 10:
                     print "Skipped U_bond element:", i_bond
                 continue  # handles finite vs. infinite boundary conditions
-            truncErr += self.update_bond(i_bond, U[i_bond])
+            trunc_err += self.update_bond(i_bond, U[i_bond])
             if self.verbose > 100:
                 print "Applied U_bond element", i_bond
-        return truncErr
+        return trunc_err
 
     def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
@@ -426,15 +426,15 @@ class Engine(object):
 
         Parameters
         ----------
-        i: int
+        i : int
             Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond:
+        U_bond : :class:~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
-            We expect labels ``'pL', 'pR', 'pL*', 'pR*'.
+            We expect labels ``'pL', 'pR', 'pL*', 'pR*'``.
 
         Returns
         -------
-        trunc_err : :class:`TruncationError`
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced by the truncation
             during this update step.
         """
@@ -447,7 +447,7 @@ class Engine(object):
         theta = theta.combine_legs([('vL', 'pL'), ('vR', 'pR')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, truncErr, renormalize = svd_theta(
+        U, S, V, trunc_err, renormalize = svd_theta(
             theta, self.TEBD_params, inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
@@ -466,14 +466,15 @@ class Engine(object):
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
         C = npc.tensordot(U_bond, C, axes=(['pL*', 'pR*'], ['p0', 'p1']))  # apply U as for theta
         B_L = npc.tensordot(
-            C.combine_legs(
-                ('vR', 'pR'), pipes=theta.legs[1]), V.conj(), axes=['(vR.pR)', '(vR*.pR*)'])
+            C.combine_legs(('vR', 'pR'), pipes=theta.legs[1]),
+            V.conj(),
+            axes=['(vR.pR)', '(vR*.pR*)'])
         B_L.ireplace_labels(['vL*', 'pL'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_B(i1, B_R, form='B')
-        return truncErr
+        return trunc_err
 
     def _calc_bond_eig(self):
         """Calculate ``self._bond_eig_{vals,vecs}`` from ``self.model.H_bond``.
@@ -514,5 +515,5 @@ class Engine(object):
         # U = V s V^dag, s = e^(- tau E )
         U = V.scale_axis(diag, axis=1)
         U = npc.tensordot(U, V.conj(), axes=(1, 1))
-        assert(tuple(U.get_leg_labels()) == ('(pL.pR)', '(pL*.pR*)'))
+        assert (tuple(U.get_leg_labels()) == ('(pL.pR)', '(pL*.pR*)'))
         return U.split_legs()

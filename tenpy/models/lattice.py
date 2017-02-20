@@ -151,8 +151,8 @@ class Lattice(object):
         # if one of the following assert fails, the `ordering` function returned an invalid array
         assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
         assert np.all(
-            np.sum(self.order * self._strides, axis=1)[self._perm] ==
-            np.arange(self.N_sites))  # rows of `order` unique?
+            np.sum(self.order * self._strides,
+                   axis=1)[self._perm] == np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
 

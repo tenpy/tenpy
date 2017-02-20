@@ -109,8 +109,10 @@ class ExactDiag(object):
         sites = self.model.lat.mps_sites()
         H_bond = self.model.H_bond
         L = len(sites)
-        Ids = [s.Id.replace_labels(['p', 'p*'], [self._labels_p[i], self._labels_pconj[i]])
-               for i, s in enumerate(sites)]
+        Ids = [
+            s.Id.replace_labels(['p', 'p*'], [self._labels_p[i], self._labels_pconj[i]])
+            for i, s in enumerate(sites)
+        ]
         Ids_L = [Ids[0]]  # Ids_L[j] has identity up to (including) site j
         Ids_R = [Ids[-1]]  # Ids_R[j] is identity starting from (including) site L-1-j
         for j in range(1, L - 2):

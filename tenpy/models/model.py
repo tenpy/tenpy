@@ -182,9 +182,11 @@ class CouplingModel(object):
         idx_i, idx_i_lat = self.lat.mps_lat_idx_fix_u(u1)
         idx_j_lat_shifted = idx_i_lat + dx
         idx_j_lat = idx_j_lat_shifted % np.array(self.lat.Ls)
-        keep = np.all(np.logical_or(idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
-                                    ~self.bc_coupling),  # direction has periodic bound. cond.
-                      axis=1)
+        keep = np.all(
+            np.logical_or(
+                idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
+                ~self.bc_coupling),  # direction has periodic bound. cond.
+            axis=1)
         idx_i = idx_i[keep]
         idx_i_lat = idx_i_lat[keep]
         idx_j_lat = idx_j_lat[keep]
@@ -275,8 +277,8 @@ class CouplingModel(object):
                     # i, j in terms are defined such that we expect j = j2,
                     # (including the case N_sites = 2 and iMPS
                     if j != j2:
-                        raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
-                            i=i, j=j2))
+                        raise ValueError(
+                            "Can't give H_bond for long-range: {i:d} {j:d}".format(i=i, j=j2))
                     for op2, strength in d3.iteritems():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
             H.set_leg_labels(['pL', 'pL*', 'pR', 'pR*'])
@@ -349,8 +351,8 @@ class CouplingModel(object):
 
     def _coupling_shape(self, dx):
         """calculate correct shape of the strengths for each coupling."""
-        return tuple([La - dxa * int(bca)
-                      for La, dxa, bca in zip(self.lat.Ls, dx, self.bc_coupling)])
+        return tuple(
+            [La - dxa * int(bca) for La, dxa, bca in zip(self.lat.Ls, dx, self.bc_coupling)])
 
 
 class NearestNeighborModel(object):

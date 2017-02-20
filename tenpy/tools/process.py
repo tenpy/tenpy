@@ -19,8 +19,9 @@ import warnings
 import ctypes
 from ctypes.util import find_library
 
-__all__ = ['memory_usage', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads',
-           'mkl_set_nthreads']
+__all__ = [
+    'memory_usage', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads', 'mkl_set_nthreads'
+]
 
 _omp_lib = None
 _mkl_lib = None

@@ -72,5 +72,5 @@ def test_MPOEnvironment():
         E = env.full_contraction(i)  # should be one
         print "total energy for contraction at site ", i, ": E =", E
         if E_old is not None:
-            assert(abs(E-E_old) < 1.e-14)
+            assert (abs(E - E_old) < 1.e-14)
         E_old = E

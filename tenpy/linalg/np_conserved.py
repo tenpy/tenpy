@@ -732,8 +732,8 @@ class Array(object):
         res._set_shape()
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
-        res._qdata = np.hstack([res._qdata[:, :i], np.zeros([len(res._data), 1], np.intp),
-                                res._qdata[:, i:]])
+        res._qdata = np.hstack(
+            [res._qdata[:, :i], np.zeros([len(res._data), 1], np.intp), res._qdata[:, i:]])
         if label is not None:
             labs = list(self.get_leg_labels())
             labs.insert(i, label)
@@ -1639,8 +1639,8 @@ class Array(object):
         """return ``self / other`` for scalar `other` with ``__future__.division``."""
         if sp.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
-                    type(self), type(other)))
+                raise ZeroDivisionError(
+                    "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
             return self.__mul__(1. / other)
         raise NotImplemented
 
@@ -1654,8 +1654,8 @@ class Array(object):
         """``self /= other`` for scalar `other`` with ``__future__.division``."""
         if sp.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
-                    type(self), type(other)))
+                raise ZeroDivisionError(
+                    "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
             return self.__imul__(1. / other)
         raise NotImplemented
 
@@ -1680,7 +1680,7 @@ class Array(object):
             a qindex for each of the legs
         """
         for block_inds in itertools.product(
-                *[xrange(l.block_number) for l in reversed(self.legs)]):
+                * [xrange(l.block_number) for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
             yield tuple(block_inds[::-1])  # back to legs in correct order
 
@@ -1893,8 +1893,8 @@ class Array(object):
                     project_masks.append(m)
                     project_axes.append(a)
                     if i.step is not None and i.step < 0:
-                        permutations.append((a, np.arange(
-                            np.count_nonzero(m), dtype=np.intp)[::-1]))
+                        permutations.append((a, np.arange(np.count_nonzero(m),
+                                                          dtype=np.intp)[::-1]))
             else:
                 try:
                     iter(i)
@@ -1964,7 +1964,7 @@ class Array(object):
             # advanced indexing in numpy is tricky ^_^
             # np.ix_ can't handle integer entries reducing the dimension.
             # we have to call it only on the entries with arrays
-            ix_block_mask = np.ix_(*[block_mask[a] for a in not_slice_axes])
+            ix_block_mask = np.ix_(* [block_mask[a] for a in not_slice_axes])
             # and put the result back into block_mask
             for a, bm in zip(not_slice_axes, ix_block_mask):
                 block_mask[a] = bm
@@ -2262,6 +2262,7 @@ class Array(object):
         else:
             raise ValueError("unknown order")
         return self
+
 
 # functions ====================================================================
 
@@ -2563,8 +2564,8 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
-                                           qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo,
+                                           chinfo.make_valid(qconj * np.array(qflat)), qconj)
     return grid_legs
 
 
@@ -3339,8 +3340,8 @@ def _tensordot_pre_reshape(data, cut, dtype, same_shape_before_cut=True):
     """reshape blocks to (fortran) matrix/vector (depending on `cut`)"""
     if cut == 0 or cut == data[0][0].ndim:
         # special case: reshape to 1D vectors
-        return [[np.reshape(T, (-1, )).astype(
-            dtype, order='F', copy=False) for T in blocks] for blocks in data]
+        return [[np.reshape(T, (-1, )).astype(dtype, order='F', copy=False) for T in blocks]
+                for blocks in data]
     res = []
     for blocks in data:
         if same_shape_before_cut:
@@ -3549,8 +3550,8 @@ def _tensordot_worker(a, b, axes):
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
-        return zeros(a.legs[:-axes] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
-                     a.qtotal + b.qtotal)
+        return zeros(a.legs[:-axes] + b.legs[axes:],
+                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
     cut_a = a.rank - axes
     cut_b = axes
     a_pre_result, b_pre_result, fast_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
@@ -3614,8 +3615,8 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         if compute_uv:
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
             if anynan(U_b) or anynan(VH_b):
-                raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
-                    np.nansum(U_b), np.nansum(VH_b)))
+                raise ValueError(
+                    "NaN in U_b {0:d} and/or VH_b: {1:d}".format(np.nansum(U_b), np.nansum(VH_b)))
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
         if anynan(S_b):

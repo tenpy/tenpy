@@ -68,7 +68,7 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
         raise ValueError
     slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
     qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
-    q_combos = [a for a in it.product(*[range(-(nq // 2), nq // 2 + 1) for nq in n_qsector])]
+    q_combos = [a for a in it.product(* [range(-(nq // 2), nq // 2 + 1) for nq in n_qsector])]
     qs = np.array(q_combos)[rand_distinct_int(0, len(q_combos) - 1, len(slices) - 1), :]
     qs = chinfo.make_valid(qs)
     return charges.LegCharge.from_qind(chinfo, slices, qs)

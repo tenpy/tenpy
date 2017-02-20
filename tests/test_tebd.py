@@ -20,7 +20,7 @@ def test_trotter_decomposition():
             evolved = [0., 0.]
             for j, k in tebd.Engine.suzuki_trotter_decomposition(order, N):
                 evolved[k] += dt[j]
-            npt.assert_array_almost_equal_nulp(evolved, N*np.ones([2]), N*2)
+            npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
 
 def check_tebd(bc_MPS='finite'):
@@ -30,12 +30,7 @@ def check_tebd(bc_MPS='finite'):
     state = ([0, 1] * L)[:L]  # Neel
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
-    tebd_param = {
-        'verbose': 2,
-        'chi_max': 200,
-        'dt': 0.1,
-        'order': 4
-        }
+    tebd_param = {'verbose': 2, 'chi_max': 200, 'dt': 0.1, 'order': 4}
     engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 
@@ -55,7 +50,7 @@ def check_tebd(bc_MPS='finite'):
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
         assert (abs(abs(ov) - 1.) < 1.e-10)
-        assert (abs(Eold-Enew) < 1.e-10)
+        assert (abs(Eold - Enew) < 1.e-10)
         # TODO: why does the test below fail??
         # assert (abs(Sold-Snew) < 1.e-10)
 
@@ -66,7 +61,7 @@ def check_tebd(bc_MPS='finite'):
             engine.run()
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
-        assert (abs(Eold-Enew) < 1.e-10)
+        assert (abs(Eold - Enew) < 1.e-10)
         # TODO: why does the test below fail??
         # assert (abs(Sold-Snew) < 1.e-10)
 

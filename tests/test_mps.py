@@ -25,11 +25,11 @@ def test_mps():
         print str(psi)
         psi2 = psi.copy()
         ov, env = psi.overlap(psi2)
-        assert(abs(ov - 1.) < 1.e-15)
+        assert (abs(ov - 1.) < 1.e-15)
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.)  # product state has no entanglement.
         E = psi.expectation_value('Sz')
-        npt.assert_array_almost_equal_nulp(E, ([0.5, -0.5]*L)[:L], 100)
+        npt.assert_array_almost_equal_nulp(E, ([0.5, -0.5] * L)[:L], 100)
         C = psi.correlation_function('Sz', 'Sz')
         npt.assert_array_almost_equal_nulp(C, np.outer(E, E), 100)
 
@@ -47,7 +47,7 @@ def test_MPSEnvironment():
     for i in range(4):
         ov = env.full_contraction(i)  # should be one
         print "total contraction on site", i, ": ov = 1. - ", ov - 1.
-        assert(abs(abs(ov)-1.) < 1.e-14)
+        assert (abs(abs(ov) - 1.) < 1.e-14)
     env.expectation_value('Sz')
 
 

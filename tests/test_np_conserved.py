@@ -53,6 +53,7 @@ def project_multiple_axes(flat_array, perms, axes):
         flat_array = flat_array[tuple(idx)]
     return flat_array
 
+
 # ------- test functions -------------------
 
 

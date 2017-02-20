@@ -257,11 +257,12 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     renormalization : float
         Factor, by which S was renormalized.
     """
-    U, S, VH = npc.svd(theta,
-                       full_matrices=False,
-                       compute_uv=True,
-                       qtotal_LR=qtotal_LR,
-                       inner_labels=inner_labels)
+    U, S, VH = npc.svd(
+        theta,
+        full_matrices=False,
+        compute_uv=True,
+        qtotal_LR=qtotal_LR,
+        inner_labels=inner_labels)
     renormalization = np.linalg.norm(S)
     S = S / renormalization
     piv, new_norm, err = truncate(S, trunc_par)

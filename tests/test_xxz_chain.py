@@ -34,8 +34,10 @@ def test_XXZChain():
     W = npc.eigvalsh(Hb2)
     print W
     npt.assert_array_almost_equal_nulp(
-        np.sort(W), np.sort([-0.75, 0.25 - 2 * 0.5 * 0.5 * pars['hz'], 0.25,
-                             0.25 + 2. * 0.5 * 0.5 * pars['hz']]), 16**3)
+        np.sort(W),
+        np.sort(
+            [-0.75, 0.25 - 2 * 0.5 * 0.5 * pars['hz'], 0.25, 0.25 + 2. * 0.5 * 0.5 * pars['hz']]),
+        16**3)
     pars['bc_MPS'] = 'infinite'
 
     for L in [2, 3, 4, 5, 6]:

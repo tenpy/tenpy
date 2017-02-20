@@ -128,6 +128,6 @@ for even_odd in [0, 1]:
         invsq = np.linalg.norm(S)
         Ss[i + 1] = S / invsq
         U = U.iscale_axis(S / invsq, 'vR')
-        Bs[i] = U.split_legs(0).iscale_axis(Ss[i]** -1, 'vL').ireplace_label('p2', 'p')
+        Bs[i] = U.split_legs(0).iscale_axis(Ss[i]**-1, 'vL').ireplace_label('p2', 'p')
         Bs[i + 1] = V.split_legs(1).ireplace_label('q2', 'p')
 print "finished"

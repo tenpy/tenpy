@@ -20,10 +20,14 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
         'verbose': 5,
         'engine': engine,
         'mixer': mixer,
-        'chi_list': {0: 20,
-                     5: 40},
+        'chi_list': {
+            0: 20,
+            5: 40
+        },
         'N_sweeps_check': 4,
-        'mixer_params': {'disable_after': 6},
+        'mixer_params': {
+            'disable_after': 6
+        },
         'max_sweeps': 40,
     }
     dmrg.run(psi, M, dmrg_pars)
@@ -37,6 +41,7 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
         assert (abs(abs(ov) - 1.) < 1.e-10)
 
     # TODO: compare with known ground state (energy) / ED !
+
 
 @attr('slow')
 def test_dmrg():

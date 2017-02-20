@@ -85,8 +85,7 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     y_shape = ys.shape
     assert y_shape[-1] == len(x)
     abc_flat = np.array([
-        alg_decay_fit(
-            x, yyy, npts=npts, power_range=power_range, power_mesh=power_mesh)
+        alg_decay_fit(x, yyy, npts=npts, power_range=power_range, power_mesh=power_mesh)
         for yyy in ys.reshape(-1, len(x))
     ])
     return abc_flat.reshape(y_shape[:-1] + (3, ))
