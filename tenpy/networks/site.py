@@ -290,6 +290,10 @@ class FermionSite(Site):
     ``dNdN``        :math:`(\delta n)^2`
     ==============  ========================================
 
+    .. todo ::
+        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
+        Handle Jordan-Wigner strings correctly in Coupling-model!
+
     Parameters
     ----------
     conserve : str
@@ -303,9 +307,6 @@ class FermionSite(Site):
         Defines what is conserved, see table above.
     filling : float
         Average filling. Used to define ``dN``.
-
-    .. todo ::
-        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
     """
 
     def __init__(self, conserve='N', filling=0.5):

@@ -151,7 +151,7 @@ class PurificationMPS(MPS):
         Bs = [None] * L
         for i in range(L):
             p_leg = sites[i].leg
-            B = npc.diag(1., p_leg, np.float)
+            B = npc.diag(1., p_leg, np.float) / sites[i].dim**0.5
             B.set_leg_labels(['p', 'q'])  # `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B

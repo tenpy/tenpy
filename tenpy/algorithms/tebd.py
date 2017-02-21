@@ -64,8 +64,8 @@ class Engine(object):
     verbose : int
         Level of verbosity (i.e. how much status information to
         print); higher=more output.
-    evolved_time : float
-        A float indicating how long (in time) `psi` has been evolved, i.e. ``dt * #TEBD_steps``.
+    evolved_time : float | complex
+        Indicating how long (in time) `psi` has been evolved, i.e. ``dt * #TEBD_steps``.
     psi : :class:`~tenpy.networks.mps.MPS`
         The MPS time evolved in-place.
     model: :class:`~tenpy.models.NearestNeigborModel`
@@ -128,25 +128,19 @@ class Engine(object):
 
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
-        Eold = np.average(self.model.bond_energies(self.psi))
-        Sold = np.average(self.psi.entanglement_entropy())
-
-        self.update(N_steps)
-        E = np.average(self.model.bond_energies(self.psi))
-        S = np.average(self.psi.entanglement_entropy())
-        DeltaE = np.abs(Eold - E)
-        DeltaS = np.abs(Sold - S)
-        Eold = E
-        Sold = S
-
         if self.verbose > 1:
-            print "--> time = %6.0f " % (self.evolved_time),
-            # print " Chi ", psi.chi,
-            print " Delta_tau = %.5f " % delta_t,
-            print " Delta_E = %.10f " % DeltaE,
-            print " Ebond = %.10f " % E.real,
-            print " Delta_S = %.10f " % DeltaS,
-            print " Sbond = %.10f " % S.real
+            Eold = np.average(self.model.bond_energies(self.psi))
+            Sold = np.average(self.psi.entanglement_entropy())
+        self.update(N_steps)
+        if self.verbose > 1:
+            E = np.average(self.model.bond_energies(self.psi))
+            S = np.average(self.psi.entanglement_entropy())
+            DeltaE = np.abs(Eold - E)
+            DeltaS = np.abs(Sold - S)
+            msg = ("--> time={t:3.3f}, dt={dt:.2e}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
+                   "Delta_S={dS:.4e}, S={S:.10f}")
+            print msg.format(t=self.evolved_time, dt=delta_t, dE=DeltaE, dS=DeltaS, E=E.real,
+                             S=S.real)
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -189,33 +183,29 @@ class Engine(object):
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
 
+        if self.verbose > 1:
+            Eold = np.average(self.model.bond_energies(self.psi))
+            Sold = np.average(self.psi.entanglement_entropy())
+
         for delta_t in delta_tau_list:
             self.calc_U(TrotterOrder, delta_t, type_evo='imag')
             DeltaE = 2 * max_error_E
             DeltaS = 2 * max_error_E
-
-            Eold = np.average(self.model.bond_energies(self.psi))
-            Sold = np.average(self.psi.entanglement_entropy())
-            step = 1
+            step = 0
             while (DeltaE > max_error_E):
                 self.update(N_steps)
-                E = np.average(self.model.bond_energies(self.psi))
-                S = np.average(self.psi.entanglement_entropy())
-                DeltaE = np.abs(Eold - E)
-                DeltaS = np.abs(Sold - S)
-                Eold = E
-                Sold = S
-
                 step += N_steps
-
                 if self.verbose > 1:
-                    print "--> step = %6.0f " % (step - 1),
-                    # print " Chi ", psi.chi,
-                    print " Delta_tau = %.10f " % delta_t,
-                    print " Delta_E = %.10f " % DeltaE,
-                    print " Ebond = %.10f " % E.real,
-                    print " Delta_S = %.10f " % DeltaS,
-                    print " Sbond = %.10f " % S.real
+                    E = np.average(self.model.bond_energies(self.psi))
+                    S = np.average(self.psi.entanglement_entropy())
+                    DeltaE = np.abs(Eold - E)
+                    DeltaS = np.abs(Sold - S)
+                    Eold = E
+                    Sold = S
+                    msg = ("--> step={step:6d}, time={t:3.3f}, Delta_tau={dt:.2e}," +
+                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}")
+                    print msg.format(step=step, t=self.evolved_time, dt=delta_t, dE=DeltaE,
+                                     dS=DeltaS, E=E.real, S=S.real)
         # done
 
     @staticmethod
@@ -329,7 +319,7 @@ class Engine(object):
         else:
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
         if self._U_param == U_param:  # same keys and values as cached
-            if self.verbose > 100:
+            if self.verbose > 10:
                 print "Skip recalculation of U with same parameters as before: ", U_param
             return  # nothing to do: U is cached
         self._U_param = U_param
@@ -364,6 +354,7 @@ class Engine(object):
         order = self._U_param['order']
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
             trunc_err += self.update_step(self._U[U_idx_dt], odd)
+        self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         return trunc_err
 
     def update_step(self, U, odd):
@@ -401,11 +392,11 @@ class Engine(object):
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
             if U[i_bond] is None:
                 if self.verbose > 10:
-                    print "Skipped U_bond element:", i_bond
+                    print "Skip U_bond element:", i_bond
                 continue  # handles finite vs. infinite boundary conditions
+            if self.verbose > 10:
+                print "Apply U_bond element", i_bond
             trunc_err += self.update_bond(i_bond, U[i_bond])
-            if self.verbose > 100:
-                print "Applied U_bond element", i_bond
         return trunc_err
 
     def update_bond(self, i, U_bond):

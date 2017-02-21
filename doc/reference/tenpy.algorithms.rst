@@ -8,6 +8,7 @@ Submodules
 
    tenpy.algorithms.dmrg
    tenpy.algorithms.exact_diag
+   tenpy.algorithms.purification_tebd
    tenpy.algorithms.tebd
    tenpy.algorithms.truncation
 

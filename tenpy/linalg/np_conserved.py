@@ -434,7 +434,7 @@ class Array(object):
         return [self.get_leg_index(l) for l in labels]
 
     def set_leg_labels(self, labels):
-        """Set labels for the different axes/legs.
+        """Set labels for the different axes/legs. In place.
 
         Introduction to leg labeling can be found in :doc:`../IntroNpc`.
 
@@ -457,6 +457,7 @@ class Array(object):
                 raise ValueError("use `None` for empty labels")
             if l is not None:
                 self.labels[l] = i
+        return self
 
     def get_leg_labels(self):
         """Return tuple of the leg labels, with `None` for anonymous legs."""

@@ -163,11 +163,12 @@ def truncate(S, trunc_par):
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
     """
+    # by default, only truncate values which are much closer to zero than machine precision.
+    # This is only to avoid problems with taking the inverse of `S`.
     chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
     chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
     sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
-    svd_min = get_parameter(trunc_par, 'svd_min', None, 'truncation')
-    #For stability reasons
+    svd_min = get_parameter(trunc_par, 'svd_min', 1.e-30, 'truncation')
     trunc_cut = get_parameter(trunc_par, 'trunc_cut', None, 'truncation')
 
     if trunc_cut >= 1.:
