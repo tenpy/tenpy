@@ -178,7 +178,7 @@ def truncate(S, trunc_par):
     svd_min = get_parameter(trunc_par, 'svd_min', 1.e-30, 'truncation')
     trunc_cut = get_parameter(trunc_par, 'trunc_cut', None, 'truncation')
 
-    if trunc_cut >= 1.:
+    if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")
     if not np.any(S > 1.e-10):
         warnings.warn("no Schmidt value above 1.e-10")

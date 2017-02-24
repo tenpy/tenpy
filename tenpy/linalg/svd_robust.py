@@ -161,15 +161,15 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
         if full_matrices:
             nu = M
             lvt = N
-            option = 'A'
+            option = b'A'
         else:
             nu = min(N, M)
             lvt = min(N, M)
-            option = 'S'
+            option = b'S'
         u = np.zeros((M, nu), t, order='F')
         vt = np.zeros((lvt, N), t, order='F')
     else:
-        option = 'N'
+        option = b'N'
         nu = 1
         u = np.empty((1, 1), t, order='F')
         vt = np.empty((1, 1), t, order='F')

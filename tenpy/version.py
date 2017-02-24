@@ -24,12 +24,12 @@ def git_version():
         return subprocess.check_output(['git', 'describe'], cwd=lib_dir).strip()
     except:
         pass
-    return 'v' + '.'.join(map(str, version)) + ' git=?'
+    return 'v' + '.'.join(map(str, version)) + ' git unknown'
 
 
 # git descritpion of the version
 git_version = git_version()
 
 # git version + numpy, scipy versions
-full_version = "{0:s} using numpy {1:s}, scipy {2:s}".format(
+full_version = "{0!s} using numpy {1!s}, scipy {2!s}".format(
     git_version, numpy.version.full_version, scipy.version.full_version)
