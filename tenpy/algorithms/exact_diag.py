@@ -83,6 +83,8 @@ class ExactDiag(object):
         if charge_sector is not None:
             self.charge_sector = self.chinfo.make_valid(charge_sector)
             self._mask = np.all(self._pipe.to_qflat() == self.charge_sector[np.newaxis, :], axis=1)
+            if np.sum(self._mask) == 0:
+                raise ValueError("The chosen charge sector is empty.")
         else:
             self.charge_sector = None
             self._mask = None
@@ -183,6 +185,9 @@ class ExactDiag(object):
         psi = mps.get_theta(0, mps.L)  # does exactly what we need
         psi = psi.take_slice([0, 0], ['vL', 'vR'])
         psi = psi.combine_legs(range(mps.L))
+        if self.charge_sector is not None:
+            psi.legs[0] = psi.legs[0].to_LegCharge()
+            psi = psi[self._mask]
         return psi
 
     def full_to_mps(self, psi, canonical_form='B'):
