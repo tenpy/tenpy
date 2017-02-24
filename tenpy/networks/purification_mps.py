@@ -241,7 +241,7 @@ class PurificationMPS(MPS):
             theta = self.get_theta(i, n)  # vL, vR, p0, q0, p1, q1
             C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:2 + n]])  # ignore 'q'
             E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p_q], do_conj=True))
-        return np.array(E)
+        return np.real_if_close(np.array(E))
 
     def _replace_p_label(self, A, k):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.

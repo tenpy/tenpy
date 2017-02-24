@@ -703,7 +703,7 @@ class MPS(object):
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
             E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
-        return np.array(E)
+        return np.real_if_close(np.array(E))
 
     def correlation_function(self,
                              ops1,
@@ -1032,6 +1032,9 @@ class MPSEnvironment(object):
     and right-canonical `B` to the right parts `RP`.
     Thus, the special case `psi`=`ket` should yield identity matrices for `LP` and `RP`.
 
+    .. todo :
+        Functionality to find the dominant LP/RP in the TD limit -> requires MPSTransferMatrix
+
     Parameters
     ----------
     bra : :class:`~tenpy.networks.mps.MPS`
@@ -1072,9 +1075,6 @@ class MPSEnvironment(object):
         Used for book-keeping, how large the DMRG system grew:
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
-
-    .. todo :
-        Functionality to find the dominant LP/RP in the TD limit -> requires MPSTransferMatrix
     """
 
     def __init__(self, bra, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
@@ -1320,7 +1320,7 @@ class MPSEnvironment(object):
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
             theta_bra = self.bra.get_theta(i, n)  # th_labels == (vL, vR, p0, p1, ...
             E.append(npc.inner(theta_bra, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
-        return np.array(E)
+        return np.real_if_close(np.array(E))
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""

@@ -65,7 +65,10 @@ class Engine(object):
         Level of verbosity (i.e. how much status information to
         print); higher=more output.
     evolved_time : float | complex
-        Indicating how long (in time) `psi` has been evolved, i.e. ``dt * #TEBD_steps``.
+        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
+    trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+        The error of the represented state which is introduced due to the truncation during
+        the sequence of update steps.
     psi : :class:`~tenpy.networks.mps.MPS`
         The MPS time evolved in-place.
     model: :class:`~tenpy.models.NearestNeigborModel`
@@ -91,6 +94,7 @@ class Engine(object):
         self.psi = psi
         self.model = model
         self.evolved_time = get_parameter(TEBD_params, 'start_time', 0., 'TEBD')
+        self.trunc_err = get_parameter(TEBD_params, 'start_trunc_err', TruncationError(), 'TEBD')
         self._calc_bond_eig()  # calculates `self._bond_eig_vals`, `self._bond_eig_vecs`.
         self._U = None
         self._U_param = {}
@@ -313,9 +317,9 @@ class Engine(object):
         """
         U_param = dict(order=order, delta_t=delta_t, type_evo=type_evo, E_offset=E_offset)
         if type_evo == 'real':
-            U_param['tau'] = 1.j * delta_t
-        elif type_evo == 'imag':
             U_param['tau'] = delta_t
+        elif type_evo == 'imag':
+            U_param['tau'] = -1.j * delta_t
         else:
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
         if self._U_param == U_param:  # same keys and values as cached
@@ -337,7 +341,7 @@ class Engine(object):
         # done
 
     def update(self, N_steps):
-        """Evolve by `N_steps * U_param(dt)`. single time step with a given U
+        """Evolve by ``N_steps * U_param['dt']``.
 
         Parameters
         ----------
@@ -355,6 +359,8 @@ class Engine(object):
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
             trunc_err += self.update_step(self._U[U_idx_dt], odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
     def update_step(self, U, odd):

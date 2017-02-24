@@ -69,10 +69,10 @@ class TruncationError(object):
 
     Attributes
     ----------
-    Ov_err
+    ov_err
     eps : float
         The total sum of all discared Schmidt values squared.
-    Ov : float
+    ov : float
         A lower bound for the overlap :math:`|\langle \psi_{trunc} | \psi_{correct} \rangle|^2`
         (assuming normalization of both states).
         This is probably the quantity you are actually interested in.
@@ -86,9 +86,13 @@ class TruncationError(object):
         what if eps < 1.e-16? in that case 1.-eps = 1 to machine precision. Just ignore that?
     """
 
-    def __init__(self):
-        self.eps = 0.
-        self.Ov = 1.
+    def __init__(self, eps=0., ov=1.):
+        self.eps = eps
+        self.ov = ov
+
+    def copy(self):
+        """Return a copy of self."""
+        return TruncationError(eps, ov)
 
     @classmethod
     def from_norm(cls, norm_new, norm_old=1.):
@@ -104,22 +108,25 @@ class TruncationError(object):
         """
         res = cls()
         res.eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
-        res.Ov = 1. - 2. * res.eps  # TODO: include factor of 2? See above link to wikipedia
+        res.ov = 1. - 2. * res.eps  # TODO: include factor of 2? See above link to wikipedia
         return res
 
     def __add__(self, other):
         res = TruncationError()
         res.eps = self.eps + other.eps  # whatever that actually means...
-        res.Ov = self.Ov * other.Ov
+        res.ov = self.ov * other.ov
         return res
 
     @property
-    def Ov_err(self):
-        """Error ``1.-Ov`` of the overlap with the correct state."""
-        return 1. - self.Ov
+    def ov_err(self):
+        """Error ``1.-ov`` of the overlap with the correct state."""
+        return 1. - self.ov
 
     def __repr__(self):
-        return "<TruncationError eps={eps:.4e}, Ov={Ov:.10f}>".format(eps=self.eps, Ov=self.Ov)
+        if self.eps != 0 or self.ov != 1.:
+            return "TruncationError(eps={eps:.4e}, ov={ov:.10f})".format(eps=self.eps, ov=self.ov)
+        else:
+            return "TruncationError()"
 
 
 def truncate(S, trunc_par):
