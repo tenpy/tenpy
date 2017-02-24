@@ -38,7 +38,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
     verbose : int
-        Print additional output if verbose > 1.
+        Print additional output if verbose >= 1.
 
     Returns
     -------
@@ -58,11 +58,11 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
                 vecs[i] -= ov_ji * vecs[j]
         else:
-            if verbose > 1:
+            if verbose >= 1:
                 print "GramSchmidt: Rank defficient", n
             vecs[j] = None
     vecs = [q for q in vecs if q is not None]
-    if verbose > 1:
+    if verbose >= 1:
         k = len(vecs)
         G = np.empty((k, k), dtype=vecs[0].dtype)
         for i, v in enumerate(vecs):
@@ -194,8 +194,8 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         if not above_ULP or (k + 1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
             break
     N = k + 1  # == len(Es)
-    if verbose > 1:
-        if verbose > 10:
+    if verbose >= 1:
+        if verbose >= 10:
             _plot_stats(Es)
         if k > 1:
             print ''.join([
@@ -243,7 +243,7 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
     if abs(1. - psi0_norm) > 1.e-3:
         warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
     psi0 /= psi0_norm
-    if verbose > 1. and len(orthogonal_to) > 0:
+    if verbose >= 1. and len(orthogonal_to) > 0:
         print ''.join(["Lanczos orthogonality:"] + [
             " {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True))) for o in orthogonal_to
         ])

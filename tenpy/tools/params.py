@@ -76,7 +76,7 @@ def get_parameter(par_dict, key, default, descr):
     val = par_dict.setdefault(key, default)  # get the value; set default if not existent
     used = par_dict.setdefault('_used_param', set())
     verbose = par_dict.get('verbose', 0)
-    if verbose > 100 or (key not in used and verbose > 0):
+    if verbose >= 100 or (key not in used and verbose > 0):
         print "set parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
             descr=descr, key=key, val=val, defaultstring=defaultstring)
     if key not in used:

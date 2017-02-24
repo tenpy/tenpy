@@ -132,19 +132,19 @@ class Engine(object):
 
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
-        if self.verbose > 1:
+        if self.verbose >= 1:
             Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
         self.update(N_steps)
-        if self.verbose > 1:
+        if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
             DeltaE = np.abs(Eold - E)
             DeltaS = np.abs(Sold - S)
-            msg = ("--> time={t:3.3f}, dt={dt:.2e}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
+            msg = ("--> time={t:3.3f}, max_chi={chi:d}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
                    "Delta_S={dS:.4e}, S={S:.10f}")
-            print msg.format(t=self.evolved_time, dt=delta_t, dE=DeltaE, dS=DeltaS, E=E.real,
-                             S=S.real)
+            print msg.format(t=self.evolved_time, chi=max(self.psi.chi), dE=DeltaE, dS=DeltaS,
+                             E=E.real, S=S.real)
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -187,29 +187,31 @@ class Engine(object):
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
 
-        if self.verbose > 1:
+        if self.verbose >= 1:
             Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
 
-        for delta_t in delta_tau_list:
-            self.calc_U(TrotterOrder, delta_t, type_evo='imag')
+        for delta_tau in delta_tau_list:
+            if self.verbose >= 1:
+                print "delta_tau = {dt:e}".format(dt=delta_tau)
+            self.calc_U(TrotterOrder, delta_tau, type_evo='imag')
             DeltaE = 2 * max_error_E
             DeltaS = 2 * max_error_E
             step = 0
             while (DeltaE > max_error_E):
                 self.update(N_steps)
                 step += N_steps
-                if self.verbose > 1:
+                if self.verbose >= 1:
                     E = np.average(self.model.bond_energies(self.psi))
                     S = np.average(self.psi.entanglement_entropy())
                     DeltaE = np.abs(Eold - E)
                     DeltaS = np.abs(Sold - S)
                     Eold = E
                     Sold = S
-                    msg = ("--> step={step:6d}, time={t:3.3f}, Delta_tau={dt:.2e}," +
+                    msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
                            "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}")
-                    print msg.format(step=step, t=self.evolved_time, dt=delta_t, dE=DeltaE,
-                                     dS=DeltaS, E=E.real, S=S.real)
+                    print msg.format(step=step, t=self.evolved_time, chi=max(self.psi.chi),
+                                     dE=DeltaE, dS=DeltaS, E=E.real, S=S.real)
         # done
 
     @staticmethod
@@ -323,11 +325,11 @@ class Engine(object):
         else:
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
         if self._U_param == U_param:  # same keys and values as cached
-            if self.verbose > 10:
+            if self.verbose >= 10:
                 print "Skip recalculation of U with same parameters as before: ", U_param
             return  # nothing to do: U is cached
         self._U_param = U_param
-        if self.verbose > 1:
+        if self.verbose >= 1:
             print "Calculate U for ", U_param
 
         H_bond = self.model.H_bond
@@ -397,10 +399,10 @@ class Engine(object):
         trunc_err = TruncationError()
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
             if U[i_bond] is None:
-                if self.verbose > 10:
+                if self.verbose >= 10:
                     print "Skip U_bond element:", i_bond
                 continue  # handles finite vs. infinite boundary conditions
-            if self.verbose > 10:
+            if self.verbose >= 10:
                 print "Apply U_bond element", i_bond
             trunc_err += self.update_bond(i_bond, U[i_bond])
         return trunc_err
@@ -433,7 +435,7 @@ class Engine(object):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose > 100:
+        if self.verbose >= 100:
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'

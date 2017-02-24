@@ -1,7 +1,6 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
 from __future__ import division
 
-import itertools as it
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -24,13 +23,14 @@ def test_trotter_decomposition():
 
 
 def check_tebd(bc_MPS='finite'):
-    xxz_pars = dict(L=4, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
-    L = xxz_pars['L']
+    L = 2 if bc_MPS == 'infinite' else 6
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
-    tebd_param = {'verbose': 2, 'chi_max': 200, 'dt': 0.1, 'order': 4}
+    tebd_param = {'verbose': 2, 'chi_max': 50, 'dt': 0.1, 'order': 4,
+                  'delta_tau_list': [1., 0.1, 1.e-4, 1.e-8, 1.e-12]}
     engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 
@@ -45,7 +45,7 @@ def check_tebd(bc_MPS='finite'):
         # Test real time TEBD
         Eold = np.average(M.bond_energies(psi))
         Sold = np.average(psi.entanglement_entropy())
-        for i in range(10):
+        for i in range(3):
             engine.run()
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
@@ -57,7 +57,7 @@ def check_tebd(bc_MPS='finite'):
     if bc_MPS == 'infinite':
         Eold = np.average(M.bond_energies(psi))
         Sold = np.average(psi.entanglement_entropy())
-        for i in range(10):
+        for i in range(2):
             engine.run()
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())

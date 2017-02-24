@@ -45,7 +45,7 @@ class PurificationTEBD(tebd.Engine):
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update(N_steps=int(beta / delta_t + 0.5))
-        if self.verbose > 1:
+        if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
             print "--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(
@@ -81,7 +81,7 @@ class PurificationTEBD(tebd.Engine):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose > 100:
+        if self.verbose >= 100:
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
@@ -208,7 +208,7 @@ class PurificationTEBD(tebd.Engine):
             if Sold - S < eps:
                 break
             Sold, S = S, Sold
-        if self.verbose > 10:
+        if self.verbose >= 10:
             print "disentangle renyi: {i:d} iterations, Sold-S = {DS:.3e}".format(i=i, DS=S-Sold)
         return theta, U
 

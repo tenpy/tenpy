@@ -142,11 +142,11 @@ def run(psi, model, DMRG_params):
     verbose = engine.verbose
 
     # prepare parameters
-    chi_max_default = engine.trunc_params.get('chi_max', np.max(psi.chi))
+    chi_max_default = engine.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
     chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
     chi_max = chi_list[max([k for k in chi_list.keys() if k <= engine.sweeps])]
     engine.trunc_params['chi_max'] = chi_max
-    if verbose > 1:
+    if verbose >= 1:
         print "Setting chi_max =", chi_max
     p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', None, 'DMRG')
     if p_tol_to_trunc is not None:
@@ -198,7 +198,7 @@ def run(psi, model, DMRG_params):
             if engine.mixer is None:
                 break
             else:
-                if verbose > 1:
+                if verbose >= 1:
                     print "Convergence criterium reached with enabled mixer.\n" +  \
                         "disable mixer and continue"
                     engine.mixer = None
@@ -214,7 +214,7 @@ def run(psi, model, DMRG_params):
             # --------------------------------------
             if engine.sweeps in chi_list:
                 engine.trunc_params['chi_max'] = chi_list[engine.sweeps]
-                if verbose > 1:
+                if verbose >= 1:
                     print "Setting chi_max =", chi_list[engine.sweeps]
         # update lancos_params depending on truncation error(s)
         if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
@@ -250,7 +250,7 @@ def run(psi, model, DMRG_params):
         sweep_statistics['max_E_trunc'].append(max_E_trunc)
         sweep_statistics['max_chi'].append(np.max(engine.env.ket.chi))
 
-        if verbose > 1:
+        if verbose >= 1:
             # print a status update
             print "=" * 80
             msg = "sweep {sweep:d}, age = {age:d}\n"
@@ -270,7 +270,7 @@ def run(psi, model, DMRG_params):
                 DS=Delta_S,
                 trerr=max_trunc_err,
                 Eerr=max_E_err)
-    if verbose > 1:
+    if verbose >= 1:
         print "=" * 80
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
@@ -384,13 +384,13 @@ class Engine(object):
         """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
         if N_sweeps <= 0:
             return
-        if self.verbose > 1:
+        if self.verbose >= 1:
             print "Updating environment ",
         for k in range(N_sweeps):
             self.sweep(0, optimize=False)
-            if self.verbose > 1:
+            if self.verbose >= 1:
                 print '.',
-        if self.verbose > 1:
+        if self.verbose >= 1:
             print ""  # end line
 
     def sweep(self, optimize=True, meas_E_trunc=False):
@@ -432,7 +432,7 @@ class Engine(object):
 
         # the actual sweep
         for i0, upd_env in itertools.izip(schedule_i0, update_env):
-            if self.verbose > 10:
+            if self.verbose >= 10:
                 print "in sweep: i0 =", i0
             # --------- the main work --------------
             E_total, E_trunc, trunc_err, N_lanczos, age = self.update_bond(
@@ -1249,7 +1249,7 @@ class Mixer(object):
         """
         self.amplitude /= self.decay
         if sweeps >= self.disable_after and self.amplitude >= np.finfo('float').eps:
-            if self.verbose > 0.1:  # increased verbosity: the same level as DMRG
+            if self.verbose >= 0.1:  # increased verbosity: the same level as DMRG
                 print "disable mixer"
             return None  # disable mixer
         return self
