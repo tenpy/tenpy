@@ -260,6 +260,88 @@ class SpinHalfSite(Site):
         return "SpinHalfSite({c!r})".format(c=self.conserve)
 
 
+class SpinSite(Site):
+    """General Spin S site.
+
+    There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
+    corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
+    Local operators are the spin-S operators.
+    e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
+    ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
+
+    ============== ====  ==========================
+    `conserve`     qmod  onsite operators
+    ============== ====  ==========================
+    ``'Sz'``       [1]   ``Id, Sz, Sp, Sm``
+    ``'parity'``   [2]   ``Id, Sz, Sp, Sm, Sx, Sy``
+    ``None``       []    ``Id, Sz, Sp, Sm, Sx, Sy``
+    ============== ====  ==========================
+
+    ==============  ================================================
+    operator        description
+    ==============  ================================================
+    ``Id``          identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``  spin components :math:`S^{x,y,z}`,
+                    equal to half the Pauli matrices.
+    ``Sp, Sm``      spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    ==============  ================================================
+
+    Parameters
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+
+    Attributes
+    ----------
+    S : float
+        S = One of 0.5, 1, 1.5, 2, ...
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+
+    def __init__(self, S=0.5, conserve='Sz'):
+        if conserve not in ['Sz', 'parity', None]:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        self.S = S = float(S)
+        d = 2*S+1
+        if d <= 1:
+            raise ValueError("negative S?")
+        if np.rint(d) != d:
+            raise ValueError("S is not half-integer or integer")
+        d = int(d)
+        Sz_diag = -S + np.arange(d)
+        Sz = np.diag(Sz_diag)
+        Sp = np.zeros([d, d])
+        for n in np.arange(d-1):
+            # Sp |m> =sqrt( S(S+1)-m(m+1)) |m+1>
+            m = n - S
+            Sp[n+1, n] = np.sqrt(S*(S+1) - m*(m+1))
+        Sm = np.transpose(Sp)
+        # Sp = Sx + i Sy, Sm = Sx - i Sy
+        Sx = (Sp + Sm) * 0.5
+        Sy = (Sm - Sp) * 0.5j
+        ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
+        if conserve == 'Sz':
+            chinfo = npc.ChargeInfo([1], ['2*Sz'])
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2*Sz_diag, dtype=np.int))
+        else:
+            ops.update(Sx=Sx, Sy=Sy)
+            if conserve == 'parity':
+                chinfo = npc.ChargeInfo([2], ['parity'])
+                leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
+            else:
+                leg = npc.LegCharge.from_trivial(d)
+        self.conserve = conserve
+        names = [None]*d
+        names[0] = 'down'
+        names[-1] = 'up'
+        super(SpinSite, self).__init__(leg, names, **ops)
+
+    def __repr__(self):
+        """Debug representation of self"""
+        return "SpinSite(S={S!s}, {c!r})".format(S=self.S, c=self.conserve)
+
+
 class FermionSite(Site):
     r"""Create a :class:`Site` for spin-less fermions.
 

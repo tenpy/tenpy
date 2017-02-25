@@ -16,6 +16,15 @@ from tenpy.networks import site
 from test_charges import gen_random_legcharge
 
 
+def commutator(A, B):
+    return np.dot(A, B) - np.dot(B, A)
+
+
+def assert_almost_equal(A, B, tol):
+    tol = len(A) * len(A) * np.finfo(np.float64).eps
+    assert(np.linalg.norm(A-B) < tol)
+
+
 def test_site():
     chinfo = npc.ChargeInfo([1, 3])
     leg = gen_random_legcharge(chinfo, 8)
@@ -40,8 +49,26 @@ def test_spin_half_site():
     for i in range(3):
         Sa, Sb, Sc = ([S.Sx, S.Sy, S.Sz] * 2)[i:i + 3]
         # for pauli matrices ``sigma_a . sigma_b = 1.j * epsilon_{a,b,c} sigma_c``
-        # with ``Sa = 0.5 sigma_a``, we get ``Sa . Sb = 0.5 epsilon_{a,b,c} Sc``.
+        # with ``Sa = 0.5 sigma_a``, we get ``Sa . Sb = 0.5j epsilon_{a,b,c} Sc``.
         npt.assert_equal(np.dot(Sa.to_ndarray(), Sb.to_ndarray()), 0.5j * Sc.to_ndarray())
+
+
+def test_spin_site():
+    for s in [0.5, 1, 1.5, 2, 5]:
+        print 's = ', s
+        for conserve in ['Sz', 'parity', None]:
+            S = site.SpinSite(s, conserve)
+            S.test_sanity()
+        npt.assert_equal((S.Sx + 1.j * S.Sy).to_ndarray(), S.Sp.to_ndarray())
+        npt.assert_equal((S.Sx - 1.j * S.Sy).to_ndarray(), S.Sm.to_ndarray())
+        Sx, Sy, Sz = S.Sx.to_ndarray(), S.Sy.to_ndarray(), S.Sz.to_ndarray()
+        Sp, Sm = S.Sp.to_ndarray(), S.Sm.to_ndarray()
+        tol = S.dim*S.dim
+        for i in range(3):
+            Sa, Sb, Sc = ([Sx, Sy, Sz] * 2)[i:i + 3]
+            assert_almost_equal(commutator(Sa, Sb), 1.j*Sc, tol)
+        npt.assert_array_almost_equal_nulp(commutator(Sz, Sp), Sp, tol)
+        npt.assert_array_almost_equal_nulp(commutator(Sz, Sm), -Sm, tol)
 
 
 def test_fermion_site():
