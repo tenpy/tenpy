@@ -131,9 +131,11 @@ class CouplingModel(object):
         opname : str
             valid operator name of an onsite operator in ``lat.unit_cell[u]``.
         """
-        if opname not in self.lat.unit_cell[u].opnames:
-            raise ValueError("unknown onsite operator {1!r} for u={2:d}".format(opname, u))
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
+        if not np.any(strength != 0.):
+            return  # nothing to do: can even accept non-defined `opname`.
+        if opname not in self.lat.unit_cell[u].opnames:
+            raise ValueError("unknown onsite operator {0!r} for u={1:d}".format(opname, u))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             term = self.onsite_terms[i]
             term[opname] = term.get(opname, 0) + strength[tuple(i_lat)]
@@ -171,11 +173,13 @@ class CouplingModel(object):
             Typical use case is the phase for a Jordan-Wigner transformation.
             (This operator should be defined on all sites in the unit cell.)
         """
-        for op, u in [(op1, u1), (op2, u2)]:
-            if op not in self.lat.unit_cell[u].opnames:
-                raise ValueError("unknown onsite operator {1!r} for u={2:d}".format(op, u))
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         strength = to_array(strength, self._coupling_shape(dx))  # tile to correct shape
+        if not np.any(strength != 0.):
+            return  # nothing to do: can even accept non-defined onsite operators
+        for op, u in [(op1, u1), (op2, u2)]:
+            if op not in self.lat.unit_cell[u].opnames:
+                raise ValueError("unknown onsite operator {0!r} for u={1:d}".format(op, u))
         luc = len(self.lat.unit_cell)
         if np.all(dx == 0) and u1 % luc == u2 % luc:
             raise ValueError("Coupling shouldn't be onsite!")

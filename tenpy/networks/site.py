@@ -293,8 +293,8 @@ class SpinSite(Site):
 
     Attributes
     ----------
-    S : float
-        S = One of 0.5, 1, 1.5, 2, ...
+    S : {0.5, 1, 1.5, 2, ...}
+        The 2S+1 states range from m = -S, -S+1, ... +S.
     conserve : str
         Defines what is conserved, see table above.
     """

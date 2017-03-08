@@ -308,3 +308,43 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     take[axis] = slice(-w_r, None)
     b[tuple(take)] = v_r
     return b
+
+
+def any_nonzero(params, keys, verbose_msg=None):
+    """Check for any non-zero or non-equal entries in some parameters.
+
+    Parameters
+    ----------
+    params : dict
+        A dictionary of parameters.
+    keys : list of {key | tuple of keys}
+        For a single key, check ``params[key]`` for non-zero entries.
+        For a tuple of keys, all the ``params[key]`` have to be equal.
+    verbose_msg : None | str
+        If params['verbose'] >= 1, we print `verbose_msg` before checking,
+        and a short notice with the `key`, if a non-zero entry is found.
+
+    Returns
+    -------
+    match : bool
+        False, if all params[key] are zero or `None` and
+        True, if any of the params[key] for single `key` in `keys`,
+
+        of if any of the entries for a tuple of `keys`
+    """
+    verbose = (params.get('verbose', 0) > 1.)
+    for k in keys:
+        if isinstance(k, tuple):
+            # check equality
+            val = params[k[0]]
+            for k1 in k[1:]:
+                if not np.all(val == params[k1]):
+                    if verbose:
+                        print "{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1)
+                    return True
+        else:
+            val = params.get(k, None)
+            if val is not None and np.any(np.array(val) != 0.):    # count `None` as zero
+                print
+                return True
+    return False

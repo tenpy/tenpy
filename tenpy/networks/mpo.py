@@ -33,6 +33,9 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
+
+.. todo :
+    transfermatrix for MPO
 """
 
 from __future__ import division

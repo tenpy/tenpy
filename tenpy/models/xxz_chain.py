@@ -1,13 +1,7 @@
 """Prototypical example of a 1D quantum model: the spin-1/2 XXZ chain.
 
-Although the XXZ chain is contained in the more general `SpinChain`,
-the idea of this class is to serve as a pedagogical example for a 'model'.
-
-.. todo ::
-    `SpinChain` is not implemented yet. Add crossref in sphinx format.
-
-.. todo ::
-    Add something like the old tenpy.models.model.set_var to tools and use it.
+Although the XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`,
+the idea of this class is more to serve as a pedagogical example for a 'model'.
 """
 
 from __future__ import division
@@ -40,7 +34,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
-    All parameters are
+    All parameters are collected in the dictionary `model_param`.
     """
 
     def __init__(self, model_param):
@@ -50,7 +44,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        # 1) charges of the physical Leg. The only time that we actually define charges!
+        # 1) charges of the physical leg. The only time that we actually define charges!
         leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
         # 2) onsite operators
         Sp = [[0., 1.], [0., 0.]]
