@@ -30,7 +30,7 @@ from . import version
 
 # hard-coded tuple of versions
 __version__ = version.version
-# full version from git description, and numpy/scipy versions
+# full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
 # __all__ = ["algorithms", "models", "mps", "tools"]

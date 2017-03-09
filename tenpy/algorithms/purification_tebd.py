@@ -37,7 +37,7 @@ class PurificationTEBD(tebd.Engine):
         Parameters
         ----------
         beta : float
-            The inverse temperature `beta = 1/T`, to which we should cool down.
+            The inverse temperature `beta = 1/T`, by which we should cool down.
             We evolve to the closest multiple of TEBD_params['dt'], c.f. :attr:`evolved_time,
             c.f. :attr:`evolved_time`.
         """
@@ -177,7 +177,7 @@ class PurificationTEBD(tebd.Engine):
         Arguments and return values are the same as for :meth:`disentangle`.
         """
         if self._U_param['type_evo'] == 'imag':
-            return theta, None
+            return theta, None  # doesn't work for this...
         U = U_bond.conj().ireplace_labels(['p0*', 'p1*', 'p0', 'p1'], ['q0', 'q1', 'q0*', 'q1*'])
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U

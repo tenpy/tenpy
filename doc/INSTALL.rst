@@ -35,7 +35,8 @@ If you have ``pip``, all of these can be installed with ::
     sudo pip install --upgrade numpy scipy   # required
     sudo pip install --upgrade matplotlib    # for plotting
     sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
-    suod pip install --upgrade yapf          # python formater to unify the code style
+    sudo pip install --upgrade yapf          # python formater to unify the code style
+    sudo pip install --upgrade nose          # nosetest to check if everything works as it should
 
 If you want to run larger simulations, we recommend the use of Intels MKL.
 It ships with a Lapack library, and uses optimization for Intel CPUs.

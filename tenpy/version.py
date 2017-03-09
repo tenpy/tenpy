@@ -10,10 +10,11 @@ Make shure to push your tag into the shared git repo with `git push origin [tagn
 
 import numpy
 import scipy
+import sys
 import subprocess
 import os
 
-# hard-coded version
+# hard-coded version for people without git...
 version = (0, 2, 0)
 
 
@@ -21,7 +22,7 @@ def git_version():
     """Get current library version from git"""
     lib_dir = os.path.dirname(__file__)
     try:
-        return subprocess.check_output(['git', 'describe'], cwd=lib_dir).strip()
+        return subprocess.check_output(['git', 'describe', '--always'], cwd=lib_dir).strip()
     except:
         pass
     return 'v' + '.'.join(map(str, version)) + ' git unknown'
@@ -31,5 +32,5 @@ def git_version():
 git_version = git_version()
 
 # git version + numpy, scipy versions
-full_version = "{0!s} using numpy {1!s}, scipy {2!s}".format(
-    git_version, numpy.version.full_version, scipy.version.full_version)
+full_version = "{0!s} using numpy {1!s}, scipy {2!s}, python {3!s}".format(
+    git_version, numpy.version.full_version, scipy.version.full_version, sys.version)

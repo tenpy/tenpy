@@ -63,12 +63,12 @@ def get_parameter(par_dict, key, default, descr):
     used parameter values:
 
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(verbose=1))
-    set parameter 'dt'=0.01 (default) for TEBD
+    parameter 'dt'=0.01 (default) for TEBD
 
     Of course you can also provide the parameter to use a non-default value:
 
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
-    set parameter 'dt'=0.1 for TEBD
+    parameter 'dt'=0.1 for TEBD
 
 
     """
@@ -77,7 +77,7 @@ def get_parameter(par_dict, key, default, descr):
     used = par_dict.setdefault('_used_param', set())
     verbose = par_dict.get('verbose', 0)
     if verbose >= 100 or (key not in used and verbose > 0):
-        print "set parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
+        print "parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
             descr=descr, key=key, val=val, defaultstring=defaultstring)
     if key not in used:
         used.add(key)
