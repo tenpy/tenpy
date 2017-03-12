@@ -195,6 +195,8 @@ class PurificationTEBD(tebd.Engine):
         ---------------- ------ ------------------------------------------------------
         disent_max_iter  float  Maximum number of iterations to perform.
         ================ ====== ======================================================
+
+        Arguments and return values are the same as for :meth:`disentangle`.
         """
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
@@ -202,34 +204,36 @@ class PurificationTEBD(tebd.Engine):
                       npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         Sold = np.inf
         for i in xrange(max_iter):
-            S, u = self.disentangle_renyi_iter(theta)
-            U = npc.tensordot(u, U, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-            theta = npc.tensordot(u, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-            if Sold - S < eps:
+            S, U = self.disentangle_renyi_iter(theta, U)
+            if abs(Sold - S) < eps:
                 break
             Sold, S = S, Sold
+        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         if self.verbose >= 10:
             print "disentangle renyi: {i:d} iterations, Sold-S = {DS:.3e}".format(i=i, DS=S-Sold)
         return theta, U
 
-    def disentangle_renyi_iter(self, theta):
-        r"""given theta and `U`, find another `U` which reduces the 2nd Renyi entropy.
+    def disentangle_renyi_iter(self, theta, U):
+        r"""Given `theta` and `U`, find another `U` which reduces the 2nd Renyi entropy.
 
-        Combining the `p` legs of `theta` with ``'vL', 'vR'``, this function contracts:
+        Temporarily view the different `U` as independt and mimizied one of them -
+        this corresponds to a linearization of the cost function.
+        Defining `Utheta` as the application of `U` to `theata`, and combining the `p` legs of
+        `theta` with ``'vL', 'vR'``, this function contracts:
 
-            |     .----theta---.
-            |     |    |   |   |
-            |     |    q0  |   |
-            |     |        |   |
-            |     |  .-theta*--.
+            |     .----theta----.
+            |     |    |   |    |
+            |     |    q0  q1   |
+            |     |             |
+            |     |        q1*  |
+            |     |        |    |
+            |     |  .-Utheta*-.
             |     |  | |
-            |     |  .-theta---.
-            |     |        |   |
-            |     |        q1  |
-            |     |            |
-            |     |    q0* q1* |
-            |     |    |   |   |
-            |     .----theta*--.
+            |     |  .-Utheta--.
+            |     |        |    |
+            |     |    q0* |    |
+            |     |    |   |    |
+            |     .----Utheta*-.
 
         The trace yields the second Renyi entropy `S2`. Further, we calculate the unitary `U`
         with maximum overlap with this network.
@@ -242,21 +246,25 @@ class PurificationTEBD(tebd.Engine):
         Returns
         -------
         S2 : float
-            Renyi entopy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `theta`.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Unitary (with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.)
+            Renyi entopy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `U theta`.
+        new_U : :class:`~tenpy.linalg.np_conserved.Array`
+            Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.
         """
-        dS = npc.tensordot(theta, theta.conj(), axes=[['p1', 'q1', 'vR'], ['p1*', 'q1*', 'vR*']])
+        U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        # same legs as theta: 'vL', 'p0', 'q0', 'p1', 'q1', 'vR'
+        # contract diagram from bottom to top
+        dS = npc.tensordot(U_theta, U_theta.conj(), axes=[['p1', 'q1', 'vR'],
+                                                          ['p1*', 'q1*', 'vR*']])
         # dS has legs 'vL', 'p0', 'q0', 'vL*', 'p0*', 'q0*'
-        dS = npc.tensordot(dS, theta, axes=[['vL*', 'p0*', 'q0*'], ['vL', 'p0', 'q0']])
+        dS = npc.tensordot(U_theta.conj(), dS, axes=[['vL*', 'p0*', 'q0*'], ['vL', 'p0', 'q0']])
         # dS has legs 'vL', 'p0', 'q0', 'vR', 'p1', 'q1'
-        dS = npc.tensordot(dS, theta.conj(), axes=[['vL', 'p0', 'vR', 'p1'],
-                                                   ['vL*', 'p0*', 'vR*', 'p1*']])
+        dS = npc.tensordot(theta, dS, axes=[['vL', 'p0', 'vR', 'p1'],
+                                            ['vL*', 'p0*', 'vR*', 'p1*']])
+        S2 = npc.inner(U, dS, axes=[['q0', 'q1', 'q0*', 'q1*'], ['q0*', 'q1*', 'q0', 'q1']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
-        S2 = npc.trace(dS)
-        # Find unitary which approximates `dS` optimally.
-        # This corresponds to a polar decomposition dS = U P with P >= 0
+        # Find unitary which maximizes `trace(U dS)`.
         W, Y, VH = npc.svd(dS)
-        U = npc.tensordot(W, VH, axes=[1, 0])  # P = V Y VH  is actually not needed.
-        return -np.log(S2.real), U.split_legs([0, 1])
+        new_U = npc.tensordot(W, VH, axes=[1, 0]).conj()  # == V W^dagger.
+        # this yields trace(U dS) = trace(Y), which is maximal.
+        return -np.log(S2.real), new_U.split_legs([0, 1])

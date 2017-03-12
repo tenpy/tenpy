@@ -40,7 +40,7 @@ Eigen systems:
 ----------------------------------------------------------------------------
 
 .. todo ::
-    QR decomposition
+    QR decomposition, expm
 """
 
 from __future__ import division
