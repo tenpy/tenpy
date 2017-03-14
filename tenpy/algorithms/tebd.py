@@ -89,8 +89,10 @@ class Engine(object):
     """
 
     def __init__(self, psi, model, TEBD_params):
-        self.TEBD_params = TEBD_params
         self.verbose = get_parameter(TEBD_params, 'verbose', 2, 'TEBD')
+        self.TEBD_params = TEBD_params
+        self.trunc_params = get_parameter(TEBD_params, 'trunc_params', {}, 'TEBD')
+        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.psi = psi
         self.model = model
         self.evolved_time = get_parameter(TEBD_params, 'start_time', 0., 'TEBD')
@@ -121,7 +123,7 @@ class Engine(object):
                            number of steps that are interlinked for all
                            Trotter decompositions of order > 1.
             ------- ------ ------------------------------------------------------
-            ...            Truncation parameters as described in
+            ...     dict   Truncation parameters as described in
                            :func:`~tenpy.algorithms.truncation.truncate`
             ======= ====== ======================================================
         """
@@ -444,7 +446,7 @@ class Engine(object):
 
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.TEBD_params, inner_labels=['vR', 'vL'])
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
