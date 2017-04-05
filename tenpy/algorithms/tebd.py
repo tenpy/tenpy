@@ -191,8 +191,8 @@ class Engine(object):
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
 
+        Eold = np.average(self.model.bond_energies(self.psi))
         if self.verbose >= 1:
-            Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
             start_time = time.time()
 
@@ -206,11 +206,11 @@ class Engine(object):
             while (DeltaE > max_error_E):
                 self.update(N_steps)
                 step += N_steps
+                E = np.average(self.model.bond_energies(self.psi))
+                DeltaE = np.abs(Eold - E)
+                DeltaS = np.abs(Sold - S)
                 if self.verbose >= 1:
-                    E = np.average(self.model.bond_energies(self.psi))
                     S = np.average(self.psi.entanglement_entropy())
-                    DeltaE = np.abs(Eold - E)
-                    DeltaS = np.abs(Sold - S)
                     Eold = E
                     Sold = S
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
