@@ -59,7 +59,7 @@ from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
-from ..tools.string import vert_join
+from ..tools.string import vert_join, is_non_string_iterable
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
@@ -944,7 +944,7 @@ class Array(object):
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
         # check: is combine_legs `iterable(iterable(int|str))` or `iterable(int|str)` ?
-        if [combine_legs[0]] == to_iterable(combine_legs[0]):
+        if not is_non_string_iterable(combine_legs[0]):
             # the first entry is (int|str) -> only a single new pipe
             combine_legs = [combine_legs]
             if new_axes is not None:

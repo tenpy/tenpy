@@ -36,6 +36,33 @@ def matvec_to_array(H):
 ##########################################################################
 # Actual Math functions
 
+def entropy(p, n=1):
+    r"""Calculate the entropy of a distribution.
+
+    Assumes that p is a normalized distribution (``np.sum(p)==1.``).
+    
+    Parameters
+    ----------
+    p : 1D array
+        A normalized distribution.
+    n : 1 | float | np.inf
+        Selects the entropy, see below.
+
+    Returns 
+    -------
+    entropy : float
+        Shannon-entropy :math:`-\sum_i p_i \log(p_i)` (n=1) or 
+        Renyi-entropy :math:`\frac{1}{1-n} \log(\sum_i p_i^n)` (n != 1)
+        of the distribution `p`.
+    """
+    p = p[p > 1.e-30]  # just for stability reasons / to avoid NaN in log
+    if n == 1:
+        return -np.inner(np.log(p), p)
+    elif n == np.inf:
+        return - np.log(np.max(p))
+    else:  # general n != 1, inf
+        return np.log(np.sum(p**n)) / (1. - n)
+
 
 def gcd(a, b):
     """Computes the greatest common divisor (GCD) of two numbers.

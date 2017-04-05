@@ -29,8 +29,9 @@ def check_tebd(bc_MPS='finite'):
     state = ([0, 1] * L)[:L]  # Neel
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
-    tebd_param = {'verbose': 2, 'chi_max': 50, 'dt': 0.1, 'order': 4,
-                  'delta_tau_list': [1., 0.1, 1.e-4, 1.e-8, 1.e-12]}
+    tebd_param = {'verbose': 2, 'dt': 0.1, 'order': 4,
+                  'delta_tau_list': [1., 0.1, 1.e-4, 1.e-8, 1.e-12],
+                  'trunc_params': {'chi_max': 50}}
     engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 

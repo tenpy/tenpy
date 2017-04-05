@@ -86,7 +86,7 @@ import scipy.sparse.linalg.eigen.arpack
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_iterable, argsort
-from ..tools.math import lcm, speigs
+from ..tools.math import lcm, speigs, entropy
 
 
 class MPS(object):
@@ -556,8 +556,9 @@ class MPS(object):
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
-        Consider a cut of the sytem in to :math:`A = \{ j: j < i \}` and :math:`B = \{ j: j > i\}`.
-        This defines the von-Neumann entanglement entropy as
+        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and 
+        :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`rho_A = tr_B(\rho)`.
+        The von-Neumann entanglement entropy is defined as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
         The generalization for ``n != 1, n>0`` are the Renyi entropies:
         :math:`S(A, n) = \frac{1}{1-n} \log(tr(\rho_A^2)) = S(B, n=1)`
@@ -596,16 +597,11 @@ class MPS(object):
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
                     s = npc.eigvals(npc.tensordot(s.conj(), s, axes=[0, 0]))
-                    s = np.sqrt(s[s > 1.e-40])
+                    res.append(entropy(s, n))
                 else:
                     raise ValueError("entropy with non-diagonal schmidt values")
-            s = s[s > 1.e-20]  # just for stability reasons / to avoid NaN in log
-            if n == 1:
-                res.append(-np.inner(np.log(s), s))
-            elif n == np.inf:
-                res.append(-2. * np.log(np.max(s)))
-            else:  # general n != 1, inf
-                res.append(np.log(np.sum(s**(2 * n))) / (1. - n))
+            else:
+                res.append(entropy(s**2, n))
         return np.array(res)
 
     def overlap(self, other):
@@ -1034,6 +1030,9 @@ class MPSEnvironment(object):
 
     .. todo :
         Functionality to find the dominant LP/RP in the TD limit -> requires MPSTransferMatrix
+
+    .. todo :
+        Doesn't work for different qtotal in ket._B / bra._B -> Need MPS.gauge_qtotal()
 
     Parameters
     ----------

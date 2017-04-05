@@ -36,6 +36,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         Length of the chain
     S : {0.5, 1, 1.5, 2, ...}
         The 2S+1 local states range from m = -S, -S+1, ... +S.
+    conserve : 'best' | 'Sz' | 'parity' | None
+        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
     Jx, Jy, Jz, hx, hy, hz : float | array
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
