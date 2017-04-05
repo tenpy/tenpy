@@ -39,6 +39,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
 
 from __future__ import division
 import numpy as np
+import time
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
@@ -137,6 +138,7 @@ class Engine(object):
         if self.verbose >= 1:
             Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
+            start_time = time.time()
         self.update(N_steps)
         if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
@@ -144,9 +146,9 @@ class Engine(object):
             DeltaE = np.abs(Eold - E)
             DeltaS = np.abs(Sold - S)
             msg = ("--> time={t:3.3f}, max_chi={chi:d}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
-                   "Delta_S={dS:.4e}, S={S:.10f}")
+                   "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
             print msg.format(t=self.evolved_time, chi=max(self.psi.chi), dE=DeltaE, dS=DeltaS,
-                             E=E.real, S=S.real)
+                             E=E.real, S=S.real, time=time.time() - start_time,)
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -192,6 +194,7 @@ class Engine(object):
         if self.verbose >= 1:
             Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
+            start_time = time.time()
 
         for delta_tau in delta_tau_list:
             if self.verbose >= 1:
@@ -211,9 +214,9 @@ class Engine(object):
                     Eold = E
                     Sold = S
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
-                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}")
+                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}, time simulated: {time:.1f} s")
                     print msg.format(step=step, t=self.evolved_time, chi=max(self.psi.chi),
-                                     dE=DeltaE, dS=DeltaS, E=E.real, S=S.real)
+                            dE=DeltaE, dS=DeltaS, E=E.real, S=S.real, time=time.time() - start_time,)
         # done
 
     @staticmethod
