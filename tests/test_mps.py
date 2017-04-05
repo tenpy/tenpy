@@ -50,6 +50,36 @@ def test_MPSEnvironment():
         assert (abs(abs(ov) - 1.) < 1.e-14)
     env.expectation_value('Sz')
 
+def test_singlet_mps():
+    pairs = [(0, 3), (1, 6), (2, 5)]
+    bond_singlets = np.array([1, 2, 3, 2, 2, 1, 0])
+    lonely = [4, 7]
+    L = 2*len(pairs) + len(lonely)
+    print "singlet pairs: ", pairs
+    print "lonely sites: ", lonely
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, up=0, down=1, bc='finite')
+    psi.test_sanity()
+    print 'chi = ', psi.chi
+    assert(np.all(2**bond_singlets == np.array(psi.chi)))
+    ent = psi.entanglement_entropy() / np.log(2)
+    npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
+    print psi.overlap(psi)
+    print psi.expectation_value('Id')
+    ent_segm = psi.entanglement_entropy_segment(range(4)) /np.log(2)
+    print ent_segm
+    npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
+    # TODO: calculating overlap with product state
+    # TODO: doesn't work yet: different qtotal.
+    #  product_state = [None]*L
+    #  for i, j in pairs:
+    #      product_state[i] = 0
+    #      product_state[j] = 1
+    #  for k in lonely:
+    #      product_state[k] = 0
+    #  psi2 = mps.MPS.from_product_state([spin_half]*L, product_state, bc='finite')
+    #  ov = psi.overlap(psi2)
+
+
 
 if __name__ == "__main__":
     test_mps()

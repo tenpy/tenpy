@@ -327,6 +327,111 @@ class MPS(object):
             res.convert_form(form)
         return res
 
+    @classmethod
+    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0, bc='finite'):
+        """Create an MPS of entangled singlets.
+
+        Parameters
+        ----------
+        site : :class:`~tenpy.networks.site.Site`
+            The `site` defining the local Hilbert space, taken uniformly for all sites.
+        L : int
+            The number of sites.
+        pairs : list of (int, int)
+            Pairs of sites to be entangled; the returned MPS will have a singlet 
+            for each pair in `pairs`.
+        up, down : int | str
+            A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
+            ``up`` and ``down`` give state indices or labels defined on the corresponding site.
+        lonely : list of int
+            Sites which are not included into a singlet pair. Useful to generate singlet pairs for 
+        lonely_state : int | str
+            The state for the lonely sites.
+        bc : {'infinite', 'finite', 'segmemt'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+
+        Returns
+        -------
+        singlet_mps : :class:`MPS`
+            An MPS representing singlets on the specified bonds.
+        """
+        # sort each pair s.t. i < j
+        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs] 
+        # sort by smaller site of the pair
+        pairs.sort(key=lambda x : x[0])
+        pairs.append((L, L))
+        lonely = sorted(lonely) + [L]
+        # generate building block tensors
+        up = site.state_index(up)
+        down = site.state_index(down)
+        mask = np.zeros(site.dim, dtype=np.bool_)
+        mask[up] = mask[down] = True
+        Open = npc.diag(1., site.leg)[:, mask]
+        Close = np.zeros([site.dim, site.dim], dtype=np.float_)
+        Close[up, down] = -1.
+        Close[down, up] = 1.
+        Close = npc.Array.from_ndarray(Close, [site.leg, site.leg])  # no conj() !
+        Close = Close[mask, :]
+        Id = npc.eye_like(Close, 0)
+        Lonely = np.zeros(site.dim, dtype=np.float_)
+        Lonely[lonely_state] = 1
+        Lonely = npc.Array.from_ndarray(Lonely, [site.leg])
+        Bs = []
+        Ss = [np.arange(1.)]
+        forms = []
+        open_singlets = []  # the k-th open singlet should be closed at site open_singlets[k]
+        Ts = []  # the tensors on the current site
+        labels_L = []
+        for i in range(L):
+            labels_R = labels_L[:]
+            next_Ts = Ts[:]
+            if i == pairs[0][0]:  # open a new singlet
+                j = pairs[0][1]
+                lbl = 's{0:d}-{1:d}'.format(i, j)
+                pairs.pop(0)
+                open_singlets.append(j)
+                next_Ts.append(Id.copy().set_leg_labels([lbl+'L', lbl]))
+                Open.set_leg_labels(['p', lbl])
+                Ts.append(Open.copy(deep=False))
+                labels_R.append(lbl)
+                forms.append('A')
+            elif i == lonely[0]:  # just a lonely state
+                Ts.append(Lonely)
+                lonely.pop(0)
+                forms.append('B')
+            else:  # close a singlet
+                k = open_singlets.index(i)
+                Close.set_leg_labels([labels_L[k]+'L', 'p'])
+                Ts[k] = Close
+                next_Ts.pop(k)
+                open_singlets.pop(k)
+                labels_R.pop(k)
+                forms.append('B')
+            # generate `B` from `Ts`
+            B = reduce(npc.outer, Ts)
+            labels_L = [lbl + 'L' for lbl in labels_L]
+            if len(labels_L) > 0 and len(labels_R) > 0:
+                B = B.combine_legs([labels_L, labels_R], new_axes=[0, 2], qconj=[+1, -1])
+                B.set_leg_labels(['vL', 'p', 'vR'])
+            elif len(labels_L) == 0 and len(labels_R) == 0:
+                B = B.add_trivial_leg(0, label='vL', qconj=+1)
+                B = B.add_trivial_leg(2, label='vR', qconj=+1)
+                B.set_leg_labels(['vL', 'p', 'vR'])
+            elif len(labels_L) == 0:
+                B = B.combine_legs([labels_R], new_axes=[1], qconj=[-1])
+                B.set_leg_labels(['p', 'vR'])
+                B = B.add_trivial_leg(0, label='vL', qconj=+1)
+            else:  # len(labels_R) == 0
+                B = B.combine_legs([labels_L], new_axes=[0], qconj=[+1])
+                B.set_leg_labels(['vL', 'p'])
+                B = B.add_trivial_leg(2, label='vR', qconj=+1)
+            Bs.append(B)
+            N = 2**len(labels_R)
+            Ss.append(np.ones(N)/(N**0.5))
+            Ts = next_Ts
+            labels_L = labels_R
+        return cls([site]*L, Bs, Ss, bc=bc, form=forms)
+
     def copy(self):
         """Returns a copy of `self`.
 
@@ -603,6 +708,96 @@ class MPS(object):
             else:
                 res.append(entropy(s**2, n))
         return np.array(res)
+
+    def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
+        r"""Calculate entanglement entropy for general geometry of the bipartition.
+
+        This function is similar as :meth:`entanglement_entropy`, 
+        but for more general geometry of the region `A` to be a segment of a *few* sites.
+
+        This is acchieved by explicitly calculating the reduced density matrix of `A`
+        and thus works only for small segments.
+
+        Parameters
+        ----------
+        segment : list of int
+            Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
+        first_site : ``None`` | (iterable of) int
+            Calculate the entropy for segments starting at these sites.
+            ``None`` defaults to ``range(L-len(segment))`` for finite 
+            or `range(L)` for infinite boundary conditions.
+        n : int | float
+            Selects which entropy to calculate;
+            `n=1` (default) is the ususal von-Neumann entanglement entropy, 
+            otherwise the `n`-th Renyi entropy.
+
+        Returns
+        -------
+        entropies : 1D ndarray
+            ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
+        """
+        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i` 
+        # of consecutive sites (in our notation, ``segment = range(La)``)
+        # To get the entanglement entropy, diagonalize:
+        #     --theta---
+        #       | | | 
+        #     --theta*--
+        #  Diagonalization is O(chi^6), compared to O(d^{3*La})
+        segment = np.sort(segment)
+        if first_site is None:
+            if self.finite:
+                first_site = range(0, self.L - segment[-1])
+            else:
+                first_site = range(self.L)
+        rho_lbl = ['p'+str(k) for k in range(len(segment))]
+        comb_legs = [rho_lbl, [lbl+'*' for lbl in rho_lbl]]
+        res = []
+        for i0 in first_site:
+            rho = self.get_rho_segment(segment+i0)
+            rho = rho.combine_legs(comb_legs, qconj=[+1, -1])
+            p = npc.eigvalsh(rho)
+            res.append(entropy(p, n))
+        return np.array(res)
+
+    def get_rho_segment(self, segment):
+        """Return reduced density matrix for a segment.
+
+        Note that the dimension of rho_A scales exponentially in the length of the segment.
+
+        Parameters
+        ----------
+        segment : iterable of int
+            Sites for which the reduced density matrix is to be calculated.
+            Assumed to be sorted.
+
+        Returns
+        -------
+        rho : :class:`~tenpy.linalg.np_conserved.Array`
+            Reduced density matrix of the segment sites.
+            Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
+        """
+        segment = np.asarray(segment)
+        if np.all(segment[1:] == segment[:-1]+1):  # consecutive
+            theta = self.get_theta(segment[0], segment[-1]-segment[0]+1)
+            rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
+            return rho
+        rho = self.get_theta(segment[0], 1)
+        rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
+        k = 1
+        for i in range(segment[0]+1, segment[-1]):
+            B = self.get_B(i)
+            if i == segment[k]:
+                B = B._replace_p_label(B, k)
+                k += 1
+                rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
+                rho = npc.tensordot(rho, B.conj(), axes=('vR*', 'vL*'))
+            else:
+                rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
+                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'] , ['vL*', 'p*']))
+        B = self.get_B(segment[-1])
+        rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
+        rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
+        return rho
 
     def overlap(self, other):
         """Compute overlap :math:`<self|other>`.
