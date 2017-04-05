@@ -38,9 +38,10 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         V = get_parameter(model_param, 'V', 1., self.__class__)
         mu = get_parameter(model_param, 'mu', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
+        conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
 
         # 1) - 3)
-        site = FermionSite(conserve='N')
+        site = FermionSite(conserve = conserve)
         # 4) lattice
         lat = Chain(L, site, bc_MPS=bc_MPS)
         bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
