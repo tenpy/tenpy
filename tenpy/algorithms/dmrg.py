@@ -243,7 +243,7 @@ def run(psi, model, DMRG_params):
             E = engine.statistics['E_total'][-1]
         Delta_E = E - E_old
         E_old = E
-        sweep_statistics['sweep'].append(engine.sweep)
+        sweep_statistics['sweep'].append(engine.sweeps)
         sweep_statistics['E'].append(E)
         sweep_statistics['S'].append(S)
         sweep_statistics['max_trunc_err'].append(max_trunc_err)
