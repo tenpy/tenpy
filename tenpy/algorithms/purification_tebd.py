@@ -118,6 +118,7 @@ class PurificationTEBD(tebd.Engine):
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
     def disentangle(self, theta, i, U_bond):

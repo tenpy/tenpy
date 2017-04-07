@@ -87,6 +87,9 @@ class Engine(object):
     _U_param : dict
         A dictionary containing the information of the latest created `_U`.
         We don't recalculate `_U` if those parameters didn't change.
+    _trunc_err_bonds : list of :class:`~tenpy.algorithms.truncation.TruncationError`
+        The *local* truncation error introduced at each bond, ignoring the errors at other bonds.
+        The `i`-th entry is left of site `i`.
     """
 
     def __init__(self, psi, model, TEBD_params):
@@ -101,6 +104,12 @@ class Engine(object):
         self._calc_bond_eig()  # calculates `self._bond_eig_vals`, `self._bond_eig_vecs`.
         self._U = None
         self._U_param = {}
+        self._trunc_err_bonds = [TruncationError() for i in range(psi.L+1)]
+
+    @property
+    def trunc_err_bonds(self):
+        """truncation error introduced on each non-trivial bond"""
+        return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     def run(self):
         """Time evolution with TEBD (time evolving block decimation).
@@ -475,6 +484,7 @@ class Engine(object):
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
     def _calc_bond_eig(self):
