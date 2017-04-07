@@ -241,7 +241,7 @@ class MPS(object):
         ci = sites[0].leg.chinfo
         Bs = []
         chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
-        legL = npc.LegCharge.from_qflat(ci, chargeL)
+        legL = npc.LegCharge.from_qflat(ci, [chargeL])
 
         for i, site in enumerate(sites):
             try:

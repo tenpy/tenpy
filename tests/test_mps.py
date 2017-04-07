@@ -16,6 +16,9 @@ spin_half = site.SpinHalfSite(conserve='Sz')
 
 
 def test_mps():
+    site_triv = site.SpinHalfSite(conserve=None)
+    psi = mps.MPS.from_product_state([site_triv]*4, [0, 1, 0, 1], bc='finite')
+    psi.test_sanity()
     for L in [4, 2, 1]:
         print L
         state = (spin_half.state_indices(['up', 'down']) * L)[:L]

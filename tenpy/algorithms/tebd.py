@@ -208,10 +208,10 @@ class Engine(object):
                 step += N_steps
                 E = np.average(self.model.bond_energies(self.psi))
                 DeltaE = np.abs(Eold - E)
-                DeltaS = np.abs(Sold - S)
+                Eold = E
                 if self.verbose >= 1:
                     S = np.average(self.psi.entanglement_entropy())
-                    Eold = E
+                    DeltaS = np.abs(Sold - S)
                     Sold = S
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
                            "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}, time simulated: {time:.1f} s")
