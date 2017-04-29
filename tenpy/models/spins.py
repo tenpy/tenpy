@@ -48,6 +48,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
 
     def __init__(self, model_param):
         # 0) read out/set default parameters
+        verbose = get_parameter(model_param, 'verbose', 1, self.__class__)
         L = get_parameter(model_param, 'L', 2, self.__class__)
         Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
         Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
@@ -67,6 +68,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
                 conserve = 'parity'
             else:
                 conserve = None
+            if verbose >= 1:
+                print str(self.__class__) + ": set conserve to " , conserve
         # 1) define Site and lattice
         site = SpinSite(S, conserve)
         lat = Chain(L, site, bc_MPS=bc_MPS)
@@ -80,7 +83,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_onsite(hz, 0, 'Sz')
         Jx = np.asarray(Jx)
         Jy = np.asarray(Jy)
-        # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2j
+        # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         self.add_coupling((Jx + Jy)/4., 0, 'Sp', 0, 'Sm', 1)

@@ -345,6 +345,8 @@ def any_nonzero(params, keys, verbose_msg=None):
         else:
             val = params.get(k, None)
             if val is not None and np.any(np.array(val) != 0.):    # count `None` as zero
-                print
+                if verbose:
+                    print verbose_mesg
+                    print str(k) + " has nonzero entries"
                 return True
     return False
