@@ -3621,11 +3621,12 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
             if anynan(U_b) or anynan(VH_b):
                 raise ValueError(
-                    "NaN in U_b {0:d} and/or VH_b: {1:d}".format(np.nansum(U_b), np.nansum(VH_b)))
+                    "NaN in U_b {0:x} and/or VH_b: {1:x}".format(np.sum(np.isnan(U_b)),
+                                                                 np.sum(np.isnan(VH_b))))
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
         if anynan(S_b):
-            raise ValueError("NaN in S: " + str(np.nansum(S_b)))
+            raise ValueError("NaN in S: " + str(np.sum(np.isnan(S_b))))
 
         if cutoff is not None:
             keep = (S_b > cutoff)  # bool array

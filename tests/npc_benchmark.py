@@ -57,8 +57,8 @@ def setup_npc(mod_q=[1],
         [gen_random_legcharge_nq(chinfo, size, n_qsectors) for i in range(leg_a_out)]
     legs_b = [l.conj() for l in legs_contr] + \
         [gen_random_legcharge_nq(chinfo, size, n_qsectors) for i in range(leg_b_out)]
-    a = npc.Array.from_func(np.random.random, chinfo, legs_a, dtype, shape_kw='size')
-    b = npc.Array.from_func(np.random.random, chinfo, legs_b, dtype, shape_kw='size')
+    a = npc.Array.from_func(np.random.random, legs_a, dtype, shape_kw='size')
+    b = npc.Array.from_func(np.random.random, legs_b, dtype, shape_kw='size')
     a.ipurge_zeros()
     b.ipurge_zeros()
     if chinfo.qnumber > 0 and select_frac < 1.:

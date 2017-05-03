@@ -760,7 +760,7 @@ class LegPipe(LegCharge):
         """like :meth:`conj`, but don't change ``qconj`` for incoming legs."""
         res = copy.copy(self)  # shallow
         res.qconj = -1
-        res.charges = self.chinfo.make_valid(-self.chares)
+        res.charges = self.chinfo.make_valid(-self.charges)
         return res
 
     def sort(self, *args, **kwargs):

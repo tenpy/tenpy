@@ -133,7 +133,11 @@ def mkl_get_nthreads():
         import mkl  # available in conda MKL
         return mkl.get_max_threads()
     except ImportError:
-        pass
+        try:
+            mkl_rt = ctypes.CDLL('libmkl_rt.so')
+            return mkl_rt.mkl_get_max_threads()
+        except OSError:
+            warnings.warn("MKL library not found: can't get nthreads")
     return -1
 
 
