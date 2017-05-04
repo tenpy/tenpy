@@ -29,7 +29,15 @@ class PurificationTEBD(tebd.Engine):
         Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
         See :func:`run` and :func:`run_GS` for more details.
+
+    Attributes
+    ----------
+    disent_iterations
+    _disent_iterations : 1D ndarray
     """
+    def __init__(self, psi, model, TEBD_params):
+        super(PurificationTEBD, self).__init__(psi, model, TEBD_params)
+        self._disent_iterations = np.zeros(psi.L)
 
     def run_imaginary(self, beta):
         """Run imaginary time evolution to cool down to the given `beta`.
@@ -50,6 +58,11 @@ class PurificationTEBD(tebd.Engine):
             S = np.average(self.psi.entanglement_entropy())
             print "--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(
                 t=self.evolved_time, E=E.real, S=S.real)
+
+    @property
+    def disent_iterations(self):
+        """For each bond the number of iterations in :meth:`disentangle_renyi`"""
+        return self._disent_iterations[self.psi.nontrivial_bonds]
 
     def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
@@ -157,13 +170,13 @@ class PurificationTEBD(tebd.Engine):
         if disentangle is None:
             return theta, None
         elif disentangle == 'backwards':
-            return self.disentangle_backwards(theta, U_bond)
+            return self.disentangle_backwards(theta, i, U_bond)
         elif disentangle == 'renyi':
-            return self.disentangle_renyi(theta)
+            return self.disentangle_renyi(theta, i, U_bond)
         # else
         raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
 
-    def disentangle_backwards(self, theta, U_bond):
+    def disentangle_backwards(self, theta, i, U_bond):
         """Disentangle with backwards time evolution.
 
         See [Karrasch2013]_.
@@ -183,7 +196,7 @@ class PurificationTEBD(tebd.Engine):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U
 
-    def disentangle_renyi(self, theta):
+    def disentangle_renyi(self, theta, i, U_bond):
         """Find optimal `U` which minimizes the second Renyi entropy.
 
         Reads of the following `TEBD_params` as break criteria for the iteration:
@@ -204,14 +217,15 @@ class PurificationTEBD(tebd.Engine):
         U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                       npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         Sold = np.inf
-        for i in xrange(max_iter):
+        for j in xrange(max_iter):
             S, U = self.disentangle_renyi_iter(theta, U)
             if abs(Sold - S) < eps:
                 break
             Sold, S = S, Sold
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        self._disent_iterations[i] += j  # save the number of iterations performed
         if self.verbose >= 10:
-            print "disentangle renyi: {i:d} iterations, Sold-S = {DS:.3e}".format(i=i, DS=S-Sold)
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S-Sold)
         return theta, U
 
     def disentangle_renyi_iter(self, theta, U):
