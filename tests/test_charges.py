@@ -83,7 +83,7 @@ def gen_random_legcharge(chinfo, ind_len):
         else:
             r = max(3, ind_len // 3)
             qflat.append(np.asarray(np.random.randint(-r, r, size=ind_len)))
-    qflat = np.array(qflat, dtype=chinfo.qtype).T.reshape(ind_len, chinfo.qnumber)
+    qflat = np.array(qflat, dtype=charges.QTYPE).T.reshape(ind_len, chinfo.qnumber)
     qconj = np.random.randint(0, 1, 1) * 2 - 1
     return charges.LegCharge.from_qflat(chinfo, qflat, qconj).bunch()[1]
 
@@ -99,7 +99,10 @@ def test_ChargeInfo():
     qs = [[0, 2], [2, 0], [5, 3], [-2, -3]]
     is_valid = [True, True, False, False]
     for q, valid in zip(qs, is_valid):
-        nst.eq_(chinfo.check_valid(q), valid)
+        print q, valid
+        check = chinfo.check_valid(np.array([q]))
+        print check
+        nst.eq_(check, valid)
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
     npt.assert_equal(qs_valid, chinfo.make_valid(qs))
 

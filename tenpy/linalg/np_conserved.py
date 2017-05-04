@@ -94,7 +94,7 @@ class Array(object):
         The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
     dtype : type or string
         The data type of the array entries. Defaults to np.float64.
-    qtotal : 1D array of `chargeinfo.qtype`
+    qtotal : 1D array of QTYPE
         The total charge of the array. Defaults to 0.
 
     Attributes
@@ -2657,7 +2657,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         return legs
     qtotal = chargeinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
     legs_known = legs[:axis] + legs[axis + 1:]
-    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=chargeinfo.qtype)
+    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=charges.QTYPE)
     for i in range(axis_len):
         A_i = np.take(flat_array, i, axis=axis)
         qflat[i] = detect_qtotal(A_i, legs_known, cutoff)

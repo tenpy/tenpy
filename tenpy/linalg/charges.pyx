@@ -9,12 +9,19 @@ Contains implementation of classes
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
+.. todo ::
+    change: take ChargeInfo.mod[j]=0 for U(1) (instead of mod=1)
+    Adjust doc strings
+
 A detailed introduction to `np_conserved` can be found in :doc:`../IntroNpc`.
 """
 
 from __future__ import division
 
 import numpy as np
+cimport numpy as np
+cimport cython
+
 import copy
 import itertools
 import bisect
@@ -25,11 +32,13 @@ from ..tools.string import vert_join
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 
+np.import_array()
+
 QTYPE = np.int_             # numpy dtype for the charges
-"""numpy data type for the charges"""
+ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
 
 
-class ChargeInfo(object):
+cdef class ChargeInfo:
     """Meta-data about the charge of a tensor.
 
     Saves info about the nature of the charge of a tensor.
@@ -49,25 +58,27 @@ class ChargeInfo(object):
 
     Attributes
     ----------
-    qnumber
-    mod
+    qnumber :
+        The number of charges.
+    mod :  ndarray[QTYPE,ndim=1]
+        Modulo how much each of the charges is taken.
+        1 for a  (i.e. mod 1-> mod infinity)
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
-    _mask_mod1 : 1D array bool
-        mask ``(mod == 1)``, to speed up `make_valid`
-    _mod_masked : 1D array QTYPE
-        equivalent to ``self.mod[self._maks_mod1]``
 
     Notes
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
+    cdef readonly int qnumber
+    cdef readonly np.ndarray mod
+    cdef list names
 
-    def __init__(self, mod=[], names=None):
+    def __init__(ChargeInfo self, mod=[], names=None):
         """see help(self)"""
-        mod = np.array(mod, dtype=QTYPE)
-        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
-        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
+        mod = np.asarray(mod, dtype=QTYPE)
+        self.qnumber = len(mod)
+        self.mod = mod
         if names is None:
             names = [''] * self.qnumber
         self.names = [str(n) for n in names]
@@ -75,29 +86,19 @@ class ChargeInfo(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self._mod_masked.ndim != 1:
-            raise ValueError("mod has wrong shape")
-        if np.any(self._mod_masked <= 0):
-            raise ValueError("mod should be > 0")
         if len(self.names) != self.qnumber:
             raise ValueError("names has incompatible length with mod")
+        if np.any(self.mod < 0):
+            raise ValueError("mod with negative entries???")
 
-    @property
-    def qnumber(self):
-        """the number of charges, also refered to as qnumber."""
-        return len(self._mask)
 
-    @property
-    def mod(self):
-        """modulo how much each of the charges is taken."""
-        res = np.ones(self.qnumber, dtype=QTYPE)
-        res[self._mask] = self._mod_masked
-        return res
-
-    def make_valid(self, charges=None):
+    cpdef np.ndarray make_valid(ChargeInfo self, charges=None):
         """Take charges modulo self.mod.
 
         Acts in-place, if charges is an array.
+
+        .. todo : fast indexing requirese 1D/2D version
+            Save default charges in self?
 
         Parameters
         ----------
@@ -111,27 +112,100 @@ class ChargeInfo(object):
             A copy of `charges` taken modulo `mod`, but with ``x % 1 := x``
         """
         if charges is None:
-            return np.zeros((self.qnumber, ))
-        charges = np.array(charges, dtype=QTYPE)
-        charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
-        return charges
+            return np.zeros((self.qnumber, ), dtype=QTYPE)
+        charges = np.asarray(charges, dtype=QTYPE)
+        if charges.ndim == 1:
+            assert(charges.shape[0] == self.qnumber)
+            return self._make_valid_1D(charges)
+        elif charges.ndim == 2:
+            assert(charges.shape[1] == self.qnumber)
+            return self._make_valid_2D(charges)
+        raise ValueError("wrong dimension of charges " + str(charges))
 
-    def check_valid(self, charges):
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
+    @cython.cdivision(True)
+    cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=1] charges):
+        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)
+        cdef int j
+        cdef QTYPE_t q
+        for j in range(self.qnumber):
+            q = self.mod[j]
+            if q == 1:
+                res[j] = charges[j]
+            else:
+                res[j] = charges[j]  % q
+                if res[j] < 0:  # correct for C-modulo opposed to python modulo
+                    res[j] += q
+        return res
+
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
+    @cython.cdivision(True)
+    cdef np.ndarray _make_valid_2D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
+        cdef np.ndarray[QTYPE_t,ndim=2] res = np.empty_like(charges)
+        cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
+        cdef int L = charges.shape[0]
+        cdef int i, j
+        cdef QTYPE_t q, x
+        for j in range(self.qnumber):
+            q = mod[j]
+            if q == 1:
+                for i in range(L):
+                    res[i, j] = charges[i, j]
+            else:
+                for i in range(L):
+                    res[i, j] = charges[i, j] % q
+                    if res[i, j] < 0:  # correct for C-modulo opposed to python modulo
+                        res[i, j] += q
+                    continue
+        return res
+
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
+    @cython.cdivision(True)
+    def check_valid(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
         r"""Check, if `charges` has all entries as expected from self.mod.
+
+        Parameters
+        ----------
+        charges : 2D ndarray QTYPE_t
+            Charge values to be checked.
 
         Returns
         -------
         res : bool
             True, if all 0 <= charges <= self.mod (wherever self.mod != 1)
         """
-        charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
-        return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
+        assert (charges.shape[1] == self.qnumber)
+        cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
+        cdef int i, j, x
+        cdef QTYPE_t q
+        cdef L = charges.shape[0]
+        for j in range(self.qnumber):
+            q = mod[j]
+            if q == 1:
+                continue
+            for i in range(L):
+                x = charges[i, j]
+                if x < 0 or x >= q:
+                    print "invalid at ", i , ",",  j
+                    return False
+        return True
 
     def __repr__(self):
         """full string representation"""
         return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
 
-    def __eq__(self, other):
+    def __richcmp__(self, other, int operator):
+        if operator == 2: # equal:
+            return self._equal(other)
+        elif operator == 3:
+            return not self._equal(other)
+        else:
+            raise NotImplementedError("No ordering of `ChargeInfo` possible")
+
+    def _equal(self, other):
         r"""compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
@@ -141,10 +215,6 @@ class ChargeInfo(object):
             if r != l and l != '' and r != '':
                 return False
         return True
-
-    def __ne__(self, other):
-        r"""Define `self != other` as `not (self == other)`"""
-        return not self.__eq__(other)
 
 
 class LegCharge(object):
