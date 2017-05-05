@@ -373,13 +373,13 @@ class Engine(object):
         trunc_err = TruncationError()
         order = self._U_param['order']
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
-            trunc_err += self.update_step(self._U[U_idx_dt], odd)
+            trunc_err += self.update_step(U_idx_dt, odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
-    def update_step(self, U, odd):
+    def update_step(self, U_idx_dt, odd):
         """Updates either even *or* odd bonds in unit cell.
 
         Depending on the choice of p, this function updates all even (``E``, odd=False,0)
@@ -394,13 +394,12 @@ class Engine(object):
         |       |  O |    |  O |    |  O |    |
         |       |----|    |----|    |----|    |
 
-        Note that boundary conditions are taken care of by having ``U[0] = None``
-        or otherwise.
+        Note that finite boundary conditions are taken care of by having ``Us[0] = None``.
 
         Parameters
         ----------
-        U : list of :class:`~tenpy.linalg.np_conserved.Array`
-            The list of bond operators with which we update the MPS.
+        U_idx_dt : int
+            Time step index in ``self._U``, evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
         odd : bool/int
             Indication of whether to update even (``odd=False,0``) or even (``odd=True,1``) sites
 
@@ -410,18 +409,19 @@ class Engine(object):
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
         """
+        Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
-            if U[i_bond] is None:
+            if Us[i_bond] is None:
                 if self.verbose >= 10:
                     print "Skip U_bond element:", i_bond
                 continue  # handles finite vs. infinite boundary conditions
             if self.verbose >= 10:
                 print "Apply U_bond element", i_bond
-            trunc_err += self.update_bond(i_bond, U[i_bond])
+            trunc_err += self.update_bond(U_idx_dt, i_bond)
         return trunc_err
 
-    def update_bond(self, i, U_bond):
+    def update_bond(self, U_idx_dt, i):
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
@@ -436,11 +436,10 @@ class Engine(object):
 
         Parameters
         ----------
-        i : int
-            Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond : :class:~tenpy.linalg.np_conserved.Array`
-            The bond operator which we apply to the wave function.
-            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
+        U_idx_dt, i : int
+            Inidices of the npc Array ``U_bond = self._U[U_idx_dt][i]``
+            to update the wave function at sites ``i-1, i``.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``. for `U_bond`.
 
         Returns
         -------
@@ -453,7 +452,7 @@ class Engine(object):
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
-        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta = npc.tensordot(self._U[U_idx_dt][i], theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
@@ -474,7 +473,7 @@ class Engine(object):
         C = self.psi.get_theta(i0, n=2, formL=0.)
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
-        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
+        C = npc.tensordot(self._U[U_idx_dt][i], C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         B_L = npc.tensordot(
             C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
             V.conj(),
