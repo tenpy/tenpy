@@ -71,6 +71,12 @@ def test_singlet_mps():
     ent_segm = psi.entanglement_entropy_segment(range(4)) /np.log(2)
     print ent_segm
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
+    mutinf = psi.mutinf_two_site() / np.log(2)
+    mutinf[np.abs(mutinf) < 1.e-14] = 0.
+    print mutinf
+    for i, j in pairs:
+        mutinf[i, j-i-1] -= 2.  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
+    npt.assert_array_almost_equal_nulp(mutinf, 0., 10)
     # TODO: calculating overlap with product state
     # TODO: doesn't work yet: different qtotal.
     #  product_state = [None]*L
