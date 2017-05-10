@@ -122,8 +122,10 @@ class PurificationMPS(MPS):
     """
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
-    # `get_theta` works thanks to `_replace_p_label`
+    _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
+    # thanks to using `self._replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
+
 
     def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
@@ -160,95 +162,6 @@ class PurificationMPS(MPS):
 
     def overlap(self, other):
         raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
-
-    def expectation_value(self, ops, sites=None, axes=None):
-        """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
-
-        Given the MPS in canonical form, it calculates n-site expectation values.
-        For example the contraction for a two-site (n=2) operator on site `i` would look like
-        the following picture (where the ``:`` on top are connected with the ones on the bottom)::
-
-            |                :     :
-            |                |     |
-            |          .--S--B[i]--B[i+1]--.
-            |          |     |     |       |
-            |          |     |-----|       |
-            |          |     | op  |       |
-            |          |     |-----|       |
-            |          |     |     |       |
-            |          .--S--B*[i]-B*[i+1]-.
-            |                |     |
-            |                :     :
-
-        Parameters
-        ----------
-        ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
-            The operators, for wich the expectation value should be taken,
-            All operators should all have the same number of legs (namely `2 n`).
-            If less than ``len(sites)`` operators are given, we repeat them periodically.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            `self.sites`.
-        sites : None | list of int
-            List of site indices. Expectation values are evaluated there.
-            If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
-        axes : None | (list of str, list of str)
-            Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contraction. The first `n` legs are contracted with conjugated B`s,
-            the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site operators (n=1), or
-            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for n > 1.
-
-        Returns
-        -------
-        exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
-            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
-
-        Examples
-        --------
-        One site examples (n=1):
-
-        >>> psi.expectation_value('Sz')
-        [Sz0, Sz1, ..., Sz{L-1}]
-        >>> psi.expectation_value(['Sz', 'Sx'])
-        [Sz0, Sx1, Sz2, Sx3, ... ]
-        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
-        [Sz0, Sz3, Sz4]
-
-        Two site example (n=2), assuming homogeneous sites:
-
-        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        >>> psi.expectation_value(SzSx)
-        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
-
-        Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
-
-        >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                                   psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-                         for i in range(0, psi.L-1, 2)]
-        >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
-        [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
-
-        """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
-                                                                                      axes)
-        th_labels = th_labels + ['q' + str(j) for j in range(n)]  # additional q0, q1, ...
-        vLvR_axes_p_q = ('vL', 'vR') + tuple(axes_p) + tuple(['q' + str(j) for j in range(n)])
-        E = []
-        for i in sites:
-            op = self.get_op(ops, i)
-            theta = self.get_theta(i, n)  # vL, vR, p0, q0, p1, q1
-            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:2 + n]])  # ignore 'q'
-            E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p_q], do_conj=True))
-        return np.real_if_close(np.array(E))
-
-    def _replace_p_label(self, A, k):
-        """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
-
-        Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
-        implement this function."""
-        return A.replace_labels(['p', 'q'], ['p' + str(k), 'q' + str(k)])
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""

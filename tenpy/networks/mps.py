@@ -155,6 +155,7 @@ class MPS(object):
 
     # valid boundary conditions. Don't overwrite this!
     _valid_bc = ('finite', 'segment', 'infinite')
+    _p_label = ['p']
 
     def __init__(self, sites, Bs, SVs, bc='finite', form='B'):
         self.sites = list(sites)
@@ -749,8 +750,8 @@ class MPS(object):
                 first_site = range(0, self.L - segment[-1])
             else:
                 first_site = range(self.L)
-        rho_lbl = ['p'+str(k) for k in range(len(segment))]
-        comb_legs = [rho_lbl, [lbl+'*' for lbl in rho_lbl]]
+        comb_legs = [self._get_p_labels(len(segment), False),
+                     self._get_p_labels(len(segment), True)]
         res = []
         for i0 in first_site:
             rho = self.get_rho_segment(segment+i0)
@@ -885,15 +886,16 @@ class MPS(object):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
 
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
-                                                                                      axes)
-        vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
+        ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
+        ax_p = ['p'+str(k) for k in range(n)]
+        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
         E = []
         for i in sites:
             op = self.get_op(ops, i)
+            op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta = self.get_theta(i, n)
-            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
-            E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+            C = npc.tensordot(op, theta, axes=[ax_pstar, ax_p])  # C has same labels as theta
+            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()]*2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def correlation_function(self,
@@ -1114,9 +1116,28 @@ class MPS(object):
     def _replace_p_label(self, A, k):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
 
-        Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
-        implement this function."""
-        return A.replace_label('p', 'p' + str(k))
+        This is done for each of the 'physical labels' in :attr:`_p_label`. 
+        With a clever use of this function, the re-implementation of various functions 
+        (like get_theta) in derived classes with multiple legs per site can be avoided.
+        """
+        return A.replace_labels(self._p_label, self._get_p_label(k, False))
+    
+    def _get_p_label(self, k, star=False):
+        """return list of physical label(s) with additional str(k) and possibly a '*'."""
+        if star == 'both':
+            return [lbl + str(k) for lbl in self._p_label] + \
+                   [lbl + str(k)+'*' for lbl in self._p_label]
+        elif star:
+            return [lbl + str(k)+'*' for lbl in self._p_label]
+        else:
+            return [lbl + str(k) for lbl in self._p_label]
+
+    def _get_p_labels(self, ks, star=False):
+        """join ``self._get_p_label(k) for k in range(ks)`` to a single list."""
+        res = []
+        for k in range(ks):
+            res.extend(self._get_p_label(k, star))
+        return res
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
@@ -1129,16 +1150,16 @@ class MPS(object):
             else:
                 sites = range(L)
         sites = to_iterable(sites)
-        th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
         if axes is None:
             if n == 1:
                 axes = (['p'], ['p*'])
             else:
-                axes = (th_labels[2:], [lbl + '*' for lbl in th_labels[2:]])
-        axes_p, axes_pstar = axes
-        if len(axes_p) != n or len(axes_pstar) != n:
-            raise ValueError("Len of axes does not match operator n=" + len(n))
-        return ops, sites, n, th_labels, axes
+                axes = (self._get_p_labels(n), self.get_p_labels(n, True))
+        # check number of axes
+        ax_p, ax_pstar = axes
+        if len(ax_p) != n or len(ax_pstar) != n:
+            raise ValueError("Len of axes does not match to n-site operator with n=" + str(n))
+        return ops, sites, n, axes
 
     def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
         """get default arguments of self.correlation_function()"""
@@ -1325,7 +1346,7 @@ class MPSEnvironment(object):
         -------
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+            with labels ``'vR*', 'vR'`` for `bra`, `ket`.
         """
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
@@ -1356,7 +1377,7 @@ class MPSEnvironment(object):
         -------
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+            with labels ``'vL*', 'vL'`` for `bra`, `ket`.
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
@@ -1498,22 +1519,23 @@ class MPSEnvironment(object):
         >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self.bra._expectation_value_args(
-            ops, sites, axes)
-        vLvR_axes_p = ('vR*', 'vL*') + tuple(axes_p)
+        ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
+        ax_p = ['p'+str(k) for k in range(n)]
+        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
         E = []
         for i in sites:
             LP = self.get_LP(i, store=True)
             RP = self.get_RP(i, store=True)
-            op = ops[i % len(ops)]
-            if type(op) == str:
-                op = self.ket.sites[i].get_op(op)
-            C = self.bra.get_theta(i, n)  # vL, vR, p0, p1, ...
-            C = npc.tensordot(op, C, axes=[axes_pstar, th_labels[2:]])  # axes_p + (vL, vR)
+            op = self.ket.get_op(ops, i)
+            op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
+            C = self.ket.get_theta(i, n) 
+            th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
+            C = npc.tensordot(op, C, axes=[ax_pstar, ax_p]) # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
-            theta_bra = self.bra.get_theta(i, n)  # th_labels == (vL, vR, p0, p1, ...
-            E.append(npc.inner(theta_bra, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+            C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
+            theta_bra = self.bra.get_theta(i, n)
+            E.append(npc.inner(theta_bra, C, axes=[th_labels]*2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def _contract_LP(self, i, LP):
