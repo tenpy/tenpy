@@ -90,6 +90,8 @@ class Engine(object):
     _trunc_err_bonds : list of :class:`~tenpy.algorithms.truncation.TruncationError`
         The *local* truncation error introduced at each bond, ignoring the errors at other bonds.
         The `i`-th entry is left of site `i`.
+    _update_index : None | (int, int)
+        The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
 
     def __init__(self, psi, model, TEBD_params):
@@ -418,10 +420,12 @@ class Engine(object):
                 continue  # handles finite vs. infinite boundary conditions
             if self.verbose >= 10:
                 print "Apply U_bond element", i_bond
-            trunc_err += self.update_bond(U_idx_dt, i_bond)
+            self._update_index = (U_idx_dt, i_bond)
+            trunc_err += self.update_bond(i_bond, Us[i_bond])
+        self._update_index = None
         return trunc_err
 
-    def update_bond(self, U_idx_dt, i):
+    def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
@@ -436,10 +440,11 @@ class Engine(object):
 
         Parameters
         ----------
-        U_idx_dt, i : int
-            Inidices of the npc Array ``U_bond = self._U[U_idx_dt][i]``
-            to update the wave function at sites ``i-1, i``.
-            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``. for `U_bond`.
+        i : int
+            Bond index; we update the matrices at sites ``i-1, i``.
+        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+            The bond operator which we apply to the wave function.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
 
         Returns
         -------
@@ -452,7 +457,7 @@ class Engine(object):
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
-        theta = npc.tensordot(self._U[U_idx_dt][i], theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
@@ -473,7 +478,7 @@ class Engine(object):
         C = self.psi.get_theta(i0, n=2, formL=0.)
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
-        C = npc.tensordot(self._U[U_idx_dt][i], C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
+        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         B_L = npc.tensordot(
             C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
             V.conj(),

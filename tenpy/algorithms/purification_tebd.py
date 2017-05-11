@@ -78,7 +78,7 @@ class PurificationTEBD(tebd.Engine):
                     for i in range(psi.L)]
         self._guess_U_disent = [Id_bonds for _ in self._U] 
 
-    def update_bond(self, U_idx_dt, i):
+    def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
@@ -95,10 +95,11 @@ class PurificationTEBD(tebd.Engine):
 
         Parameters
         ----------
-        U_idx_dt, i : int
-            Inidices of the npc Array ``U_bond = self._U[U_idx_dt][i]``
-            to update the wave function at sites ``i-1, i``.
-            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``. for `U_bond`.
+        i : int
+            Bond index; we update the matrices at sites ``i-1, i``.
+        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+            The bond operator which we apply to the wave function.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'`` for `U_bond`.
 
         Returns
         -------
@@ -114,7 +115,7 @@ class PurificationTEBD(tebd.Engine):
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         # ##### new hook compared to tebd.Engine.calc_U
-        theta, U_disent = self.disentangle(theta, U_idx_dt, i)
+        theta, U_disent = self.disentangle(theta, i)
         # ####
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
@@ -150,7 +151,7 @@ class PurificationTEBD(tebd.Engine):
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
-    def disentangle(self, theta, U_idx_dt, i):
+    def disentangle(self, theta):
         r"""Disentangle `theta` before splitting with svd.
 
         For the purification we write :math:`\rho_P = Tr_Q{|\psi_{P,Q}><\psi_{P,Q}|}`. Thus, we
@@ -169,9 +170,6 @@ class PurificationTEBD(tebd.Engine):
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function to disentangle, with legs ``'vL', 'vR', 'p0', 'p1', 'q0', 'q1'``.
-        U_idx_dt, i : int
-            Indices for the update: we update with self._U[U_idx_dt][i]
-            the matrices at sites ``i-1, i``.
 
         Returns
         -------
@@ -190,7 +188,7 @@ class PurificationTEBD(tebd.Engine):
         # else
         raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
 
-    def disentangle_backwards(self, theta, U_idx_dt, i):
+    def disentangle_backwards(self, theta):
         """Disentangle with backwards time evolution.
 
         See [Karrasch2013]_.
@@ -206,12 +204,13 @@ class PurificationTEBD(tebd.Engine):
         """
         if self._U_param['type_evo'] == 'imag':
             return theta, None  # doesn't work for this...
+        U_idx_dt, i = self._update_index
         U = self._U[U_idx_dt][i].conj()
         U.ireplace_labels(['p0*', 'p1*', 'p0', 'p1'], ['q0', 'q1', 'q0*', 'q1*'])
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U
 
-    def disentangle_renyi(self, theta, U_idx_dt, i):
+    def disentangle_renyi(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy.
 
         Reads of the following `TEBD_params` as break criteria for the iteration:
@@ -229,6 +228,7 @@ class PurificationTEBD(tebd.Engine):
         """
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        U_idx_dt, i = self._update_index
         U = self._guess_U_disent[U_idx_dt][i]  # recover last result
         #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
         #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
@@ -302,7 +302,7 @@ class PurificationTEBD(tebd.Engine):
         # this yields trace(U dS) = trace(Y), which is maximal.
         return -np.log(S2.real), new_U.split_legs([0, 1])
 
-    def disentangle_renyi_dU(self, theta, U_idx_dt, i):
+    def disentangle_renyi_dU(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy.
 
         Very similar to :meth:`disentangle_renyi`, 
@@ -316,6 +316,7 @@ class PurificationTEBD(tebd.Engine):
         """
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        U_idx_dt, i = self._update_index
         U = self._guess_U_disent[U_idx_dt][i]  # recover last result
         #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
         #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
