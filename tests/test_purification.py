@@ -27,6 +27,10 @@ def test_purification_mps():
         npt.assert_array_almost_equal_nulp(E, np.zeros([L]), 100)
         C = psi.correlation_function('Sz', 'Sz')
         npt.assert_array_almost_equal_nulp(C, 0.5 * 0.5 * np.eye(L), 100)
+        mutinf = psi.mutinf_two_site()
+        print mutinf
+        if L > 1:
+            assert np.max(np.abs(mutinf)) < 1.e-14
 
 
 def test_purification_TEBD(L=4):

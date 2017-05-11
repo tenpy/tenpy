@@ -96,6 +96,7 @@ import numpy as np
 
 from .mps import MPS
 from ..linalg import np_conserved as npc
+from ..tools.math import entropy
 
 
 class PurificationMPS(MPS):
@@ -159,6 +160,133 @@ class PurificationMPS(MPS):
             Bs[i] = B
         res = cls(sites, Bs, S, bc, form)
         return res
+
+    def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1, legs='p'):
+        r"""Calculate entanglement entropy for general geometry of the bipartition.
+
+        This function is similar as :meth:`entanglement_entropy`, 
+        but for more general geometry of the region `A` to be a segment of a *few* sites.
+
+        This is acchieved by explicitly calculating the reduced density matrix of `A`
+        and thus works only for small segments.
+
+        Parameters
+        ----------
+        segment : list of int
+            Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
+        first_site : ``None`` | (iterable of) int
+            Calculate the entropy for segments starting at these sites.
+            ``None`` defaults to ``range(L-segment[-1])`` for finite 
+            or `range(L)` for infinite boundary conditions.
+        n : int | float
+            Selects which entropy to calculate;
+            `n=1` (default) is the ususal von-Neumann entanglement entropy, 
+            otherwise the `n`-th Renyi entropy.
+        leg : 'p', 'q', 'pq'
+            Whether we look at the entanglement entropy in both (`pq`) or 
+            only one of auxiliar (`q`) and physical (`p`) space.
+
+        Returns
+        -------
+        entropies : 1D ndarray
+            ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
+        """
+        segment = np.sort(segment)
+        if first_site is None:
+            if self.finite:
+                first_site = range(0, self.L - segment[-1])
+            else:
+                first_site = range(self.L)
+        N = len(segment)
+
+        def labels(choice):
+            res1 = [c + str(k) for k in range(N) for c in choice]
+            res2 = [c + str(k) + '*' for k in range(N) for c in choice]
+            return res1, res2
+
+        if legs == 'pq':
+            tr_legs = ([], [])
+            comb_legs = labels(['p', 'q'])
+        elif legs == 'p':
+            tr_legs = labels(['q'])
+            comb_legs = labels(['p'])
+        elif legs == 'q':
+            tr_legs = labels(['p'])
+            comb_legs = labels(['q'])
+        res = []
+        for i0 in first_site:
+            rho = self.get_rho_segment(segment+i0)  # p0, q0, p0*, q0*, ...
+            # extra contraction
+            for a, b in zip(*tr_legs):
+                rho = npc.trace(rho, a, b)
+            rho = rho.combine_legs(comb_legs, qconj=[+1, -1])
+            p = npc.eigvalsh(rho)
+            res.append(entropy(p, n))
+        return np.array(res)
+
+    def mutinf_two_site(self, max_range=None, n=1, legs='p'):
+        """Calculate the two-site mutual information :math:`I(i:j)`.
+
+        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`, 
+        where :math:`S(i)` is the single site entropy on site :math:`i` 
+        and :math:`S(i,j)` the two-site entropy on sites :math:`i,j`.
+
+        Parameters
+        ----------
+        max_range : int
+            Maximal distance |i-j| for which the mutual information should be calculated.
+            ``None`` defaults to `L-1`.
+        n : float
+            Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
+        leg : 'p', 'q', 'pq'
+            Whether we look at the entanglement entropy in both (`pq`) or 
+            only one of auxiliar (`q`) and physical (`p`) space.
+
+        Returns
+        -------
+        mutinf : masked array, shape (L, max_range)
+            mutinf[i, j] is the mutual information between sites ``(i, i+j+1)``
+        """
+        # Now same as MPS.mutinf_two_site(), but contract additionally over leg.
+        if max_range is None:
+            max_range = self.L
+        S_i = self.entanglement_entropy_segment(n=n, legs=legs)  # single-site entropy
+        res = - np.ones([self.L, max_range])  # filled with -1  for 'no entry'
+
+        def labels(choice):
+            res1 = [c + str(k) for k in range(2) for c in choice]
+            res2 = [c + str(k) + '*' for k in range(2) for c in choice]
+            return res1, res2
+
+        if legs == 'pq':
+            tr_legs = ([], [])
+            comb_legs = labels(['p', 'q'])
+        elif legs == 'p':
+            tr_legs = labels(['q'])
+            comb_legs = labels(['p'])
+        elif legs == 'q':
+            tr_legs = labels(['p'])
+            comb_legs = labels(['q'])
+        contr_rho = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
+                     ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        for i in range(self.L):
+            rho = self.get_theta(i, 1)
+            rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
+            jmax = i + max_range + 1
+            if self.finite:
+                jmax = min(jmax, self.L)
+            for j in range(i+1, jmax):
+                B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
+                rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
+                rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
+                for a, b in zip(*tr_legs):
+                    rho_ij = npc.trace(rho_ij, a, b)
+                rho_ij = rho_ij.combine_legs(comb_legs, qconj=[+1, -1])
+                S_ij = entropy(npc.eigvalsh(rho_ij), n)
+                res[i, j-i-1] = S_i[i] + S_i[j % self.L] - S_ij
+                if j + 1 < jmax:
+                    rho = npc.tensordot(rho, B.conj(), axes=contr_rho)
+        return np.ma.MaskedArray(res, mask=(res == -1))
 
     def overlap(self, other):
         raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
