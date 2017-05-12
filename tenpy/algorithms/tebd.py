@@ -225,9 +225,11 @@ class Engine(object):
                     DeltaS = np.abs(Sold - S)
                     Sold = S
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
-                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}, time simulated: {time:.1f} s")
+                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, " +
+                           "S={S:.10f}, time simulated: {time:.1f} s")
                     print msg.format(step=step, t=self.evolved_time, chi=max(self.psi.chi),
-                            dE=DeltaE, dS=DeltaS, E=E.real, S=S.real, time=time.time() - start_time,)
+                                     dE=DeltaE, dS=DeltaS, E=E.real, S=S.real,
+                                     time=time.time() - start_time,)
         # done
 
     @staticmethod
@@ -401,7 +403,8 @@ class Engine(object):
         Parameters
         ----------
         U_idx_dt : int
-            Time step index in ``self._U``, evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
+            Time step index in ``self._U``,
+            evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
         odd : bool/int
             Indication of whether to update even (``odd=False,0``) or even (``odd=True,1``) sites
 

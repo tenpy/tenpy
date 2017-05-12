@@ -42,13 +42,14 @@ def test_purification_TEBD(L=4):
                        'verbose': 30, 'N_steps': 2}
         eng = PurificationTEBD(psi, M, TEBD_params)
         eng.run()
-        print psi.get_B(0)
         N = psi.expectation_value('Id')     # check normalization : <1> =?= 1
         npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
         eng.run_imaginary(0.2)
-        print psi.get_B(0)
         N = psi.expectation_value('Id')     # check normalization : <1> =?= 1
         npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
+        if disent == 'renyi':
+            eng.run_imaginary(0.3)
+            eng.disentangle_global()
 
 
 def test_disentangler(L=4, eps=1.e-15):

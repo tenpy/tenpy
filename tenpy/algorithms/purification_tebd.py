@@ -54,8 +54,8 @@ class PurificationTEBD(tebd.Engine):
             We evolve to the closest multiple of TEBD_params['dt'], c.f. :attr:`evolved_time,
             c.f. :attr:`evolved_time`.
         """
-        delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'TEBD')
-        TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
+        delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'PurificationTEBD')
+        TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'PurificationTEBD')
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update(N_steps=int(beta / delta_t + 0.5))
         if self.verbose >= 1:
@@ -76,7 +76,7 @@ class PurificationTEBD(tebd.Engine):
         Id_bonds = [npc.outer(npc.diag(1., psi.sites[(i-1)%psi.L].leg.conj()).set_leg_labels(['q0', 'q0*']),
                               npc.diag(1., psi.sites[i].leg.conj()).set_leg_labels(['q1', 'q1*']))
                     for i in range(psi.L)]
-        self._guess_U_disent = [Id_bonds for _ in self._U] 
+        self._guess_U_disent = [list(Id_bonds) for _ in range(len(self._U)+1)]
 
     def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
@@ -107,7 +107,6 @@ class PurificationTEBD(tebd.Engine):
             The error of the represented state which is introduced by the truncation
             during this update step.
         """
-        U_bond = self._U[U_idx_dt][i]
         i0, i1 = i - 1, i
         if self.verbose >= 100:
             print "Update sites ({0:d}, {1:d})".format(i0, i1)
@@ -115,7 +114,7 @@ class PurificationTEBD(tebd.Engine):
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         # ##### new hook compared to tebd.Engine.calc_U
-        theta, U_disent = self.disentangle(theta, i)
+        theta, U_disent = self.disentangle(theta)
         # ####
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
@@ -182,9 +181,9 @@ class PurificationTEBD(tebd.Engine):
         if disentangle is None:
             return theta, None
         elif disentangle == 'backwards':
-            return self.disentangle_backwards(theta, U_idx_dt, i)
+            return self.disentangle_backwards(theta)
         elif disentangle == 'renyi':
-            return self.disentangle_renyi(theta, U_idx_dt, i)
+            return self.disentangle_renyi(theta)
         # else
         raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
 
@@ -305,11 +304,11 @@ class PurificationTEBD(tebd.Engine):
     def disentangle_renyi_dU(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy.
 
-        Very similar to :meth:`disentangle_renyi`, 
+        Very similar to :meth:`disentangle_renyi`,
         but use :meth:`disentangle_renyi_dU_iter` for the iteration.
 
         Arguments and return values are the same as for :meth:`disentangle`.
-        
+
         .. todo :
             This should give *exactly* (as far as the SVD is unique, i.e. up to phases)
             the same result as :meth:`disentangle_renyi`.
@@ -384,3 +383,76 @@ class PurificationTEBD(tebd.Engine):
         U = npc.tensordot(W, VH, axes=[1, 0])  # P = V Y VH  is actually not needed.
         # NOTE: no conj: we contracted the conjugate compared to disentangle_renyi_iter
         return -np.log(S2.real), U.split_legs([0, 1])
+
+    def disentangle_global(self):
+        """Try global disentangling by determining the maximally entangled pairs of sites.
+
+        Caclulate the mutual information (in the auxiliar space) between two sites
+        and determine where it is maximal. Disentangle these two sites.
+        """
+        max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
+        mutinf = self.psi.mutinf_two_site(max_range, legs='q')  # TODO: what to choose here???
+        for i in range(0, self.psi.L-1):
+            # TODO: good choice??? better choose globally the L maximally entangled pairs?
+            j = np.argmax(mutinf[i, :]) + i + 1
+            self._disentangle_two_site(i, j)
+        # done
+
+    def _disentangle_two_site(self, i, j):
+        """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""
+        # TODO: should we also disentangle 'on the way' of swapping?
+        on_way = get_parameter(self.TEBD_params, 'disent_gl_on_swap', False, 'PurificationTEBD')
+        if not self.psi.finite:
+            raise NotImplementedError  # adjust: what's the shortest path?
+        assert(i < j)
+        for j0 in range(j, i+1, -1):  # j0 = current site of `j`
+            # originial leg `j` is at j0
+            self._update_index = -1, j0
+            self._swap_disentangle_bond(j0, swap=True, disentangle=False)  # swap j0-1, j0
+            # originial leg is at `j0-1`
+        # disentangle i, i+1
+        self._update_index = -1, i+1  # guess: self._guess_U_disent[-1, i0+1]
+        self._swap_disentangle_bond(i+1, swap=False, disentangle=True)
+        for j0 in range(i+1, j):  # j0 = current site of `j`
+            # originial leg `j` is at j0
+            self._update_index = -1, j0
+            self._swap_disentangle_bond(j0+1, disentangle=on_way)  # swap j0-1, j0
+            # originial leg is at `j0+1`
+        self._update_index = None  # done
+
+    def _swap_disentangle_bond(self, i, swap=True, disentangle=False):
+        """swap sites (i-1, i) (if swap = True) """
+        # very similar to update_bond
+        i0, i1 = i - 1, i
+        if self.verbose >= 100:
+            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+        # Construct the theta matrix
+        theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
+        if swap:
+            theta.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
+        if disentangle:
+            theta, U_disent = self.disentangle_renyi(theta)
+        theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+
+        # Perform the SVD and truncate the wavefunction
+        U, S, V, trunc_err, renormalize = svd_theta(
+            theta, self.TEBD_params, inner_labels=['vR', 'vL'])
+
+        # bring back to right-canonical 'B' form and update matrices
+        B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+        C = self.psi.get_theta(i0, n=2, formL=0.)
+        if swap:
+            C.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
+        if disentangle:
+            C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        B_L = npc.tensordot(
+            C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
+            V.conj(),
+            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
+        B_L /= renormalize  # re-normalize to <psi|psi> = 1
+        self.psi.set_SR(i0, S)
+        self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
+        return trunc_err
