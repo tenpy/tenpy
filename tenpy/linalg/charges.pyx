@@ -38,7 +38,7 @@ QTYPE = np.int_             # numpy dtype for the charges
 ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
 
 
-cdef class ChargeInfo:
+cdef class ChargeInfo(object):
     """Meta-data about the charge of a tensor.
 
     Saves info about the nature of the charge of a tensor.
@@ -216,8 +216,19 @@ cdef class ChargeInfo:
                 return False
         return True
 
+    def __getstate__(self):
+        """allow to pickle and copy"""
+        return (self.qnumber, self.mod, self.names)
 
-class LegCharge(object):
+    def __setstate__(self, state):
+        """allow to pickle and copy"""
+        qnumber, mod, names = state
+        self.qnumber = qnumber
+        self.mod = mod
+        self.names = names
+
+
+cdef class LegCharge(object):
     r"""Save the charge data associated to a leg of a tensor.
 
     This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
@@ -244,10 +255,10 @@ class LegCharge(object):
     block_number
     chinfo : :class:`ChargeInfo` instance
         the nature of the charge. Can be shared between LegCharges
-    slices : ndarray (block_number+1)
+    slices : ndarray[QTYPE_t,ndim=1] (block_number+1)
         A block with 'qindex' ``qi`` correspondes to the leg indices in
         ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slice`.
-    charges : ndarray (block_number, chinfo.qnumber)
+    charges : ndarray[QTYPE_t,ndim=1] (block_number, chinfo.qnumber)
         ``charges[qi]`` gives the charges for a block with 'qindex' ``qi``.
         Note: the sign might be changed by `qconj`. See also :meth:`get_charge`.
     qconj : {-1, 1}
@@ -264,16 +275,26 @@ class LegCharge(object):
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
     """
+    cdef readonly int ind_len
+    cdef readonly int block_number
+    cdef readonly ChargeInfo chinfo
+    cdef readonly np.ndarray slices
+    cdef readonly np.ndarray charges
+    cdef readonly int qconj
+    cdef public bint sorted
+    cdef public bint bunched
 
-    def __init__(self, chargeinfo, slices, charges, qconj=1):
+    def __init__(LegCharge self, chargeinfo, slices, charges, qconj=1):
         """see help(self)"""
         self.chinfo = chargeinfo
-        self.slices = np.array(slices, dtype=np.intp)
+        self.slices = np.array(slices, dtype=QTYPE)
         self.charges = np.array(charges, dtype=QTYPE)
-        self.qconj = int(qconj)
+        self.qconj = qconj
         self.sorted = False
         self.bunched = False
-        self.test_sanity()
+        self.ind_len = self.slices[-1]
+        self.block_number = self.charges.shape[0]
+        LegCharge.test_sanity(self)
 
     @classmethod
     def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
@@ -356,9 +377,9 @@ class LegCharge(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        sl = self.slices
-        ch = self.charges
-        if sl.shape != (self.block_number + 1, ):
+        cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
+        cdef np.ndarray[QTYPE_t,ndim=2] ch = self.charges
+        if sl.ndim != 1 or sl.shape[0] != self.block_number + 1:
             raise ValueError("wrong len of `slices`")
         if sl[0] != 0:
             raise ValueError("slices does not start with 0")
@@ -366,23 +387,14 @@ class LegCharge(object):
             raise ValueError("shape of `charges` incompatible with qnumber")
         if not self.chinfo.check_valid(ch):
             raise ValueError("charges invalid for " + str(self.chinfo) + "\n" + str(self))
-        if self.qconj not in [-1, 1]:
+        if self.qconj != -1 and self.qconj != 1:
             raise ValueError("qconj has invalid value != +-1 :" + repr(self.qconj))
 
-    @property
-    def ind_len(self):
-        """the number of indices for this leg"""
-        return self.slices[-1]
 
-    @property
-    def block_number(self):
-        """the number of blocks, i.e., a 'qindex' for this leg is in ``range(block_number)``."""
-        return self.charges.shape[0]
-
-    def conj(self):
+    cpdef LegCharge conj(LegCharge self):
         """return a (shallow) copy with opposite ``self.qconj``"""
         res = copy.copy(self)  # shallow
-        res.qconj *= -1
+        (<LegCharge> res).qconj = - self.qconj
         return res
 
     def to_qflat(self):
@@ -526,7 +538,7 @@ class LegCharge(object):
         """Return charge ``self.charges[qindex] * self.qconj`` for a given `qindex`."""
         return self.charges[qindex] * self.qconj
 
-    def sort(self, bunch=True):
+    def sort(LegCharge self, bint bunch=True):
         """Return a copy of `self` sorted by charges (but maybe not bunched).
 
         If bunch=True, the returned copy is completely blocked by charge.
@@ -557,7 +569,7 @@ class LegCharge(object):
             return np.arange(self.block_number, dtype=np.intp), self
         perm_qind = lexsort(self.charges.T)
         cp = copy.copy(self)
-        cp.charges = self.charges[perm_qind, :]
+        cp._set_charges(self.charges[perm_qind, :])
         block_sizes = self._get_block_sizes()
         cp._set_block_sizes(block_sizes[perm_qind])
         cp.sorted = True
@@ -582,13 +594,14 @@ class LegCharge(object):
         See also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
+        # TODO: cythonize
         if self.bunched:  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
         cp = copy.copy(self)
         idx = _find_row_differences(self.charges)[:-1]
-        cp.charges = cp.charges[idx]  # avanced indexing -> copy
+        cp._set_charges(cp.charges[idx])  # avanced indexing -> copy
         sl_idx = np.append(idx, [-1])  # keep also the ind_len
-        cp.slices = cp.slices[sl_idx]
+        cp._set_slices(cp.slices[sl_idx])
         cp.bunched = True
         return idx, cp
 
@@ -616,7 +629,7 @@ class LegCharge(object):
         new_block_lens = [np.sum(bm) for bm in block_masks]
         keep = np.nonzero(new_block_lens)[0]
         block_masks = [block_masks[i] for i in keep]
-        cp.charges = cp.charges[keep]
+        cp._set_charges(cp.charges[keep])
         map_qind = -np.ones(self.block_number, np.int_)
         map_qind[keep] = np.arange(len(keep))
         cp._set_block_sizes(np.array(new_block_lens)[keep])
@@ -648,9 +661,18 @@ class LegCharge(object):
         return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(self.chinfo, self.qconj,
                                                                       self.slices, self.charges)
 
-    def _set_block_sizes(self, block_sizes):
+    cpdef void _set_charges(LegCharge self, np.ndarray[QTYPE_t,ndim=2] charges):
+        """provide hook to set 'private' charges"""
+        self.charges = charges
+        self.block_number = charges.shape[0]
+
+    cpdef void _set_slices(LegCharge self, np.ndarray[np.intp_t,ndim=1] slices):
+        self.slices = slices
+        self.ind_len = slices[-1]
+
+    def _set_block_sizes(self, block_sizes):  # TODO: cythonize
         """Set self.slices from an list of the block-sizes."""
-        self.slices = np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False)
+        self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
 
     def _get_block_sizes(self):
         """return block sizes"""
@@ -691,8 +713,31 @@ class LegCharge(object):
             raise ValueError("Permutation mixes qind")
         return perm_qind
 
+    def __getstate__(self):
+        """allow to pickle and copy"""
+        return (self.ind_len,
+                self.block_number,
+                self.chinfo,
+                self.slices,
+                self.charges,
+                self.qconj,
+                self.sorted,
+                self.bunched)
 
-class LegPipe(LegCharge):
+    def __setstate__(self, state):
+        """allow to pickle and copy"""
+        ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
+        self.ind_len = ind_len
+        self.block_number = block_number
+        self.chinfo = chinfo
+        self.slices = slices
+        self.charges = charges
+        self.qconj = qconj
+        self.sorted = sorted
+        self.bunched = bunched
+
+
+cdef class LegPipe(LegCharge):
     r"""A `LegPipe` combines multiple legs of a tensor to one.
 
     Often, it is necessary to "combine" multiple legs into one:
@@ -780,6 +825,14 @@ class LegPipe(LegCharge):
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
     """
+    cdef readonly int nlegs
+    cdef readonly tuple legs
+    cdef readonly tuple subshape
+    cdef readonly tuple subqshape
+    cdef readonly np.ndarray q_map
+    cdef readonly list q_map_slices
+    cdef readonly np.ndarray _perm
+    cdef readonly np.ndarray _strides
 
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
@@ -788,22 +841,16 @@ class LegPipe(LegCharge):
         super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
+        self.nlegs = len(legs)
         self.subshape = tuple([l.ind_len for l in self.legs])
         self.subqshape = tuple([l.block_number for l in self.legs])
         # the diffuclt part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
         self._init_from_legs(sort, bunch)
         self.test_sanity()
 
-    @property
-    def nlegs(self):
-        """the number of legs"""
-        return len(self.subshape)
-
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         super(LegPipe, self).test_sanity()
-        if not hasattr(self, "subshape"):
-            return  # omit further check during ``super(LegPipe, self).__init__``
         assert (all([l.chinfo == self.chinfo for l in self.legs]))
         assert (self.subshape == tuple([l.ind_len for l in self.legs]))
         assert (self.subqshape == tuple([l.block_number for l in self.legs]))
@@ -813,11 +860,11 @@ class LegPipe(LegCharge):
         Usually not needed, but called by functions, which are not implemented for a LegPipe."""
         return LegCharge(self.chinfo, self.slices, self.charges, self.qconj)
 
-    def conj(self):
+    cpdef LegPipe conj(self):
         """return a shallow copy with opposite ``self.qconj``.
 
         Also conjugates each of the incoming legs."""
-        res = super(LegPipe, self).conj()  # invert self.qconj
+        cdef LegPipe res = super(LegPipe, self).conj()  # invert self.qconj
         res.legs = tuple([l.conj() for l in self.legs])
         return res
 
@@ -825,7 +872,7 @@ class LegPipe(LegCharge):
         """like :meth:`conj`, but don't change ``qconj`` for incoming legs."""
         res = copy.copy(self)  # shallow
         res.qconj = -1
-        res.charges = self.chinfo.make_valid(-self.charges)
+        res._set_charges(self.chinfo.make_valid(-self.charges))
         return res
 
     def sort(self, *args, **kwargs):
@@ -937,7 +984,7 @@ class LegPipe(LegCharge):
             self._perm = inverse_permutation(perm_qind)
         else:
             self._perm = None
-        self.charges = charges
+        self._set_charges(charges)
         self.sorted = sort
         self._set_block_sizes(blocksizes)  # sets self.slices
         q_map[:, 0] = self.slices[:-1]
@@ -946,8 +993,8 @@ class LegPipe(LegCharge):
         if bunch:
             # call LegCharge.bunch(), which also calculates new blocksizes
             idx, bunched = super(LegPipe, self).bunch()
-            self.charges = bunched.charges  # copy information back to self
-            self.slices = bunched.slices
+            self._set_charges(bunched.charges)  # copy information back to self
+            self._set_slices(bunched.slices)
             # calculate q_map[:, -1], the qindices corresponding to the rows of q_map
             q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
             q_map_Qi[idx[1:]] = 1  # not for the first entry => np.cumsum starts with 0
@@ -988,7 +1035,33 @@ class LegPipe(LegCharge):
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
 
+    def __getstate__(self):
+        """allow to pickle and copy"""
+        super_state = super(LegPipe, self).__getstate__()
+        return (super_state,
+                self.nlegs,
+                self.legs,
+                self.subshape,
+                self.subqshape,
+                self.q_map,
+                self.q_map_slices,
+                self._perm,
+                self._strides)
 
+    def __setstate__(self, state):
+        """allow to pickle and copy"""
+        super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
+        self.nlegs = nlegs
+        self.legs = legs
+        self.subshape = subshape
+        self.subqshape = subqshape
+        self.q_map = q_map
+        self.q_map_slices = q_map_slices
+        self._perm = _perm
+        self._strides = _strides
+        super(LegPipe, self).__setstate__(super_state)
+
+# TODO: cythonize
 def _find_row_differences(qflat):
     """Return indices where the rows of the 2D array `qflat` change.
 
