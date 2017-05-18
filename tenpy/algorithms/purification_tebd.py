@@ -232,15 +232,18 @@ class PurificationTEBD(tebd.Engine):
         #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
         #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         Sold = np.inf
+        S0 = None
         for j in xrange(max_iter):
             S, U = self.disentangle_renyi_iter(theta, U)
+            if S0 is None:
+                S0 = S
             if abs(Sold - S) < eps:
                 break
             Sold, S = S, Sold
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self._disent_iterations[i] += j  # save the number of iterations performed
         if self.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S-Sold)
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S0-Sold)
         self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
         return theta, U
 
@@ -391,10 +394,13 @@ class PurificationTEBD(tebd.Engine):
         and determine where it is maximal. Disentangle these two sites.
         """
         max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
-        mutinf = self.psi.mutinf_two_site(max_range, legs='q')  # TODO: what to choose here???
+        coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')  # TODO: which legs?
         for i in range(0, self.psi.L-1):
             # TODO: good choice??? better choose globally the L maximally entangled pairs?
-            j = np.argmax(mutinf[i, :]) + i + 1
+            mask = (coords[:, 0] == i)
+            i, j = coords[mask][np.argmax(mutinf[mask])]
+            if self.verbose > 10:
+                print 'disentangle global pair ' + repr((i, j))
             self._disentangle_two_site(i, j)
         # done
 
@@ -431,7 +437,7 @@ class PurificationTEBD(tebd.Engine):
         if swap:
             theta.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
         if disentangle:
-            theta, U_disent = self.disentangle_renyi(theta)
+            theta, U_disent = self.disentangle_renyi_dU(theta)
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction

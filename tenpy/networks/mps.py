@@ -339,13 +339,13 @@ class MPS(object):
         L : int
             The number of sites.
         pairs : list of (int, int)
-            Pairs of sites to be entangled; the returned MPS will have a singlet 
+            Pairs of sites to be entangled; the returned MPS will have a singlet
             for each pair in `pairs`.
         up, down : int | str
             A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
             ``up`` and ``down`` give state indices or labels defined on the corresponding site.
         lonely : list of int
-            Sites which are not included into a singlet pair. Useful to generate singlet pairs for 
+            Sites which are not included into a singlet pair. Useful to generate singlet pairs for
         lonely_state : int | str
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segmemt'}
@@ -357,7 +357,7 @@ class MPS(object):
             An MPS representing singlets on the specified bonds.
         """
         # sort each pair s.t. i < j
-        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs] 
+        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
         # sort by smaller site of the pair
         pairs.sort(key=lambda x : x[0])
         pairs.append((L, L))
@@ -662,7 +662,7 @@ class MPS(object):
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
-        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and 
+        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and
         :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`rho_A = tr_B(\rho)`.
         The von-Neumann entanglement entropy is defined as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
@@ -713,7 +713,7 @@ class MPS(object):
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
         r"""Calculate entanglement entropy for general geometry of the bipartition.
 
-        This function is similar as :meth:`entanglement_entropy`, 
+        This function is similar as :meth:`entanglement_entropy`,
         but for more general geometry of the region `A` to be a segment of a *few* sites.
 
         This is acchieved by explicitly calculating the reduced density matrix of `A`
@@ -725,11 +725,11 @@ class MPS(object):
             Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
         first_site : ``None`` | (iterable of) int
             Calculate the entropy for segments starting at these sites.
-            ``None`` defaults to ``range(L-segment[-1])`` for finite 
+            ``None`` defaults to ``range(L-segment[-1])`` for finite
             or `range(L)` for infinite boundary conditions.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy, 
+            `n=1` (default) is the ususal von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
 
         Returns
@@ -737,11 +737,11 @@ class MPS(object):
         entropies : 1D ndarray
             ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
         """
-        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i` 
+        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i`
         # of consecutive sites (in our notation, ``segment = range(La)``)
         # To get the entanglement entropy, diagonalize:
         #     --theta---
-        #       | | | 
+        #       | | |
         #     --theta*--
         #  Diagonalization is O(chi^6), compared to O(d^{3*La})
         segment = np.sort(segment)
@@ -803,8 +803,8 @@ class MPS(object):
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
 
-        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`, 
-        where :math:`S(i)` is the single site entropy on site :math:`i` 
+        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`,
+        where :math:`S(i)` is the single site entropy on site :math:`i`
         and :math:`S(i,j)` the two-site entropy on sites :math:`i,j`.
 
         Parameters
@@ -817,10 +817,13 @@ class MPS(object):
 
         Returns
         -------
-        mutinf : masked array, shape (L, max_range)
-            mutinf[i, j] is the mutual information between sites ``(i, i+j+1)``
+        coords : 2D array
+            Coordinates for the mutinf array.
+        mutinf : 1D array
+            ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
+            sites ``i, j = coords[k]``.
         """
-        #  Basically the code of get_rho_segment and entanglement_entropy, 
+        #  Basically the code of get_rho_segment and entanglement_entropy,
         #  but optimized to run in O(L^2)
         if max_range is None:
             max_range = self.L
@@ -830,6 +833,8 @@ class MPS(object):
             # (['p0', 'p1'], ['p0*', 'p1*'])
         contr_legs = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
                       ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        mutinf = []
+        coord = []
         for i in range(self.L):
             rho = self.get_theta(i, 1)
             rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
@@ -842,10 +847,11 @@ class MPS(object):
                 rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
                 rho_ij = rho_ij.combine_legs(legs_ij, qconj=[+1, -1])
                 S_ij = entropy(npc.eigvalsh(rho_ij), n)
-                res[i, j-i-1] = S_i[i] + S_i[j % self.L] - S_ij
+                mutinf.append(S_i[i] + S_i[j % self.L] - S_ij)
+                coord.append((i, j))
                 if j + 1 < jmax:
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
-        return np.ma.MaskedArray(res, mask=(res == -1))
+        return np.array(coord), np.array(mutinf)
 
     def overlap(self, other):
         """Compute overlap :math:`<self|other>`.
@@ -1163,12 +1169,12 @@ class MPS(object):
     def _replace_p_label(self, A, k):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
 
-        This is done for each of the 'physical labels' in :attr:`_p_label`. 
-        With a clever use of this function, the re-implementation of various functions 
+        This is done for each of the 'physical labels' in :attr:`_p_label`.
+        With a clever use of this function, the re-implementation of various functions
         (like get_theta) in derived classes with multiple legs per site can be avoided.
         """
         return A.replace_labels(self._p_label, self._get_p_label(k, False))
-    
+
     def _get_p_label(self, k, star=False):
         """return list of physical label(s) with additional str(k) and possibly a '*'."""
         if star == 'both':
@@ -1575,7 +1581,7 @@ class MPSEnvironment(object):
             RP = self.get_RP(i, store=True)
             op = self.ket.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
-            C = self.ket.get_theta(i, n) 
+            C = self.ket.get_theta(i, n)
             th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
             C = npc.tensordot(op, C, axes=[ax_pstar, ax_p]) # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)

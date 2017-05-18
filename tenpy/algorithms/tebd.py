@@ -107,6 +107,7 @@ class Engine(object):
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L+1)]
+        self._update_index = None
 
     @property
     def trunc_err_bonds(self):

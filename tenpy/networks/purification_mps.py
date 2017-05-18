@@ -86,8 +86,11 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
     Moreover, we don't split the physical and auxiliar space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 
-Of course, we are not only intereseted at infinite-temperature expecation values, but primarily on
-finite temperature expectation values.
+.. todo :
+    One can also look at the canonical ensembles by defining the conserved quantities
+    differently, see Barthel (2016), arXiv:1607.01696 for details.
+    Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
+    I think it should suffice to implement another `from_inifinite_T`.
 
 """
 
@@ -164,7 +167,7 @@ class PurificationMPS(MPS):
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1, legs='p'):
         r"""Calculate entanglement entropy for general geometry of the bipartition.
 
-        This function is similar as :meth:`entanglement_entropy`, 
+        This function is similar as :meth:`entanglement_entropy`,
         but for more general geometry of the region `A` to be a segment of a *few* sites.
 
         This is acchieved by explicitly calculating the reduced density matrix of `A`
@@ -176,14 +179,14 @@ class PurificationMPS(MPS):
             Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
         first_site : ``None`` | (iterable of) int
             Calculate the entropy for segments starting at these sites.
-            ``None`` defaults to ``range(L-segment[-1])`` for finite 
+            ``None`` defaults to ``range(L-segment[-1])`` for finite
             or `range(L)` for infinite boundary conditions.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy, 
+            `n=1` (default) is the ususal von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
         leg : 'p', 'q', 'pq'
-            Whether we look at the entanglement entropy in both (`pq`) or 
+            Whether we look at the entanglement entropy in both (`pq`) or
             only one of auxiliar (`q`) and physical (`p`) space.
 
         Returns
@@ -227,8 +230,8 @@ class PurificationMPS(MPS):
     def mutinf_two_site(self, max_range=None, n=1, legs='p'):
         """Calculate the two-site mutual information :math:`I(i:j)`.
 
-        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`, 
-        where :math:`S(i)` is the single site entropy on site :math:`i` 
+        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`,
+        where :math:`S(i)` is the single site entropy on site :math:`i`
         and :math:`S(i,j)` the two-site entropy on sites :math:`i,j`.
 
         Parameters
@@ -239,19 +242,21 @@ class PurificationMPS(MPS):
         n : float
             Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
         leg : 'p', 'q', 'pq'
-            Whether we look at the entanglement entropy in both (`pq`) or 
+            Whether we look at the entanglement entropy in both (`pq`) or
             only one of auxiliar (`q`) and physical (`p`) space.
 
         Returns
         -------
-        mutinf : masked array, shape (L, max_range)
-            mutinf[i, j] is the mutual information between sites ``(i, i+j+1)``
+        coords : 2D array
+            Coordinates for the mutinf array.
+        mutinf : 1D array
+            ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
+            sites ``i, j = coords[k]``.
         """
         # Now same as MPS.mutinf_two_site(), but contract additionally over leg.
         if max_range is None:
             max_range = self.L
         S_i = self.entanglement_entropy_segment(n=n, legs=legs)  # single-site entropy
-        res = - np.ones([self.L, max_range])  # filled with -1  for 'no entry'
 
         def labels(choice):
             res1 = [c + str(k) for k in range(2) for c in choice]
@@ -269,6 +274,8 @@ class PurificationMPS(MPS):
             comb_legs = labels(['q'])
         contr_rho = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
                      ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        mutinf = []
+        coord = []
         for i in range(self.L):
             rho = self.get_theta(i, 1)
             rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
@@ -283,10 +290,11 @@ class PurificationMPS(MPS):
                     rho_ij = npc.trace(rho_ij, a, b)
                 rho_ij = rho_ij.combine_legs(comb_legs, qconj=[+1, -1])
                 S_ij = entropy(npc.eigvalsh(rho_ij), n)
-                res[i, j-i-1] = S_i[i] + S_i[j % self.L] - S_ij
+                mutinf.append(S_i[i] + S_i[j % self.L] - S_ij)
+                coord.append((i, j))
                 if j + 1 < jmax:
                     rho = npc.tensordot(rho, B.conj(), axes=contr_rho)
-        return np.ma.MaskedArray(res, mask=(res == -1))
+        return np.array(coord), np.array(mutinf)
 
     def overlap(self, other):
         raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
