@@ -8,6 +8,7 @@ import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import purification_mps, site
+from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
 import tenpy.linalg.np_conserved as npc
 
@@ -98,3 +99,58 @@ def test_disentangler(L=4, eps=1.e-15):
         warnings.warn("test of purification failed to find the optimum.")
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
+
+
+def gen_disentangler_psi0(site_P, L, max_range=10, product_P=True):
+    """generate an initial state of random singlets, identical in P and Q"""
+    assert(L % 2 == 0)
+    # generate pairs with given maximum range, for both P and Q
+    pairs_PQ = [None, None]
+    for i in range(2):
+        pairs = pairs_PQ[i] = []
+        have = range(L)
+        while len(have) > 0:
+            i = have.pop(0)
+            js = [j for j in have[:max_range] if abs(i-j) <= max_range]
+            j = have.pop(np.random.choice(len(js)))
+            pairs.append((i, j))
+    # generate singlet mps in P and Q
+    if product_P:
+        psiP = MPS.from_product_state([site_P]*L, [0, 1]*(L//2))
+    else:
+        psiP = MPS.from_singlets(site_P, L, pairs_PQ[0])
+    psiQ = MPS.from_singlets(site_P, L, pairs_PQ[1])
+    # generate BS for PurificationMPS
+    Bs = []
+    for i in range(L):
+        BP = psiP.get_B(i)
+        BQ = psiQ.get_B(i)
+        B2 = npc.outer(BP, BQ.conj())
+        B2 = B2.combine_legs([['vL', 'vL*'], ['vR', 'vR*']],
+                             qconj=[+1, -1])
+        B2.ireplace_labels(['(vL.vL*)', '(vR.vR*)', 'p*'], ['vL', 'vR', 'q'])
+        Bs.append(B2)
+    Ss = [np.outer(S, S2).flatten() for S, S2 in zip(psiP._S, psiQ._S)]
+    return purification_mps.PurificationMPS([site_P]*L, Bs, Ss), pairs_PQ
+
+
+def get_disentangler_psi0_test(site_P=spin_half, L=6, max_range=4):
+    psi0, pairs_PQ = gen_disentangler_psi0(site_P, L, max_range)
+    psi0.test_sanity()
+    print "pairs: P", pairs_PQ[0]
+    print "pairs: Q", pairs_PQ[1]
+    print "entanglement entropy: ", psi0.entanglement_entropy() / np.log(2.)
+    coords, mutinf_pq = psi0.mutinf_two_site(legs='pq')
+    print "(i,j)=", [tuple(c) for c in coords]
+    print "PQ:", np.round(mutinf_pq/np.log(2), 3)
+    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)
+    print "Q: ", np.round(psi0.mutinf_two_site(legs='q')[1]/np.log(2), 3)
+    M = XXZChain(dict(L=L))
+    tebd_pars = dict(verbose=31, trunc_cut=1.e-10)
+    eng = PurificationTEBD(psi0, M, tebd_pars)
+    eng.disentangle_global()
+    print psi0.entanglement_entropy() / np.log(2)
+    mutinf_Q = psi0.mutinf_two_site(legs='q')[1]
+    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)
+    print "Q: ", np.round(mutinf_Q/np.log(2), 3)
+    assert(np.all(mutinf_Q < 1.e-10))
