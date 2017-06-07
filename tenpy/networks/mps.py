@@ -359,7 +359,7 @@ class MPS(object):
         # sort each pair s.t. i < j
         pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
         # sort by smaller site of the pair
-        pairs.sort(key=lambda x : x[0])
+        pairs.sort(key=lambda x: x[0])
         pairs.append((L, L))
         lonely = sorted(lonely) + [L]
         # generate building block tensors
@@ -794,7 +794,7 @@ class MPS(object):
                 rho = npc.tensordot(rho, B.conj(), axes=('vR*', 'vL*'))
             else:
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
-                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'] , ['vL*', 'p*']))
+                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
         B = self.get_B(segment[-1])
         rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
@@ -828,9 +828,8 @@ class MPS(object):
         if max_range is None:
             max_range = self.L
         S_i = self.entanglement_entropy_segment(n=n)  # single-site entropy
-        res = - np.ones([self.L, max_range])  # filled with -1  for 'no entry'
         legs_ij = self._get_p_labels(2, False), self._get_p_labels(2, True)
-            # (['p0', 'p1'], ['p0*', 'p1*'])
+        # = (['p0', 'p1'], ['p0*', 'p1*'])
         contr_legs = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
                       ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
         mutinf = []
@@ -1067,6 +1066,101 @@ class MPS(object):
                     # exchange ops1 and ops2 : they commute on different sites,
                     # but we apply opstr after op1 (using the last argument = False)
         return np.real_if_close(C)
+
+    def norm_test(self):
+        """Check that self is in canonical form.
+
+        Returns
+        -------
+        norm_error: array, shape (L, 2)
+            For each site the norm error to the left and right.
+            The error ``norm_error[i, 0]`` is defined as the norm-difference between
+            the following networks::
+
+                |   --s[i]--B[i]--.       --s[i]--.
+                |           |     |    vs         |
+                |   --s[i]--B*[i]-.       --s[i]--.
+
+        """
+        err = np.empty((self.L, 2), dtype=np.float)
+        lbl_R = (self._get_p_label(0, star=False) + ['vR'],
+                 self._get_p_label(0, star=True) + ['vR*'])
+        lbl_L = (self._get_p_label(0, star=False) + ['vL'],
+                 self._get_p_label(0, star=True) + ['vL*'])
+        for i in range(self.L):
+            th = self.get_theta(i, 1)
+            rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
+            rho_L2 = npc.diag(self.get_SL(i)**2, rho_L.get_leg('vL'), dtype=rho_L.dtype)
+            err[i, 0] = npc.norm(rho_L - rho_L2)
+            rho_R = npc.tensordot(th, th.conj(), axes=lbl_L)
+            rho_R2 = npc.diag(self.get_SR(i)**2, rho_R.get_leg('vR'), dtype=rho_R.dtype)
+            err[i, 1] = npc.norm(rho_R - rho_R2)
+        return err
+
+    def canonical_form_finite(self):
+        """Bring self into canonical 'B' form, calculate singular values.
+
+        Works only for finite/segment boundary conditions.
+        It only uses the very left singular values for `segment` boundary conditions,
+        and no singular values at all for `finite` boundary conditions.
+        The ``self._B`` are taken as they are, ignoring any canonical form labels `A`, `B`, `C`.
+
+        .. todo :
+            Should we try to avoid carrying around the total charge of the B matrices?
+        """
+        assert(self.finite)
+        L = self.L
+        assert(L > 2)  # otherwise implement yourself...
+        # normalize very left singular values
+        S = self.get_SL(0)
+        if self.bc == 'segment':
+            if S is None:
+                raise ValueError("Need S for segment boundary conditions.")
+            self.set_SL(0, S/np.linalg.norm(S))  # must have correct singular values to the left...
+            S = self.get_SR(L-1)
+            self.set_SR(L-1, S/np.linalg.norm(S))
+        else:   # bc == 'finite':
+            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
+            self.set_SR(0, np.array([1.]))
+        # sweep from left to right to bring it into left canonical form.
+        M = self.get_B(0, None)
+        if self.bc == 'segment':
+            M.iscale_axis(self.get_SL(0), axis='vL')
+        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+        # Q = unitary, R has to be multiplied to the right
+        self.set_B(0, Q.split_legs(0), form='A')
+        for i in range(1, L-1):
+            M = self.get_B(i, None)
+            M = npc.tensordot(R, M, axes=['vR', 'vL'])
+            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
+            self.set_B(i, Q.split_legs(0), form='A')
+        M = self.get_B(L-1, None)
+        M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        # sweep from right to left, calculating all the singular values
+        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                          inner_labels=['vR', 'vL'])
+        S = S/np.linalg.norm(S)  # normalize
+        self.set_SL(L-1, S)
+        self.set_B(L-1, V.split_legs(1), form='B')
+        for i in range(L-2, 0, -1):
+            M = self.get_B(i, 'A')
+            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              inner_labels=['vR', 'vL'])
+            S = S/np.linalg.norm(S)  # normalize
+            self.set_SL(i, S)
+            self.set_B(i, V.split_legs(1), form='B')
+        # last one
+        M = self.get_B(0, 'A')
+        M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+        self.set_B(0, M, 'A')
+        if self.bc == 'segment':
+            S = self.get_SL(0)
+            self.set_SL(S/np.linalg.norm(S))
+        # convert _B[0] to 'B' form as well, by multiplying with singluar values.
+        self.set_B(0, self.get_B(0, form='B'), form='B')
+        # finally: done
 
     def __str__(self):
         """Some status information about the MPS"""
@@ -1583,7 +1677,7 @@ class MPSEnvironment(object):
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             C = self.ket.get_theta(i, n)
             th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
-            C = npc.tensordot(op, C, axes=[ax_pstar, ax_p]) # same labels
+            C = npc.tensordot(op, C, axes=[ax_pstar, ax_p])  # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels

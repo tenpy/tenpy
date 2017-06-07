@@ -35,6 +35,8 @@ def test_mps():
         npt.assert_array_almost_equal_nulp(E, ([0.5, -0.5] * L)[:L], 100)
         C = psi.correlation_function('Sz', 'Sz')
         npt.assert_array_almost_equal_nulp(C, np.outer(E, E), 100)
+        norm_err = psi.norm_test()
+        assert(np.linalg.norm(norm_err) < 1.e-13)
 
 
 def test_MPSEnvironment():

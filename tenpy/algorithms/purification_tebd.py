@@ -56,9 +56,9 @@ class PurificationTEBD(tebd.Engine):
             c.f. :attr:`evolved_time`.
         """
         delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'PurificationTEBD')
-        TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'PurificationTEBD')
+        TrotterOrder = 2  # TODO: currently, imaginary time evolution works only for second order.
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
-        self.update(N_steps=int(beta / delta_t + 0.5))
+        self.update_imag(N_steps=int(beta / delta_t + 0.5))
         if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
@@ -123,7 +123,7 @@ class PurificationTEBD(tebd.Engine):
 
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.TEBD_params, inner_labels=['vR', 'vL'])
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -149,6 +149,46 @@ class PurificationTEBD(tebd.Engine):
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
+        return trunc_err
+
+    def update_bond_imag(self, i, U_bond):
+        """Update a bond with a (possibly non-unitary) `U_bond`.
+
+        Similar as :meth:`update_bond`; but after the SVD just keep the `A, S, B` canonical form.
+        In that way, one can sweep left or right without using old singular values,
+        thus preserving the canonical form during imaginary time evolution.
+
+        Parameters
+        ----------
+        i : int
+            Bond index; we update the matrices at sites ``i-1, i``.
+        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+            The bond operator which we apply to the wave function.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced by the truncation
+            during this update step.
+        """
+        i0, i1 = i - 1, i
+        if self.verbose >= 100:
+            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+        # Construct the theta matrix
+        theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'q0', 'p1', 'q1'
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+        # Perform the SVD and truncate the wavefunction
+        U, S, V, trunc_err, renormalize = svd_theta(
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        # Split legs and update matrices
+        B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+        A_L = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
+        self.psi.set_SR(i0, S)
+        self.psi.set_B(i0, A_L, form='A')
         self.psi.set_B(i1, B_R, form='B')
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
@@ -484,7 +524,7 @@ class PurificationTEBD(tebd.Engine):
 
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.TEBD_params, inner_labels=['vR', 'vL'])
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
