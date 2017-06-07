@@ -413,7 +413,7 @@ cdef class LegCharge(object):
             raise ValueError("can't convert qflat to qdict for non-blocked LegCharge")
         return res
 
-    def is_blocked(self):
+    cpdef bint is_blocked(self):
         """returns whether self is blocked, i.e. qindex map 1:1 to charge values."""
         if self.sorted and self.bunched:
             return True
@@ -431,7 +431,7 @@ cdef class LegCharge(object):
         """checks wheter :meth:`bunch` would change something. """
         return len(_find_row_differences(self.charges)) == self.block_number + 1
 
-    def test_contractible(self, other):
+    cpdef void test_contractible(LegCharge self, LegCharge other) except *:
         """Raises a ValueError if charges are incompatible for contraction with other.
 
         Parameters
@@ -471,7 +471,7 @@ cdef class LegCharge(object):
         """
         self.test_equal(other.conj())
 
-    def test_equal(self, other):
+    cpdef void test_equal(LegCharge self, LegCharge other) except *:
         """test if charges are *equal* including `qconj`.
 
         Check that all of the following conditions are met:
@@ -499,7 +499,7 @@ cdef class LegCharge(object):
             raise ValueError("incompatible LegCharge\n" + vert_join(
                 ["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
-    def get_slice(self, qindex):
+    cpdef slice get_slice(LegCharge self, int qindex):
         """return slice selecting the block for a given `qindex`"""
         return slice(self.slices[qindex], self.slices[qindex + 1])
 
@@ -586,7 +586,8 @@ cdef class LegCharge(object):
         Returns
         -------
         idx : 1D array
-            the indices of the old qind which are kept
+            ``idx[:-1]`` are the indices of the old qind which are kept,
+            ``idx[-1] = old_block_number``.
         cp : :class:`LegCharge`
             a new LegCharge with the same charges at given indices of the leg,
             but (possibly) shorter ``self.charges`` and ``self.slices``.
@@ -596,12 +597,11 @@ cdef class LegCharge(object):
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
         # TODO: cythonize
         if self.bunched:  # nothing to do
-            return np.arange(self.block_number, dtype=np.intp), self
+            return np.arange(self.block_number+1, dtype=np.intp), self
         cp = copy.copy(self)
-        idx = _find_row_differences(self.charges)[:-1]
-        cp._set_charges(cp.charges[idx])  # avanced indexing -> copy
-        sl_idx = np.append(idx, [-1])  # keep also the ind_len
-        cp._set_slices(cp.slices[sl_idx])
+        idx = _find_row_differences(self.charges)
+        cp._set_charges(cp.charges[idx[:-1]])  # avanced indexing -> copy
+        cp._set_slices(cp.slices[idx])
         cp.bunched = True
         return idx, cp
 
@@ -674,7 +674,7 @@ cdef class LegCharge(object):
         """Set self.slices from an list of the block-sizes."""
         self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
 
-    def _get_block_sizes(self):
+    def _get_block_sizes(self):  # TODO: cythonize
         """return block sizes"""
         return self.slices[1:] - self.slices[:-1]
 
@@ -724,7 +724,7 @@ cdef class LegCharge(object):
                 self.sorted,
                 self.bunched)
 
-    def __setstate__(self, state):
+    cpdef void __setstate__(LegCharge self, tuple state):
         """allow to pickle and copy"""
         ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
         self.ind_len = ind_len
@@ -776,7 +776,8 @@ cdef class LegPipe(LegCharge):
         block_number for each of the incoming legs
     q_map:  2D array
         shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
-        see Notes below for details. lex-sorted by (I_s, i's), i.e. by colums [2:].
+        see Notes below for details.
+        # TODO re-order q_map[:, 2], q_map[:, 3:] := q_map[:, -1], q_map[:, 2:]
     q_map_slices : list of views onto q_map
         defined such that ``q_map_slices[I_s] == q_map[(q_map[:, -1] == I_s)]``
     _perm : 1D array
@@ -804,7 +805,7 @@ cdef class LegPipe(LegCharge):
     ``[b_j, b_{j+1}, i_1, . . . , i_{nlegs}, I_s ]``,
 
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
-    the total block `I_s`, i.e., ``b_j = a_j - self.qind[I_s, 0]``.
+    the total block `I_s`, i.e., ``b_j = a_j - self.slices[I_s]``.
 
     The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``.
     Each ``I_s`` will have multiple rows,
@@ -812,10 +813,10 @@ cdef class LegPipe(LegCharge):
     in the actual tensor, i.e., it might look like ::
 
         [ ...,
-         [ b_j,     b_{j+1},  i_1,    ..., i_{nlegs},     I_s   ],
-         [ b_{j+1}, b_{j+2},  i'_1,   ..., i'_{nlegs},    I_s   ],
-         [ 0,       b_{j+3},  i''_1,  ..., i''_{nlegs},   I_s+1 ],
-         [ b_{j+3}, b_{j+4},  i'''_1, ..., i''''_{nlegs}, I_s+1
+         [ b_j,     b_{j+1},  i_1,    ..., i_{nlegs},    I_s    ],
+         [ b_{j+1}, b_{j+2},  i'_1,   ..., i'_{nlegs},   I_s    ],
+         [ 0,       b_{j+3},  i''_1,  ..., i''_{nlegs},  I_s + 1],
+         [ b_{j+3}, b_{j+4},  i'''_1, ..., i'''_{nlegs}, I_s + 1],
          ...]
 
 
@@ -927,7 +928,10 @@ cdef class LegPipe(LegCharge):
             s=self.sorted,
             b=self.bunched)
 
-    def _init_from_legs(self, sort=True, bunch=True):
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
+    @cython.cdivision(True)
+    cdef void _init_from_legs(LegPipe self, bint sort=True, bint bunch=True) except *:
         """calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
 
         `qind` is constructed to fullfill the charge fusion rule stated in the class doc-string.
@@ -935,39 +939,49 @@ cdef class LegPipe(LegCharge):
         # this function heavily uses numpys advanced indexing, for details see
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
         # and the documentation of np.mgrid
-        nlegs = self.nlegs
-        qnumber = self.chinfo.qnumber
-        qshape = self.subqshape
+        cdef int nlegs = self.nlegs
+        cdef int qnumber = self.chinfo.qnumber
+        cdef np.ndarray[QTYPE_t, ndim=1] qshape = np.array(self.subqshape, dtype=QTYPE)
+        cdef int i, j, sign
+        cdef QTYPE_t a
 
         # create a grid to select the multi-index sector
         grid = np.mgrid[[slice(0, l) for l in qshape]]
         # grid is an array with shape ``(nlegs,) + qshape``,
         # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
-        # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
-        self._strides = np.array(grid.strides, np.intp)[1:] // grid.itemsize
+        cdef np.ndarray[QTYPE_t, ndim=1] strides =  \
+            np.array(grid.strides, np.intp)[1:] // grid.itemsize
+        self._strides = strides  # save for :meth:`_map_incoming_qind`
         # collapse the different directions into one.
-        grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
+        cdef np.ndarray[QTYPE_t, ndim=2] grid2 = grid.reshape(nlegs, -1)
+            # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
-        nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
+        cdef int nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
+        cdef np.ndarray[QTYPE_t, ndim=2] q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QTYPE)
         # determine q_map -- it's essentially the grid.
-        q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QTYPE)
-        q_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
-        # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
-        legbs = [l._get_block_sizes() for l in self.legs]
-        # andvanced indexing:
-        # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        blocksizes = np.prod([lbs[gr] for lbs, gr in itertools.izip(legbs, grid)], axis=0)
+        q_map[:, 2:2+nlegs] = grid2.T  # transpose -> rows are possible combinations.
         # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
 
+        # determine block sizes
+        cdef np.ndarray[QTYPE_t, ndim=1] blocksizes = np.ones((nblocks,), dtype=QTYPE)
+        cdef np.ndarray[QTYPE_t, ndim=1] leg_bs
+        for i in range(nlegs):
+            leg_bs = self.legs[i]._get_block_sizes()
+            for j in range(nblocks):
+                blocksizes[j] *= leg_bs[grid2[i, j]]
+
         # calculate total charges
-        charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
+        cdef np.ndarray[QTYPE_t, ndim=2] charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
+        cdef np.ndarray[QTYPE_t, ndim=2] legcharges
         if qnumber > 0:
-            # similar scheme as for the block sizes above, but now for 1D arrays of charges
-            legcharges = [(self.qconj * l.qconj) * l.charges for l in self.legs]
-            # ``legcharges[li]`` is a 2D array mapping `q_li` to the charges.
-            # thus ``(legcharges[li])[grid[li], :]`` gives a 2D array of shape (nblocks, qnumber)
-            charges = np.sum([lq[gr] for lq, gr in itertools.izip(legcharges, grid)], axis=0)
+            for i in range(nlegs):
+                legcharges = self.legs[i].charges
+                sign = self.qconj * self.legs[i].qconj
+                for j in range(nblocks):
+                    for k in range(qnumber):
+                        charges[j, k] += sign * legcharges[grid2[i, j], k]
+            charges = self.chinfo.make_valid(charges)
             # now, we have what we need according to the charge **fusion rule**
             # namely for qi=`leg qindices` and li=`legs`:
             # charges[(q1, q2,...)] == self.qconj * (l1.qind[q1]*l1.qconj +
@@ -987,27 +1001,40 @@ cdef class LegPipe(LegCharge):
         self._set_charges(charges)
         self.sorted = sort
         self._set_block_sizes(blocksizes)  # sets self.slices
-        q_map[:, 0] = self.slices[:-1]
-        q_map[:, 1] = self.slices[1:]
+        cdef np.ndarray[QTYPE_t, ndim=1] slices = self.slices
+        for j in range(nblocks):
+            q_map[j, 0] = slices[j]
+            q_map[j, 1] = slices[j+1]
 
+        cdef np.ndarray[QTYPE_t, ndim=1] idx
         if bunch:
             # call LegCharge.bunch(), which also calculates new blocksizes
             idx, bunched = super(LegPipe, self).bunch()
             self._set_charges(bunched.charges)  # copy information back to self
             self._set_slices(bunched.slices)
-            # calculate q_map[:, -1], the qindices corresponding to the rows of q_map
-            q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
-            q_map_Qi[idx[1:]] = 1  # not for the first entry => np.cumsum starts with 0
-            q_map[:, -1] = q_map_Qi = np.cumsum(q_map_Qi)
+            a = 0
+            for i in range(idx.shape[0]-1):
+                for j in range(idx[i] , idx[i+1]):
+                    q_map[j, 2+nlegs] = a
+                a += 1
+            for j in range(idx[idx.shape[0]-1], nblocks):
+                q_map[j, 2+nlegs] = a
         else:
-            q_map[:, -1] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
-        # calculate the slices within blocks: subtract the start of each block
-        q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
-        self.q_map = q_map  # finished
+            # trivial mapping for q_map[:, -1]
+            for j in range(nblocks):
+                q_map[j, 2 + nlegs] = j
+            idx = np.arange(len(q_map)+1, dtype=np.intp)
 
+        # calculate the slices within blocks: subtract the start of each block
+        slices = self.slices
+        for j in range(nblocks):
+            a = slices[q_map[j, 2 + nlegs]]
+            q_map[j, 0] -= a
+            q_map[j, 1] -= a
+
+        self.q_map = q_map  # finished
         # finally calculate q_map_slices
-        diffs = _find_row_differences(q_map[:, -1:])
-        self.q_map_slices = [q_map[i:j] for i, j in itertools.izip(diffs[:-1], diffs[1:])]
+        self.q_map_slices = [q_map[idx[i]:idx[i+1]] for i in range(len(idx)-1)]
         # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):
@@ -1048,7 +1075,7 @@ cdef class LegPipe(LegCharge):
                 self._perm,
                 self._strides)
 
-    def __setstate__(self, state):
+    cpdef void __setstate__(LegPipe self, tuple state):
         """allow to pickle and copy"""
         super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
         self.nlegs = nlegs

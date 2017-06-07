@@ -504,7 +504,8 @@ class LegCharge(object):
         Returns
         -------
         idx : 1D array
-            the indices of the old qind which are kept
+            ``idx[:-1]`` are the indices of the old qind which are kept,
+            ``idx[-1] = old_block_number``.
         cp : :class:`LegCharge`
             a new LegCharge with the same charges at given indices of the leg,
             but (possibly) shorter ``self.charges`` and ``self.slices``.
@@ -513,12 +514,11 @@ class LegCharge(object):
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
         if self.bunched:  # nothing to do
-            return np.arange(self.block_number, dtype=np.intp), self
+            return np.arange(self.block_number+1, dtype=np.intp), self
         cp = copy.copy(self)
-        idx = _find_row_differences(self.charges)[:-1]
-        cp.charges = cp.charges[idx]  # avanced indexing -> copy
-        sl_idx = np.append(idx, [-1])  # keep also the ind_len
-        cp.slices = cp.slices[sl_idx]
+        idx = _find_row_differences(self.charges)
+        cp.charges = cp.charges[idx[:-1]]  # avanced indexing -> copy
+        cp.slices = cp.slices[idx]
         cp.bunched = True
         return idx, cp
 
@@ -880,17 +880,17 @@ class LegPipe(LegCharge):
             self.slices = bunched.slices
             # calculate q_map[:, -1], the qindices corresponding to the rows of q_map
             q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
-            q_map_Qi[idx[1:]] = 1  # not for the first entry => np.cumsum starts with 0
+            q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
             q_map[:, -1] = q_map_Qi = np.cumsum(q_map_Qi)
         else:
             q_map[:, -1] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
+            idx = np.arange(len(q_map)+1, dtype=np.intp)
         # calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
         self.q_map = q_map  # finished
 
         # finally calculate q_map_slices
-        diffs = _find_row_differences(q_map[:, -1:])
-        self.q_map_slices = [q_map[i:j] for i, j in itertools.izip(diffs[:-1], diffs[1:])]
+        self.q_map_slices = [q_map[i:j] for i, j in itertools.izip(idx[:-1], idx[1:])]
         # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):

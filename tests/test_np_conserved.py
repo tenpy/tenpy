@@ -101,7 +101,8 @@ def test_npc_Array_sort():
     npt.assert_equal(a_s.to_ndarray(), arr_s)  # sort without bunch
     _, a_sb = a_s.sort_legcharge(False, True)
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # bunch after sort
-    npt.assert_equal(a_sb._qdata_sorted, False)
+    # after re-implementation of sort_legcharge, this is automatically _qdata_sorted...
+    # npt.assert_equal(a_sb._qdata_sorted, False)
     a_sb.isort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
 
@@ -112,7 +113,7 @@ def test_npc_Array_sort():
     npt.assert_equal(a_s.to_ndarray(), arr_s)  # sort without bunch
     _, a_sb = a_s.sort_legcharge(False, True)
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # bunch after sort
-    npt.assert_equal(a_sb._qdata_sorted, False)
+    # npt.assert_equal(a_sb._qdata_sorted, False)
     a_sb.isort_qdata()
     npt.assert_equal(a_sb.to_ndarray(), arr_s)  # sort_qdata
     print "sort trivial charge data"

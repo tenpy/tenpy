@@ -797,7 +797,7 @@ class Array(object):
         return all([l.is_blocked() for l in self.legs])
 
     def sort_legcharge(self, sort=True, bunch=True):
-        """Return a copy with one ore all legs sorted by charges.
+        """Return a copy with one or all legs sorted by charges.
 
         Sort/bunch one or multiple of the LegCharges.
         Legs which are sorted *and* bunched are guaranteed to be blocked by charge.
@@ -820,35 +820,34 @@ class Array(object):
         result : Array
             a shallow copy of self, with legs sorted/bunched
         """
-        if sort is False or sort is True:  # ``sort in [False, True]`` doesn't work...
+        if sort is False or sort is True:  # ``sort in [False, True]`` doesn't work
             sort = [sort] * self.rank
         if bunch is False or bunch is True:
             bunch = [bunch] * self.rank
         if not len(sort) == len(bunch) == self.rank:
             raise ValueError("Wrong len for bunch or sort")
-        cp = self.copy(deep=False)
-        cp._qdata = cp._qdata.copy()  # Array views may share _qdata, so make a copy first
-        for li in xrange(self.rank):
-            if sort[li] is not False:
-                if sort[li] is True:
-                    if cp.legs[li].sorted:  # optimization if the leg is sorted already
-                        sort[li] = np.arange(cp.shape[li])
-                        continue
-                    p_qind, newleg = cp.legs[li].sort(bunch=False)
-                    sort[li] = cp.legs[li].perm_flat_from_perm_qind(p_qind)  # old leg!
-                    cp.legs[li] = newleg
-                else:
-                    try:
-                        p_qind = self.legs[li].perm_qind_from_perm_flat(sort[li])
-                    except ValueError:  # permutation mixes qindices
-                        cp = cp.permute(sort[li], axes=[li])
-                        continue
-                cp._perm_qind(p_qind, li)
+
+        # idea: encapsulate legs into pipes wich are sorted/bunched ...
+        axes = []
+        pipes = []
+        perms = [None]*self.rank
+        for ax in range(self.rank):
+            if sort[ax] or bunch[ax]:
+                axes.append([ax])
+                leg = self.legs[ax]
+                pipe = charges.LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
+                pipes.append(pipe)
             else:
-                sort[li] = np.arange(cp.shape[li])
-        if any(bunch):
-            cp = cp._bunch(bunch)  # bunch does not permute...
-        return tuple(sort), cp
+                perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
+        cp = self.combine_legs(axes, pipes=pipes)
+        # ... and convert pipes back to leg charges
+        for ax in axes:
+            ax = ax[0]
+            pipe = cp.legs[ax]
+            p_qind = inverse_permutation(pipe._perm)
+            perms[ax] = self.legs[ax].perm_flat_from_perm_qind(p_qind)
+            cp.legs[ax] = pipe.to_LegCharge()
+        return tuple(perms), cp
 
     def isort_qdata(self):
         """(lex)sort ``self._qdata``. In place.
@@ -1763,23 +1762,17 @@ class Array(object):
         """
         cp = self.copy(deep=False)
         # lists for each leg:
-        new_to_old_idx = [None] * cp.rank  # the `idx` returned by cp.legs[li].bunch()
         map_qindex = [None] * cp.rank  # array mapping old qindex to new qindex, such that
         # ``new_leg.charges[m_qindex[i]] == old_leg.charges[i]``
         bunch_qindex = [None] * cp.rank  # bool array wheter the *new* qindex was bunched
         for li, bunch in enumerate(bunch_legs):
             idx, new_leg = cp.legs[li].bunch()
             cp.legs[li] = new_leg
-            new_to_old_idx[li] = idx
             # generate entries in map_qindex and bunch_qdindex
-            idx = np.append(idx, [self.shape[li]])
-            m_qindex = []
-            bunch_qindex[li] = b_qindex = np.empty(idx.shape, dtype=np.bool_)
-            for inew in xrange(len(idx) - 1):
-                old_blocks = idx[inew + 1] - idx[inew]
-                m_qindex.append([inew] * old_blocks)
-                b_qindex[inew] = (old_blocks > 1)
-            map_qindex[li] = np.concatenate(m_qindex, axis=0)
+            bunch_qindex[li] = ((idx[1:]-idx[:-1]) > 1)
+            m_qindex = np.zeros(idx[-1], dtype=np.intp)
+            m_qindex[idx[:-1]] = 1
+            map_qindex[li] = np.cumsum(m_qindex, axis=0)
 
         # now map _data and _qdata
         bunched_blocks = {}  # new qindices -> index in new _data
