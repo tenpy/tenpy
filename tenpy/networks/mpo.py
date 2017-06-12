@@ -535,7 +535,7 @@ class MPOGraph(object):
                 stL, stR = states[i:i + 2]
                 graph = self.graph[i]
                 grid = self._grids[i]
-                for keyL, qL in chL.iteritems():
+                for keyL, qL in chL.copy().iteritems():  # copy: for L=1 infinite, chL is chR
                     for keyR in graph[keyL]:
                         # calculate charge qR from the entry of the grid
                         op = grid[stL[keyL]][stR[keyR]]

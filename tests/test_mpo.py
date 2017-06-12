@@ -40,9 +40,10 @@ def test_MPOGraph():
     for bc in mpo.MPO._valid_bc:
         for L in [1, 2, 4]:
             print "L =", L
-            g = mpo.MPOGraph([spin_half] * L, 'finite')
-            g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
+            g = mpo.MPOGraph([spin_half] * L, bc)
+            g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
             if L > 1:
+                g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
                 g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
                 g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
                 g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
@@ -53,6 +54,7 @@ def test_MPOGraph():
             g.test_sanity()
             print repr(g)
             print str(g)
+            print "build MPO"
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
 

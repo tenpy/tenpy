@@ -11,6 +11,7 @@ from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
 import tenpy.linalg.np_conserved as npc
+from nose.plugins.attrib import attr
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -35,6 +36,7 @@ def test_purification_mps():
             assert np.max(np.abs(mutinf)) < 1.e-14
 
 
+@attr('slow')
 def test_purification_TEBD(L=4):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
@@ -101,7 +103,7 @@ def test_disentangler(L=4, eps=1.e-15):
         # If the optimal U is 'too far away' from U0=eye?
 
 
-def gen_disentangler_psi0(site_P, L, max_range=10, product_P=True):
+def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
     """generate an initial state of random singlets, identical in P and Q"""
     assert(L % 2 == 0)
     # generate pairs with given maximum range, for both P and Q
@@ -121,6 +123,14 @@ def gen_disentangler_psi0(site_P, L, max_range=10, product_P=True):
         psiP = MPS.from_singlets(site_P, L, pairs_PQ[0])
     psiQ = MPS.from_singlets(site_P, L, pairs_PQ[1])
     # generate BS for PurificationMPS
+    return gen_disentangler_psi_prod(psiP, psiQ), pairs_PQ
+
+
+def gen_disentangler_psi_prod(psiP, psiQ):
+    """generate a PurificationMPS as tensorproduct (psi_P x psi_Q).
+
+    psiQ should have the same `sites` as psiP."""
+    L = psiP.L
     Bs = []
     for i in range(L):
         BP = psiP.get_B(i)
@@ -131,11 +141,12 @@ def gen_disentangler_psi0(site_P, L, max_range=10, product_P=True):
         B2.ireplace_labels(['(vL.vL*)', '(vR.vR*)', 'p*'], ['vL', 'vR', 'q'])
         Bs.append(B2)
     Ss = [np.outer(S, S2).flatten() for S, S2 in zip(psiP._S, psiQ._S)]
-    return purification_mps.PurificationMPS([site_P]*L, Bs, Ss), pairs_PQ
+    return purification_mps.PurificationMPS(psiP.sites, Bs, Ss)
 
 
-def get_disentangler_psi0_test(site_P=spin_half, L=6, max_range=4):
-    psi0, pairs_PQ = gen_disentangler_psi0(site_P, L, max_range)
+@attr('slow')
+def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
+    psi0, pairs_PQ = gen_disentangler_psi_singlets(site_P, L, max_range)
     psi0.test_sanity()
     print "pairs: P", pairs_PQ[0]
     print "pairs: Q", pairs_PQ[1]
@@ -146,9 +157,10 @@ def get_disentangler_psi0_test(site_P=spin_half, L=6, max_range=4):
     print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)
     print "Q: ", np.round(psi0.mutinf_two_site(legs='q')[1]/np.log(2), 3)
     M = XXZChain(dict(L=L))
-    tebd_pars = dict(verbose=31, trunc_cut=1.e-10)
+    tebd_pars = dict(verbose=31, trunc_cut=1.e-10, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
-    eng.disentangle_global()
+    for i in range(L):
+        eng.disentangle_global()
     print psi0.entanglement_entropy() / np.log(2)
     mutinf_Q = psi0.mutinf_two_site(legs='q')[1]
     print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)

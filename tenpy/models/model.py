@@ -393,6 +393,11 @@ class NearestNeighborModel(object):
         if len(self.H_bond) != self.lat.N_sites:
             raise ValueError("wrong len of H_bond")
 
+    def trivial_like_NNModel(self):
+        """Return a NearestNeighborModel with same lattice, but trivial (H=0) bonds."""
+        triv_H = [H.zeros_like() if H is not None else None for H in self.H_bond]
+        return NearestNeighborModel(self.lat, triv_H)
+
     def bond_energies(self, psi):
         """Calculate bond energies <psi|H_bond|psi>.
 

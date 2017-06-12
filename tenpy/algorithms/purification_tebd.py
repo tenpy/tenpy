@@ -227,6 +227,8 @@ class PurificationTEBD(tebd.Engine):
             return self.disentangle_backwards(theta)
         elif disentangle == 'renyi':
             return self.disentangle_renyi(theta)
+        elif disentangle == 'diag':
+            return self.disentangle_diag(theta)
         # else
         raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
 
@@ -274,8 +276,10 @@ class PurificationTEBD(tebd.Engine):
         if U_idx_dt is not None:
             U = self._guess_U_disent[U_idx_dt][i]  # recover last result
         else:
-            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+            #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+            #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+            # TODO: is this a good idea?
+            _, U = self.disentangle_diag(theta)
         Sold = np.inf
         S0 = None
         for j in xrange(max_iter):
@@ -366,6 +370,7 @@ class PurificationTEBD(tebd.Engine):
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
         U_idx_dt, i = self._update_index
+        S0 = self._entropy_theta(theta, n=2)
         if U_idx_dt is not None:
             # during real time evolution
             U = self._guess_U_disent[U_idx_dt][i]  # recover last result
@@ -373,7 +378,7 @@ class PurificationTEBD(tebd.Engine):
             #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
             #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
             # TODO XXX: do also for self.disentangle_reny()
-            U = self.disentangle_diag(theta)
+            _, U = self.disentangle_diag(theta)
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         Sold = np.inf
         for j in xrange(max_iter):
@@ -385,7 +390,8 @@ class PurificationTEBD(tebd.Engine):
             Sold, S = S, Sold
         self._disent_iterations[i] += j  # save the number of iterations performed
         if self.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S-Sold)
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}, S0-S={DS2:.3e}".format(
+                j=j, DS=S-Sold, DS2=S0-Sold)
         if U_idx_dt is not None:
             self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
         return theta, U
@@ -455,6 +461,8 @@ class PurificationTEBD(tebd.Engine):
                                                        ['vL*', 'vR*', 'p0*', 'p1*']))
         S0 = self._entropy_theta(theta)
         # TODO: eigh sorts only within the charge blocks...
+        # TODO: the phase of the eigenvectors is arbitrary, but might increase the entanglement!!!
+        #       how should it be chosen?
         E, V = npc.eigh(rho.combine_legs((['q0', 'q1'], ['q0*', 'q1*']), qconj=[+1, -1]))
         # test that we actually reduce the *global* entanglement (not only I_ij)
         V.ireplace_label('eig', '(q0*.q1*)')
@@ -463,23 +471,25 @@ class PurificationTEBD(tebd.Engine):
         theta1 = npc.tensordot(Vd, theta, axes=(['q0*', 'q1*'], ['q0', 'q1']))
         S1 = self._entropy_theta(theta1)
         if S1 < S0 - 1.e-14:
-            return Vd
+            return theta1, Vd
         else:
+            return theta1, Vd # TODO: still return theta1 although we increase S TODO XXX
+            assert(False) # TODO XXX
             # discard: we increased the entanglement
-            return npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                             npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+            return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                                     npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
 
     def disentangle_global(self):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
         Caclulate the mutual information (in the auxiliar space) between two sites
-        and determine where it is maximal. Disentangle these two sites.
+        and determine where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
         coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
-        # choose L maximally entangled pairs
+        # TODO: recalculate mutinf only as necessary and do multiple steps at once...
         sorted = np.argsort(mutinf)
-        for i, j in coords[sorted[-self.psi.L:]]:
+        for i, j in coords[sorted[-1:]]:
             if self.verbose > 10:
                 print 'disentangle global pair ' + repr((i, j))
             self._disentangle_two_site(i, j)
@@ -519,7 +529,7 @@ class PurificationTEBD(tebd.Engine):
         if swap:
             theta.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
         if disentangle:
-            theta, U_disent = self.disentangle_renyi_dU(theta)
+            theta, U_disent = self.disentangle(theta)
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
@@ -531,7 +541,7 @@ class PurificationTEBD(tebd.Engine):
         C = self.psi.get_theta(i0, n=2, formL=0.)
         if swap:
             C.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
-        if disentangle:
+        if disentangle and U_disent is not None:
             C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         B_L = npc.tensordot(
             C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
