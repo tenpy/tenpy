@@ -464,9 +464,16 @@ class PurificationTEBD(tebd.Engine):
         # TODO: the phase of the eigenvectors is arbitrary, but might increase the entanglement!!!
         #       how should it be chosen?
         E, V = npc.eigh(rho.combine_legs((['q0', 'q1'], ['q0*', 'q1*']), qconj=[+1, -1]))
-        # test that we actually reduce the *global* entanglement (not only I_ij)
+        # the phase of the eigenvectors is not well defined. Thus, even if V is the identity,
+        # we might actually increase the entanglement due to the random phases!
+        # Try to get rid of them by choosing the phase of the maximal element.
+        V_flat = V.to_ndarray()
+        phases = V_flat[np.argmax(np.abs(V_flat), axis=0), np.arange(len(V_flat))]   # max values
+        phases = phases / np.abs(phases)  # divided by absolute value
+        V.iscale_axis(np.conj(phases), 'eig')
         V.ireplace_label('eig', '(q0*.q1*)')
         V = V.split_legs()
+        # test that we actually reduce the *global* entanglement (not only I_ij)
         Vd = V.conj()
         theta1 = npc.tensordot(Vd, theta, axes=(['q0*', 'q1*'], ['q0', 'q1']))
         S1 = self._entropy_theta(theta1)
