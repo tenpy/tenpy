@@ -445,6 +445,9 @@ class Array(object):
         --------
         get_leg: translate the labels to indices
         get_legs: calls get_legs for an iterable of labels
+
+        .. todo :
+            rename to iset_leg_labels
         """
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs.")
@@ -732,6 +735,7 @@ class Array(object):
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
         res.legs.insert(i, leg)
         res._set_shape()
+        res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
         res._qdata = np.hstack(
@@ -3316,9 +3320,9 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     """
     if a.rank != 2:
         raise ValueError("expect a matrix!")
-    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
-    label_Q, label_R = inner_labels
     a_labels = a.get_leg_labels()
+    label_Q, label_R = inner_labels
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
     q_data = []
     r_data = []
     i0 = 0
