@@ -92,6 +92,12 @@ from ..tools.math import lcm, speigs, entropy
 class MPS(object):
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
+    .. todo :
+        Somewhere keep track of the norm of the wave function?
+        Even if we don't use it in most cases,
+        it might be useful e.g. for imaginary time evolution (giving the partition function)
+        or for calculating overlaps. Tricky for infinite boundary conditions; keep norm per site?
+
     Parameters
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`
@@ -1161,6 +1167,40 @@ class MPS(object):
         # convert _B[0] to 'B' form as well, by multiplying with singluar values.
         self.set_B(0, self.get_B(0, form='B'), form='B')
         # finally: done
+
+    def add(self, other, alpha, beta):
+        """return an MPS which represents `alpha self + beta others`
+
+        Parameters
+        ----------
+        other : :class:`MPS`
+            Another MPS of the same length to be added with self.
+        alpha, beta : complex float
+            Prefactors for self and other. We calculate
+            ``alpha * |self> + beta * |other>``
+        """
+        L = self.L
+        assert(other.L == L and L >= 2)  # (one could generalize this function...)
+        assert(self.bc == 'finite')  # not clear for segment: are left states orthogonal?
+        # TODO: should gauge qtotal to zero.
+        legs = ['vL', 'vR'] + self._p_label
+        # alpha and beta appera only on the first site
+        Bs = [npc.grid_concat([[alpha*self.get_B(0).transpose(legs),
+                                beta*other.get_B(0).transpose(legs)]], axes=[0, 1])]
+        for i in range(1, L-1):
+            B1 = self.get_B(i).transpose(legs)
+            B2 = other.get_B(i).transpose(legs)
+            grid = [[B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')]+B1.legs[2:])],
+                    [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')]+B1.legs[2:]), B2]]
+            Bs.append(npc.grid_concat(grid, [0, 1]))
+        Bs.append(npc.grid_concat([[self.get_B(L-1).transpose(legs)],
+                                   [other.get_B(L-1).transpose(legs)]], axes=[0, 1]))
+
+        Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
+        psi = MPS(self.sites, Bs, Ss, 'finite', None)
+        # bring to canonical form, calculate Ss
+        psi.canonical_form_finite()
+        return psi
 
     def __str__(self):
         """Some status information about the MPS"""

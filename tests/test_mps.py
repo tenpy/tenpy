@@ -39,6 +39,24 @@ def test_mps():
         assert(np.linalg.norm(norm_err) < 1.e-13)
 
 
+def test_mps_add():
+    s = site.SpinHalfSite(conserve='Sz')
+    psi1 = mps.MPS.from_product_state([s]*4, [0, 1, 0, 0], bc='finite')
+    psi2 = mps.MPS.from_product_state([s]*4, [0, 0, 1, 0], bc='finite')
+    psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
+    print psi_sum
+    print psi_sum._B[1]
+    print psi_sum._B[2]
+    # check overlap with singlet state
+    # TODO: doesn't work due to gauging of charges....
+    psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3],
+                                up=0, down=1, bc='finite')
+    print psi.expectation_value('Sz')
+    #  ov = psi.overlap(psi_sum)[0]
+    #  print "ov = ", ov
+    #  assert( abs(1.-ov) < 1.e-14)
+
+
 def test_MPSEnvironment():
     xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
     L = xxz_pars['L']
@@ -97,4 +115,5 @@ def test_singlet_mps():
 
 if __name__ == "__main__":
     test_mps()
+    test_mps_add()
     test_MPSEnvironment()
