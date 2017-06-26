@@ -25,7 +25,7 @@ roundoff errors).
 
 For efficient simulations, it is crucial that the MPS is in a 'canonical form'.
 The different forms and boundary conditions are easiest described in Vidal's
-:math:`\Gamma, \Lambda` notation [1]_.
+:math:`\Gamma, \Lambda` notation [Vidal2004]_.
 
 Valid MPS boundary conditions (not to confuse with `bc_coupling` of
 :class:`tenpy.models.model.CouplingModel`)  are the following:
@@ -69,7 +69,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     :meth:`canonicalize` (or sub-functions) before using algorithms.
 ======== ========== =======================================================================
 
-.. todo ::
+.. todo :
 
     - expectaion values
     - canonicalize()
@@ -335,7 +335,8 @@ class MPS(object):
         return res
 
     @classmethod
-    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0, bc='finite'):
+    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0,
+                      bc='finite'):
         """Create an MPS of entangled singlets.
 
         Parameters
@@ -816,7 +817,7 @@ class MPS(object):
         Parameters
         ----------
         max_range : int
-            Maximal distance |i-j| for which the mutual information should be calculated.
+            Maximal distance ``|i-j|`` for which the mutual information should be calculated.
             ``None`` defaults to `L-1`.
         n : float
             Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
@@ -883,7 +884,7 @@ class MPS(object):
         """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For example the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For example the contraction for a two-site (`n` = 2) operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -1034,13 +1035,13 @@ class MPS(object):
         C : 2D ndarray
             The correlation function ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``,
             where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
-            If opstr is given, it gives (for ``opstr_on_first=True``):
+            If `opstr` is given, it gives (for ``str_on_first=True``):
 
             - For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
             - For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
             - For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
 
-            The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
+            The condition ``<= r`` is replaced by a strict ``< r``, if ``str_on_first=False``.
         """
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(ops1, ops2, sites1,
                                                                             sites2, opstr)
@@ -1096,10 +1097,22 @@ class MPS(object):
         for i in range(self.L):
             th = self.get_theta(i, 1)
             rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
-            rho_L2 = npc.diag(self.get_SL(i)**2, rho_L.get_leg('vL'), dtype=rho_L.dtype)
+            S = self.get_SL(i)
+            if isinstance(S, npc.Array):  # during DMRG with mixer, S may be a 2D npc.Array
+                if S.rank != 2:
+                    raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
+                rho_L2 = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'])
+            else:
+                rho_L2 = npc.diag(S**2, rho_L.get_leg('vL'), dtype=rho_L.dtype)
             err[i, 0] = npc.norm(rho_L - rho_L2)
             rho_R = npc.tensordot(th, th.conj(), axes=lbl_L)
-            rho_R2 = npc.diag(self.get_SR(i)**2, rho_R.get_leg('vR'), dtype=rho_R.dtype)
+            S = self.get_SR(i)
+            if isinstance(S, npc.Array):
+                if S.rank != 2:
+                    raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
+                rho_R2 = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            else:
+                rho_R2 = npc.diag(S**2, rho_R.get_leg('vR'), dtype=rho_L.dtype)
             err[i, 1] = npc.norm(rho_R - rho_R2)
         return err
 
@@ -1113,6 +1126,7 @@ class MPS(object):
 
         .. todo :
             Should we try to avoid carrying around the total charge of the B matrices?
+            Also, we need a 'canonical_form_infinite', such that we can define canonical_form()
         """
         assert(self.finite)
         L = self.L
@@ -1834,30 +1848,30 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.transpose = transpose
         if not transpose:
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                ket.get_B(i, form='B').itranspose(['vL', 'p', 'vR'])
                 for i in range(shift_ket, shift_ket + L)
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                bra.get_B(i, form='B').conj().itranspose(['p*', 'vR*', 'vL*'])
                 for i in range(shift_bra, shift_bra + L)
             ]
         else:
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                ket.get_B(i, form='A').itranspose(['vR', 'p', 'vL'])
                 for i in range(shift_ket, shift_ket + L)
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                bra.get_B(i, form='A').conj().itranspose(['p*', 'vL*', 'vR*'])
                 for i in range(shift_bra, shift_bra + L)
             ]
         self.chinfo = bra.chinfo
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
-        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N]))
+        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
         self._pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1)
         if transpose:
             self._pipe = self._pipe.conj()
-        self.shape = (self._pipe_L.ind_len, self._pipe_R.ind_len)
+        self.shape = (self._pipe.ind_len, self._pipe.ind_len)
         self.dtype = np.promote_types(bra.dtype, ket.dtype)
         self.matvec_count = 0
         self._charge_sector = None
@@ -1865,7 +1879,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.charge_sector = charge_sector  # uses the setter
 
     @property
-    def charge_sector(self, value):
+    def charge_sector(self):
         """Charge sector of `RP` (`LP` for `transpose) which is used for `matvec` with ndarray."""
         return self._charge_sector
 
@@ -1884,7 +1898,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
             self.shape = (chi2, chi2)
             self._mask = np.ones([chi2], dtype=np.bool)
 
-    def matvec(self, vec):
+    def _matvec(self, vec):
         """Apply the transfer matrix to `vec`.
 
         Parameters
@@ -1919,7 +1933,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         We return it the same way as we got it (with the same legs and charges)."""
         pipe = None
         if vec.rank == 1:
-            vec.split_legs(0)
+            vec = vec.split_legs(0)
             pipe = self._pipe
         qtotal = vec.qtotal
         legs = vec.legs
@@ -1956,7 +1970,9 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         """
         full_vec = np.zeros(self._pipe.ind_len)
         full_vec[self._mask] = vec
-        return npc.Array.from_ndarray(full_vec, [self._pipe])
+        res = npc.Array.from_ndarray(full_vec, [self._pipe])
+        res.set_leg_labels(['(vL.vL*)'])
+        return res
 
     def _npc_to_flat(self, npc_vec):
         """Convert npc Array with qtotal = self.charge_sector into ndarray.

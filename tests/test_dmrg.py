@@ -30,6 +30,8 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
         },
         'max_sweeps': 40,
     }
+    if bc_MPS == 'infinite':
+        dmrg_pars['update_env'] = 2
     dmrg.run(psi, M, dmrg_pars)
     if bc_MPS == 'finite':
         ED = ExactDiag(M)
@@ -40,7 +42,7 @@ def check_dmrg(bc_MPS='finite', engine='EngineCombine', mixer=None):
         print "compare with ED: overlap = ", abs(ov)**2
         assert (abs(abs(ov) - 1.) < 1.e-10)
 
-    # TODO: compare with known ground state (energy) / ED !
+    # TODO: compare with known ground state (energy), e.g. Transverse field ising !
 
 
 @attr('slow')

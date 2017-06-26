@@ -70,8 +70,9 @@ def run(psi, model, DMRG_params):
                                  of the environment.
         -------------- --------- ---------------------------------------------------------------
         mixer          str |     Chooses the :class:`Mixer` to be used.
-                       class     A string stands for one of the mixers defined in module,
+                       class     A string stands for one of the mixers defined in this module,
                                  a class is used as custom mixer.
+                                 Default (``None``) uses no mixer, ``True`` uses :class:`Mixer`.
         -------------- --------- ---------------------------------------------------------------
         mixer_params   dict      Non-default initialization arguments of the mixer.
                                  Options may be custom to the specified mixer, so they're
@@ -96,7 +97,14 @@ def run(psi, model, DMRG_params):
                                  initialize the environment.
         -------------- --------- ---------------------------------------------------------------
         update_env     int       Number of sweeps without bond optimizaiton to update the
-                                 environment, performed every `N_sweeps_check` sweeps.
+                                 environment for infinite bc,
+                                 performed every `N_sweeps_check` sweeps.
+        -------------- --------- ---------------------------------------------------------------
+        norm_tol       float     After the DMRG run, update the environment by 'update_env'
+                                 sweeps until ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+        -------------- --------- ---------------------------------------------------------------
+        norm_tol_iter  float     Perform at most `update_env` * `norm_tol_iter` iteration to
+                                 converge the norm error below `norm_tol`.
         -------------- --------- ---------------------------------------------------------------
         max_sweeps     int       Maximum number of sweeps to be performed.
         -------------- --------- ---------------------------------------------------------------
@@ -168,11 +176,18 @@ def run(psi, model, DMRG_params):
 
     # initial sweeps of the environment
     start_env = get_parameter(DMRG_params, 'start_env', 0, 'DMRG')
-    update_env = get_parameter(DMRG_params, 'update_env', 0, 'DMRG')
-    if engine.env.ket.finite:
+    # update environement sweeps
+    default_update_env = min((N_sweeps_check // 2 + 1), 10)
+    if psi.finite:
+        default_update_env = 0
+    update_env = get_parameter(DMRG_params, 'update_env', default_update_env, 'DMRG')
+    norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-3, 'DMRG')
+    norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 10, 'DMRG')
+    if psi.finite:
         if start_env > 0 or update_env > 0:
             warnings.warn("Ignore `start_env` and `update_env` for finite MPS: nothing to do.")
         start_env = update_env = 0
+        norm_tol = None
     engine.environment_sweeps(start_env)
 
     # initialize statistics
@@ -186,7 +201,8 @@ def run(psi, model, DMRG_params):
         'S': [],
         'max_trunc_err': [],
         'max_E_trunc': [],
-        'max_chi': []
+        'max_chi': [],
+        'norm_err': []
     }
 
     while True:
@@ -206,7 +222,6 @@ def run(psi, model, DMRG_params):
             shelve = True
             warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
             break
-        # TODO: check norm condition
         # the time-consuming part: the actual sweeps
         for i in range(N_sweeps_check):
             # --------- the main work --------------
@@ -221,8 +236,8 @@ def run(psi, model, DMRG_params):
             engine.lanczos_params['P_tol'] = max(p_tol_min,
                                                  min(p_tol_max, max_trunc_err * p_tol_to_trunc))
         if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
-            engine.lanczos_params['P_tol'] = max(e_tol_min,
-                                                 min(e_tol_max, max_E_trunc * p_tol_to_trunc))
+            engine.lanczos_params['E_tol'] = max(e_tol_min,
+                                                 min(e_tol_max, max_E_trunc * e_tol_to_trunc))
         # update environment
         engine.environment_sweeps(update_env)
         try:
@@ -243,18 +258,20 @@ def run(psi, model, DMRG_params):
             E = engine.statistics['E_total'][-1]
         Delta_E = E - E_old
         E_old = E
+        norm_err = np.linalg.norm(psi.norm_test())
         sweep_statistics['sweep'].append(engine.sweeps)
         sweep_statistics['E'].append(E)
         sweep_statistics['S'].append(S)
         sweep_statistics['max_trunc_err'].append(max_trunc_err)
         sweep_statistics['max_E_trunc'].append(max_E_trunc)
-        sweep_statistics['max_chi'].append(np.max(engine.env.ket.chi))
+        sweep_statistics['max_chi'].append(np.max(psi.chi))
+        sweep_statistics['norm_err'].append(norm_err)
 
         if verbose >= 1:
             # print a status update
             print "=" * 80
             msg = "sweep {sweep:d}, age = {age:d}\n"
-            msg += "Energy = {E:.16f}\n"
+            msg += "Energy = {E:.16f}, norm_err = {norm_err:.1e}\n"
             msg += "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
@@ -263,13 +280,28 @@ def run(psi, model, DMRG_params):
                 sweep=engine.sweeps,
                 time=time.time() - start_time,
                 mem=memory_usage(),
-                chi=engine.env.ket.chi,
+                chi=psi.chi,
                 age=engine.statistics['age'][-1],
                 E=E,
                 DE=Delta_E,
                 DS=Delta_S,
                 trerr=max_trunc_err,
-                Eerr=max_E_err)
+                Eerr=max_E_trunc,
+                norm_err=norm_err)
+    # clean up from mixer
+    engine.mixer_cleanup(optimize=False)
+    # update environment until norm_tol is reached
+    if norm_tol is not None and norm_err > norm_tol:
+        warnings.warn("final DMRG state not in canonical form: too much truncation!")
+        if psi.finite:
+            psi.canonical_form_finite()
+        else:
+            for _ in range(norm_tol_iter):
+                engine.environment_sweeps(update_env)
+                norm_err = np.linalg.norm(psi.norm_test())
+                if norm_err <= norm_tol:
+                    break
+
     if verbose >= 1:
         print "=" * 80
         msg = "DMRG finished after {sweep:d} sweeps.\n"
@@ -277,11 +309,8 @@ def run(psi, model, DMRG_params):
         print msg.format(
             sweep=engine.sweeps,
             age=engine.statistics['age'][-1],
-            chimax=np.max(engine.env.ket.chi))
+            chimax=np.max(psi.chi))
         print "=" * 80
-
-    # cleanup
-    engine.mixer_cleanup()
     return {
         'E': E,
         'shelve': shelve,
@@ -368,6 +397,8 @@ class Engine(object):
         self.mixer = None  # means 'ignore mixer'
         Mixer_class = get_parameter(DMRG_params, 'mixer', None, 'DMRG')
         if Mixer_class is not None:
+            if Mixer_class is True:
+                Mixer_class = Mixer
             if isinstance(Mixer_class, str):
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(DMRG_params, 'mixer_params', {}, 'DMRG')
@@ -385,9 +416,9 @@ class Engine(object):
         if N_sweeps <= 0:
             return
         if self.verbose >= 1:
-            print "Updating environment ",
+            print "Updating environment"
         for k in range(N_sweeps):
-            self.sweep(0, optimize=False)
+            self.sweep(optimize=False)
             if self.verbose >= 1:
                 print '.',
         if self.verbose >= 1:
@@ -733,7 +764,7 @@ class Engine(object):
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def mixer_cleanup(self, *args):
+    def mixer_cleanup(self, *args, **kwargs):
         """Cleanup the effects of the mixer.
 
         A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
@@ -742,7 +773,7 @@ class Engine(object):
         if self.mixer is not None:
             mixer = self.mixer
             self.mixer = None  # disable the mixer
-            self.sweep(*args)  # (discard return value)
+            self.sweep(*args, **kwargs)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
 
     def set_B(self, i0, U, S, VH):

@@ -84,6 +84,9 @@ class Array(object):
     In-place methods are indicated by a name starting with ``i``.
     (But `is_completely_blocked` is not inplace...)
 
+    .. todo :
+        rename set_leg_labels() to iset_leg_labels();
+        rename rank -> ndim  for better compatibility with numpy.ndarray
 
     Parameters
     ----------
@@ -445,9 +448,6 @@ class Array(object):
         --------
         get_leg: translate the labels to indices
         get_legs: calls get_legs for an iterable of labels
-
-        .. todo :
-            rename to iset_leg_labels
         """
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs.")
@@ -1045,8 +1045,7 @@ class Array(object):
 
         labels = list(self.get_leg_labels())
         for a in sorted(axes, reverse=True):
-            if labels[a] is not None:
-                labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
+            labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.set_leg_labels(labels)
         return res
 
@@ -2212,9 +2211,11 @@ class Array(object):
 
         Examples
         --------
-        >>> self._split_leg_label('(a,b,(c,d))', 3)
+        >>> self._split_leg_label('(a.b.(c.d))', 3)
         ['a', 'b', '(c.d)']
         """
+        if label is None:
+            return [None] * count
         if label[0] != '(' or label[-1] != ')':
             warnings.warn("split leg with label not in Form '(...)': " + label)
             return [None] * count
