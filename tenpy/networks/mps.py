@@ -1174,6 +1174,44 @@ class MPS(object):
         # done: just discard the U on the left (trivial phase / norm for finite bc,
         # and just re-shuffling of the states left for 'segment' bc
 
+    def correlation_length(self, num_ev=1, charge_sector=None, tol_ev0=1.e-8):
+        r"""calculate the correlation length by diagonalizing the transfer matrix.
+
+        Works only for infinite MPS, where the transfer matrix is a useful concept.
+        For an MPS, any correlation function splits into :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
+        with some parts left and right and the :math:`j-i-1`-th power of the transfer matrix in
+        between. The largest eigenvalue is 1 and gives the dominant contribution of
+        :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`, and the second largest one
+        gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
+        Thus :math:`\lambda_2 = exp(-1/\xi)`.
+        Assumes that `self` is in canonical form.
+
+        .. todo :
+            might want to insert OpString.
+
+        Parameters
+        ----------
+        num_ev : int
+            We look for the `num_ev`+1 largest eigenvalues.
+        charge_sector : ``None`` | 0 | charges
+            The charge sector of the transfer matrix,
+            in which we look for the most dominant eigenvalues.
+
+        Returns
+        -------
+        xi : float | 1D array
+            for num_ev =1, return just the correlation length,
+            otherwise an array of the `num_ev` largest correlation legths.
+        """
+        T = TransferMatrix(self, self, charge_sector=charge_sector)
+        E, V = T.eigenvectors(num_ev + 1, which='LM')
+        E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
+        if abs(E[0] - 1.) > tol_ev0:
+            raise ValueError("largest eigenvalue not one: was not in canonical form!")
+        if num_ev == 1:
+            return -1./np.log(abs(E[1])) * self.L
+        return -1./np.log(np.abs(E[1:num_ev+1])) * self.L
+
     def add(self, other, alpha, beta):
         """return an MPS which represents `alpha self + beta others`
 
