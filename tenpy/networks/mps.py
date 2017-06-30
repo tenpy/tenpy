@@ -1141,7 +1141,7 @@ class MPS(object):
             self.set_SR(L-1, S/np.linalg.norm(S))
         else:   # bc == 'finite':
             self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
-            self.set_SR(0, np.array([1.]))
+            self.set_SR(L-1, np.array([1.]))
         # sweep from left to right to bring it into left canonical form.
         M = self.get_B(0, None)
         if self.bc == 'segment':
@@ -1163,7 +1163,7 @@ class MPS(object):
         S = S/np.linalg.norm(S)  # normalize
         self.set_SL(L-1, S)
         self.set_B(L-1, V.split_legs(1), form='B')
-        for i in range(L-2, 0, -1):
+        for i in range(L-2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
@@ -1171,16 +1171,8 @@ class MPS(object):
             S = S/np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
-        # last one
-        M = self.get_B(0, 'A')
-        M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-        self.set_B(0, M, 'A')
-        if self.bc == 'segment':
-            S = self.get_SL(0)
-            self.set_SL(S/np.linalg.norm(S))
-        # convert _B[0] to 'B' form as well, by multiplying with singluar values.
-        self.set_B(0, self.get_B(0, form='B'), form='B')
-        # finally: done
+        # done: just discard the U on the left (trivial phase / norm for finite bc,
+        # and just re-shuffling of the states left for 'segment' bc
 
     def add(self, other, alpha, beta):
         """return an MPS which represents `alpha self + beta others`
@@ -1355,7 +1347,7 @@ class MPS(object):
             if n == 1:
                 axes = (['p'], ['p*'])
             else:
-                axes = (self._get_p_labels(n), self.get_p_labels(n, True))
+                axes = (self._get_p_labels(n), self._get_p_labels(n, True))
         # check number of axes
         ax_p, ax_pstar = axes
         if len(ax_p) != n or len(ax_pstar) != n:
