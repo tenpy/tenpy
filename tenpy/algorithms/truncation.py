@@ -31,13 +31,13 @@ is the discarded part (orthogonal to the kept part) and the
 
 .. warning :
     For imaginary time evolution (e.g. with TEBD), you try to project out the ground state.
-    Then, looking at the truncation error definde in this module does *not* give you any
+    Then, looking at the truncation error defined in this module does *not* give you any
     information how good the found state coincides with the actual ground state!
     (Instead, the returned truncation error depends on the overlap with the initial state,
     which is arbitrary > 0)
 
 .. warning :
-    This module takes only track of the errors coming from the trunecation of Schmidt values.
+    This module takes only track of the errors coming from the truncation of Schmidt values.
     There might be other sources of error as well, for example TEBD has also an discretisation
     error depending on the chosen time step.
 
@@ -82,8 +82,6 @@ class TruncationError(object):
     >>> TE = TruncationError()
     >>> TE += tebd.time_evolution(...)
 
-    .. todo :
-        what if eps < 1.e-16? in that case 1.-eps = 1 to machine precision. Just ignore that?
     """
 
     def __init__(self, eps=0., ov=1.):
@@ -175,8 +173,8 @@ def truncate(S, trunc_par):
     chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
     chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
     sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
-    svd_min = get_parameter(trunc_par, 'svd_min', 1.e-30, 'truncation')
-    trunc_cut = get_parameter(trunc_par, 'trunc_cut', None, 'truncation')
+    svd_min = get_parameter(trunc_par, 'svd_min', 1.e-14, 'truncation')
+    trunc_cut = get_parameter(trunc_par, 'trunc_cut', 1.e-14, 'truncation')
 
     if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")
