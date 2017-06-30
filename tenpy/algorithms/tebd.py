@@ -109,6 +109,11 @@ class Engine(object):
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L+1)]
         self._update_index = None
 
+    def __del__(self):
+        from ..tools.params import unused_parameters
+        unused_parameters(self.TEBD_params['trunc_params'], "TEBD trunc_params")
+        unused_parameters(self.TEBD_params, "TEBD")
+
     @property
     def trunc_err_bonds(self):
         """truncation error introduced on each non-trivial bond"""

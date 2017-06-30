@@ -1,12 +1,12 @@
 from __future__ import division
 import numpy as np
 
-from .lattice import Site, Chain
+from .lattice import Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel
-from ..linalg import np_conserved as npc
-from ..tools.params import get_parameter
+from ..tools.params import get_parameter, unused_parameters
 
 from tenpy.networks.site import FermionSite
+
 
 class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
     r"""Spinless fermion chain with N conservation.
@@ -39,9 +39,9 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         mu = get_parameter(model_param, 'mu', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
-
+        unused_parameters(model_param, self.__class__)
         # 1) - 3)
-        site = FermionSite(conserve = conserve)
+        site = FermionSite(conserve=conserve)
         # 4) lattice
         lat = Chain(L, site, bc_MPS=bc_MPS)
         bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
@@ -50,8 +50,8 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(mu, 0, 'N')
-        J = np.asarray(J) # convert to array: allow `array_like` J
-        self.add_coupling(J, 0, 'Cd', 0, 'C', 1) # JW not needed in NN mod.
+        J = np.asarray(J)  # convert to array: allow `array_like` J
+        self.add_coupling(J, 0, 'Cd', 0, 'C', 1)  # JW not needed in NN mod.
         self.add_coupling(J, 0, 'C', 0, 'Cd', 1)
         self.add_coupling(V, 0, 'N', 0, 'N', 1)
         # 7) initialize MPO

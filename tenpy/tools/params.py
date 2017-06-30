@@ -5,7 +5,7 @@ See the doc-string of :func:`get_parameter` for details.
 
 import warnings
 
-__all__ = ["get_parameter"]
+__all__ = ["get_parameter", "unused_parameters"]
 
 
 def get_parameter(par_dict, key, default, descr):

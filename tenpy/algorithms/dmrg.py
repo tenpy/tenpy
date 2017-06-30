@@ -39,7 +39,7 @@ from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos
 from .truncation import truncate, svd_theta
-from ..tools.params import get_parameter
+from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
 
 __all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer']
@@ -311,6 +311,9 @@ def run(psi, model, DMRG_params):
             age=engine.statistics['age'][-1],
             chimax=np.max(psi.chi))
         print "=" * 80
+    unused_parameters(DMRG_params['lanczos_params'], "DMRG")
+    unused_parameters(DMRG_params['trunc_params'], "DMRG")
+    unused_parameters(DMRG_params, "DMRG")
     return {
         'E': E,
         'shelve': shelve,

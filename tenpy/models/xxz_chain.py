@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..linalg import np_conserved as npc
-from ..tools.params import get_parameter
+from ..tools.params import get_parameter, unused_parameters
 
 __all__ = ['XXZChain']
 
@@ -44,6 +44,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
+        unused_parameters(model_param, self.__class__)
         # 1) charges of the physical leg. The only time that we actually define charges!
         leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
         # 2) onsite operators
