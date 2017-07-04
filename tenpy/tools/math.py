@@ -22,7 +22,8 @@ def matvec_to_array(H):
     H_dense : ndarray, shape ``(H.dim, H.dim)``
         a dense array version of `H`.
     """
-    dim = H.dim
+    dim, dim2 = H.shape
+    assert(dim == dim2)
     X = np.zeros((dim, dim), H.dtype)
     v = np.zeros((dim), H.dtype)
     for i in range(dim):
@@ -40,7 +41,7 @@ def entropy(p, n=1):
     r"""Calculate the entropy of a distribution.
 
     Assumes that p is a normalized distribution (``np.sum(p)==1.``).
-    
+
     Parameters
     ----------
     p : 1D array
@@ -48,10 +49,10 @@ def entropy(p, n=1):
     n : 1 | float | np.inf
         Selects the entropy, see below.
 
-    Returns 
+    Returns
     -------
     entropy : float
-        Shannon-entropy :math:`-\sum_i p_i \log(p_i)` (n=1) or 
+        Shannon-entropy :math:`-\sum_i p_i \log(p_i)` (n=1) or
         Renyi-entropy :math:`\frac{1}{1-n} \log(\sum_i p_i^n)` (n != 1)
         of the distribution `p`.
     """

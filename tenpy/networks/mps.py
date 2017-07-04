@@ -1208,6 +1208,8 @@ class MPS(object):
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
         if abs(E[0] - 1.) > tol_ev0:
             raise ValueError("largest eigenvalue not one: was not in canonical form!")
+        if len(E) < 2:
+            return 0.  # only a single eigenvector: zero correlation length
         if num_ev == 1:
             return -1./np.log(abs(E[1])) * self.L
         return -1./np.log(np.abs(E[1:num_ev+1])) * self.L
@@ -1969,11 +1971,11 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         legs = vec.legs
         # the actual work
         if not self.transpose:
-            for N, M in itertools.izip(self._bra_N, self._ket_M):
+            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
         else:
-            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
+            for N, M in itertools.izip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
         if np.any(self.qtotal != 0):
