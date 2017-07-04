@@ -237,8 +237,7 @@ class MPS(object):
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
-            Bond charges at bond 0, which are purely conventional.
-
+            Leg charge at bond 0, which are purely conventional.
         """
         sites = list(sites)
         L = len(sites)
@@ -249,16 +248,59 @@ class MPS(object):
         Bs = []
         chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
         legL = npc.LegCharge.from_qflat(ci, [chargeL])
-
-        for i, site in enumerate(sites):
+        for p_st, site in zip(p_state, sites):
             try:
-                iter(p_state[i])
-                if len(p_state[i]) != site.dim:
-                    raise ValueError("p_state incompatible with local dim:" + repr(p_state[i]))
-                B = np.array(p_state[i], dtype).reshape((site.dim, 1, 1))
+                iter(p_st)
+                if len(p_st) != site.dim:
+                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
+                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             except TypeError:
                 B = np.zeros((site.dim, 1, 1), dtype)
-                B[p_state[i], 0, 0] = 1.0
+                B[p_st, 0, 0] = 1.0
+            Bs.append(B)
+        SVs = [[1.]] * (L + 1)
+        return cls.from_Bflat(sites, Bs, SVs, bc=bc, dtype=dtype, form=form, legL=legL)
+
+    @classmethod
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, form='B', legL=None):
+        """ Construct a matrix product state from a given product state.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        Bflat : iterable of numpy ndarrays
+            The matrix defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
+            (physical, virtual left/right).
+        SVs : list of 1D array | ``None``
+            The singular values on *each* bond. Should always have length `L+1`.
+            By default (``None``), set all singular values to the same value.
+            Entries out of :attr:`nontrivial_bonds` are ignored.
+        bc : {'infinite', 'finite', 'segmemt'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : type or string
+            The data type of the array entries.
+        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+            Defines the canonical form of `Bflat`. See module doc-string.
+            A single choice holds for all of the entries.
+        leg_L : LegCharge | ``None``
+            Leg charges at bond 0, which are purely conventional.
+            If ``None``, use trivial charges.
+        """
+        sites = list(sites)
+        L = len(sites)
+        Bflat = list(Bflat)
+        if len(Bflat) != L:
+            raise ValueError("Length of Bflat does not match number of sites.")
+        ci = sites[0].leg.chinfo
+        if legL is None:
+            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)]*Bflat[0].shape[1])
+        if SVs is None:
+            SVs = [np.ones(B.shape[1])/np.sqrt(B.shape[1]) for B in Bflat]
+            SVs.append(np.ones(Bflat[-1].shape[2])/np.sqrt(Bflat[-1].shape[2]))
+        Bs = []
+        for i, site in enumerate(sites):
+            B = np.array(Bflat[i], dtype)
             # calculate the LegCharge of the right leg
             legs = [site.leg, legL, None]  # other legs are known
             legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
@@ -271,7 +313,6 @@ class MPS(object):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        SVs = [[1.]] * (L + 1)
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
     @classmethod
@@ -417,7 +458,7 @@ class MPS(object):
                 forms.append('B')
             # generate `B` from `Ts`
             B = reduce(npc.outer, Ts)
-            labels_L = [lbl + 'L' for lbl in labels_L]
+            labels_L = [lbl_ + 'L' for lbl_ in labels_L]
             if len(labels_L) > 0 and len(labels_R) > 0:
                 B = B.combine_legs([labels_L, labels_R], new_axes=[0, 2], qconj=[+1, -1])
                 B.set_leg_labels(['vL', 'p', 'vR'])
