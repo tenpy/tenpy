@@ -429,7 +429,7 @@ cdef class LegCharge(object):
 
     def is_bunched(self):
         """checks wheter :meth:`bunch` would change something. """
-        return len(_find_row_differences(self.charges)) == self.block_number + 1
+        return len(_c_find_row_differences(self.charges)) == self.block_number + 1
 
     cpdef void test_contractible(LegCharge self, LegCharge other) except *:
         """Raises a ValueError if charges are incompatible for contraction with other.
@@ -595,11 +595,10 @@ cdef class LegCharge(object):
         See also
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
-        # TODO: cythonize
         if self.bunched:  # nothing to do
             return np.arange(self.block_number+1, dtype=np.intp), self
         cp = copy.copy(self)
-        idx = _find_row_differences(self.charges)
+        idx = _c_find_row_differences(self.charges)
         cp._set_charges(cp.charges[idx[:-1]])  # avanced indexing -> copy
         cp._set_slices(cp.slices[idx])
         cp.bunched = True
@@ -647,7 +646,7 @@ cdef class LegCharge(object):
         charges = self.charges.copy()
         if not self.sorted:
             charges = charges[np.lexsort(self.charges.T), :]
-        charges = charges[_find_row_differences(charges)[:-1], :]
+        charges = charges[_c_find_row_differences(charges)[:-1], :]
         return charges
 
     def __str__(self):
@@ -670,13 +669,14 @@ cdef class LegCharge(object):
         self.slices = slices
         self.ind_len = slices[-1]
 
-    def _set_block_sizes(self, block_sizes):  # TODO: cythonize
+    cpdef _set_block_sizes(self, block_sizes):
         """Set self.slices from an list of the block-sizes."""
         self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
 
-    def _get_block_sizes(self):  # TODO: cythonize
+    cpdef _get_block_sizes(self):
         """return block sizes"""
-        return self.slices[1:] - self.slices[:-1]
+        cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
+        return sl[1:] - sl[:-1]
 
     def _slice_start_stop(self):
         """yield (start, stop) for each qindex"""
@@ -1088,7 +1088,6 @@ cdef class LegPipe(LegCharge):
         self._strides = _strides
         super(LegPipe, self).__setstate__(super_state)
 
-# TODO: cythonize
 def _find_row_differences(qflat):
     """Return indices where the rows of the 2D array `qflat` change.
 
@@ -1108,3 +1107,27 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+cdef _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
+    """C-version of :func:`_find_row_differences` (which uses numpy for optimization)"""
+    # TODO: remove python version once np_conserved is also cythonized...
+    if qflat.shape[1] == 0:
+        return np.array([0, qflat.shape[0]], dtype=np.intp)
+    cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
+    cdef bint rows_equal = False
+    res = np.empty(L + 1, dtype=np.intp)
+    res[0] = 0
+    for i in range(1, L):
+        rows_equal = True
+        for j in range(M):
+            if qflat[i-1, j] != qflat[i, j]:
+                rows_equal = False
+                break
+        if not rows_equal:
+            res[n] = i
+            n += 1
+    res[n] = L
+    return res[:n+1]
