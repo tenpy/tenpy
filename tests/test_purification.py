@@ -8,8 +8,10 @@ import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import purification_mps, site
+from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
 import tenpy.linalg.np_conserved as npc
+from nose.plugins.attrib import attr
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -27,24 +29,34 @@ def test_purification_mps():
         npt.assert_array_almost_equal_nulp(E, np.zeros([L]), 100)
         C = psi.correlation_function('Sz', 'Sz')
         npt.assert_array_almost_equal_nulp(C, 0.5 * 0.5 * np.eye(L), 100)
+        coords, mutinf = psi.mutinf_two_site()
+        for (i, j), Iij in zip(coords, mutinf):
+            print repr((i, j)), Iij
+        if L > 1:
+            assert np.max(np.abs(mutinf)) < 1.e-14
 
 
+@attr('slow')
 def test_purification_TEBD(L=4):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
     for disent in [None, 'backwards', 'renyi']:
         psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
-        TEBD_params = {'chi_max': 16, 'svd_min': 1.e-13, 'disentangle': disent, 'dt': 0.1,
-                       'verbose': 30, 'N_steps': 2}
+        TEBD_params = {'trunc_params': {'chi_max': 16, 'svd_min': 1.e-13},
+                       'disentangle': disent,
+                       'dt': 0.1,
+                       'verbose': 30,
+                       'N_steps': 2}
         eng = PurificationTEBD(psi, M, TEBD_params)
         eng.run()
-        print psi.get_B(0)
         N = psi.expectation_value('Id')     # check normalization : <1> =?= 1
         npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
         eng.run_imaginary(0.2)
-        print psi.get_B(0)
         N = psi.expectation_value('Id')     # check normalization : <1> =?= 1
         npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
+        if disent == 'renyi':
+            eng.run_imaginary(0.3)
+            eng.disentangle_global()
 
 
 def test_disentangler(L=4, eps=1.e-15):
@@ -52,9 +64,7 @@ def test_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
-    TEBD_params = {'chi_max': 32, 'svd_min': 1.e-13, 'disentangle': 'renyi',
-                   'verbose': 30, 'N_steps': 3}
-    eng = PurificationTEBD(psi, M, TEBD_params)
+    eng = PurificationTEBD(psi, M, {'verbose': 30})
     theta = eng.psi.get_theta(1, 2)
     print theta[0, :, :, 0, :, :]
     # find random unitary: SVD of random matix
@@ -92,3 +102,68 @@ def test_disentangler(L=4, eps=1.e-15):
         warnings.warn("test of purification failed to find the optimum.")
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
+
+
+def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
+    """generate an initial state of random singlets, identical in P and Q"""
+    assert(L % 2 == 0)
+    # generate pairs with given maximum range, for both P and Q
+    pairs_PQ = [None, None]
+    for i in range(2):
+        pairs = pairs_PQ[i] = []
+        have = range(L)
+        while len(have) > 0:
+            i = have.pop(0)
+            js = [j for j in have[:max_range] if abs(i-j) <= max_range]
+            j = have.pop(np.random.choice(len(js)))
+            pairs.append((i, j))
+    # generate singlet mps in P and Q
+    if product_P:
+        psiP = MPS.from_product_state([site_P]*L, [0, 1]*(L//2))
+    else:
+        psiP = MPS.from_singlets(site_P, L, pairs_PQ[0])
+    psiQ = MPS.from_singlets(site_P, L, pairs_PQ[1])
+    # generate BS for PurificationMPS
+    return gen_disentangler_psi_prod(psiP, psiQ), pairs_PQ
+
+
+def gen_disentangler_psi_prod(psiP, psiQ):
+    """generate a PurificationMPS as tensorproduct (psi_P x psi_Q).
+
+    psiQ should have the same `sites` as psiP."""
+    L = psiP.L
+    Bs = []
+    for i in range(L):
+        BP = psiP.get_B(i)
+        BQ = psiQ.get_B(i)
+        B2 = npc.outer(BP, BQ.conj())
+        B2 = B2.combine_legs([['vL', 'vL*'], ['vR', 'vR*']],
+                             qconj=[+1, -1])
+        B2.ireplace_labels(['(vL.vL*)', '(vR.vR*)', 'p*'], ['vL', 'vR', 'q'])
+        Bs.append(B2)
+    Ss = [np.outer(S, S2).flatten() for S, S2 in zip(psiP._S, psiQ._S)]
+    return purification_mps.PurificationMPS(psiP.sites, Bs, Ss)
+
+
+@attr('slow')
+def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
+    psi0, pairs_PQ = gen_disentangler_psi_singlets(site_P, L, max_range)
+    psi0.test_sanity()
+    print "pairs: P", pairs_PQ[0]
+    print "pairs: Q", pairs_PQ[1]
+    print "entanglement entropy: ", psi0.entanglement_entropy() / np.log(2.)
+    coords, mutinf_pq = psi0.mutinf_two_site(legs='pq')
+    print "(i,j)=", [tuple(c) for c in coords]
+    print "PQ:", np.round(mutinf_pq/np.log(2), 3)
+    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)
+    print "Q: ", np.round(psi0.mutinf_two_site(legs='q')[1]/np.log(2), 3)
+    M = XXZChain(dict(L=L))
+    tebd_pars = dict(verbose=31, trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
+    eng = PurificationTEBD(psi0, M, tebd_pars)
+    for i in range(L):
+        eng.disentangle_global()
+    print psi0.entanglement_entropy() / np.log(2)
+    mutinf_Q = psi0.mutinf_two_site(legs='q')[1]
+    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1]/np.log(2), 3)
+    print "Q: ", np.round(mutinf_Q/np.log(2), 3)
+    assert(np.all(mutinf_Q < 1.e-10))

@@ -32,21 +32,18 @@ Contraction of some legs:
 :func:`tensordot`, :func:`outer`, :func:`inner`, :func:`trace`
 
 Linear algebra:
-:func:`svd`, :func:`pinv`, :func:`norm`
+:func:`svd`, :func:`pinv`, :func:`norm`, :func:`qr`, :func:`expm`
 
 Eigen systems:
 :func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
 
-----------------------------------------------------------------------------
-
-.. todo ::
-    QR decomposition, expm
 """
 
 from __future__ import division
 
 import numpy as np
 import scipy as sp
+import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
 import copy as copy_
 import warnings
@@ -87,6 +84,9 @@ class Array(object):
     In-place methods are indicated by a name starting with ``i``.
     (But `is_completely_blocked` is not inplace...)
 
+    .. todo :
+        rename set_leg_labels() to iset_leg_labels();
+        rename rank -> ndim  for better compatibility with numpy.ndarray
 
     Parameters
     ----------
@@ -735,6 +735,7 @@ class Array(object):
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
         res.legs.insert(i, leg)
         res._set_shape()
+        res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
         res._qdata = np.hstack(
@@ -1043,8 +1044,7 @@ class Array(object):
 
         labels = list(self.get_leg_labels())
         for a in sorted(axes, reverse=True):
-            if labels[a] is not None:
-                labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
+            labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.set_leg_labels(labels)
         return res
 
@@ -2204,9 +2204,11 @@ class Array(object):
 
         Examples
         --------
-        >>> self._split_leg_label('(a,b,(c,d))', 3)
+        >>> self._split_leg_label('(a.b.(c.d))', 3)
         ['a', 'b', '(c.d)']
         """
+        if label is None:
+            return [None] * count
         if label[0] != '(' or label[-1] != ')':
             warnings.warn("split leg with label not in Form '(...)': " + label)
             return [None] * count
@@ -2943,12 +2945,10 @@ def svd(a,
     # check arguments
     if a.rank != 2:
         raise ValueError("SVD is only defined for a 2D matrix. Use LegPipes!")
-    a_labels = a.get_leg_labels()
     if full_matrices and ((not compute_uv) or cutoff is not None):
         raise ValueError("What do you want? Check your goals!")
     labL, labR = inner_labels
-    U_labels = [a_labels[0], labL]
-    VH_labels = [labR, a_labels[1]]
+    a_labels = a.get_leg_labels()
     # ensure complete blocking
     piped_axes, a = a.as_completely_blocked()
 
@@ -2976,8 +2976,8 @@ def svd(a,
         U.split_legs(0)
     if 1 in piped_axes:
         VH.split_legs(1)
-    U.set_leg_labels(U_labels)
-    VH.set_leg_labels(VH_labels)
+    U.set_leg_labels([a_labels[0], labL])
+    VH.set_leg_labels([labR, a_labels[1]])
     return U, S, VH
 
 
@@ -3205,11 +3205,11 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     """
     charge_sector = a.chinfo.make_valid(charge_sector).reshape((a.chinfo.qnumber, ))
     if a.rank != 2 or a.shape[0] != a.shape[1]:
-        raise ValueError("can only diagonalize a matrix!")
-    if np.any(a.qtotal != a.chinfo.make_valid()):
-        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
-    ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
+        raise ValueError("expect a square matrix!")
     a.legs[0].test_contractible(a.legs[1])
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise ValueError("Non-trivial qtotal -> Nilpotent. Not diagonizable!?")
+    ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
 
     # find the block correspoding to `charge_sector` in `a`
@@ -3251,6 +3251,104 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         return W, V
     else:
         return W
+
+
+def expm(a):
+    """Use scipy.linalg.expm to calculate the matrix exponential of a square matrix.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        A square matrix to be exponentiated
+
+    Returns
+    -------
+    exp_a : :class:`Array`
+        The matrix exponential ``expm(a)``, calculated using scipy.linalg.expm.
+        Same legs/labels as `a`.
+    """
+    if a.rank != 2 or a.shape[0] != a.shape[1]:
+        raise ValueError("expect a square matrix!")
+    a.legs[0].test_contractible(a.legs[1])
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise NotImplementedError("A*A has different qtotal than A; nilpotent matrix")
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
+
+    res = diag(1., a.legs[0], dtype=a.dtype)
+    res.labels = a.labels.copy()
+    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+        exp_block = scipy.linalg.expm(block)  # main work
+        qi = qindices[0]  # `res` has all diagonal blocks,
+        # so res._qdata = [[0, 0], [1, 1], [2, 2]...]
+        res._data[qi] = exp_block  # replace idendity block
+    if len(piped_axes) > 0:
+        res = res.split_legs(piped_axes)  # revert the permutation in the axes
+    return res
+
+
+def qr(a, mode='reduced', inner_labels=[None, None]):
+    r"""Q-R decomposition of a matrix.
+
+    Decomposition such that ``A == npc.tensordot(q, r, axes=1)`` up to numerical rounding errors.
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        A square matrix to be exponentiated, shape ``(M,N)``.
+    mode : 'reduced', 'complete', 'full'
+        'reduced': return `q` and `r` with shapes (M,K) and (K,N), where K=min(M,N)
+        'complete': return `q` with shape (M,M).
+    inner_labels: [{str|None}, {str|None}]
+        The first label is used for ``Q.legs[1]``, the second for ``R.legs[0]``.
+
+    Returns
+    -------
+    q : :class:`Array`
+        If `mode` is 'complete', a unitary matrix.
+        For `mode` 'reduced' such thatOtherwise such that
+        :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`
+    r : :class:`Array`
+        Upper triangular matrix if both legs of A are sorted by charges;
+        Otherwise a simple transposition (performed when sorting by charges) brings it to
+        upper triangular form.
+    """
+    if a.rank != 2:
+        raise ValueError("expect a matrix!")
+    a_labels = a.get_leg_labels()
+    label_Q, label_R = inner_labels
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
+    q_data = []
+    r_data = []
+    i0 = 0
+    a_leg0 = a.legs[0]
+    inner_leg_mask = np.zeros(a_leg0.ind_len, dtype=np.bool_)
+    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+        q_block, r_block = np.linalg.qr(block, mode)
+        q_data.append(q_block)
+        r_data.append(r_block)
+        q1, q2 = qindices
+        i0 = a_leg0.slices[q1]
+        inner_leg_mask[i0:i0+q_block.shape[1]] = True
+    # map qindices
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
+    q = Array([a_leg0, inner_leg.conj()], a.dtype)
+    q._data = q_data
+    q._qdata = a._qdata.copy()
+    q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
+    r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
+    r._data = r_data
+    r._qdata = a._qdata.copy()
+    r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
+    if len(piped_axes) > 0:  # revert the permutation in the axes
+        if 0 in piped_axes:
+            q = q.split_legs(0)
+        if 1 in piped_axes:
+            r = r.split_legs(1)
+    q.set_leg_labels([a_labels[0], label_Q])
+    r.set_leg_labels([label_R, a_labels[1]])
+    return q, r
 
 
 def to_iterable_arrays(array_list):
@@ -3680,10 +3778,11 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
 def _eig_worker(hermitian, a, sort, UPLO='L'):
     """worker for ``eig``, ``eigh``"""
     if a.rank != 2 or a.shape[0] != a.shape[1]:
-        raise ValueError("can only diagonalize a matrix!")
-    if np.any(a.qtotal != a.chinfo.make_valid()):
-        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
+        raise ValueError("expect a square matrix!")
     a.legs[0].test_contractible(a.legs[1])
+    if np.any(a.qtotal != a.chinfo.make_valid()):
+        raise ValueError("Non-trivial qtotal -> Nilpotent. Not diagonizable!?")
+
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
 
     dtype = np.float if hermitian else np.complex
@@ -3710,10 +3809,10 @@ def _eig_worker(hermitian, a, sort, UPLO='L'):
 def _eigvals_worker(hermitian, a, sort, UPLO='L'):
     """worker for ``eigvals``, ``eigvalsh``"""
     if a.rank != 2 or a.shape[0] != a.shape[1]:
-        raise ValueError("can only diagonalize a matrix!")
+        raise ValueError("expect a square matrix!")
     a.legs[0].test_contractible(a.legs[1])
     if np.any(a.qtotal != a.chinfo.make_valid()):
-        raise ValueError("can only diagonalize block-diagonal matrix with `qtotal` 0!")
+        raise ValueError("Non-trivial qtotal -> Nilpotent. Not diagonizable!?")
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
 
     dtype = np.float if hermitian else np.complex

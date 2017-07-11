@@ -44,11 +44,6 @@ def run_example(filename='npc_intro'):
 @attr('example')  # allow to skip the examples with ``$> nosetest -a '!example'``
 @attr('slow')
 def test_examples():
-    """test generator to run all *.py files in ``ex_dir``.
-
-    Generator, which yields ``function, arguments...``.
-    `nosetests` then runs one test for each of them like ``function(arguments...)``
-    """
     for fn in os.listdir(ex_dir):
         if fn[-3:] == '.py' and fn not in exclude:
             yield run_example, fn[:-3]

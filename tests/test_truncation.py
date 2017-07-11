@@ -9,7 +9,7 @@ from tenpy.algorithms import truncation
 
 
 def test_truncate():
-    S = np.exp(-np.arange(20) - 0.1 * np.random.rand(20))
+    S = np.exp(-np.arange(15) - 0.1 * np.random.rand(15))
     np.random.shuffle(S)
     # default arguments
     pars = dict(verbose=1)

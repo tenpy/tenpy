@@ -9,7 +9,7 @@ import numpy as np
 from .lattice import Chain
 from ..networks.site import SpinSite
 from .model import CouplingModel, NearestNeighborModel, MPOModel
-from ..tools.params import get_parameter
+from ..tools.params import get_parameter, unused_parameters
 from ..tools.misc import any_nonzero
 
 __all__ = ['SpinChain']
@@ -69,7 +69,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
             else:
                 conserve = None
             if verbose >= 1:
-                print str(self.__class__) + ": set conserve to " , conserve
+                print str(self.__class__) + ": set conserve to ", conserve
+        unused_parameters(model_param, self.__class__)
         # 1) define Site and lattice
         site = SpinSite(S, conserve)
         lat = Chain(L, site, bc_MPS=bc_MPS)

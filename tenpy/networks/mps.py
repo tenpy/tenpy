@@ -25,7 +25,7 @@ roundoff errors).
 
 For efficient simulations, it is crucial that the MPS is in a 'canonical form'.
 The different forms and boundary conditions are easiest described in Vidal's
-:math:`\Gamma, \Lambda` notation [1]_.
+:math:`\Gamma, \Lambda` notation [Vidal2004]_.
 
 Valid MPS boundary conditions (not to confuse with `bc_coupling` of
 :class:`tenpy.models.model.CouplingModel`)  are the following:
@@ -69,7 +69,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     :meth:`canonicalize` (or sub-functions) before using algorithms.
 ======== ========== =======================================================================
 
-.. todo ::
+.. todo :
 
     - expectaion values
     - canonicalize()
@@ -91,6 +91,12 @@ from ..tools.math import lcm, speigs, entropy
 
 class MPS(object):
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
+
+    .. todo :
+        Somewhere keep track of the norm of the wave function?
+        Even if we don't use it in most cases,
+        it might be useful e.g. for imaginary time evolution (giving the partition function)
+        or for calculating overlaps. Tricky for infinite boundary conditions; keep norm per site?
 
     Parameters
     ----------
@@ -155,6 +161,7 @@ class MPS(object):
 
     # valid boundary conditions. Don't overwrite this!
     _valid_bc = ('finite', 'segment', 'infinite')
+    _p_label = ['p']
 
     def __init__(self, sites, Bs, SVs, bc='finite', form='B'):
         self.sites = list(sites)
@@ -230,8 +237,7 @@ class MPS(object):
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
-            Bond charges at bond 0, which are purely conventional.
-
+            Leg charge at bond 0, which are purely conventional.
         """
         sites = list(sites)
         L = len(sites)
@@ -242,16 +248,59 @@ class MPS(object):
         Bs = []
         chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
         legL = npc.LegCharge.from_qflat(ci, [chargeL])
-
-        for i, site in enumerate(sites):
+        for p_st, site in zip(p_state, sites):
             try:
-                iter(p_state[i])
-                if len(p_state[i]) != site.dim:
-                    raise ValueError("p_state incompatible with local dim:" + repr(p_state[i]))
-                B = np.array(p_state[i], dtype).reshape((site.dim, 1, 1))
+                iter(p_st)
+                if len(p_st) != site.dim:
+                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
+                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             except TypeError:
                 B = np.zeros((site.dim, 1, 1), dtype)
-                B[p_state[i], 0, 0] = 1.0
+                B[p_st, 0, 0] = 1.0
+            Bs.append(B)
+        SVs = [[1.]] * (L + 1)
+        return cls.from_Bflat(sites, Bs, SVs, bc=bc, dtype=dtype, form=form, legL=legL)
+
+    @classmethod
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, form='B', legL=None):
+        """ Construct a matrix product state from a given product state.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        Bflat : iterable of numpy ndarrays
+            The matrix defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
+            (physical, virtual left/right).
+        SVs : list of 1D array | ``None``
+            The singular values on *each* bond. Should always have length `L+1`.
+            By default (``None``), set all singular values to the same value.
+            Entries out of :attr:`nontrivial_bonds` are ignored.
+        bc : {'infinite', 'finite', 'segmemt'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : type or string
+            The data type of the array entries.
+        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+            Defines the canonical form of `Bflat`. See module doc-string.
+            A single choice holds for all of the entries.
+        leg_L : LegCharge | ``None``
+            Leg charges at bond 0, which are purely conventional.
+            If ``None``, use trivial charges.
+        """
+        sites = list(sites)
+        L = len(sites)
+        Bflat = list(Bflat)
+        if len(Bflat) != L:
+            raise ValueError("Length of Bflat does not match number of sites.")
+        ci = sites[0].leg.chinfo
+        if legL is None:
+            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)]*Bflat[0].shape[1])
+        if SVs is None:
+            SVs = [np.ones(B.shape[1])/np.sqrt(B.shape[1]) for B in Bflat]
+            SVs.append(np.ones(Bflat[-1].shape[2])/np.sqrt(Bflat[-1].shape[2]))
+        Bs = []
+        for i, site in enumerate(sites):
+            B = np.array(Bflat[i], dtype)
             # calculate the LegCharge of the right leg
             legs = [site.leg, legL, None]  # other legs are known
             legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
@@ -264,7 +313,6 @@ class MPS(object):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        SVs = [[1.]] * (L + 1)
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
     @classmethod
@@ -328,7 +376,8 @@ class MPS(object):
         return res
 
     @classmethod
-    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0, bc='finite'):
+    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0,
+                      bc='finite'):
         """Create an MPS of entangled singlets.
 
         Parameters
@@ -338,13 +387,13 @@ class MPS(object):
         L : int
             The number of sites.
         pairs : list of (int, int)
-            Pairs of sites to be entangled; the returned MPS will have a singlet 
+            Pairs of sites to be entangled; the returned MPS will have a singlet
             for each pair in `pairs`.
         up, down : int | str
             A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
             ``up`` and ``down`` give state indices or labels defined on the corresponding site.
         lonely : list of int
-            Sites which are not included into a singlet pair. Useful to generate singlet pairs for 
+            Sites which are not included into a singlet pair. Useful to generate singlet pairs for
         lonely_state : int | str
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segmemt'}
@@ -356,9 +405,9 @@ class MPS(object):
             An MPS representing singlets on the specified bonds.
         """
         # sort each pair s.t. i < j
-        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs] 
+        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
         # sort by smaller site of the pair
-        pairs.sort(key=lambda x : x[0])
+        pairs.sort(key=lambda x: x[0])
         pairs.append((L, L))
         lonely = sorted(lonely) + [L]
         # generate building block tensors
@@ -409,7 +458,7 @@ class MPS(object):
                 forms.append('B')
             # generate `B` from `Ts`
             B = reduce(npc.outer, Ts)
-            labels_L = [lbl + 'L' for lbl in labels_L]
+            labels_L = [lbl_ + 'L' for lbl_ in labels_L]
             if len(labels_L) > 0 and len(labels_R) > 0:
                 B = B.combine_legs([labels_L, labels_R], new_axes=[0, 2], qconj=[+1, -1])
                 B.set_leg_labels(['vL', 'p', 'vR'])
@@ -661,7 +710,7 @@ class MPS(object):
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
-        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and 
+        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and
         :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`rho_A = tr_B(\rho)`.
         The von-Neumann entanglement entropy is defined as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
@@ -712,7 +761,7 @@ class MPS(object):
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
         r"""Calculate entanglement entropy for general geometry of the bipartition.
 
-        This function is similar as :meth:`entanglement_entropy`, 
+        This function is similar as :meth:`entanglement_entropy`,
         but for more general geometry of the region `A` to be a segment of a *few* sites.
 
         This is acchieved by explicitly calculating the reduced density matrix of `A`
@@ -724,11 +773,11 @@ class MPS(object):
             Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
         first_site : ``None`` | (iterable of) int
             Calculate the entropy for segments starting at these sites.
-            ``None`` defaults to ``range(L-len(segment))`` for finite 
+            ``None`` defaults to ``range(L-segment[-1])`` for finite
             or `range(L)` for infinite boundary conditions.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy, 
+            `n=1` (default) is the ususal von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
 
         Returns
@@ -736,11 +785,11 @@ class MPS(object):
         entropies : 1D ndarray
             ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
         """
-        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i` 
+        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i`
         # of consecutive sites (in our notation, ``segment = range(La)``)
         # To get the entanglement entropy, diagonalize:
         #     --theta---
-        #       | | | 
+        #       | | |
         #     --theta*--
         #  Diagonalization is O(chi^6), compared to O(d^{3*La})
         segment = np.sort(segment)
@@ -749,8 +798,8 @@ class MPS(object):
                 first_site = range(0, self.L - segment[-1])
             else:
                 first_site = range(self.L)
-        rho_lbl = ['p'+str(k) for k in range(len(segment))]
-        comb_legs = [rho_lbl, [lbl+'*' for lbl in rho_lbl]]
+        comb_legs = [self._get_p_labels(len(segment), False),
+                     self._get_p_labels(len(segment), True)]
         res = []
         for i0 in first_site:
             rho = self.get_rho_segment(segment+i0)
@@ -793,11 +842,63 @@ class MPS(object):
                 rho = npc.tensordot(rho, B.conj(), axes=('vR*', 'vL*'))
             else:
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
-                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'] , ['vL*', 'p*']))
+                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
         B = self.get_B(segment[-1])
         rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
         return rho
+
+    def mutinf_two_site(self, max_range=None, n=1):
+        """Calculate the two-site mutual information :math:`I(i:j)`.
+
+        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`,
+        where :math:`S(i)` is the single site entropy on site :math:`i`
+        and :math:`S(i,j)` the two-site entropy on sites :math:`i,j`.
+
+        Parameters
+        ----------
+        max_range : int
+            Maximal distance ``|i-j|`` for which the mutual information should be calculated.
+            ``None`` defaults to `L-1`.
+        n : float
+            Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
+
+        Returns
+        -------
+        coords : 2D array
+            Coordinates for the mutinf array.
+        mutinf : 1D array
+            ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
+            sites ``i, j = coords[k]``.
+        """
+        #  Basically the code of get_rho_segment and entanglement_entropy,
+        #  but optimized to run in O(L^2)
+        if max_range is None:
+            max_range = self.L
+        S_i = self.entanglement_entropy_segment(n=n)  # single-site entropy
+        legs_ij = self._get_p_labels(2, False), self._get_p_labels(2, True)
+        # = (['p0', 'p1'], ['p0*', 'p1*'])
+        contr_legs = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
+                      ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        mutinf = []
+        coord = []
+        for i in range(self.L):
+            rho = self.get_theta(i, 1)
+            rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
+            jmax = i + max_range + 1
+            if self.finite:
+                jmax = min(jmax, self.L)
+            for j in range(i+1, jmax):
+                B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
+                rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
+                rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
+                rho_ij = rho_ij.combine_legs(legs_ij, qconj=[+1, -1])
+                S_ij = entropy(npc.eigvalsh(rho_ij), n)
+                mutinf.append(S_i[i] + S_i[j % self.L] - S_ij)
+                coord.append((i, j))
+                if j + 1 < jmax:
+                    rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
+        return np.array(coord), np.array(mutinf)
 
     def overlap(self, other):
         """Compute overlap :math:`<self|other>`.
@@ -824,7 +925,7 @@ class MPS(object):
         """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
-        For example the contraction for a two-site (`n`=2) operator on site `i` would look like::
+        For example the contraction for a two-site (`n` = 2) operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--.
             |          |     |     |       |
@@ -885,15 +986,16 @@ class MPS(object):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
 
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
-                                                                                      axes)
-        vLvR_axes_p = ('vL', 'vR') + tuple(axes_p)
+        ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
+        ax_p = ['p'+str(k) for k in range(n)]
+        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
         E = []
         for i in sites:
             op = self.get_op(ops, i)
+            op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta = self.get_theta(i, n)
-            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:]])
-            E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+            C = npc.tensordot(op, theta, axes=[ax_pstar, ax_p])  # C has same labels as theta
+            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()]*2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def correlation_function(self,
@@ -974,13 +1076,13 @@ class MPS(object):
         C : 2D ndarray
             The correlation function ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``,
             where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
-            If opstr is given, it gives (for ``opstr_on_first=True``):
+            If `opstr` is given, it gives (for ``str_on_first=True``):
 
             - For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
             - For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
             - For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
 
-            The condition ``<= r`` is replaced by a strict ``< r``, if ``opstr_on_first=False``.
+            The condition ``<= r`` is replaced by a strict ``< r``, if ``str_on_first=False``.
         """
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(ops1, ops2, sites1,
                                                                             sites2, opstr)
@@ -1012,6 +1114,180 @@ class MPS(object):
                     # exchange ops1 and ops2 : they commute on different sites,
                     # but we apply opstr after op1 (using the last argument = False)
         return np.real_if_close(C)
+
+    def norm_test(self):
+        """Check that self is in canonical form.
+
+        Returns
+        -------
+        norm_error: array, shape (L, 2)
+            For each site the norm error to the left and right.
+            The error ``norm_error[i, 0]`` is defined as the norm-difference between
+            the following networks::
+
+                |   --s[i]--B[i]--.       --s[i]--.
+                |           |     |    vs         |
+                |   --s[i]--B*[i]-.       --s[i]--.
+
+        """
+        err = np.empty((self.L, 2), dtype=np.float)
+        lbl_R = (self._get_p_label(0, star=False) + ['vR'],
+                 self._get_p_label(0, star=True) + ['vR*'])
+        lbl_L = (self._get_p_label(0, star=False) + ['vL'],
+                 self._get_p_label(0, star=True) + ['vL*'])
+        for i in range(self.L):
+            th = self.get_theta(i, 1)
+            rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
+            S = self.get_SL(i)
+            if isinstance(S, npc.Array):  # during DMRG with mixer, S may be a 2D npc.Array
+                if S.rank != 2:
+                    raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
+                rho_L2 = npc.tensordot(S, S.conj(), axes=['vR', 'vR*'])
+            else:
+                rho_L2 = npc.diag(S**2, rho_L.get_leg('vL'), dtype=rho_L.dtype)
+            err[i, 0] = npc.norm(rho_L - rho_L2)
+            rho_R = npc.tensordot(th, th.conj(), axes=lbl_L)
+            S = self.get_SR(i)
+            if isinstance(S, npc.Array):
+                if S.rank != 2:
+                    raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
+                rho_R2 = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            else:
+                rho_R2 = npc.diag(S**2, rho_R.get_leg('vR'), dtype=rho_L.dtype)
+            err[i, 1] = npc.norm(rho_R - rho_R2)
+        return err
+
+    def canonical_form_finite(self):
+        """Bring self into canonical 'B' form, calculate singular values.
+
+        Works only for finite/segment boundary conditions.
+        It only uses the very left singular values for `segment` boundary conditions,
+        and no singular values at all for `finite` boundary conditions.
+        The ``self._B`` are taken as they are, ignoring any canonical form labels `A`, `B`, `C`.
+
+        .. todo :
+            Should we try to avoid carrying around the total charge of the B matrices?
+            Also, we need a 'canonical_form_infinite', such that we can define canonical_form()
+        """
+        assert(self.finite)
+        L = self.L
+        assert(L > 2)  # otherwise implement yourself...
+        # normalize very left singular values
+        S = self.get_SL(0)
+        if self.bc == 'segment':
+            if S is None:
+                raise ValueError("Need S for segment boundary conditions.")
+            self.set_SL(0, S/np.linalg.norm(S))  # must have correct singular values to the left...
+            S = self.get_SR(L-1)
+            self.set_SR(L-1, S/np.linalg.norm(S))
+        else:   # bc == 'finite':
+            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
+            self.set_SR(L-1, np.array([1.]))
+        # sweep from left to right to bring it into left canonical form.
+        M = self.get_B(0, None)
+        if self.bc == 'segment':
+            M.iscale_axis(self.get_SL(0), axis='vL')
+        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+        # Q = unitary, R has to be multiplied to the right
+        self.set_B(0, Q.split_legs(0), form='A')
+        for i in range(1, L-1):
+            M = self.get_B(i, None)
+            M = npc.tensordot(R, M, axes=['vR', 'vL'])
+            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
+            self.set_B(i, Q.split_legs(0), form='A')
+        M = self.get_B(L-1, None)
+        M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        # sweep from right to left, calculating all the singular values
+        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                          inner_labels=['vR', 'vL'])
+        S = S/np.linalg.norm(S)  # normalize
+        self.set_SL(L-1, S)
+        self.set_B(L-1, V.split_legs(1), form='B')
+        for i in range(L-2, -1, -1):
+            M = self.get_B(i, 'A')
+            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              inner_labels=['vR', 'vL'])
+            S = S/np.linalg.norm(S)  # normalize
+            self.set_SL(i, S)
+            self.set_B(i, V.split_legs(1), form='B')
+        # done: just discard the U on the left (trivial phase / norm for finite bc,
+        # and just re-shuffling of the states left for 'segment' bc
+
+    def correlation_length(self, num_ev=1, charge_sector=None, tol_ev0=1.e-8):
+        r"""calculate the correlation length by diagonalizing the transfer matrix.
+
+        Works only for infinite MPS, where the transfer matrix is a useful concept.
+        For an MPS, any correlation function splits into :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
+        with some parts left and right and the :math:`j-i-1`-th power of the transfer matrix in
+        between. The largest eigenvalue is 1 and gives the dominant contribution of
+        :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`, and the second largest one
+        gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
+        Thus :math:`\lambda_2 = exp(-1/\xi)`.
+        Assumes that `self` is in canonical form.
+
+        .. todo :
+            might want to insert OpString.
+
+        Parameters
+        ----------
+        num_ev : int
+            We look for the `num_ev`+1 largest eigenvalues.
+        charge_sector : ``None`` | 0 | charges
+            The charge sector of the transfer matrix,
+            in which we look for the most dominant eigenvalues.
+
+        Returns
+        -------
+        xi : float | 1D array
+            for num_ev =1, return just the correlation length,
+            otherwise an array of the `num_ev` largest correlation legths.
+        """
+        T = TransferMatrix(self, self, charge_sector=charge_sector)
+        E, V = T.eigenvectors(num_ev + 1, which='LM')
+        E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
+        if abs(E[0] - 1.) > tol_ev0:
+            raise ValueError("largest eigenvalue not one: was not in canonical form!")
+        if len(E) < 2:
+            return 0.  # only a single eigenvector: zero correlation length
+        if num_ev == 1:
+            return -1./np.log(abs(E[1])) * self.L
+        return -1./np.log(np.abs(E[1:num_ev+1])) * self.L
+
+    def add(self, other, alpha, beta):
+        """return an MPS which represents `alpha self + beta others`
+
+        Parameters
+        ----------
+        other : :class:`MPS`
+            Another MPS of the same length to be added with self.
+        alpha, beta : complex float
+            Prefactors for self and other. We calculate
+            ``alpha * |self> + beta * |other>``
+        """
+        L = self.L
+        assert(other.L == L and L >= 2)  # (one could generalize this function...)
+        assert(self.bc == 'finite')  # not clear for segment: are left states orthogonal?
+        # TODO: should gauge qtotal to zero.
+        legs = ['vL', 'vR'] + self._p_label
+        # alpha and beta appera only on the first site
+        Bs = [npc.grid_concat([[alpha*self.get_B(0).transpose(legs),
+                                beta*other.get_B(0).transpose(legs)]], axes=[0, 1])]
+        for i in range(1, L-1):
+            B1 = self.get_B(i).transpose(legs)
+            B2 = other.get_B(i).transpose(legs)
+            grid = [[B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')]+B1.legs[2:])],
+                    [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')]+B1.legs[2:]), B2]]
+            Bs.append(npc.grid_concat(grid, [0, 1]))
+        Bs.append(npc.grid_concat([[self.get_B(L-1).transpose(legs)],
+                                   [other.get_B(L-1).transpose(legs)]], axes=[0, 1]))
+
+        Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
+        psi = MPS(self.sites, Bs, Ss, 'finite', None)
+        # bring to canonical form, calculate Ss
+        psi.canonical_form_finite()
+        return psi
 
     def __str__(self):
         """Some status information about the MPS"""
@@ -1114,9 +1390,28 @@ class MPS(object):
     def _replace_p_label(self, A, k):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
 
-        Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
-        implement this function."""
-        return A.replace_label('p', 'p' + str(k))
+        This is done for each of the 'physical labels' in :attr:`_p_label`.
+        With a clever use of this function, the re-implementation of various functions
+        (like get_theta) in derived classes with multiple legs per site can be avoided.
+        """
+        return A.replace_labels(self._p_label, self._get_p_label(k, False))
+
+    def _get_p_label(self, k, star=False):
+        """return list of physical label(s) with additional str(k) and possibly a '*'."""
+        if star == 'both':
+            return [lbl + str(k) for lbl in self._p_label] + \
+                   [lbl + str(k)+'*' for lbl in self._p_label]
+        elif star:
+            return [lbl + str(k)+'*' for lbl in self._p_label]
+        else:
+            return [lbl + str(k) for lbl in self._p_label]
+
+    def _get_p_labels(self, ks, star=False):
+        """join ``self._get_p_label(k) for k in range(ks)`` to a single list."""
+        res = []
+        for k in range(ks):
+            res.extend(self._get_p_label(k, star))
+        return res
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
@@ -1129,16 +1424,16 @@ class MPS(object):
             else:
                 sites = range(L)
         sites = to_iterable(sites)
-        th_labels = ['vL', 'vR'] + ['p' + str(j) for j in range(n)]
         if axes is None:
             if n == 1:
                 axes = (['p'], ['p*'])
             else:
-                axes = (th_labels[2:], [lbl + '*' for lbl in th_labels[2:]])
-        axes_p, axes_pstar = axes
-        if len(axes_p) != n or len(axes_pstar) != n:
-            raise ValueError("Len of axes does not match operator n=" + len(n))
-        return ops, sites, n, th_labels, axes
+                axes = (self._get_p_labels(n), self._get_p_labels(n, True))
+        # check number of axes
+        ax_p, ax_pstar = axes
+        if len(ax_p) != n or len(ax_pstar) != n:
+            raise ValueError("Len of axes does not match to n-site operator with n=" + str(n))
+        return ops, sites, n, axes
 
     def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
         """get default arguments of self.correlation_function()"""
@@ -1325,7 +1620,7 @@ class MPSEnvironment(object):
         -------
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+            with labels ``'vR*', 'vR'`` for `bra`, `ket`.
         """
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
@@ -1356,7 +1651,7 @@ class MPSEnvironment(object):
         -------
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+            with labels ``'vL*', 'vL'`` for `bra`, `ket`.
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
@@ -1498,22 +1793,23 @@ class MPSEnvironment(object):
         >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self.bra._expectation_value_args(
-            ops, sites, axes)
-        vLvR_axes_p = ('vR*', 'vL*') + tuple(axes_p)
+        ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
+        ax_p = ['p'+str(k) for k in range(n)]
+        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
         E = []
         for i in sites:
             LP = self.get_LP(i, store=True)
             RP = self.get_RP(i, store=True)
-            op = ops[i % len(ops)]
-            if type(op) == str:
-                op = self.ket.sites[i].get_op(op)
-            C = self.bra.get_theta(i, n)  # vL, vR, p0, p1, ...
-            C = npc.tensordot(op, C, axes=[axes_pstar, th_labels[2:]])  # axes_p + (vL, vR)
+            op = self.ket.get_op(ops, i)
+            op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
+            C = self.ket.get_theta(i, n)
+            th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
+            C = npc.tensordot(op, C, axes=[ax_pstar, ax_p])  # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
-            theta_bra = self.bra.get_theta(i, n)  # th_labels == (vL, vR, p0, p1, ...
-            E.append(npc.inner(theta_bra, C, axes=[th_labels, vLvR_axes_p], do_conj=True))
+            C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
+            theta_bra = self.bra.get_theta(i, n)
+            E.append(npc.inner(theta_bra, C, axes=[th_labels]*2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def _contract_LP(self, i, LP):
@@ -1625,30 +1921,30 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.transpose = transpose
         if not transpose:
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                ket.get_B(i, form='B').itranspose(['vL', 'p', 'vR'])
                 for i in range(shift_ket, shift_ket + L)
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                bra.get_B(i, form='B').conj().itranspose(['p*', 'vR*', 'vL*'])
                 for i in range(shift_bra, shift_bra + L)
             ]
         else:
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                ket.get_B(i, form='A').itranspose(['vR', 'p', 'vL'])
                 for i in range(shift_ket, shift_ket + L)
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                bra.get_B(i, form='A').conj().itranspose(['p*', 'vL*', 'vR*'])
                 for i in range(shift_bra, shift_bra + L)
             ]
         self.chinfo = bra.chinfo
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
-        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N]))
+        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
         self._pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1)
         if transpose:
             self._pipe = self._pipe.conj()
-        self.shape = (self._pipe_L.ind_len, self._pipe_R.ind_len)
+        self.shape = (self._pipe.ind_len, self._pipe.ind_len)
         self.dtype = np.promote_types(bra.dtype, ket.dtype)
         self.matvec_count = 0
         self._charge_sector = None
@@ -1656,7 +1952,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.charge_sector = charge_sector  # uses the setter
 
     @property
-    def charge_sector(self, value):
+    def charge_sector(self):
         """Charge sector of `RP` (`LP` for `transpose) which is used for `matvec` with ndarray."""
         return self._charge_sector
 
@@ -1675,7 +1971,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
             self.shape = (chi2, chi2)
             self._mask = np.ones([chi2], dtype=np.bool)
 
-    def matvec(self, vec):
+    def _matvec(self, vec):
         """Apply the transfer matrix to `vec`.
 
         Parameters
@@ -1710,17 +2006,17 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         We return it the same way as we got it (with the same legs and charges)."""
         pipe = None
         if vec.rank == 1:
-            vec.split_legs(0)
+            vec = vec.split_legs(0)
             pipe = self._pipe
         qtotal = vec.qtotal
         legs = vec.legs
         # the actual work
         if not self.transpose:
-            for N, M in itertools.izip(self._bra_N, self._ket_M):
+            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
         else:
-            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
+            for N, M in itertools.izip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
         if np.any(self.qtotal != 0):
@@ -1747,7 +2043,9 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         """
         full_vec = np.zeros(self._pipe.ind_len)
         full_vec[self._mask] = vec
-        return npc.Array.from_ndarray(full_vec, [self._pipe])
+        res = npc.Array.from_ndarray(full_vec, [self._pipe])
+        res.set_leg_labels(['(vL.vL*)'])
+        return res
 
     def _npc_to_flat(self, npc_vec):
         """Convert npc Array with qtotal = self.charge_sector into ndarray.

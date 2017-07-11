@@ -90,6 +90,8 @@ class Engine(object):
     _trunc_err_bonds : list of :class:`~tenpy.algorithms.truncation.TruncationError`
         The *local* truncation error introduced at each bond, ignoring the errors at other bonds.
         The `i`-th entry is left of site `i`.
+    _update_index : None | (int, int)
+        The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
 
     def __init__(self, psi, model, TEBD_params):
@@ -105,6 +107,12 @@ class Engine(object):
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L+1)]
+        self._update_index = None
+
+    def __del__(self):
+        from ..tools.params import unused_parameters
+        unused_parameters(self.TEBD_params['trunc_params'], "TEBD trunc_params")
+        unused_parameters(self.TEBD_params, "TEBD")
 
     @property
     def trunc_err_bonds(self):
@@ -223,9 +231,11 @@ class Engine(object):
                     DeltaS = np.abs(Sold - S)
                     Sold = S
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
-                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, S={S:.10f}, time simulated: {time:.1f} s")
+                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, " +
+                           "S={S:.10f}, time simulated: {time:.1f} s")
                     print msg.format(step=step, t=self.evolved_time, chi=max(self.psi.chi),
-                            dE=DeltaE, dS=DeltaS, E=E.real, S=S.real, time=time.time() - start_time,)
+                                     dE=DeltaE, dS=DeltaS, E=E.real, S=S.real,
+                                     time=time.time() - start_time,)
         # done
 
     @staticmethod
@@ -373,13 +383,13 @@ class Engine(object):
         trunc_err = TruncationError()
         order = self._U_param['order']
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
-            trunc_err += self.update_step(self._U[U_idx_dt], odd)
+            trunc_err += self.update_step(U_idx_dt, odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
-    def update_step(self, U, odd):
+    def update_step(self, U_idx_dt, odd):
         """Updates either even *or* odd bonds in unit cell.
 
         Depending on the choice of p, this function updates all even (``E``, odd=False,0)
@@ -394,13 +404,13 @@ class Engine(object):
         |       |  O |    |  O |    |  O |    |
         |       |----|    |----|    |----|    |
 
-        Note that boundary conditions are taken care of by having ``U[0] = None``
-        or otherwise.
+        Note that finite boundary conditions are taken care of by having ``Us[0] = None``.
 
         Parameters
         ----------
-        U : list of :class:`~tenpy.linalg.np_conserved.Array`
-            The list of bond operators with which we update the MPS.
+        U_idx_dt : int
+            Time step index in ``self._U``,
+            evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
         odd : bool/int
             Indication of whether to update even (``odd=False,0``) or even (``odd=True,1``) sites
 
@@ -410,15 +420,18 @@ class Engine(object):
             The error of the represented state which is introduced due to the truncation
             during this sequence of update steps.
         """
+        Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
-            if U[i_bond] is None:
+            if Us[i_bond] is None:
                 if self.verbose >= 10:
                     print "Skip U_bond element:", i_bond
                 continue  # handles finite vs. infinite boundary conditions
             if self.verbose >= 10:
                 print "Apply U_bond element", i_bond
-            trunc_err += self.update_bond(i_bond, U[i_bond])
+            self._update_index = (U_idx_dt, i_bond)
+            trunc_err += self.update_bond(i_bond, Us[i_bond])
+        self._update_index = None
         return trunc_err
 
     def update_bond(self, i, U_bond):
@@ -483,6 +496,91 @@ class Engine(object):
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
+        return trunc_err
+
+    def update_imag(self, N_steps):
+        """perform an update suitable for imaginary time evolution.
+
+        Instead of the even/odd brick structure used for ordinary TEBD,
+        we 'sweep' from left to right and right to left, similar as DMRG.
+        Thanks to that, we are actually able to preserve the canonical form.
+
+        .. todo :
+            works currently only for second order, recovering the initial state.
+        """
+        trunc_err = TruncationError()
+        order = self._U_param['order']
+        # allow only second order evolution
+        assert(order == 2)
+        U_idx_dt = 0  # always with dt=0.5
+        assert(self.suzuki_trotter_time_steps(order)[U_idx_dt] == 0.5)
+        assert(self.psi.finite)  # finite or segment bc
+        Us = self._U[U_idx_dt]
+        for _ in range(N_steps):
+            # sweep right
+            for i_bond in xrange(self.psi.L):
+                if Us[i_bond] is None:
+                    if self.verbose >= 10:
+                        print "Skip U_bond element:", i_bond
+                    continue  # handles finite vs. infinite boundary conditions
+                if self.verbose >= 10:
+                    print "Apply U_bond element", i_bond
+                self._update_index = (U_idx_dt, i_bond)
+                trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
+            # sweep left
+            for i_bond in xrange(self.psi.L-1, -1, -1):
+                if Us[i_bond] is None:
+                    if self.verbose >= 10:
+                        print "Skip U_bond element:", i_bond
+                    continue  # handles finite vs. infinite boundary conditions
+                if self.verbose >= 10:
+                    print "Apply U_bond element", i_bond
+                self._update_index = (U_idx_dt, i_bond)
+                trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
+        self._update_index = None
+        self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def update_bond_imag(self, i, U_bond):
+        """Update a bond with a (possibly non-unitary) `U_bond`.
+
+        Similar as :meth:`update_bond`; but after the SVD just keep the `A, S, B` canonical form.
+        In that way, one can sweep left or right without using old singular values,
+        thus preserving the canonical form during imaginary time evolution.
+
+        Parameters
+        ----------
+        i : int
+            Bond index; we update the matrices at sites ``i-1, i``.
+        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+            The bond operator which we apply to the wave function.
+            We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced by the truncation
+            during this update step.
+        """
+        i0, i1 = i - 1, i
+        if self.verbose >= 100:
+            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+        # Construct the theta matrix
+        theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
+        # Perform the SVD and truncate the wavefunction
+        U, S, V, trunc_err, renormalize = svd_theta(
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        # Split legs and update matrices
+        B_R = V.split_legs(1).ireplace_label('p1', 'p')
+        A_L = U.split_legs(0).ireplace_label('p0', 'p')
+        self.psi.set_SR(i0, S)
+        self.psi.set_B(i0, A_L, form='A')
         self.psi.set_B(i1, B_R, form='B')
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err

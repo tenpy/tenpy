@@ -86,8 +86,11 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
     Moreover, we don't split the physical and auxiliar space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 
-Of course, we are not only intereseted at infinite-temperature expecation values, but primarily on
-finite temperature expectation values.
+.. todo :
+    One can also look at the canonical ensembles by defining the conserved quantities
+    differently, see Barthel (2016), arXiv:1607.01696 for details.
+    Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
+    I think it should suffice to implement another `from_inifinite_T`.
 
 """
 
@@ -96,6 +99,7 @@ import numpy as np
 
 from .mps import MPS
 from ..linalg import np_conserved as npc
+from ..tools.math import entropy
 
 
 class PurificationMPS(MPS):
@@ -122,8 +126,10 @@ class PurificationMPS(MPS):
     """
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
-    # `get_theta` works thanks to `_replace_p_label`
+    _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
+    # thanks to using `self._replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
+
 
     def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
@@ -158,97 +164,140 @@ class PurificationMPS(MPS):
         res = cls(sites, Bs, S, bc, form)
         return res
 
-    def overlap(self, other):
-        raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
+    def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1, legs='p'):
+        r"""Calculate entanglement entropy for general geometry of the bipartition.
 
-    def expectation_value(self, ops, sites=None, axes=None):
-        """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
+        This function is similar as :meth:`entanglement_entropy`,
+        but for more general geometry of the region `A` to be a segment of a *few* sites.
 
-        Given the MPS in canonical form, it calculates n-site expectation values.
-        For example the contraction for a two-site (n=2) operator on site `i` would look like
-        the following picture (where the ``:`` on top are connected with the ones on the bottom)::
-
-            |                :     :
-            |                |     |
-            |          .--S--B[i]--B[i+1]--.
-            |          |     |     |       |
-            |          |     |-----|       |
-            |          |     | op  |       |
-            |          |     |-----|       |
-            |          |     |     |       |
-            |          .--S--B*[i]-B*[i+1]-.
-            |                |     |
-            |                :     :
+        This is acchieved by explicitly calculating the reduced density matrix of `A`
+        and thus works only for small segments.
 
         Parameters
         ----------
-        ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
-            The operators, for wich the expectation value should be taken,
-            All operators should all have the same number of legs (namely `2 n`).
-            If less than ``len(sites)`` operators are given, we repeat them periodically.
-            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            `self.sites`.
-        sites : None | list of int
-            List of site indices. Expectation values are evaluated there.
-            If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
-        axes : None | (list of str, list of str)
-            Two lists of each `n` leg labels giving the physical legs of the operator used for
-            contraction. The first `n` legs are contracted with conjugated B`s,
-            the second `n` legs with the non-conjugated `B`.
-            ``None`` defaults to ``(['p'], ['p*'])`` for single site operators (n=1), or
-            ``(['p0', 'p1', ... 'p{n-1}'], ['p0*', 'p1*', .... 'p{n-1}*'])`` for n > 1.
+        segment : list of int
+            Given a first site `i`, the region ``A_i`` is defined to be ``[i+j for j in segment]``.
+        first_site : ``None`` | (iterable of) int
+            Calculate the entropy for segments starting at these sites.
+            ``None`` defaults to ``range(L-segment[-1])`` for finite
+            or `range(L)` for infinite boundary conditions.
+        n : int | float
+            Selects which entropy to calculate;
+            `n=1` (default) is the ususal von-Neumann entanglement entropy,
+            otherwise the `n`-th Renyi entropy.
+        leg : 'p', 'q', 'pq'
+            Whether we look at the entanglement entropy in both (`pq`) or
+            only one of auxiliar (`q`) and physical (`p`) space.
 
         Returns
         -------
-        exp_vals : 1D ndarray
-            Expectation values, ``exp_vals[i] = <psi|ops[i]|psi>``, where ``ops[i]`` acts on
-            site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
-
-        Examples
-        --------
-        One site examples (n=1):
-
-        >>> psi.expectation_value('Sz')
-        [Sz0, Sz1, ..., Sz{L-1}]
-        >>> psi.expectation_value(['Sz', 'Sx'])
-        [Sz0, Sx1, Sz2, Sx3, ... ]
-        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
-        [Sz0, Sz3, Sz4]
-
-        Two site example (n=2), assuming homogeneous sites:
-
-        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        >>> psi.expectation_value(SzSx)
-        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
-
-        Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
-
-        >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                                   psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-                         for i in range(0, psi.L-1, 2)]
-        >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
-        [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
-
+        entropies : 1D ndarray
+            ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
         """
-        ops, sites, n, th_labels, (axes_p, axes_pstar) = self._expectation_value_args(ops, sites,
-                                                                                      axes)
-        th_labels = th_labels + ['q' + str(j) for j in range(n)]  # additional q0, q1, ...
-        vLvR_axes_p_q = ('vL', 'vR') + tuple(axes_p) + tuple(['q' + str(j) for j in range(n)])
-        E = []
-        for i in sites:
-            op = self.get_op(ops, i)
-            theta = self.get_theta(i, n)  # vL, vR, p0, q0, p1, q1
-            C = npc.tensordot(op, theta, axes=[axes_pstar, th_labels[2:2 + n]])  # ignore 'q'
-            E.append(npc.inner(theta, C, axes=[th_labels, vLvR_axes_p_q], do_conj=True))
-        return np.real_if_close(np.array(E))
+        segment = np.sort(segment)
+        if first_site is None:
+            if self.finite:
+                first_site = range(0, self.L - segment[-1])
+            else:
+                first_site = range(self.L)
+        N = len(segment)
 
-    def _replace_p_label(self, A, k):
-        """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
+        def labels(choice):
+            res1 = [c + str(k) for k in range(N) for c in choice]
+            res2 = [c + str(k) + '*' for k in range(N) for c in choice]
+            return res1, res2
 
-        Instead of re-implementing `get_theta`, the derived `PurificationMPS` needs only to
-        implement this function."""
-        return A.replace_labels(['p', 'q'], ['p' + str(k), 'q' + str(k)])
+        if legs == 'pq':
+            tr_legs = ([], [])
+            comb_legs = labels(['p', 'q'])
+        elif legs == 'p':
+            tr_legs = labels(['q'])
+            comb_legs = labels(['p'])
+        elif legs == 'q':
+            tr_legs = labels(['p'])
+            comb_legs = labels(['q'])
+        res = []
+        for i0 in first_site:
+            rho = self.get_rho_segment(segment+i0)  # p0, q0, p0*, q0*, ...
+            # extra contraction
+            for a, b in zip(*tr_legs):
+                rho = npc.trace(rho, a, b)
+            rho = rho.combine_legs(comb_legs, qconj=[+1, -1])
+            p = npc.eigvalsh(rho)
+            res.append(entropy(p, n))
+        return np.array(res)
+
+    def mutinf_two_site(self, max_range=None, n=1, legs='p'):
+        """Calculate the two-site mutual information :math:`I(i:j)`.
+
+        Calculates :math:`I(i:j) = S(i) + S(j) - S(i,j)`,
+        where :math:`S(i)` is the single site entropy on site :math:`i`
+        and :math:`S(i,j)` the two-site entropy on sites :math:`i,j`.
+
+        Parameters
+        ----------
+        max_range : int
+            Maximal distance |i-j| for which the mutual information should be calculated.
+            ``None`` defaults to `L-1`.
+        n : float
+            Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
+        leg : 'p', 'q', 'pq'
+            Whether we look at the entanglement entropy in both (`pq`) or
+            only one of auxiliar (`q`) and physical (`p`) space.
+
+        Returns
+        -------
+        coords : 2D array
+            Coordinates for the mutinf array.
+        mutinf : 1D array
+            ``mutinf[k]`` is the mutual information :math:`I(i:j)` between the
+            sites ``i, j = coords[k]``.
+        """
+        # Now same as MPS.mutinf_two_site(), but contract additionally over leg.
+        if max_range is None:
+            max_range = self.L
+        S_i = self.entanglement_entropy_segment(n=n, legs=legs)  # single-site entropy
+
+        def labels(choice):
+            res1 = [c + str(k) for k in range(2) for c in choice]
+            res2 = [c + str(k) + '*' for k in range(2) for c in choice]
+            return res1, res2
+
+        if legs == 'pq':
+            tr_legs = ([], [])
+            comb_legs = labels(['p', 'q'])
+        elif legs == 'p':
+            tr_legs = labels(['q'])
+            comb_legs = labels(['p'])
+        elif legs == 'q':
+            tr_legs = labels(['p'])
+            comb_legs = labels(['q'])
+        contr_rho = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
+                     ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        mutinf = []
+        coord = []
+        for i in range(self.L):
+            rho = self.get_theta(i, 1)
+            rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
+            jmax = i + max_range + 1
+            if self.finite:
+                jmax = min(jmax, self.L)
+            for j in range(i+1, jmax):
+                B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
+                rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
+                rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
+                for a, b in zip(*tr_legs):
+                    rho_ij = npc.trace(rho_ij, a, b)
+                rho_ij = rho_ij.combine_legs(comb_legs, qconj=[+1, -1])
+                S_ij = entropy(npc.eigvalsh(rho_ij), n)
+                mutinf.append(S_i[i] + S_i[j % self.L] - S_ij)
+                coord.append((i, j))
+                if j + 1 < jmax:
+                    rho = npc.tensordot(rho, B.conj(), axes=contr_rho)
+        return np.array(coord), np.array(mutinf)
+
+    def overlap(self, other):
+        raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""

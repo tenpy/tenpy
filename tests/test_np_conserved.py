@@ -8,6 +8,8 @@ import nose.tools as nst
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
 
+from test_charges import gen_random_legcharge
+
 chinfo = npc.ChargeInfo([1, 2], ['number', 'parity'])
 # parity can be derived from number. Yet, this should all work...
 qflat = np.array([[0, 0], [1, 1], [2, 0], [-2, 0], [1, 1]])
@@ -31,7 +33,6 @@ lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
 
-from test_charges import gen_random_legcharge
 
 EPS = np.finfo(np.float_).eps
 
@@ -635,6 +636,31 @@ def test_eig():
     npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), A.shape[0]**3)
 
 
+def test_expm(size=10):
+    ci = chinfo3
+    l = gen_random_legcharge(ci, size)
+    A = npc.Array.from_func(np.random.random, [l, l.conj()], qtotal=None, shape_kw='size')
+    A_flat = A.to_ndarray()
+    exp_A = npc.expm(A)
+    exp_A.test_sanity()
+    from scipy.linalg import expm
+    npt.assert_array_almost_equal_nulp(expm(A_flat), exp_A.to_ndarray(), size*size)
+
+
+def test_qr():
+    for shape in [(4, 4), (6, 8), (8, 6)]:
+        for qtotal in [None, [1]]:
+            print "qtotal=", qtotal, "shape =", shape
+            A = random_Array(shape, chinfo3, qtotal=qtotal, sort=False)
+            A_flat = A.to_ndarray()
+            q, r = npc.qr(A, 'reduced')
+            print q._qdata
+            q.test_sanity()
+            r.test_sanity()
+            qr = npc.tensordot(q, r, axes=1)
+            npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), shape[0]*shape[1]*100)
+
+
 def test_charge_detection():
     chinfo = chinfo3
     for qtotal in [[0], [1], None]:
@@ -676,4 +702,5 @@ if __name__ == "__main__":
     test_npc_pinv()
     test_trace()
     test_eig()
+    test_qr()
     test_charge_detection()
