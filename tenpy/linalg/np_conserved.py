@@ -2101,7 +2101,7 @@ class Array(object):
         qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
         for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
             np.take(
-                p.q_map[:, -1],  # last column of q_map maps to qindex of the pipe
+                p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
                 qmap_ind,
                 out=qdata[:, na])  # write the result directly into qdata
         # now we have probably many duplicate rows in qdata,
@@ -2177,7 +2177,7 @@ class Array(object):
             new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
             for qmap_rows in itertools.product(*qmap_slices):
                 for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
-                    qdata_row[sl] = block_qind = qm[2:-1]
+                    qdata_row[sl] = block_qind = qm[3:]
                     new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
                                            for l, qi in zip(pipe.legs, block_qind)]
                     block_slice[a] = slice(qm[0], qm[1])

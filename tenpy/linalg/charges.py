@@ -660,12 +660,12 @@ class LegPipe(LegCharge):
     subqshape : tuple of int
         block_number for each of the incoming legs
     q_map:  2D array
-        shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
-        see Notes below for details. lex-sorted by (I_s, i's), i.e. by colums [2:].
+        shape (`block_number`, 3+`nlegs`). rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
+        see Notes below for details.
     q_map_slices : list of views onto q_map
-        defined such that ``q_map_slices[I_s] == q_map[(q_map[:, -1] == I_s)]``
+        defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``
     _perm : 1D array
-        a permutation such that ``q_map[_perm, :]`` is sorted by `i_l` (ignoring the `I_s`).
+        a permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array
         strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
 
@@ -689,7 +689,7 @@ class LegPipe(LegCharge):
     ``[b_j, b_{j+1}, i_1, . . . , i_{nlegs}, I_s ]``,
 
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
-    the total block `I_s`, i.e., ``b_j = a_j - self.qind[I_s, 0]``.
+    the total block `I_s`, i.e., ``b_j = a_j - self.slices[I_s]``.
 
     The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``.
     Each ``I_s`` will have multiple rows,
@@ -697,10 +697,10 @@ class LegPipe(LegCharge):
     in the actual tensor, i.e., it might look like ::
 
         [ ...,
-         [ b_j,     b_{j+1},  i_1,    ..., i_{nlegs},     I_s   ],
-         [ b_{j+1}, b_{j+2},  i'_1,   ..., i'_{nlegs},    I_s   ],
-         [ 0,       b_{j+3},  i''_1,  ..., i''_{nlegs},   I_s+1 ],
-         [ b_{j+3}, b_{j+4},  i'''_1, ..., i''''_{nlegs}, I_s+1
+         [ b_j,     b_{j+1},  I_s,     i_1,    ..., i_{nlegs}   ],
+         [ b_{j+1}, b_{j+2},  I_s,     i'_1,   ..., i'_{nlegs}  ],
+         [ 0,       b_{j+3},  I_s + 1, i''_1,  ..., i''_{nlegs} ],
+         [ b_{j+3}, b_{j+4},  I_s + 1, i'''_1, ..., i'''_{nlegs}],
          ...]
 
 
@@ -714,7 +714,7 @@ class LegPipe(LegCharge):
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
         chinfo = legs[0].chinfo
-        # initialize LegCharge with trivial qind, which gets overwritten in _init_from_legs
+        # initialize LegCharge with trivial charges/slices, which gets overwritten in _init_from_legs
         super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
@@ -834,14 +834,14 @@ class LegPipe(LegCharge):
 
         nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
         # determine q_map -- it's essentially the grid.
-        q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QTYPE)
-        q_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
+        q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
+        q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
         # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
         legbs = [l._get_block_sizes() for l in self.legs]
         # andvanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         blocksizes = np.prod([lbs[gr] for lbs, gr in itertools.izip(legbs, grid)], axis=0)
-        # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
+        # q_map[:, :3] is initialized after sort/bunch.
 
         # calculate total charges
         charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
@@ -878,12 +878,12 @@ class LegPipe(LegCharge):
             idx, bunched = super(LegPipe, self).bunch()
             self.charges = bunched.charges  # copy information back to self
             self.slices = bunched.slices
-            # calculate q_map[:, -1], the qindices corresponding to the rows of q_map
+            # calculate q_map[:, 2], the qindices corresponding to the rows of q_map
             q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
             q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
-            q_map[:, -1] = q_map_Qi = np.cumsum(q_map_Qi)
+            q_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
         else:
-            q_map[:, -1] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
+            q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
             idx = np.arange(len(q_map)+1, dtype=np.intp)
         # calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
@@ -907,7 +907,7 @@ class LegPipe(LegCharge):
         -------
         q_map_indices : 1D array
             for each row of `qind_incoming` an index `j` such that
-            ``self.q_map[j, 2:-1] == qind_incoming[j]``.
+            ``self.q_map[j, 3:] == qind_incoming[j]``.
         """
         assert (qind_incoming.shape[1] == self.nlegs)
         # calculate indices of q_map[_perm], which is sorted by :math:`i_1, i_2, ...`,

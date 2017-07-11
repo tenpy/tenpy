@@ -775,13 +775,12 @@ cdef class LegPipe(LegCharge):
     subqshape : tuple of int
         block_number for each of the incoming legs
     q_map:  2D array
-        shape (`block_number`, 2+`nlegs`+1). rows: ``[ m_j, m_{j+1}, i_1, ..., i_{nlegs}, I_s]``,
+        shape (`block_number`, 3+`nlegs`). rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         see Notes below for details.
-        # TODO re-order q_map[:, 2], q_map[:, 3:] := q_map[:, -1], q_map[:, 2:]
     q_map_slices : list of views onto q_map
-        defined such that ``q_map_slices[I_s] == q_map[(q_map[:, -1] == I_s)]``
+        defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``
     _perm : 1D array
-        a permutation such that ``q_map[_perm, :]`` is sorted by `i_l` (ignoring the `I_s`).
+        a permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array
         strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
 
@@ -813,10 +812,10 @@ cdef class LegPipe(LegCharge):
     in the actual tensor, i.e., it might look like ::
 
         [ ...,
-         [ b_j,     b_{j+1},  i_1,    ..., i_{nlegs},    I_s    ],
-         [ b_{j+1}, b_{j+2},  i'_1,   ..., i'_{nlegs},   I_s    ],
-         [ 0,       b_{j+3},  i''_1,  ..., i''_{nlegs},  I_s + 1],
-         [ b_{j+3}, b_{j+4},  i'''_1, ..., i'''_{nlegs}, I_s + 1],
+         [ b_j,     b_{j+1},  I_s,     i_1,    ..., i_{nlegs}   ],
+         [ b_{j+1}, b_{j+2},  I_s,     i'_1,   ..., i'_{nlegs}  ],
+         [ 0,       b_{j+3},  I_s + 1, i''_1,  ..., i''_{nlegs} ],
+         [ b_{j+3}, b_{j+4},  I_s + 1, i'''_1, ..., i'''_{nlegs}],
          ...]
 
 
@@ -838,7 +837,7 @@ cdef class LegPipe(LegCharge):
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
         chinfo = legs[0].chinfo
-        # initialize LegCharge with trivial qind, which gets overwritten in _init_from_legs
+        # initialize LegCharge with trivial charges/slices, which gets overwritten in _init_from_legs
         super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
@@ -958,10 +957,10 @@ cdef class LegPipe(LegCharge):
         # *columns* of grid are now all possible cominations of qindices.
 
         cdef int nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
-        cdef np.ndarray[QTYPE_t, ndim=2] q_map = np.empty((nblocks, 2 + nlegs + 1), dtype=QTYPE)
+        cdef np.ndarray[QTYPE_t, ndim=2] q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
         # determine q_map -- it's essentially the grid.
-        q_map[:, 2:2+nlegs] = grid2.T  # transpose -> rows are possible combinations.
-        # q_map[:, :2] and q_map[:, -1] are initialized after sort/bunch.
+        q_map[:, 3:] = grid2.T  # transpose -> rows are possible combinations.
+        # q_map[:, :3] is initialized after sort/bunch.
 
         # determine block sizes
         cdef np.ndarray[QTYPE_t, ndim=1] blocksizes = np.ones((nblocks,), dtype=QTYPE)
@@ -1014,21 +1013,21 @@ cdef class LegPipe(LegCharge):
             self._set_slices(bunched.slices)
             a = 0
             for i in range(idx.shape[0]-1):
-                for j in range(idx[i] , idx[i+1]):
-                    q_map[j, 2+nlegs] = a
+                for j in range(idx[i], idx[i+1]):
+                    q_map[j, 2] = a
                 a += 1
             for j in range(idx[idx.shape[0]-1], nblocks):
-                q_map[j, 2+nlegs] = a
+                q_map[j, 2] = a
         else:
-            # trivial mapping for q_map[:, -1]
+            # trivial mapping for q_map[:, 2]
             for j in range(nblocks):
-                q_map[j, 2 + nlegs] = j
+                q_map[j, 2] = j
             idx = np.arange(len(q_map)+1, dtype=np.intp)
 
         # calculate the slices within blocks: subtract the start of each block
         slices = self.slices
         for j in range(nblocks):
-            a = slices[q_map[j, 2 + nlegs]]
+            a = slices[q_map[j, 2]]
             q_map[j, 0] -= a
             q_map[j, 1] -= a
 
@@ -1051,7 +1050,7 @@ cdef class LegPipe(LegCharge):
         -------
         q_map_indices : 1D array
             for each row of `qind_incoming` an index `j` such that
-            ``self.q_map[j, 2:-1] == qind_incoming[j]``.
+            ``self.q_map[j, 3:] == qind_incoming[j]``.
         """
         assert (qind_incoming.shape[1] == self.nlegs)
         # calculate indices of q_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
