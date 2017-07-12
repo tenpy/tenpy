@@ -1252,8 +1252,8 @@ class MPS(object):
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if num_ev == 1:
-            return -1./np.log(abs(E[1])) * self.L
-        return -1./np.log(np.abs(E[1:num_ev+1])) * self.L
+            return -1./np.log(abs(E[1]/E[0])) * self.L
+        return -1./np.log(np.abs(E[1:num_ev+1]/E[0])) * self.L
 
     def add(self, other, alpha, beta):
         """return an MPS which represents `alpha self + beta others`
