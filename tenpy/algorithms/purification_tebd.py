@@ -9,7 +9,7 @@ from __future__ import division
 
 from . import tebd
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta
+from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter
 from ..tools.math import entropy
 
@@ -275,6 +275,9 @@ class PurificationTEBD(tebd.Engine):
         U_idx_dt, i = self._update_index
         if U_idx_dt is not None:
             U = self._guess_U_disent[U_idx_dt][i]  # recover last result
+            # TODO XXX : HACK to disable using the last result
+            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         else:
             #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
             #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
@@ -571,3 +574,73 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([['p0', 'q0', 'vL'], ['p1', 'q1', 'vR']], qconj=[+1, -1])
         _, S, _ = npc.svd(theta)
         return entropy(S**2, n)
+
+
+class PurificationTEBD2(PurificationTEBD):
+    """similar as PurificationTEBD, but perform sweeps instead of brickwall
+    for real and imaginary time evolution"""
+
+    def update(self, N_steps):
+        """Evolve by ``N_steps * U_param['dt']``.
+
+        Parameters
+        ----------
+        N_steps : int
+            The number of steps for which the whole lattice should be updated.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation during
+            this sequence of update steps.
+        """
+        trunc_err = TruncationError()
+        order = self._U_param['order']
+        assert(order == 2 and self.psi.finite)
+        # sweep right orde
+
+        for i in range(N_steps):
+            trunc_err += self.update_step(0, False)
+            trunc_err += self.update_step(0, True)
+        self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def update_step(self, U_idx_dt, odd):
+        """Updates either even *or* odd bonds in unit cell.
+
+        Depending on the choice of `odd`, perform a sweep to the left or right,
+        updating once per site with a time step given by U_idx_dt.
+
+        Parameters
+        ----------
+        U_idx_dt : int
+            Time step index in ``self._U``,
+            evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
+        odd : bool/int
+            Indication of whether to update even (``odd=False,0``) or even (``odd=True,1``) sites
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation
+            during this sequence of update steps.
+        """
+        Us = self._U[U_idx_dt]
+        trunc_err = TruncationError()
+        if odd:
+            sweep = range(1, self.psi.L)  # start with 1: only finite!
+        else:
+            sweep = range(self.psi.L-1, 0, -1)
+        for i_bond in sweep:
+            if Us[i_bond] is None:
+                if self.verbose >= 10:
+                    print "Skip U_bond element:", i_bond
+                continue  # handles finite vs. infinite boundary conditions
+            if self.verbose >= 10:
+                print "Apply U_bond element", i_bond
+            self._update_index = (U_idx_dt, i_bond)
+            trunc_err += self.update_bond(i_bond, Us[i_bond])
+        self._update_index = None
+        return trunc_err
