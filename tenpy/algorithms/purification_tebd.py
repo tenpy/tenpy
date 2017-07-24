@@ -486,20 +486,24 @@ class PurificationTEBD(tebd.Engine):
             return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
 
-    def disentangle_global(self):
+    def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
         Caclulate the mutual information (in the auxiliar space) between two sites
         and determine where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
-        coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
-        # TODO: recalculate mutinf only as necessary and do multiple steps at once...
-        sorted = np.argsort(mutinf)
-        for i, j in coords[sorted[-1:]]:
-            if self.verbose > 10:
-                print 'disentangle global pair ' + repr((i, j))
-            self._disentangle_two_site(i, j)
+        if pair is None:
+            coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
+            # TODO: recalculate mutinf only as necessary and do multiple steps at once...
+            sorted = np.argsort(mutinf)
+            pair = coords[sorted[-1]]
+        i, j = pair
+        #  for i, j in coords[sorted[-1:]]:
+        if self.verbose > 10:
+            print 'disentangle global pair ' + repr((i, j))
+        self._disentangle_two_site(i, j)
+        return i, j   # TODO
         # done
 
     def _disentangle_two_site(self, i, j):
