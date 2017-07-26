@@ -509,6 +509,70 @@ class PurificationTEBD(tebd.Engine):
         return i, j   # TODO
         # done
 
+    def disentangle_global_nsite(self, n=2):
+        """Perform a sweep through the system, disentangling `n` sites at once.
+
+        Parameters
+        ----------
+        n: int
+            maximal number of sites to disentangle at once.
+        """
+        for i in range(0, self.psi.L-n+1):  # sweep left to right
+            self._update_index = None, i
+            theta = self.psi.get_theta(i, n=n)
+            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+        for i in range(self.psi.L-n, -1, -1):  # sweep right to left
+            self._update_index = None, i
+            theta = self.psi.get_theta(i, n=n)
+            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+        self._update_index = None
+
+    def disentangle_renyi_n_site(self, i, n, theta):
+        r"""Generalization of :meth:`_disentangle_renyi` to `n` sites.
+
+        Simply group left and right `n`/2 physical legs, adjust labels, and
+        apply :meth:`disentangle_renyi` to disentangle the central bond.
+        Recursively proceed to disentangle left and right parts afterwards.
+        Scales (for even `n`) as :math:`O(\chi^3 d^n d^{n/2})`.
+        """
+        assert(n >= 2)
+        n1 = n // 2
+        n2 = n - n1
+        p = ['p'+str(j) for j in range(n)]  # labels of theta to be separated
+        q = ['q'+str(j) for j in range(n)]
+        pL, pR = p[:n1], p[n1:]
+        qL, qR = q[:n1], q[n1:]
+        theta = theta.combine_legs([pL, qL, pR, qR], qconj=[+1, -1, +1, -1], new_axes=[1, 2, 3, 4])
+        _, p0, q0, p1, q1, _ = theta.get_leg_labels()  # keep the labels for later
+        theta.ireplace_labels([p0, q0, p1, q1], ['p0', 'q0', 'p1', 'q1'])
+        theta, _ = self.disentangle_renyi(theta)  # apply two-site disentangling
+        theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+
+        # Perform the SVD and truncate the wavefunction
+        U, S, V, trunc_err, renormalize = svd_theta(
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        self.psi.set_SL(i+n1, S)  # update S
+        if n1 == 1:
+            # save U as left B in psi
+            U = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
+            self.psi.set_B(i, U, form='A')  # TODO: might want to do this inversion-free?
+        else:
+            # disentangle left n1-site wave function recursively
+            theta_L = U.iscale_axis(S, 1).split_legs(0)
+            theta_L = theta_L.ireplace_labels(['p0', 'q0'], [p0, q0]).split_legs([p0, q0])
+            self.disentangle_renyi_n_site(i, n1, theta_L)
+        if n2 == 1:
+            # save V as right B in psi
+            V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+            self.psi.set_B(i+n1, V, form='B')
+        else:
+            # disentangle right n2-site wave function recursively
+            theta_R = V.iscale_axis(S, 0).split_legs(1)
+            theta_R = theta_R.ireplace_labels(['p1', 'q1'], [p1, q1]).split_legs([p1, q1])
+            theta_R.ireplace_labels(pR, p[:n2]).ireplace_labels(qR, q[:n2])
+            self.disentangle_renyi_n_site(i+n1, n2, theta_R)
+
+
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""
         # TODO: should we also disentangle 'on the way' of swapping?
