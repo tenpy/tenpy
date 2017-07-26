@@ -86,6 +86,7 @@ def test_singlet_mps():
     assert(np.all(2**bond_singlets == np.array(psi.chi)))
     ent = psi.entanglement_entropy() / np.log(2)
     npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
+    psi.entanglement_spectrum(True)  # (just check that the function runs)
     print psi.overlap(psi)
     print psi.expectation_value('Id')
     ent_segm = psi.entanglement_entropy_segment(range(4)) /np.log(2)
@@ -117,3 +118,4 @@ if __name__ == "__main__":
     test_mps()
     test_mps_add()
     test_MPSEnvironment()
+    test_singlet_mps()

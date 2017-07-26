@@ -808,6 +808,39 @@ class MPS(object):
             res.append(entropy(p, n))
         return np.array(res)
 
+    def entanglement_spectrum(self, by_charge=False):
+        r"""return entanglement energy spectrum.
+
+        Parameters
+        ----------
+        by_charge : bool
+            Wheter we should sort the spectrum on each bond by the possible charges.
+
+        Returns
+        -------
+        ent_spectrum : list
+            For each (non-trivial) bond the entanglement spectrum.
+            If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
+            with the convetion :math:`S_i = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            and math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
+            If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
+            for each possible charge on that bond.
+        """
+        if by_charge:
+            res = []
+            for i in range(self.L+1)[self.nontrivial_bonds]:
+                ss = -np.log(self._S[i])
+                if i < self.L:
+                    leg = self._B[i].get_leg('vL')
+                else:  # i == L: segment b.c.
+                    leg = self._B[i-1].get_leg('vR')
+                spectrum = [(leg.get_charge(qi), np.sort(ss[leg.get_slice(qi)]))
+                            for qi in range(leg.block_number)]
+                res.append(spectrum)
+            return res
+        else:
+            return [np.sort(-np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
+
     def get_rho_segment(self, segment):
         """Return reduced density matrix for a segment.
 
