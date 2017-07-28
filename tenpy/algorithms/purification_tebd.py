@@ -572,7 +572,6 @@ class PurificationTEBD(tebd.Engine):
             theta_R.ireplace_labels(pR, p[:n2]).ireplace_labels(qR, q[:n2])
             self.disentangle_renyi_n_site(i+n1, n2, theta_R)
 
-
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""
         # TODO: should we also disentangle 'on the way' of swapping?
