@@ -94,7 +94,7 @@ def unused_parameters(par_dict, warn=None):
     par_dict : dict
         A dictionary of parameters which was given to (functions using) :meth:`get_parameter`
     warn : None | str
-        If given, print a warning "unused parameter {key!r} for {warn!s}" for each unused key.
+        If given, print a warning "unused parameter for {warn!s}: {unused_keys!s}".
 
     Returns
     -------
@@ -106,6 +106,10 @@ def unused_parameters(par_dict, warn=None):
     unused.discard('_used_param')
     unused.discard('verbose')
     if warn is not None:
-        for key in unused:
-            warnings.warn("unused parameter {key!r} for {descr!s}".format(key=key, descr=warn))
+        if len(unused) > 0:
+            if len(unused) > 1:
+                msg = "unused parameters for {descr!s}:\n{keys!s}"
+            else:
+                msg = "unused parameter {keys!s} for {descr!s}\n"
+            warnings.warn(msg.format(keys=sorted(unused), descr=warn))
     return unused

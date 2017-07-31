@@ -9,7 +9,7 @@ from __future__ import division
 
 from . import tebd
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta
+from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter
 from ..tools.math import entropy
 
@@ -275,6 +275,9 @@ class PurificationTEBD(tebd.Engine):
         U_idx_dt, i = self._update_index
         if U_idx_dt is not None:
             U = self._guess_U_disent[U_idx_dt][i]  # recover last result
+            # TODO XXX : HACK to disable using the last result
+            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         else:
             #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
             #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
@@ -486,21 +489,88 @@ class PurificationTEBD(tebd.Engine):
             return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
 
-    def disentangle_global(self):
+    def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
         Caclulate the mutual information (in the auxiliar space) between two sites
         and determine where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
-        coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
-        # TODO: recalculate mutinf only as necessary and do multiple steps at once...
-        sorted = np.argsort(mutinf)
-        for i, j in coords[sorted[-1:]]:
-            if self.verbose > 10:
-                print 'disentangle global pair ' + repr((i, j))
-            self._disentangle_two_site(i, j)
+        if pair is None:
+            coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
+            # TODO: recalculate mutinf only as necessary and do multiple steps at once...
+            sorted = np.argsort(mutinf)
+            pair = coords[sorted[-1]]
+        i, j = pair
+        #  for i, j in coords[sorted[-1:]]:
+        if self.verbose > 10:
+            print 'disentangle global pair ' + repr((i, j))
+        self._disentangle_two_site(i, j)
+        return i, j   # TODO
         # done
+
+    def disentangle_global_nsite(self, n=2):
+        """Perform a sweep through the system, disentangling `n` sites at once.
+
+        Parameters
+        ----------
+        n: int
+            maximal number of sites to disentangle at once.
+        """
+        for i in range(0, self.psi.L-n+1):  # sweep left to right
+            self._update_index = None, i
+            theta = self.psi.get_theta(i, n=n)
+            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+        for i in range(self.psi.L-n, -1, -1):  # sweep right to left
+            self._update_index = None, i
+            theta = self.psi.get_theta(i, n=n)
+            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+        self._update_index = None
+
+    def disentangle_renyi_n_site(self, i, n, theta):
+        r"""Generalization of :meth:`_disentangle_renyi` to `n` sites.
+
+        Simply group left and right `n`/2 physical legs, adjust labels, and
+        apply :meth:`disentangle_renyi` to disentangle the central bond.
+        Recursively proceed to disentangle left and right parts afterwards.
+        Scales (for even `n`) as :math:`O(\chi^3 d^n d^{n/2})`.
+        """
+        assert(n >= 2)
+        n1 = n // 2
+        n2 = n - n1
+        p = ['p'+str(j) for j in range(n)]  # labels of theta to be separated
+        q = ['q'+str(j) for j in range(n)]
+        pL, pR = p[:n1], p[n1:]
+        qL, qR = q[:n1], q[n1:]
+        theta = theta.combine_legs([pL, qL, pR, qR], qconj=[+1, -1, +1, -1], new_axes=[1, 2, 3, 4])
+        _, p0, q0, p1, q1, _ = theta.get_leg_labels()  # keep the labels for later
+        theta.ireplace_labels([p0, q0, p1, q1], ['p0', 'q0', 'p1', 'q1'])
+        theta, _ = self.disentangle_renyi(theta)  # apply two-site disentangling
+        theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+
+        # Perform the SVD and truncate the wavefunction
+        U, S, V, trunc_err, renormalize = svd_theta(
+            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        self.psi.set_SL(i+n1, S)  # update S
+        if n1 == 1:
+            # save U as left B in psi
+            U = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
+            self.psi.set_B(i, U, form='A')  # TODO: might want to do this inversion-free?
+        else:
+            # disentangle left n1-site wave function recursively
+            theta_L = U.iscale_axis(S, 1).split_legs(0)
+            theta_L = theta_L.ireplace_labels(['p0', 'q0'], [p0, q0]).split_legs([p0, q0])
+            self.disentangle_renyi_n_site(i, n1, theta_L)
+        if n2 == 1:
+            # save V as right B in psi
+            V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+            self.psi.set_B(i+n1, V, form='B')
+        else:
+            # disentangle right n2-site wave function recursively
+            theta_R = V.iscale_axis(S, 0).split_legs(1)
+            theta_R = theta_R.ireplace_labels(['p1', 'q1'], [p1, q1]).split_legs([p1, q1])
+            theta_R.ireplace_labels(pR, p[:n2]).ireplace_labels(qR, q[:n2])
+            self.disentangle_renyi_n_site(i+n1, n2, theta_R)
 
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""
@@ -567,3 +637,73 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([['p0', 'q0', 'vL'], ['p1', 'q1', 'vR']], qconj=[+1, -1])
         _, S, _ = npc.svd(theta)
         return entropy(S**2, n)
+
+
+class PurificationTEBD2(PurificationTEBD):
+    """similar as PurificationTEBD, but perform sweeps instead of brickwall
+    for real and imaginary time evolution"""
+
+    def update(self, N_steps):
+        """Evolve by ``N_steps * U_param['dt']``.
+
+        Parameters
+        ----------
+        N_steps : int
+            The number of steps for which the whole lattice should be updated.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation during
+            this sequence of update steps.
+        """
+        trunc_err = TruncationError()
+        order = self._U_param['order']
+        assert(order == 2 and self.psi.finite)
+        # sweep right orde
+
+        for i in range(N_steps):
+            trunc_err += self.update_step(0, False)
+            trunc_err += self.update_step(0, True)
+        self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def update_step(self, U_idx_dt, odd):
+        """Updates either even *or* odd bonds in unit cell.
+
+        Depending on the choice of `odd`, perform a sweep to the left or right,
+        updating once per site with a time step given by U_idx_dt.
+
+        Parameters
+        ----------
+        U_idx_dt : int
+            Time step index in ``self._U``,
+            evolve with ``Us[i] = self.U[U_idx_dt][i]`` at bond ``(i-1,i)``.
+        odd : bool/int
+            Indication of whether to update even (``odd=False,0``) or even (``odd=True,1``) sites
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation
+            during this sequence of update steps.
+        """
+        Us = self._U[U_idx_dt]
+        trunc_err = TruncationError()
+        if odd:
+            sweep = range(1, self.psi.L)  # start with 1: only finite!
+        else:
+            sweep = range(self.psi.L-1, 0, -1)
+        for i_bond in sweep:
+            if Us[i_bond] is None:
+                if self.verbose >= 10:
+                    print "Skip U_bond element:", i_bond
+                continue  # handles finite vs. infinite boundary conditions
+            if self.verbose >= 10:
+                print "Apply U_bond element", i_bond
+            self._update_index = (U_idx_dt, i_bond)
+            trunc_err += self.update_bond(i_bond, Us[i_bond])
+        self._update_index = None
+        return trunc_err

@@ -808,6 +808,39 @@ class MPS(object):
             res.append(entropy(p, n))
         return np.array(res)
 
+    def entanglement_spectrum(self, by_charge=False):
+        r"""return entanglement energy spectrum.
+
+        Parameters
+        ----------
+        by_charge : bool
+            Wheter we should sort the spectrum on each bond by the possible charges.
+
+        Returns
+        -------
+        ent_spectrum : list
+            For each (non-trivial) bond the entanglement spectrum.
+            If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
+            with the convetion :math:`S_i = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            and math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
+            If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
+            for each possible charge on that bond.
+        """
+        if by_charge:
+            res = []
+            for i in range(self.L+1)[self.nontrivial_bonds]:
+                ss = -np.log(self._S[i])
+                if i < self.L:
+                    leg = self._B[i].get_leg('vL')
+                else:  # i == L: segment b.c.
+                    leg = self._B[i-1].get_leg('vR')
+                spectrum = [(leg.get_charge(qi), np.sort(ss[leg.get_slice(qi)]))
+                            for qi in range(leg.block_number)]
+                res.append(spectrum)
+            return res
+        else:
+            return [np.sort(-np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
+
     def get_rho_segment(self, segment):
         """Return reduced density matrix for a segment.
 
@@ -1161,9 +1194,10 @@ class MPS(object):
         """Bring self into canonical 'B' form, calculate singular values.
 
         Works only for finite/segment boundary conditions.
-        It only uses the very left singular values for `segment` boundary conditions,
-        and no singular values at all for `finite` boundary conditions.
-        The ``self._B`` are taken as they are, ignoring any canonical form labels `A`, `B`, `C`.
+        If any `B` is in `form` ``None``, it does *not* use any of the singular values `S`
+        (for 'finite' boundary conditions, or only the very left `S` for 'segment' b.c.).
+        If all sites have a `form` label (like ``'A','B'``), it respects the `form` to ensure
+        that one `S` is included per bond.
 
         .. todo :
             Should we try to avoid carrying around the total charge of the B matrices?
@@ -1184,14 +1218,21 @@ class MPS(object):
             self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
             self.set_SR(L-1, np.array([1.]))
         # sweep from left to right to bring it into left canonical form.
-        M = self.get_B(0, None)
+        if any([(f is None) for f in self.form]):
+            # ignore any 'S' and canonical form
+            M = self.get_B(0, None)
+            form = None
+        else:
+            # we actually had a canonical form before, so we should *not* ignore the 'S'
+            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
+            form = 'B'  # for other 'M'
         if self.bc == 'segment':
             M.iscale_axis(self.get_SL(0), axis='vL')
         Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
         for i in range(1, L-1):
-            M = self.get_B(i, None)
+            M = self.get_B(i, form)
             M = npc.tensordot(R, M, axes=['vR', 'vL'])
             Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
@@ -1252,8 +1293,8 @@ class MPS(object):
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if num_ev == 1:
-            return -1./np.log(abs(E[1])) * self.L
-        return -1./np.log(np.abs(E[1:num_ev+1])) * self.L
+            return -1./np.log(abs(E[1]/E[0])) * self.L
+        return -1./np.log(np.abs(E[1:num_ev+1]/E[0])) * self.L
 
     def add(self, other, alpha, beta):
         """return an MPS which represents `alpha self + beta others`

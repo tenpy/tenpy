@@ -10,6 +10,8 @@ import itertools
 
 from tenpy.models import model, lattice
 import tenpy.networks.site
+import tenpy.linalg.np_conserved as npc
+import test_mpo
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
 spin_half_lat = lattice.Chain(2, spin_half_site)
@@ -28,8 +30,24 @@ def test_CouplingModel():
         M.test_sanity()
 
 
-def check_general_model(ModelClass, model_pars={}, check_pars={}):
-    """Create a model for different sets of parameters.
+def check_model_sanity(M, hermitian=True):
+    """call M.test_sanity() for all different subclasses of M"""
+    if isinstance(M, model.CouplingModel):
+        model.CouplingModel.test_sanity(M)
+    if isinstance(M, model.NearestNeighborModel):
+        model.NearestNeighborModel.test_sanity(M)
+        if hermitian:
+            for H in M.H_bond:
+                if H is not None:
+                    err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
+                    assert(err < 1.e-14)
+    if isinstance(M, model.MPOModel):
+        model.MPOModel.test_sanity(M)
+        test_mpo.check_hermitian(M.H_MPO)
+
+
+def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
+    """Create a model for different sets of parameters and check it's sanity.
 
     Parameters
     ----------
@@ -40,12 +58,12 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}):
     check_pars : dict
         pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
         ``check_params[key]`` (in each possible combination!) an create a model for it.
+    hermitian : bool
+        If True, check that the Hamiltonian is hermitian.
     """
-    M = ModelClass(model_pars.copy())  # with default parameters
-    M.test_sanity()
     for vals in itertools.product(*check_pars.values()):
         params = model_pars.copy()
         for k, v in zip(check_pars.keys(), vals):
             params[k] = v
         M = ModelClass(params)
-        M.test_sanity()
+        check_model_sanity(M)
