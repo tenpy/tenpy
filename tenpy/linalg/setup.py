@@ -11,7 +11,9 @@ lib_dirs = []
 
 extensions = [
     Extension("charges", ["charges.pyx"],
-              include_dirs=include_dirs, libraries=libs, library_dirs = lib_dirs),
+              include_dirs=include_dirs, libraries=libs, library_dirs=lib_dirs),
+    Extension("np_conserved", ["np_conserved.pyx"],
+              include_dirs=include_dirs, libraries=libs, library_dirs=lib_dirs),
 ]
 setup(
     name = "TenPyLight",
