@@ -50,8 +50,8 @@ import warnings
 import itertools
 
 # import public API from charges
-from .charges import (ChargeInfo, LegCharge, LegPipe)
-from . import charges  # for private functions
+import charges
+cimport charges #ChargeInfo, LegCharge, LegPipe, _c_find_row_differences
 from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
@@ -67,6 +67,11 @@ __all__ = [
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
+
+# provide references to the classes of :mod:`tenpy.linalg.charges` for convenience
+ChargeInfo = charges.ChargeInfo
+LegCharge = charges.LegCharge
+LegPipe = charges.LegPipe
 
 
 class Array(object):
@@ -836,7 +841,7 @@ class Array(object):
             if sort[ax] or bunch[ax]:
                 axes.append([ax])
                 leg = self.legs[ax]
-                pipe = charges.LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
+                pipe = LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
                 pipes.append(pipe)
             else:
                 perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
@@ -884,7 +889,7 @@ class Array(object):
         """
         axes = self.get_leg_indices(axes)
         legs = [self.legs[a] for a in axes]
-        return charges.LegPipe(legs, **kwargs)
+        return LegPipe(legs, **kwargs)
 
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
@@ -2112,7 +2117,7 @@ class Array(object):
         old_data = [self._data[s] for s in sort]
         qmap_inds = [qm[sort] for qm in qmap_inds]
         # divide into parts, which give a single new block
-        diffs = charges._find_row_differences(qdata_s)  # including the first and last row
+        diffs = charges._c_find_row_differences(qdata_s)  # including the first and last row
 
         # now the hard part: map data
         data = []
@@ -3509,8 +3514,8 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     else:
         b_qdata_keep = b._qdata[:, cut_b:]
     # find blocks where qdata_a[not_axes_a] and qdata_b[not_axes_b] change
-    a_slices = charges._find_row_differences(a_qdata_keep)
-    b_slices = charges._find_row_differences(b_qdata_keep)
+    a_slices = charges._c_find_row_differences(a_qdata_keep)
+    b_slices = charges._c_find_row_differences(b_qdata_keep)
     # the slices divide a_data and b_data into rows and columns of the final result
     a_data = [a_data[i:i2] for i, i2 in itertools.izip(a_slices[:-1], a_slices[1:])]
     b_data = [b_data[j:j2] for j, j2 in itertools.izip(b_slices[:-1], b_slices[1:])]

@@ -5,7 +5,7 @@
 .DS_Store
 ._*
 playground
-tenpy/linalg/build
+build
 tenpy/linalg/*.c
 tenpy/linalg/*.so
 tenpy/linalg/*.html

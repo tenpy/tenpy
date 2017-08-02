@@ -35,7 +35,7 @@ __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 np.import_array()
 
 QTYPE = np.int_             # numpy dtype for the charges
-ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
+# QTYPE_T is declared in charges.pxd
 
 
 cdef class ChargeInfo(object):
@@ -70,9 +70,6 @@ cdef class ChargeInfo(object):
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
-    cdef readonly int qnumber
-    cdef readonly np.ndarray mod
-    cdef list names
 
     def __init__(ChargeInfo self, mod=[], names=None):
         """see help(self)"""
@@ -142,7 +139,7 @@ cdef class ChargeInfo(object):
     @cython.wraparound(False)
     @cython.boundscheck(False)
     @cython.cdivision(True)
-    cdef np.ndarray _make_valid_2D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
+    cdef np.ndarray[QTYPE_t,ndim=2] _make_valid_2D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
         cdef np.ndarray[QTYPE_t,ndim=2] res = np.empty_like(charges)
         cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
         cdef int L = charges.shape[0]
@@ -275,14 +272,6 @@ cdef class LegCharge(object):
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
     """
-    cdef readonly int ind_len
-    cdef readonly int block_number
-    cdef readonly ChargeInfo chinfo
-    cdef readonly np.ndarray slices
-    cdef readonly np.ndarray charges
-    cdef readonly int qconj
-    cdef public bint sorted
-    cdef public bint bunched
 
     def __init__(LegCharge self, chargeinfo, slices, charges, qconj=1):
         """see help(self)"""
@@ -825,14 +814,6 @@ cdef class LegPipe(LegCharge):
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
     """
-    cdef readonly int nlegs
-    cdef readonly tuple legs
-    cdef readonly tuple subshape
-    cdef readonly tuple subqshape
-    cdef readonly np.ndarray q_map
-    cdef readonly list q_map_slices
-    cdef readonly np.ndarray _perm
-    cdef readonly np.ndarray _strides
 
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         """see help(self)"""
@@ -1117,7 +1098,7 @@ cdef _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
         return np.array([0, qflat.shape[0]], dtype=np.intp)
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
-    res = np.empty(L + 1, dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] res = np.empty(L + 1, dtype=np.intp)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
