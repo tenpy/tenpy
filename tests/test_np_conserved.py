@@ -242,8 +242,11 @@ def test_npc_Array_itemacces():
     b = npc.Array.from_func(np.random.random, a.legs, a.dtype, a.qtotal, shape_kw='size')
     # remove half of the blocks to check copying to empty sites as well
     keep = (np.arange(b.stored_blocks) % 2 == 0)
-    b._data = [d for d, k in zip(b._data, keep) if k]
-    b._qdata = b._qdata[keep]
+    try:
+        b._data = [d for d, k in zip(b._data, keep) if k]
+        b._qdata = b._qdata[keep]
+    except AttributeError:
+        pass  # for cython version, we can't write _data and _qdata...
     bflat = b.to_ndarray().copy()
     aflat = a.to_ndarray().copy()
     for idx in check_idx:

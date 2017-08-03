@@ -42,7 +42,6 @@ Eigen systems:
 from __future__ import division
 
 import numpy as np
-import scipy as sp
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
 import copy as copy_
@@ -1572,7 +1571,7 @@ class Array(object):
         """return self + other"""
         if isinstance(other, Array):
             return self.binary_blockwise(np.add, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise add ignores zero blocks!")
             return self.unary_blockwise(np.add, other)
         elif isinstance(other, np.ndarray):
@@ -1587,7 +1586,7 @@ class Array(object):
         """self += other"""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.add, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise add ignores zero blocks!")
             return self.iunary_blockwise(np.add, other)
         # can't convert to numpy array in place, thus no ``self += ndarray``
@@ -1597,7 +1596,7 @@ class Array(object):
         """return self - other"""
         if isinstance(other, Array):
             return self.binary_blockwise(np.subtract, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise subtract ignores zero blocks!")
             return self.unary_blockwise(np.subtract, other)
         elif isinstance(other, np.ndarray):
@@ -1608,7 +1607,7 @@ class Array(object):
         """self -= other"""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.subtract, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise subtract ignores zero blocks!")
             return self.iunary_blockwise(np.subtract, other)
         # can't convert to numpy array in place, thus no ``self -= ndarray``
@@ -1618,7 +1617,7 @@ class Array(object):
         """return ``self * other`` for scalar ``other``
 
         Use explicit functions for matrix multiplication etc."""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 return self.zeros_like()
             return self.unary_blockwise(np.multiply, other)
@@ -1630,7 +1629,7 @@ class Array(object):
 
     def __imul__(self, other):
         """``self *= other`` for scalar `other`"""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 self._data = []
                 self._qdata = np.empty((0, self.rank), np.intp)
@@ -1641,7 +1640,7 @@ class Array(object):
 
     def __truediv__(self, other):
         """return ``self / other`` for scalar `other` with ``__future__.division``."""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError(
                     "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
@@ -1656,7 +1655,7 @@ class Array(object):
 
     def __itruediv__(self, other):
         """``self /= other`` for scalar `other`` with ``__future__.division``."""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError(
                     "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
@@ -3641,8 +3640,6 @@ def _tensordot_worker(a, b, axes):
     How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
     depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
     is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
-
-    Step 4) is finally implemented in :func:`_tensordot_post_worker`,
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0

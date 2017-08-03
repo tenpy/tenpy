@@ -42,7 +42,9 @@ Eigen systems:
 from __future__ import division
 
 import numpy as np
-import scipy as sp
+cimport numpy as np
+cimport cython
+
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
 import copy as copy_
@@ -52,8 +54,8 @@ import itertools
 # import public API from charges
 import charges
 cimport charges #ChargeInfo, LegCharge, LegPipe, _c_find_row_differences
-from .svd_robust import svd as svd_flat
 
+from .svd_robust import svd as svd_flat
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join, is_non_string_iterable
@@ -74,7 +76,7 @@ LegCharge = charges.LegCharge
 LegPipe = charges.LegPipe
 
 
-class Array(object):
+cdef class Array(object):
     r"""A multidimensional array (=tensor) for using charge conservation.
 
     An `Array` represents a multi-dimensional tensor,
@@ -104,9 +106,10 @@ class Array(object):
 
     Attributes
     ----------
-    rank
     size
     stored_blocks
+    rank : int
+        The number of legs
     shape : tuple(int)
         The number of indices for each of the legs
     dtype : np.dtype
@@ -128,6 +131,17 @@ class Array(object):
         but *must* be set to `False` by algorithms changing _qdata.
 
     """
+    cdef readonly int rank
+    cdef readonly tuple shape
+    cdef public np.dtype dtype
+    cdef public charges.ChargeInfo chinfo
+    cdef public np.ndarray qtotal
+    cdef public list legs
+    cdef public dict labels
+    cdef readonly list _data
+    cdef readonly np.ndarray _qdata
+    cdef readonly bint _qdata_sorted
+
 
     def __init__(self, legcharges, dtype=np.float64, qtotal=None):
         """see help(self)"""
@@ -170,16 +184,15 @@ class Array(object):
         >>> a *= 2  # has no effect on `b`
         >>> b.iconj()  # nor does this change `a`
         """
+        cdef Array cp = Array(self.legs, self.dtype, self.qtotal)  # makes necessary copies
+        cp.labels = self.labels.copy()
+        cp._qdata_sorted = self._qdata_sorted
         if deep:
-            cp = copy_.deepcopy(self)
+            cp._data = [b.copy() for b in self._data]
+            cp._qdata = self._qdata.copy()
         else:
-            cp = copy_.copy(self)
-            # some things should be copied even for shallow copies
-            cp.qtotal = cp.qtotal.copy()
-            cp.labels = cp.labels.copy()
-        # even deep copies can share chinfo and legs
-        cp.chinfo = self.chinfo  # same instance
-        cp.legs = self.legs[:]  # copied list with same instances of legs
+            cp._data = list(self._data)
+            cp._qdata = self._qdata
         return cp
 
     @classmethod
@@ -201,7 +214,7 @@ class Array(object):
         data_flat = np.array(data_flat, dtype)
         chinfo = ChargeInfo()
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
-        res = cls(legs, dtype)
+        cdef Array res = cls(legs, dtype)
         res._data = [data_flat]
         res._qdata = np.zeros((1, res.rank), np.intp)
         res._qdata_sorted = True
@@ -241,7 +254,7 @@ class Array(object):
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
             dtype = data_flat.dtype
-        res = cls(legcharges, dtype, qtotal)  # without any data
+        cdef Array res = cls(legcharges, dtype, qtotal)  # without any data
         data_flat = data_flat.astype(dtype, copy=False)
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
@@ -306,7 +319,7 @@ class Array(object):
         res : :class:`Array`
             an Array with blocks filled using `func`.
         """
-        res = cls(legcharges, dtype, qtotal)  # without any data yet.
+        cdef Array res = cls(legcharges, dtype, qtotal)  # without any data yet.
         data = []
         qdata = []
         # iterate over all qindices compatible with qtotal
@@ -332,7 +345,7 @@ class Array(object):
 
     def zeros_like(self):
         """return a copy of self with only zeros as entries, containing no `_data`"""
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         res._data = []
         res._qdata = np.empty((0, res.rank), dtype=np.intp)
         res._qdata_sorted = True
@@ -353,7 +366,7 @@ class Array(object):
             if l.chinfo != self.chinfo:
                 raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
                     l.chinfo, self.chinfo))
-        if self._qdata.shape != (self.stored_blocks, self.rank):
+        if self._qdata.shape[0] != self.stored_blocks or self._qdata.shape[1] != self.rank:
             raise ValueError("_qdata shape wrong")
         if self._qdata.dtype != np.intp:
             raise ValueError("wront dtype of _qdata")
@@ -370,11 +383,6 @@ class Array(object):
             raise ValueError("some row of _qdata is incompatible with total charge")
 
     # properties ==============================================================
-
-    @property
-    def rank(self):
-        """the number of legs"""
-        return len(self.shape)
 
     @property
     def size(self):
@@ -633,7 +641,7 @@ class Array(object):
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
             block = self._get_block(pos[:, 0])
             if block is None:
-                return self.dtype.type(0)
+                return 0. # TODO XXX self.dtype.type(0)
             else:
                 return block[tuple(pos[:, 1])]
         # advanced indexing
@@ -687,7 +695,7 @@ class Array(object):
             raise ValueError("len(axes) != len(indices)")
         if indices.ndim != 1:
             raise ValueError("indices may only contain ints")
-        res = self.copy(deep=True)
+        cdef Array res = self.copy(deep=True)
         if len(axes) == 0:
             return res  # nothing to do
         # qindex and index_within_block for each of the axes
@@ -736,7 +744,7 @@ class Array(object):
         """
         if i < 0:
             i += self.rank
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
         res.legs.insert(i, leg)
         res._set_shape()
@@ -781,7 +789,7 @@ class Array(object):
             a shallow copy of self with ``copy.qtotal == newqtotal`` and new ``copy.legs[leg]``.
             The new leg will be a :class`LegCharge`, even if the old leg was a :class:`LegPipe`.
         """
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         ax = self.get_leg_index(axis)
         old_qconj = self.legs[ax].qconj
         if new_qconj is None:
@@ -1103,7 +1111,7 @@ class Array(object):
         if len(keep) == 0:
             index = tuple([0] * self.rank)
             return self[index]
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         # adjust qtotal
         res.legs = [self.legs[a] for a in keep]
         res._set_shape()
@@ -1137,7 +1145,7 @@ class Array(object):
         copy : :class:`Array`
             deep copy of self with new dtype
         """
-        cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
+        cdef Array cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
         cp._qdata = cp._qdata.copy()
         if dtype is None:
             dtype = np.common_dtype(*self._data)
@@ -1272,7 +1280,7 @@ class Array(object):
         inv_perm = inverse_permutation(perm)
         newleg = LegCharge.from_qflat(self.chinfo, oldleg.to_qflat()[perm], oldleg.qconj)
         newleg = newleg.bunch()[1]
-        res = self.copy(deep=False)  # data is replaced afterwards
+        cdef Array res = self.copy(deep=False)  # data is replaced afterwards
         res.legs[axis] = newleg
         qdata_axis = self._qdata[:, axis]
         new_block_idx = [slice(None)] * self.rank
@@ -1396,7 +1404,7 @@ class Array(object):
 
     def scale_axis(self, s, axis=-1):
         """Samse as :meth:`iscale_axis`, but return a (deep) copy."""
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         res._qdata = res._qdata.copy()
         res.iscale_axis(s, axis)
         return res
@@ -1458,6 +1466,7 @@ class Array(object):
         inplace : bool
             wheter to apply changes to `self`, or to return a *deep* copy
         """
+        cdef Array res
         if self.dtype.kind == 'c' and complex_conj:
             if inplace:
                 res = self.iunary_blockwise(np.conj)
@@ -1575,24 +1584,22 @@ class Array(object):
 
     def __add__(self, other):
         """return self + other"""
+        if not isinstance(self, Array):  # cython ignores __radd__...
+            return other + self
         if isinstance(other, Array):
             return self.binary_blockwise(np.add, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise add ignores zero blocks!")
             return self.unary_blockwise(np.add, other)
         elif isinstance(other, np.ndarray):
             return self.to_ndarray().__add__(other)
         raise NotImplemented  # unknown type of other
 
-    def __radd__(self, other):
-        """return other + self"""
-        return self.__add__(other)  # (assume commutativity of self.dtype)
-
     def __iadd__(self, other):
         """self += other"""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.add, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise add ignores zero blocks!")
             return self.iunary_blockwise(np.add, other)
         # can't convert to numpy array in place, thus no ``self += ndarray``
@@ -1602,7 +1609,7 @@ class Array(object):
         """return self - other"""
         if isinstance(other, Array):
             return self.binary_blockwise(np.subtract, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise subtract ignores zero blocks!")
             return self.unary_blockwise(np.subtract, other)
         elif isinstance(other, np.ndarray):
@@ -1613,7 +1620,7 @@ class Array(object):
         """self -= other"""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.subtract, other)
-        elif sp.isscalar(other):
+        elif np.isscalar(other):
             warnings.warn("block-wise subtract ignores zero blocks!")
             return self.iunary_blockwise(np.subtract, other)
         # can't convert to numpy array in place, thus no ``self -= ndarray``
@@ -1623,19 +1630,17 @@ class Array(object):
         """return ``self * other`` for scalar ``other``
 
         Use explicit functions for matrix multiplication etc."""
-        if sp.isscalar(other):
+        if not isinstance(self, Array):  # cython ignores __rmul__...
+            return other*self
+        if np.isscalar(other):
             if other == 0.:
                 return self.zeros_like()
             return self.unary_blockwise(np.multiply, other)
-        raise NotImplemented
-
-    def __rmul__(self, other):
-        """return ``other * self`` for scalar `other`"""
-        return self * other  # (assumes commutativity of self.dtype)
+        raise NotImplementedError
 
     def __imul__(self, other):
         """``self *= other`` for scalar `other`"""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 self._data = []
                 self._qdata = np.empty((0, self.rank), np.intp)
@@ -1646,7 +1651,7 @@ class Array(object):
 
     def __truediv__(self, other):
         """return ``self / other`` for scalar `other` with ``__future__.division``."""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError(
                     "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
@@ -1661,7 +1666,7 @@ class Array(object):
 
     def __itruediv__(self, other):
         """``self /= other`` for scalar `other`` with ``__future__.division``."""
-        if sp.isscalar(other):
+        if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError(
                     "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
@@ -1677,8 +1682,9 @@ class Array(object):
     def _set_shape(self):
         """deduce self.shape from self.legs"""
         if len(self.legs) == 0:
-            raise ValueError("We don't allow 0-dimensional arrays. Why should we?" "")
+            raise ValueError("We don't allow 0-dimensional arrays. Why should we?")
         self.shape = tuple([lc.ind_len for lc in self.legs])
+        self.rank = len(self.legs)
 
     def _iter_all_blocks(self):
         """generator to iterate over all combinations of qindices in lexiographic order.
@@ -2092,7 +2098,7 @@ class Array(object):
         non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
         non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
 
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         res.legs = legs
         res._set_shape()
         res.labels = {}
@@ -2159,7 +2165,7 @@ class Array(object):
         new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
         new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
 
-        res = self.copy(deep=False)
+        cdef Array res = self.copy(deep=False)
         legs = res.legs
         for a in reversed(split_axes):
             legs[a:a + 1] = legs[a].legs  # replace pipes with saved original legs
@@ -2350,7 +2356,7 @@ def concatenate(arrays, axis=0, copy=True):
     :meth:`Array.sort_legcharge` : can be used to block by charges along the axis.
     """
     arrays = list(arrays)
-    res = arrays[0].zeros_like()
+    cdef Array res = arrays[0].zeros_like()
     res.labels = arrays[0].labels.copy()
     axis = res.get_leg_index(axis)
     not_axis = range(res.rank)
@@ -2689,15 +2695,15 @@ def trace(a, leg1=0, leg2=1):
     a.legs[ax1].test_contractible(a.legs[ax2])
     if a.rank == 2:
         # full contraction: ax1, ax2 = 0, 1 or vice versa
-        res = a.dtype.type(0.)
+        res_scalar = a.dtype.type(0.)
         for qdata_row, block in itertools.izip(a._qdata, a._data):
             if qdata_row[0] == qdata_row[1]:
-                res += np.trace(block)
-        return res
+                res_scalar += np.trace(block)
+        return res_scalar
     # non-complete contraction
     keep = np.array([ax for ax in xrange(a.rank) if ax != ax1 and ax != ax2], dtype=np.intp)
     legs = [a.legs[ax] for ax in keep]
-    res = Array(legs, a.dtype, a.qtotal)
+    cdef Array res = Array(legs, a.dtype, a.qtotal)
     if a.stored_blocks > 0:
         res_data = {}  # dictionary qdata_row -> block
         for qdata_row, block in itertools.izip(a._qdata, a._data):
@@ -3244,6 +3250,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         V_flat = np.zeros((block_size, k), a.dtype)
         V_flat[:k, :k] = np.eye(k, a.dtype)  # chose standard basis as eigenvectors
     # convert V_flat to npc Arrays and return
+    cdef Array U
     if ret_eigv:
         V = []
         for j in range(V_flat.shape[1]):
@@ -3338,11 +3345,11 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
-    q = Array([a_leg0, inner_leg.conj()], a.dtype)
+    cdef Array q = Array([a_leg0, inner_leg.conj()], a.dtype)
     q._data = q_data
     q._qdata = a._qdata.copy()
     q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
-    r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
+    cdef Array r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
     r._data = r_data
     r._qdata = a._qdata.copy()
     r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
@@ -3646,8 +3653,6 @@ def _tensordot_worker(a, b, axes):
     How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
     depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
     is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
-
-    Step 4) is finally implemented in :func:`_tensordot_post_worker`,
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
