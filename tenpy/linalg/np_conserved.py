@@ -86,6 +86,7 @@ class Array(object):
     .. todo :
         rename set_leg_labels() to iset_leg_labels();
         rename rank -> ndim  for better compatibility with numpy.ndarray
+        add self.add_leg(legcharge, index) as opposite of take_slice
 
     Parameters
     ----------
@@ -406,10 +407,10 @@ class Array(object):
         except:
             raise KeyError("label not found: " + repr(label) + ", current labels" + repr(
                 self.get_leg_labels()))
-        if res > self.rank:
-            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
-        elif res < 0:
+        if res < 0:
             res += self.rank
+        if res > self.rank or res < 0:
+            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         return res
 
     def get_leg_indices(self, labels):
@@ -3388,7 +3389,7 @@ def _iter_common_sorted(a, b):
     l_a = len(a)
     l_b = len(b)
     i, j = 0, 0
-    res = []  # TODO
+    res = []
     while i < l_a and j < l_b:
         if a[i] < b[j]:
             i += 1

@@ -351,7 +351,7 @@ cdef class Array(object):
         res._qdata_sorted = True
         return res
 
-    def test_sanity(self):
+    cpdef test_sanity(Array self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
             raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
@@ -396,7 +396,7 @@ cdef class Array(object):
 
     # labels ==================================================================
 
-    def get_leg_index(self, label):
+    cpdef get_leg_index(Array self, label):
         """translate a leg-index or leg-label to a leg-index.
 
         Parameters
@@ -420,10 +420,10 @@ cdef class Array(object):
         except:
             raise KeyError("label not found: " + repr(label) + ", current labels" + repr(
                 self.get_leg_labels()))
-        if res > self.rank:
-            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
-        elif res < 0:
+        if res < 0:
             res += self.rank
+        if res > self.rank or res < 0:
+            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
         return res
 
     def get_leg_indices(self, labels):
@@ -641,7 +641,7 @@ cdef class Array(object):
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
             block = self._get_block(pos[:, 0])
             if block is None:
-                return 0. # TODO XXX self.dtype.type(0)
+                return 0.
             else:
                 return block[tuple(pos[:, 1])]
         # advanced indexing
@@ -2069,7 +2069,10 @@ cdef class Array(object):
         transp = sum(transp, [])  # flatten: [a] + [b] = [a, b]
         return new_axes, tuple(transp)
 
-    def _combine_legs_worker(self, combine_legs, new_axes, pipes):
+    cdef _combine_legs_worker(Array self,
+                              list combine_legs,
+                              list new_axes,
+                              list pipes):
         """the main work of combine_legs: create a copy and reshape the data blocks.
 
         Assumes standard form of parameters.
@@ -2090,25 +2093,25 @@ cdef class Array(object):
         """
         all_combine_legs = np.concatenate(combine_legs)
         # non_combined_legs: axes of self which are not in combine_legs
-        non_combined_legs = np.array(
+        cdef np.ndarray[np.intp_t, ndim=1] non_combined_legs = np.array(
             [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
         legs = [self.legs[i] for i in non_combined_legs]
         for na, p in zip(new_axes, pipes):  # not reversed
             legs.insert(na, p)
-        non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
-        non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
-
         cdef Array res = self.copy(deep=False)
         res.legs = legs
         res._set_shape()
-        res.labels = {}
+        non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
+        cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
+
         # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
         qmap_inds = [
             p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
         ]
 
         # get new qdata
-        qdata = np.empty((self.stored_blocks, res.rank), dtype=self._qdata.dtype)
+        cdef np.ndarray[np.intp_t, ndim=2] qdata = np.empty((self.stored_blocks, res.rank),
+                                                            dtype=self._qdata.dtype)
         qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
         for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
             np.take(
@@ -2123,24 +2126,36 @@ cdef class Array(object):
         old_data = [self._data[s] for s in sort]
         qmap_inds = [qm[sort] for qm in qmap_inds]
         # divide into parts, which give a single new block
-        diffs = charges._c_find_row_differences(qdata_s)  # including the first and last row
+        cdef np.ndarray[np.intp_t, ndim=1] diffs = charges._c_find_row_differences(qdata_s)
+        # including the first and last row
 
         # now the hard part: map data
-        data = []
-        slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
+        cdef list data = []
+        cdef list slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
         # iterate over ranges of equal qindices in qdata_s
-        for beg, end in itertools.izip(diffs[:-1], diffs[1:]):
+        cdef np.ndarray new_block, old_block #, new_block_view # TODO: shape doesn't work...
+        cdef np.ndarray[np.intp_t, ndim=1] qindices
+        cdef int beg, end, bi, j, old_data_idx, qi
+        cdef np.ndarray[charges.QTYPE_t, ndim=2] q_map
+        cdef tuple sl
+        cdef int npipes = len(combine_legs)
+        for bi in range(diffs.shape[0]-1):
+            beg = diffs[bi]
+            end = diffs[bi+1]
             qindices = qdata_s[beg]
             new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
             data.append(new_block)
             # copy blocks
-            for old_data_idx in xrange(beg, end):
-                for na, p, qm_ind in zip(new_axes, pipes, qmap_inds):
-                    slices[na] = slice(*p.q_map[qm_ind[old_data_idx], :2])
+            for old_data_idx in range(beg, end):
+                for j in range(npipes):
+                    q_map = pipes[j].q_map
+                    qi = qmap_inds[j][old_data_idx]
+                    slices[new_axes[j]] = slice(q_map[qi, 0], q_map[qi, 1])
                 sl = tuple(slices)
-                new_block_view = new_block[sl]
                 # reshape block while copying
-                new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
+                new_block_view = new_block[sl]
+                old_block = old_data[old_data_idx].reshape(new_block_view.shape)
+                np.copyto(new_block_view, old_block, casting='no')
         res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
         res._qdata_sorted = True
         res._data = data
@@ -3401,7 +3416,7 @@ def _iter_common_sorted(a, b):
     l_a = len(a)
     l_b = len(b)
     i, j = 0, 0
-    res = []  # TODO
+    res = []
     while i < l_a and j < l_b:
         if a[i] < b[j]:
             i += 1
