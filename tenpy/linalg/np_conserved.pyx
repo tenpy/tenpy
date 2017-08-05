@@ -2069,10 +2069,10 @@ cdef class Array(object):
         transp = sum(transp, [])  # flatten: [a] + [b] = [a, b]
         return new_axes, tuple(transp)
 
-    cdef _combine_legs_worker(Array self,
-                              list combine_legs,
-                              list new_axes,
-                              list pipes):
+    cdef Array _combine_legs_worker(Array self,
+                                    list combine_legs,
+                                    list new_axes,
+                                    list pipes):
         """the main work of combine_legs: create a copy and reshape the data blocks.
 
         Assumes standard form of parameters.
@@ -2161,29 +2161,30 @@ cdef class Array(object):
         res._data = data
         return res
 
-    def _split_legs_worker(self, split_axes, cutoff):
+    cdef Array _split_legs_worker(Array self, list split_axes_, float cutoff):
         """the main work of split_legs: create a copy and reshape the data blocks.
 
         Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
         """
         # calculate mappings of axes
         # in self
-        split_axes = np.array(sorted(split_axes), dtype=np.intp)
+        cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.sort(split_axes_)
+        cdef int a, i, j, nsplit=split_axes.shape[0]
         pipes = [self.legs[a] for a in split_axes]
-        nonsplit_axes = np.array(
+        cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
             [i for i in xrange(self.rank) if i not in split_axes], dtype=np.intp)
         # in result
-        new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
-        for a in reversed(split_axes):
+        cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
+        for a in split_axes:
             new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
-        new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
-        new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
+        cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = new_nonsplit_axes[split_axes]
+        #    = the first leg for splitted pipes
+        cdef list new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
         new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
 
         cdef Array res = self.copy(deep=False)
-        legs = res.legs
         for a in reversed(split_axes):
-            legs[a:a + 1] = legs[a].legs  # replace pipes with saved original legs
+            res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
         res._set_shape()
 
         # get new qdata by stacking columns
@@ -2192,27 +2193,39 @@ cdef class Array(object):
         tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
 
         # now split the blocks
-        data = []
-        qdata = []  # rows of the new qdata
-        new_block_shape = np.empty(res.rank, dtype=np.intp)
-        block_slice = [slice(None)] * self.rank
+        cdef list data = []
+        cdef list qdata = []  # rows of the new qdata
+        cdef np.ndarray[np.intp_t, ndim=1] new_block_shape = np.empty(res.rank, dtype=np.intp)
+        cdef np.ndarray[np.intp_t, ndim=1] qdata_row, qm
+        cdef list block_slice = [slice(None)] * self.rank
+        cdef list qmap_slices = [None] * nsplit
+        cdef slice sl
+        cdef charges.LegPipe pipe
+        cdef charges.LegCharge leg
+        cdef np.ndarray old_block, new_block
+
         for old_block, qdata_row in itertools.izip(self._data, tmp_qdata):
-            qmap_slices = [
-                p.q_map_slices[i] for p, i in zip(pipes, qdata_row[new_split_axes_first])
-            ]
-            new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
+            for j in range(nonsplit_axes.shape[0]):
+                new_block_shape[new_nonsplit_axes[j]] = old_block.shape[nonsplit_axes[j]]
+            for j in range(nsplit):
+                pipe = pipes[j]
+                qmap_slices[j] = pipe.q_map_slices[qdata_row[new_split_axes_first[j]]]
             for qmap_rows in itertools.product(*qmap_slices):
-                for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
-                    qdata_row[sl] = block_qind = qm[3:]
-                    new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
-                                           for l, qi in zip(pipe.legs, block_qind)]
-                    block_slice[a] = slice(qm[0], qm[1])
-                new_block = old_block[block_slice].reshape(new_block_shape)
+                for i in range(nsplit):
+                    qm = qmap_rows[i]
+                    a = new_split_axes_first[i]
+                    pipe = pipes[i]
+                    for j in range(pipe.nlegs):
+                        qi = qm[3+j]
+                        qdata_row[a+j] = qi
+                        leg = pipe.legs[j]
+                        new_block_shape[a+j] = leg.slices[qi+1] - leg.slices[qi]
+                    block_slice[split_axes[i]] = slice(qm[0], qm[1])
+                new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
                 # all charges are compatible by construction, but some might be zero
-                if not np.any(np.abs(new_block) > cutoff):
-                    continue
-                data.append(new_block.copy())  # copy, not view
-                qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
+                if np.any(np.abs(new_block) > cutoff):
+                    data.append(new_block.copy())  # copy, not view
+                    qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
         if len(data) > 0:
             res._qdata = np.array(qdata, dtype=np.intp)
             res._qdata_sorted = False
