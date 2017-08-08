@@ -46,4 +46,7 @@ cdef class LegPipe(LegCharge):
     cdef void _init_from_legs(LegPipe self, bint sort=?, bint bunch=?) except *
     cpdef void __setstate__(LegPipe self, tuple state)
 
-cdef _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat)
+cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat)
+cdef np.ndarray[QTYPE_t,ndim=2] _partial_qtotal(ChargeInfo chinfo,
+                                                list legs,
+                                                np.ndarray[np.intp_t, ndim=2] qdata)

@@ -2820,7 +2820,7 @@ def tensordot(a, b, axes=2):
     Does not require complete blocking of the charges.
 
     Labels are inherited from `a` and `b`.
-    In case of a collistion (= the same label would be inherited from `a` and `b`
+    In case of a collision (= the same label would be inherited from `a` and `b`
     after the contraction), both labels are dropped.
 
     Detailed implementation notes are available in the doc-string of :func:`_tensordot_worker`.
@@ -2855,7 +2855,7 @@ def tensordot(a, b, axes=2):
         # step 1.) of the implementation notes: bring into standard form by transposing
         axes_a = a.get_leg_indices(to_iterable(axes_a))
         axes_b = b.get_leg_indices(to_iterable(axes_b))
-        if len(axes_a) != len(axes_a):
+        if len(axes_a) != len(axes_b):
             raise ValueError("different lens of axes for a, b: " + repr(axes))
         not_axes_a = [i for i in range(a.rank) if i not in axes_a]
         not_axes_b = [i for i in range(b.rank) if i not in axes_b]

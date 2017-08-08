@@ -178,7 +178,7 @@ cdef class ChargeInfo(object):
         cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
         cdef int i, j, x
         cdef QTYPE_t q
-        cdef L = charges.shape[0]
+        cdef int L = charges.shape[0]
         for j in range(self.qnumber):
             q = mod[j]
             if q == 1:
@@ -1091,7 +1091,7 @@ def _find_row_differences(qflat):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
+cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
     """C-version of :func:`_find_row_differences` (which uses numpy for optimization)"""
     # TODO: remove python version once np_conserved is also cythonized...
     if qflat.shape[1] == 0:
@@ -1111,3 +1111,36 @@ cdef _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
             n += 1
     res[n] = L
     return res[:n+1]
+
+cdef np.ndarray[QTYPE_t,ndim=2] _partial_qtotal(ChargeInfo chinfo,
+                                                list legs,
+                                                np.ndarray[np.intp_t, ndim=2] qdata):
+    """Calculate qtotal of a part of the legs of a npc.Array.
+
+    Parameters
+    ----------
+    chinfo : ChargeInfo
+        Common ChargeInfo of the legs.
+    legs : list of LegCharge
+        The legs over which wich we sum
+    qdata : 2D array
+        Rows of qindices for the specified legs.
+
+    Returns
+    -------
+    partial_qtotal : 2D ndarray
+        Valid 2D version of
+        ``chinfo.make_valid(np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0))``.
+    """
+    cdef np.ndarray[QTYPE_t, ndim=2] res = np.zeros([qdata.shape[0], chinfo.qnumber], QTYPE)
+    cdef int a, k, qi
+    cdef LegCharge leg
+    cdef np.ndarray[QTYPE_t, ndim=2] charges
+    for a in range(qdata.shape[1]):
+        leg = legs[a]
+        charges  = leg.charges
+        for i in range(qdata.shape[0]):
+            qi = qdata[i, a]
+            for k in range(chinfo.qnumber):
+                res[i, k] += charges[qi, k] * leg.qconj
+    return chinfo._make_valid_2D(res)

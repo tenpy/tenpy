@@ -444,10 +444,18 @@ def test_npc_tensordot():
         print "axes = 1"  # start simple: only one axes
         c = npc.tensordot(a, b, axes=1)
         c.test_sanity()
+        a.test_sanity()
+        b.test_sanity()
+        npt.assert_array_almost_equal_nulp(a.to_ndarray(), aflat, 1)
+        npt.assert_array_almost_equal_nulp(b.to_ndarray(), bflat, 1)
         cflat = np.tensordot(aflat, bflat, axes=1)
         npt.assert_array_almost_equal_nulp(c.to_ndarray(), cflat, sum(a.shape))
         print "axes = 2"  # second: more than one axis
         c = npc.tensordot(a, b, axes=([1, 2], [1, 0]))
+        a.test_sanity()
+        b.test_sanity()
+        npt.assert_array_almost_equal_nulp(a.to_ndarray(), aflat, 1)
+        npt.assert_array_almost_equal_nulp(b.to_ndarray(), bflat, 1)
         c.test_sanity()
         cflat = np.tensordot(aflat, bflat, axes=([1, 2], [1, 0]))
         npt.assert_array_almost_equal_nulp(c.to_ndarray(), cflat, sum(a.shape))
