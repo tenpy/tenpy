@@ -97,8 +97,6 @@ class ChargeInfo(object):
     def make_valid(self, charges=None):
         """Take charges modulo self.mod.
 
-        Acts in-place, if charges is an array.
-
         Parameters
         ----------
         charges : array_like or None

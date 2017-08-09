@@ -19,6 +19,7 @@ try:
     has_old_npc = True
 except:
     has_old_npc = False
+# TODO: comparison with non-compiled np_conserved -> need npc.Array.get_state and set_state
 
 from test_charges import gen_random_legcharge_nq, rand_permutation, rand_distinct_int
 
@@ -166,15 +167,19 @@ def tensordot_timing(do_flat=True,
     return time_npc, time_old_npc, time_flat
 
 
-def tensordot_profile(fn=None, dmax=None, **kwargs):
+def tensordot_profile(fn=None, dmax=None, rep_tdot=1, **kwargs):
     """profile the tensordot"""
     a, b, axes = setup_npc(**kwargs)
-    print "profile tensordot(a, b, axes)"
+    cmd = "npc.tensordot(a, b, axes)"
+    if rep_tdot > 1:
+        cmd = "for _ in range({rep_tdot:d}): ".format(rep_tdot=rep_tdot) + cmd
+    print "profile:"
+    print cmd
     print "a: {a!r}\nb: {b!r}\naxes {axes!r}".format(a=a, b=b, axes=axes)
     print "sparse stats:"
     print a.sparse_stats()
     print b.sparse_stats()
-    cProfile.runctx("npc.tensordot(a, b, axes)", globals(), locals(), fn)
+    cProfile.runctx(cmd, globals(), locals(), fn)
 
 
 def skip_timing(dmax, size=20, mod_q=[1], n_qsectors=3, **kwargs):
@@ -194,7 +199,7 @@ def skip_timing(dmax, size=20, mod_q=[1], n_qsectors=3, **kwargs):
     return skip_all, do_flat
 
 
-def run_tensordot_timing(sizes=range(5, 80, 5),
+def run_tensordot_timing(sizes=range(1, 10) + range(10, 80, 5),
                          num_qs=range(3),
                          seeds=range(5),
                          dmax=2000,
@@ -219,7 +224,7 @@ def run_tensordot_timing(sizes=range(5, 80, 5),
             if not skip_all:
                 for seed in seeds:
                     kwargs.update(seed=seed)
-                    res = tensordot_timing(do_flat, True, 3, 3, **kwargs)
+                    res = tensordot_timing(do_flat, True, **kwargs)
                     timing += res
             num_q_timings.append(timing / len(seeds))
         print "-" * 80
@@ -337,6 +342,13 @@ if __name__ == "__main__":
     parser.add_argument(
         '--n_qsectors', type=int, default=3, help="""number of charge sectors per leg""")
     parser.add_argument(
+        '--repeat',
+        type=int,
+        default=1,
+        help="""Repeat each tensordot `repeat` times during measurements.
+        For timing, we still measure the  ``(time for repeat dot)/repeat``;
+        For profiling the times just scale with `repeat`.""")
+    parser.add_argument(
         '--legs',
         type=int,
         default=2,
@@ -349,6 +361,7 @@ if __name__ == "__main__":
         leg_a_out=args.legs,
         leg_b_out=args.legs,
         leg_contract=args.legs,
+        rep_tdot=args.repeat,
         dmax=args.dmax)
     if args.timing:
         t0 = time.time()
@@ -362,7 +375,7 @@ if __name__ == "__main__":
             plot_timing_res(data, os.path.splitext(fn)[0] + '.png')
     if args.profile:
         fn = None if len(args.files) == 0 else args.files[0]
-        tensordot_profile(fn, mod_q=[1], size=50, seed=2, **kwargs)
+        tensordot_profile(fn, mod_q=[1], size=10, seed=2, **kwargs)
     if not any([args.timing, args.plot, args.profile]):
         data = run_tensordot_timing(**kwargs)
         print_timing_res(data)

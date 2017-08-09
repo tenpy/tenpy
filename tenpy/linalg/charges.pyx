@@ -1,3 +1,4 @@
+# cython: profile=True
 r"""Basic definitions of a charge.
 
 Contains implementation of classes
@@ -92,11 +93,6 @@ cdef class ChargeInfo(object):
     cpdef np.ndarray make_valid(ChargeInfo self, charges=None):
         """Take charges modulo self.mod.
 
-        Acts in-place, if charges is an array.
-
-        .. todo : fast indexing requirese 1D/2D version
-            Save default charges in self?
-
         Parameters
         ----------
         charges : array_like or None
@@ -123,7 +119,7 @@ cdef class ChargeInfo(object):
     @cython.boundscheck(False)
     @cython.cdivision(True)
     cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=1] charges):
-        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)
+        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)  # TODO: why an explicit copy?
         cdef int j
         cdef QTYPE_t q
         for j in range(self.qnumber):
