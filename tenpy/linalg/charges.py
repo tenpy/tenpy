@@ -109,7 +109,7 @@ class ChargeInfo(object):
             A copy of `charges` taken modulo `mod`, but with ``x % 1 := x``
         """
         if charges is None:
-            return np.zeros((self.qnumber, ))
+            return np.zeros((self.qnumber, ), dtype=QTYPE)
         charges = np.array(charges, dtype=QTYPE)
         charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
         return charges
