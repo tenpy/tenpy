@@ -333,21 +333,24 @@ class Array(object):
         res._qdata_sorted = True
         return res
 
-    def test_sanity(self):
+    def test_sanity(self, quick=False):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self.shape != tuple([lc.ind_len for lc in self.legs]):
-            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
-                self.shape, tuple([lc.ind_len for lc in self.legs])))
-        if any([self.dtype != d.dtype for d in self._data]):
-            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
-                self.dtype, [self.dtype != d.dtype for d in self._data]))
         if len(self.legs) == 0:
             raise ValueError("We don't allow rank-0 tensors without legs")
         for l in self.legs:
-            l.test_sanity()
             if l.chinfo != self.chinfo:
                 raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
                     l.chinfo, self.chinfo))
+        if quick:  # Previous checks to test the arguments of __init__
+            return
+        if self.shape != tuple([lc.ind_len for lc in self.legs]):
+            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
+                self.shape, tuple([lc.ind_len for lc in self.legs])))
+        for l in self.legs:
+            l.test_sanity()
+        if any([self.dtype != d.dtype for d in self._data]):
+            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
+                self.dtype, [self.dtype != d.dtype for d in self._data]))
         if self._qdata.shape != (self.stored_blocks, self.rank):
             raise ValueError("_qdata shape wrong")
         if self._qdata.dtype != np.intp:
