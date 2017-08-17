@@ -3302,7 +3302,7 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     ----------
     a : :class:`Array`
         A square matrix to be exponentiated, shape ``(M,N)``.
-    mode : 'reduced', 'complete', 'full'
+    mode : 'reduced', 'complete'
         'reduced': return `q` and `r` with shapes (M,K) and (K,N), where K=min(M,N)
         'complete': return `q` with shape (M,M).
     inner_labels: [{str|None}, {str|None}]
@@ -3333,26 +3333,35 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
         q_block, r_block = np.linalg.qr(block, mode)
         q_data.append(q_block)
         r_data.append(r_block)
-        q1, q2 = qindices
-        i0 = a_leg0.slices[q1]
-        inner_leg_mask[i0:i0+q_block.shape[1]] = True
-    # map qindices
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
+        if mode != 'complete':
+            q1, q2 = qindices
+            i0 = a_leg0.slices[q1]
+            inner_leg_mask[i0:i0+q_block.shape[1]] = True
+    if mode != 'complete':
+        # map qindices
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
+    else:
+        inner_leg = a_leg0
     q = Array([a_leg0, inner_leg.conj()], a.dtype)
     q._data = q_data
     q._qdata = a._qdata.copy()
-    q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
     r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
     r._data = r_data
     r._qdata = a._qdata.copy()
-    r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
+    if mode != 'complete':
+        q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
+        r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
     if len(piped_axes) > 0:  # revert the permutation in the axes
         if 0 in piped_axes:
-            q = q.split_legs(0)
+            if mode != 'complete':
+                q = q.split_legs(0)
+            else:
+                q = q.split_legs(0, 1)
+                r = r.split_legs(0)
         if 1 in piped_axes:
-            r = r.split_legs(1)
+            r = r.split_legs(-1)
     q.set_leg_labels([a_labels[0], label_Q])
     r.set_leg_labels([label_R, a_labels[1]])
     return q, r
