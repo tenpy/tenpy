@@ -227,6 +227,8 @@ class PurificationTEBD(tebd.Engine):
             return self.disentangle_backwards(theta)
         elif disentangle == 'renyi':
             return self.disentangle_renyi(theta)
+        elif disentangle == 'norm':
+            return self.disentangle_norm(theta)
         elif disentangle == 'diag':
             return self.disentangle_diag(theta)
         # else
@@ -329,7 +331,8 @@ class PurificationTEBD(tebd.Engine):
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Two-site wave function to be disentangled.
-        U
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The previous guess for `U`; with legs ``'q0', 'q1', 'q0*', 'q1*'``.
 
         Returns
         -------
@@ -489,6 +492,81 @@ class PurificationTEBD(tebd.Engine):
             return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
 
+    def disentangle_norm(self, theta):
+        """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
+
+        Reads of the following `TEBD_params` as break criteria for the iteration:
+
+        ================ ====== ======================================================
+        key              type   description
+        ================ ====== ======================================================
+        disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
+                                per iteration is smaller than this value.
+        ---------------- ------ ------------------------------------------------------
+        disent_max_iter  float  Maximum number of iterations to perform.
+        ================ ====== ======================================================
+
+        Arguments and return values are the same as for :meth:`disentangle`.
+        """
+        max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
+        eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        U_idx_dt, i = self._update_index
+        if U_idx_dt is not None:
+            U = self._guess_U_disent[U_idx_dt][i]  # recover last result
+            # TODO XXX : HACK to disable using the last result
+            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+        else:
+            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+        err = None
+        for j in xrange(max_iter):
+            err2, U = self.disentangle_norm_iter(theta, U)
+            if err is not None and abs(err.eps - err2.eps) <= err.eps * eps:
+                break
+            err = err2
+        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        self._disent_iterations[i] += j  # save the number of iterations performed
+        if self.verbose >= 10:
+            print "disentangle norm: {j:d} iterations, err={err!s}".format(j=j, err=err)
+        if U_idx_dt is not None:
+            self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
+        return theta, U
+
+    def disentangle_norm_iter(self, theta, U):
+        r"""Given `theta` and `U`, find `U2` maximizing ``<theta|U2 truncate(U |theta>)``.
+
+        Finds unitary `U2` which maximizes Tr(U
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Two-site wave function to be disentangled.
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The previous guess for `U`; with legs ``'q0', 'q1', 'q0*', 'q1*'``.
+
+        Returns
+        -------
+        trunc_err : TruncationError
+            Norm error discarded during the truncation of ``U|theta>``.
+        new_U : :class:`~tenpy.linalg.np_conserved.Array`
+            Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``.
+            Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
+        """
+        U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
+        X, Y, Z, err, _ = svd_theta(lambda_, self.trunc_params)
+        lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
+        dS = npc.tensordot(theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'],
+                                                        ['vL*', 'vR*', 'p0*', 'p1*']])
+        # dS has legs 'q0', 'q1', 'q0*', 'q1*'
+        dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
+        # Find unitary U2 which maximizes `trace(U dS)`.
+        W, Y, VH = npc.svd(dS)
+        new_U = npc.tensordot(W, VH, axes=[1, 0]).conj()  # == V W^dagger.
+        # this yields trace(U dS) = trace(Y), which is maximal.
+        return err, new_U.split_legs([0, 1])
+
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
@@ -510,7 +588,7 @@ class PurificationTEBD(tebd.Engine):
         # done
 
     def disentangle_global_nsite(self, n=2):
-        """Perform a sweep through the system, disentangling `n` sites at once.
+        """Perform a sweep through the system and disentangle with :meth:`disentangle_n_site`.
 
         Parameters
         ----------
@@ -520,15 +598,15 @@ class PurificationTEBD(tebd.Engine):
         for i in range(0, self.psi.L-n+1):  # sweep left to right
             self._update_index = None, i
             theta = self.psi.get_theta(i, n=n)
-            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+            self.disentangle_n_site(i, n, theta)  # works recursively
         for i in range(self.psi.L-n, -1, -1):  # sweep right to left
             self._update_index = None, i
             theta = self.psi.get_theta(i, n=n)
-            self.disentangle_renyi_n_site(i, n, theta)  # works recursively
+            self.disentangle_n_site(i, n, theta)  # works recursively
         self._update_index = None
 
-    def disentangle_renyi_n_site(self, i, n, theta):
-        r"""Generalization of :meth:`_disentangle_renyi` to `n` sites.
+    def disentangle_n_site(self, i, n, theta):
+        r"""Generalization of :meth:`disentangle` to `n` sites.
 
         Simply group left and right `n`/2 physical legs, adjust labels, and
         apply :meth:`disentangle_renyi` to disentangle the central bond.
@@ -545,7 +623,7 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([pL, qL, pR, qR], qconj=[+1, -1, +1, -1], new_axes=[1, 2, 3, 4])
         _, p0, q0, p1, q1, _ = theta.get_leg_labels()  # keep the labels for later
         theta.ireplace_labels([p0, q0, p1, q1], ['p0', 'q0', 'p1', 'q1'])
-        theta, _ = self.disentangle_renyi(theta)  # apply two-site disentangling
+        theta, _ = self.disentangle(theta)  # apply two-site disentangling
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
@@ -560,7 +638,7 @@ class PurificationTEBD(tebd.Engine):
             # disentangle left n1-site wave function recursively
             theta_L = U.iscale_axis(S, 1).split_legs(0)
             theta_L = theta_L.ireplace_labels(['p0', 'q0'], [p0, q0]).split_legs([p0, q0])
-            self.disentangle_renyi_n_site(i, n1, theta_L)
+            self.disentangle_n_site(i, n1, theta_L)
         if n2 == 1:
             # save V as right B in psi
             V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -570,7 +648,7 @@ class PurificationTEBD(tebd.Engine):
             theta_R = V.iscale_axis(S, 0).split_legs(1)
             theta_R = theta_R.ireplace_labels(['p1', 'q1'], [p1, q1]).split_legs([p1, q1])
             theta_R.ireplace_labels(pR, p[:n2]).ireplace_labels(qR, q[:n2])
-            self.disentangle_renyi_n_site(i+n1, n2, theta_R)
+            self.disentangle_n_site(i+n1, n2, theta_R)
 
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""

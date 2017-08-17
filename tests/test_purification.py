@@ -40,9 +40,9 @@ def test_purification_mps():
 def test_purification_TEBD(L=4):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
-    for disent in [None, 'backwards', 'renyi']:
+    for disent in [None, 'backwards', 'renyi', 'norm']:
         psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
-        TEBD_params = {'trunc_params': {'chi_max': 16, 'svd_min': 1.e-13},
+        TEBD_params = {'trunc_params': {'chi_max': 16, 'svd_min': 1.e-8},
                        'disentangle': disent,
                        'dt': 0.1,
                        'verbose': 30,
