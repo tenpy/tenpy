@@ -223,16 +223,24 @@ class PurificationTEBD(tebd.Engine):
         disentangle = get_parameter(self.TEBD_params, 'disentangle', None, 'PurificationTEBD')
         if disentangle is None:
             return theta, None
-        elif disentangle == 'backwards':
-            return self.disentangle_backwards(theta)
-        elif disentangle == 'renyi':
-            return self.disentangle_renyi(theta)
-        elif disentangle == 'norm':
-            return self.disentangle_norm(theta)
-        elif disentangle == 'diag':
-            return self.disentangle_diag(theta)
-        # else
-        raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
+        disentangle_words = disentangle.split('-')
+        Utot = None
+        for disentangle in disentangle_words:
+            if disentangle == 'backwards':
+                theta, U = self.disentangle_backwards(theta)
+            elif disentangle == 'renyi':
+                theta, U = self.disentangle_renyi(theta)
+            elif disentangle == 'norm':
+                theta, U = self.disentangle_norm(theta)
+            elif disentangle == 'diag':
+                theta, U = self.disentangle_diag(theta)
+            else:
+                raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
+            if Utot is None:
+                Utot = U
+            elif U is not None:  # neither Utot nor U are None: multiply together
+                Utot = npc.tensordot(U, Utot, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        return theta, Utot
 
     def disentangle_backwards(self, theta):
         """Disentangle with backwards time evolution.
@@ -504,12 +512,16 @@ class PurificationTEBD(tebd.Engine):
                                 per iteration is smaller than this value.
         ---------------- ------ ------------------------------------------------------
         disent_max_iter  float  Maximum number of iterations to perform.
+        ---------------- ------ ------------------------------------------------------
+        disent_trunc_par dict   Truncation parameters; defaults to `trunc_params`.
         ================ ====== ======================================================
 
         Arguments and return values are the same as for :meth:`disentangle`.
         """
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        trunc_par = get_parameter(self.TEBD_params, 'disent_trunc_par',
+                                  self.trunc_params, 'PurificationTEBD')
         U_idx_dt, i = self._update_index
         if U_idx_dt is not None:
             U = self._guess_U_disent[U_idx_dt][i]  # recover last result
@@ -519,9 +531,10 @@ class PurificationTEBD(tebd.Engine):
         else:
             U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                           npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+        #  trunc_par['chi_max'] = max([int(len(self.psi._S[i+1])*0.9), 1]) # TODO XXX HACK
         err = None
         for j in xrange(max_iter):
-            err2, U = self.disentangle_norm_iter(theta, U)
+            err2, U = self.disentangle_norm_iter(theta, U, trunc_par)
             if err is not None and abs(err.eps - err2.eps) <= err.eps * eps:
                 break
             err = err2
@@ -533,7 +546,7 @@ class PurificationTEBD(tebd.Engine):
             self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
         return theta, U
 
-    def disentangle_norm_iter(self, theta, U):
+    def disentangle_norm_iter(self, theta, U, trunc_params):
         r"""Given `theta` and `U`, find `U2` maximizing ``<theta|U2 truncate(U |theta>)``.
 
         Finds unitary `U2` which maximizes Tr(U
@@ -544,6 +557,8 @@ class PurificationTEBD(tebd.Engine):
             Two-site wave function to be disentangled.
         U : :class:`~tenpy.linalg.np_conserved.Array`
             The previous guess for `U`; with legs ``'q0', 'q1', 'q0*', 'q1*'``.
+        trunc_params : dict
+            The truncation parameters (similar as `self.trunc_params`) used to truncate `U|theta>`.
 
         Returns
         -------
@@ -555,7 +570,7 @@ class PurificationTEBD(tebd.Engine):
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
-        X, Y, Z, err, _ = svd_theta(lambda_, self.trunc_params)
+        X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
         lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
         dS = npc.tensordot(theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'],
                                                         ['vL*', 'vR*', 'p0*', 'p1*']])
