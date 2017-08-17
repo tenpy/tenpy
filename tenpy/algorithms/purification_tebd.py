@@ -223,16 +223,24 @@ class PurificationTEBD(tebd.Engine):
         disentangle = get_parameter(self.TEBD_params, 'disentangle', None, 'PurificationTEBD')
         if disentangle is None:
             return theta, None
-        elif disentangle == 'backwards':
-            return self.disentangle_backwards(theta)
-        elif disentangle == 'renyi':
-            return self.disentangle_renyi(theta)
-        elif disentangle == 'norm':
-            return self.disentangle_norm(theta)
-        elif disentangle == 'diag':
-            return self.disentangle_diag(theta)
-        # else
-        raise ValueError("Invalid 'disentangle': got " + repr(disentangle))
+        disentangle_words = disentangle.split('-')
+        Utot = None
+        for disentangle in disentangle_words:
+            if disentangle == 'backwards':
+                theta, U = self.disentangle_backwards(theta)
+            elif disentangle == 'renyi':
+                theta, U = self.disentangle_renyi(theta)
+            elif disentangle == 'norm':
+                theta, U = self.disentangle_norm(theta)
+            elif disentangle == 'diag':
+                theta, U = self.disentangle_diag(theta)
+            else:
+                raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
+            if Utot is None:
+                Utot = U
+            elif U is not None:  # neither Utot nor U are None: multiply together
+                Utot = npc.tensordot(U, Utot, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        return theta, Utot
 
     def disentangle_backwards(self, theta):
         """Disentangle with backwards time evolution.
@@ -523,6 +531,7 @@ class PurificationTEBD(tebd.Engine):
         else:
             U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                           npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+        #  trunc_par['chi_max'] = max([int(len(self.psi._S[i+1])*0.9), 1]) # TODO XXX HACK
         err = None
         for j in xrange(max_iter):
             err2, U = self.disentangle_norm_iter(theta, U, trunc_par)
