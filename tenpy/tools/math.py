@@ -1,4 +1,4 @@
-"""Differnt math functions needed at some point in the library."""
+"""Different math functions needed at some point in the library."""
 import numpy as np
 import warnings
 from . import misc

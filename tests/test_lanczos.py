@@ -6,6 +6,7 @@ import numpy as np
 
 from test_charges import gen_random_legcharge
 from tenpy.linalg import lanczos
+import tenpy.linalg.random_matrix as rmat
 
 ch = npc.ChargeInfo([2])
 
@@ -28,21 +29,21 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
 def test_lanczos(n=30, k=5, tol=5.e-15):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
-    H = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    H = H + 1.j * npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    H += H.conj().transpose()
+    H = npc.Array.from_func_square(rmat.GUE, leg)
     H_flat = H.to_ndarray()
+    E_flat, psi_flat = np.linalg.eigh(H_flat)
+    E0_flat, psi0_flat = E_flat[0], psi_flat[:, 0]
+    qtotal = npc.detect_qtotal(psi0_flat, [leg])
+
     H_Op = lanczos.LinearOperator(H)
-    psi_init = npc.Array.from_func(np.random.random, [leg], shape_kw='size')
+    psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
     E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1})
-    E_flat, psi_flat = np.linalg.eigh(H_flat)
     print "full spectrum:", E_flat
-    E0_flat, psi0_flat = E_flat[0], psi_flat[:, 0]
     print "E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat)
     print "|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat)
     psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), do_conj=True)
-    print "<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0
+    print "<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
     print "<psi0_flat|H_flat|psi0_flat> / E0_flat = ",
     print np.inner(psi0_flat.conj(), np.dot(H_flat, psi0_flat)) / E0_flat
@@ -74,4 +75,4 @@ def test_lanczos(n=30, k=5, tol=5.e-15):
     # and finnally check also orthogonality to psi0
     ov = npc.inner(psi0, psi1, do_conj=True)
     print "|<psi0|psi1>| =", abs(ov)
-    assert (abs(ov) < tol)
+    assert (abs(ov) < tol**0.5)
