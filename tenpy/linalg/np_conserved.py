@@ -262,7 +262,7 @@ class Array(object):
     def from_func(cls,
                   func,
                   legcharges,
-                  dtype=np.float64,
+                  dtype=None,
                   qtotal=None,
                   func_args=(),
                   func_kwargs={},
@@ -283,8 +283,9 @@ class Array(object):
             `shape` is a tuple of int.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
-        dtype : type | string
-            the data type of the output entries. Defaults to np.float64.
+        dtype : None | type | string
+            The data type of the output entries.
+            Defaults to `None`: obtain it from the return value of the function.
             Note that this argument is not given to func, but rather a type conversion
             is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
         qtotal : None | charges
@@ -301,6 +302,17 @@ class Array(object):
         res : :class:`Array`
             an Array with blocks filled using `func`.
         """
+        if dtype is None:
+            # create a small test block to derive the dtype
+            shape = (2, 2)
+            if shape_kw is None:
+                block = func(shape, *func_args, **func_kwargs)
+            else:
+                kws = func_kwargs.copy()
+                kws[shape_kw] = shape
+                block = func(*func_args, **kws)
+            block = np.asarray(block)
+            dtype = block.dtype
         res = cls(legcharges, dtype, qtotal)  # without any data yet.
         data = []
         qdata = []
@@ -323,6 +335,60 @@ class Array(object):
         res._qdata = np.array(qdata, dtype=np.intp).reshape((len(qdata), res.rank))
         res._qdata_sorted = True  # _iter_all_blocks is in lexiographic order
         res.test_sanity()
+        return res
+
+    @classmethod
+    def from_func_square(cls,
+                         func,
+                         leg,
+                         dtype=None,
+                         func_args=(),
+                         func_kwargs={},
+                         shape_kw=None):
+        """Create an Array from a (numpy) function.
+
+        This function creates an array and fills the blocks *compatible* with the charges
+        using `func`, where `func` is a function returning a `array_like` when given a shape,
+        e.g. one of ``np.ones`` or ``np.random.standard_normal`` or the functions defined in
+        :module:`~tenpy.linalg.random_matrix`.
+
+        Parameters
+        ----------
+        func : callable
+            a function-like object which is called to generate the data blocks.
+            We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
+            If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
+            otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
+            `shape` is a tuple of int.
+        leg : :class:`LegCharge`
+            The leg charges for the first leg; the second leg is set to ``leg.conj()``.
+            The :class:`ChargeInfo` is read out from it.
+        dtype : None | type | string
+            The data type of the output entries.
+            Defaults to `None`: obtain it from the return value of the function.
+            Note that this argument is not given to func, but rather a type conversion
+            is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
+        func_args : iterable
+            additional arguments given to `func`
+        func_kwargs : dict
+            additional keyword arguments given to `func`
+        shape_kw : None | str
+            If given, the keyword with which shape is given to `func`.
+
+        Returns
+        -------
+        res : :class:`Array`
+            an Array with blocks filled using `func`.
+        """
+        blocked = leg.is_blocked()
+        if not blocked:
+            pipe = charges.LegPipe([leg])
+            legs = [pipe, pipe.conj()]
+        else:
+            legs = [leg, leg.conj()]
+        res = Array.from_func(func, legs, dtype, None, func_args, func_kwargs, shape_kw)
+        if not blocked:
+            return res.split_legs()
         return res
 
     def zeros_like(self):
@@ -1473,6 +1539,10 @@ class Array(object):
             labels[self._conj_leg_label(lab)] = ax
         res.labels = labels
         return res
+
+    def complex_conj(self):
+        """return complex conjugate *without* conjugating the charge data."""
+        return self.unary_blockwise(np.conj)
 
     def norm(self, ord=None, convert_to_float=True):
         """Norm of flattened data.
