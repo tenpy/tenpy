@@ -13,16 +13,11 @@ import nose.tools as nst
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
 
-from test_charges import gen_random_legcharge
+from random_test import gen_random_legcharge
 
 
 def commutator(A, B):
     return np.dot(A, B) - np.dot(B, A)
-
-
-def assert_almost_equal(A, B, tol):
-    tol = len(A) * len(A) * np.finfo(np.float64).eps
-    assert(np.linalg.norm(A-B) < tol)
 
 
 def test_site():
@@ -66,7 +61,7 @@ def test_spin_site():
         tol = S.dim*S.dim
         for i in range(3):
             Sa, Sb, Sc = ([Sx, Sy, Sz] * 2)[i:i + 3]
-            assert_almost_equal(commutator(Sa, Sb), 1.j*Sc, tol)
+            npt.assert_allclose(commutator(Sa, Sb), 1.j*Sc, tol, tol)
         npt.assert_array_almost_equal_nulp(commutator(Sz, Sp), Sp, tol)
         npt.assert_array_almost_equal_nulp(commutator(Sz, Sm), -Sm, tol)
 

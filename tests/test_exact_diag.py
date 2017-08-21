@@ -30,8 +30,9 @@ def test_ED():
     ov = npc.inner(psi, full_psi2, do_conj=True)
     print "overlab <psi | psi2> = 1. -", 1. - ov
     assert (abs(abs(ov) - 1.) < 1.e-15)
-    # starting from a random guess, check if we can also do lanczos.
-    np.random.seed(123455)
+    # starting from a random guess in the correct charge sector,
+    # check if we can also do lanczos.
+    np.random.seed(12345)
     psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
     E0, psi3, N = lanczos(ED2, psi3)
     print "Lanczos E0 =", E0

@@ -21,7 +21,7 @@ except:
     has_old_npc = False
 # TODO: comparison with non-compiled np_conserved -> need npc.Array.get_state and set_state
 
-from test_charges import gen_random_legcharge_nq, rand_permutation, rand_distinct_int
+from random_test import gen_random_legcharge_nq, rand_permutation, rand_distinct_int
 
 # setup code for timeit
 setup_code = """

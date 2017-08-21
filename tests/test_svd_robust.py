@@ -8,7 +8,8 @@ from scipy.linalg import diagsvd
 
 from tenpy.linalg import svd_robust
 
-np.random.seed(3141592)  # (it should work for any seed)
+import random_test  # fix the random seed.
+from tenpy.linalg.random_matrix import standard_normal_complex
 
 
 def test_CLAPACK_import():
@@ -25,10 +26,11 @@ def check_svd_function(svd_function):
             print "m, n = ", m, n
             tol_NULP = 200 * max(max(m, n)**3,
                                  100)  # quite large tolerance, but seems to be required...
-            A = np.random.random(size=(m, n))
+            if np.dtype(dtype).kind == 'c':  # complex?
+                A = standard_normal_complex((m, n))
+            else:
+                A = np.random.standard_normal(size=(m, n))
             A = np.asarray(A, dtype)
-            if dtype in [np.complex64, np.complex128]:
-                A += 1.j * np.random.random(size=(m, n))
             Sonly = svd_function(A, compute_uv=False)
 
             Ufull, Sfull, VTfull = svd_function(A, full_matrices=True, compute_uv=True)
@@ -45,8 +47,5 @@ def check_svd_function(svd_function):
 
 
 def test_svd():
-    check_svd_function(svd_robust.svd)
-
-
-def test_svd_gesvd():
-    check_svd_function(svd_robust.svd_gesvd)
+    yield check_svd_function, svd_robust.svd
+    yield check_svd_function, svd_robust.svd_gesvd

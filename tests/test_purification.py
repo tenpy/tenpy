@@ -10,6 +10,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
+import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
 from nose.plugins.attrib import attr
 
@@ -60,7 +61,6 @@ def test_purification_TEBD(L=4):
 
 
 def test_disentangler(L=4, eps=1.e-15):
-    np.random.seed(12345)  # TODO: this doesn't work for all seeds!?!
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
@@ -69,12 +69,9 @@ def test_disentangler(L=4, eps=1.e-15):
     print theta[0, :, :, 0, :, :]
     # find random unitary: SVD of random matix
     pleg = psi.sites[0].leg
-    legs = [pleg, pleg, pleg.conj(), pleg.conj()]
-    A = npc.Array.from_func(np.random.random, legs, shape_kw='size')
+    pipe = npc.LegPipe([pleg, pleg])
+    A = npc.Array.from_func_square(rmat.CUE, pipe).split_legs()
     A.set_leg_labels(['p0', 'p1', 'p0*', 'p1*'])
-    A = A.combine_legs([[0, 1], [2, 3]], qconj=[+1, -1])
-    X, Y, Z = npc.svd(A)
-    A = npc.tensordot(X, Z, axes=[1, 0]).split_legs()
     # Now we have unitary `A`, i.e. the optimal `U` should be `A^dagger`.
     theta = npc.tensordot(A, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
 
@@ -98,7 +95,8 @@ def test_disentangler(L=4, eps=1.e-15):
     print theta.itranspose(['vL', 'vR', 'p0', 'q0', 'p1', 'q1'])
     print theta[0, 0]
     assert(S < S_0)   # this should always be true...
-    if S > eps:
+    if S > 100*eps:
+        print "final S =", S
         warnings.warn("test of purification failed to find the optimum.")
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?

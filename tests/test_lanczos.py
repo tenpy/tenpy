@@ -4,7 +4,7 @@ from __future__ import division
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 
-from test_charges import gen_random_legcharge
+from random_test import gen_random_legcharge
 from tenpy.linalg import lanczos
 import tenpy.linalg.random_matrix as rmat
 

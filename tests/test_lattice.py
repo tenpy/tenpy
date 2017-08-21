@@ -7,7 +7,7 @@ import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
 
-from test_charges import gen_random_legcharge
+from random_test import gen_random_legcharge
 
 
 def test_lattice():

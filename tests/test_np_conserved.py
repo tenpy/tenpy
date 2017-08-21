@@ -8,7 +8,7 @@ import nose.tools as nst
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
 
-from test_charges import gen_random_legcharge
+from random_test import gen_random_legcharge, random_Array
 
 chinfo = npc.ChargeInfo([1, 2], ['number', 'parity'])
 # parity can be derived from number. Yet, this should all work...
@@ -30,21 +30,8 @@ chinfoTr = npc.ChargeInfo()  # trivial charge
 
 lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
-# fix the random number generator such that tests are reproducible
-np.random.seed(3141592)  # (it should work for any seed)
-
 
 EPS = np.finfo(np.float_).eps
-
-
-def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=None, sort=True):
-    """generates a random npc.Array of given shape with random legcharges and entries."""
-    legs = [gen_random_legcharge(chinfo, s) for s in shape]
-    a = npc.Array.from_func(func, legs, qtotal=qtotal, shape_kw=shape_kw)
-    a.set_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
-    if sort:
-        _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
-    return a
 
 
 def project_multiple_axes(flat_array, perms, axes):
