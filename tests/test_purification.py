@@ -41,7 +41,7 @@ def test_purification_mps():
 def test_purification_TEBD(L=4):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
-    for disent in [None, 'backwards', 'renyi', 'norm']:
+    for disent in [None, 'backwards', 'renyi', 'noise-norm']:
         psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
         TEBD_params = {'trunc_params': {'chi_max': 16, 'svd_min': 1.e-8},
                        'disentangle': disent,
@@ -60,7 +60,7 @@ def test_purification_TEBD(L=4):
             eng.disentangle_global()
 
 
-def test_disentangler(L=4, eps=1.e-15):
+def test_renyi_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')

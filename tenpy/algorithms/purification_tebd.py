@@ -12,6 +12,7 @@ from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter
 from ..tools.math import entropy
+from ..linalg import random_matrix as rand_mat
 
 import numpy as np
 
@@ -234,6 +235,8 @@ class PurificationTEBD(tebd.Engine):
                 theta, U = self.disentangle_norm(theta)
             elif disentangle == 'diag':
                 theta, U = self.disentangle_diag(theta)
+            elif disentangle == 'noise':
+                theta, U = self.disentangle_noise(theta)
             else:
                 raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
             if Utot is None:
@@ -499,6 +502,18 @@ class PurificationTEBD(tebd.Engine):
             # discard: we increased the entanglement
             return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
                                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
+
+    def disentangle_noise(self, theta):
+        """Apply a little bit of random noise. Useful as pre-step to disentangle_renyi.
+
+        Arguments and return values are the same as for :meth:`disentangle`.
+        """
+        a = get_parameter(self.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
+        leg = theta.make_pipe(['q0', 'q1'])
+        U = npc.Array.from_func_square(rand_mat.U_close_1, leg, func_args=[a]).split_legs()
+        U.set_leg_labels(['q0', 'q1', 'q0*', 'q1*'])
+        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        return theta, U
 
     def disentangle_norm(self, theta):
         """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
