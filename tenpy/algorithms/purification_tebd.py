@@ -510,7 +510,10 @@ class PurificationTEBD(tebd.Engine):
         """
         a = get_parameter(self.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
         leg = theta.make_pipe(['q0', 'q1'])
-        U = npc.Array.from_func_square(rand_mat.U_close_1, leg, func_args=[a]).split_legs()
+        if a is None:
+            U = npc.Array.from_func_square(rand_mat.CUE, leg).split_legs()
+        else:
+            U = npc.Array.from_func_square(rand_mat.U_close_1, leg, func_args=[a]).split_legs()
         U.set_leg_labels(['q0', 'q1', 'q0*', 'q1*'])
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U
