@@ -1,5 +1,5 @@
-tenpy.networks.purification_mps module
-======================================
+tenpy\.networks\.purification\_mps module
+=========================================
 
 .. automodule:: tenpy.networks.purification_mps
     :members:

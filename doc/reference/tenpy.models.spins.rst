@@ -1,7 +1,7 @@
-tenpy\.tools\.params module
+tenpy\.models\.spins module
 ===========================
 
-.. automodule:: tenpy.tools.params
+.. automodule:: tenpy.models.spins
     :members:
     :undoc-members:
     :show-inheritance:

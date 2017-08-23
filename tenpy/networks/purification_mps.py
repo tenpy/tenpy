@@ -237,7 +237,7 @@ class PurificationMPS(MPS):
         Parameters
         ----------
         max_range : int
-            Maximal distance |i-j| for which the mutual information should be calculated.
+            Maximal distance ``|i-j|`` for which the mutual information should be calculated.
             ``None`` defaults to `L-1`.
         n : float
             Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.

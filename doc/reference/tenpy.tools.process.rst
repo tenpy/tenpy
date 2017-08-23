@@ -1,5 +1,5 @@
-tenpy.tools.process module
-==========================
+tenpy\.tools\.process module
+============================
 
 .. automodule:: tenpy.tools.process
     :members:

@@ -1,5 +1,5 @@
-tenpy.algorithms.purification_tebd module
-=========================================
+tenpy\.algorithms\.purification\_tebd module
+============================================
 
 .. automodule:: tenpy.algorithms.purification_tebd
     :members:

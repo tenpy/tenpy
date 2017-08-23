@@ -1,5 +1,5 @@
-tenpy.algorithms.exact_diag module
-==================================
+tenpy\.algorithms\.exact\_diag module
+=====================================
 
 .. automodule:: tenpy.algorithms.exact_diag
     :members:

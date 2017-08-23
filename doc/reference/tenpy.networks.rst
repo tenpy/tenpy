@@ -1,5 +1,5 @@
-tenpy.networks package
-======================
+tenpy\.networks package
+=======================
 
 Submodules
 ----------

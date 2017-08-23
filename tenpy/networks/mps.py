@@ -1,4 +1,4 @@
-"""This module contains a base class for a Matrix Product State (MPS).
+r"""This module contains a base class for a Matrix Product State (MPS).
 
 An MPS looks roughly like this::
 
@@ -1039,7 +1039,7 @@ class MPS(object):
                              opstr=None,
                              str_on_first=False,
                              hermitian=False):
-        """Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
+        r"""Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
 
         Given the MPS in canonical form, it calculates n-site expectation values.
         For examples the contraction for a two-site operator on site `i` would look like::
@@ -1265,7 +1265,7 @@ class MPS(object):
         between. The largest eigenvalue is 1 and gives the dominant contribution of
         :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`, and the second largest one
         gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
-        Thus :math:`\lambda_2 = exp(-1/\xi)`.
+        Thus :math:`\lambda_2 = \exp(-\frac{1}{\xi})`.
         Assumes that `self` is in canonical form.
 
         .. todo :
@@ -1274,7 +1274,7 @@ class MPS(object):
         Parameters
         ----------
         num_ev : int
-            We look for the `num_ev`+1 largest eigenvalues.
+            We look for the `num_ev` + 1 largest eigenvalues.
         charge_sector : ``None`` | 0 | charges
             The charge sector of the transfer matrix,
             in which we look for the most dominant eigenvalues.
@@ -1878,7 +1878,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
     For an iMPS in the thermodynamic limit, we need to find the 'dominant `LP`' (and `RP`).
     This mean nothing else than to take the transfer matrix of the unit cell and find the
     (left/right) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
-    :math:` LP (TM)^n` (or :math:`(TM)^n RP`) in the limit :math:`n \rightarrow \infty` - whatever
+    :math:`LP (TM)^n` (or :math:`(TM)^n RP`) in the limit :math:`n \rightarrow \infty` - whatever
     the initial `LP` is. This class provides exactly that functionality with :meth:`dominant_vec`
 
     Given two MPS, we define the transfer matrix as::
@@ -1951,6 +1951,9 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         Problem: At the time of writing this, the npc.Lanczos.LinalgOperator takes also
         rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
         Still, might also be useful in algorithms.exact_diag
+
+    .. todo :
+        scipy.sparse.LinearOperator has a conflicting `transpose` method!
     """
 
     def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0):

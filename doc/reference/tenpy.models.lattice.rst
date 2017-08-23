@@ -1,5 +1,5 @@
-tenpy.models.lattice module
-===========================
+tenpy\.models\.lattice module
+=============================
 
 .. automodule:: tenpy.models.lattice
     :members:

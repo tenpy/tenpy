@@ -1,5 +1,5 @@
-tenpy.linalg package
-====================
+tenpy\.linalg package
+=====================
 
 Submodules
 ----------
@@ -7,8 +7,11 @@ Submodules
 .. toctree::
 
    tenpy.linalg.charges
+   tenpy.linalg.charges
    tenpy.linalg.lanczos
    tenpy.linalg.np_conserved
+   tenpy.linalg.np_conserved
+   tenpy.linalg.random_matrix
    tenpy.linalg.svd_robust
 
 Module contents

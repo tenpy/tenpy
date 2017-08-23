@@ -1,5 +1,5 @@
-tenpy.version module
-====================
+tenpy\.version module
+=====================
 
 .. automodule:: tenpy.version
     :members:

@@ -1,5 +1,5 @@
-tenpy.tools.misc module
-=======================
+tenpy\.tools\.misc module
+=========================
 
 .. automodule:: tenpy.tools.misc
     :members:

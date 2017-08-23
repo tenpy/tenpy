@@ -1,7 +1,7 @@
-tenpy\.algorithms\.truncation module
+tenpy\.models\.fermion\_chain module
 ====================================
 
-.. automodule:: tenpy.algorithms.truncation
+.. automodule:: tenpy.models.fermion_chain
     :members:
     :undoc-members:
     :show-inheritance:

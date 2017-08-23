@@ -1,5 +1,5 @@
-tenpy.tools.string module
-=========================
+tenpy\.tools\.string module
+===========================
 
 .. automodule:: tenpy.tools.string
     :members:

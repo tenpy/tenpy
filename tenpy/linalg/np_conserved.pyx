@@ -374,7 +374,7 @@ cdef class Array(object):
         This function creates an array and fills the blocks *compatible* with the charges
         using `func`, where `func` is a function returning a `array_like` when given a shape,
         e.g. one of ``np.ones`` or ``np.random.standard_normal`` or the functions defined in
-        :module:`~tenpy.linalg.random_matrix`.
+        :mod:`~tenpy.linalg.random_matrix`.
 
         Parameters
         ----------
@@ -1561,7 +1561,7 @@ cdef class Array(object):
         return res
 
     def complex_conj(self):
-        """return complex conjugate *without* conjugating the charge data."""
+        """return copy which is complex conjugated *without* conjugating the charge data."""
         return self.unary_blockwise(np.conj)
 
     def norm(self, ord=None, convert_to_float=True):

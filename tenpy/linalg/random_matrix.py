@@ -147,10 +147,10 @@ def CUE(size):
 
 
 def O_close_1(size, a=0.01):
-    """return an random orthogonal matrix 'close' to the Identity.
+    r"""return an random orthogonal matrix 'close' to the Identity.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     size : tuple
         ``(n, n)``, where `n` is the dimension of the output matrix.
     a : float
@@ -173,10 +173,10 @@ def O_close_1(size, a=0.01):
 
 
 def U_close_1(size, a=0.01):
-    """return an random orthogonal matrix 'close' to the identity.
+    r"""return an random orthogonal matrix 'close' to the identity.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     size : tuple
         ``(n, n)``, where `n` is the dimension of the output matrix.
     a : float
