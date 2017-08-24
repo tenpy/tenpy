@@ -74,13 +74,7 @@ class PurificationTEBD(tebd.Engine):
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
         """see :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
         super(PurificationTEBD, self).calc_U(order, delta_t, type_evo, E_offset)
-        psi = self.psi
-        Id_bonds = []
-        for i in range(psi.L):
-            Id_L = npc.diag(1., psi.sites[(i-1) % psi.L].leg.conj()).set_leg_labels(['q0', 'q0*'])
-            Id_R = npc.diag(1., psi.sites[i].leg.conj()).set_leg_labels(['q1', 'q1*'])
-            Id_bonds.append(npc.outer(Id_L, Id_R))
-        self._guess_U_disent = [list(Id_bonds) for _ in range(len(self._U))]
+        self._guess_U_disent = [[None]*len(Us) for Us in self._U]
 
     def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
@@ -237,12 +231,17 @@ class PurificationTEBD(tebd.Engine):
                 theta, U = self.disentangle_diag(theta)
             elif disentangle == 'noise':
                 theta, U = self.disentangle_noise(theta)
+            elif disentangle == 'last':
+                theta, U = self.disentangle_last(theta)
             else:
                 raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
             if Utot is None:
                 Utot = U
             elif U is not None:  # neither Utot nor U are None: multiply together
                 Utot = npc.tensordot(U, Utot, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        U_idx_dt, i = self._update_index
+        if U_idx_dt is not None:
+            self._guess_U_disent[U_idx_dt][i] = Utot  # save result as next guess
         return theta, Utot
 
     def disentangle_backwards(self, theta):
@@ -286,16 +285,8 @@ class PurificationTEBD(tebd.Engine):
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
         U_idx_dt, i = self._update_index
-        if U_idx_dt is not None:
-            U = self._guess_U_disent[U_idx_dt][i]  # recover last result
-            # TODO XXX : HACK to disable using the last result
-            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
-        else:
-            #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-            #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
-            # TODO: is this a good idea?
-            _, U = self.disentangle_diag(theta)
+        U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                        npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         Sold = np.inf
         S0 = None
         for j in xrange(max_iter):
@@ -309,8 +300,6 @@ class PurificationTEBD(tebd.Engine):
         self._disent_iterations[i] += j  # save the number of iterations performed
         if self.verbose >= 10:
             print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S0-Sold)
-        if U_idx_dt is not None:
-            self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
         return theta, U
 
     def disentangle_renyi_iter(self, theta, U):
@@ -371,97 +360,89 @@ class PurificationTEBD(tebd.Engine):
         # this yields trace(U dS) = trace(Y), which is maximal.
         return -np.log(S2.real), new_U.split_legs([0, 1])
 
-    def disentangle_renyi_dU(self, theta):
-        """Find optimal `U` which minimizes the second Renyi entropy.
+    def disentangle_norm(self, theta):
+        """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
 
-        Very similar to :meth:`disentangle_renyi`,
-        but use :meth:`disentangle_renyi_dU_iter` for the iteration.
+        Reads of the following `TEBD_params` as break criteria for the iteration:
+
+        ================ ====== ======================================================
+        key              type   description
+        ================ ====== ======================================================
+        disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
+                                per iteration is smaller than this value.
+        ---------------- ------ ------------------------------------------------------
+        disent_max_iter  float  Maximum number of iterations to perform.
+        ---------------- ------ ------------------------------------------------------
+        disent_trunc_par dict   Truncation parameters; defaults to `trunc_params`.
+        ================ ====== ======================================================
 
         Arguments and return values are the same as for :meth:`disentangle`.
-
-        .. todo :
-            This should give *exactly* (as far as the SVD is unique, i.e. up to phases)
-            the same result as :meth:`disentangle_renyi`.
-            Keep only one of them, namely the one which is faster....
         """
         max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
-        U_idx_dt, i = self._update_index
-        S0 = self._entropy_theta(theta, n=2)
-        if U_idx_dt is not None:
-            # during real time evolution
-            U = self._guess_U_disent[U_idx_dt][i]  # recover last result
-        else:
-            #  U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-            #                npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
-            # TODO XXX: do also for self.disentangle_reny()
-            _, U = self.disentangle_diag(theta)
-        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        Sold = np.inf
+        trunc_par = get_parameter(self.TEBD_params, 'disent_trunc_par',
+                                  self.trunc_params, 'PurificationTEBD')
+        _, i = self._update_index
+        U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
+                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+        #  trunc_par['chi_max'] = max([int(len(self.psi._S[i+1])*0.9), 1]) # TODO XXX HACK
+        err = None
         for j in xrange(max_iter):
-            S, u = self.disentangle_renyi_dU_iter(theta)
-            U = npc.tensordot(u, U, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-            theta = npc.tensordot(u, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-            if abs(Sold - S) < eps:
+            err2, U = self.disentangle_norm_iter(theta, U, trunc_par)
+            if err is not None and abs(err.eps - err2.eps) <= err.eps * eps:
                 break
-            Sold, S = S, Sold
+            err = err2
+        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self._disent_iterations[i] += j  # save the number of iterations performed
         if self.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}, S0-S={DS2:.3e}".format(
-                j=j, DS=S-Sold, DS2=S0-Sold)
-        if U_idx_dt is not None:
-            self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
+            print "disentangle norm: {j:d} iterations, err={err!s}".format(j=j, err=err)
         return theta, U
 
-    def disentangle_renyi_dU_iter(self, theta):
-        r"""given theta and `U`, find another `U` which reduces the 2nd Renyi entropy.
+    def disentangle_norm_iter(self, theta, U, trunc_params):
+        r"""Given `theta` and `U`, find `U2` maximizing ``<theta|U2 truncate(U |theta>)``.
 
-        Combining the `p` legs of `theta` with ``'vL', 'vR'``, this function contracts:
-
-            |     .----theta---.
-            |     |    |   |   |
-            |     |    q0  |   |
-            |     |        |   |
-            |     |  .-theta*--.
-            |     |  | |
-            |     |  .-theta---.
-            |     |        |   |
-            |     |        q1  |
-            |     |            |
-            |     |    q0* q1* |
-            |     |    |   |   |
-            |     .----theta*--.
-
-        The trace yields the second Renyi entropy `S2`. Further, we calculate the unitary `U`
-        with maximum overlap with this network.
+        Finds unitary `U2` which maximizes Tr(U
 
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Two-site wave function to be disentangled.
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The previous guess for `U`; with legs ``'q0', 'q1', 'q0*', 'q1*'``.
+        trunc_params : dict
+            The truncation parameters (similar as `self.trunc_params`) used to truncate `U|theta>`.
 
         Returns
         -------
-        S2 : float
-            Renyi entopy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `theta`.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Unitary (with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.)
+        trunc_err : TruncationError
+            Norm error discarded during the truncation of ``U|theta>``.
+        new_U : :class:`~tenpy.linalg.np_conserved.Array`
+            Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``.
+            Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
         """
-        dS = npc.tensordot(theta, theta.conj(), axes=[['p1', 'q1', 'vR'], ['p1*', 'q1*', 'vR*']])
-        # dS has legs 'vL', 'p0', 'q0', 'vL*', 'p0*', 'q0*'
-        dS = npc.tensordot(dS, theta, axes=[['vL*', 'p0*', 'q0*'], ['vL', 'p0', 'q0']])
-        # dS has legs 'vL', 'p0', 'q0', 'vR', 'p1', 'q1'
-        dS = npc.tensordot(dS, theta.conj(), axes=[['vL', 'p0', 'vR', 'p1'],
-                                                   ['vL*', 'p0*', 'vR*', 'p1*']])
+        U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
+        X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
+        lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
+        dS = npc.tensordot(theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'],
+                                                        ['vL*', 'vR*', 'p0*', 'p1*']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
-        S2 = npc.trace(dS)
-        # Find unitary which approximates `dS` optimally.
-        # This corresponds to a polar decomposition dS = U P with P >= 0
+        # Find unitary U2 which maximizes `trace(U dS)`.
         W, Y, VH = npc.svd(dS)
-        U = npc.tensordot(W, VH, axes=[1, 0])  # P = V Y VH  is actually not needed.
-        # NOTE: no conj: we contracted the conjugate compared to disentangle_renyi_iter
-        return -np.log(S2.real), U.split_legs([0, 1])
+        new_U = npc.tensordot(W, VH, axes=[1, 0]).conj()  # == V W^dagger.
+        # this yields trace(U dS) = trace(Y), which is maximal.
+        return err, new_U.split_legs([0, 1])
+
+    def disentangle_last(self, theta):
+        "Use the last total 'U' used in :meth:`disentangle` for the same _update_index as guess."
+        U = None
+        U_idx_dt, i = self._update_index
+        if U_idx_dt is not None:
+            U = self._guess_U_disent[U_idx_dt][i]  # result saved in :meth:`disentangle`
+        if U is not None:
+            theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        return theta, U
 
     def disentangle_diag(self, theta):
         """Disentangle by diagonalizing the two-site density matrix in the auxiliar space.
@@ -500,8 +481,7 @@ class PurificationTEBD(tebd.Engine):
             return theta1, Vd # TODO: still return theta1 although we increase S TODO XXX
             assert(False) # TODO XXX
             # discard: we increased the entanglement
-            return (theta, npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                                     npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*'])))
+            return theta, None
 
     def disentangle_noise(self, theta):
         """Apply a little bit of random noise. Useful as pre-step to disentangle_renyi.
@@ -517,88 +497,6 @@ class PurificationTEBD(tebd.Engine):
         U.set_leg_labels(['q0', 'q1', 'q0*', 'q1*'])
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U
-
-    def disentangle_norm(self, theta):
-        """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
-
-        Reads of the following `TEBD_params` as break criteria for the iteration:
-
-        ================ ====== ======================================================
-        key              type   description
-        ================ ====== ======================================================
-        disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
-                                per iteration is smaller than this value.
-        ---------------- ------ ------------------------------------------------------
-        disent_max_iter  float  Maximum number of iterations to perform.
-        ---------------- ------ ------------------------------------------------------
-        disent_trunc_par dict   Truncation parameters; defaults to `trunc_params`.
-        ================ ====== ======================================================
-
-        Arguments and return values are the same as for :meth:`disentangle`.
-        """
-        max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
-        eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
-        trunc_par = get_parameter(self.TEBD_params, 'disent_trunc_par',
-                                  self.trunc_params, 'PurificationTEBD')
-        U_idx_dt, i = self._update_index
-        if U_idx_dt is not None:
-            U = self._guess_U_disent[U_idx_dt][i]  # recover last result
-            # TODO XXX : HACK to disable using the last result
-            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
-        else:
-            U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                          npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
-        #  trunc_par['chi_max'] = max([int(len(self.psi._S[i+1])*0.9), 1]) # TODO XXX HACK
-        err = None
-        for j in xrange(max_iter):
-            err2, U = self.disentangle_norm_iter(theta, U, trunc_par)
-            if err is not None and abs(err.eps - err2.eps) <= err.eps * eps:
-                break
-            err = err2
-        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        self._disent_iterations[i] += j  # save the number of iterations performed
-        if self.verbose >= 10:
-            print "disentangle norm: {j:d} iterations, err={err!s}".format(j=j, err=err)
-        if U_idx_dt is not None:
-            self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
-        return theta, U
-
-    def disentangle_norm_iter(self, theta, U, trunc_params):
-        r"""Given `theta` and `U`, find `U2` maximizing ``<theta|U2 truncate(U |theta>)``.
-
-        Finds unitary `U2` which maximizes Tr(U
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Two-site wave function to be disentangled.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The previous guess for `U`; with legs ``'q0', 'q1', 'q0*', 'q1*'``.
-        trunc_params : dict
-            The truncation parameters (similar as `self.trunc_params`) used to truncate `U|theta>`.
-
-        Returns
-        -------
-        trunc_err : TruncationError
-            Norm error discarded during the truncation of ``U|theta>``.
-        new_U : :class:`~tenpy.linalg.np_conserved.Array`
-            Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``.
-            Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
-        """
-        U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
-        X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
-        lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
-        dS = npc.tensordot(theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'],
-                                                        ['vL*', 'vR*', 'p0*', 'p1*']])
-        # dS has legs 'q0', 'q1', 'q0*', 'q1*'
-        dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
-        # Find unitary U2 which maximizes `trace(U dS)`.
-        W, Y, VH = npc.svd(dS)
-        new_U = npc.tensordot(W, VH, axes=[1, 0]).conj()  # == V W^dagger.
-        # this yields trace(U dS) = trace(Y), which is maximal.
-        return err, new_U.split_legs([0, 1])
 
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
@@ -685,7 +583,6 @@ class PurificationTEBD(tebd.Engine):
 
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`_disentangle_renyi`."""
-        # TODO: should we also disentangle 'on the way' of swapping?
         on_way = get_parameter(self.TEBD_params, 'disent_gl_on_swap', False, 'PurificationTEBD')
         if not self.psi.finite:
             raise NotImplementedError  # adjust: what's the shortest path?
