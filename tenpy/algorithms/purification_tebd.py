@@ -296,7 +296,7 @@ class PurificationTEBD(tebd.Engine):
         S_min = self._entropy_theta(theta_min, n)
         for method in methods[1:]:
             theta2, U2 = self._parse_disentangle(method, theta)
-            S2 = self._entropy_theta(theta_min, n)
+            S2 = self._entropy_theta(theta2, n)
             if S2 < S_min:
                 S_min = S2
                 theta_min = theta2
