@@ -38,10 +38,10 @@ def test_purification_mps():
 
 
 @attr('slow')
-def test_purification_TEBD(L=4):
+def test_purification_TEBD(L=3):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
-    for disent in [None, 'backwards', 'last-renyi', 'noise-norm']:
+    for disent in [None, 'backwards', 'last-renyi', 'noise-norm', 'renyi-min2(None,noise-renyi)']:
         psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
         TEBD_params = {'trunc_params': {'chi_max': 16, 'svd_min': 1.e-8},
                        'disentangle': disent,
@@ -55,7 +55,7 @@ def test_purification_TEBD(L=4):
         eng.run_imaginary(0.2)
         N = psi.expectation_value('Id')     # check normalization : <1> =?= 1
         npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
-        if disent == 'renyi':
+        if disent == 'last-renyi':
             eng.run_imaginary(0.3)
             eng.disentangle_global()
 

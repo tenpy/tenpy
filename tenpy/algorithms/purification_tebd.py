@@ -15,6 +15,7 @@ from ..tools.math import entropy
 from ..linalg import random_matrix as rand_mat
 
 import numpy as np
+import re  # regex
 
 
 class PurificationTEBD(tebd.Engine):
@@ -40,7 +41,12 @@ class PurificationTEBD(tebd.Engine):
     _guess_U_disent : list of list of npc.Array
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
+    _MATCH_DISENTANGLE : compiled regex
+        Regex to match the TEBD parameter 'disentangle', which specifies the method used for
+        disentangling.
     """
+    _MATCH_DISENTANGLE = re.compile(r"min2?\([^)]+\)|[^-]+")
+
     def __init__(self, psi, model, TEBD_params):
         super(PurificationTEBD, self).__init__(psi, model, TEBD_params)
         self._disent_iterations = np.zeros(psi.L)
@@ -200,8 +206,12 @@ class PurificationTEBD(tebd.Engine):
             / correlation functions!
 
         Thus function reads out ``TEBD_params['disentangle']``.
-        By default (``None``) it does nothing,
-        otherwise it calls one of the other `disentangle_*` methods.
+        By default (``None`` or ``'None'``) it does nothing.
+        Valid strings are of the form ``'method1-method2-min(method3-method4,method5)'``.
+        Here, each of the `method#` stands for a call of the coresponding `disentangle_{method}`,
+        Methods separated by ``-`` are successively applied as reading from left to right.
+        `min2` is an alternative to `min`, comparing the second Renyi entropy instead of the
+        von-Neumann entropy.
 
         Parameters
         ----------
@@ -214,35 +224,84 @@ class PurificationTEBD(tebd.Engine):
             Disentangled `theta`; ``npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])``.
         U : :class:`~tenpy.linalg.conserved.Array`
             The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
+            If no unitary was found/applied, it might also be ``None``.
         """
         disentangle = get_parameter(self.TEBD_params, 'disentangle', None, 'PurificationTEBD')
         if disentangle is None:
             return theta, None
-        disentangle_words = disentangle.split('-')
+        theta, U = self._parse_disentangle(disentangle, theta)
+        U_idx_dt, i = self._update_index
+        if U_idx_dt is not None:
+            self._guess_U_disent[U_idx_dt][i] = U  # save result as next guess
+        return theta, U
+
+    def _parse_disentangle(self, disentangle, theta):
+        """Parse the parameter `disentangle` to disentangle `theta` with the chosen methods.
+
+        """
+        methods = self._MATCH_DISENTANGLE.findall(disentangle)
         Utot = None
-        for disentangle in disentangle_words:
-            if disentangle == 'backwards':
+        for method in methods:
+            if method == 'None':
+                U = None  # do nothing
+            elif method == 'backwards':
                 theta, U = self.disentangle_backwards(theta)
-            elif disentangle == 'renyi':
+            elif method == 'renyi':
                 theta, U = self.disentangle_renyi(theta)
-            elif disentangle == 'norm':
+            elif method == 'norm':
                 theta, U = self.disentangle_norm(theta)
-            elif disentangle == 'diag':
+            elif method == 'diag':
                 theta, U = self.disentangle_diag(theta)
-            elif disentangle == 'noise':
+            elif method == 'noise':
                 theta, U = self.disentangle_noise(theta)
-            elif disentangle == 'last':
+            elif method == 'last':
                 theta, U = self.disentangle_last(theta)
+            elif method.startswith('min('):
+                theta, U = self.disentangle_min(method[4:-1], theta)
+            elif method.startswith('min2('):
+                theta, U = self.disentangle_min(method[5:-1], theta, n=2)
             else:
                 raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
             if Utot is None:
                 Utot = U
             elif U is not None:  # neither Utot nor U are None: multiply together
                 Utot = npc.tensordot(U, Utot, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        U_idx_dt, i = self._update_index
-        if U_idx_dt is not None:
-            self._guess_U_disent[U_idx_dt][i] = Utot  # save result as next guess
         return theta, Utot
+
+    def disentangle_min(self, methods, theta, n=1):
+        """Try different methods for disentangling and take the theta with minimal final entropy.
+
+        Parameters
+        ----------
+        methods: string
+            Methods to try, separated by ``,``.
+            As in :meth:`disentangle`, methods separated by ``-`` are applied successively.
+            Thus, ``method3-method4,method4`` compares the two possibilities of
+            1) apply `method3`, then `method4` or 2) apply `method5`.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Wave function to disentangle, with legs ``'vL', 'vR', 'p0', 'p1', 'q0', 'q1'``.
+        n : int
+            Which entropy to choose for selecting the 'minimum'.
+
+        Returns
+        -------
+        theta_disentangled : :class:`~tenpy.linalg.np_conserved.Array`
+            Disentangled `theta`; ``npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])``.
+        U : :class:`~tenpy.linalg.conserved.Array`
+            The unitary used to disentangle `theta`, with labels ``'q0', 'q1', 'q0*', 'q1*'``.
+            If no unitary was found/applied, it might also be ``None``.
+        """
+        methods = methods.split(',')
+        theta_min, U_min = self._parse_disentangle(methods[0], theta)
+        S_min = self._entropy_theta(theta_min, n)
+        for method in methods[1:]:
+            theta2, U2 = self._parse_disentangle(method, theta)
+            S2 = self._entropy_theta(theta_min, n)
+            if S2 < S_min:
+                S_min = S2
+                theta_min = theta2
+                U_min = U2
+        return theta_min, U_min
 
     def disentangle_backwards(self, theta):
         """Disentangle with backwards time evolution.
@@ -457,7 +516,6 @@ class PurificationTEBD(tebd.Engine):
         """
         rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR', 'p0', 'p1'],
                                                        ['vL*', 'vR*', 'p0*', 'p1*']))
-        S0 = self._entropy_theta(theta)
         # TODO: eigh sorts only within the charge blocks...
         # TODO: the phase of the eigenvectors is arbitrary, but might increase the entanglement!!!
         #       how should it be chosen?
@@ -474,14 +532,7 @@ class PurificationTEBD(tebd.Engine):
         # test that we actually reduce the *global* entanglement (not only I_ij)
         Vd = V.conj()
         theta1 = npc.tensordot(Vd, theta, axes=(['q0*', 'q1*'], ['q0', 'q1']))
-        S1 = self._entropy_theta(theta1)
-        if S1 < S0 - 1.e-14:
-            return theta1, Vd
-        else:
-            return theta1, Vd # TODO: still return theta1 although we increase S TODO XXX
-            assert(False) # TODO XXX
-            # discard: we increased the entanglement
-            return theta, None
+        return theta1, Vd
 
     def disentangle_noise(self, theta):
         """Apply a little bit of random noise. Useful as pre-step to disentangle_renyi.
