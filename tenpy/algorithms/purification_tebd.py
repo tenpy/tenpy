@@ -345,7 +345,7 @@ class PurificationTEBD(tebd.Engine):
         eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
         U_idx_dt, i = self._update_index
         U = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                        npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+                      npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
         Sold = np.inf
         S0 = None
         for j in xrange(max_iter):
@@ -614,7 +614,8 @@ class PurificationTEBD(tebd.Engine):
         self.psi.set_SL(i+n1, S)  # update S
         if n1 == 1:
             # save U as left B in psi
-            U = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
+            U = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['(p)', '(q)'])
+            U = U.split_legs(['(p)', '(q)'])
             self.psi.set_B(i, U, form='A')  # TODO: might want to do this inversion-free?
         else:
             # disentangle left n1-site wave function recursively
@@ -623,7 +624,8 @@ class PurificationTEBD(tebd.Engine):
             self.disentangle_n_site(i, n1, theta_L)
         if n2 == 1:
             # save V as right B in psi
-            V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
+            V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['(p)', '(q)'])
+            V = V.split_legs(['(p)', '(q)'])
             self.psi.set_B(i+n1, V, form='B')
         else:
             # disentangle right n2-site wave function recursively
