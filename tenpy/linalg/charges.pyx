@@ -198,7 +198,7 @@ cdef class ChargeInfo(object):
         else:
             raise NotImplementedError("No ordering of `ChargeInfo` possible")
 
-    def _equal(self, other):
+    def _equal(ChargeInfo self, ChargeInfo other):
         r"""compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True

@@ -5,7 +5,7 @@ ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
 cdef class ChargeInfo(object):
     cdef readonly int qnumber
     cdef readonly np.ndarray mod
-    cdef list names
+    cdef readonly list names
     cpdef np.ndarray make_valid(ChargeInfo self, charges=?)
     cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self,
                                                    np.ndarray[QTYPE_t,ndim=1] charges)
