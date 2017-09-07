@@ -248,12 +248,13 @@ def run(psi, model, DMRG_params):
             Delta_S = 0.
         S_old = S
         if not psi.finite:  # iDMRG: need energy density
-            try:
-                Es = engine.statistics['E_total']
-                age = engine.statistics['age']
-                E = (Es[-1] - Es[-1 - 2 * engine.env.L]) / (age[-1] - age[-1 - 2 * engine.env.L])
-            except:
-                E = np.nan
+            Es = engine.statistics['E_total']
+            age = engine.statistics['age']
+            if N_sweeps_check > 1:
+                growth = (age[-1] - age[-1 - 2 * engine.env.L])
+                E = (Es[-1] - Es[-1 - 2 * engine.env.L]) / growth
+            else:
+                E = (Es[-1] - Es[0]) / (age[-1] - age[0])
         else:
             E = engine.statistics['E_total'][-1]
         Delta_E = E - E_old
@@ -697,6 +698,8 @@ class Engine(object):
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
         theta = npc.tensordot(theta, VH.conj(), axes=['(vR.p1)', '(vR*.p1*)'])  # axes 1, 1
         theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # for left/right
+        # normalize `S` (as in svd_theta) to avoid blowing up numbers
+        theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
         return U, theta, VH, errL + err_R
 
     def mix_rho_L(self, theta, i0, mix_enabled):
