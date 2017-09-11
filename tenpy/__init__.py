@@ -21,16 +21,21 @@ yet, for people new to the library, the big number of tools made it hard
 to focus on the essential parts.
 This fork tries getting back to a simple version of TenPy.
 
-.. todo ::
-    set __all__, include some parts of the library?
 """
 # This file marks this directory as a python package.
 
 from . import version
+
+# load and provide subpackages on first input
+from . import algorithms
+from . import linalg
+from . import models
+from . import networks
+from . import tools
 
 # hard-coded tuple of versions
 __version__ = version.version
 # full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
-# __all__ = ["algorithms", "models", "mps", "tools"]
+__all__ = ["algorithms", "linalg", "models", "networks", "tools"]
