@@ -69,7 +69,7 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'to_iterable_arrays'
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -95,9 +95,6 @@ cdef class Array(object):
 
     In-place methods are indicated by a name starting with ``i``.
     (But `is_completely_blocked` is not inplace...)
-
-    .. todo :
-        add self.add_leg(legcharge, index) as opposite of take_slice
 
     Parameters
     ----------
@@ -761,6 +758,10 @@ cdef class Array(object):
         -------
         sliced_self : :class:`Array`
             A copy of self, equivalent to taking slices with indices inserted in axes.
+
+        See also
+        --------
+        :meth:`add_leg` : opposite action of inserting a new leg.
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)
@@ -798,13 +799,13 @@ cdef class Array(object):
         res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
         return res
 
-    def add_trivial_leg(self, i, label=None, qconj=1):
+    def add_trivial_leg(self, axis=0, label=None, qconj=1):
         """Add a trivial leg (with just one entry) to `self`.
 
         Parameters
         ----------
-        i : int
-            The new leg is inserted before index `i`.
+        axis : int
+            The new leg is inserted before index `axis`.
         label : str | ``None``
             If not ``None``, use it as label for the new leg.
         qconj : +1 | -1
@@ -813,24 +814,64 @@ cdef class Array(object):
         Returns
         -------
         extended : :class:`Array`
-            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 & charge 0.
+            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 and charge 0.
         """
-        if i < 0:
-            i += self.rank
+        if axis < 0:
+            axis += self.rank
         cdef Array res = self.copy(deep=False)
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
-        res.legs.insert(i, leg)
+        res.legs.insert(axis, leg)
         res._set_shape()
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
-            res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
+            res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
         res._qdata = np.hstack(
-            [res._qdata[:, :i], np.zeros([len(res._data), 1], np.intp), res._qdata[:, i:]])
+            [res._qdata[:, :axis], np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]])
         if label is not None:
             labs = list(self.get_leg_labels())
-            labs.insert(i, label)
+            labs.insert(axis, label)
             res.iset_leg_labels(labs)
         return res
+
+    def add_leg(self, leg, i, axis=0, label=None):
+        """Add a leg to `self`, setting the current array as slice for a given index.
+
+        Parameters
+        ----------
+        leg : :class:`LegCharge`
+            The charge data of the leg to be added.
+        i : int
+            Index within the leg for which the data of `self` should be set.
+        axis : axis
+            The new leg is inserted before this current axis.
+        label : str | ``None``
+            If not ``None``, use it as label for the new leg.
+
+        Returns
+        -------
+        extended : :class:`Array`
+            A copy of self with the new `leg` at axis `axis` , such that
+            ``extended.take_slice(i, axis)`` returns a copy of `self`.
+
+        See also
+        --------
+        :meth:`take_slice` : opposite action reducing the number of legs.
+        """
+        if axis < 0:
+            axis += self.rank
+        legs = list(self.legs)
+        legs.insert(axis, leg)
+        qi, _ = leg.get_qindex(i)
+        qtotal = self.chinfo.make_valid(self.qtotal + leg.get_charge(qi))
+        extended = Array(legs, self.dtype, qtotal)
+        slices = [slice(None, None)]*self.rank
+        slices[axis] = i
+        extended[tuple(slices)] = self  # use existing implementation
+        if label is not None:
+            labs = list(self.get_leg_labels())
+            labs.insert(axis, label)
+            extended.iset_leg_labels(labs)
+        return extended
 
     # handling of charges =====================================================
 
