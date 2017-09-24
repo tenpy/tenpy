@@ -70,7 +70,7 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
     """generates a random npc.Array of given shape with random legcharges and entries."""
     legs = [gen_random_legcharge(chinfo, s) for s in shape]
     a = npc.Array.from_func(func, legs, qtotal=qtotal, shape_kw=shape_kw)
-    a.set_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
+    a.iset_leg_labels([chr(i + ord('a')) for i in range(a.rank)])
     if sort:
         _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
     return a

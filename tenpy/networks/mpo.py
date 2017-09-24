@@ -382,7 +382,7 @@ class MPOGraph(object):
         for i in xrange(self.L):
             legs = [self._grid_legs[i], self._grid_legs[i + 1].conj()]
             W = npc.grid_outer(self._grids[i], legs, W_qtotal)
-            W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws.append(W)
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
@@ -643,7 +643,7 @@ class MPOEnvironment(MPSEnvironment):
             firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             # should work for both finite and segment bc
             firstLP[:, H.IdL[0], :] = npc.diag(1., leg_bra, dtype=self.dtype)
-            firstLP.set_leg_labels(['vR*', 'wR', 'vR'])
+            firstLP.iset_leg_labels(['vR*', 'wR', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
             # Build trivial verly last RP
@@ -653,7 +653,7 @@ class MPOEnvironment(MPSEnvironment):
             leg_ket.test_contractible(leg_bra)
             lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
             lastRP[:, H.IdR[L], :] = npc.diag(1., leg_bra, dtype=self.dtype)
-            lastRP.set_leg_labels(['vL*', 'wL', 'vL'])
+            lastRP.iset_leg_labels(['vL*', 'wL', 'vL'])
         self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()
 

@@ -118,7 +118,7 @@ def test_npc_Array_sort():
 def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     for t in [('x', None), (None, 'y'), ('x', 'y')]:
-        a.set_leg_labels(t)
+        a.iset_leg_labels(t)
         nst.eq_(a.get_leg_labels(), t)
         axes = (0, 1, 1, 0, 1, 0)
         axes_l = list(axes)  # replace with labels, where available
@@ -344,7 +344,7 @@ def test_npc_Array_scale_axis():
 
 def test_npc_Array_conj():
     a = random_Array((15, 10), chinfo3, sort=True)
-    a.set_leg_labels(['a', 'b*'])
+    a.iset_leg_labels(['a', 'b*'])
     aflat = a.to_ndarray()
     b = a.conj()
     b.test_sanity()

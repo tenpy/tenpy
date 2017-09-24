@@ -678,7 +678,7 @@ class Engine(object):
         # eigenvalues are S^2.
         val_L, U = npc.eigh(rho_L)
         U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
-        U.set_leg_labels(['(vL.p0)', 'vR'])
+        U.iset_leg_labels(['(vL.p0)', 'vR'])
         val_L[val_L < 0.] = 0.  # for stability reasons
         val_L /= np.sum(val_L)
         keep_L, _, errL = truncate(np.sqrt(val_L), self.trunc_params)
@@ -687,7 +687,7 @@ class Engine(object):
         # Thus, rho_L V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_L
         val_R, Vc = npc.eigh(rho_R)
         Vc.legs[1] = Vc.legs[1].to_LegCharge()
-        Vc.set_leg_labels(['(vR.p1)', 'vL'])
+        Vc.iset_leg_labels(['(vR.p1)', 'vL'])
         VH = Vc.itranspose(['vL', '(vR.p1)'])
         val_R[val_R < 0.] = 0.  # for stability reasons
         val_R /= np.sum(val_R)
@@ -1319,7 +1319,7 @@ class Mixer(object):
         if Id_R is not None:
             x[Id_R] = 0.
         x = npc.diag(x, wR_leg)
-        x.set_leg_labels(['wL*', 'wL'])
+        x.iset_leg_labels(['wL*', 'wL'])
         return x, separate_Id
 
     def get_xL(self, wL_leg, Id_L, Id_R):
@@ -1350,5 +1350,5 @@ class Mixer(object):
         if Id_L is not None:
             x[Id_L] = 0.
         x = npc.diag(x, wL_leg)
-        x.set_leg_labels(['wR*', 'wR'])
+        x.iset_leg_labels(['wR*', 'wR'])
         return x, separate_Id

@@ -285,7 +285,7 @@ class CouplingModel(object):
                             "Can't give H_bond for long-range: {i:d} {j:d}".format(i=i, j=j2))
                     for op2, strength in d3.iteritems():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-            H.set_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+            H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             res[j] = H
         if finite:
             assert (res[0].norm(np.inf) <= tol_zero)

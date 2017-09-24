@@ -75,8 +75,8 @@ def setup_npc(mod_q=[1],
             b._data = [b._data[i] for i in b_subset]
 
     labs = ["l{i:d}".format(i=i) for i in range(max(leg_a_out, leg_b_out) + leg_contract)]
-    a.set_leg_labels(labs[:a.rank])
-    b.set_leg_labels(labs[:b.rank])
+    a.iset_leg_labels(labs[:a.rank])
+    b.iset_leg_labels(labs[:b.rank])
     a.itranspose(rand_permutation(a.rank))
     b.itranspose(rand_permutation(b.rank))
     axes = [labs[:leg_contract]] * 2
