@@ -418,6 +418,104 @@ class FermionSite(Site):
         return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
 
 
+class SpinHalfFermionSite(Site):
+    r"""Create a :class:`Site` for spinful (spin-1/2) fermions.
+
+    Local states are:
+         ``empty``
+         ``spin-up``
+         ``spin-down``
+         ``full``
+    Local operators can be built from creation operators.
+
+    .. warning :
+        Using the Jordan-Wigner strings (``JWU`` and ``JWD``) is crucial to get correct results,
+        otherwise you just describe hardcore bosons!
+
+    ============== ====  ==========================
+    `conserve`     qmod  onsite operators
+    ============== ====  ==========================
+    ``'N'``        [1]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
+    ``'spin'``     [1]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
+    ``'parity'``   [2]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
+    ``None``       []    ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
+    ============== ====  ==========================
+
+    ==============  ========================================
+    operator        description
+    ==============  ========================================
+    ``Id``          identity :math:`\mathbb{1}`
+    ``JWU``         Sign for the Jordan-Wigner string for spin-up operators.
+    ``JWD``         Sign for the Jordan-Wigner string for spin-down operators.
+    ``CU``          Annihilation operator spin-up :math:`c_{\uparrow}`
+    ``CUd``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
+    ``CD``          Annihilation operator spin-down :math:`c_{\downarrow}`
+    ``CDd``         Creation operator spin-down :math:`c_{\downarrow}`
+    ``NU``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
+    ``ND``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
+    ``NUND``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
+    ``NT``          Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
+    ``Sz``          Pauli-z matrix
+    ==============  ========================================
+
+    .. todo :: (Inherited from FermionSite)
+        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
+        Handle Jordan-Wigner strings correctly in Coupling-model!
+
+    .. todo ::
+        Check if Jordan-Wigner strings for 4x4 operators are correct.
+
+    Attributes
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+    def __init__(self, conserve='N'):
+        if conserve not in ['N', 'parity', 'spin', None]:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        d = 4
+
+        # 0) Build the operators.
+        Id = np.identity(d)
+        CU = np.zeros(  (d, d)  ) 
+        CU[0,1] = 1
+        CU[2,3] = 1
+        CUd = np.transpose(CU)
+        NU = np.dot(CUd, CU)
+
+        CD = np.zeros(  (d, d)  ) 
+        CD[0,2] = 1
+        CD[1,3] = 1
+        CDd = np.transpose(CD)
+        ND = np.dot(CDd, CD)
+
+        NT = NU + ND     # Total density
+        NUND = np.dot(NU, ND)
+        JWU = Id - 2 * ND  # JW strings are defined to go along with other operators, e.g. JWU dot CU
+        JWD = Id - 2 * NU  # That's why JWU is defined with ND and JWD is defined with ND.
+        Sz = 0.5 * (NU - ND)
+
+        ops = dict(Id=Id, JWU=JWU, JWD=JWD, CU=CU, CUd=CUd, CD=CD, CDd=CDd, NU=NU, ND=ND, NT=NT, 
+                   NUND=NUND, Sz=Sz)
+        if conserve == 'N':
+            chinfo = npc.ChargeInfo([1], ['N'])
+            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, 1, 2])
+        elif conserve == 'spin':
+            chinfo = npc.ChargeInfo([1], ['spin'])
+            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, -1, 0])
+        elif conserve == 'parity':
+            chinfo = npc.ChargeInfo([2], ['parity'])
+            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, 1, 2])
+        else:
+            leg = npc.LegCharge.from_trivial(2)
+        self.conserve = conserve
+        super(FermionSite, self).__init__(leg, ['empty', 'up', 'down', 'full'], **ops)
+
+    def __repr__(self):
+        """Debug representation of self"""
+        return "SpinHalfFermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
+
+
 class BosonSite(Site):
     r"""Create a :class:`Site` for up to `Nmax` bosons.
 
