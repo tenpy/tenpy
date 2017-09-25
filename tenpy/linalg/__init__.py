@@ -9,6 +9,6 @@ are imported to :mod:`~tenpy.linalg.np_conserved`,
 so you propably won't need to import `charges` directly.
 """
 
-from . import charges, np_conserved
+from . import charges, np_conserved, lanczos, random_matrix, svd_robust
 
-__all__ = ['charges', 'np_conserved']
+__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'svd_robust']

@@ -147,7 +147,7 @@ class ExactDiag(object):
         if self.full_H is None:
             raise ValueError("You need to call one of `build_full_H_*` first!")
         E, V = npc.eigh(self.full_H, *args, **kwargs)
-        V.set_leg_labels(['ps', 'ps*'])
+        V.iset_leg_labels(['ps', 'ps*'])
         self.E = E
         self.V = V
 
@@ -210,7 +210,7 @@ class ExactDiag(object):
             full_psi = npc.zeros([self._pipe], psi.dtype, psi.qtotal)
             full_psi[self._mask] = psi
             psi = full_psi
-        psi.set_leg_labels(['(' + '.'.join(self._labels_p) + ')'])
+        psi.iset_leg_labels(['(' + '.'.join(self._labels_p) + ')'])
         psi = psi.split_legs([0])  # split the combined leg into the physical legs of the sites
         return MPS.from_full(self._sites, psi, form=canonical_form)
 

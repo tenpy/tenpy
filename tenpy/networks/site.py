@@ -141,7 +141,7 @@ class Site(object):
         op.legs[0].test_equal(self.leg)
         op.legs[1].test_contractible(self.leg)
         op.test_sanity()
-        op.set_leg_labels(['p', 'p*'])
+        op.iset_leg_labels(['p', 'p*'])
         setattr(self, name, op)
         self.opnames.add(name)
 

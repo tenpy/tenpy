@@ -118,7 +118,7 @@ def test_npc_Array_sort():
 def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     for t in [('x', None), (None, 'y'), ('x', 'y')]:
-        a.set_leg_labels(t)
+        a.iset_leg_labels(t)
         nst.eq_(a.get_leg_labels(), t)
         axes = (0, 1, 1, 0, 1, 0)
         axes_l = list(axes)  # replace with labels, where available
@@ -198,7 +198,7 @@ def test_npc_Array_itemacces():
     aflat = a.to_ndarray().copy()
     for i, j in it.product(xrange(10), xrange(10)):  # access all elements
         nst.eq_(a[i, j], aflat[i, j])
-    # take_slice
+    # take_slice and add_leg
     a = random_Array((20, 10, 5), chinfo3)
     aflat = a.to_ndarray().copy()
     for idx, axes in [(0, 0), (4, 1), ([3, -2], [-1, 0])]:
@@ -213,6 +213,11 @@ def test_npc_Array_itemacces():
         sl = tuple(sl)
         npt.assert_equal(a_sl.to_ndarray(), aflat[sl])
         npt.assert_equal(a[sl].to_ndarray(), aflat[sl])
+        # NOTE: interally uses advanced indexing notation, but only with slices.
+        if type(axes) == int:
+            a_ext = a_sl.add_leg(a.legs[axes], idx, axes)
+            npt.assert_equal(a.qtotal, a_ext.qtotal)
+            npt.assert_equal(a_ext.to_ndarray()[sl], aflat[sl])
     # advanced indexing with slices and projection/mask
     # NOTE: for bflat[idx] = aflat[idx] to work, non-slices may not be separated by slices.
     check_idx = [(2, Ellipsis, 1),
@@ -242,6 +247,7 @@ def test_npc_Array_itemacces():
         b.test_sanity()
         bflat[idx] = aflat[idx]  # idx may only contain a single array
         npt.assert_equal(b.to_ndarray(), bflat)
+
 
 
 def test_npc_Array_reshape():
@@ -344,7 +350,7 @@ def test_npc_Array_scale_axis():
 
 def test_npc_Array_conj():
     a = random_Array((15, 10), chinfo3, sort=True)
-    a.set_leg_labels(['a', 'b*'])
+    a.iset_leg_labels(['a', 'b*'])
     aflat = a.to_ndarray()
     b = a.conj()
     b.test_sanity()

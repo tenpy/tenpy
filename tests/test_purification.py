@@ -71,12 +71,12 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     pleg = psi.sites[0].leg
     pipe = npc.LegPipe([pleg, pleg])
     A = npc.Array.from_func_square(rmat.CUE, pipe).split_legs()
-    A.set_leg_labels(['p0', 'p1', 'p0*', 'p1*'])
+    A.iset_leg_labels(['p0', 'p1', 'p0*', 'p1*'])
     # Now we have unitary `A`, i.e. the optimal `U` should be `A^dagger`.
     theta = npc.tensordot(A, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
 
-    U0 = npc.outer(npc.eye_like(theta, 'q0').set_leg_labels(['q0', 'q0*']),
-                   npc.eye_like(theta, 'q1').set_leg_labels(['q1', 'q1*']))
+    U0 = npc.outer(npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
+                   npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
     U = U0
     Sold = np.inf
     for i in xrange(20):

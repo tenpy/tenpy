@@ -10,10 +10,6 @@ Contains implementation of classes
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
-.. todo ::
-    change: take ChargeInfo.mod[j]=0 for U(1) (instead of mod=1)
-    Adjust doc strings
-
 A detailed introduction to `np_conserved` can be found in :doc:`../IntroNpc`.
 """
 
@@ -119,7 +115,7 @@ cdef class ChargeInfo(object):
     @cython.boundscheck(False)
     @cython.cdivision(True)
     cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=1] charges):
-        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)  # TODO: why an explicit copy?
+        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)
         cdef int j
         cdef QTYPE_t q
         for j in range(self.qnumber):
@@ -1089,7 +1085,6 @@ def _find_row_differences(qflat):
 @cython.cdivision(True)
 cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
     """C-version of :func:`_find_row_differences` (which uses numpy for optimization)"""
-    # TODO: remove python version once np_conserved is also cythonized...
     if qflat.shape[1] == 0:
         return np.array([0, qflat.shape[0]], dtype=np.intp)
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]

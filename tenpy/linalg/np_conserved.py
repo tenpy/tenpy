@@ -61,7 +61,7 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'to_iterable_arrays'
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -82,11 +82,6 @@ class Array(object):
 
     In-place methods are indicated by a name starting with ``i``.
     (But `is_completely_blocked` is not inplace...)
-
-    .. todo :
-        rename set_leg_labels() to iset_leg_labels();
-        rename rank -> ndim  for better compatibility with numpy.ndarray
-        add self.add_leg(legcharge, index) as opposite of take_slice
 
     Parameters
     ----------
@@ -468,7 +463,7 @@ class Array(object):
         See also
         --------
         get_leg_indices : calls get_leg_index for a list of labels
-        set_leg_labels : set the labels of different legs.
+        iset_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
         try:
@@ -498,11 +493,11 @@ class Array(object):
         See also
         --------
         get_leg_index : used to translate each of the single entries.
-        set_leg_labels : set the labels of different legs.
+        iset_leg_labels : set the labels of different legs.
         """
         return [self.get_leg_index(l) for l in labels]
 
-    def set_leg_labels(self, labels):
+    def iset_leg_labels(self, labels):
         """Set labels for the different axes/legs. In place.
 
         Introduction to leg labeling can be found in :doc:`../IntroNpc`.
@@ -744,6 +739,10 @@ class Array(object):
         -------
         sliced_self : :class:`Array`
             A copy of self, equivalent to taking slices with indices inserted in axes.
+
+        See also
+        --------
+        :meth:`add_leg` : opposite action of inserting a new leg.
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)
@@ -761,7 +760,7 @@ class Array(object):
         res.legs = [self.legs[a] for a in keep_axes]
         res._set_shape()
         labels = self.get_leg_labels()
-        res.set_leg_labels([labels[a] for a in keep_axes])
+        res.iset_leg_labels([labels[a] for a in keep_axes])
         # calculate new total charge
         for a, (qi, _) in zip(axes, pos):
             res.qtotal -= self.legs[a].get_charge(qi)
@@ -781,13 +780,13 @@ class Array(object):
         res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
         return res
 
-    def add_trivial_leg(self, i, label=None, qconj=1):
+    def add_trivial_leg(self, axis=0, label=None, qconj=1):
         """Add a trivial leg (with just one entry) to `self`.
 
         Parameters
         ----------
-        i : int
-            The new leg is inserted before index `i`.
+        axis : int
+            The new leg is inserted before index `axis`.
         label : str | ``None``
             If not ``None``, use it as label for the new leg.
         qconj : +1 | -1
@@ -796,24 +795,64 @@ class Array(object):
         Returns
         -------
         extended : :class:`Array`
-            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 & charge 0.
+            A (possibly) *shallow* copy of self with an additional leg of ind_len 1 and charge 0.
         """
-        if i < 0:
-            i += self.rank
+        if axis < 0:
+            axis += self.rank
         res = self.copy(deep=False)
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
-        res.legs.insert(i, leg)
+        res.legs.insert(axis, leg)
         res._set_shape()
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
-            res._data[j] = T.reshape(T.shape[:i] + (1, ) + T.shape[i:])
+            res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
         res._qdata = np.hstack(
-            [res._qdata[:, :i], np.zeros([len(res._data), 1], np.intp), res._qdata[:, i:]])
+            [res._qdata[:, :axis], np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]])
         if label is not None:
             labs = list(self.get_leg_labels())
-            labs.insert(i, label)
-            res.set_leg_labels(labs)
+            labs.insert(axis, label)
+            res.iset_leg_labels(labs)
         return res
+
+    def add_leg(self, leg, i, axis=0, label=None):
+        """Add a leg to `self`, setting the current array as slice for a given index.
+
+        Parameters
+        ----------
+        leg : :class:`LegCharge`
+            The charge data of the leg to be added.
+        i : int
+            Index within the leg for which the data of `self` should be set.
+        axis : axis
+            The new leg is inserted before this current axis.
+        label : str | ``None``
+            If not ``None``, use it as label for the new leg.
+
+        Returns
+        -------
+        extended : :class:`Array`
+            A copy of self with the new `leg` at axis `axis` , such that
+            ``extended.take_slice(i, axis)`` returns a copy of `self`.
+
+        See also
+        --------
+        :meth:`take_slice` : opposite action reducing the number of legs.
+        """
+        if axis < 0:
+            axis += self.rank
+        legs = list(self.legs)
+        legs.insert(axis, leg)
+        qi, _ = leg.get_qindex(i)
+        qtotal = self.chinfo.make_valid(self.qtotal + leg.get_charge(qi))
+        extended = Array(legs, self.dtype, qtotal)
+        slices = [slice(None, None)]*self.rank
+        slices[axis] = i
+        extended[tuple(slices)] = self  # use existing implementation
+        if label is not None:
+            labs = list(self.get_leg_labels())
+            labs.insert(axis, label)
+            extended.iset_leg_labels(labs)
+        return extended
 
     # handling of charges =====================================================
 
@@ -994,7 +1033,7 @@ class Array(object):
 
         Examples
         --------
-        >>> oldarray.set_leg_labels(['a', 'b', 'c', 'd', 'e'])
+        >>> oldarray.iset_leg_labels(['a', 'b', 'c', 'd', 'e'])
         >>> c1 = oldarray.combine_legs([1, 2], qconj=-1)  # only single output pipe
         >>> c1.get_leg_labels()
         ['a', '(b.c)', 'd', 'e']
@@ -1040,7 +1079,7 @@ class Array(object):
         # transpose if necessary
         if transp != tuple(range(self.rank)):
             res = self.copy(deep=False)
-            res.set_leg_labels(labels)
+            res.iset_leg_labels(labels)
             res = res.itranspose(transp)
             inv_transp = inverse_permutation(transp)
             tr_combine_legs = [[inv_transp[a] for a in cl] for cl in combine_legs]
@@ -1055,7 +1094,7 @@ class Array(object):
         pipe_labels = [('(' + '.'.join([labels[c] for c in cl]) + ')') for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
             labels[na:na + p.nlegs] = [plab]
-        res.set_leg_labels(labels)
+        res.iset_leg_labels(labels)
         return res
 
     def split_legs(self, axes=None, cutoff=0.):
@@ -1089,7 +1128,7 @@ class Array(object):
         --------
         Given a rank-5 Array `old_array`, you can combine it and split it again:
 
-        >>> old_array.set_leg_labels(['a', 'b', 'c', 'd', 'e'])
+        >>> old_array.iset_leg_labels(['a', 'b', 'c', 'd', 'e'])
         >>> comb_array = old_array.combine_legs([[0, 3], [2, 4]] )
         >>> comb_array.get_leg_labels()
         ['(a.d)', 'b', '(c.e)']
@@ -1114,7 +1153,7 @@ class Array(object):
         labels = list(self.get_leg_labels())
         for a in sorted(axes, reverse=True):
             labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
-        res.set_leg_labels(labels)
+        res.iset_leg_labels(labels)
         return res
 
     def as_completely_blocked(self):
@@ -1176,7 +1215,7 @@ class Array(object):
         res.qtotal = self.chinfo.make_valid(res.qtotal)
 
         labels = self.get_leg_labels()
-        res.set_leg_labels([labels[a] for a in keep])
+        res.iset_leg_labels([labels[a] for a in keep])
 
         res._data = [np.squeeze(t, axis=axes).copy() for t in self._data]
         res._qdata = self._qdata[:, np.array(keep)]
@@ -1391,7 +1430,7 @@ class Array(object):
         self.legs = [self.legs[a] for a in axes]
         self._set_shape()
         labs = self.get_leg_labels()
-        self.set_leg_labels([labs[a] for a in axes])
+        self.iset_leg_labels([labs[a] for a in axes])
         self._qdata = self._qdata[:, axes_arr]
         self._qdata_sorted = False
         self._data = [np.transpose(block, axes) for block in self._data]
@@ -2581,7 +2620,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
         if labels is not None and tuple(entry.get_leg_labels()) != labels:
             labels = None
     if labels is not None:
-        res.set_leg_labels([None] * len(grid_shape) + list(labels))
+        res.iset_leg_labels([None] * len(grid_shape) + list(labels))
     res.test_sanity()
     return res
 
@@ -2782,7 +2821,7 @@ def trace(a, leg1=0, leg2=1):
             res._qdata_sorted = False
     # labels
     a_labels = a.get_leg_labels()
-    res.set_leg_labels([a_labels[ax] for ax in keep])
+    res.iset_leg_labels([a_labels[ax] for ax in keep])
     return res
 
 
@@ -2950,7 +2989,7 @@ def tensordot(a, b, axes=2):
     res = _tensordot_worker(a, b, axes)
 
     # labels
-    res.set_leg_labels(list(a.get_leg_labels()[:-axes]) + [None] * (b.rank - axes))
+    res.iset_leg_labels(list(a.get_leg_labels()[:-axes]) + [None] * (b.rank - axes))
     for k in b.labels:
         if b.labels[k] >= axes:  # not contracted
             if k in res.labels:
@@ -3049,8 +3088,8 @@ def svd(a,
         U.split_legs(0)
     if 1 in piped_axes:
         VH.split_legs(1)
-    U.set_leg_labels([a_labels[0], labL])
-    VH.set_leg_labels([labR, a_labels[1]])
+    U.iset_leg_labels([a_labels[0], labL])
+    VH.iset_leg_labels([labR, a_labels[1]])
     return U, S, VH
 
 
@@ -3161,7 +3200,7 @@ def eigh(a, UPLO='L', sort=None):
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
     w, v = _eig_worker(True, a, sort, UPLO)  # hermitian
-    v.set_leg_labels([a.get_leg_labels()[0], 'eig'])
+    v.iset_leg_labels([a.get_leg_labels()[0], 'eig'])
     return w, v
 
 
@@ -3195,7 +3234,7 @@ def eig(a, sort=None):
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
     w, v = _eig_worker(False, a, sort)  # non-hermitian
-    v.set_leg_labels([a.get_leg_labels()[0], 'eig'])
+    v.iset_leg_labels([a.get_leg_labels()[0], 'eig'])
     return w, v
 
 
@@ -3428,8 +3467,8 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
                 r = r.split_legs(0)
         if 1 in piped_axes:
             r = r.split_legs(-1)
-    q.set_leg_labels([a_labels[0], label_Q])
-    r.set_leg_labels([label_R, a_labels[1]])
+    q.iset_leg_labels([a_labels[0], label_Q])
+    r.iset_leg_labels([label_R, a_labels[1]])
     return q, r
 
 

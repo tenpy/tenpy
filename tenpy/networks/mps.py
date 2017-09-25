@@ -305,7 +305,7 @@ class MPS(object):
             legs = [site.leg, legL, None]  # other legs are known
             legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
             B = npc.Array.from_ndarray(B, legs, dtype)
-            B.set_leg_labels(['p', 'vL', 'vR'])
+            B.iset_leg_labels(['p', 'vL', 'vR'])
             Bs.append(B)
             legL = legs[-1].conj()  # prepare for next `i`
         if bc == 'infinite':
@@ -439,8 +439,8 @@ class MPS(object):
                 lbl = 's{0:d}-{1:d}'.format(i, j)
                 pairs.pop(0)
                 open_singlets.append(j)
-                next_Ts.append(Id.copy().set_leg_labels([lbl+'L', lbl]))
-                Open.set_leg_labels(['p', lbl])
+                next_Ts.append(Id.copy().iset_leg_labels([lbl+'L', lbl]))
+                Open.iset_leg_labels(['p', lbl])
                 Ts.append(Open.copy(deep=False))
                 labels_R.append(lbl)
                 forms.append('A')
@@ -450,7 +450,7 @@ class MPS(object):
                 forms.append('B')
             else:  # close a singlet
                 k = open_singlets.index(i)
-                Close.set_leg_labels([labels_L[k]+'L', 'p'])
+                Close.iset_leg_labels([labels_L[k]+'L', 'p'])
                 Ts[k] = Close
                 next_Ts.pop(k)
                 open_singlets.pop(k)
@@ -461,18 +461,18 @@ class MPS(object):
             labels_L = [lbl_ + 'L' for lbl_ in labels_L]
             if len(labels_L) > 0 and len(labels_R) > 0:
                 B = B.combine_legs([labels_L, labels_R], new_axes=[0, 2], qconj=[+1, -1])
-                B.set_leg_labels(['vL', 'p', 'vR'])
+                B.iset_leg_labels(['vL', 'p', 'vR'])
             elif len(labels_L) == 0 and len(labels_R) == 0:
                 B = B.add_trivial_leg(0, label='vL', qconj=+1)
                 B = B.add_trivial_leg(2, label='vR', qconj=+1)
-                B.set_leg_labels(['vL', 'p', 'vR'])
+                B.iset_leg_labels(['vL', 'p', 'vR'])
             elif len(labels_L) == 0:
                 B = B.combine_legs([labels_R], new_axes=[1], qconj=[-1])
-                B.set_leg_labels(['p', 'vR'])
+                B.iset_leg_labels(['p', 'vR'])
                 B = B.add_trivial_leg(0, label='vL', qconj=+1)
             else:  # len(labels_R) == 0
                 B = B.combine_legs([labels_L], new_axes=[0], qconj=[+1])
-                B.set_leg_labels(['vL', 'p'])
+                B.iset_leg_labels(['vL', 'p'])
                 B = B.add_trivial_leg(2, label='vR', qconj=+1)
             Bs.append(B)
             N = 2**len(labels_R)
@@ -1626,7 +1626,7 @@ class MPSEnvironment(object):
             leg_ket.test_contractible(leg_bra)
             # should work for both finite and segment bc
             firstLP = npc.diag(1., leg_bra, dtype=self.dtype)
-            firstLP.set_leg_labels(['vR*', 'vR'])
+            firstLP.iset_leg_labels(['vR*', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
             # Build trivial verly last RP
@@ -1634,7 +1634,7 @@ class MPSEnvironment(object):
             leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
             lastRP = npc.diag(1., leg_bra, dtype=self.dtype)  # (leg_bra, leg_ket)
-            lastRP.set_leg_labels(['vL*', 'vL'])
+            lastRP.iset_leg_labels(['vL*', 'vL'])
         self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()
 
@@ -2088,7 +2088,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         full_vec = np.zeros(self._pipe.ind_len)
         full_vec[self._mask] = vec
         res = npc.Array.from_ndarray(full_vec, [self._pipe])
-        res.set_leg_labels(['(vL.vL*)'])
+        res.iset_leg_labels(['(vL.vL*)'])
         return res
 
     def _npc_to_flat(self, npc_vec):

@@ -52,7 +52,7 @@ def test_MPO():
             grid = [[s.Id, s.Sp, s.Sz], [None, None, s.Sm], [None, None, s.Id]]
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()])
-            W.set_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws = [W] * L
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]

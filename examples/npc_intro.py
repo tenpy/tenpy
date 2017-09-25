@@ -36,7 +36,7 @@ B_even[0, 0, 0] = 1.  # up
 B_odd[0, 0, 1] = 1.  # down
 
 for B in [B_even, B_odd]:
-    B.set_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
+    B.iset_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
 
 Bs = [B_even, B_odd] * (L // 2) + [B_even] * (L % 2)  # (right-canonical)
 Ss = [np.ones(1)] * L  # Ss[i] are singular values between Bs[i-1] and Bs[i]
@@ -56,7 +56,7 @@ Sp = npc.Array.from_ndarray([[0., 1.], [0., 0.]], [p_leg, p_leg.conj()])
 Sm = npc.Array.from_ndarray([[0., 0.], [1., 0.]], [p_leg, p_leg.conj()])
 Id = npc.eye_like(Sz)  # identity
 for op in [Sz, Sp, Sm, Id]:
-    op.set_leg_labels(['p2', 'p'])  # physical out, physical in
+    op.iset_leg_labels(['p2', 'p'])  # physical out, physical in
 
 mpo_leg = npc.LegCharge.from_qflat(ci, [[0], [2], [-2], [0], [0]])
 
@@ -67,16 +67,16 @@ W_grid = [[Id, Sp, Sm, Sz, None],
           [None, None, None, None, Id]]  # yapf:disable
 
 W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()])
-W.set_leg_labels(['wL', 'wR', 'p2', 'p'])  # wL/wR = virtual left/right of the MPO
+W.iset_leg_labels(['wL', 'wR', 'p2', 'p'])  # wL/wR = virtual left/right of the MPO
 Ws = [W] * L
 
 print "3) define 'environments' left and right"
 
 envL = npc.zeros([W.get_leg('wL').conj(), Bs[0].get_leg('vL').conj(), Bs[0].get_leg('vL')])
-envL.set_leg_labels(['wR', 'vR', 'vR*'])
+envL.iset_leg_labels(['wR', 'vR', 'vR*'])
 envL[0, :, :] = npc.diag(1., envL.legs[1])
 envR = npc.zeros([W.get_leg('wR').conj(), Bs[-1].get_leg('vR').conj(), Bs[-1].get_leg('vR')])
-envR.set_leg_labels(['wL', 'vL', 'vL*'])
+envR.iset_leg_labels(['wL', 'vL', 'vL*'])
 envR[-1, :, :] = npc.diag(1., envR.legs[1])
 
 print "4) contract MPS and MPO to calculate the energy"
@@ -108,7 +108,7 @@ E2, U2 = npc.eigh(H2)
 print "Eigenvalues of H2:", E2
 U_expE2 = U2.scale_axis(np.exp(-1.j * dt * E2), axis=1)  # scale_axis ~= apply an diagonal matrix
 exp_H2 = npc.tensordot(U_expE2, U2.conj(), axes=(1, 1))
-exp_H2.set_leg_labels(H2.get_leg_labels())
+exp_H2.iset_leg_labels(H2.get_leg_labels())
 exp_H2 = exp_H2.split_legs()  # by default split all legs which are `LegPipe`
 # (this restores the originial labels ['p2', 'q2', 'p', 'q'] of `H2` in `exp_H2`)
 
