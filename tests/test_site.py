@@ -33,6 +33,10 @@ def test_site():
     assert (s.silly_op is op1)
     s.add_op('op2', op2)
     assert (s.op2 is op2)
+    assert (s.get_op('op2') is op2)
+    assert (s.get_op('silly_op') is op1)
+    npt.assert_equal(s.get_op('silly_op op2').to_ndarray(),
+                     npc.tensordot(op1, op2, [1, 0]).to_ndarray())
 
 
 def test_spin_half_site():

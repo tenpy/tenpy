@@ -20,7 +20,7 @@ class Site(object):
 
     Parameters
     ----------
-    leg : :class:`npc.LegCharge`
+    leg : :class:`~tenpy.linalg.charges.LegCharge`
         Charges of the physical states, to be used for the physical leg of MPS & co).
     state_labels : None | list of str
         Optionally a label for each local basis states. ``None`` entries are ignored / not set.
@@ -32,13 +32,13 @@ class Site(object):
     ----------
     dim
     onsite_ops
-    leg : :class:`npc.LegCharge`
+    leg : :class:`~tenpy.linalg.charges.LegCharge`
         Charges of the local basis states.
     state_labels : {str: int}
         (Optional) labels for the local basis states.
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
-    ops : :class:`npc.Array`
+    ops : :class:`~tenpy.linalg.charges.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
         All onsite operators have labels ``'p', 'p*'``.
@@ -119,9 +119,10 @@ class Site(object):
         name : str
             A valid python variable name, used to label the operator.
             The name under which `op` is added as attribute to self.
-        op : np.ndarray | npc.Array
+        op : np.ndarray | :class:`~tenpy.linalg.charges.Array`
             A matrix acting on the local hilbert space representing the local operator.
-            Dense numpy arrays are automatically converted to :class:`npc.Array`.
+            Dense numpy arrays are automatically converted to
+            :class:`~tenpy.linalg.np_conserved.Array`.
             LegCharges have to be [leg, leg.conj()].
             We set labels ``'p', 'p*'``.
         """
@@ -186,8 +187,27 @@ class Site(object):
         return [self.state_index(lbl) for lbl in labels]
 
     def get_op(self, name):
-        """Return operator of given name."""
-        return getattr(self, name)
+        """Return operator of given name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the operator to be returned.
+            In case of multiple operator names separated by whitespace,
+            we multiply them together to a single on-site operator
+            (with the one on the right acting first).
+
+        Returns
+        -------
+        op : :class:`~tenpy.linalg.np_conserved`
+            The operator given by `name`, with labels ``'p', 'p*'``.
+        """
+        names = name.split()
+        op = getattr(self, names[0])
+        for name2 in names[1:]:
+            op2 = getattr(self, name2)
+            op = npc.tensordot(op, op2, axes=['p*', 'p'])
+        return op
 
     def __repr__(self):
         """Debug representation of self"""
