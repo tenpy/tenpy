@@ -1,13 +1,13 @@
 """Defines a class describing the local physical Hilbert space.
 
-.. todo ::
-    implement more standard sites, e.g. spin-full fermions, spin-S, ...
 """
 from __future__ import division
 
 import numpy as np
 
 from ..linalg import np_conserved as npc
+
+__all__ = ['Site', 'SpinHalfSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
 
 
 class Site(object):
@@ -26,7 +26,7 @@ class Site(object):
         Optionally a label for each local basis states. ``None`` entries are ignored / not set.
     **site_ops :
         Additional keyword arguments of the form ``name=op`` given to :meth:`add_op`.
-        The identity operator 'Id' is always included.
+        The identity operator 'Id' is automatically included.
 
     Attributes
     ----------
@@ -42,6 +42,8 @@ class Site(object):
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
         All onsite operators have labels ``'p', 'p*'``.
+    perm : 1D array
+        Index permutation of the physical leg compared to `conserve=None`.
 
     Examples
     --------
@@ -58,15 +60,6 @@ class Site(object):
     >>> print site.Splus.to_ndarray()
     array([[ 0.,  1.],
            [ 0.,  0.]])
-
-    .. todo ::
-        Problem: what if we later want to remove the charges / add new charges?!?
-        Some onsite op's might not be compatible with charges, although the resulting
-        Hamiltonian might be?
-
-    .. todo ::
-        add option to sort by charges and save the resulting permutation.
-        Use it where helpful, e.g. for boson_site(conserve=parity) and co.
     """
 
     def __init__(self, leg, state_labels=None, **site_ops):
@@ -80,12 +73,14 @@ class Site(object):
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.iteritems():
             self.add_op(name, op)
+        if not hasattr(self, 'perm'):  # default permutation for the local states
+            self.perm = np.arange(self.dim)
         self.test_sanity()
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         for lab, ind in self.state_labels.iteritems():
-            if type(lab) != str:
+            if not isinstance(lab, str):
                 raise ValueError("wrong type of state label")
             if not 0 <= ind < self.dim:
                 raise ValueError("index of state label out of bounds")
@@ -123,7 +118,7 @@ class Site(object):
             A matrix acting on the local hilbert space representing the local operator.
             Dense numpy arrays are automatically converted to
             :class:`~tenpy.linalg.np_conserved.Array`.
-            LegCharges have to be [leg, leg.conj()].
+            LegCharges have to be ``[leg, leg.conj()]``.
             We set labels ``'p', 'p*'``.
         """
         name = str(name)
@@ -158,9 +153,13 @@ class Site(object):
         """
         if old_name == new_name:
             return
+        if new_name in self.opnames:
+            raise ValueError("new_name already exists")
         op = getattr(self, old_name)
         setattr(self, new_name, op)
         delattr(self, old_name)
+        del self.opnames[old_name]
+        self.opnames.add(new_name)
 
     def state_index(self, label):
         """Return index of a basis state from its label.
@@ -225,22 +224,22 @@ class SpinHalfSite(Site):
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
     ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
 
-    ============== ====  ==========================
-    `conserve`     qmod  onsite operators
-    ============== ====  ==========================
-    ``'Sz'``       [1]   ``Id, Sz, Sp, Sm``
-    ``'parity'``   [2]   ``Id, Sz, Sp, Sm, Sx, Sy``
-    ``None``       []    ``Id, Sz, Sp, Sm, Sx, Sy``
-    ============== ====  ==========================
-
     ==============  ================================================
     operator        description
     ==============  ================================================
-    ``Id``          identity :math:`\mathbb{1}`
-    ``Sx, Sy, Sz``  spin components :math:`S^{x,y,z}`,
+    ``Id``          Identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
                     equal to half the Pauli matrices.
-    ``Sp, Sm``      spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Sz'``       [1]   ``Sx, Sy``
+    ``'parity'``   [2]   --
+    ``None``       []    --
+    ============== ====  ============================
 
     Parameters
     ----------
@@ -285,26 +284,26 @@ class SpinSite(Site):
 
     There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
     corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
-    Local operators are the spin-S operators.
+    Local operators are the spin-S operators,
     e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
     ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
-
-    ============== ====  ==========================
-    `conserve`     qmod  onsite operators
-    ============== ====  ==========================
-    ``'Sz'``       [1]   ``Id, Sz, Sp, Sm``
-    ``'parity'``   [2]   ``Id, Sz, Sp, Sm, Sx, Sy``
-    ``None``       []    ``Id, Sz, Sp, Sm, Sx, Sy``
-    ============== ====  ==========================
 
     ==============  ================================================
     operator        description
     ==============  ================================================
-    ``Id``          identity :math:`\mathbb{1}`
-    ``Sx, Sy, Sz``  spin components :math:`S^{x,y,z}`,
+    ``Id``          Identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
                     equal to half the Pauli matrices.
-    ``Sp, Sm``      spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Sz'``       [1]   ``Sx, Sy``
+    ``'parity'``   [2]   --
+    ``None``       []    --
+    ============== ====  ============================
 
     Parameters
     ----------
@@ -365,25 +364,16 @@ class SpinSite(Site):
 class FermionSite(Site):
     r"""Create a :class:`Site` for spin-less fermions.
 
-    Local states are ``empty`` and ``occupied``.
-    Local operators can be built from creation operators.
+    Local states are ``empty`` and ``full``.
 
-    .. warning :
+    .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
-
-    ============== ====  ==========================
-    `conserve`     qmod  onsite operators
-    ============== ====  ==========================
-    ``'N'``        [1]   ``Id, JW, C, Cd, N``
-    ``'parity'``   [2]   ``Id, JW, C, Cd, N``
-    ``None``       []    ``Id, JW, C, Cd, N``
-    ============== ====  ==========================
 
     ==============  ========================================
     operator        description
     ==============  ========================================
-    ``Id``          identity :math:`\mathbb{1}`
+    ``Id``          Identity :math:`\mathbb{1}`
     ``JW``          Sign for the Jordan-Wigner string.
     ``C``           Annihilation operator :math:`c`
     ``Cd``          Creation operator :math:`c^\dagger`
@@ -391,6 +381,14 @@ class FermionSite(Site):
     ``dN``          :math:`\delta n := n - filling`
     ``dNdN``        :math:`(\delta n)^2`
     ==============  ========================================
+
+    ============== ====  ===============================
+    `conserve`     qmod  *exluded* onsite operators
+    ============== ====  ===============================
+    ``'N'``        [1]   --
+    ``'parity'``   [2]   --
+    ``None``       []    --
+    ============== ====  ===============================
 
     .. todo ::
         Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
@@ -431,7 +429,7 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
-        super(FermionSite, self).__init__(leg, ['empty', 'occupied'], **ops)
+        super(FermionSite, self).__init__(leg, ['empty', 'full'], **ops)
 
     def __repr__(self):
         """Debug representation of self"""
@@ -442,98 +440,174 @@ class SpinHalfFermionSite(Site):
     r"""Create a :class:`Site` for spinful (spin-1/2) fermions.
 
     Local states are:
-         ``empty``
-         ``spin-up``
-         ``spin-down``
-         ``full``
+         ``empty``  (vacuum),
+         ``up``     (one spin-up electron),
+         ``down``   (one spin-down electron), and
+         ``full``   (both electrons)
+
     Local operators can be built from creation operators.
 
-    .. warning :
-        Using the Jordan-Wigner strings (``JWU`` and ``JWD``) is crucial to get correct results,
-        otherwise you just describe hardcore bosons!
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
+        results, otherwise you just describe hardcore bosons!
 
-    ============== ====  ==========================
-    `conserve`     qmod  onsite operators
-    ============== ====  ==========================
-    ``'N'``        [1]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
-    ``'spin'``     [1]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
-    ``'parity'``   [2]   ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
-    ``None``       []    ``Id, JWU, JWD, CU, CUd, CD, CDd,  NU, ND, NT, NUND, Sz``
-    ============== ====  ==========================
-
-    ==============  ========================================
+    ==============  =============================================================================
     operator        description
-    ==============  ========================================
-    ``Id``          identity :math:`\mathbb{1}`
-    ``JWU``         Sign for the Jordan-Wigner string for spin-up operators.
-    ``JWD``         Sign for the Jordan-Wigner string for spin-down operators.
-    ``CU``          Annihilation operator spin-up :math:`c_{\uparrow}`
-    ``CUd``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
-    ``CD``          Annihilation operator spin-down :math:`c_{\downarrow}`
-    ``CDd``         Creation operator spin-down :math:`c_{\downarrow}`
-    ``NU``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
-    ``ND``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
-    ``NUND``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
-    ``NT``          Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
-    ``Sz``          Pauli-z matrix
-    ==============  ========================================
+    ==============  =============================================================================
+    ``Id``          Identity :math:`\mathbb{1}`
+    ``JWu``         Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
+    ``JWd``         Sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
+    ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
+    ``Cud``         Creation operator spin-up :math:`c_{\uparrow}^\dagger`
+    ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
+    ``Cdd``         Creation operator spin-down :math:`c_{\downarrow}^\dagger`
+    ``Nu``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
+    ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
+    ``NuNd``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
+    ``Ntot``        Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
+    ``dN``          Total number operator compared to the filling :math:`\Delta n = n_t-filling`
+    ``Sx, Sy, Sz``  Spin operators :math:`S^{x,y,z}`, in particular
+                    :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
+    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`,
+                    e.g. :math:`S^{+} = c_\uparrow^\dagger c_\downarrow`
+    ==============  =============================================================================
 
-    .. todo :: (Inherited from FermionSite)
+    The spin operators are defined as :math:`S^\gamma =
+    (c_{\uparrow}^\dagger, c_{\downarrow}^\dagger) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
+    where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
+
+    ============= ============= ======= =======================================
+    `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
+    ============= ============= ======= =======================================
+    ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
+    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``None``      [1]     --
+    ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
+    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``None``      [2]     --
+    ``None``      ``'Sz'``      [1]     ``Sx, Sy``
+    ``None``      ``'parity'``  [2]     --
+    ``None``      ``None``      []      --
+    ============= ============= ======= =======================================
+
+    .. todo ::
+        (Inherited from FermionSite)
         Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
         Handle Jordan-Wigner strings correctly in Coupling-model!
 
     .. todo ::
         Check if Jordan-Wigner strings for 4x4 operators are correct.
 
+
+    Parameters
+    ----------
+    cons_N : ``'N', 'parity' | None``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz', 'parity' | None``
+        Whether spin is conserved, c.f. table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+
     Attributes
     ----------
-    conserve : str
+    conserve : str | ``None``
         Defines what is conserved, see table above.
-    """
-    def __init__(self, conserve='N'):
-        if conserve not in ['N', 'parity', 'spin', None]:
-            raise ValueError("invalid `conserve`: " + repr(conserve))
+    filling : float
+        Average filling. Used to define ``dN``.  """
+    def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
+        if cons_N not in ['N', 'parity', None]:
+            raise ValueError("invalid `cons_N`: " + repr(cons_N))
+        if cons_Sz not in ['Sz', 'parity', None]:
+            raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
         d = 4
-
+        states = ['empty', 'up', 'down', 'full']
         # 0) Build the operators.
-        Id = np.identity(d)
-        CU = np.zeros(  (d, d)  ) 
-        CU[0,1] = 1
-        CU[2,3] = 1
-        CUd = np.transpose(CU)
-        NU = np.dot(CUd, CU)
+        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float)
+        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float)
+        Nu = np.diag(Nu_diag)
+        Nd = np.diag(Nd_diag)
+        Ntot = np.diag(Nu_diag + Nd_diag)
+        dN = np.diag(Nu_diag + Nd_diag - filling)
+        NuNd = np.diag(Nu_diag * Nd_diag)
+        JWu = np.diag(1. - 2 * Nu_diag)     # (-1)^Nu
+        JWd = np.diag(1. - 2 * Nd_diag)     # (-1)^Nd
+        JW = JWu * JWd                      # (-1)^{Nu+Nd}
 
-        CD = np.zeros(  (d, d)  ) 
-        CD[0,2] = 1
-        CD[1,3] = 1
-        CDd = np.transpose(CD)
-        ND = np.dot(CDd, CD)
+        Cu = np.zeros((d, d))
+        Cu[0, 1] = Cu[2, 3] = 1
+        # For spin-down annihilation operator: include a Jordan-Wigner string JWu
+        # this ensures that Cud.Cd = - Cd.Cud
+        # c.f. the chapter on the Jordan-Wigner trafo in the userguide
+        Cd_noJW = np.zeros((d, d))
+        Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1
+        Cd = np.dot(JWu, Cd_noJW)           # (don't do this for spin-up...)
+        Cud = np.transpose(Cu)
+        Cdd = np.transpose(Cd)
 
-        NT = NU + ND     # Total density
-        NUND = np.dot(NU, ND)
-        JWU = Id - 2 * ND  # JW strings are defined to go along with other operators, e.g. JWU dot CU
-        JWD = Id - 2 * NU  # That's why JWU is defined with ND and JWD is defined with ND.
-        Sz = 0.5 * (NU - ND)
+        # spin operators are defined as  (Cud, Cdd) S^gamma (Cu, Cd)^T,
+        # where S^gamma is the 2x2 matrix for spin-half
+        Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
+        Sp = np.dot(Cud, Cd)
+        Sm = np.dot(Cdd, Cu)
+        Sx = 0.5*(Sp + Sm)
+        Sy = -0.5j*(Sp - Sm)
 
-        ops = dict(Id=Id, JWU=JWU, JWD=JWD, CU=CU, CUd=CUd, CD=CD, CDd=CDd, NU=NU, ND=ND, NT=NT, 
-                   NUND=NUND, Sz=Sz)
-        if conserve == 'N':
-            chinfo = npc.ChargeInfo([1], ['N'])
-            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, 1, 2])
-        elif conserve == 'spin':
-            chinfo = npc.ChargeInfo([1], ['spin'])
-            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, -1, 0])
-        elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
-            leg = npc.LegCharge.from_qflat(chinfo, [0, 1, 1, 2])
+        # yapf: disable
+        ops = dict(JW=JW, JWu=JWu, JWd=JWd,
+                   Cu=Cu, Cud=Cud, Cd=Cd, Cdd=Cdd,
+                   Nu=Nu, Nd=Nd, Ntot=Ntot, NuNd=NuNd, dN=dN,
+                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)
+        # yapf: enable
+
+        # handle charges
+        qmod = []
+        qnames = []
+        charges = []
+        if cons_N == 'N':
+            qnames.append('N')
+            qmod.append(1)
+            charges.append([0, 1, 1, 2])
+        elif cons_N == 'parity':
+            qnames.append('N')
+            qmod.append(2)
+            charges.append([0, 1, 1, 0])
+        if cons_Sz == 'Sz':
+            qnames.append('Sz')
+            qmod.append(1)
+            charges.append([0, 1, -1, 0])
+            del ops['Sx']
+            del ops['Sy']
+        elif cons_Sz == 'parity':
+            qnames.append('Sz')
+            qmod.append(4)    # difference between up and down is 2!
+            charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
+            # chosen s.t. Cu, Cd have well-defined charges!
+
+        if len(qmod) == 0:
+            leg = npc.LegCharge.from_trivial(d)
         else:
-            leg = npc.LegCharge.from_trivial(2)
-        self.conserve = conserve
-        super(FermionSite, self).__init__(leg, ['empty', 'up', 'down', 'full'], **ops)
+            if len(qmod) == 1:
+                charges = charges[0]
+            else:  # len(charges) == 2: need to transpose
+                charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
+            chinfo = npc.ChargeInfo(qmod, qnames)
+            leg_unsorted = npc.LegCharge.from_qflat(chinfo, charges)
+            # sort by charges
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            self.perm = perm_flat
+            # permute operators accordingly
+            for opname in ops:
+                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
+            # and the states
+            states = [states[i] for i in perm_flat]
+        self.cons_N = cons_N
+        self.cons_Sz = cons_Sz
+        super(SpinHalfFermionSite, self).__init__(leg, states, **ops)
 
     def __repr__(self):
         """Debug representation of self"""
-        return "SpinHalfFermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
+        return "SpinHalfFermionSite({c!r})".format(c=self.conserve)
 
 
 class BosonSite(Site):
@@ -541,29 +615,27 @@ class BosonSite(Site):
 
     Local states are ``vac, 1, 2, ... , Nc``.
     (Exception: for parity conservation, we sort as ``vac, 2, 4, ..., 1, 3, 5, ...``.)
-    Local operators can be built from creation operators.
-
-
-    ============== ====  ==================================
-    `conserve`     qmod  onsite operators
-    ============== ====  ==================================
-    ``'N'``        [1]   ``Id, B, Bd, N, NN, dN, dNdN, P``
-    ``'parity'``   [2]   ``Id, B, Bd, N, NN, dN, dNdN, P``
-    ``None``       []    ``Id, B, Bd, N, NN, dN, dNdN, P``
-    ============== ====  ==================================
 
     ==============  ========================================
     operator        description
     ==============  ========================================
-    ``Id``          identity :math:`\mathbb{1}`
+    ``Id``          Identity :math:`\mathbb{1}`
     ``B``           Annihilation operator :math:`b`
     ``Bd``          Creation operator :math:`b^\dagger`
-    ``N``           Number operator :math:`N= b^\dagger b`
-    ``NN``          :math:`N^2`
-    ``dN``          :math:`\delta N := N - filling`
-    ``dNdN``        :math:`(\delta N)^2`
-    ``P``           Parity :math:`Id - 2 (N \mod 2)`.
+    ``N``           Number operator :math:`n= b^\dagger b`
+    ``NN``          :math:`n^2`
+    ``dN``          :math:`\delta n := n - filling`
+    ``dNdN``        :math:`(\delta n)^2`
+    ``P``           Parity :math:`Id - 2 (n \mod 2)`.
     ==============  ========================================
+
+    ============== ====  ==================================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ==================================
+    ``'N'``        [1]   --
+    ``'parity'``   [2]   --
+    ``None``       []    --
+    ============== ====  ==================================
 
     Parameters
     ----------
@@ -587,6 +659,7 @@ class BosonSite(Site):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
+        states = ['vac'] + [str(n) for n in range(1, dim)]
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
         B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
@@ -610,15 +683,18 @@ class BosonSite(Site):
             # sort by charges
             perm_qind, leg = leg_unsorted.sort()
             perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            self.perm = perm_flat
             # permute operators accordingly
             for opname in ops:
                 ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
+            # and the states
+            states = [states[i] for i in perm_flat]
         else:
             leg = npc.LegCharge.from_trivial(dim)
         self.Nmax = Nmax
         self.conserve = conserve
         self.filling = filling
-        super(BosonSite, self).__init__(leg, ['vac'] + [str(n) for n in range(1, dim)], **ops)
+        super(BosonSite, self).__init__(leg, states, **ops)
 
     def __repr__(self):
         """Debug representation of self"""
