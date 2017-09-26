@@ -41,7 +41,7 @@ and even a search function :-).
 
 .. note ::
 
-   Building the html documentation requires loading the modules.
+   Building the (html) documentation requires loading the modules.
    Thus make sure that the folder `tenpy` is included in your ``$PYTHONPATH``,
    as described in :doc:`doc/INSTALL.rst <INSTALL>`.
 

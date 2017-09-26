@@ -69,8 +69,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     :meth:`canonicalize` (or sub-functions) before using algorithms.
 ======== ========== =======================================================================
 
-.. todo :
-
+.. todo ::
     - expectaion values
     - canonicalize()
     - much much more ....
@@ -92,7 +91,7 @@ from ..tools.math import lcm, speigs, entropy
 class MPS(object):
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
-    .. todo :
+    .. todo ::
         Somewhere keep track of the norm of the wave function?
         Even if we don't use it in most cases,
         it might be useful e.g. for imaginary time evolution (giving the partition function)
@@ -949,7 +948,7 @@ class MPS(object):
             The environment (storing the LP and RP) used to calculate the overlap.
         """
         if not self.finite:
-            # requires MPSTransferMatrix for finding dominant left/right parts
+            # requires TransferMatrix for finding dominant left/right parts
             raise NotImplementedError("TODO")
         env = MPSEnvironment(self, other)
         return env.full_contraction(0), env
@@ -1199,7 +1198,7 @@ class MPS(object):
         If all sites have a `form` label (like ``'A','B'``), it respects the `form` to ensure
         that one `S` is included per bond.
 
-        .. todo :
+        .. todo ::
             Should we try to avoid carrying around the total charge of the B matrices?
             Also, we need a 'canonical_form_infinite', such that we can define canonical_form()
         """
@@ -1268,7 +1267,7 @@ class MPS(object):
         Thus :math:`\lambda_2 = \exp(-\frac{1}{\xi})`.
         Assumes that `self` is in canonical form.
 
-        .. todo :
+        .. todo ::
             might want to insert OpString.
 
         Parameters
@@ -1559,10 +1558,10 @@ class MPSEnvironment(object):
     and right-canonical `B` to the right parts `RP`.
     Thus, the special case `psi`=`ket` should yield identity matrices for `LP` and `RP`.
 
-    .. todo :
-        Functionality to find the dominant LP/RP in the TD limit -> requires MPSTransferMatrix
+    .. todo ::
+        Functionality to find the dominant LP/RP in the TD limit -> requires TransferMatrix
 
-    .. todo :
+    .. todo ::
         Doesn't work for different qtotal in ket._B / bra._B -> Need MPS.gauge_qtotal()
 
     Parameters
@@ -1898,6 +1897,16 @@ class TransferMatrix(sparse.linalg.LinearOperator):
     Instead, we support to select a charge sector and act on numpy arrays, which allows to use the
     scipy.sparse routines.
 
+    .. todo ::
+        One could create a separate `LinearOperator` class working for both numpy and npc arrays,
+        checking the type of `vec`. Should implement `matvec` exactly as here.
+        Problem: At the time of writing this, the npc.Lanczos.LinalgOperator takes also
+        rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
+        Still, might also be useful in algorithms.exact_diag
+
+    .. todo ::
+        scipy.sparse.LinearOperator has a conflicting `transpose` method!
+
     Parameters
     ----------
     bra : MPS
@@ -1944,16 +1953,6 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         with a dense ndarray. ``None`` stands for *all* sectors.
     _mask : bool ndarray
         Selects the indices of the pipe which are used in `matvec`, mapping from
-
-    .. todo :
-        One could create a separate `LinearOperator` class working for both numpy and npc arrays,
-        checking the type of `vec`. Should implement `matvec` exactly as here.
-        Problem: At the time of writing this, the npc.Lanczos.LinalgOperator takes also
-        rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
-        Still, might also be useful in algorithms.exact_diag
-
-    .. todo :
-        scipy.sparse.LinearOperator has a conflicting `transpose` method!
     """
 
     def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0):

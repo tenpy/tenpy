@@ -86,7 +86,7 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
     Moreover, we don't split the physical and auxiliar space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 
-.. todo :
+.. todo ::
     One can also look at the canonical ensembles by defining the conserved quantities
     differently, see Barthel (2016), arXiv:1607.01696 for details.
     Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
@@ -119,7 +119,7 @@ class PurificationMPS(MPS):
 
     See also the docstring of the module for details.
 
-    .. todo :
+    .. todo ::
         Formally, the order of the algorithms is better if we split the `p` and `q` legs onto
         different 'sites' (i.e. making a ladder-structure). For TEBD, this requires a `swap` of
         the sites. Also, I'm not sure, how much faster this actually would be....

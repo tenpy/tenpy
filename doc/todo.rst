@@ -4,59 +4,32 @@ Update doc/changes_TenPy.rst if you've done something.
 
 Primary goals for the coming release
 ------------------------------------
-- convert TenPy2 code, restrict to necessary parts. 
-
-    - add files from old git repo without changes, git commit
-    - run `$> yapf -r -i`. See doc/changes_TenPy.rst for detailed command
-    - relative imports (except in tests)
-    - git commit
-
-- CamelCase for classes
-- include minimal library with mps, mpo, basic model (XXZ)
-
-- some way to set the number of cores used by the MKL
+- finish documentation and tests on existing stuff
+- script for automatic conversion to python3
 
 
 Concrete things to be fixed in different files
 ----------------------------------------------
-- np_conserved:
-
-  - add state labeling to LegCharge !
-  - as_completely_blocked: option to select only some legs
-
-- model:
-
-  - separate class for nearest neighbour models.
-  - every model should define Hmpo
-  - generalize to non-uniform [d]
-  - introduce basic lattice class;
-    derive MPS-chain fixing index notation for accessing different sites
-    How to best handle different mappings lattice->chain?
-
-- add doc strings in __init__.py for different folders, explaining the most important parts of the modules
-- The MPO class has no function for expectation value with MPS?
+- The MPO class has no function for expectation value with MPS
 
 
 To be done at some point for the next releases
 ----------------------------------------------
-- uniform way of handling truncation errors -> module tools/truncation with TruncError class and TruncError
 - documentation on the idea of algorithms, references in doc strings.
 
   - overview and usage introduction to the overall library
   - np_conserved needs an introduction for newbies
   - usage introduction with very simple (few-line) examples for newbies.
 
-- set __all__  in the __init__.py files.
-- properties might be useful for certain things, e.g. for dtype of npc.Array
-
-- np_conserved:
-  optional just-in-time compilation with numba could maybe speed things up?
+- functionality to remove charges from an MPS, 
+  e.g. if we use DMRG with charge conservation and want to quench and time evolve 
+  with a different hamiltonian violating some charge conservation...
+  Should be possible using Site.perm correctly...
 
 
 Wish-list
 ---------
 - Open Source on GitHub? -> Licence? Documentation on readthedocs.org?
-- dump of stack for lated inspection, when an error occurs while on the cluster?
 - logging mechanism?
 - Johannes Motruk: extend simulation class: save standard variables like entropy, energy, etc?
 - Ruben: extend MPS TransferMatrix class
@@ -79,5 +52,5 @@ Here, you can report Bugs that need to be fixed.
 Known limitations
 -----------------
 TenPyLight is meant to be a simple and readably library. Therefore, it may not handle every special case correctly.
-Here, we list some known 'bugs' that won't be fixed (at least not in the near future).
+Here, we collect a list of some known 'bugs' that won't be fixed (at least not in the near future).
 

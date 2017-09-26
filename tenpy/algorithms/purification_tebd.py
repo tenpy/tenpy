@@ -506,7 +506,7 @@ class PurificationTEBD(tebd.Engine):
     def disentangle_diag(self, theta):
         """Disentangle by diagonalizing the two-site density matrix in the auxiliar space.
 
-        .. todo :
+        .. todo ::
             See Appendix B in arXiv:1704.01974.
             Problem: Sorting by eigenvalues breaks the charge conservation!
             Instead we just sort within the charge blocks and check, wether we increased

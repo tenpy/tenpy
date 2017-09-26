@@ -506,14 +506,12 @@ class Engine(object):
         Instead of the even/odd brick structure used for ordinary TEBD,
         we 'sweep' from left to right and right to left, similar as DMRG.
         Thanks to that, we are actually able to preserve the canonical form.
-
-        .. todo :
-            works currently only for second order, recovering the initial state.
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
         # allow only second order evolution
-        assert(order == 2)
+        if order != 2 or not self.psi.finite:
+            raise NotImplementedError() # Would lead to loss of canonical form. What about DMRG?
         U_idx_dt = 0  # always with dt=0.5
         assert(self.suzuki_trotter_time_steps(order)[U_idx_dt] == 0.5)
         assert(self.psi.finite)  # finite or segment bc

@@ -29,19 +29,19 @@ is the discarded part (orthogonal to the kept part) and the
 *truncation error of a single truncation* is defined as
 :math:`\epsilon = 1 - |\langle \psi | \psi_{tr}\rangle |^2 = \sum_{a >= \chi_c} \lambda_a^2`.
 
-.. warning :
+.. warning ::
     For imaginary time evolution (e.g. with TEBD), you try to project out the ground state.
     Then, looking at the truncation error defined in this module does *not* give you any
     information how good the found state coincides with the actual ground state!
     (Instead, the returned truncation error depends on the overlap with the initial state,
     which is arbitrary > 0)
 
-.. warning :
+.. warning ::
     This module takes only track of the errors coming from the truncation of Schmidt values.
     There might be other sources of error as well, for example TEBD has also an discretisation
     error depending on the chosen time step.
 
-.. todo :
+.. todo ::
     The `TEBD wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`_
     (in the section 'Errors coming from the truncation of the Hilbert space')
     claims that there is a second more subtle error, which stems from the change of the Schmidt
@@ -64,7 +64,7 @@ class TruncationError(object):
 
     The default initialization represents "no truncation".
 
-    .. warning:
+    .. warning ::
         For imaginary time evolution, this is *not* the error you are interested in!
 
     Attributes
@@ -90,7 +90,7 @@ class TruncationError(object):
 
     def copy(self):
         """Return a copy of self."""
-        return TruncationError(eps, ov)
+        return TruncationError(self.eps, self.ov)
 
     @classmethod
     def from_norm(cls, norm_new, norm_old=1.):

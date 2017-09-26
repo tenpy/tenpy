@@ -22,7 +22,7 @@ Currently, there is only one :class:`Mixer` implemented.
 The mixer should be used initially to avoid that the algorithm gets stuck in local energy minima,
 and then slowly turned off in the end.
 
-.. todo :
+.. todo ::
     abort on too large NormErr -> need MPS.normerr()
     Need function to plot the statistics in the end
     Write UserGuide/Example!!!
@@ -1230,7 +1230,7 @@ class EngineFracture(Engine):
 class Mixer(object):
     """Mixer class.
 
-    .. todo :
+    .. todo ::
         documentation/reference
 
     Parameters
