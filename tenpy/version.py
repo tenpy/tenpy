@@ -6,6 +6,11 @@ To update a version, change `version` in this module and create a git tag ::
     git tag -a "v1.0.2"
 
 Make shure to push your tag into the shared git repo with `git push origin [tagname]`.
+
+This module provides the three variables `version`, `git_version` and `full_version`.
+`version` is a tuple of three integers (major, minor, revision).
+`git_version` is a string including information about the current git commit,
+`full_version` includes the versions of the used python, numpy and scipy libraries.
 """
 
 import numpy
@@ -13,6 +18,8 @@ import scipy
 import sys
 import subprocess
 import os
+
+__all__ = ["version", "git_version", "full_version"]
 
 # hard-coded version for people without git...
 version = (0, 2, 0)
