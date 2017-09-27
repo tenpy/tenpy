@@ -102,11 +102,17 @@ class MPO(object):
         if IdL is None:
             self.IdL = [None] * (self.L + 1)
         else:
-            self.IdL = list(IdL)
+            try:
+                self.IdL = list(IdL)
+            except TypeError:
+                self.IdL = [IdL] * (self.L + 1)
         if IdR is None:
             self.IdR = [None] * (self.L + 1)
         else:
-            self.IdR = list(IdR)
+            try:
+                self.IdR = list(IdR)
+            except TypeError:
+                self.IdR = [IdR] * (self.L + 1)
         self.bc = bc
         self.test_sanity()
 

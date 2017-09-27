@@ -552,12 +552,10 @@ class SpinHalfFermionSite(Site):
         Sx = 0.5*(Sp + Sm)
         Sy = -0.5j*(Sp - Sm)
 
-        # yapf: disable
         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
                    Cu=Cu, Cud=Cud, Cd=Cd, Cdd=Cdd,
                    Nu=Nu, Nd=Nd, Ntot=Ntot, NuNd=NuNd, dN=dN,
-                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)
-        # yapf: enable
+                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
 
         # handle charges
         qmod = []
