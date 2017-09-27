@@ -9,8 +9,8 @@ This example includes the following steps:
 6) calculate ``exp(-1.j*dt*H2)`` by diagonalization of H2
 7) apply ``exp(H2)`` to two sites of the MPS and truncate with svd
 
-Note that this example uses only npc and no other modules.
-Compare it to the example `mps_intro.py`,
+Note that this example uses only np_conserved, but no other modules.
+Compare it to the example `01_mps_intro.py`,
 which does the same steps using a few predefined classes like MPS and MPO.
 """
 

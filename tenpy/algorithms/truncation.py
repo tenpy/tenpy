@@ -45,7 +45,7 @@ is the discarded part (orthogonal to the kept part) and the
     The `TEBD wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`_
     (in the section 'Errors coming from the truncation of the Hilbert space')
     claims that there is a second more subtle error, which stems from the change of the Schmidt
-    basis |R_a> on bond i-1 if we truncate bond i.
+    basis :math:`|R_a\rangle` on bond i-1 if we truncate bond i.
     In the end, that leads just to a factor of 2 in TruncationError.__init__ ???
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)

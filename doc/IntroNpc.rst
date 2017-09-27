@@ -9,7 +9,7 @@ Even for more general (non-square-matrix) tensors, charge conservation imposes r
 be non-zero. Only those blocks need to be saved, and e.g. tensordot can be speeded up.
 
 This introduction covers our implementation of charges; explaining mathematical details of the underlying symmetry is beyond its scope.
-We refer you to Ref. [1]_ for the general idea, which is more nicely explained for the example of a :math:`U(1)` symmetry in [2]_.
+We refer you to Ref. [Singh2009]_ for the general idea, which is more nicely explained for the example of a :math:`U(1)` symmetry in [Singh2010]_.
 
 Notations
 ---------
@@ -557,7 +557,7 @@ So here is how it works:
   For instance, the call ``tensordot(A, B, [ ['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
   (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
   and 2 as 'the 2nd leg'. That's why we require labels to be strings!
-- Labels will be intelligently inherited through the various operations of `np_conserved`. Assume `
+- Labels will be intelligently inherited through the various operations of `np_conserved`.
     - Under `transpose`, labels are permuted.
     - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
     - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
@@ -567,7 +567,7 @@ So here is how it works:
     - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
     - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a,(b*,c))' -> '(a*, (b, c*))'``
     - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
-    - Under `pinv`, the labels are transposed
+    - Under `pinv`, the labels are transposed.
 
 
 See also
@@ -582,9 +582,4 @@ A full example code for spin-1/2
 --------------------------------
 Below follows a full example demonstrating the creation and contraction of Arrays.
 
-.. literalinclude:: ../examples/npc_intro.py
-
-References
-----------
-.. [1] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), arXiv:0907.2994
-.. [2] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, arXiv:1008.4774
+.. literalinclude:: ../examples/00_npc_intro.py
