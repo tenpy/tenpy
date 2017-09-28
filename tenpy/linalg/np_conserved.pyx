@@ -4066,9 +4066,13 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
     for a_qdata_row, block in itertools.izip(a._qdata, a._data):
         if compute_uv:
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
-            if anynan(U_b) or anynan(VH_b):
+            if anynan(U_b) or anynan(VH_b) or anynan(S_b):
+                # give it another try with the other (more stable) svd driver
+                U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a,
+                                          check_finite=True, lapack_driver='gesvd')
+            if anynan(U_b) or anynan(VH_b) or anynan(S_b):
                 raise ValueError(
-                    "NaN in U_b {0:x} and/or VH_b: {1:x}".format(np.sum(np.isnan(U_b)),
+                    "NaN in U_b {0:d} and/or VH_b: {1:d}".format(np.sum(np.isnan(U_b)),
                                                                  np.sum(np.isnan(VH_b))))
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
