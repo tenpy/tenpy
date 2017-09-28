@@ -14,9 +14,20 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{i} J (c^{+}_i c_{i+1} + c_i c^{+}_{i+1})
-            + V n^{+}_i n_{i}
-            - mu n_{i}
+        H = \sum_{<i,j>}
+              \mathtt{J} (c^{\dagger}_i c_{i+1} + c_i c^{\dagger}_{i+1})
+            + \mathtt{V} n_i n_{i+1} \\
+            - \sum_i
+              \mathtt{mu} n_{i}
+
+    All parameters are collected in a single dictionary `model_param` and read out with
+    :func:`~tenpy.tools.params.get_parameter`.
+
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
+
+    .. todo ::
+        check correct use of Jordan-Wigner string
 
     Parameters
     ----------
@@ -28,8 +39,6 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen
         appropriately.
-
-    #TODO: Add more documentation!
     """
     def __init__(self, model_param):
         # 0) read out/set default parameters
@@ -51,8 +60,11 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(mu, 0, 'N')
         J = np.asarray(J)  # convert to array: allow `array_like` J
-        self.add_coupling(J, 0, 'Cd', 0, 'C', 1)  # JW not needed in NN mod.
-        self.add_coupling(J, 0, 'C', 0, 'Cd', 1)
+        self.add_coupling(J, 0, 'Cd', 0, 'C', 1, 'JW')  # (for a nearest neighbor model, we
+        self.add_coupling(J, 0, 'C', 0, 'Cd', 1, 'JW')  # could leave all `JW` away)
+        # TODO: should be, but doesn't work:
+        #  self.add_coupling(J, 0, 'Cd JW', 0, 'C', 1, 'JW')  # (for a nearest neighbor model, we
+        #  self.add_coupling(J, 0, 'JW C', 0, 'Cd', 1, 'JW')  # could leave all `JW` away)
         self.add_coupling(V, 0, 'N', 0, 'N', 1)
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())

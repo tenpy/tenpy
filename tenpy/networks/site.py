@@ -501,17 +501,19 @@ class SpinHalfFermionSite(Site):
 
     Parameters
     ----------
-    cons_N : ``'N', 'parity' | None``
+    cons_N : ``'N' | 'parity' | None``
         Whether particle number is conserved, c.f. table above.
-    cons_Sz : ``'Sz', 'parity' | None``
+    cons_Sz : ``'Sz' | 'parity' | None``
         Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.
 
     Attributes
     ----------
-    conserve : str | ``None``
-        Defines what is conserved, see table above.
+    cons_N : ``'N' | 'parity' | None``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz' | 'parity' | None``
+        Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.  """
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):

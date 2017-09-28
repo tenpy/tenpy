@@ -45,10 +45,6 @@ class CouplingModel(object):
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
     terms.
 
-    .. todo ::
-        implement ...
-        Some way to generalize to couplings involving multiple sites?
-
     Parameters
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`

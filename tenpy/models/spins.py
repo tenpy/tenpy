@@ -22,13 +22,18 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
 
     .. math ::
         H = \sum_{<i,j>}
-            Jx S^X_i S^X_j
-            + Jy S^Y_i S^Y_j
-            + Jz S^Z_i S^Z_j
-            + muJ i/2 (S^{+}_i S^{-}_j - S^{-}_i S^{+}_j)
-            + hx Sx_i
-            + hy Sy_i
-            + hz Sz_i
+              \mathtt{Jx} S^x_i S^x_j
+            + \mathtt{Jy} S^y_i S^y_j
+            + \mathtt{Jz} S^z_i S^z_j
+            + \mathtt{muJ} i/2 (S^{+}_i S^{-}_j - S^{-}_i S^{+}_j)
+            \\
+            + \sum_i
+              \mathtt{hx} S^x_i
+            + \mathtt{hy} S^y_i
+            + \mathtt{hz} S^z_i
+
+    All parameters are collected in a single dictionary `model_param` and read out with
+    :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
     ----------
@@ -42,8 +47,6 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-
-    All parameters are collected in the dictionary `model_param`.
     """
 
     def __init__(self, model_param):

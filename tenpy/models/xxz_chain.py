@@ -1,6 +1,6 @@
 """Prototypical example of a 1D quantum model: the spin-1/2 XXZ chain.
 
-Although the XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`,
+The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`;
 the idea of this class is more to serve as a pedagogical example for a 'model'.
 """
 
@@ -21,9 +21,14 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{i} Jxx/2 (S^{+}_i S^{-}_{i+1} + S^{-}_i S^{+}_{i+1})
-            + Jz S^Z_i S^Z_{i+1}
-            - hz Sz_i
+        H = \sum_{i}
+              \mathtt{Jxx}/2 (S^{+}_i S^{-}_{i+1} + S^{-}_i S^{+}_{i+1})
+            + \mathtt{Jz} S^z_i S^z_{i+1}
+            - \sum_i
+              \mathtt{hz} S^z_i
+
+    All parameters are collected in a single dictionary `model_param` and read out with
+    :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
     ----------
@@ -33,8 +38,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-
-    All parameters are collected in the dictionary `model_param`.
     """
 
     def __init__(self, model_param):
@@ -44,7 +47,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        unused_parameters(model_param, self.__class__)
+        unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
         # 1) charges of the physical leg. The only time that we actually define charges!
         leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
         # 2) onsite operators
@@ -55,7 +58,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 3) local physical site
         site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
         # NOTE: the most common `site` are pre-defined in tenpy.networks.site.
-        # you could replace step 1)-3) by::
+        # you could (and should) replace steps 1)-3) by::
         #     from tenpy.networks.site import SpinHalfSite
         #     site = SpinHalfSite(conserve='Sz')
         # 4) lattice
