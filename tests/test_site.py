@@ -53,9 +53,8 @@ def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
     """
     Sp, Sm, Sz = SpSmSz
     Sp, Sm, Sz = S.get_op(Sp).to_ndarray(), S.get_op(Sm).to_ndarray(), S.get_op(Sz).to_ndarray()
-    tol = S.dim*S.dim
-    npt.assert_array_almost_equal_nulp(commutator(Sz, Sp), Sp, tol)
-    npt.assert_array_almost_equal_nulp(commutator(Sz, Sm), -Sm, tol)
+    npt.assert_almost_equal(commutator(Sz, Sp), Sp, 13)
+    npt.assert_almost_equal(commutator(Sz, Sm), -Sm, 13)
     if SxSy is not None:
         Sx, Sy = SxSy
         Sx, Sy = S.get_op(Sx).to_ndarray(), S.get_op(Sy).to_ndarray()
@@ -65,8 +64,8 @@ def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
             Sa, Sb, Sc = ([Sx, Sy, Sz] * 2)[i:i + 3]
             # for pauli matrices ``sigma_a . sigma_b = 1.j * epsilon_{a,b,c} sigma_c``
             # with ``Sa = 0.5 sigma_a``, we get ``Sa . Sb = 0.5j epsilon_{a,b,c} Sc``.
-            #  npt.assert_array_almost_equal_nulp(np.dot(Sa, Sb), 0.5j*Sc, 200*tol)
-            npt.assert_array_almost_equal_nulp(commutator(Sa, Sb), 1.j*Sc, tol)
+            #  npt.assert_almost_equal(np.dot(Sa, Sb), 0.5j*Sc, 13) # holds only for S=1/2
+            npt.assert_almost_equal(commutator(Sa, Sb), 1.j*Sc, 13)
 
 
 def test_spin_half_site():
