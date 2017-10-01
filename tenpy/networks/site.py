@@ -27,7 +27,8 @@ class Site(object):
     **site_ops :
         Additional keyword arguments of the form ``name=op`` given to :meth:`add_op`.
         The identity operator ``'Id'`` is automatically included.
-        If no ``'JW'`` for the Jordan-Wigner string is given, ``'JW'`` is set as an alias to ``'Id'``.
+        If no ``'JW'`` for the Jordan-Wigner string is given,
+        ``'JW'`` is set as an alias to ``'Id'``.
 
     Attributes
     ----------
@@ -83,8 +84,10 @@ class Site(object):
             self.add_op(name, op)
         if not hasattr(self, 'perm'):  # default permutation for the local states
             self.perm = np.arange(self.dim)
-        if not 'JW' in self.opnames:
-            self.add_op('JW', self.Id) # by default for non-
+        if 'JW' not in self.opnames:
+            # include trivial `JW` to allow combinations
+            # of bosonic and fermionic sites in an MPS
+            self.add_op('JW', self.Id)
         self.test_sanity()
 
     def test_sanity(self):
@@ -166,7 +169,7 @@ class Site(object):
         if new_name in self.opnames:
             raise ValueError("new_name already exists")
         op = getattr(self, old_name)
-        self.remove_op(name)
+        self.remove_op(old_name)
         setattr(self, new_name, op)
         self.opnames.add(new_name)
 
@@ -180,7 +183,6 @@ class Site(object):
         """
         delattr(self, name)
         del self.opnames[name]
-
 
     def state_index(self, label):
         """Return index of a basis state from its label.
@@ -416,17 +418,17 @@ class FermionSite(Site):
         otherwise you just describe hardcore bosons!
         Further details in :doc:`../intro_JordanWigner`.
 
-    ==============  ========================================
+    ==============  ===================================================================
     operator        description
-    ==============  ========================================
+    ==============  ===================================================================
     ``Id``          Identity :math:`\mathbb{1}`
     ``JW``          Sign for the Jordan-Wigner string.
-    ``C``           Annihilation operator :math:`c`
-    ``Cd``          Creation operator :math:`c^\dagger`
+    ``C``           Annihilation operator :math:`c` (up to 'JW'-string left of it)
+    ``Cd``          Creation operator :math:`c^\dagger` (up to 'JW'-string left of it)
     ``N``           Number operator :math:`n= c^\dagger c`
     ``dN``          :math:`\delta n := n - filling`
     ``dNdN``        :math:`(\delta n)^2`
-    ==============  ========================================
+    ==============  ===================================================================
 
     ============== ====  ===============================
     `conserve`     qmod  *exluded* onsite operators
@@ -435,10 +437,6 @@ class FermionSite(Site):
     ``'parity'``   [2]   --
     ``None``       []    --
     ============== ====  ===============================
-
-    .. todo ::
-        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
-        Handle Jordan-Wigner strings correctly in Coupling-model!
 
     Parameters
     ----------
@@ -505,10 +503,14 @@ class SpinHalfFermionSite(Site):
     ``JWu``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
     ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
     ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
+                    (up to 'JW'-string on sites left of it).
     ``Cud``         Creation operator spin-up :math:`c_{\uparrow}^\dagger`
+                    (up to 'JW'-string on sites left of it).
     ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
+                    (up to 'JW'-string on sites left of it).
                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
     ``Cdd``         Creation operator spin-down :math:`c_{\downarrow}^\dagger`
+                    (up to 'JW'-string on sites left of it).
                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
     ``Nu``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
     ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
@@ -540,13 +542,7 @@ class SpinHalfFermionSite(Site):
     ============= ============= ======= =======================================
 
     .. todo ::
-        (Inherited from FermionSite)
-        Write userguide for Fermions describing Jordan-Wigner-trafo/-string...
-        Handle Jordan-Wigner strings correctly in Coupling-model!
-
-    .. todo ::
         Check if Jordan-Wigner strings for 4x4 operators are correct.
-
 
     Parameters
     ----------
