@@ -9,7 +9,7 @@ Contains implementation of classes
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
-A detailed introduction to `np_conserved` can be found in :doc:`../IntroNpc`.
+A detailed introduction to `np_conserved` can be found in :doc:`../intro_npc`.
 """
 
 from __future__ import division
@@ -149,7 +149,7 @@ class LegCharge(object):
     r"""Save the charge data associated to a leg of a tensor.
 
     This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
-    See :doc:`../IntroNpc` for more details.
+    See :doc:`../intro_npc` for more details.
 
     (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
     :mod:`tenpy.linalg.np_conserved` for convenience.)
@@ -371,7 +371,7 @@ class LegCharge(object):
 
                 self.charges * self.qconj = - other.charges * other.qconj
 
-        In general, there could also be a change of the total charge, see :doc:`../IntroNpc`
+        In general, there could also be a change of the total charge, see :doc:`../intro_npc`
         This special case is not considered here - instead use
         :meth:~tenpy.linalg.np_conserved.gauge_total_charge`, if a change of the charge is desired.
 
