@@ -34,7 +34,7 @@ def test_site():
     s = site.Site(leg, labels, silly_op=op1)
     nst.eq_(s.state_index('up'), 0)
     nst.eq_(s.state_index('down'), 8 - 1)
-    nst.eq_(s.opnames, set(['silly_op', 'Id']))
+    nst.eq_(s.opnames, set(['silly_op', 'Id', 'JW']))
     assert (s.silly_op is op1)
     s.add_op('op2', op2)
     assert (s.op2 is op2)

@@ -70,10 +70,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
 ======== ========== =======================================================================
 
 .. todo ::
-    - expectaion values
-    - canonicalize()
-    - much much more ....
-    - proper documentation
+    canonical_form() for infinite BC from diagonalizing the transfer matrix
 """
 
 from __future__ import division
@@ -972,7 +969,7 @@ class MPS(object):
         ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             The operators, for wich the expectation value should be taken,
             All operators should all have the same number of legs (namely `2 n`).
-            If less than ``len(sites)`` operators are given, we repeat them periodically.
+            If less than `self.L` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             `self.sites`.
         sites : None | list of int
@@ -1036,7 +1033,7 @@ class MPS(object):
                              sites1=None,
                              sites2=None,
                              opstr=None,
-                             str_on_first=False,
+                             str_on_first=True,
                              hermitian=False):
         r"""Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
 
@@ -1065,7 +1062,7 @@ class MPS(object):
             |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
 
         For ``i==j``, no `opstr` is included.
-        For ``str_on_first=False`` (default), the `opstr` on site ``min(i, j)`` is always left out.
+        For ``str_on_first=False``, the `opstr` on site ``min(i, j)`` is always left out.
 
         Strings (like ``'Id', 'Sz'``) in the operator lists are translated into single-site
         operators defined by the :class:`~tenpy.networks.site.Site` on which they act.

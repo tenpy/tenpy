@@ -268,7 +268,7 @@ class MPOGraph(object):
                 for keyR in gr[keyL]:
                     assert keyR in stR
                     for opname, strength in gr[keyL][keyR]:
-                        assert opname in site.opnames
+                        assert site.valid_opname(opname)
         # done
 
     @property
@@ -296,7 +296,7 @@ class MPOGraph(object):
         """
         i = i % self.L
         if check_op:
-            if opname not in self.sites[i].opnames:
+            if not self.sites[i].valid_opname(opname):
                 raise ValueError("operator {0!r} not existent on site {1:d}".format(opname, i))
         G = self.graph[i]
         if keyL not in self.states[i]:

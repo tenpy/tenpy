@@ -37,10 +37,12 @@ def check_model_sanity(M, hermitian=True):
     if isinstance(M, model.NearestNeighborModel):
         model.NearestNeighborModel.test_sanity(M)
         if hermitian:
-            for H in M.H_bond:
+            for i, H in enumerate(M.H_bond):
                 if H is not None:
                     err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
-                    assert(err < 1.e-14)
+                    if err > 1.e-14:
+                        print H
+                        raise ValueError("H on bond {i:d} not hermitian".format(i=i))
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         test_mpo.check_hermitian(M.H_MPO)
@@ -62,8 +64,11 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         If True, check that the Hamiltonian is hermitian.
     """
     for vals in itertools.product(*check_pars.values()):
+        print "-"*40
         params = model_pars.copy()
         for k, v in zip(check_pars.keys(), vals):
             params[k] = v
+        print "check_model_sanity with following parameters:"
+        print params
         M = ModelClass(params)
         check_model_sanity(M)

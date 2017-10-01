@@ -26,7 +26,8 @@ class Site(object):
         Optionally a label for each local basis states. ``None`` entries are ignored / not set.
     **site_ops :
         Additional keyword arguments of the form ``name=op`` given to :meth:`add_op`.
-        The identity operator 'Id' is automatically included.
+        The identity operator ``'Id'`` is automatically included.
+        If no ``'JW'`` for the Jordan-Wigner string is given, ``'JW'`` is set as an alias to ``'Id'``.
 
     Attributes
     ----------
@@ -38,6 +39,7 @@ class Site(object):
         (Optional) labels for the local basis states.
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
+        Note that :meth:`get_op` allow arbitrary concatenations of them.
     ops : :class:`~tenpy.linalg.charges.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
@@ -60,6 +62,12 @@ class Site(object):
     >>> print site.Splus.to_ndarray()
     array([[ 0.,  1.],
            [ 0.,  0.]])
+    >>> print site.get_op('Sminus').to_ndarray()
+    array([[ 0.,  0.],
+           [ 1.,  0.]])
+    >>> print site.get_op('Splus Sminus').to_ndarry()
+    array([[ 1.,  0.],
+           [ 0.,  0.]])
     """
 
     def __init__(self, leg, state_labels=None, **site_ops):
@@ -75,6 +83,8 @@ class Site(object):
             self.add_op(name, op)
         if not hasattr(self, 'perm'):  # default permutation for the local states
             self.perm = np.arange(self.dim)
+        if not 'JW' in self.opnames:
+            self.add_op('JW', self.Id) # by default for non-
         self.test_sanity()
 
     def test_sanity(self):
@@ -156,10 +166,21 @@ class Site(object):
         if new_name in self.opnames:
             raise ValueError("new_name already exists")
         op = getattr(self, old_name)
+        self.remove_op(name)
         setattr(self, new_name, op)
-        delattr(self, old_name)
-        del self.opnames[old_name]
         self.opnames.add(new_name)
+
+    def remove_op(self, name):
+        """Remove an added operator.
+
+        Parameters
+        ----------
+        name : str
+            The name of the operator to be removed.
+        """
+        delattr(self, name)
+        del self.opnames[name]
+
 
     def state_index(self, label):
         """Return index of a basis state from its label.
@@ -208,6 +229,25 @@ class Site(object):
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
 
+    def valid_opname(self, name):
+        """Check wheter 'name' labels a valid onsite-operator.
+
+        Parameters
+        ----------
+        name : str
+            Label for the operator. Can be multiple operator(labels) separated by whitespace,
+            indicating that they should  be multiplied together.
+
+        Returns
+        -------
+        valid : bool
+            ``True`` if `name` is a valid argument to :meth:`get_op`.
+        """
+        for name2 in name.split():
+            if name2 not in self.opnames:
+                return False
+        return True
+
     def __repr__(self):
         """Debug representation of self"""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
@@ -227,7 +267,7 @@ class SpinHalfSite(Site):
     ==============  ================================================
     operator        description
     ==============  ================================================
-    ``Id``          Identity :math:`\mathbb{1}`
+    ``Id, JW``      Identity :math:`\mathbb{1}`
     ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
                     equal to half the Pauli matrices.
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
@@ -291,7 +331,7 @@ class SpinSite(Site):
     ==============  ================================================
     operator        description
     ==============  ================================================
-    ``Id``          Identity :math:`\mathbb{1}`
+    ``Id, JW``      Identity :math:`\mathbb{1}`
     ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
                     equal to half the Pauli matrices.
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
@@ -339,6 +379,11 @@ class SpinSite(Site):
         # Sp = Sx + i Sy, Sm = Sx - i Sy
         Sx = (Sp + Sm) * 0.5
         Sy = (Sm - Sp) * 0.5j
+        # Note: For S=1/2, Sy might look wrong compared to the Pauli matrix or SpinHalfSite.
+        # Don't worry, I'm 99.99% sure it's correct (J. Hauschild)
+        # The reason it looks wrong is simply that this class orders the states as ['down', 'up'],
+        # while the usual spin-1/2 convention is ['up', 'down'].
+        # (The commutation relations are checked explicitly in `tests/test_site.py`
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
@@ -369,6 +414,7 @@ class FermionSite(Site):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
+        Further details in :doc:`../intro_JordanWigner`.
 
     ==============  ========================================
     operator        description
@@ -455,12 +501,15 @@ class SpinHalfFermionSite(Site):
     operator        description
     ==============  =============================================================================
     ``Id``          Identity :math:`\mathbb{1}`
-    ``JWu``         Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
-    ``JWd``         Sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
+    ``JW``          Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}+n_{\downarrow}}`
+    ``JWu``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
+    ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
     ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
     ``Cud``         Creation operator spin-up :math:`c_{\uparrow}^\dagger`
     ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
     ``Cdd``         Creation operator spin-down :math:`c_{\downarrow}^\dagger`
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
     ``Nu``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
     ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
     ``NuNd``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
@@ -537,13 +586,13 @@ class SpinHalfFermionSite(Site):
 
         Cu = np.zeros((d, d))
         Cu[0, 1] = Cu[2, 3] = 1
+        Cud = np.transpose(Cu)
         # For spin-down annihilation operator: include a Jordan-Wigner string JWu
         # this ensures that Cud.Cd = - Cd.Cud
         # c.f. the chapter on the Jordan-Wigner trafo in the userguide
         Cd_noJW = np.zeros((d, d))
         Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1
         Cd = np.dot(JWu, Cd_noJW)           # (don't do this for spin-up...)
-        Cud = np.transpose(Cu)
         Cdd = np.transpose(Cd)
 
         # spin operators are defined as  (Cud, Cdd) S^gamma (Cu, Cd)^T,
@@ -619,7 +668,7 @@ class BosonSite(Site):
     ==============  ========================================
     operator        description
     ==============  ========================================
-    ``Id``          Identity :math:`\mathbb{1}`
+    ``Id, JW``      Identity :math:`\mathbb{1}`
     ``B``           Annihilation operator :math:`b`
     ``Bd``          Creation operator :math:`b^\dagger`
     ``N``           Number operator :math:`n= b^\dagger b`

@@ -22,8 +22,7 @@ it might be simpler to specify the MPO explicitly.
 Of course, we also provide ways to transform a :class:`NearestNeighborModel` into a
 :class:`MPOModel` and vice versa, as far as this is possible.
 
-.. todo ::
-    User guide: introduction how to create a new model
+See also the introduction :doc:`../intro_model`.
 """
 
 from __future__ import division
@@ -32,7 +31,6 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
-from ..tools.params import get_parameter
 
 __all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
 
@@ -98,15 +96,15 @@ class CouplingModel(object):
         sites = self.lat.mps_sites()
         for site, terms in zip(sites, self.onsite_terms):
             for opname, strength in terms.iteritems():
-                if opname not in site.opnames:
+                if not site.valid_opname(opname):
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
         for site_i, d1 in zip(sites, self.coupling_terms):
             for (op_i, opstring), d2 in d1.iteritems():
-                if op_i not in site_i.opnames:
+                if not site_i.valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site".format(op=op_i))
                 for j, d3 in d2.iteritems():
                     for op_j in d3.keys():
-                        if op_j not in sites[j].opnames:
+                        if not sites[j].valid_opname(op_j):
                             raise ValueError("Operator {op!r} not in site".format(op=op_j))
         # done
 
@@ -130,13 +128,15 @@ class CouplingModel(object):
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined `opname`.
-        if opname not in self.lat.unit_cell[u].opnames:
-            raise ValueError("unknown onsite operator {0!r} for u={1:d}".format(opname, u))
+        if not self.lat.unit_cell[u].valid_opname(opname):
+            raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                             "{2:!r}".format(opname, u, self.lat.unit_cell[u]))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             term = self.onsite_terms[i]
             term[opname] = term.get(opname, 0) + strength[tuple(i_lat)]
 
-    def add_coupling(self, strength, u1, op1, u2, op2, dx, op_string='Id'):
+    def add_coupling(self, strength, u1, op1, u2, op2, dx, op_string='Id',
+                     str_on_first=True, raise_op2_left=False):
         """Add twosite coupling terms to the Hamiltonian.
 
         Represents couplings of the form
@@ -147,7 +147,7 @@ class CouplingModel(object):
         For periodic boundary conditions (``bc_coupling[a] == False``)
         the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
-        ``0 <= x_a+dx < lat.Ls[a]``.
+        ``0 <= x_a+dx[a] < lat.Ls[a]``.
 
         Parameters
         ----------
@@ -165,18 +165,30 @@ class CouplingModel(object):
             Translation vector (of the unit cell) between OP1 and OP2.
             For a 1D lattice, a single int is also fine.
         op_string : str
-            Name of an operator to be used between OP1 and OP2.
+            Name of an operator to be used between OP1 and OP2 *and* on the smaller of the two sites.
             Typical use case is the phase for a Jordan-Wigner transformation.
             (This operator should be defined on all sites in the unit cell.)
+        str_on_first : bool
+            This option should be chosen as ``True`` for Jordan-Wigner strings.
+            When handling Jordan-Wigner strings we need to extend the `op_string` to also act on
+            the 'left', first site (in the sense of the MPS ordering of the sites given by the
+            lattice). In this case, there is a well-defined ordering of the operators in the
+            physical sense (i.e. which of `op1` or `op2` acts first on a given state).
+            We follow the convention that `op2` acts first (in the physical sense),
+            independent of the MPS ordering.
+        raise_op2_left : bool
+            Raise an error when `op2` appears left of `op1`
+            (in the sense of the MPS ordering given by the lattice).
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         strength = to_array(strength, self._coupling_shape(dx))  # tile to correct shape
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
-        for op, u in [(op1, u1), (op2, u2)]:
-            if op not in self.lat.unit_cell[u].opnames:
-                raise ValueError("unknown onsite operator {0!r} for u={1:d}".format(op, u))
         luc = len(self.lat.unit_cell)
+        for op, u in [(op1, u1), (op2, u2)] + [(op_string, u) for u in range(luc)]:
+            if not self.lat.unit_cell[u].valid_opname(op):
+                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and u1 % luc == u2 % luc:
             raise ValueError("Coupling shouldn't be onsite!")
         idx_i, idx_i_lat = self.lat.mps_lat_idx_fix_u(u1)
@@ -203,10 +215,19 @@ class CouplingModel(object):
                 else:  # d_in == d_out
                     swap = False  # don't change the order
                     # this is necessary for correct TEBD for iMPS with L=2
-            else:  # finite MPS
-                swap = (j < i)  # ensure i < j
+            else:  # finite MPS: allow periodic boundary conditions
+                swap = (j < i)  # ensure i <= j
             if swap:
+                if raise_op2_left:
+                    raise ValueError("Op2 is left")
                 i, o1, j, o2 = j, op2, i, op1  # swap OP1 <-> OP2
+            # now o1 is the "left" operator;
+            # if j < i, o2 acts one unit cell "right" of o1.
+            if str_on_first and op_string != 'Id':
+                if swap:
+                    o1 = op_string + ' ' + o1  # o1==op2 should act first
+                else:
+                    o1 = o1 + ' ' + op_string  # o1==op1 should act second
             d1 = self.coupling_terms[i]
             # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             d2 = d1.setdefault((o1, op_string), dict())
