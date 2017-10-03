@@ -45,7 +45,7 @@ higher-dimensional lattice to a 1D chain, usually at the expence of long-range h
 With this mapping, the Jordan-Wigner transformation generalizes to higher dimensions in a straight-forward way.
 
 
-Spinfull fermions
+Spinful fermions
 -----------------
 You can think of spin-1/2 fermions on a chain as spinless fermions living on a ladder (and analogous mappings for higher dimensional lattices),
 each rung forming a :class:`~tenpy.networks.site.SpinHalfFermionSite` being composed two :class:`~tenpy.networks.site.FermionSite` for each spin-up and spin-down.
@@ -56,10 +56,10 @@ In the case of spin-1/2 fermions labeled by :math:`\uparrow` and :math:`\downarr
 .. math ::
     (\sigma^{z}_{\uparrow,j} + 1)/2 \leftrightarrow n_{\uparrow,j}                                                                                  \\
     (\sigma^{z}_{\downarrow,j} + 1)/2 \leftrightarrow n_{\downarrow,j}                                                                              \\
-    (-1)^{\sum_{l < j} n_{\uparrow,j} + n_{\downarrow,j}} \sigma^{-}_{\uparrow,j} \leftrightarrow c_{\uparrow,j}                                    \\
-    (-1)^{\sum_{l < j} n_{\uparrow,j} + n_{\downarrow,j}} \sigma^{+}_{\uparrow,j} \leftrightarrow c_{\uparrow,j}^\dagger                            \\
-    (-1)^{\sum_{l < j} n_{\uparrow,j} + n_{\downarrow,j}} (-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j} \leftrightarrow c_{\downarrow,j}          \\
-    (-1)^{\sum_{l < j} n_{\uparrow,j} + n_{\downarrow,j}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \leftrightarrow c_{\downarrow,j}^\dagger  \\
+    (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{-}_{\uparrow,j} \leftrightarrow c_{\uparrow,j}                                    \\
+    (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{+}_{\uparrow,j} \leftrightarrow c_{\uparrow,j}^\dagger                            \\
+    (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j} \leftrightarrow c_{\downarrow,j}          \\
+    (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \leftrightarrow c_{\downarrow,j}^\dagger  \\
 
 All of the operators on the left hand sides above commute; we can rewrite
 :math:`(-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} = \prod_{l < j} (-1)^{n_{\uparrow,l}} (-1)^{n_{\downarrow,l}}`,
