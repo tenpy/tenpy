@@ -142,20 +142,6 @@ Similar, within a spinless :class:`~tenpy.networks.site.FermionSite`, one can si
 but these relations do *not* hold in the :class:`~tenpy.networks.site.SpinHalfSite`, 
 and for consistency we recommend to explicitly keep the ``"JW"`` operator string even in nearest-neighbor models where it is not strictly necessary.
 
-As an example of a neirest-neighbour interaction, let us consider the two-body term :math:`c_{i, \downarrow}^{\dagger} c_{i+1, \uparrow}`. In the code this would be the product::
-
-    ["JW", ..., "JW", "Cdd", "Id", "Id", ...] * ["JW", ..., "JW", "JW",  "Cu",  "Id", ..., "Id"]
-
-which multiplies to ::
-
-    ["JW JW", ..., "JW JW", "Cdd JW", "Id Cu", "Id Id", ...]
-
-or, simplified: ::
-
-    ["Id", ..., "Id", "Cdd JW", "Cu", "Id", ...]
-
-So we can see that only a single ``"JW"`` remains, as expected.
-
 
 How to handle Jordan-Wigner strings in practice
 -----------------------------------------------
