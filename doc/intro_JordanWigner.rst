@@ -12,9 +12,9 @@ With the spin-1/2 operators :math:`\sigma^{x,y,z}_j` and :math:`\sigma^{\pm}_j =
 we can map 
 
 .. math ::
-    2n_j  \leftrightarrow (\sigma^{z}_j + 1)/2        \\
-    c_j \leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{-}_j             \\
-    c_j^\dagger \leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{+}_j  
+    2n_j  &\leftrightarrow (\sigma^{z}_j + 1)/2        \\
+    c_j &\leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{-}_j             \\
+    c_j^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{+}_j  
 
 (The :math:`n_l` in the second and third row are defined in terms of spin operators according to the first row).
 
@@ -99,12 +99,12 @@ includes the signs :math:`(-1)^{n_l}` of *all* species of fermions to the 'left'
 In the case of spin-1/2 fermions labeled by :math:`\uparrow` and :math:`\downarrow` on each `site`, the complete mapping is given (where `j` and `l` are indices of the :class:`~tenpy.networks.site.FermionSite`:
 
 .. math ::
-    n_{\uparrow,j} \leftrightarrow (\sigma^{z}_{\uparrow,j} + 1)/2                                                                                  \\
-    n_{\downarrow,j} \leftrightarrow (\sigma^{z}_{\downarrow,j} + 1)/2                                                                              \\
-    c_{\uparrow,j} \leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{-}_{\uparrow,j}                                    \\
-    c_{\uparrow,j}^\dagger \leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{+}_{\uparrow,j}                           \\
-    c_{\downarrow,j} \leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j}          \\
-    c_{\downarrow,j}^\dagger \leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \\
+    n_{\uparrow,j} &\leftrightarrow (\sigma^{z}_{\uparrow,j} + 1)/2                                                                                  \\
+    n_{\downarrow,j} &\leftrightarrow (\sigma^{z}_{\downarrow,j} + 1)/2                                                                              \\
+    c_{\uparrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{-}_{\uparrow,j}                                    \\
+    c_{\uparrow,j}^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{+}_{\uparrow,j}                           \\
+    c_{\downarrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j}          \\
+    c_{\downarrow,j}^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \\
 
 In each of the above mappings the operators on the right hand sides commute; we can rewrite
 :math:`(-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} = \prod_{l < j} (-1)^{n_{\uparrow,l}} (-1)^{n_{\downarrow,l}}`,
@@ -141,6 +141,20 @@ Jordan-Wigner sign :math:`(-1)^{n_\uparrow,2}` appears twice (namely once in the
 Similar, within a spinless :class:`~tenpy.networks.site.FermionSite`, one can simplify ``"Cd JW" == "Cd"`` and ``"JW C" == "C"``, 
 but these relations do *not* hold in the :class:`~tenpy.networks.site.SpinHalfSite`, 
 and for consistency we recommend to explicitly keep the ``"JW"`` operator string even in nearest-neighbor models where it is not strictly necessary.
+
+As an example of a neirest-neighbour interaction, let us consider the two-body term :math:`c_{i, \downarrow}^{\dagger} c_{i+1, \uparrow}`. In the code this would be the product::
+
+    ["JW", ..., "JW", "Cdd", "Id", "Id", ...] * ["JW", ..., "JW", "JW",  "Cu",  "Id", ..., "Id"]
+
+which multiplies to ::
+
+    ["JW JW", ..., "JW JW", "Cdd JW", "Id Cu", "Id Id", ...]
+
+or, simplified: ::
+
+    ["Id", ..., "Id", "Cdd JW", "Cu", "Id", ...]
+
+So we can see that only a single ``"JW"`` remains, as expected.
 
 
 How to handle Jordan-Wigner strings in practice
