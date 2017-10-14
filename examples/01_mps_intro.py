@@ -1,4 +1,4 @@
-"""Simplified version of `npc_intro.py` making use of other classes (like MPS, MPO).
+"""Simplified version of `00_npc_intro.py` making use of other classes (like MPS, MPO).
 
 This example includes the following steps:
 1) create Arrays for an Neel MPS

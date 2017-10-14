@@ -8,15 +8,19 @@ maps fermionic creation- and annihilation operators to (bosonic) spin-operators.
 Spinless fermions in 1D
 -----------------------
 Let's start by explicitly writing down the transformation.
-With the spin-1/2 operators :math:`\sigma^{x,y,z}_j` and :math:`\sigma^{\pm}_j = \sigma^x_j \pm \mathrm{i} \sigma^y_j` on each site,
+With the Pauli matrices :math:`\sigma^{x,y,z}_j` and :math:`\sigma^{\pm}_j = (\sigma^x_j \pm \mathrm{i} \sigma^y_j)/2` on each site,
 we can map 
 
 .. math ::
-    2n_j  &\leftrightarrow (\sigma^{z}_j + 1)/2        \\
-    c_j &\leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{-}_j             \\
+    n_j         &\leftrightarrow (\sigma^{z}_j + 1)/2        \\
+    c_j         &\leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{-}_j             \\
     c_j^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_l} \sigma^{+}_j  
 
-(The :math:`n_l` in the second and third row are defined in terms of spin operators according to the first row).
+The :math:`n_l` in the second and third row are defined in terms of Pauli matrices according to the first row.
+We do not interpret the Pauli matrices as spin-1/2; they have nothing to do with the spin in the spin-full case.
+If you really want to interpret them physically, you might better think of them as hard-core bosons 
+(:math:`b_j =\sigma^{-}, b_j^\dagger=\sigma^{+}`),
+with a spin of the fermions mapping to a spin of the hard-core bosons.
 
 Note that this transformation maps the fermionic operators :math:`c_j` and :math:`c_j^\dagger` to *global* operators; although they carry an index `j` indicating
 a site, they actually act on all sites ``l <= j``!
@@ -115,8 +119,8 @@ for example ``JW`` on site `j` is given by :math:`(-1)^{n_{\uparrow,j}} (-1)^{n_
 ``Cu`` is just the :math:`\sigma^{-}_{\uparrow,j}`, ``Cud`` is :math:`\sigma^{+}_{\uparrow,j}`,
 ``Cd`` is :math:`(-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j}`.
 and ``Cdd`` is :math:`(-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j}`.
-Note the asymmetry regarding the spin in the definition of the onsite operators, the spin-down operators include
-Jordan-Wigner signs for the spin-up fermions on the same site. 
+Note the asymmetry regarding the spin in the definition of the onsite operators:
+the spin-down operators include Jordan-Wigner signs for the spin-up fermions on the same site. 
 This asymetry stems from the ordering convention introduced by the solid line in the picture, according to which the spin-up site
 is "left" of the spin-down site. With the above definition, the operators within the same :class:`~tenpy.networks.site.SpinHalfFermionSite` fulfill the expected commutation relations,
 for example ``"Cu Cdd" == - "Cdd Cu"``, but again the ``JW`` on sites left of the operator pair is crucial to get the correct
@@ -124,7 +128,7 @@ commutation relations globally.
 
 .. warning ::
     Again, the fermionic operators :math:`c_{\downarrow,j}, c^\dagger_{\downarrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
-    the Jordan-Wigner string build by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cud', 'Cd', 'Cdd'`` on site ``j``.
+    the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cud', 'Cd', 'Cdd'`` on site ``j``.
 
 Written explicitly in terms of onsite operators defined in the :class:`~tenpy.networks.sites.FermionSite`,
 with the `j`-th entry entry in the list acting on site `j`, the relations are::
