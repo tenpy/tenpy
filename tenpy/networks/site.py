@@ -41,7 +41,7 @@ class Site(object):
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
         Note that :meth:`get_op` allow arbitrary concatenations of them.
-    ops : :class:`~tenpy.linalg.charges.Array`
+    ops : :class:`~tenpy.linalg.np_conserved.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
         All onsite operators have labels ``'p', 'p*'``.
@@ -127,7 +127,7 @@ class Site(object):
         name : str
             A valid python variable name, used to label the operator.
             The name under which `op` is added as attribute to self.
-        op : np.ndarray | :class:`~tenpy.linalg.charges.Array`
+        op : np.ndarray | :class:`~tenpy.linalg.np_conserved.Array`
             A matrix acting on the local hilbert space representing the local operator.
             Dense numpy arrays are automatically converted to
             :class:`~tenpy.linalg.np_conserved.Array`.
@@ -253,6 +253,84 @@ class Site(object):
     def __repr__(self):
         """Debug representation of self"""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
+
+
+class DoubleSite(Site):
+    """Group two :class:`Site` into a larger one.
+
+    A typical use-case is that you want a NearestNeigborModel for TEBD although you have
+    next-nearest neighbor interactions: you just double your local Hilbertspace to consist of
+    two original sites.
+    Note that this is a 'hack' at the cost of other things
+    (like measurements of 'local' operators) getting more complicated.
+
+    Parameters
+    ----------
+    site0 : :class:`Site`
+        The first site to be included.
+    site1 : :class:`Site`
+        The second site to be included.
+    label0 : str
+        Include the Kronecker product of ``[op, Id]`` as onsite operators with name
+        ``opname+label0`` for each of the operators `op` in `site0` (with name `opname`).
+    label1 : str
+        Include the Kronecker product of ``[Id, op]`` as onsite operators with name
+        ``opname+label1`` for each of the operators `op` in `site1` (with name `opname`).
+    JW : bool
+        Defaults to ``False``, in which case the
+        Set this option to ``True`` if you handle fermions; default is ``False``.
+        If ``True``, we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]``
+        for the onsite operators of `site1`, such that the operators in this class fulfill the
+        expected commutation relations. See also :doc:`../intro_JordanWigner`.
+        (Exception: the operator ``'JW'+label1`` is the Kronecker product of ``[Id, JW]``.)
+
+    .. todo ::
+        tests!
+
+    .. todo ::
+        Implement SpinHalfFermionSite building on that!
+        => adjust order Cdu vs Cud in doc/02_intro_JordanWigner.rst
+    """
+    def __init__(self, site0, site1, label0='0', label1='1', JW=False):
+        self.site0 = site0
+        self.site1 = site1
+        pipe = npc.LegPipe([site0.leg, site1.leg])
+        self.leg = pipe  # used in self._tensorproduct
+        states = None
+        if len(site1.state_labels) > 0:
+            pass  # TODO handle permutations
+            #  raise NotImplementedError # TODO XXX
+        ops = {}
+        Id1 = site1.Id
+        Id0 = site0.JW if JW else site0.Id
+        for opname, op in site0.onsite_ops.iteritems():
+            if opname not in ['Id', 'JW']:
+                ops[opname+label0] = self.kroneckerproduct(op, Id1)
+        for opname, op in site1.onsite_ops.iteritems():
+            if opname not in ['Id', 'JW']:
+                ops[opname+label1] = self.kroneckerproduct(Id0, op)
+        if JW:
+            ops['JW'+label0] = self.kroneckerproduct(site0.JW, site1.Id)
+            ops['JW'+label1] = self.kroneckerproduct(site0.Id, site1.JW)
+        super(DoubleSite, self).__init__(pipe, states, **ops)
+
+    def kroneckerproduct(self, op0, op1):
+        r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
+
+        Parameters
+        ----------
+        op0, op1 : :class:`~tenpy.linalg.np_conserved.Array`
+            Onsite operators on `site0` and `site1`, respectively.
+            Should have labels ``['p', 'p*']``.
+
+        Returns
+        -------
+        prod : :class:`~tenpy.linalg.np_conserved.Array`
+            Kronecker product :math:`op0 \otimes op1`, with labels ``['p', 'p*']``.
+        """
+        pipe = self.leg
+        op = npc.outer(op0.transpose(['p', 'p*']), op1.transpose(['p', 'p*']))
+        return op.combine_legs([[0, 2], [1, 3]], qconj=[+1, -1], pipes=[pipe, pipe.conj()])
 
 
 # ------------------------------------------------------------------------------
