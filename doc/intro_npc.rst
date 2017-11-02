@@ -60,7 +60,7 @@ Physical Example
 ----------------
 For concreteness, you can think of the Hamiltonian :math:`H = -t \sum_{<i,j>} (c^\dagger_i c_j + H.c.) + U n_i n_j` 
 with :math:`n_i = c^\dagger_i c_i`.
-This Hamiltonian has the global :math:`U(1)` gauge symmetry :math:`c_i \rightarrow c_i e^i\phi`.
+This Hamiltonian has the global :math:`U(1)` gauge symmetry :math:`c_i \rightarrow c_i e^{i\phi}`.
 The corresponding charge is the total number of particles :math:`N = \sum_i n_i`.
 You would then introduce one charge with :math:`m=1`.
 

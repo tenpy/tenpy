@@ -468,7 +468,7 @@ class Chain(SimpleLattice):
 
 
 class SquareLattice(SimpleLattice):
-    """A simple uniform square lattice of `Lx` by `Lx` sites."""
+    """A simple uniform square lattice of `Lx` by `Ly` sites."""
 
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
         super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
