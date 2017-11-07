@@ -254,6 +254,8 @@ class PurificationTEBD(tebd.Engine):
                 theta, U = self.disentangle_diag(theta)
             elif method == 'noise':
                 theta, U = self.disentangle_noise(theta)
+            elif method == 'graddesc':
+                theta, U = self.disentangle_graddesc(theta)
             elif method == 'last':
                 theta, U = self.disentangle_last(theta)
             elif method.startswith('min('):
@@ -261,7 +263,8 @@ class PurificationTEBD(tebd.Engine):
             elif method.startswith('min2('):
                 theta, U = self.disentangle_min(method[5:-1], theta, n=2)
             else:
-                raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle))
+                raise ValueError("Invalid choice in 'disentangle': " + repr(disentangle) +
+                                 "\nDon't understand " + repr(method))
             if Utot is None:
                 Utot = U
             elif U is not None:  # neither Utot nor U are None: multiply together
@@ -549,6 +552,117 @@ class PurificationTEBD(tebd.Engine):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         return theta, U
 
+    def disentangle_graddesc(self, theta):
+        """Gradient-descent optimization, similar to :meth:`disentangle_renyi`.
+
+        Reads of the following `TEBD_params` as break criteria for the iteration:
+
+        ================ ====== ======================================================
+        key              type   description
+        ================ ====== ======================================================
+        disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
+                                per iteration is smaller than this value.
+        ---------------- ------ ------------------------------------------------------
+        disent_max_iter  float  Maximum number of iterations to perform.
+        ---------------- ------ ------------------------------------------------------
+        disent_n         float  Renyi index of the entropy to be used.
+                                ``n=1`` for von-Neumann entropy.
+        ================ ====== ======================================================
+
+        Arguments and return values are the same as for :meth:`disentangle`.
+        """
+        max_iter = get_parameter(self.TEBD_params, 'disent_max_iter', 20, 'PurificationTEBD')
+        eps = get_parameter(self.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        n = get_parameter(self.TEBD_params, 'disent_n', 1., 'PurificationTEBD')
+        stepsizes = get_parameter(self.TEBD_params, 'disent_stepsizes', [0.2, 1., 2.],
+                                  'PurificationTEBD')
+        U_idx_dt, i = self._update_index
+        Utot = None
+        Sold = np.inf
+        S0 = None
+        for j in xrange(max_iter):
+            S, theta, U = self.disentangle_graddesc_iter(theta, n, stepsizes)
+            if Utot is None:
+                Utot = U
+            else:
+                Utot = npc.tensordot(U, Utot, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+            if S0 is None:
+                S0 = S
+            if abs(Sold - S) < eps:
+                break
+            Sold, S = S, Sold
+        theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+        self._disent_iterations[i] += j  # save the number of iterations performed
+        if self.verbose >= 10:
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S0-Sold)
+        return theta, U
+
+    def disentangle_graddesc_iter(self, theta, n, stepsizes):
+        r"""Given `theta`, find a unitary `U` towards minimizing the n-th Renyi entropy.
+
+        This function calulates the gradiant :math:`dS = \partial S(U theta, n) /\partial U`.
+        and then ``U(t) = exp(-t*dS)``, where we choose the `t` from stepsizes which
+        minimizes the entropy of ``U(t) theta``.
+
+        When ``R[i]`` is the derivative :math:`\partial S(Y, n) \partial Y_i` of the (n-th Renyi)
+        entropy, ``dS`` is given by:
+
+            |     .----X--R--Z----.
+            |     |    |     |    |
+            |     |    q0    q1   |
+            |     |               |
+            |     |    q0*   q1*  |
+            |     |    |     |    |
+            |     .----X*-Y--Z*---.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Two-site wave function to be disentangled
+        n : float
+            Minimize the n-th Renyi entropy, n=1 corresponds to von-Neumann entropy.
+        stepsizes : list of float
+            The step sizes of the gradient, to be minimized over.
+
+        Returns
+        -------
+        S : float
+            n-th Renyi entopy of new_theta
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The *disentangled* wave function ``new_U theta``.
+        new_U : :class:`~tenpy.linalg.np_conserved.Array`
+            Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which was used to disentangle `theta`.
+        """
+        theta2 = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
+        X, Y, Z = npc.svd(theta2, inner_labels=['vR', 'vL'])
+        if n == 1:
+            r = Y*np.log(Y)*2
+            r[Y < 1.e-14] = 0.
+            #  S = -np.inner(Y**2, np.log(Y**2))
+        else:
+            Y[Y < 1.e-20] = 1.e-20
+            tr_pn = np.sum(Y**(2*n))
+            ss = Y**(2*(n-1))
+            r = Y*ss *(n/(n - 1.) / tr_pn)  # TODO: why?
+            #  r = Y*ss *(1 - n.)  # TODO: why not?
+            #  S = np.log(tr_pn)/(1 - n)
+        XrZ = npc.tensordot(X.scale_axis(r, 'vR'), Z, axes=['vR', 'vL']).split_legs()
+        dS = npc.tensordot(theta, XrZ.conj(), axes=[['vL', 'p0', 'p1', 'vR'],
+                                                    ['vL*', 'p0*', 'p1*', 'vR*']])
+        dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[1, -1])
+        dS = dS - dS.conj().transpose(['(q0.q1)', '(q0*.q1*)'])  # project: anti-hermitian part
+        new_Ss = []
+        new_thetas = []
+        new_Us = []
+        for t in stepsizes:
+            U = npc.expm((-t)*dS).split_legs()   # dS anti-hermitian => exp(-tdS) unitary
+            new_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
+            new_Ss.append(self._entropy_theta(new_theta, n))
+            new_thetas.append(new_theta)
+            new_Us.append(U)
+        a = np.argmin(new_Ss)
+        return new_Ss[a], new_thetas[a], new_Us[a]
+
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
@@ -701,8 +815,12 @@ class PurificationTEBD(tebd.Engine):
 
 
 class PurificationTEBD2(PurificationTEBD):
-    """similar as PurificationTEBD, but perform sweeps instead of brickwall
-    for real and imaginary time evolution"""
+    """Similar as PurificationTEBD, but perform sweeps instead of brickwall.
+
+    Instead of the A-B pattern of even/odd bonds used in TEBD, perform sweeps similar as in DMRG
+    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag`
+    does for imaginary time evolution).
+    """
 
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
@@ -732,7 +850,7 @@ class PurificationTEBD2(PurificationTEBD):
         return trunc_err
 
     def update_step(self, U_idx_dt, odd):
-        """Updates either even *or* odd bonds in unit cell.
+        """Updates bonds in unit cell.
 
         Depending on the choice of `odd`, perform a sweep to the left or right,
         updating once per site with a time step given by U_idx_dt.
