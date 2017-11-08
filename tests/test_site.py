@@ -1,7 +1,4 @@
 """A collection of tests for :mod:`tenpy.models.site`.
-
-.. todo ::
-    More tests of commutators for the various special sites!
 """
 
 from __future__ import division
@@ -42,6 +39,16 @@ def test_site():
     assert (s.get_op('silly_op') is op1)
     npt.assert_equal(s.get_op('silly_op op2').to_ndarray(),
                      npc.tensordot(op1, op2, [1, 0]).to_ndarray())
+
+
+def test_double_site():
+    for site0, site1 in [[site.SpinHalfSite(None)]*2, [site.SpinHalfSite('Sz')]*2]:
+        ds = site.DoubleSite(site0, site1)
+        ds.test_sanity()
+    fs = site.FermionSite('N')
+    ds = site.DoubleSite(fs, fs, 'a', 'b')
+    assert ds.need_JW_string == set([op+'a' for op in fs.need_JW_string] +
+                                    [op+'b' for op in fs.need_JW_string])
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
@@ -106,6 +113,11 @@ def test_fermion_site():
         # anti-commutate with Jordan-Wigner
         npt.assert_equal(np.dot(Cd, JW), -np.dot(JW, Cd))
         npt.assert_equal(np.dot(C, JW), -np.dot(JW, C))
+        assert S.need_JW_string == set(['Cd', 'C'])
+        for op in ['C', 'Cd', 'C N' 'C Cd C']:
+            assert S.op_needs_JW(op)
+        for op in ['N', 'C Cd', 'JW']:
+            assert not S.op_needs_JW(op)
 
 
 def test_spin_half_fermion_site():

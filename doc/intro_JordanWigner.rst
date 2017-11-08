@@ -95,12 +95,12 @@ As illustrated in the above picture, you can think of spin-1/2 fermions on a cha
 Each rung (a blue box in the picture) forms a :class:`~tenpy.networks.site.SpinHalfFermionSite` 
 which is composed of two :class:`~tenpy.networks.site.FermionSite` (the circles in the picture) for spin-up and spin-down.
 The mapping of the spin-1/2 fermions onto the ladder induces an ordering of the spins, as the final result must again be a one-dimensional chain, now containing both spin species.
-The solid line indicates the convention for the ordering, the dashed line indicate spin-preserving hopping :math:`c^\dagger_{s,i} c_{s,i+1} + h.c.` 
+The solid line indicates the convention for the ordering, the dashed lines indicate spin-preserving hopping :math:`c^\dagger_{s,i} c_{s,i+1} + h.c.` 
 and visualize the ladder structure.
 More generally, each species of fermions appearing in your model gets a separate label, and its Jordan-Wigner string
 includes the signs :math:`(-1)^{n_l}` of *all* species of fermions to the 'left' of it (in the sense of the ordering indicated by the solid line in the picture).
 
-In the case of spin-1/2 fermions labeled by :math:`\uparrow` and :math:`\downarrow` on each `site`, the complete mapping is given (where `j` and `l` are indices of the :class:`~tenpy.networks.site.FermionSite`:
+In the case of spin-1/2 fermions labeled by :math:`\uparrow` and :math:`\downarrow` on each `site`, the complete mapping is given (where `j` and `l` are indices of the :class:`~tenpy.networks.site.FermionSite`):
 
 .. math ::
     n_{\uparrow,j} &\leftrightarrow (\sigma^{z}_{\uparrow,j} + 1)/2                                                                                  \\
@@ -160,6 +160,8 @@ you cannot reverse this mapping (in a straightforward way), and thus your result
 Whatever you do, you should first think about if (and how much of) the Jordan-Wigner string cancels.
 For example for many of the onsite operators (like the particle number operator ``N`` or the spin operators in the :class:`~tenpy.networks.site.SpinHalfFermionSite`)
 the Jordan-Wigner string cancels completely and you can just ignore it both in onsite-terms and couplings.
+To check, whether the Jordan-Wigner string cancels for a given operator, 
+take a look at :attr:`~tenpy.networks.site.Site.need_JW_string` and :meth:`~tenpy.networks.site.Site.op_needs_JW`.
 In case of operators acting on different sites, you typically have a Jordan-Wigner string inbetween (e.g. for the
 :math:`c^\dagger_i c_j` examples described above and below) or no Jordan-Wigner strings at all (e.g. for density-density
 interactions :math:`n_i n_j`).

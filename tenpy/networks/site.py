@@ -41,6 +41,8 @@ class Site(object):
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
         Note that :meth:`get_op` allow arbitrary concatenations of them.
+    need_JW_string : set
+        Labels of all onsite operators that need a Jordan-Wigner string.
     ops : :class:`~tenpy.linalg.np_conserved.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
@@ -79,6 +81,7 @@ class Site(object):
                 if v is not None:
                     self.state_labels[str(v)] = i
         self.opnames = set()
+        self.need_JW_string = set()
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.iteritems():
             self.add_op(name, op)
@@ -106,6 +109,8 @@ class Site(object):
             op.legs[0].test_equal(self.leg)
             op.legs[1].test_contractible(self.leg)
             op.test_sanity()
+        for op in self.need_JW_string:
+            assert op in self.opnames
 
     @property
     def dim(self):
@@ -119,7 +124,7 @@ class Site(object):
         (single operators are accessible as attributes.)"""
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op):
+    def add_op(self, name, op, need_JW=False):
         """Add one on-site operators
 
         Parameters
@@ -133,6 +138,9 @@ class Site(object):
             :class:`~tenpy.linalg.np_conserved.Array`.
             LegCharges have to be ``[leg, leg.conj()]``.
             We set labels ``'p', 'p*'``.
+        need_JW : bool
+            Wheter the operator needs a Jordan-Wigner string.
+            If ``True``, the function adds `name` to :attr:`need_JW_string`.
         """
         name = str(name)
         if name in self.opnames:
@@ -153,6 +161,8 @@ class Site(object):
         op.iset_leg_labels(['p', 'p*'])
         setattr(self, name, op)
         self.opnames.add(name)
+        if need_JW:
+            self.need_JW_string.add(name)
 
     def rename_op(self, old_name, new_name):
         """Rename an added operator.
@@ -169,9 +179,12 @@ class Site(object):
         if new_name in self.opnames:
             raise ValueError("new_name already exists")
         op = getattr(self, old_name)
+        need_JW = old_name in self.need_JW_string
         self.remove_op(old_name)
         setattr(self, new_name, op)
         self.opnames.add(new_name)
+        if need_JW:
+            self.need_JW_string.add(new_name)
 
     def remove_op(self, name):
         """Remove an added operator.
@@ -183,6 +196,7 @@ class Site(object):
         """
         delattr(self, name)
         del self.opnames[name]
+        self.need_JW_string.discard(name)
 
     def state_index(self, label):
         """Return index of a basis state from its label.
@@ -231,6 +245,29 @@ class Site(object):
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
 
+    def op_needs_JW(self, name):
+        """Wheter an (composite) onsite operator needs a Jordan-Wigner string.
+
+        Parameters
+        ----------
+        name : str
+            The name of the operator, as in :meth:`get_op`.
+            In case of multiple operator names separated by whitespace,
+            we multiply them together to a single on-site operator
+            (with the one on the right acting first).
+
+        Returns
+        -------
+        needs_JW : bool
+            Wheter the operator needs a Jordan-Wigner string, judging from :attr:`need_JW_string`.
+        """
+        names = name.split()
+        need_JW = bool(names[0] in self.need_JW_string)
+        for op in names[1:]:
+            if op in self.need_JW_string:
+                need_JW = not need_JW  # == (need_JW xor (op in self.need_JW_string)
+        return need_JW
+
     def valid_opname(self, name):
         """Check wheter 'name' labels a valid onsite-operator.
 
@@ -261,8 +298,18 @@ class DoubleSite(Site):
     A typical use-case is that you want a NearestNeigborModel for TEBD although you have
     next-nearest neighbor interactions: you just double your local Hilbertspace to consist of
     two original sites.
-    Note that this is a 'hack' at the cost of other things
-    (like measurements of 'local' operators) getting more complicated.
+    Note that this is a 'hack' at the cost of other things (e.g., measurements of 'local'
+    operators) getting more complicated/computationally expensive.
+
+
+        Defaults to ``False``, in which case the
+        Set this option to ``True`` if you handle fermions; default is ``False``.
+    If the individual sites indicate fermionic operators (with entries in `needs_JW_string`),
+    we construct the new on-site oerators of `site1` to include the JW string of `site0`,
+    i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
+    (but always ``[op, Id]``).
+    In that way the onsite operators of this DoubleSite automatically fulfill the
+    expected commutation relations. See also :doc:`../intro_JordanWigner`.
 
     Parameters
     ----------
@@ -276,43 +323,48 @@ class DoubleSite(Site):
     label1 : str
         Include the Kronecker product of ``[Id, op]`` as onsite operators with name
         ``opname+label1`` for each of the operators `op` in `site1` (with name `opname`).
-    JW : bool
-        Defaults to ``False``, in which case the
-        Set this option to ``True`` if you handle fermions; default is ``False``.
-        If ``True``, we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]``
-        for the onsite operators of `site1`, such that the operators in this class fulfill the
-        expected commutation relations. See also :doc:`../intro_JordanWigner`.
-        (Exception: the operator ``'JW'+label1`` is the Kronecker product of ``[Id, JW]``.)
 
-    .. todo ::
-        tests!
+    Attributes
+    ----------
+    site0, site1 : :class:`Site`
+        The sites from which this is build.
+    label0, label1 : str
+        The labels which are added to the single-site operators during construction.
 
     .. todo ::
         Implement SpinHalfFermionSite building on that!
         => adjust order Cdu vs Cud in doc/02_intro_JordanWigner.rst
+
+    .. todo ::
+        Need a way to combine charges, e.g. group SpinHalfSite with FermionSite.
+        -> add option to __init__.
     """
     def __init__(self, site0, site1, label0='0', label1='1', JW=False):
         self.site0 = site0
         self.site1 = site1
         pipe = npc.LegPipe([site0.leg, site1.leg])
-        self.leg = pipe  # used in self._tensorproduct
+        self.leg = pipe     # needed in kroneckerproduct
         states = None
         if len(site1.state_labels) > 0:
             pass  # TODO handle permutations
             #  raise NotImplementedError # TODO XXX
-        ops = {}
+        JW0 = site0.JW
+        JW1 = site1.JW
+        JW_both = self.kroneckerproduct(JW0, JW1)
+        super(DoubleSite, self).__init__(pipe, states, JW=JW_both)
+        # add remaining operators
         Id1 = site1.Id
-        Id0 = site0.JW if JW else site0.Id
         for opname, op in site0.onsite_ops.iteritems():
-            if opname not in ['Id', 'JW']:
-                ops[opname+label0] = self.kroneckerproduct(op, Id1)
+            if opname != 'Id':
+                need_JW = opname in site0.need_JW_string
+                self.add_op(opname+label0, self.kroneckerproduct(op, Id1), need_JW)
+        Id0 = site0.Id
         for opname, op in site1.onsite_ops.iteritems():
-            if opname not in ['Id', 'JW']:
-                ops[opname+label1] = self.kroneckerproduct(Id0, op)
-        if JW:
-            ops['JW'+label0] = self.kroneckerproduct(site0.JW, site1.Id)
-            ops['JW'+label1] = self.kroneckerproduct(site0.Id, site1.JW)
-        super(DoubleSite, self).__init__(pipe, states, **ops)
+            if opname != 'Id':
+                need_JW = opname in site1.need_JW_string
+                op0 = JW0 if need_JW else Id0
+                self.add_op(opname+label1, self.kroneckerproduct(op0, op), need_JW)
+        # done
 
     def kroneckerproduct(self, op0, op1):
         r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
@@ -552,6 +604,8 @@ class FermionSite(Site):
         self.conserve = conserve
         self.filling = filling
         super(FermionSite, self).__init__(leg, ['empty', 'full'], **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['C', 'Cd'])
 
     def __repr__(self):
         """Debug representation of self"""
@@ -638,7 +692,8 @@ class SpinHalfFermionSite(Site):
     cons_Sz : ``'Sz' | 'parity' | None``
         Whether spin is conserved, c.f. table above.
     filling : float
-        Average filling. Used to define ``dN``.  """
+        Average filling. Used to define ``dN``.
+    """
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
         if cons_N not in ['N', 'parity', None]:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
@@ -727,6 +782,8 @@ class SpinHalfFermionSite(Site):
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
         super(SpinHalfFermionSite, self).__init__(leg, states, **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['Cu', 'Cud', 'Cd', 'Cdd'])
 
     def __repr__(self):
         """Debug representation of self"""
