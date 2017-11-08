@@ -19,19 +19,19 @@ we can map
 The :math:`n_l` in the second and third row are defined in terms of Pauli matrices according to the first row.
 We do not interpret the Pauli matrices as spin-1/2; they have nothing to do with the spin in the spin-full case.
 If you really want to interpret them physically, you might better think of them as hard-core bosons 
-(:math:`b_j =\sigma^{-}, b_j^\dagger=\sigma^{+}`),
+(:math:`b_j =\sigma^{-}_j, b^\dagger_j=\sigma^{+}_j`),
 with a spin of the fermions mapping to a spin of the hard-core bosons.
 
-Note that this transformation maps the fermionic operators :math:`c_j` and :math:`c_j^\dagger` to *global* operators; although they carry an index `j` indicating
+Note that this transformation maps the fermionic operators :math:`c_j` and :math:`c^\dagger_j` to *global* operators; although they carry an index `j` indicating
 a site, they actually act on all sites ``l <= j``!
 Thus, clearly the operators ``C`` and ``Cd`` defined in the :class:`~tenpy.networks.site.FermionSite` do *not* directly correspond to :math:`c_j` and
-:math:`c_j^\dagger`.
+:math:`c^\dagger_j`.
 :math:`(-1)^{\sum_{l < j} n_l}` is called Jordan-Wigner string and in the :class:`~tenpy.networks.site.FermionSite` is given by the local operator 
 ``JW`` acting all sites ``l < j``.
 Since this important, let me stress it again:
 
 .. warning ::
-    The fermionic operator :math:`c_j` (and similar :math:`c_j^\dagger`) maps to a *global* operator consisting of
+    The fermionic operator :math:`c_j` (and similar :math:`c^\dagger_j`) maps to a *global* operator consisting of
     the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operator ``C`` (or ``Cd``, respectively) on site ``j``.
 
 On the sites itself, the onsite operators ``C`` and ``Cd`` in the :class:`~tenpy.networks.site.FermionSite` fulfill the correct anti-commutation relation, without the need to include ``JW`` strings.
@@ -44,7 +44,7 @@ with the `i`-th entry entry in the list acting on site `i`, the relations are th
     ["JW", ..., "JW", "Cd", "Id", ..., "Id"]   # for the creation operator
     
 Note that ``"JW"`` squares to the identity, ``"JW JW" == "Id"``, 
-which is the reason that the Jordan-wigner string completely cancels in :math:`n_j = c_j^\dagger c_j`. 
+which is the reason that the Jordan-wigner string completely cancels in :math:`n_j = c^\dagger_j c_j`. 
 In the above notation, this can be written as::
 
     ["JW", ..., "JW", "Cd",  "Id", ..., "Id"] * ["JW", ..., "JW", "C", "Id", ..., "Id"]
@@ -54,7 +54,7 @@ In the above notation, this can be written as::
 
 For a pair of operators acting on different sites, ``JW`` strings have to be included for every site between the operators.
 For example, taking ``i < j``, 
-:math:`c_i^\dagger c_j \leftrightarrow \sigma_i^{+} (-1)^{\sum_{i <=l < j} n_l}  \sigma_j^{-}`. 
+:math:`c^\dagger_i c_j \leftrightarrow \sigma_i^{+} (-1)^{\sum_{i <=l < j} n_l}  \sigma_j^{-}`. 
 More explicitly, for ``j = i+2`` we get::
 
     ["JW", ..., "JW", "Cd", "Id", "Id", "Id", ..., "Id"] * ["JW", ..., "JW", "JW", "JW", "C", "Id", ..., "Id"]
@@ -68,7 +68,7 @@ This last line (as well as the last line of the previous example) can be rewritt
 (This is valid because either site ``i`` is occupied, yielding a minus sign from the ``JW``, or it is empty, yielding a 0 from the ``Cd``.)
 
 This is also the case for ``j < i``, say ``j = i-2``:
-:math:`c_i^\dagger c_j \leftrightarrow (-1)^{\sum_{j <=l < i} n_l} \sigma_i^{+} \sigma_j^{-}`. 
+:math:`c^\dagger_i c_j \leftrightarrow (-1)^{\sum_{j <=l < i} n_l} \sigma_i^{+} \sigma_j^{-}`. 
 As shown in the following, the ``JW`` again appears on the left site,
 but this time acting *after* ``C``::
 
@@ -106,9 +106,9 @@ In the case of spin-1/2 fermions labeled by :math:`\uparrow` and :math:`\downarr
     n_{\uparrow,j} &\leftrightarrow (\sigma^{z}_{\uparrow,j} + 1)/2                                                                                  \\
     n_{\downarrow,j} &\leftrightarrow (\sigma^{z}_{\downarrow,j} + 1)/2                                                                              \\
     c_{\uparrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{-}_{\uparrow,j}                                    \\
-    c_{\uparrow,j}^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{+}_{\uparrow,j}                           \\
+    c^\dagger_{\uparrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} \sigma^{+}_{\uparrow,j}                           \\
     c_{\downarrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j}          \\
-    c_{\downarrow,j}^\dagger &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \\
+    c^\dagger_{\downarrow,j} &\leftrightarrow (-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} (-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j} \\
 
 In each of the above mappings the operators on the right hand sides commute; we can rewrite
 :math:`(-1)^{\sum_{l < j} n_{\uparrow,l} + n_{\downarrow,l}} = \prod_{l < j} (-1)^{n_{\uparrow,l}} (-1)^{n_{\downarrow,l}}`,
@@ -116,7 +116,7 @@ which resembles the actual structure in the code more closely.
 The parts of the operator acting in the same box of the picture, i.e. which have the same index `j` or `l`, 
 are the 'onsite' operators in the :class:`~tenpy.networks.site.SpinHalfFermionSite`:
 for example ``JW`` on site `j` is given by :math:`(-1)^{n_{\uparrow,j}} (-1)^{n_{\downarrow,j}}`, 
-``Cu`` is just the :math:`\sigma^{-}_{\uparrow,j}`, ``Cud`` is :math:`\sigma^{+}_{\uparrow,j}`,
+``Cu`` is just the :math:`\sigma^{-}_{\uparrow,j}`, ``Cdu`` is :math:`\sigma^{+}_{\uparrow,j}`,
 ``Cd`` is :math:`(-1)^{n_{\uparrow,j}} \sigma^{-}_{\downarrow,j}`.
 and ``Cdd`` is :math:`(-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j}`.
 Note the asymmetry regarding the spin in the definition of the onsite operators:
@@ -128,17 +128,17 @@ commutation relations globally.
 
 .. warning ::
     Again, the fermionic operators :math:`c_{\downarrow,j}, c^\dagger_{\downarrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
-    the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cud', 'Cd', 'Cdd'`` on site ``j``.
+    the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cdu', 'Cd', 'Cdd'`` on site ``j``.
 
 Written explicitly in terms of onsite operators defined in the :class:`~tenpy.networks.sites.FermionSite`,
 with the `j`-th entry entry in the list acting on site `j`, the relations are::
 
     ["JW", ..., "JW", "Cu",  "Id", ..., "Id"]    # for the annihilation operator spin-up
     ["JW", ..., "JW", "Cd",  "Id", ..., "Id"]    # for the annihilation operator spin-down
-    ["JW", ..., "JW", "Cud",  "Id", ..., "Id"]   # for the creation operator spin-up
+    ["JW", ..., "JW", "Cdu",  "Id", ..., "Id"]   # for the creation operator spin-up
     ["JW", ..., "JW", "Cdd",  "Id", ..., "Id"]   # for the creation operator spin-down
 
-As you can see, the asymmetry regaring the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cud", "Cdd"`` lead to a symmetric definition in the global sense.
+As you can see, the asymmetry regaring the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cdu", "Cdd"`` lead to a symmetric definition in the global sense.
 If you look at the definitions very closely, you can see that in terms like ``["Id", "Cd JW", "JW", "Cd"]`` the
 Jordan-Wigner sign :math:`(-1)^{n_\uparrow,2}` appears twice (namely once in the definition of ``"Cd"`` and once in the ``"JW"`` on site
 2) and could in principle be canceled, however in favor of a simplified handling in the code we do not recommend you to cancel it.
@@ -191,7 +191,7 @@ Slightly more complicated, to specify the hopping
 in the Fermi-Hubbard model on a 2D square lattice, we would need more terms::
 
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-        add_coupling(strength, 0, 'Cud', 0, 'Cu', (dx, dy), 'JW', True)
+        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)
         add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)
 
 If you want to build a model directly as an MPO or with nearest-neighbor bonds, you have to worry yourself about how to handle the Jordan-Wigner string correctly.

@@ -128,24 +128,24 @@ def test_spin_half_fermion_site():
         Id = S.Id.to_ndarray()
         JW = S.JW.to_ndarray()
         Cu, Cd = S.Cu.to_ndarray(), S.Cd.to_ndarray()
-        Cud, Cdd = S.Cud.to_ndarray(), S.Cdd.to_ndarray()
+        Cdu, Cdd = S.Cdu.to_ndarray(), S.Cdd.to_ndarray()
         Nu, Nd, Ntot = S.Nu.to_ndarray(), S.Nd.to_ndarray(), S.Ntot.to_ndarray()
-        npt.assert_equal(np.dot(Cud, Cu), Nu)
+        npt.assert_equal(np.dot(Cdu, Cu), Nu)
         npt.assert_equal(np.dot(Cdd, Cd), Nd)
         npt.assert_equal(Nu + Nd, Ntot)
         npt.assert_equal(np.dot(Nu, Nd), S.NuNd.to_ndarray())
-        npt.assert_equal(anticommutator(Cud, Cu), Id)
+        npt.assert_equal(anticommutator(Cdu, Cu), Id)
         npt.assert_equal(anticommutator(Cdd, Cd), Id)
         # anti-commutate with Jordan-Wigner
         npt.assert_equal(np.dot(Cu, JW), -np.dot(JW, Cu))
         npt.assert_equal(np.dot(Cd, JW), -np.dot(JW, Cd))
-        npt.assert_equal(np.dot(Cud, JW), -np.dot(JW, Cud))
+        npt.assert_equal(np.dot(Cdu, JW), -np.dot(JW, Cdu))
         npt.assert_equal(np.dot(Cdd, JW), -np.dot(JW, Cdd))
         # anti-commute Cu with Cd
         npt.assert_equal(np.dot(Cu, Cd), -np.dot(Cd, Cu))
         npt.assert_equal(np.dot(Cu, Cdd), -np.dot(Cdd, Cu))
-        npt.assert_equal(np.dot(Cud, Cd), -np.dot(Cd, Cud))
-        npt.assert_equal(np.dot(Cud, Cdd), -np.dot(Cdd, Cud))
+        npt.assert_equal(np.dot(Cdu, Cd), -np.dot(Cd, Cdu))
+        npt.assert_equal(np.dot(Cdu, Cdd), -np.dot(Cdd, Cdu))
         if cons_Sz != 'Sz':
             SxSy = ['Sx', 'Sy']
         else:

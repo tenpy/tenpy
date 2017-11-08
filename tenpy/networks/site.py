@@ -333,7 +333,6 @@ class DoubleSite(Site):
 
     .. todo ::
         Implement SpinHalfFermionSite building on that!
-        => adjust order Cdu vs Cud in doc/02_intro_JordanWigner.rst
 
     .. todo ::
         Need a way to combine charges, e.g. group SpinHalfSite with FermionSite.
@@ -636,15 +635,15 @@ class SpinHalfFermionSite(Site):
     ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
     ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
                     (up to 'JW'-string on sites left of it).
-    ``Cud``         Creation operator spin-up :math:`c_{\uparrow}^\dagger`
+    ``Cdu``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
                     (up to 'JW'-string on sites left of it).
     ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
                     (up to 'JW'-string on sites left of it).
-                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
-    ``Cdd``         Creation operator spin-down :math:`c_{\downarrow}^\dagger`
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
+    ``Cdd``         Creation operator spin-down :math:`c^\dagger_{\downarrow}`
                     (up to 'JW'-string on sites left of it).
-                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cud``.
-    ``Nu``          Number operator :math:`n_{\uparrow}= c^{\dagger}_{\uparrow} c_{\uparrow}`
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
+    ``Nu``          Number operator :math:`n_{\uparrow}= c^\dagger_{\uparrow} c_{\uparrow}`
     ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
     ``NuNd``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
     ``Ntot``        Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
@@ -652,11 +651,11 @@ class SpinHalfFermionSite(Site):
     ``Sx, Sy, Sz``  Spin operators :math:`S^{x,y,z}`, in particular
                     :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`,
-                    e.g. :math:`S^{+} = c_\uparrow^\dagger c_\downarrow`
+                    e.g. :math:`S^{+} = c^\dagger_\uparrow c_\downarrow`
     ==============  =============================================================================
 
     The spin operators are defined as :math:`S^\gamma =
-    (c_{\uparrow}^\dagger, c_{\downarrow}^\dagger) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
+    (c^\dagger_{\uparrow}, c^\dagger_{\downarrow}) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
     where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
 
     ============= ============= ======= =======================================
@@ -715,25 +714,25 @@ class SpinHalfFermionSite(Site):
 
         Cu = np.zeros((d, d))
         Cu[0, 1] = Cu[2, 3] = 1
-        Cud = np.transpose(Cu)
+        Cdu = np.transpose(Cu)
         # For spin-down annihilation operator: include a Jordan-Wigner string JWu
-        # this ensures that Cud.Cd = - Cd.Cud
+        # this ensures that Cdu.Cd = - Cd.Cdu
         # c.f. the chapter on the Jordan-Wigner trafo in the userguide
         Cd_noJW = np.zeros((d, d))
         Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1
         Cd = np.dot(JWu, Cd_noJW)           # (don't do this for spin-up...)
         Cdd = np.transpose(Cd)
 
-        # spin operators are defined as  (Cud, Cdd) S^gamma (Cu, Cd)^T,
+        # spin operators are defined as  (Cdu, Cdd) S^gamma (Cu, Cd)^T,
         # where S^gamma is the 2x2 matrix for spin-half
         Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
-        Sp = np.dot(Cud, Cd)
+        Sp = np.dot(Cdu, Cd)
         Sm = np.dot(Cdd, Cu)
         Sx = 0.5*(Sp + Sm)
         Sy = -0.5j*(Sp - Sm)
 
         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
-                   Cu=Cu, Cud=Cud, Cd=Cd, Cdd=Cdd,
+                   Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
                    Nu=Nu, Nd=Nd, Ntot=Ntot, NuNd=NuNd, dN=dN,
                    Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
 
@@ -783,7 +782,7 @@ class SpinHalfFermionSite(Site):
         self.cons_Sz = cons_Sz
         super(SpinHalfFermionSite, self).__init__(leg, states, **ops)
         # specify fermionic operators
-        self.need_JW_string |= set(['Cu', 'Cud', 'Cd', 'Cdd'])
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd'])
 
     def __repr__(self):
         """Debug representation of self"""
