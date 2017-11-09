@@ -12,3 +12,4 @@ They can be cited from the python doc-strings using the format ``[Author####]_``
 .. [Singh2010] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, arXiv:1008.4774
 .. [Schollwoeck2011] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
+.. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, arXiv:1711.01288

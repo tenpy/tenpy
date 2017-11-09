@@ -75,7 +75,8 @@ From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to t
 If the state is modified (e.g. by applying `A` or `B` to calculate correlation functions),
 this is not true any more. However, we still can find unitaries, which are 'optimal' in the sense
 of reducing the entanglement of the MPS/MPO to the minimal value.
-
+For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.puficiation_tebd`),
+see [Hauschild2017]_.
 
 .. Note :
     The literature (e.g. section 7.2 of [Schollwoeck2011]_ or [Karrasch2013]_) suggests to use

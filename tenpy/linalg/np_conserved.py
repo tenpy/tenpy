@@ -1091,7 +1091,7 @@ class Array(object):
         res = self._combine_legs_worker(combine_legs, new_axes, pipes)
 
         # get new labels
-        pipe_labels = [('(' + '.'.join([labels[c] for c in cl]) + ')') for cl in combine_legs]
+        pipe_labels = [self._combine_leg_labels([labels[c] for c in cl]) for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
             labels[na:na + p.nlegs] = [plab]
         res.iset_leg_labels(labels)
@@ -2308,10 +2308,22 @@ class Array(object):
         res._data = data
         return res
 
-    def _split_leg_label(self, label, count):
-        """Revert the combination of labels performed in :meth:`_combine_legs`.
+    @staticmethod
+    def _combine_leg_labels(labels):
+        """Generate label for legs combined in a :class:`LegPipe`.
 
-        Return a list of labels corresponding to the original labels before 'combine_legs'.
+        Examples
+        --------
+        >>> self._combine_leg_labels(['a', 'b', '(c.d)'])
+        '(a.b.(c.d))'
+        """
+        return '(' + '.'.join(labels) + ')'
+
+    @staticmethod
+    def _split_leg_label(label, count):
+        """Revert the combination of labels performed in :meth:`combine_leg_labels`.
+
+        Return a list of labels corresponding to the original labels before 'combine_leg_labels'.
         Test that it splits into `count` labels.
 
         Examples
@@ -2344,10 +2356,19 @@ class Array(object):
                 res[i] = None
         return res
 
-    def _conj_leg_label(self, label):
-        """conjugate a leg `label`.
+    @staticmethod
+    def _conj_leg_label(label):
+        """Conjugate a leg `label`.
 
-        Takes ``'a' -> 'a*'; 'a*'-> 'a'; '(a.(b*.c))' -> '(a*.(b.c*))'``"""
+        Examples
+        --------
+        >>> self._conj_leg_labels('a')
+        'a*'
+        >>> self._conj_leg_labels('a*')
+        'a'
+        >>> self._conj_leg_labels('(a.(b*.c))')
+        '(a*.(b.c*))'
+        """
         # first insert '*' after each label, taking into account recursion of LegPipes
         res = []
         beg = 0

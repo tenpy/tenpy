@@ -36,7 +36,7 @@ Afterwards, go to the folder `doc/` and run the following command::
 
 This should generate the html documentation in `doc/sphinx_build/html`.
 Simply open this folder (or to be precise: the file `index.html` in it) in your webbroser
-and enjoy this and other documentation beautifully rendered, with cross links, math forumulas
+and enjoy this and other documentation beautifully rendered, with cross links, math formulas
 and even a search function :-).
 
 .. note ::

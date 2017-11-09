@@ -1,7 +1,4 @@
 """A collection of tests for :mod:`tenpy.models.site`.
-
-.. todo ::
-    More tests of commutators for the various special sites!
 """
 
 from __future__ import division
@@ -42,6 +39,16 @@ def test_site():
     assert (s.get_op('silly_op') is op1)
     npt.assert_equal(s.get_op('silly_op op2').to_ndarray(),
                      npc.tensordot(op1, op2, [1, 0]).to_ndarray())
+
+
+def test_double_site():
+    for site0, site1 in [[site.SpinHalfSite(None)]*2, [site.SpinHalfSite('Sz')]*2]:
+        ds = site.DoubleSite(site0, site1)
+        ds.test_sanity()
+    fs = site.FermionSite('N')
+    ds = site.DoubleSite(fs, fs, 'a', 'b')
+    assert ds.need_JW_string == set([op+'a' for op in fs.need_JW_string] +
+                                    [op+'b' for op in fs.need_JW_string])
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
@@ -106,6 +113,11 @@ def test_fermion_site():
         # anti-commutate with Jordan-Wigner
         npt.assert_equal(np.dot(Cd, JW), -np.dot(JW, Cd))
         npt.assert_equal(np.dot(C, JW), -np.dot(JW, C))
+        assert S.need_JW_string == set(['Cd', 'C'])
+        for op in ['C', 'Cd', 'C N' 'C Cd C']:
+            assert S.op_needs_JW(op)
+        for op in ['N', 'C Cd', 'JW']:
+            assert not S.op_needs_JW(op)
 
 
 def test_spin_half_fermion_site():
@@ -116,24 +128,24 @@ def test_spin_half_fermion_site():
         Id = S.Id.to_ndarray()
         JW = S.JW.to_ndarray()
         Cu, Cd = S.Cu.to_ndarray(), S.Cd.to_ndarray()
-        Cud, Cdd = S.Cud.to_ndarray(), S.Cdd.to_ndarray()
+        Cdu, Cdd = S.Cdu.to_ndarray(), S.Cdd.to_ndarray()
         Nu, Nd, Ntot = S.Nu.to_ndarray(), S.Nd.to_ndarray(), S.Ntot.to_ndarray()
-        npt.assert_equal(np.dot(Cud, Cu), Nu)
+        npt.assert_equal(np.dot(Cdu, Cu), Nu)
         npt.assert_equal(np.dot(Cdd, Cd), Nd)
         npt.assert_equal(Nu + Nd, Ntot)
         npt.assert_equal(np.dot(Nu, Nd), S.NuNd.to_ndarray())
-        npt.assert_equal(anticommutator(Cud, Cu), Id)
+        npt.assert_equal(anticommutator(Cdu, Cu), Id)
         npt.assert_equal(anticommutator(Cdd, Cd), Id)
         # anti-commutate with Jordan-Wigner
         npt.assert_equal(np.dot(Cu, JW), -np.dot(JW, Cu))
         npt.assert_equal(np.dot(Cd, JW), -np.dot(JW, Cd))
-        npt.assert_equal(np.dot(Cud, JW), -np.dot(JW, Cud))
+        npt.assert_equal(np.dot(Cdu, JW), -np.dot(JW, Cdu))
         npt.assert_equal(np.dot(Cdd, JW), -np.dot(JW, Cdd))
         # anti-commute Cu with Cd
         npt.assert_equal(np.dot(Cu, Cd), -np.dot(Cd, Cu))
         npt.assert_equal(np.dot(Cu, Cdd), -np.dot(Cdd, Cu))
-        npt.assert_equal(np.dot(Cud, Cd), -np.dot(Cd, Cud))
-        npt.assert_equal(np.dot(Cud, Cdd), -np.dot(Cdd, Cud))
+        npt.assert_equal(np.dot(Cdu, Cd), -np.dot(Cd, Cdu))
+        npt.assert_equal(np.dot(Cdu, Cdd), -np.dot(Cdd, Cdu))
         if cons_Sz != 'Sz':
             SxSy = ['Sx', 'Sy']
         else:

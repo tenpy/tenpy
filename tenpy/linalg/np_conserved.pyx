@@ -1110,7 +1110,7 @@ cdef class Array(object):
         res = self._combine_legs_worker(combine_legs, new_axes, pipes)
 
         # get new labels
-        pipe_labels = [('(' + '.'.join([labels[c] for c in cl]) + ')') for cl in combine_legs]
+        pipe_labels = [self._combine_leg_labels([labels[c] for c in cl]) for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
             labels[na:na + p.nlegs] = [plab]
         res.iset_leg_labels(labels)
@@ -2353,7 +2353,19 @@ cdef class Array(object):
         res._data = data
         return res
 
-    def _split_leg_label(self, label, count):
+    @staticmethod
+    def _combine_leg_labels(labels):
+        """Generate label for legs combined in a :class:`LegPipe`.
+
+        Examples
+        --------
+        >>> self._combine_leg_labels(['a', 'b', '(c.d)'])
+        '(a.b.(c.d))'
+        """
+        return '(' + '.'.join(labels) + ')'
+
+    @staticmethod
+    def _split_leg_label(label_, count):
         """Revert the combination of labels performed in :meth:`_combine_legs`.
 
         Return a list of labels corresponding to the original labels before 'combine_legs'.
@@ -2364,8 +2376,9 @@ cdef class Array(object):
         >>> self._split_leg_label('(a.b.(c.d))', 3)
         ['a', 'b', '(c.d)']
         """
-        if label is None:
+        if label_ is None:
             return [None] * count
+        cdef str label = label_
         if label[0] != '(' or label[-1] != ')':
             warnings.warn("split leg with label not in Form '(...)': " + label)
             return [None] * count
@@ -2389,7 +2402,8 @@ cdef class Array(object):
                 res[i] = None
         return res
 
-    def _conj_leg_label(self, label):
+    @staticmethod
+    def _conj_leg_label(label):
         """conjugate a leg `label`.
 
         Takes ``'a' -> 'a*'; 'a*'-> 'a'; '(a.(b*.c))' -> '(a*.(b.c*))'``"""
