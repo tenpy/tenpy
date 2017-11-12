@@ -1,8 +1,10 @@
 """A TenPyLight implementation of the cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 
 .. todo::
+	Define unit_cell.
 	Sort out the lattice (including correct bc handling for cylinder/strip).
 	Implement the Hamiltonian.
+	In particular: hoppings along y at the boundary have to be different.
 """
 
 from __future__ import division
@@ -64,7 +66,7 @@ class cold_hof_model(CouplingModel, NearestNeighborModel, MPOModel):
     	unused_parameters(model_pars, self.__class__)
 
     	# 1-3) Define the sites.
-        site = BosonSite(Nmax=N_max, conserve='N', filling=filling)
+        site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
 
         # 4) Lattice
         lat = Lattice([Lx * mx, Ly * my], unit_cell, order='default', bc_MPS='finite', basis=None, positions=None)
@@ -81,10 +83,10 @@ class cold_hof_model(CouplingModel, NearestNeighborModel, MPOModel):
         hop_y = - Jy * ( 1 + mu * (kappa / (2 * omega)) ** 2 )
         hop_x = - Jx * np.exp( 1.j * (np.pi / 2) * (index) - phi_0)  # TODO figure out index
         hop_x_hc = - Jx * np.exp( 1.j * (np.pi / 2) * (index) - phi_0)  # TODO figure out index
-        self.add_coupling(hop_y, u1, 'B', u2, 'Bd', dx)  # TODO figure out u1, u2 and dx
-        self.add_coupling(hop_y, u1, 'Bd', u2, 'B', dx)
-        self.add_coupling(hop_x, u1, 'B', u2, 'Bd', dx)
-        self.add_coupling(hop_x_hc, u1, 'Bd', u2, 'B', dx)
+        self.add_coupling(hop_y, u1, 'B', u2, 'Bd', [0,1])  # TODO figure out u1, u2
+        self.add_coupling(hop_y, u1, 'Bd', u2, 'B', [0,1])
+        self.add_coupling(hop_x, u1, 'B', u2, 'Bd', [1,0])
+        self.add_coupling(hop_x_hc, u1, 'Bd', u2, 'B', [1,0])
 
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
