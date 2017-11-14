@@ -21,7 +21,8 @@ Classes:
 :class:`ChargeInfo`, :class:`LegCharge`, :class:`LegPipe`, :class:`Array`
 
 Array creation:
-:func:`zeros`, :func:`eye_like`, :func:`diag`,
+:meth:`Array.from_ndarray_trivial`, :meth:`Array.from_ndarray`, :meth:`Array.from_func`,
+:meth:`Array.from_func_square`, :func:`zeros`, :func:`eye_like`, :func:`diag`,
 
 Concatenation:
 :func:`concatenate`, :func:`grid_concat`, :func:`grid_outer`
@@ -91,7 +92,7 @@ cdef class Array(object):
     The default :meth:`__init__` (i.e. ``Array(...)``) does not insert any data,
     and thus yields an Array 'full' of zeros, equivalent to :func:`zeros()`.
     Further, new arrays can be created with one of :meth:`from_ndarray_trivial`,
-    :meth:`from_ndarray`, or :meth:`from_npfunc`, and of course by copying/tensordot/svd etc.
+    :meth:`from_ndarray`, or :meth:`from_func`, and of course by copying/tensordot/svd etc.
 
     In-place methods are indicated by a name starting with ``i``.
     (But `is_completely_blocked` is not inplace...)
@@ -110,11 +111,11 @@ cdef class Array(object):
     size
     stored_blocks
     rank : int
-        The number of legs
+        The number of legs.
     shape : tuple(int)
-        The number of indices for each of the legs
+        The number of indices for each of the legs.
     dtype : np.dtype
-        The data type of the entries
+        The data type of the entries.
     chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
         The nature of the charge.
     qtotal : 1D array
@@ -122,9 +123,9 @@ cdef class Array(object):
     legs : list of :class:`~tenpy.linalg.charges.LegCharge`
         The leg charges for each of the legs.
     labels : dict (string -> int)
-        Labels for the different legs
+        Labels for the different legs.
     _data : list of arrays
-        The actual entries of the tensor
+        The actual entries of the tensor.
     _qdata : 2D array (len(_data), rank), dtype np.intp
         For each of the _data entries the qindices of the different legs.
     _qdata_sorted : Bool
@@ -203,14 +204,14 @@ cdef class Array(object):
         Parameters
         ----------
         data_flat : array_like
-            the data to be converted to a Array
+            The data to be converted to a Array.
         dtype : type | string
-            the data type of the array entries. Defaults to ``np.float64``.
+            The data type of the array entries. Defaults to ``np.float64``.
 
         Returns
         -------
         res : :class:`Array`
-            an Array with data of data_flat
+            An Array with data of data_flat.
         """
         data_flat = np.array(data_flat, dtype)
         chinfo = ChargeInfo()
@@ -229,14 +230,14 @@ cdef class Array(object):
         Parameters
         ----------
         data_flat : array_like
-            the flat ndarray which should be converted to a npc `Array`.
+            The flat ndarray which should be converted to a npc `Array`.
             The shape has to be compatible with legcharges.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
         dtype : ``np.dtype`` | string
-            the data type of the array entries. Defaults to dtype of data_flat.
+            The data type of the array entries. Defaults to dtype of data_flat.
         qtotal : None | charges
-            the total charge of the new array.
+            The total charge of the new array.
         cutoff : float
             Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
             Defaults to :data:`QCUTOFF`.
@@ -244,7 +245,7 @@ cdef class Array(object):
         Returns
         -------
         res : :class:`Array`
-            an Array with data of `data_flat`.
+            An Array with data of `data_flat`.
 
         See also
         --------
@@ -295,7 +296,7 @@ cdef class Array(object):
         Parameters
         ----------
         func : callable
-            a function-like object which is called to generate the data blocks.
+            A function-like object which is called to generate the data blocks.
             We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
             If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
             otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
@@ -308,18 +309,18 @@ cdef class Array(object):
             Note that this argument is not given to func, but rather a type conversion
             is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
         qtotal : None | charges
-            the total charge of the new array. Defaults to charge 0.
+            The total charge of the new array. Defaults to charge 0.
         func_args : iterable
-            additional arguments given to `func`
+            Additional arguments given to `func`.
         func_kwargs : dict
-            additional keyword arguments given to `func`
+            Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
 
         Returns
         -------
         res : :class:`Array`
-            an Array with blocks filled using `func`.
+            An Array with blocks filled using `func`.
         """
         if dtype is None:
             # create a small test block to derive the dtype
@@ -374,7 +375,7 @@ cdef class Array(object):
         Parameters
         ----------
         func : callable
-            a function-like object which is called to generate the data blocks.
+            A function-like object which is called to generate the data blocks.
             We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
             If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
             otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
@@ -388,16 +389,16 @@ cdef class Array(object):
             Note that this argument is not given to func, but rather a type conversion
             is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
         func_args : iterable
-            additional arguments given to `func`
+            Additional arguments given to `func`.
         func_kwargs : dict
-            additional keyword arguments given to `func`
+            Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
 
         Returns
         -------
         res : :class:`Array`
-            an Array with blocks filled using `func`.
+            An Array with blocks filled using `func`.
         """
         blocked = leg.is_blocked()
         if not blocked:
@@ -411,7 +412,7 @@ cdef class Array(object):
         return res
 
     def zeros_like(self):
-        """return a copy of self with only zeros as entries, containing no `_data`"""
+        """Return a copy of self with only zeros as entries, containing no `_data`."""
         cdef Array res = self.copy(deep=False)
         res._data = []
         res._qdata = np.empty((0, res.rank), dtype=np.intp)
@@ -456,12 +457,12 @@ cdef class Array(object):
 
     @property
     def size(self):
-        """the number of dtype-objects stored"""
+        """The number of dtype-objects stored."""
         return np.sum([t.size for t in self._data], dtype=np.int_)
 
     @property
     def stored_blocks(self):
-        """the number of (non-zero) blocks stored in self._data"""
+        """The number of (non-zero) blocks stored in :attr:`_data`."""
         return len(self._data)
 
     # labels ==================================================================
@@ -472,16 +473,16 @@ cdef class Array(object):
         Parameters
         ----------
         label : int | string
-            eather the leg-index directly or a label (string) set before.
+            The leg-index directly or a label (string) set before.
 
         Returns
         -------
         leg_index : int
-            the index of the label
+            The index of the label.
 
         See also
         --------
-        get_leg_indices : calls get_leg_index for a list of labels
+        get_leg_indices : calls get_leg_index for a list of labels.
         iset_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
@@ -502,12 +503,12 @@ cdef class Array(object):
         Parameters
         ----------
         labels : iterable of string/int
-            The leg-labels (or directly indices) to be translated in leg-indices
+            The leg-labels (or directly indices) to be translated in leg-indices.
 
         Returns
         -------
         leg_indices : list of int
-            the translated labels.
+            The translated labels.
 
         See also
         --------
@@ -529,8 +530,8 @@ cdef class Array(object):
 
         See also
         --------
-        get_leg: translate the labels to indices
-        get_legs: calls get_legs for an iterable of labels
+        get_leg: translate the labels to indices.
+        get_legs: calls get_legs for an iterable of labels.
         """
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs.")
@@ -640,7 +641,7 @@ cdef class Array(object):
     # accessing entries =======================================================
 
     def to_ndarray(self):
-        """convert self to a dense numpy ndarray."""
+        """Convert self to a dense numpy ndarray."""
         res = np.zeros(self.shape, dtype=self.dtype)
         for block, slices, _, _ in self:  # that's elegant! :)
             res[slices] = block
@@ -669,7 +670,7 @@ cdef class Array(object):
             yield block, tuple(blockslices), qs, qdat
 
     def __getitem__(self, inds):
-        """acces entries with ``self[inds]``
+        """Acces entries with ``self[inds]``.
 
         Parameters
         ----------
@@ -689,11 +690,11 @@ cdef class Array(object):
         Returns
         -------
         res : `dtype`
-            only returned, if a single integer is given for all legs.
+            Only returned, if a single integer is given for all legs.
             It is the entry specified by `inds`, giving ``0.`` for non-saved blocks.
         or
         sliced : :class:`Array`
-            a copy with some of the data removed by :meth:`take_slice` and/or :meth:`project`
+            A copy with some of the data removed by :meth:`take_slice` and/or :meth:`project`.
 
         Notes
         -----
@@ -718,7 +719,7 @@ cdef class Array(object):
         return self._advanced_getitem(inds)
 
     def __setitem__(self, inds, other):
-        """assign ``self[inds] = other``.
+        """Assign ``self[inds] = other``.
 
         Should work as expected for both basic and advanced indexing as described in
         :meth:`__getitem__`.
@@ -749,7 +750,7 @@ cdef class Array(object):
         Parameters
         ----------
         indices : (iterable of) int
-            The (flat) index for each of the legs specified by `axes`
+            The (flat) index for each of the legs specified by `axes`.
         axes : (iterable of) str/int
             Leg labels or indices to specify the legs for which the indices are given.
 
@@ -889,9 +890,9 @@ cdef class Array(object):
         Parameters
         ----------
         axis : int or string
-            the new leg (index or label), for which the charge is changed
+            The new leg (index or label), for which the charge is changed.
         newqtotal : charge values, defaults to 0
-            the new total charge
+            The new total charge.
         new_qconj: {+1, -1, None}
             Whether the new LegCharge points inward (+1) or outward (-1) afterwards.
             By default (None) use the previous ``self.legs[leg].qconj``.
@@ -899,7 +900,7 @@ cdef class Array(object):
         Returns
         -------
         copy : :class:`Array`
-            a shallow copy of self with ``copy.qtotal == newqtotal`` and new ``copy.legs[leg]``.
+            A shallow copy of self with ``copy.qtotal == newqtotal`` and new ``copy.legs[leg]``.
             The new leg will be a :class`LegCharge`, even if the old leg was a :class:`LegPipe`.
         """
         cdef Array res = self.copy(deep=False)
@@ -1037,7 +1038,7 @@ cdef class Array(object):
         return res
 
     def is_completely_blocked(self):
-        """returns bool wheter all legs are blocked by charge"""
+        """Returns bool whether all legs are blocked by charge."""
         return all([l.is_blocked() for l in self.legs])
 
     def sort_legcharge(self, sort=True, bunch=True):
@@ -1054,15 +1055,15 @@ cdef class Array(object):
             or a 1D array perm for a given permuation to apply to a leg.
         bunch : True | False | list of {True, False}
             A single bool holds for all legs, default=True.
-            whether or not to bunch at each leg, i.e. combine contiguous blocks with equal charges.
+            Whether or not to bunch at each leg, i.e. combine contiguous blocks with equal charges.
 
         Returns
         -------
         perm : tuple of 1D arrays
-            the permutation applied to each of the legs.
-            cp.to_ndarray() = self.to_ndarray(perm)
+            The permutation applied to each of the legs, such that
+            ``cp.to_ndarray() = self.to_ndarray(perm)``.
         result : Array
-            a shallow copy of self, with legs sorted/bunched
+            A shallow copy of self, with legs sorted/bunched.
         """
         if sort is False or sort is True:  # ``sort in [False, True]`` doesn't work
             sort = [sort] * self.rank
@@ -1094,7 +1095,7 @@ cdef class Array(object):
         return tuple(perms), cp
 
     def isort_qdata(self):
-        """(lex)sort ``self._qdata``. In place.
+        """(Lexiographically) sort ``self._qdata``. In place.
 
         Lexsort ``self._qdata`` and ``self._data`` and set ``self._qdata_sorted = True``.
         """
@@ -1111,14 +1112,14 @@ cdef class Array(object):
     # reshaping ===============================================================
 
     def make_pipe(self, axes, **kwargs):
-        """generates a :class:`~tenpy.linalg.charges.LegPipe` for specified axes.
+        """Generates a :class:`~tenpy.linalg.charges.LegPipe` for specified axes.
 
         Parameters
         ----------
         axes : iterable of str|int
-            the leg labels for the axes which should be combined. Order matters!
+            The leg labels for the axes which should be combined. Order matters!
         **kwargs :
-            additional keyword arguments given to :class:`~tenpy.linalg.charges.LegPipe`
+            Additional keyword arguments given to :class:`~tenpy.linalg.charges.LegPipe`.
 
         Returns
         -------
@@ -1135,7 +1136,7 @@ cdef class Array(object):
         Parameters
         ----------
         combine_legs : (iterable of) iterable of {str|int}
-            bundles of leg indices or labels, which should be combined into a new output pipes.
+            Bundles of leg indices or labels, which should be combined into a new output pipes.
             If multiple pipes should be created, use a list fore each new pipe.
         new_axes : None | (iterable of) int
             The leg-indices, at which the combined legs should appear in the resulting array.
@@ -1143,11 +1144,11 @@ cdef class Array(object):
             (taking into account that some axes are 'removed' by combining).
             Thus no transposition is perfomed if `combine_legs` contains only contiguous ranges.
         pipes : None | (iterable of) {:class:`LegPipes` | None}
-            optional: provide one or multiple of the resulting LegPipes to avoid overhead of
+            Optional: provide one or multiple of the resulting LegPipes to avoid overhead of
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            specify whether new created pipes point inward or outward. Defaults to +1.
+            Specify whether new created pipes point inward or outward. Defaults to +1.
             Ignored for given `pipes`, which are not newly calculated.
 
         Returns
@@ -1243,7 +1244,7 @@ cdef class Array(object):
         Parameters
         ----------
         axes : (iterable of) int|str
-            leg labels or indices determining the axes to split.
+            Leg labels or indices determining the axes to split.
             The corresponding entries in self.legs must be :class:`LegPipe` instances.
             Defaults to all legs, which are :class:`LegPipe` instances.
         cutoff : float
@@ -1253,7 +1254,7 @@ cdef class Array(object):
         Returns
         -------
         reshaped : :class:`Array`
-            a copy of self where the specified legs are splitted.
+            A copy of self where the specified legs are splitted.
 
         See also
         --------
@@ -1292,7 +1293,7 @@ cdef class Array(object):
         return res
 
     def as_completely_blocked(self):
-        """gives a version of self which is completely blocked by charges.
+        """Gives a version of self which is completely blocked by charges.
 
         Functions like :func:`svd` or :func:`eigh` require a complete blocking by charges.
         This can be achieved by encapsulating each leg which is not completely blocked into a
@@ -1302,9 +1303,9 @@ cdef class Array(object):
         Returns
         -------
         encapsulated_axes : list of int
-            the leg indices which have been encapsulated into Pipes.
+            The leg indices which have been encapsulated into Pipes.
         blocked_self : :class:`Array`
-            self (if ``len(encapsulated_axes) = 0``) or a copy of self,
+            Self (if ``len(encapsulated_axes) = 0``) or a copy of self,
             which is completely blocked.
         """
         enc_axes = [a for a, l in enumerate(self.legs) if not l.is_blocked()]
@@ -1321,7 +1322,7 @@ cdef class Array(object):
         Parameters
         ----------
         axes : None | (iterable of) {int|str}
-            labels or indices of the legs which should be 'squeezed', i.e. the legs removed.
+            Labels or indices of the legs which should be 'squeezed', i.e. the legs removed.
             The corresponding legs must be trivial, i.e., have `ind_len` 1.
 
         Returns
@@ -1365,15 +1366,15 @@ cdef class Array(object):
         Parameters
         ----------
         dtype : convertible to a np.dtype
-            the new data type.
+            The new data type.
             If None, deduce the new dtype as common type of ``self._data``.
         copy : bool
-            whether to make a copy of the blocks even if the type didn't change.
+            Whether to make a copy of the blocks even if the type didn't change.
 
         Returns
         -------
         copy : :class:`Array`
-            deep copy of self with new dtype
+            Deep copy of self with new dtype.
         """
         cdef Array cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
         cp._qdata = cp._qdata.copy()
@@ -1389,9 +1390,9 @@ cdef class Array(object):
         Parameters
         ----------
         cutoff : float
-            blocks with norm <= `cutoff` are removed. defaults to :data:`QCUTOFF`.
+            Blocks with norm <= `cutoff` are removed. defaults to :data:`QCUTOFF`.
         norm_order :
-            a valid `ord` argument for `np.linalg.norm`.
+            A valid `ord` argument for `np.linalg.norm`.
             Default ``None`` gives the Frobenius norm/2-norm for matrices/everything else.
             Note that this differs from other methods, e.g. :meth:`from_ndarray`,
             which use the maximum norm.
@@ -1419,7 +1420,7 @@ cdef class Array(object):
         Parameters
         ----------
         mask : (list of) 1D array(bool|int)
-            for each axis specified by `axes` a mask, which indices of the axes should be kept.
+            For each axis specified by `axes` a mask, which indices of the axes should be kept.
             If `mask` is a bool array, keep the indices where `mask` is True.
             If `mask` is an int array, keep the indices listed in the mask, *ignoring* the
             order or multiplicity.
@@ -1431,10 +1432,10 @@ cdef class Array(object):
         Returns
         -------
         map_qind : list of 1D arrays
-            the mapping of qindices for each of the specified axes.
+            The mapping of qindices for each of the specified axes.
         block_masks: list of lists of 1D bool arrays
             ``block_masks[a][qind]`` is a boolen mask which indices to keep
-            in block ``qindex`` of ``axes[a]``
+            in block ``qindex`` of ``axes[a]``.
         """
         if axes is not to_iterable(axes):
             mask = [mask]
@@ -1487,15 +1488,15 @@ cdef class Array(object):
         Parameters
         ----------
         perm : array_like 1D int
-            The permutation which should be applied to the leg given by `axis`
+            The permutation which should be applied to the leg given by `axis`.
         axis : str | int
-            a leg label or index specifying on which leg to take the permutation.
+            A leg label or index specifying on which leg to take the permutation.
 
         Returns
         -------
         res : :class:`Array`
-            a copy of self with leg `axis` permuted, such that
-            ``res[i, ...] = self[perm[i], ...]`` for ``i`` along `axis`
+            A copy of self with leg `axis` permuted, such that
+            ``res[i, ...] = self[perm[i], ...]`` for ``i`` along `axis`.
 
         See also
         --------
@@ -1551,7 +1552,7 @@ cdef class Array(object):
         Parameters
         ----------
         axes: iterable (int|string), len ``rank`` | None
-            the new order of the axes. By default (None), reverse axes.
+            The new order of the axes. By default (None), reverse axes.
         """
         if axes is None:
             axes = tuple(reversed(xrange(self.rank)))
@@ -1578,7 +1579,7 @@ cdef class Array(object):
         return cp
 
     def iswapaxes(self, axis1, axis2):
-        """similar as ``np.swapaxes``. In place."""
+        """Similar as ``np.swapaxes``. In place."""
         axis1 = self.get_leg_index(axis1)
         axis2 = self.get_leg_index(axis2)
         if axis1 == axis2:
@@ -1599,16 +1600,16 @@ cdef class Array(object):
         return self
 
     def iscale_axis(self, s, axis=-1):
-        """scale with varying values along an axis. In place.
+        """Scale with varying values along an axis. In place.
 
         Rescale to ``new_self[i1, ..., i_axis, ...] = s[i_axis] * self[i1, ..., i_axis, ...]``.
 
         Parameters
         ----------
         s : 1D array, len=self.shape[axis]
-            the vector with which the axis should be scaled
+            The vector with which the axis should be scaled.
         axis : str|int
-            the leg label or index for the axis which should be scaled.
+            The leg label or index for the axis which should be scaled.
 
         See also
         --------
@@ -1633,7 +1634,7 @@ cdef class Array(object):
         return self
 
     def scale_axis(self, s, axis=-1):
-        """Samse as :meth:`iscale_axis`, but return a (deep) copy."""
+        """Same as :meth:`iscale_axis`, but return a (deep) copy."""
         cdef Array res = self.copy(deep=False)
         res._qdata = res._qdata.copy()
         res.iscale_axis(s, axis)
@@ -1656,9 +1657,9 @@ cdef class Array(object):
             A function acting on flat arrays, returning flat arrays.
             It is called like ``new_block = func(block, *args, **kwargs)``.
         *args :
-            additional arguments given to function *after* the block
+            Additional arguments given to function *after* the block.
         **kwargs :
-            keyword arguments given to the function
+            Keyword arguments given to the function.
 
         Examples
         --------
@@ -1678,11 +1679,11 @@ cdef class Array(object):
         return res.iunary_blockwise(func, *args, **kwargs)
 
     def iconj(self, complex_conj=True):
-        """wraper around :meth:`self.conj` with ``inplace=True``"""
+        """Wraper around :meth:`self.conj` with ``inplace=True``."""
         return self.conj(complex_conj, inplace=True)
 
     def conj(self, complex_conj=True, inplace=False):
-        """conjugate: complex conjugate data, conjugate charge data.
+        """Conjugate: complex conjugate data, conjugate charge data.
 
         Conjugate all legs, set negative qtotal.
 
@@ -1692,9 +1693,9 @@ cdef class Array(object):
         Parameters
         ----------
         complex_conj : bool
-            Wheter the data should be complex conjugated.
+            Whether the data should be complex conjugated.
         inplace : bool
-            wheter to apply changes to `self`, or to return a *deep* copy
+            Whether to apply changes to `self`, or to return a *deep* copy.
         """
         cdef Array res
         if self.dtype.kind == 'c' and complex_conj:
@@ -1716,7 +1717,7 @@ cdef class Array(object):
         return res
 
     def complex_conj(self):
-        """return copy which is complex conjugated *without* conjugating the charge data."""
+        """Return copy which is complex conjugated *without* conjugating the charge data."""
         return self.unary_blockwise(np.conj)
 
     def norm(self, ord=None, convert_to_float=True):
@@ -1817,7 +1818,7 @@ cdef class Array(object):
         return tensordot(self, other, axes=1)
 
     def __add__(self, other):
-        """return self + other"""
+        """Return ``self + other``."""
         if not isinstance(self, Array):  # cython ignores __radd__...
             return other + self
         if isinstance(other, Array):
@@ -1830,7 +1831,7 @@ cdef class Array(object):
         raise NotImplemented  # unknown type of other
 
     def __iadd__(self, other):
-        """self += other"""
+        """``self += other``."""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.add, other)
         elif np.isscalar(other):
@@ -1840,7 +1841,7 @@ cdef class Array(object):
         raise NotImplemented  # unknown type of other
 
     def __sub__(self, other):
-        """return self - other"""
+        """Return ``self - other``."""
         if isinstance(other, Array):
             return self.binary_blockwise(np.subtract, other)
         elif np.isscalar(other):
@@ -1851,7 +1852,7 @@ cdef class Array(object):
         raise NotImplemented  # unknown type of other
 
     def __isub__(self, other):
-        """self -= other"""
+        """``self -= other``."""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.subtract, other)
         elif np.isscalar(other):
@@ -1861,7 +1862,7 @@ cdef class Array(object):
         raise NotImplementedError()
 
     def __mul__(self, other):
-        """return ``self * other`` for scalar ``other``
+        """Return ``self * other`` for scalar ``other``.
 
         Use explicit functions for matrix multiplication etc."""
         if not isinstance(self, Array):  # cython ignores __rmul__...
@@ -1873,7 +1874,7 @@ cdef class Array(object):
         raise NotImplementedError
 
     def __imul__(self, other):
-        """``self *= other`` for scalar `other`"""
+        """``self *= other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.:
                 self._data = []
@@ -1884,7 +1885,7 @@ cdef class Array(object):
         raise NotImplemented
 
     def __truediv__(self, other):
-        """return ``self / other`` for scalar `other` with ``__future__.division``."""
+        """Return ``self / other`` for scalar `other` with ``__future__.division``."""
         if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError(
@@ -1914,19 +1915,19 @@ cdef class Array(object):
     # private functions =======================================================
 
     def _set_shape(self):
-        """deduce self.shape from self.legs"""
+        """Deduce self.shape from self.legs."""
         if len(self.legs) == 0:
             raise ValueError("We don't allow 0-dimensional arrays. Why should we?")
         self.shape = tuple([lc.ind_len for lc in self.legs])
         self.rank = len(self.legs)
 
     def _iter_all_blocks(self):
-        """generator to iterate over all combinations of qindices in lexiographic order.
+        """Generator to iterate over all combinations of qindices in lexiographic order.
 
         Yields
         ------
         qindices : tuple of int
-            a qindex for each of the legs
+            A qindex for each of the legs
         """
         for block_inds in itertools.product(
                 * [xrange(l.block_number) for l in reversed(self.legs)]):
@@ -1934,7 +1935,7 @@ cdef class Array(object):
             yield tuple(block_inds[::-1])  # back to legs in correct order
 
     def _get_block_charge(self, qindices):
-        """returns the charge of a block selected by `qindices`
+        """Returns the charge of a block selected by `qindices`.
 
         The charge of a single block is defined as ::
 
@@ -1944,21 +1945,21 @@ cdef class Array(object):
         return self.chinfo.make_valid(q)
 
     def _get_block_slices(self, qindices):
-        """returns tuple of slices for a block selected by `qindices`"""
+        """Returns tuple of slices for a block selected by `qindices`."""
         return tuple([l.get_slice(qi) for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block_shape(self, qindices):
-        """return shape for the block given by qindices"""
+        """Return shape for the block given by qindices."""
         return tuple([(l.slices[qi + 1] - l.slices[qi])
                       for l, qi in itertools.izip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
-        """return the ndarray in ``_data`` representing the block corresponding to `qindices`.
+        """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
 
         Parameters
         ----------
         qindices : 1D array of np.intp
-            the qindices, for which we need to look in _qdata
+            The qindices, for which we need to look in _qdata.
         insert : bool
             If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
             Else: just return ``None`` in that case.
@@ -1968,13 +1969,13 @@ cdef class Array(object):
         Returns
         -------
         block: ndarray
-            the block in ``_data`` corresponding to qindices
-            If `insert`=False and there is not block with qindices, return ``False``
+            The block in ``_data`` corresponding to qindices.
+            If `insert`=False and there is not block with qindices, return ``False``.
 
         Raises
         ------
         IndexError
-            If qindices are incompatible with charge and `raise_incomp_q`
+            If qindices are incompatible with charge and `raise_incomp_q`.
         """
         if not np.all(self._get_block_charge(qindices) == self.qtotal):
             if raise_incomp_q:
@@ -1994,12 +1995,12 @@ cdef class Array(object):
         return self._data[match[0]]
 
     def _bunch(self, bunch_legs):
-        """Return copy and bunch the qind for one or multiple legs
+        """Return copy and bunch the qind for one or multiple legs.
 
         Parameters
         ----------
         bunch : list of {True, False}
-            one entry for each leg, whether the leg should be bunched.
+            One entry for each leg, whether the leg should be bunched.
 
         See also
         --------
@@ -2009,7 +2010,7 @@ cdef class Array(object):
         # lists for each leg:
         map_qindex = [None] * cp.rank  # array mapping old qindex to new qindex, such that
         # ``new_leg.charges[m_qindex[i]] == old_leg.charges[i]``
-        bunch_qindex = [None] * cp.rank  # bool array wheter the *new* qindex was bunched
+        bunch_qindex = [None] * cp.rank  # bool array whether the *new* qindex was bunched
         for li, bunch in enumerate(bunch_legs):
             idx, new_leg = cp.legs[li].bunch()
             cp.legs[li] = new_leg
@@ -2064,12 +2065,12 @@ cdef class Array(object):
         self._qdata_sorted = False
 
     def _pre_indexing(self, inds):
-        """check if `inds` are valid indices for ``self[inds]`` and replaces Ellipsis by slices.
+        """Check if `inds` are valid indices for ``self[inds]`` and replaces Ellipsis by slices.
 
         Returns
         -------
         only_integer : bool
-            whether all of `inds` are (convertible to) np.intp
+            Whether all of `inds` are (convertible to) np.intp.
         inds : tuple, len=self.rank
             `inds`, where ``Ellipsis`` is replaced by the correct number of slice(None).
         """
@@ -2093,7 +2094,7 @@ cdef class Array(object):
             return True, inds
 
     def _advanced_getitem(self, inds, calc_map_qind=False, permute=True):
-        """calculate self[inds] for non-integer `inds`.
+        """Calculate self[inds] for non-integer `inds`.
 
         This function is called by self.__getitem__(inds).
         and from _advanced_setitem_npc with ``calc_map_qind=True``.
@@ -2101,11 +2102,11 @@ cdef class Array(object):
         Parameters
         ----------
         inds : tuple
-            indices for the different axes, as returned by :meth:`_pre_indexing`
+            Indices for the different axes, as returned by :meth:`_pre_indexing`.
         calc_map_qind :
-            whether to calculate and return the additional `map_qind` and `axes` tuple
+            Whether to calculate and return the additional `map_qind` and `axes` tuple.
         permute :
-            if False, don't perform permutations in case one of `inds` is an unsorted index array,
+            If False, don't perform permutations in case one of `inds` is an unsorted index array,
             but consider it as a mask only, ignoring the order of the indices.
 
         Returns
@@ -2120,7 +2121,7 @@ cdef class Array(object):
             Only returned if `calc_map_qind` is True.
             Collects (axes, permutation) applied to `res` *after* `take_slice` and `iproject`.
         res : :class:`Array`
-            an copy with the data ``self[inds]``.
+            A copy with the data ``self[inds]``.
         """
         # non-integer inds -> slicing / projection
         slice_inds = []  # arguments for `take_slice`
@@ -2169,7 +2170,7 @@ cdef class Array(object):
 
     def _advanced_getitem_map_qind(self, inds, slice_axes, slice_inds, project_axes, p_map_qinds,
                                    p_masks, res_axes):
-        """generate a function mapping from qindices of `self[inds]` back to qindices of self
+        """Generate a function mapping from qindices of `self[inds]` back to qindices of self.
 
         This function is called only by `_advanced_getitem(calc_map_qind=True)`
         to obtain the function `map_qind_part2self`,
@@ -2191,7 +2192,7 @@ cdef class Array(object):
         bsizes = [l._get_block_sizes() for l in self.legs]
 
         def part2self(part_qindices):
-            """given `part_qindices` of ``res = self[inds]``,
+            """Given `part_qindices` of ``res = self[inds]``,
             return (`qindices`, `block_mask`) such that
             ``res._get_block(part_qindices) == self._get_block(qindices)``.
             """
@@ -2216,7 +2217,8 @@ cdef class Array(object):
         return part2self
 
     def _advanced_setitem_npc(self, inds, other):
-        """self[inds] = other for non-integer `inds` and :class:`Array` `other`.
+        """Self[inds] = other for non-integer `inds` and :class:`Array` `other`.
+
         This function is called by self.__setitem__(inds, other)."""
         # suppress warning if we project a pipe
         with warnings.catch_warnings():
@@ -2250,7 +2252,7 @@ cdef class Array(object):
         self.ipurge_zeros(0.)  # remove blocks identically zero
 
     def _combine_legs_make_pipes(self, combine_legs, pipes, qconj):
-        """argument parsing for :meth:`combine_legs`: make missing pipes.
+        """Argument parsing for :meth:`combine_legs`: make missing pipes.
 
         Generates missing pipes & checks compatibility for provided pipes."""
         npipes = len(combine_legs)
@@ -2282,7 +2284,7 @@ cdef class Array(object):
         return pipes
 
     def _combine_legs_new_axes(self, combine_legs, new_axes):
-        """figure out new_axes and how legs have to be transposed"""
+        """Figure out new_axes and how legs have to be transposed."""
         all_combine_legs = np.concatenate(combine_legs)
         non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs])
         if new_axes is None:  # figure out default new_legs
@@ -2307,23 +2309,23 @@ cdef class Array(object):
                                     list combine_legs,
                                     list new_axes,
                                     list pipes):
-        """the main work of combine_legs: create a copy and reshape the data blocks.
+        """The main work of combine_legs: create a copy and reshape the data blocks.
 
         Assumes standard form of parameters.
 
         Parameters
         ----------
         combine_legs : list(1D np.array)
-            axes of self which are collected into pipes.
+            Axes of self which are collected into pipes.
         new_axes : 1D array
-            the axes of the pipes in the new array. Ascending.
+            The axes of the pipes in the new array. Ascending.
         pipes : list of :class:`LegPipe`
-            all the correct output pipes, already generated.
+            All the correct output pipes, already generated.
 
         Returns
         -------
         res : :class:`Array`
-            copy of self with combined legs
+            Copy of self with combined legs.
         """
         all_combine_legs = np.concatenate(combine_legs)
         # non_combined_legs: axes of self which are not in combine_legs
@@ -2396,7 +2398,7 @@ cdef class Array(object):
         return res
 
     cdef Array _split_legs_worker(Array self, list split_axes_, float cutoff):
-        """the main work of split_legs: create a copy and reshape the data blocks.
+        """The main work of split_legs: create a copy and reshape the data blocks.
 
         Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
         """
@@ -2520,7 +2522,7 @@ cdef class Array(object):
 
     @staticmethod
     def _conj_leg_label(label):
-        """conjugate a leg `label`.
+        """Conjugate a leg `label`.
 
         Takes ``'a' -> 'a*'; 'a*'-> 'a'; '(a.(b*.c))' -> '(a*.(b.c*))'``"""
         # first insert '*' after each label, taking into account recursion of LegPipes
@@ -2555,7 +2557,7 @@ cdef class Array(object):
 
 
 def zeros(legcharges, dtype=np.float64, qtotal=None):
-    """create a npc array full of zeros (with no _data).
+    """Create a npc array full of zeros (with no _data).
 
     This is just a wrapper around ``Array(...)``,
     detailed documentation can be found in the class doc-string of :class:`Array`."""
@@ -2576,16 +2578,16 @@ def diag(s, leg, dtype=None):
     Parameters
     ----------
     s : scalar | 1D array
-        the entries to put on the diagonal. If scalar, all diagonal entries are the same.
+        The entries to put on the diagonal. If scalar, all diagonal entries are the same.
     leg : :class:`LegCharge`
-        the first leg of the resulting matrix.
+        The first leg of the resulting matrix.
     dtype : None | type
-        the data type to be used for the result. By default, use dtype of `s`.
+        The data type to be used for the result. By default, use dtype of `s`.
 
     Returns
     -------
     diagonal : :class:`Array`
-        a square matrix with diagonal entries `s`.
+        A square matrix with diagonal entries `s`.
 
     See also
     --------
@@ -2607,7 +2609,7 @@ def diag(s, leg, dtype=None):
 
 
 def concatenate(arrays, axis=0, copy=True):
-    """stack arrays along a given axis, similar as np.concatenate.
+    """Stack arrays along a given axis, similar as np.concatenate.
 
     Stacks the qind of the array, without sorting/blocking.
     Labels are inherited from the first array only.
@@ -2615,17 +2617,17 @@ def concatenate(arrays, axis=0, copy=True):
     Parameters
     ----------
     arrays : iterable of :class:`Array`
-        the arrays to be stacked. They must have the same shape and charge data
+        The arrays to be stacked. They must have the same shape and charge data
         except on the specified axis.
     axis : int | str
-        leg index or label of the first array. Defines the axis along which the arrays are stacked.
+        Leg index or label of the first array. Defines the axis along which the arrays are stacked.
     copy : bool
-        wheter to copy the data blocks
+        Whether to copy the data blocks.
 
     Returns
     -------
     stacked : :class:`Array`
-        concatenation of the given `arrays` along the specified axis.
+        Concatenation of the given `arrays` along the specified axis.
 
     See also
     --------
@@ -2688,12 +2690,12 @@ def grid_concat(grid, axes, copy=True):
     Parameters
     ----------
     grid : array_like of :class:`Array`
-        the grid of arrays.
+        The grid of arrays.
     axes : list of int
         The axes along which to concatenate the arrays,  same len as the dimension of the grid.
         Concatenate arrays of the `i`th axis of the grid along the axis ``axes[i]``
     copy : bool
-        whether the _data blocks are copied.
+        Whether the _data blocks are copied.
 
     Examples
     --------
@@ -2734,7 +2736,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
     Parameters
     ----------
     grid : array_like of {:class:`Array` | None}
-        the grid gives the first part of the axes of the resulting array.
+        The grid gives the first part of the axes of the resulting array.
         Entries have to have all the same shape and charge-data, giving the remaining axes.
         ``None`` entries in the grid are interpreted as zeros.
     grid_legs : list of :class:`LegCharge`
@@ -2803,12 +2805,12 @@ def grid_outer(grid, grid_legs, qtotal=None):
 def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=False):
     """Derive a LegCharge for a grid used for :func:`grid_outer`.
 
-    Note: the resulting LegCharge is *not* bunched.
+    Note: The resulting LegCharge is *not* bunched.
 
     Parameters
     ----------
     grid : array_like of {:class:`Array` | None}
-        the grid as it will be given to :func:`grid_outer`
+        The grid as it will be given to :func:`grid_outer`.
     grid_legs : list of {:class:`LegCharge` | None}
         One LegCharge for each dimension of the grid, except for one entry which is ``None``.
         This missing entry is to be calculated.
@@ -2862,9 +2864,9 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     Parameters
     ----------
     flat_array : array
-        the flat numpy array from which you want to detect the charges
+        The flat numpy array from which you want to detect the charges.
     legcharges : list of :class:`LegCharge`
-        for each leg the LegCharge.
+        For each leg the LegCharge.
     cutoff : float
         Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
         Defaults to :data:`QCUTOFF`.
@@ -2872,7 +2874,7 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     Returns
     -------
     qtotal : charge
-        the total charge fo the first non-zero (i.e. > cutoff) charge block
+        The total charge fo the first non-zero (i.e. > cutoff) charge block.
 
     See also
     --------
@@ -2892,7 +2894,7 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
 
 
 def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, cutoff=None):
-    """calculate a missing `LegCharge` by looking for nonzero entries of a flat array.
+    """Calculate a missing `LegCharge` by looking for nonzero entries of a flat array.
 
     Parameters
     ----------
@@ -2914,7 +2916,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
     Returns
     -------
     new_legcharges : list of :class:`LegCharge`
-        A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge,
+        A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
 
     See also
     --------
@@ -3009,12 +3011,12 @@ def outer(a, b):
     Parameters
     ----------
     a, b : :class:`Array`
-        the arrays for which to form the product.
+        The arrays for which to form the product.
 
     Returns
     -------
     c : :class:`Array`
-        Array of rank ``a.rank + b.rank`` such that (for ``Ra = a.rank; Rb = b.rank``):
+        Array of rank ``a.rank + b.rank`` such that (for ``Ra = a.rank; Rb = b.rank``)::
 
             c[i_1, ..., i_Ra, j_1, ... j_R] = a[i_1, ..., i_Ra] * b[j_1, ..., j_rank_b]
     """
@@ -3070,7 +3072,7 @@ def inner(a, b, axes=None, do_conj=False):
     Returns
     -------
     inner_product : dtype
-        a scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
+        A scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
     """
     if a.rank != b.rank:
         raise ValueError("different rank!")
@@ -3115,7 +3117,7 @@ def tensordot(a, b, axes=2):
     Parameters
     ----------
     a, b : :class:`Array`
-        the first and second npc Array for which axes are to be contracted.
+        The first and second npc Array for which axes are to be contracted.
     axes : ``(axes_a, axes_b)`` | int
         A single integer is equivalent to ``(range(-axes, 0), range(axes))``.
         Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
@@ -3202,7 +3204,7 @@ def svd(a,
         ``(N, N)``. Note that the arrays are not directly contractible in that case; ``diag(S)``
         would need to be a rectangluar ``(M, N)`` matrix.
     compute_uv : bool
-        Wheter to compute and return `U` and `V`.
+        Whether to compute and return `U` and `V`.
     cutoff : ``None`` | float
         Keep only singular values which are (strictly) greater than `cutoff`.
         (Then the factorization holds only approximately).
@@ -3278,7 +3280,7 @@ def pinv(a, cutoff=1.e-15):
     Parameters
     ----------
     a : (M, N) :class:`Array`
-      Matrix to be pseudo-inverted.
+        Matrix to be pseudo-inverted.
     cuttof : float
         Cutoff for small singular values, as given to :func:`svd`.
         (Note: different convetion than numpy.)
@@ -3286,7 +3288,7 @@ def pinv(a, cutoff=1.e-15):
     Returns
     -------
     B : (N, M) :class:`Array`
-      The pseudo-inverse of `a`.
+        The pseudo-inverse of `a`.
     """
     if cutoff <= 0.:
         raise ValueError("invalid cutoff")
@@ -3320,16 +3322,16 @@ def norm(a, ord=None, convert_to_float=True):
     Parameters
     ----------
     a : :class:`Array` | np.ndarray
-        the array of which the norm should be calculated.
+        The array of which the norm should be calculated.
     ord :
-        the order of the norm. See table above.
+        The order of the norm. See table above.
     convert_to_float :
-        convert integer to float before calculating the norm, avoiding int overflow
+        Convert integer to float before calculating the norm, avoiding int overflow.
 
     Returns
     -------
     norm : float
-        the norm over the *flat* data of the array.
+        The norm over the *flat* data of the array.
     """
     if isinstance(a, Array):
         return a.norm(ord, convert_to_float)
@@ -3353,7 +3355,7 @@ def eigh(a, UPLO='L', sort=None):
     a : :class:`Array`
         The hermitian square matrix to be diagonalized.
     UPLO : {'L', 'U'}
-        wheter to take the lower ('L', default) or upper ('U') triangular part of `a`.
+        Whether to take the lower ('L', default) or upper ('U') triangular part of `a`.
     sort : {'m>', 'm<', '>', '<', ``None``}
         How the eigenvalues should are sorted *within* each charge block.
         Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
@@ -3361,7 +3363,7 @@ def eigh(a, UPLO='L', sort=None):
     Returns
     -------
     W : 1D ndarray
-        the eigenvalues, sorted within the same charge blocks according to `sort`.
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
     V : :class:`Array`
         Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
         The first label is inherited from `A`, the second label is ``'eig'``.
@@ -3395,7 +3397,7 @@ def eig(a, sort=None):
     Returns
     -------
     W : 1D ndarray
-        the eigenvalues, sorted within the same charge blocks according to `sort`.
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
     V : :class:`Array`
         Unitary matrix; ``V[:, i]`` is normalized eigenvector with eigenvalue ``W[i]``.
         The first label is inherited from `A`, the second label is ``'eig'``.
@@ -3423,7 +3425,7 @@ def eigvalsh(a, UPLO='L', sort=None):
     a : :class:`Array`
         The hermitian square matrix to be diagonalized.
     UPLO : {'L', 'U'}
-        wheter to take the lower ('L', default) or upper ('U') triangular part of `a`.
+        Whether to take the lower ('L', default) or upper ('U') triangular part of `a`.
     sort : {'m>', 'm<', '>', '<', ``None``}
         How the eigenvalues should are sorted *within* each charge block.
         Defaults to ``None``, which is same as '<'. See :func:`argsort` for details.
@@ -3431,7 +3433,7 @@ def eigvalsh(a, UPLO='L', sort=None):
     Returns
     -------
     W : 1D ndarray
-        the eigenvalues, sorted within the same charge blocks according to `sort`.
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
 
     Notes
     -----
@@ -3454,7 +3456,7 @@ def eigvals(a, sort=None):
     Returns
     -------
     W : 1D ndarray
-        the eigenvalues, sorted within the same charge blocks according to `sort`.
+        The eigenvalues, sorted within the same charge blocks according to `sort`.
 
     Notes
     -----
@@ -3472,14 +3474,14 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     Parameters
     ----------
     a : :class:`Array`
-        a square array with contractible legs and vanishing total charge.
+        A square array with contractible legs and vanishing total charge.
     charge_sector : charges
-        `ndim` charges to select the block
+        `ndim` charges to select the block.
     k : int
-        how many eigenvalues/vectors should be calculated.
+        How many eigenvalues/vectors should be calculated.
         If the block of `charge_sector` is smaller than `k`, `k` may be reduced accordingly.
     *args, **kwargs :
-        additional arguments given to `scipy.sparse.linalg.eigs`
+        Additional arguments given to `scipy.sparse.linalg.eigs`.
 
     Returns
     -------
@@ -3547,7 +3549,7 @@ def expm(a):
     Parameters
     ----------
     a : :class:`Array`
-        A square matrix to be exponentiated
+        A square matrix to be exponentiated.
 
     Returns
     -------
@@ -3649,7 +3651,7 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
 
 
 def to_iterable_arrays(array_list):
-    """similar as :func:`~tenpy.tools.misc.to_iterable`, but also enclose npc Arrays in a list."""
+    """Similar as :func:`~tenpy.tools.misc.to_iterable`, but also enclose npc Arrays in a list."""
     if isinstance(array_list, Array):
         array_list = [array_list]
     array_list = to_iterable(array_list)
@@ -3659,7 +3661,7 @@ def to_iterable_arrays(array_list):
 # internal helper functions
 
 def _nontrivial_grid_entries(grid):
-    """return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
+    """Return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
     grid = np.asarray(grid, dtype=np.object)
     entries = []  # fill with (multi_index, entry)
     # use np.nditer to iterate with multi-index over the grid.
@@ -3748,7 +3750,7 @@ def _inner_worker(a, b):
 
 
 cdef _tensordot_pre_sort(Array a, Array b, int cut_a, int cut_b, np.dtype calc_dtype):
-    """Pre-calculations before the actual matrix procut.
+    """Pre-calculations before the actual matrix product.
 
     Called by :func:`_tensordot_worker`.
     See doc-string of :func:`tensordot` for details on the implementation.
@@ -3798,7 +3800,7 @@ cdef _tensordot_match_charges(int n_rows_a,
                               int qnumber,
                               np.ndarray[charges.QTYPE_t, ndim=2] a_charges_keep,
                               np.ndarray[charges.QTYPE_t, ndim=2] b_charges_match):
-    """estimate number of blocks in res and get order for iteration over row_a and col_b
+    """Estimate number of blocks in res and get order for iteration over row_a and col_b
 
     Parameters
     ----------
@@ -3892,7 +3894,7 @@ cdef _tensordot_match_charges(int n_rows_a,
 
 
 cdef _tensordot_worker(Array a, Array b, int axes):
-    """main work of tensordot, called by :func:`tensordot`.
+    """Main work of tensordot, called by :func:`tensordot`.
 
     Assumes standard form of parameters: axes is integer,
     sum over the last `axes` legs of `a` and first `axes` legs of `b`.
@@ -4176,7 +4178,7 @@ cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta
 
 
 def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, inner_qconj):
-    """main work of svd. Assumes that `a` is 2D and completely blocked."""
+    """Main work of svd. Assumes that `a` is 2D and completely blocked."""
     chinfo = a.chinfo
     qtotal_L, qtotal_R = qtotal_LR
     at = 0  # will be gradually increased, counting the number of singular values
@@ -4266,7 +4268,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
 
 
 def _eig_worker(hermitian, a, sort, UPLO='L'):
-    """worker for ``eig``, ``eigh``"""
+    """Worker for ``eig``, ``eigh``"""
     if a.rank != 2 or a.shape[0] != a.shape[1]:
         raise ValueError("expect a square matrix!")
     a.legs[0].test_contractible(a.legs[1])
@@ -4297,7 +4299,7 @@ def _eig_worker(hermitian, a, sort, UPLO='L'):
 
 
 def _eigvals_worker(hermitian, a, sort, UPLO='L'):
-    """worker for ``eigvals``, ``eigvalsh``"""
+    """Worker for ``eigvals``, ``eigvalsh``"""
     if a.rank != 2 or a.shape[0] != a.shape[1]:
         raise ValueError("expect a square matrix!")
     a.legs[0].test_contractible(a.legs[1])

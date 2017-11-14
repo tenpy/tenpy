@@ -59,7 +59,7 @@ cdef class ChargeInfo(object):
         The number of charges.
     mod :  ndarray[QTYPE,ndim=1]
         Modulo how much each of the charges is taken.
-        1 for a  (i.e. mod 1-> mod infinity)
+        1 for a U(1) charge, i.e., mod 1 -> mod infinity.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
 
@@ -69,7 +69,6 @@ cdef class ChargeInfo(object):
     """
 
     def __init__(ChargeInfo self, mod=[], names=None):
-        """see help(self)"""
         mod = np.asarray(mod, dtype=QTYPE)
         self.qnumber = len(mod)
         self.mod = mod
@@ -252,7 +251,7 @@ cdef class ChargeInfo(object):
         return True
 
     def __repr__(self):
-        """full string representation"""
+        """Full string representation."""
         return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
 
     def __richcmp__(self, other, int operator):
@@ -264,7 +263,7 @@ cdef class ChargeInfo(object):
             raise NotImplementedError("No ordering of `ChargeInfo` possible")
 
     def _equal(ChargeInfo self, ChargeInfo other):
-        r"""compare self.mod and self.names for equality, ignore missing names."""
+        """Compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
         if not np.all(self.mod == other.mod):
@@ -275,11 +274,11 @@ cdef class ChargeInfo(object):
         return True
 
     def __getstate__(self):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         return (self.qnumber, self.mod, self.names)
 
     def __setstate__(self, state):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         qnumber, mod, names = state
         self.qnumber = qnumber
         self.mod = mod
@@ -298,7 +297,7 @@ cdef class LegCharge(object):
     Parameters
     ----------
     chargeinfo : :class:`ChargeInfo`
-        the nature of the charge
+        The nature of the charge.
     slices: 1D array_like, len(block_number+1)
         A block with 'qindex' ``qi`` correspondes to the leg indices in
         ``slice(slices[qi], slices[qi+1])``.
@@ -312,7 +311,7 @@ cdef class LegCharge(object):
     ind_len
     block_number
     chinfo : :class:`ChargeInfo` instance
-        the nature of the charge. Can be shared between LegCharges
+        The nature of the charge. Can be shared between LegCharges.
     slices : ndarray[QTYPE_t,ndim=1] (block_number+1)
         A block with 'qindex' ``qi`` correspondes to the leg indices in
         ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slice`.
@@ -323,9 +322,9 @@ cdef class LegCharge(object):
         A flag telling whether the charge points inwards (+1) or outwards (-1).
         Whenever charges are added, they should be multiplied with their `qconj` value.
     sorted : bool
-        whether the charges are guaranteed to be sorted
+        Whether the charges are guaranteed to be sorted.
     bunched : bool
-        whether the charges are guaranteed to be bunched
+        Whether the charges are guaranteed to be bunched.
 
     Notes
     -----
@@ -335,7 +334,6 @@ cdef class LegCharge(object):
     """
 
     def __init__(LegCharge self, chargeinfo, slices, charges, qconj=1):
-        """see help(self)"""
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=QTYPE)
         self.charges = np.array(charges, dtype=QTYPE)
@@ -348,14 +346,14 @@ cdef class LegCharge(object):
 
     @classmethod
     def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
-        """create trivial (qnumber=0) LegCharge for given len of indices `ind_len`"""
+        """Create trivial (qnumber=0) LegCharge for given len of indices `ind_len`."""
         if chargeinfo is None:
             chargeinfo = ChargeInfo()
         return cls(chargeinfo, [0, ind_len], [[]], qconj)
 
     @classmethod
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
-        """create a LegCharge from qflat form.
+        """Create a LegCharge from qflat form.
 
         Does *neither* bunch *nor* sort. We recommend to sort (and bunch) afterwards,
         if you expect that tensors using the LegCharge have entries at all positions compatible
@@ -364,9 +362,9 @@ cdef class LegCharge(object):
         Parameters
         ----------
         chargeinfo : :class:`ChargeInfo`
-            the nature of the charge
+            The nature of the charge.
         qflat : array_like (ind_len, `qnumber`)
-            `qnumber` charges for each index of the leg on entry
+            `qnumber` charges for each index of the leg on entry.
         qconj : {-1, 1}
             A flag telling whether the charge points inwards (+1) or outwards (-1).
 
@@ -389,7 +387,7 @@ cdef class LegCharge(object):
 
     @classmethod
     def from_qind(cls, chargeinfo, slices, charges, qconj=1):
-        """just a wrapper around self.__init__(), see class doc-string for parameters.
+        """Just a wrapper around self.__init__(), see class doc-string for parameters.
 
         See also
         --------
@@ -403,14 +401,14 @@ cdef class LegCharge(object):
 
     @classmethod
     def from_qdict(cls, chargeinfo, qdict, qconj=1):
-        """create a LegCharge from qdict form.
+        """Create a LegCharge from qdict form.
 
         Parameters
         ----------
         chargeinfo : :class:`ChargeInfo`
-            the nature of the charge
+            The nature of the charge
         qdict : dict
-            a dictionary mapping a tuple of charges to slices.
+            A dictionary mapping a tuple of charges to slices.
         """
         slices = np.array([(sl.start, sl.stop) for sl in qdict.values()], np.intp)
         charges = np.array(qdict.keys(), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
@@ -530,20 +528,20 @@ cdef class LegCharge(object):
 
 
     cpdef LegCharge conj(LegCharge self):
-        """return a (shallow) copy with opposite ``self.qconj``"""
+        """Return a (shallow) copy with opposite ``self.qconj``."""
         res = copy.copy(self)  # shallow
         (<LegCharge> res).qconj = - self.qconj
         return res
 
     def to_qflat(self):
-        """return charges in `qflat` form"""
+        """Return charges in `qflat` form."""
         qflat = np.empty((self.ind_len, self.chinfo.qnumber), dtype=QTYPE)
         for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
             qflat[slice(start, stop)] = ch
         return qflat
 
     def to_qdict(self):
-        """return charges in `qdict` form. Raises ValueError, if not blocked."""
+        """Return charges in `qdict` form. Raises ValueError, if not blocked."""
         res = dict()
         for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
             res[tuple(ch)] = slice(start, stop)
@@ -552,21 +550,21 @@ cdef class LegCharge(object):
         return res
 
     cpdef bint is_blocked(self):
-        """returns whether self is blocked, i.e. qindex map 1:1 to charge values."""
+        """Returns whether self is blocked, i.e. qindex map 1:1 to charge values."""
         if self.sorted and self.bunched:
             return True
         s = {tuple(c) for c in self.charges}  # a set has unique elements
         return (len(s) == self.block_number)
 
     def is_sorted(self):
-        """returns whether `self.charges` is sorted lexiographically"""
+        """Returns whether `self.charges` is sorted lexiographically."""
         if self.chinfo.qnumber == 0:
             return True
         res = lexsort(self.charges.T)
         return np.all(res == np.arange(len(res)))
 
     def is_bunched(self):
-        """checks wheter :meth:`bunch` would change something. """
+        """Checks whether :meth:`bunch` would change something."""
         return len(_c_find_row_differences(self.charges)) == self.block_number + 1
 
     cpdef void test_contractible(LegCharge self, LegCharge other) except *:
@@ -610,7 +608,7 @@ cdef class LegCharge(object):
         self.test_equal(other.conj())
 
     cpdef void test_equal(LegCharge self, LegCharge other) except *:
-        """test if charges are *equal* including `qconj`.
+        """Test if charges are *equal* including `qconj`.
 
         Check that all of the following conditions are met:
 
@@ -638,11 +636,11 @@ cdef class LegCharge(object):
                 ["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
     cpdef slice get_slice(LegCharge self, int qindex):
-        """return slice selecting the block for a given `qindex`"""
+        """Return slice selecting the block for a given `qindex`."""
         return slice(self.slices[qindex], self.slices[qindex + 1])
 
     def get_qindex(self, flat_index):
-        """find qindex containing a flat index.
+        """Find qindex containing a flat index.
 
         Given a flat index, to find the corresponding entry in an Array, we need to determine the
         block it is saved in. For example, if ``qind[:, 2] = [[0, 3], [3, 7], [7, 12]]``,
@@ -652,14 +650,14 @@ cdef class LegCharge(object):
         Parameters
         ----------
         flat_index : int
-            a flat index of the leg. Negative index counts from behind.
+            A flat index of the leg. Negative index counts from behind.
 
         Returns
         -------
         qindex : int
-            the qindex, i.e. the index of the block containing `flat_index`
+            The qindex, i.e. the index of the block containing `flat_index`.
         index_within_block : int
-            the index of `flat_index` within the block given by `qindex`.
+            The index of `flat_index` within the block given by `qindex`.
         """
         if flat_index < 0:
             flat_index += self.ind_len
@@ -684,18 +682,18 @@ cdef class LegCharge(object):
         Parameters
         ----------
         bunch : bool
-            whether `self.bunch` is called after sorting.
+            Whether `self.bunch` is called after sorting.
             If True, the leg is guaranteed to be fully blocked by charge.
 
         Returns
         -------
         perm_qind : array (self.block_len,)
-            the permutation of the qindices (before bunching) used for the sorting.
+            The permutation of the qindices (before bunching) used for the sorting.
             To obtain the flat permuation such that
             ``sorted_array[..., :] = unsorted_array[..., perm_flat]``, use
             ``perm_flat = unsorted_leg.perm_flat_from_perm_qind(perm_qind)``
         sorted_copy : :class:`LegCharge`
-            a shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
+            A shallow copy of self, with new qind sorted (and thus blocked if bunch) by charges.
 
         See also
         --------
@@ -727,7 +725,7 @@ cdef class LegCharge(object):
             ``idx[:-1]`` are the indices of the old qind which are kept,
             ``idx[-1] = old_block_number``.
         cp : :class:`LegCharge`
-            a new LegCharge with the same charges at given indices of the leg,
+            A new LegCharge with the same charges at given indices of the leg,
             but (possibly) shorter ``self.charges`` and ``self.slices``.
 
         See also
@@ -748,17 +746,17 @@ cdef class LegCharge(object):
         Parameters
         ----------
         mask : 1D array(bool)
-            whether to keep of the indices
+            Whether to keep of the indices.
 
         Returns
         -------
         map_qind : 1D array
-            map of qindices, such that ``qind_new = map_qind[qind_old]``,
+            Map of qindices, such that ``qind_new = map_qind[qind_old]``,
             and ``map_qind[qind_old] = -1`` for qindices projected out.
         block_masks : 1D array
-            the bool mask for each of the *remaining* blocks
+            The bool mask for each of the *remaining* blocks.
         projected_copy : :class:`LegCharge`
-            copy of self with the qind projected by `mask`
+            Copy of self with the qind projected by `mask`.
         """
         mask = np.asarray(mask, dtype=np.bool_)
         cp = copy.copy(self)
@@ -788,18 +786,18 @@ cdef class LegCharge(object):
         return charges
 
     def __str__(self):
-        """return a string of nicely formatted slices & charges"""
+        """Return a string of nicely formatted slices & charges."""
         qconj = " {0:+d}\n".format(self.qconj)
         slices = '\n'.join([str(s) for s in self.slices])
         return qconj + vert_join([slices, str(self.charges)], delim=' ')
 
     def __repr__(self):
-        """full string representation"""
+        """Full string representation."""
         return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(self.chinfo, self.qconj,
                                                                       self.slices, self.charges)
 
     cpdef void _set_charges(LegCharge self, np.ndarray[QTYPE_t,ndim=2] charges):
-        """provide hook to set 'private' charges"""
+        """Provide hook to set 'private' charges."""
         self.charges = charges
         self.block_number = charges.shape[0]
 
@@ -812,12 +810,12 @@ cdef class LegCharge(object):
         self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
 
     cpdef _get_block_sizes(self):
-        """return block sizes"""
+        """Return block sizes."""
         cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
         return sl[1:] - sl[:-1]
 
     def _slice_start_stop(self):
-        """yield (start, stop) for each qindex"""
+        """Yield (start, stop) for each qindex."""
         return itertools.izip(self.slices[:-1], self.slices[1:])
 
     def perm_flat_from_perm_qind(self, perm_qind):
@@ -832,17 +830,17 @@ cdef class LegCharge(object):
         Parameters
         ----------
         perm_flat : 1D array
-            a permutation acting on self, which doesn't mix the blocks of qind.
+            A permutation acting on self, which doesn't mix the blocks of qind.
 
         Returns
         -------
         perm_qind : 1D array
-            the permutation of self.qind described by perm_flat.
+            The permutation of self.qind described by perm_flat.
 
         Raises
         ------
         ValueError
-            If perm_flat mixes blocks of different qindex
+            If perm_flat mixes blocks of different qindex.
         """
         perm_flat = np.asarray(perm_flat)
         perm_qind = perm_flat[self.slices[:-1]]
@@ -852,7 +850,7 @@ cdef class LegCharge(object):
         return perm_qind
 
     def __getstate__(self):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         return (self.ind_len,
                 self.block_number,
                 self.chinfo,
@@ -863,7 +861,7 @@ cdef class LegCharge(object):
                 self.bunched)
 
     cpdef void __setstate__(LegCharge self, tuple state):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
         self.ind_len = ind_len
         self.block_number = block_number
@@ -892,7 +890,7 @@ cdef class LegPipe(LegCharge):
     Parameters
     ----------
     legs : list of :class:`LegCharge`
-        the legs which are to be combined.
+        The legs which are to be combined.
     qconj : {+1, -1}
         A flag telling whether the charge of the *resulting* pipe points inwards
         (+1, default) or outwards (-1).
@@ -905,22 +903,23 @@ cdef class LegPipe(LegCharge):
 
     Attributes
     ----------
-    nlegs
+    nlegs : int
+        The number of legs.
     legs : tuple of :class:`LegCharge`
-        the original legs, which were combined in the pipe.
+        The original legs, which were combined in the pipe.
     subshape : tuple of int
-        ind_len for each of the incoming legs
+        `ind_len` for each of the incoming legs.
     subqshape : tuple of int
-        block_number for each of the incoming legs
+        `block_number` for each of the incoming legs.
     q_map:  2D array
-        shape (`block_number`, 3+`nlegs`). rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
-        see Notes below for details.
+        Shape (`block_number`, 3+`nlegs`). Rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
+        See Notes below for details.
     q_map_slices : list of views onto q_map
-        defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``
+        Defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``.
     _perm : 1D array
-        a permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
+        A permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array
-        strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``
+        Strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``.
 
     Notes
     -----
@@ -965,9 +964,8 @@ cdef class LegPipe(LegCharge):
     """
 
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
-        """see help(self)"""
         chinfo = legs[0].chinfo
-        # initialize LegCharge with trivial charges/slices, which gets overwritten in _init_from_legs
+        # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs
         super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
@@ -986,12 +984,12 @@ cdef class LegPipe(LegCharge):
         assert (self.subqshape == tuple([l.block_number for l in self.legs]))
 
     def to_LegCharge(self):
-        """convert self to a LegCharge, discarding the information how to split the legs.
+        """Convert self to a LegCharge, discarding the information how to split the legs.
         Usually not needed, but called by functions, which are not implemented for a LegPipe."""
         return LegCharge(self.chinfo, self.slices, self.charges, self.qconj)
 
     cpdef LegPipe conj(self):
-        """return a shallow copy with opposite ``self.qconj``.
+        """Return a shallow copy with opposite ``self.qconj``.
 
         Also conjugates each of the incoming legs."""
         cdef LegPipe res = super(LegPipe, self).conj()  # invert self.qconj
@@ -999,28 +997,28 @@ cdef class LegPipe(LegCharge):
         return res
 
     def outer_conj(self):
-        """like :meth:`conj`, but don't change ``qconj`` for incoming legs."""
+        """Like :meth:`conj`, but don't change ``qconj`` for incoming legs."""
         res = copy.copy(self)  # shallow
         res.qconj = -1
         res._set_charges(self.chinfo.make_valid(-self.charges))
         return res
 
     def sort(self, *args, **kwargs):
-        """convert to LegCharge and call :meth:`LegCharge.sort`"""
+        """Convert to LegCharge and call :meth:`LegCharge.sort`."""
         # could be implemented for a LegPipe, but who needs it?
         warnings.warn("Converting LegPipe to LegCharge for `sort`")
         res = self.to_LegCharge()
         return res.sort(*args, **kwargs)
 
     def bunch(self, *args, **kwargs):
-        """convert to LegCharge and call :meth:`LegCharge.bunch`"""
+        """Convert to LegCharge and call :meth:`LegCharge.bunch`."""
         # could be implemented for a LegPipe, but who needs it?
         warnings.warn("Converting LegPipe to LegCharge for `bunch`")
         res = self.to_LegCharge()
         return res.bunch(*args, **kwargs)
 
     def project(self, *args, **kwargs):
-        """convert self to LegCharge and call :meth:`LegCharge.project`.
+        """Convert self to LegCharge and call :meth:`LegCharge.project`.
 
         In general, this could be implemented for a LegPipe, but would make
         :meth:`~tenpy.linalg.np_conserved.Array.split_legs` more complicated, thus we keep it
@@ -1039,7 +1037,7 @@ cdef class LegPipe(LegCharge):
         return res.project(*args, **kwargs)
 
     def __str__(self):
-        """fairly short debug output"""
+        """Fairly short debug output."""
         res_lines = [
             "LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
             "    qconj {0}->{1:+1};".format(
@@ -1050,7 +1048,7 @@ cdef class LegPipe(LegCharge):
         return '\n'.join(res_lines)
 
     def __repr__(self):
-        """full string representation"""
+        """Full string representation."""
         return "LegPipe({legs},\nqconj={qconj:+d}, sort={s!r}, bunch={b!r})".format(
             legs='[' + ',\n'.join([repr(l) for l in self.legs]) + ']',
             qconj=self.qconj,
@@ -1061,7 +1059,7 @@ cdef class LegPipe(LegCharge):
     @cython.boundscheck(False)
     @cython.cdivision(True)
     cdef void _init_from_legs(LegPipe self, bint sort=True, bint bunch=True) except *:
-        """calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
+        """Calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
 
         `qind` is constructed to fullfill the charge fusion rule stated in the class doc-string.
         """
@@ -1167,19 +1165,19 @@ cdef class LegPipe(LegCharge):
         # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):
-        """map incoming qindices to indices of q_map.
+        """Map incoming qindices to indices of q_map.
 
         Needed for :meth:`~tenpy.linalg.np_conserved.Array.combine_legs`.
 
         Parameters
         ----------
         qind_incoming : 2D array
-            rows are qindices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs
+            Rows are qindices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs.
 
         Returns
         -------
         q_map_indices : 1D array
-            for each row of `qind_incoming` an index `j` such that
+            For each row of `qind_incoming` an index `j` such that
             ``self.q_map[j, 3:] == qind_incoming[j]``.
         """
         assert (qind_incoming.shape[1] == self.nlegs)
@@ -1192,7 +1190,7 @@ cdef class LegPipe(LegCharge):
         return self._perm[inds_before_perm]
 
     def __getstate__(self):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         super_state = super(LegPipe, self).__getstate__()
         return (super_state,
                 self.nlegs,
@@ -1205,7 +1203,7 @@ cdef class LegPipe(LegCharge):
                 self._strides)
 
     cpdef void __setstate__(LegPipe self, tuple state):
-        """allow to pickle and copy"""
+        """Allow to pickle and copy."""
         super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
         self.nlegs = nlegs
         self.legs = legs
@@ -1223,7 +1221,7 @@ def _find_row_differences(qflat):
     Parameters
     ----------
     qflat : 2D array
-        the rows of this array are compared.
+        The rows of this array are compared.
 
     Returns
     -------
