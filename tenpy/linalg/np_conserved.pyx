@@ -656,7 +656,7 @@ cdef class Array(object):
         blockslices : tuple of slices
             a slice giving the range of the block in the original tensor for each of the legs
         charges : list of charges
-            the charge value(s) for each of the legs (takink `qconj` into account)
+            the charge value(s) for each of the legs (taking `qconj` into account)
         qdat : ndarray
             the qindex for each of the legs
         """
@@ -738,8 +738,7 @@ cdef class Array(object):
         if not isinstance(other, Array):
             # if other is a flat array, convert it to an npc Array
             like_other = self.zeros_like()._advanced_getitem(inds)
-            other = Array.from_ndarray(other, self.chinfo, like_other.legs, self.dtype,
-                                       like_other.qtotal)
+            other = Array.from_ndarray(other, like_other.legs, self.dtype, like_other.qtotal)
         self._advanced_setitem_npc(inds, other)
 
     def take_slice(self, indices, axes):
@@ -918,6 +917,123 @@ cdef class Array(object):
             new_charges = -new_charges
         new_charges = chinfo.make_valid(new_charges)
         res.legs[ax] = LegCharge.from_qind(chinfo, self.legs[ax].slices, new_charges, new_qconj)
+        return res
+
+    def add_charge(self, add_legs, chinfo=None, qtotal=None):
+        """Drop (one of) the charges.
+
+        Parameters
+        ----------
+        add_legs : iterable of :class:`LegCharge`
+            One `LegCharge` for each axis of `self`, to be added to the one in :attr:`legs`.
+        chargeinfo : :class:`ChargeInfo`
+            The ChargeInfo for all charges; create new if ``None``.
+        qtotal : None | charges
+            The total charge with respect to `add_legs`.
+            If ``None``, derive it from non-zero entries of ``self``.
+
+        Returns
+        -------
+        charges_added : :class:`Array`
+            A copy of `self`, where the LegCharges `add_legs` where added to `self.legs`.
+            Note that the LegCharges are neither bunched or sorted;
+            you might want to use :meth:`sort_legcharge`.
+        """
+        if len(add_legs) != self.rank:
+            raise ValueError("wrong number of legs in `add_legs`")
+        if chinfo is not None:
+            if self.rank > 0:
+                chinfo2 = ChargeInfo.add(self.chinfo, add_legs[0].chinfo)
+                assert chinfo == chinfo2
+        else:
+            if self.rank == 0:
+                raise ValueError("Rank 0: can't derive `chinfo`")
+            chinfo = ChargeInfo.add(self.chinfo, add_legs[0].chinfo)
+        legs = [LegCharge.from_add_charge(leg, leg2, chinfo) for (leg, leg2) in zip(self.legs,
+                                                                                    add_legs)]
+        if qtotal is None:
+            for block, slices, _, _ in self:
+                leg_slices = []
+                for leg, sl in zip(add_legs, slices):
+                    mask = np.zeros(leg.ind_len, np.bool)
+                    mask[sl] = True
+                    leg_slices.append(leg.project(mask)[2])
+                qtotal = detect_qtotal(self.to_ndarray(), leg_slices)
+                break
+            else:
+                raise ValueError("no non-zero entry: can't detect qtotal")
+        else:
+            qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=charges.QTYPE)))
+        res = Array(legs, self.dtype, qtotal)
+        for block, slices, _, _ in self:   # use __iter__
+            res[slices] = block  # use __setitem__
+        return res
+
+    def drop_charge(self, charge=None, chinfo=None):
+        """Drop (one of) the charges.
+
+        Parameters
+        ----------
+        charge : int | str
+            Number or `name` of the charge (within `chinfo`) which is to be dropped.
+            ``None`` means dropping all charges.
+        chinfo : :class:`ChargeInfo`
+            The :class:`ChargeInfo` with `charge` dropped; create a new one if ``None``.
+
+        Returns
+        -------
+        dropped : :class:`Array`
+            A copy of `self`, where the specified `charge` has been removed.
+            Note that the LegCharges are neither bunched or sorted;
+            you might want to use :meth:`sort_legcharge`.
+        """
+        chinfo2 = ChargeInfo.drop(self.chinfo, charge)
+        if chinfo is not None:
+            assert chinfo == chinfo2
+            chinfo2 = chinfo
+        if charge is None:
+            qtotal = None
+        else:
+            if isinstance(charge, str):
+                charge = self.chinfo.names.index(charge)
+            qtotal = np.delete(self.qtotal, charge, 0)
+        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
+                    self.dtype, qtotal)
+        for block, slices, _, _ in self:   # use __iter__
+            res[slices] = block  # use __setitem__
+        return res
+
+    def change_charge(self, charge, new_qmod, new_name='', chinfo=None):
+        """Change the `qmod` of one charge in `chinfo`.
+
+        Parameters
+        ----------
+        charge : int | str
+            Number or `name` of the charge (within `chinfo`) which is to be changed.
+            ``None`` means dropping all charges.
+        new_qmod : int
+            The new `qmod` to be set.
+        new_name : str
+            The new name of the charge.
+        chinfo : :class:`ChargeInfo`
+            The :class:`ChargeInfo` with `qmod` of `charge` changed; create a new one if ``None``.
+
+        Returns
+        -------
+        changed : :class:`Array`
+            A copy of `self`, where the `qmod` of the specified `charge` has been changed.
+            Note that the LegCharges are neither bunched or sorted;
+            you might want to use :meth:`sort_legcharge`.
+        """
+        chinfo2 = ChargeInfo.change(self.chinfo, charge, new_qmod, new_name)
+        if chinfo is not None:
+            assert chinfo == chinfo2
+            chinfo2 = chinfo
+        res = self.copy(deep=True)
+        res.chinfo = chinfo2
+        res.legs = [LegCharge.from_change_charge(leg, charge, new_qmod, new_name, chinfo2)
+                    for leg in self.legs]
+        res.test_sanity()
         return res
 
     def is_completely_blocked(self):

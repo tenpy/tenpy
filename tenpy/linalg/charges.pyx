@@ -78,6 +78,75 @@ cdef class ChargeInfo(object):
         self.names = [str(n) for n in names]
         self.test_sanity()  # checks for invalid arguments
 
+    @classmethod
+    def add(cls, chinfo1, chinfo2):
+        """Create a :class:`ChargeInfo` combining multiple charges.
+
+        Parameters
+        ----------
+        chinfo1, chinfo2 : :class:`ChargeInfo`
+            Two ChargeInfo to be added into one.
+            The charges of `chinfo2` are appended at the end of `chinfo1`.
+
+        Returns
+        -------
+        chinfo : :class:`ChargeInfo`
+            ChargeInfo combining all the given charges.
+        """
+        return cls(np.concatenate((chinfo1.mod, chinfo2.mod)), chinfo1.names + chinfo2.names)
+
+    @classmethod
+    def drop(cls, chinfo, charge=None):
+        """Remove a charge from a :class:`ChargeInfo`.
+
+        Parameters
+        ----------
+        chinfo: class:`ChargeInfo`
+            The ChargeInfo from where to drop/remove a charge.
+        charge : int | str
+            Number or `name` of the charge (within `chinfo`) which is to be dropped.
+            ``None`` means dropping all charges.
+
+        Returns
+        -------
+        chinfo : :class:`ChargeInfo`
+            ChargeInfo where the specified charge is dropped.
+        """
+        if charge is None:
+            return cls()  # trivial charge
+        if isinstance(charge, str):
+            charge = chinfo.names.index(charge)
+        names = list(chinfo.names)
+        names.pop(charge)
+        return cls(np.delete(chinfo.mod, charge), names)
+
+    @classmethod
+    def change(cls, chinfo, charge, new_qmod, new_name=''):
+        """Change the `qmod` of a given charge.
+
+        Parameters
+        ----------
+        chinfo : :class:`ChargeInfo`
+            The ChargeInfo for which `qmod` of `charge` should be changed.
+        new_qmod : int
+            The new `qmod` to be set.
+        new_name : str
+            The new name of the charge.
+
+        Returns
+        -------
+        chinfo : :class:`ChargeInfo`
+            ChargeInfo where `qmod` of the specified charge was changed.
+        """
+        if isinstance(charge, str):
+            charge = chinfo.names.index(charge)
+        names = list(chinfo.names)
+        names[charge] = new_name
+        mod = chinfo.mod.copy()
+        mod[charge] = new_qmod
+        return cls(mod, names)
+
+
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if len(self.names) != self.qnumber:
@@ -355,6 +424,94 @@ cdef class LegCharge(object):
         res.sorted = True
         res.bunched = res.is_bunched()
         return res
+
+    @classmethod
+    def from_add_charge(cls, leg1, leg2, chargeinfo=None):
+        """Add the (independent) charges of two legs to get larger `qnumber`.
+
+        Parameters
+        ----------
+        leg1, leg2 : :class:`LegCharge`
+            The legs for which the charges are to be combined/added.
+        chargeinfo : :class:`ChargeInfo`
+            The ChargeInfo for all charges; create new if ``None``.
+
+        Returns
+        -------
+        combined : :class:`LegCharge`
+            A LegCharge with the charges of both legs. Is neither sorted nor bunched!
+        """
+        chinfo = ChargeInfo.add(leg1.chinfo, leg2.chinfo)
+        if chargeinfo is not None:
+            assert chinfo == chargeinfo
+            chinfo = chargeinfo
+        if leg1.ind_len != leg2.ind_len:
+            raise ValueError("different length")
+        if leg1.qconj != leg2.qconj:
+            raise ValueError("different qconj")
+        qflat = np.empty([leg1.ind_len, chinfo.qnumber], dtype=QTYPE)
+        qflat[:, :leg1.chinfo.qnumber] = leg1.to_qflat()
+        qflat[:, leg1.chinfo.qnumber:] = leg2.to_qflat()
+        return cls.from_qflat(chinfo, qflat, leg1.qconj)
+
+    @classmethod
+    def from_drop_charge(cls, leg, charge=None, chargeinfo=None):
+        """Remove a charge from a LegCharge.
+
+        Parameters
+        ----------
+        leg: class:`LegCharge`
+            The leg from which to drop/remove a charge.
+        charge : int | str
+            Number or `name` of the charge (within `chinfo`) which is to be dropped.
+            ``None`` means dropping all charges.
+        chargeinfo : :class:`ChargeInfo`
+            The ChargeInfo with `charge` dropped; create new if ``None``.
+
+        Returns
+        -------
+        dropped : :class:`LegCharge`
+            A LegCharge with the specified charge dropped. Is neither sorted nor bunched!
+        """
+        if charge is None:
+            return cls.from_trivial(leg.ind_len, chargeinfo, leg.qconj)
+        chinfo = ChargeInfo.drop(leg.chinfo, charge)
+        if chargeinfo is not None:
+            assert chinfo == chargeinfo
+            chinfo = chargeinfo
+        if isinstance(charge, str):
+            charge = chinfo.names.index(charge)
+        return cls.from_qflat(chinfo, np.delete(leg.to_qflat(), charge, 1), leg.qconj)
+
+    @classmethod
+    def from_change_charge(cls, leg, charge, new_qmod, new_name='', chargeinfo=None):
+        """Remove a charge from a LegCharge.
+
+        Parameters
+        ----------
+        leg: class:`LegCharge`
+            The leg from which to drop/remove a charge.
+        charge : int | str
+            Number or `name` of the charge (within `chinfo`) which is to be dropped.
+            ``None`` means dropping all charges.
+        new_qmod : int
+            The new `mod` to be set for `charge` in the :class:`ChargeInfo`.
+        new_name : str
+            The new name for `charge`.
+        chargeinfo : :class:`ChargeInfo`
+            The ChargeInfo with `charge` changed; create new if ``None``.
+
+        Returns
+        -------
+        leg : :class:`LegCharge`
+            A LegCharge with the specified charge changed. Is neither sorted nor bunched!
+        """
+        chinfo = ChargeInfo.change(leg.chinfo, charge, new_qmod, new_name)
+        if chargeinfo is not None:
+            assert chinfo == chargeinfo
+            chinfo = chargeinfo
+        charges = chinfo.make_valid(leg.charges)
+        return cls.from_qind(chinfo, leg.slices, charges, leg.qconj)
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""

@@ -686,6 +686,40 @@ def test_charge_detection():
     # done
 
 
+def test_drop_add_change_charge():
+    chinfo14 = npc.ChargeInfo([1, 4], ['U1', 'Z4'])
+    chinfo41 = npc.ChargeInfo([4, 1], ['Z4', 'U1'])
+    chinfo1 = npc.ChargeInfo([1], ['U1'])
+    chinfo4 = npc.ChargeInfo([4], ['Z4'])
+    chinfo12 = npc.ChargeInfo([1, 2], ['U1', 'Z2'])
+    for shape in [(50, ), (10, 4), (1, 1, 2)]:
+        A14 = random_Array(shape, chinfo14)
+        A14_flat = A14.to_ndarray()
+        A = A14.drop_charge()
+        A.test_sanity()
+        npt.assert_equal(A.to_ndarray(), A14_flat)
+        assert A.chinfo == chinfoTr
+        A1 = A14.drop_charge(1)
+        A1.test_sanity()
+        npt.assert_equal(A1.to_ndarray(), A14_flat)
+        assert A1.chinfo == chinfo1
+        A4 = A14.drop_charge('U1', chinfo4)
+        npt.assert_equal(A4.to_ndarray(), A14_flat)
+        assert A4.chinfo is chinfo4
+        A12 = A14.change_charge('Z4', 2, 'Z2', chinfo12)
+        A12.test_sanity()
+        npt.assert_equal(A4.to_ndarray(), A14_flat)
+        assert A12.chinfo is chinfo12
+        A14_new = A1.add_charge(A4.legs, qtotal=A4.qtotal)
+        A14_new.test_sanity()
+        npt.assert_equal(A14_new.to_ndarray(), A14_flat)
+        assert A14_new.chinfo == chinfo14
+        A41_new = A4.add_charge(A1.legs, chinfo41, qtotal=A1.qtotal)
+        A41_new.test_sanity()
+        npt.assert_equal(A41_new.to_ndarray(), A14_flat)
+        assert A41_new.chinfo is chinfo41
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
@@ -708,3 +742,4 @@ if __name__ == "__main__":
     test_eig()
     test_qr()
     test_charge_detection()
+    test_drop_add_change_charge()
