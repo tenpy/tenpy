@@ -3630,9 +3630,11 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     cdef Array q = Array([a_leg0, inner_leg.conj()], a.dtype)
     q._data = q_data
     q._qdata = a._qdata.copy()
+    q._qdata_sorted = False
     cdef Array r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
     r._data = r_data
     r._qdata = a._qdata.copy()
+    r._qdata_sorted = False
     if mode != 'complete':
         q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
         r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q

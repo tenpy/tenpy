@@ -872,8 +872,7 @@ class LegPipe(LegCharge):
     Because many charge combinations fuse to the same total charge,
     in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
     :math:`I_s`.  The rows of `q_map` are precisely the collections of
-    ``[b_j, b_{j+1}, i_1, . . . , i_{nlegs}, I_s ]``,
-
+    ``[b_j, b_{j+1}, I_s, i_1, . . . , i_{nlegs}]``.
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
     the total block `I_s`, i.e., ``b_j = a_j - self.slices[I_s]``.
 
@@ -977,6 +976,37 @@ class LegPipe(LegCharge):
         warnings.warn("Converting LegPipe to LegCharge for `project`")
         res = self.to_LegCharge()
         return res.project(*args, **kwargs)
+
+    def map_incoming_flat(self, incoming_indices):
+        """Map (flat) incoming indices to an index in the outgoing pipe.
+
+        Parameters
+        ----------
+        incoming_indices : iterable of int
+            One (flat) index on each of the incoming legs.
+
+        Returns
+        -------
+        outgoing_index : int
+            The index in the outgoing leg.
+        """
+        # need to calculate the `a_j` in the Notes of the doc-string of self.
+        if len(incoming_indices) != self.nlegs:
+            raise ValueError("wrong len of flat_ind_incoming")
+        qind_in = np.empty((1, self.nlegs), dtype=np.intp)
+        within_block_out = 0
+        stride = 1
+        for ax in range(self.nlegs -1, -1, -1):   # reversed: C order within the block
+            leg = self.legs[ax]
+            qind, within_block = leg.get_qindex(incoming_indices[ax])
+            qind_in[0, ax] = qind
+            within_block_out += stride * within_block
+            stride *= (leg.slices[qind+1] - leg.slices[qind])
+        j = self._map_incoming_qind(qind_in)[0]
+        q_map = self.q_map[j, :]
+        assert(q_map[1] - q_map[0] == stride)
+        qind_out = q_map[2]  # I_s
+        return self.slices[qind_out] + q_map[0] + within_block_out
 
     def __str__(self):
         """Fairly short debug output."""

@@ -117,7 +117,7 @@ def test_LegPipe():
         pipe.test_sanity()
         assert (pipe.ind_len == np.prod(shape))
         print pipe.q_map
-        # test pipe.map_incoming_qind
+        # test pipe._map_incoming_qind
         qind_inc = pipe.q_map[:, 3:].copy()  # all possible qindices
         np.random.shuffle(qind_inc)  # different order to make the test non-trivial
         qmap_ind = pipe._map_incoming_qind(qind_inc)
@@ -125,6 +125,7 @@ def test_LegPipe():
             npt.assert_equal(pipe.q_map[qmap_ind[i], 3:], qind_inc[i])
             size = np.prod([l.slices[j + 1] - l.slices[j] for l, j in zip(legs, qind_inc[i])])
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
+        # pipe.map_incoming_flat is tested by test_np_conserved.
 
 
 if __name__ == "__main__":

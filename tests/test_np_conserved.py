@@ -249,7 +249,6 @@ def test_npc_Array_itemacces():
         npt.assert_equal(b.to_ndarray(), bflat)
 
 
-
 def test_npc_Array_reshape():
     a = random_Array((20, 15, 10), chinfo, sort=False)
     aflat = a.to_ndarray()
@@ -301,6 +300,26 @@ def test_npc_Array_reshape():
     asplit = acomb.split_legs([0])
     asplit.test_sanity()
     npt.assert_equal(asplit.to_ndarray(), aflat)
+
+
+def test_npc_Array_reshape_2():
+    # check that combine_leg is compatible with pipe.map_incoming_flat
+    shape = (2, 5, 2)
+    a = random_Array(shape, chinfo3, sort=True)
+    aflat = a.to_ndarray()
+    acomb = a.combine_legs([[0, 1], [2]])
+    acombflat = acomb.to_ndarray()
+    pipe = acomb.legs[0]
+    print a
+    print acomb
+    print pipe.q_map
+    print pipe.slices
+    # expensive: compare all entries
+    for i, j, k in it.product(*[range(s) for s in shape]):
+        ij = pipe.map_incoming_flat([i, j])
+        print i, j, ij
+        assert(acombflat[ij, k] == aflat[i, j, k])
+    # done
 
 
 def test_npc_grid_outer():
@@ -637,7 +656,7 @@ def test_eig():
     Aflat = A.to_ndarray()
     W, V = npc.eigh(A)
     recalc = npc.tensordot(V.scale_axis(W, axis=-1), V.conj(), axes=[1, 1])
-    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), A.shape[0]**3)
+    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), 5*A.shape[0]**3)
 
 
 def test_expm(size=10):
@@ -669,11 +688,14 @@ def test_charge_detection():
     chinfo = chinfo3
     for qtotal in [[0], [1], None]:
         print "qtotal=", qtotal
-        shape = (4, 5, 5)
+        shape = (6, 5, 5)
         A = random_Array(shape, chinfo3, qtotal=qtotal)
         Aflat = A.to_ndarray()
         legs = A.legs[:]
         print A
+        if not np.any(A > 1.e-8):
+            print "skip test: no non-zero entry"
+            continue
         qt = npc.detect_qtotal(Aflat, legs)
         npt.assert_equal(qt, chinfo.make_valid(qtotal))
         for i in range(len(shape)):
