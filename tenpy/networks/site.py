@@ -3,9 +3,11 @@
 """
 from __future__ import division
 
+import copy
 import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..tools.misc import inverse_permutation
 
 __all__ = ['Site', 'SpinHalfSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
 
@@ -92,6 +94,40 @@ class Site(object):
             # of bosonic and fermionic sites in an MPS
             self.add_op('JW', self.Id)
         self.test_sanity()
+
+    def copy_change_charge(self, new_leg_charge=None, permute=None):
+        """Generate a copy of a site with different charges.
+
+        Parameters
+        ----------
+        new_leg_charge : :class:`LegCharge` | None
+            The new charges to be used. If ``None``, use trivial charges.
+        permute : ``None`` | ndarray
+            Ignored if ``None``; otherwise an permuation applied to the physical leg.
+
+        Returns
+        -------
+        cpy : :class:`Site`
+            A copy of `self` with a different (possibly permuted) :attr:`leg`.
+        """
+        if new_leg_charge is None:
+            new_leg_charge = npc.LegCharge.from_trivial(self.dim)
+        cpy = copy.deepcopy(self)
+        cpy.leg = new_leg_charge
+        if permute is not None:
+            permute = np.asarray(permute, dtype=np.intp)
+            inv_perm = inverse_permutation(permute)
+            cpy.perm = self.perm[permute]
+        for opname in self.opnames:
+            cpy.remove_op(opname)
+            op = self.get_op(opname).to_ndarray()
+            if permute is not None:
+                op = op[np.ix_(permute, permute)]
+            cpy.add_op(opname, op, opname in self.need_JW_string)
+        if permute is not None:
+            for label in self.state_labels:
+                cpy.state_labels[label] = inv_perm[self.state_labels[label]]
+        return cpy
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -194,8 +230,8 @@ class Site(object):
         name : str
             The name of the operator to be removed.
         """
+        self.opnames.remove(name)
         delattr(self, name)
-        del self.opnames[name]
         self.need_JW_string.discard(name)
 
     def state_index(self, label):
@@ -301,9 +337,6 @@ class DoubleSite(Site):
     Note that this is a 'hack' at the cost of other things (e.g., measurements of 'local'
     operators) getting more complicated/computationally expensive.
 
-
-        Defaults to ``False``, in which case the
-        Set this option to ``True`` if you handle fermions; default is ``False``.
     If the individual sites indicate fermionic operators (with entries in `needs_JW_string`),
     we construct the new on-site oerators of `site1` to include the JW string of `site0`,
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
@@ -323,6 +356,13 @@ class DoubleSite(Site):
     label1 : str
         Include the Kronecker product of ``[Id, op]`` as onsite operators with name
         ``opname+label1`` for each of the operators `op` in `site1` (with name `opname`).
+    charges : ``'same'`` | ``'independent' | 'drop'``
+        How to handle charges, defaults to 'drop'.
+        ``'same'`` means that `site0` and `site1` have the same `ChargeInfo`, and the total charge
+        is the sum of the charges on `site0` and `site1`.
+        ``'independent'`` means that `site0` and `site1` have possibly different `ChargeInfo`,
+        and the charges are conserved separately, i.e., we have two conserved charges.
+        For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
 
     Attributes
     ----------
@@ -330,23 +370,40 @@ class DoubleSite(Site):
         The sites from which this is build.
     label0, label1 : str
         The labels which are added to the single-site operators during construction.
-
-    .. todo ::
-        Implement SpinHalfFermionSite building on that!
-
-    .. todo ::
-        Need a way to combine charges, e.g. group SpinHalfSite with FermionSite.
-        -> add option to __init__.
     """
-    def __init__(self, site0, site1, label0='0', label1='1', JW=False):
+    def __init__(self, site0, site1, label0='0', label1='1', charges='drop', JW=False):
+        if charges == 'drop':
+            leg0 = npc.LegCharge.from_drop_charge(site0.leg)
+            leg1 = npc.LegCharge.from_drop_charge(site1.leg, chargeinfo=leg0.chinfo)
+            perm_qind0, leg0s = leg0.sort()
+            perm_qind1, leg1s = leg1.sort()
+            site0 = site0.copy_change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1 = site1.copy_change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+        elif charges == 'same':
+            pass   # nothing to do
+        elif charges == 'independent':
+            # charges are separately conserved
+            leg0_triv1 = npc.LegCharge.from_trivial(site0.dim, site1.leg.chinfo)
+            leg1_triv0 = npc.LegCharge.from_trivial(site1.dim, site0.leg.chinfo)
+            leg0 = npc.LegCharge.from_add_charge(site0.leg, leg0_triv1)
+            leg1 = npc.LegCharge.from_add_charge(leg1_triv0, site1.leg, chargeinfo=leg0.chinfo)
+            perm_qind0, leg0s = leg0.sort()
+            perm_qind1, leg1s = leg1.sort()
+            site0 = site0.copy_change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1 = site1.copy_change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+        else:
+            raise ValueError("Unknown option for `charges`: " + repr(charges))
+        assert site0.leg.chinfo == site1.leg.chinfo  # check for compatibility
         self.site0 = site0
         self.site1 = site1
         pipe = npc.LegPipe([site0.leg, site1.leg])
         self.leg = pipe     # needed in kroneckerproduct
-        states = None
-        if len(site1.state_labels) > 0:
-            pass  # TODO handle permutations
-            #  raise NotImplementedError # TODO XXX
+        states = [None] * pipe.ind_len
+        for st0 in site0.state_labels:
+            for st1 in site1.state_labels:
+                ind_pipe = pipe.map_incoming_flat([site0.state_labels[st0],
+                                                   site1.state_labels[st1]])
+                states[ind_pipe] = ''.join([st0, '_', label0, ' ', st1, '_', label1])
         JW0 = site0.JW
         JW1 = site1.JW
         JW_both = self.kroneckerproduct(JW0, JW1)

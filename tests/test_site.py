@@ -27,10 +27,10 @@ def test_site():
     leg = gen_random_legcharge(chinfo, 8)
     op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    labels = ['up'] + [None] * 6 + ['down']
+    labels = ['up'] + [None] * (leg.ind_len-2) + ['down']
     s = site.Site(leg, labels, silly_op=op1)
     nst.eq_(s.state_index('up'), 0)
-    nst.eq_(s.state_index('down'), 8 - 1)
+    nst.eq_(s.state_index('down'), leg.ind_len - 1)
     nst.eq_(s.opnames, set(['silly_op', 'Id', 'JW']))
     assert (s.silly_op is op1)
     s.add_op('op2', op2)
@@ -39,14 +39,30 @@ def test_site():
     assert (s.get_op('silly_op') is op1)
     npt.assert_equal(s.get_op('silly_op op2').to_ndarray(),
                      npc.tensordot(op1, op2, [1, 0]).to_ndarray())
+    leg2 = npc.LegCharge.from_drop_charge(leg, 1)
+    leg2 = npc.LegCharge.from_change_charge(leg2, 0, 2, 'changed')
+    s2 = s.copy_change_charge(leg2)
+    perm_qind, leg2s = leg2.sort()
+    perm_flat = leg2.perm_flat_from_perm_qind(perm_qind)
+    s2s = s2.copy_change_charge(leg2s, perm_flat)
+    for site_check in [s2, s2s]:
+        print "site_check.leg = ", site_check.leg
+        for opn in site_check.opnames:
+            op1 = s.get_op(opn).to_ndarray()
+            op2 = site_check.get_op(opn).to_ndarray()
+            perm = site_check.perm
+            npt.assert_equal(op1[np.ix_(perm, perm)], op2)
+    # done
 
 
 def test_double_site():
-    for site0, site1 in [[site.SpinHalfSite(None)]*2, [site.SpinHalfSite('Sz')]*2]:
-        ds = site.DoubleSite(site0, site1)
-        ds.test_sanity()
+    ss = site.SpinHalfSite('Sz')
+    for site0, site1 in [[site.SpinHalfSite(None)]*2, [ss]*2]:
+        for charges in ['same', 'drop', 'independent']:
+            ds = site.DoubleSite(site0, site1, charges=charges)
+            ds.test_sanity()
     fs = site.FermionSite('N')
-    ds = site.DoubleSite(fs, fs, 'a', 'b')
+    ds = site.DoubleSite(fs, fs, 'a', 'b', charges='same')
     assert ds.need_JW_string == set([op+'a' for op in fs.need_JW_string] +
                                     [op+'b' for op in fs.need_JW_string])
 

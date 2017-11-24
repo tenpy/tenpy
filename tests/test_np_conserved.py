@@ -688,7 +688,7 @@ def test_charge_detection():
     chinfo = chinfo3
     for qtotal in [[0], [1], None]:
         print "qtotal=", qtotal
-        shape = (6, 5, 5)
+        shape = (8, 6, 5)
         A = random_Array(shape, chinfo3, qtotal=qtotal)
         Aflat = A.to_ndarray()
         legs = A.legs[:]

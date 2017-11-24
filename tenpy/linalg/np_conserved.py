@@ -902,7 +902,7 @@ class Array(object):
         return res
 
     def add_charge(self, add_legs, chinfo=None, qtotal=None):
-        """Drop (one of) the charges.
+        """Add charges.
 
         Parameters
         ----------

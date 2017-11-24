@@ -349,7 +349,10 @@ cdef class LegCharge(object):
         """Create trivial (qnumber=0) LegCharge for given len of indices `ind_len`."""
         if chargeinfo is None:
             chargeinfo = ChargeInfo()
-        return cls(chargeinfo, [0, ind_len], [[]], qconj)
+            charges = [[]]
+        else:
+            charges = [[0]*chargeinfo.qnumber]
+        return cls(chargeinfo, [0, ind_len], charges, qconj)
 
     @classmethod
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
@@ -490,8 +493,7 @@ cdef class LegCharge(object):
         leg: class:`LegCharge`
             The leg from which to drop/remove a charge.
         charge : int | str
-            Number or `name` of the charge (within `chinfo`) which is to be dropped.
-            ``None`` means dropping all charges.
+            Number or `name` of the charge (within `chinfo`) for which `mod` is to be changed.
         new_qmod : int
             The new `mod` to be set for `charge` in the :class:`ChargeInfo`.
         new_name : str
