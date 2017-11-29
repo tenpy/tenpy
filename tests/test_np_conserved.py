@@ -693,7 +693,7 @@ def test_charge_detection():
         Aflat = A.to_ndarray()
         legs = A.legs[:]
         print A
-        if not np.any(A > 1.e-8):
+        if not np.any(Aflat > 1.e-8):
             print "skip test: no non-zero entry"
             continue
         qt = npc.detect_qtotal(Aflat, legs)

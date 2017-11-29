@@ -94,6 +94,9 @@ class MPS(object):
         it might be useful e.g. for imaginary time evolution (giving the partition function)
         or for calculating overlaps. Tricky for infinite boundary conditions; keep norm per site?
 
+    .. todo ::
+        need method apply_op() to apply a local operator: useful for quenches etc
+
     Parameters
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`

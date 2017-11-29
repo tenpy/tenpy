@@ -130,7 +130,7 @@ class CouplingModel(object):
             return  # nothing to do: can even accept non-defined `opname`.
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                             "{2:!r}".format(opname, u, self.lat.unit_cell[u]))
+                             "{2!r}".format(opname, u, self.lat.unit_cell[u]))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             term = self.onsite_terms[i]
             term[opname] = term.get(opname, 0) + strength[tuple(i_lat)]
@@ -443,6 +443,7 @@ class MPOModel(object):
 
     .. todo ::
         implement: provide (function to calculate) the MPO for time evolution.
+        Also, provide function to get H_MPO from H_bond
 
     Parameters
     ----------

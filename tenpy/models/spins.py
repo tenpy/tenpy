@@ -25,7 +25,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
               \mathtt{Jx} S^x_i S^x_j
             + \mathtt{Jy} S^y_i S^y_j
             + \mathtt{Jz} S^z_i S^z_j
-            + \mathtt{muJ} i/2 (S^{+}_i S^{-}_j - S^{-}_i S^{+}_j)
+            + \mathtt{muJ} i/2 (S^{-}_i S^{+}_j - S^{+}_i S^{-}_j)
             \\
             + \sum_i
               \mathtt{hx} S^x_i
@@ -43,7 +43,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         The 2S+1 local states range from m = -S, -S+1, ... +S.
     conserve : 'best' | 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-    Jx, Jy, Jz, hx, hy, hz : float | array
+    Jx, Jy, Jz, hx, hy, hz, muJ: float | array
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
@@ -59,6 +59,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         hx = get_parameter(model_param, 'hx', 0., self.__class__)
         hy = get_parameter(model_param, 'hy', 0., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
+        muJ = get_parameter(model_param, 'muJ', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         S = get_parameter(model_param, 'S', 0.5, self.__class__)
         conserve = get_parameter(model_param, 'conserve', 'best', self.__class__)
@@ -95,6 +96,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_coupling((Jx - Jy)/4., 0, 'Sp', 0, 'Sp', 1)
         self.add_coupling((Jx - Jy)/4., 0, 'Sm', 0, 'Sm', 1)
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
+        self.add_coupling(muJ*0.5j, 0, 'Sm', 0, 'Sp', 1)
+        self.add_coupling(muJ*-0.5j, 0, 'Sp', 0, 'Sm', 1)
         # 4) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         # 5) initialize H_bond
