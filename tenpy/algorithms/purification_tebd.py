@@ -205,10 +205,10 @@ class PurificationTEBD(tebd.Engine):
         r"""Disentangle `theta` before splitting with svd.
 
         For the purification we write :math:`\rho_P = Tr_Q{|\psi_{P,Q}><\psi_{P,Q}|}`. Thus, we
-        have actually apply any unitary to the auxiliar `Q` space of :math:`|\psi>` without
+        can actually apply any unitary to the auxiliar `Q` space of :math:`|\psi>` without
         changing the result.
 
-        .. note :
+        .. note ::
             We have to apply the *same* unitary to the 'bra' and 'ket' used for expectation values
             / correlation functions!
 
@@ -459,7 +459,7 @@ class Disentangler:
     can actually apply any unitary to the auxiliar `Q` space of :math:`|\psi>` without
     changing the physical expectation values.
 
-    .. note :
+    .. note ::
         We have to apply the *same* unitary to the 'bra' and 'ket' used for expectation values
         / correlation functions!
 
@@ -580,7 +580,7 @@ class RenyiDisentangler(Disentangler):
         Temporarily view the different `U` as independt and mimizied one of them -
         this corresponds to a linearization of the cost function.
         Defining `Utheta` as the application of `U` to `theata`, and combining the `p` legs of
-        `theta` with ``'vL', 'vR'``, this function contracts:
+        `theta` with ``'vL', 'vR'``, this function contracts::
 
             |     .----theta----.
             |     |    |   |    |
@@ -770,7 +770,7 @@ class GradientDescentDisentangler(Disentangler):
         minimizes the entropy of ``U(t) theta``.
 
         When ``R[i]`` is the derivative :math:`\partial S(Y, n) \partial Y_i` of the (n-th Renyi)
-        entropy, ``dS`` is given by:
+        entropy, ``dS`` is given by::
 
             |     .----X--R--Z----.
             |     |    |     |    |

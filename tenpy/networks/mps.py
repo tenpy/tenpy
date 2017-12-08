@@ -68,9 +68,6 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     Valid form for initialization, but you need to call
                     :meth:`canonicalize` (or sub-functions) before using algorithms.
 ======== ========== =======================================================================
-
-.. todo ::
-    canonical_form() for infinite BC from diagonalizing the transfer matrix
 """
 
 from __future__ import division
@@ -93,9 +90,6 @@ class MPS(object):
         Even if we don't use it in most cases,
         it might be useful e.g. for imaginary time evolution (giving the partition function)
         or for calculating overlaps. Tricky for infinite boundary conditions; keep norm per site?
-
-    .. todo ::
-        need method apply_op() to apply a local operator: useful for quenches etc
 
     Parameters
     ----------
@@ -218,7 +212,7 @@ class MPS(object):
                            dtype=np.float,
                            form='B',
                            chargeL=None):
-        """ Construct a matrix product state from a given product state.
+        """Construct a matrix product state from a given product state.
 
         Parameters
         ----------
@@ -262,7 +256,7 @@ class MPS(object):
 
     @classmethod
     def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, form='B', legL=None):
-        """ Construct a matrix product state from a given product state.
+        """Construct a matrix product state from a given product state.
 
         Parameters
         ----------
@@ -522,7 +516,7 @@ class MPS(object):
             return slice(0, self.L)
 
     def get_B(self, i, form='B', copy=False, cutoff=1.e-16):
-        """return (view of) `B` at site `i` in canonical form.
+        """Return (view of) `B` at site `i` in canonical form.
 
         Parameters
         ----------
@@ -554,7 +548,7 @@ class MPS(object):
         return self._convert_form_i(self._B[i], i, self.form[i], form, copy, cutoff)
 
     def set_B(self, i, B, form='B'):
-        """set `B` at site `i`.
+        """Set `B` at site `i`.
 
         Parameters
         ----------
@@ -571,24 +565,24 @@ class MPS(object):
         self._B[i] = B
 
     def get_SL(self, i):
-        """return singular values on the left of site `i`"""
+        """Return singular values on the left of site `i`"""
         i = self._to_valid_index(i)
         return self._S[i]
 
     def get_SR(self, i):
-        """return singular values on the right of site `i`"""
+        """Return singular values on the right of site `i`"""
         i = self._to_valid_index(i)
         return self._S[i + 1]
 
     def set_SL(self, i, S):
-        """set singular values on the left of site `i`"""
+        """Set singular values on the left of site `i`"""
         i = self._to_valid_index(i)
         self._S[i] = S
         if not self.finite and i == 0:
             self._S[self.L] = S
 
     def set_SR(self, i, S):
-        """set singular values on the right of site `i`"""
+        """Set singular values on the right of site `i`"""
         i = self._to_valid_index(i)
         self._S[i + 1] = S
         if not self.finite and i == self.L - 1:
@@ -689,7 +683,7 @@ class MPS(object):
         return theta
 
     def convert_form(self, new_form='B'):
-        """tranform self into different canonical form (by scaling the legs with singular values).
+        """Tranform self into different canonical form (by scaling the legs with singular values).
 
         Parameters
         ----------
@@ -974,7 +968,7 @@ class MPS(object):
             All operators should all have the same number of legs (namely `2 n`).
             If less than `self.L` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            `self.sites`.
+            :attr:`sites`.
         sites : None | list of int
             List of site indices. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)
@@ -1189,7 +1183,7 @@ class MPS(object):
             err[i, 1] = npc.norm(rho_R - rho_R2)
         return err
 
-    def canonical_form_finite(self):
+    def canonical_form(self):
         """Bring self into canonical 'B' form, calculate singular values.
 
         Works only for finite/segment boundary conditions.
@@ -1200,63 +1194,14 @@ class MPS(object):
 
         .. todo ::
             Should we try to avoid carrying around the total charge of the B matrices?
-            Also, we need a 'canonical_form_infinite', such that we can define canonical_form()
+            Also, implement 'canonical_form_infinite' by diagonalizing the transfer matrix...
         """
-        assert(self.finite)
-        L = self.L
-        assert(L > 2)  # otherwise implement yourself...
-        # normalize very left singular values
-        S = self.get_SL(0)
-        if self.bc == 'segment':
-            if S is None:
-                raise ValueError("Need S for segment boundary conditions.")
-            self.set_SL(0, S/np.linalg.norm(S))  # must have correct singular values to the left...
-            S = self.get_SR(L-1)
-            self.set_SR(L-1, S/np.linalg.norm(S))
-        else:   # bc == 'finite':
-            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
-            self.set_SR(L-1, np.array([1.]))
-        # sweep from left to right to bring it into left canonical form.
-        if any([(f is None) for f in self.form]):
-            # ignore any 'S' and canonical form
-            M = self.get_B(0, None)
-            form = None
-        else:
-            # we actually had a canonical form before, so we should *not* ignore the 'S'
-            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
-            form = 'B'  # for other 'M'
-        if self.bc == 'segment':
-            M.iscale_axis(self.get_SL(0), axis='vL')
-        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
-        # Q = unitary, R has to be multiplied to the right
-        self.set_B(0, Q.split_legs(0), form='A')
-        for i in range(1, L-1):
-            M = self.get_B(i, form)
-            M = npc.tensordot(R, M, axes=['vR', 'vL'])
-            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
-            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
-            self.set_B(i, Q.split_legs(0), form='A')
-        M = self.get_B(L-1, None)
-        M = npc.tensordot(R, M, axes=['vR', 'vL'])
-        # sweep from right to left, calculating all the singular values
-        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                          inner_labels=['vR', 'vL'])
-        S = S/np.linalg.norm(S)  # normalize
-        self.set_SL(L-1, S)
-        self.set_B(L-1, V.split_legs(1), form='B')
-        for i in range(L-2, -1, -1):
-            M = self.get_B(i, 'A')
-            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                              inner_labels=['vR', 'vL'])
-            S = S/np.linalg.norm(S)  # normalize
-            self.set_SL(i, S)
-            self.set_B(i, V.split_legs(1), form='B')
-        # done: just discard the U on the left (trivial phase / norm for finite bc,
-        # and just re-shuffling of the states left for 'segment' bc
+        if self.finite:
+            self._canonical_form_finite()
+        self._canonical_form_infinite()
 
     def correlation_length(self, num_ev=1, charge_sector=None, tol_ev0=1.e-8):
-        r"""calculate the correlation length by diagonalizing the transfer matrix.
+        r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Works only for infinite MPS, where the transfer matrix is a useful concept.
         For an MPS, any correlation function splits into :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
@@ -1296,7 +1241,9 @@ class MPS(object):
         return -1./np.log(np.abs(E[1:num_ev+1]/E[0])) * self.L
 
     def add(self, other, alpha, beta):
-        """return an MPS which represents `alpha self + beta others`
+        """Return an MPS which represents `alpha self + beta others`.
+
+        Works only for 'finite' boundary conditions.
 
         Parameters
         ----------
@@ -1326,11 +1273,40 @@ class MPS(object):
         Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
         psi = MPS(self.sites, Bs, Ss, 'finite', None)
         # bring to canonical form, calculate Ss
-        psi.canonical_form_finite()
+        psi._canonical_form_finite()
         return psi
 
+    def apply_local_op(self, i, op, unitary=None):
+        """Apply a local operator to `self`.
+
+        .. note ::
+            If the local operator is non-unitary, this destroys the canonical form!
+            If necessary, this function calls :meth:`canonical_form`.
+
+        Parameters
+        ----------
+        i : int
+            Index of the site on which the operator should act.
+        op : str | npc.Array
+            A physical operator acting on site `i`, with legs ``'p', 'p*'``.
+            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
+            :attr:`sites`.
+        unitary : None | bool
+            Whether `op` is unitary, i.e., whether the canonical form is preserved.
+            ``None`` checks whether ``norm(op dagger(op) - identity)`` is small.
+        """
+        if unitary is None:
+            op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
+            unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger.legs[0])) < 1.e-14
+        if (type(op) == str):
+            op = self.sites[i].get_op(op)
+        opB = npc.tensordot(op, self._Bs[i], axes=['p*', 'p'])
+        self._Bs[i] = opB
+        if not unitary:
+            self.canonical_form()
+
     def __str__(self):
-        """Some status information about the MPS"""
+        """Some status information about the MPS."""
         res = ["MPS, L={L:d}, bc={bc!r}.".format(L=self.L, bc=self.bc)]
         res.append("chi: " + str(self.chi))
         if self.L > 10:
@@ -1342,7 +1318,7 @@ class MPS(object):
         return "\n".join(res)
 
     def _to_valid_index(self, i):
-        """make sure `i` is a valid index (depending on `self.bc`)."""
+        """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
             return i % self.L
         if i < 0:
@@ -1352,7 +1328,7 @@ class MPS(object):
         return i
 
     def _parse_form(self, form):
-        """parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
+        """Parse `form` = (list of) {tuple | key of _valid_forms} to list of tuples"""
         if isinstance(form, tuple):
             return [form] * self.L
         form = to_iterable(form)
@@ -1363,13 +1339,13 @@ class MPS(object):
         return [self._to_valid_form(f) for f in form]
 
     def _to_valid_form(self, form):
-        """parse `form` = {tuple | key of _valid_forms} to a tuple"""
+        """Parse `form` = {tuple | key of _valid_forms} to a tuple"""
         if isinstance(form, tuple):
             return form
         return self._valid_forms[form]
 
     def _convert_form_i(self, B, i, form, new_form, copy=True, cutoff=1.e-16):
-        """transform `B[i]` from canonical form `form` into canonical form `new_form`.
+        """Transform `B[i]` from canonical form `form` into canonical form `new_form`.
 
         ======== ======== ================================================
         form     new_form action
@@ -1519,6 +1495,63 @@ class MPS(object):
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
         return res
+
+    def _canonical_form_finite(self):
+        assert(self.finite)
+        L = self.L
+        assert(L > 2)  # otherwise implement yourself...
+        # normalize very left singular values
+        S = self.get_SL(0)
+        if self.bc == 'segment':
+            if S is None:
+                raise ValueError("Need S[0] for segment boundary conditions.")
+            self.set_SL(0, S/np.linalg.norm(S))  # must have correct singular values to the left...
+            S = self.get_SR(L-1)
+            self.set_SR(L-1, S/np.linalg.norm(S))
+        else:   # bc == 'finite':
+            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
+            self.set_SR(L-1, np.array([1.]))
+        # sweep from left to right to bring it into left canonical form.
+        if any([(f is None) for f in self.form]):
+            # ignore any 'S' and canonical form
+            M = self.get_B(0, None)
+            form = None
+        else:
+            # we actually had a canonical form before, so we should *not* ignore the 'S'
+            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
+            form = 'B'  # for other 'M'
+        if self.bc == 'segment':
+            M.iscale_axis(self.get_SL(0), axis='vL')
+        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+        # Q = unitary, R has to be multiplied to the right
+        self.set_B(0, Q.split_legs(0), form='A')
+        for i in range(1, L-1):
+            M = self.get_B(i, form)
+            M = npc.tensordot(R, M, axes=['vR', 'vL'])
+            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
+            self.set_B(i, Q.split_legs(0), form='A')
+        M = self.get_B(L-1, None)
+        M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        # sweep from right to left, calculating all the singular values
+        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                          inner_labels=['vR', 'vL'])
+        S = S/np.linalg.norm(S)  # normalize
+        self.set_SL(L-1, S)
+        self.set_B(L-1, V.split_legs(1), form='B')
+        for i in range(L-2, -1, -1):
+            M = self.get_B(i, 'A')
+            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              inner_labels=['vR', 'vL'])
+            S = S/np.linalg.norm(S)  # normalize
+            self.set_SL(i, S)
+            self.set_B(i, V.split_legs(1), form='B')
+        # done: just discard the U on the left (trivial phase / norm for finite bc,
+        # and just re-shuffling of the states left for 'segment' bc
+
+    def _canonical_form_infinite(self):
+        raise NotImplementedError("TODO")
 
 
 class MPSEnvironment(object):
@@ -1790,7 +1823,7 @@ class MPSEnvironment(object):
             All operators should all have the same number of legs (namely `2 n`).
             If less than ``len(sites)`` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
-            `self.sites`.
+            :attr:`sites`.
         sites : list
             List of site indices. Expectation values are evaluated there.
             If ``None`` (default), the entire chain is taken (clipping for finite b.c.)

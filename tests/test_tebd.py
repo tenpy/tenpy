@@ -43,7 +43,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
 
     print "norm_test", psi.norm_test()
     if bc_MPS == 'finite':
-        psi.canonical_form_finite()
+        psi.canonical_form()
         ED = ExactDiag(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()

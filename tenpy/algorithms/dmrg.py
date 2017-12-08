@@ -295,7 +295,7 @@ def run(psi, model, DMRG_params):
     if norm_tol is not None and norm_err > norm_tol:
         warnings.warn("final DMRG state not in canonical form: too much truncation!")
         if psi.finite:
-            psi.canonical_form_finite()
+            psi.canonical_form()
         else:
             for _ in range(norm_tol_iter):
                 engine.environment_sweeps(update_env)
