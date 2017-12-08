@@ -67,7 +67,7 @@ class SimpleMPS(object):
             op_theta = np.tensordot(op, theta, axes=[1, 1])  # i [i*], vL [i] vR
             result.append(np.tensordot(theta.conj(), op_theta, [[0, 1, 2], [1, 0, 2]]))
             # [vL*] [i*] [vR*], [i] [vL] [vR]
-        return np.array(result)
+        return np.real_if_close(result)
 
     def bond_expectation_value(self, op):
         """Calculate expectation values of a local operator at each bond."""
@@ -78,15 +78,17 @@ class SimpleMPS(object):
             # i j [i*] [j*], vL [i] [j] vR
             result.append(np.tensordot(theta.conj(), op_theta, [[0, 1, 2, 3], [2, 0, 1, 3]]))
             # [vL*] [i*] [j*] [vR*], [i] [j] [vL] [vR]
-        return np.array(result)
+        return np.real_if_close(result)
 
     def entanglement_entropy(self):
         """Return the (von-Neumann) entanglement entropy for a bipartition at any of the bonds."""
         bonds = range(1, self.L) if self.bc == 'finite' else range(0, self.L)
+        result = []
         for i in bonds:
             S = self.Ss[i].copy()
             S[S < 1.e-20] = 0.  # 0*log(0) should give 0; avoid warning or NaN.
-            return -np.sum(S*np.log(S))
+            result.append(-np.sum(S*np.log(S)))
+        return np.array(result)
 
     def correlation_length(self):
         """Diagonalize transfer matrix to obtain the correlation length."""

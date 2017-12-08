@@ -140,7 +140,7 @@ class SimpleDMRGEngine(object):
 
 
 def example_DMRG_finite(L, g):
-    print "finite TEBD, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    print "finite DMRG, L={L:d}, g={g:.2f}".format(L=L, g=g)
     import a_simple_1_MPS
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L=L, J=1., g=g, bc='finite')
@@ -151,10 +151,11 @@ def example_DMRG_finite(L, g):
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
         print "sweep {i:2d}: E = {E:.13f}".format(i=i+1, E=E)
     print "final bond dimensions: ", psi.get_chi()
-    E_ed = M.exact_finite_gs_energy()
-    print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
-    print "relative error: ", abs((E-E_ed)/E_ed)
-    return E, psi
+    if L < 20:
+        E_ed = M.exact_finite_gs_energy()
+        print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
+        print "relative error: ", abs((E-E_ed)/E_ed)
+    return E, psi, M
 
 
 def example_DMRG_infinite(g):
@@ -173,7 +174,7 @@ def example_DMRG_infinite(g):
     E_ed = M.exact_infinite_gs_energy()
     print "Analytic result: E/L = {E:.13f}".format(E=E_ed)
     print "relative error: ", abs((E-E_ed)/E_ed)
-    return E, psi
+    return E, psi, M
 
 
 if __name__ == "__main__":

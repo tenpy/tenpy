@@ -49,7 +49,7 @@ def update_bond(psi, i, U_bond, chi_max, eps):
 
 
 def example_TEBD_gs_finite(L, g):
-    print "finite TEBD, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    print "finite TEBD, imaginary time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g)
     import a_simple_1_MPS
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L, J=1., g=g)
@@ -60,14 +60,15 @@ def example_TEBD_gs_finite(L, g):
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
         print "dt = {dt:.5f}: E = {E:.13f}".format(dt=dt, E=E)
     print "final bond dimensions: ", psi.get_chi()
-    E_ed = M.exact_finite_gs_energy()
-    print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
-    print "relative error: ", abs((E-E_ed)/E_ed)
-    return E, psi
+    if L < 20:
+        E_ed = M.exact_finite_gs_energy()
+        print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
+        print "relative error: ", abs((E-E_ed)/E_ed)
+    return E, psi, M
 
 
 def example_TEBD_gs_infinite(g):
-    print "infinite TEBD, g={g:.2f}".format(g=g)
+    print "infinite TEBD, imaginary time evolution, g={g:.2f}".format(g=g)
     import a_simple_1_MPS
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L=2, J=1., g=g, bc='infinite')
@@ -82,10 +83,40 @@ def example_TEBD_gs_infinite(g):
     E_ex = M.exact_infinite_gs_energy()
     print "Analytic result: E/L = {E:.13f}".format(E=E_ex)
     print "relative error: ", abs((E-E_ex)/E_ex)
-    return E, psi
+    return E, psi, M
+
+
+def example_TEBD_lightcone(L, g, tmax, dt):
+    print "finite TEBD, real time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    # find ground state with TEBD or DMRG
+    #  E, psi, M = example_TEBD_gs_finite(L, g)
+    from a_simple_4_DMRG import example_DMRG_finite
+    E, psi, M = example_DMRG_finite(L, g)
+    i0 = L // 2
+    # apply sigmaz on site i0
+    SzB = np.tensordot(M.sigmaz, psi.Bs[i0], axes=[1, 1])  # i [i*], vL [i] vR
+    psi.Bs[i0] = np.transpose(SzB, [1, 0, 2])  # vL i vR
+    U_bonds = calc_U_bonds(M.H_bonds, 1.j*dt)  # (imaginary dt -> realtime evolution)
+    S = []
+    Nsteps = int(tmax/dt+0.5)
+    for n in range(Nsteps):
+        if abs((n*dt + 0.1) % 0.2 - 0.1) < 1.e-10:
+            print "t =", n*dt, "chi =", psi.get_chi()
+        S.append(psi.entanglement_entropy())
+        run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
+    import pylab as pl
+    pl.figure()
+    pl.imshow(S[::-1], vmin=0., aspect='auto', interpolation='nearest',
+              extent=(0, L-1., 0., Nsteps*dt))
+    pl.xlabel('site $i$')
+    pl.ylabel('time $t/J$')
+    pl.colorbar().set_label('entropy $S$')
+    pl.show()
 
 
 if __name__ == "__main__":
     example_TEBD_gs_finite(L=10, g=1.)
     print "-"*80
     example_TEBD_gs_infinite(g=1.5)
+    print "-"*80
+    example_TEBD_lightcone(L=20, g=1.5, tmax=3., dt=0.001)
