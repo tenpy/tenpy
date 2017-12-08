@@ -1,0 +1,91 @@
+"""Toy code implementing the time evolving block decimation (TEBD)."""
+
+import numpy as np
+from scipy.linalg import expm
+from a_simple_1_MPS import split_truncate_theta
+
+
+def calc_U_bonds(H_bonds, dt):
+    """Given the H_bonds, calculate ``U_bonds[i] = expm(-dt*H_bonds[i])``.
+
+    Each local operator has legs (i out, (i+1) out, i in, (i+1) in), in short ``i j i* j*``.
+    Note that no imaginary 'i' is included, thus real `dt` means 'imaginary time' evolution!
+    """
+    d = H_bonds[0].shape[0]
+    U_bonds = []
+    for H in H_bonds:
+        H = np.reshape(H, [d*d, d*d])
+        U = expm(-dt*H)
+        U_bonds.append(np.reshape(U, [d, d, d, d]))
+    return U_bonds
+
+
+def run_TEBD(psi, U_bonds, N_steps, chi_max, eps):
+    """Evolve for `N_steps` time steps with TEBD."""
+    Nbonds = psi.L-1 if psi.bc == 'finite' else psi.L
+    assert len(U_bonds) == Nbonds
+    for n in range(N_steps):
+        for k in [0, 1]:  # even, odd
+            for i_bond in range(k, Nbonds, 2):
+                update_bond(psi, i_bond, U_bonds[i_bond], chi_max, eps)
+    # done
+
+
+def update_bond(psi, i, U_bond, chi_max, eps):
+    """Apply `U_bond` acting on i,j=(i+1) to `psi`."""
+    j = (i+1) % psi.L
+    # construct theta matrix
+    theta = psi.get_theta2(i)  # vL i j vR
+    # apply U
+    Utheta = np.tensordot(U_bond, theta, axes=([2, 3], [1, 2]))  # i j [i*] [j*], vL [i] [j] vR
+    Utheta = np.transpose(Utheta, [2, 0, 1, 3])  # vL i j vR
+    # split and truncate
+    Ai, Sj, Bj = split_truncate_theta(Utheta, chi_max, eps)
+    # put back into MPS
+    Gi = np.tensordot(np.diag(psi.Ss[i]**(-1)), Ai, axes=[1, 0])  # vL [vL*], [vL] i vC
+    psi.Bs[i] = np.tensordot(Gi, np.diag(Sj), axes=[2, 0])  # vL i [vC], [vC] vC
+    psi.Ss[j] = Sj  # vC
+    psi.Bs[j] = Bj  # vC j vR
+
+
+def example_TEBD_gs_finite(L, g):
+    print "finite TEBD, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    import a_simple_1_MPS
+    import a_simple_2_model
+    M = a_simple_2_model.TFIModel(L, J=1., g=g)
+    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    for dt in [0.1, 0.01, 0.001, 1.e-4, 1.e-5]:
+        U_bonds = calc_U_bonds(M.H_bonds, dt)
+        run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
+        E = np.sum(psi.bond_expectation_value(M.H_bonds))
+        print "dt = {dt:.5f}: E = {E:.13f}".format(dt=dt, E=E)
+    print "final bond dimensions: ", psi.get_chi()
+    E_ed = M.exact_finite_gs_energy()
+    print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
+    print "relative error: ", abs((E-E_ed)/E_ed)
+    return E, psi
+
+
+def example_TEBD_gs_infinite(g):
+    print "infinite TEBD, g={g:.2f}".format(g=g)
+    import a_simple_1_MPS
+    import a_simple_2_model
+    M = a_simple_2_model.TFIModel(L=2, J=1., g=g, bc='infinite')
+    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    for dt in [0.1, 0.01, 0.001, 1.e-4, 1.e-5]:
+        U_bonds = calc_U_bonds(M.H_bonds, dt)
+        run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
+        E = np.mean(psi.bond_expectation_value(M.H_bonds))
+        print "dt = {dt:.5f}: E/L = {E:.13f}".format(dt=dt, E=E)
+    print "final bond dimensions: ", psi.get_chi()
+    print "correlation length:", psi.correlation_length()
+    E_ex = M.exact_infinite_gs_energy()
+    print "Analytic result: E/L = {E:.13f}".format(E=E_ex)
+    print "relative error: ", abs((E-E_ex)/E_ex)
+    return E, psi
+
+
+if __name__ == "__main__":
+    example_TEBD_gs_finite(L=10, g=1.)
+    print "-"*80
+    example_TEBD_gs_infinite(g=1.5)

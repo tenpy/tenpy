@@ -11,7 +11,7 @@ from __future__ import division
 import numpy as np
 
 from .lattice import Lattice
-from tenpy.networks.site import BosonSite
+from ..networks.site import BosonSite
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..linalg import np_conserved as npc
 from ..tools.params import get_parameter, unused_parameters
@@ -68,6 +68,7 @@ class cold_hof_model(CouplingModel, NearestNeighborModel, MPOModel):
     	# 1-4) Define the sites and the lattice.
         site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
         lat = Lattice([Lx * mx, Ly * my], unit_cell, order='default', bc_MPS='finite', basis=None, positions=None)
+        bc_coupling = 'finite' # TODO
 
 		# 5) initialize CouplingModel
         if bc_MPS == 'infinite' or bc_MPS == 'periodic': #TODO Check if this is correct for mps 'periodic'

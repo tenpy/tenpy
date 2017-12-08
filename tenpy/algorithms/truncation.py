@@ -49,6 +49,9 @@ is the discarded part (orthogonal to the kept part) and the
     In the end, that leads just to a factor of 2 in TruncationError.__init__ ???
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)
+
+.. todo ::
+    Redefine trunc_cut to discard as long as ``sum_{i discarded} S[i]**2 <= trunc_cut **2``.
 """
 
 import numpy as np
