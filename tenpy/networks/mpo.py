@@ -500,7 +500,7 @@ class MPOGraph(object):
         then all other charges (hopefully) follow from the entries of the grid."""
         if leg0 is None:
             if len(grids[0]) != 1:
-                raise ValueError("finite MPO with first bond > 1: how????")
+                raise ValueError("finite MPO with len of first bond != 1: how????")
             q = self.chinfo.make_valid()
             leg0 = npc.LegCharge.from_qflat(self.chinfo, [q], qconj=+1)
         legs = [leg0]

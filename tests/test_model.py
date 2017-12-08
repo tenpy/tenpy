@@ -59,7 +59,7 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         Model parameters used.
     check_pars : dict
         pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
-        ``check_params[key]`` (in each possible combination!) an create a model for it.
+        ``check_params[key]`` (in each possible combination!) and create a model for it.
     hermitian : bool
         If True, check that the Hamiltonian is hermitian.
     """

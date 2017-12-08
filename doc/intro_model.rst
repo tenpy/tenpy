@@ -46,3 +46,8 @@ The complete source code for this model is included in the following and should 
 generalize.
 
 .. literalinclude:: ../tenpy/models/xxz_chain.py
+
+Another standard example is the transverse field Ising model. Below, it is defined
+in one dimension on a chain, or a square lattice in 2 dimensions, illustrating how easily geometries can be changed in TenPy.
+
+.. literalinclude:: ../tenpy/models/tf_ising.py
