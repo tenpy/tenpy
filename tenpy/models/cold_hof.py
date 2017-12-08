@@ -65,14 +65,15 @@ class cold_hof_model(CouplingModel, NearestNeighborModel, MPOModel):
     	verbose = get_parameter('verbose', 1, self.__class__)
     	unused_parameters(model_pars, self.__class__)
 
-    	# 1-3) Define the sites.
+    	# 1-4) Define the sites and the lattice.
         site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
-
-        # 4) Lattice
         lat = Lattice([Lx * mx, Ly * my], unit_cell, order='default', bc_MPS='finite', basis=None, positions=None)
-        bc_coupling = # TODO
 
 		# 5) initialize CouplingModel
+        if bc_MPS == 'infinite' or bc_MPS == 'periodic': #TODO Check if this is correct for mps 'periodic'
+            bc_coupling = 'periodic'
+        else:
+            bc_coupling = 'open'
         CouplingModel.__init__(self, lat, bc_coupling)
 
         # 6) add terms of the Hamiltonian
