@@ -1198,7 +1198,8 @@ class MPS(object):
         """
         if self.finite:
             self._canonical_form_finite()
-        self._canonical_form_infinite()
+        else:
+            self._canonical_form_infinite()
 
     def correlation_length(self, num_ev=1, charge_sector=None, tol_ev0=1.e-8):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.

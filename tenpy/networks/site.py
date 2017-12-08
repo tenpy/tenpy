@@ -458,13 +458,16 @@ class SpinHalfSite(Site):
     ``Id, JW``      Identity :math:`\mathbb{1}`
     ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
                     equal to half the Pauli matrices.
+    ``Sigmax``      Pauli matrix :math:`Sigmax`
+    ``Sigmay``
+    ``Sigmaz``
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
 
     ============== ====  ============================
     `conserve`     qmod  *excluded* onsite operators
     ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy``
+    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
     ``'parity'``   [2]   --
     ``None``       []    --
     ============== ====  ============================
@@ -501,6 +504,10 @@ class SpinHalfSite(Site):
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         super(SpinHalfSite, self).__init__(leg, ['up', 'down'], **ops)
+        if conserve != 'Sz':
+            self.add_op('Sigmax', 2.*self.Sx)
+            self.add_op('Sigmay', 2.*self.Sy)
+        self.add_op('Sigmaz', 2.*self.Sz)
 
     def __repr__(self):
         """Debug representation of self"""
