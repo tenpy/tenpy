@@ -36,12 +36,11 @@ class BosonChain(CouplingModel, MPOModel, NearestNeighborModel):
 		L = get_parameter(model_param, 'L', 1, self.__class_)
 		nu = get_parameter(model_param, 'nu', 1, self.__class__)  #What is this?
 		n_max = get_parameter(model_param, 'n_max', 3, self.__class__)
-		mu = get_parameter(model_param, 'mu', 0., self.__class__)
 		filling = get_parameter(model_param, 'filling', 0.5, self.__class__)
 		bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-		t1 = get_parameter(model_param, 't1', 1., self.__class__)
-		t2 = get_parameter(model_param, 't2', 0., self.__class__)
+		t = get_parameter(model_param, 't1', 1., self.__class__)
 		U = get_parameter(model_param, 'U', 0, self.__class__)
+		mu = get_parameter(model_param, 'mu', 0, self.__class__)
 		conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)  # Supported: 'N', 'parity' or None
 		unused_parameters(model_param, self.__class__)
 
@@ -62,9 +61,8 @@ class BosonChain(CouplingModel, MPOModel, NearestNeighborModel):
 		self.add_onsite(U, 0, 'NN')  # Do we want longer-range dens-dens or just onsite/
 
 		# 3b) coupling terms.
-		self.add_coupling(t1, 0, 'Bd', 0, 'B', 1)  # Single-particle hopping
-		self.add_coupling(t1, 0, 'B', 0, 'BD', 1)
-		self.add_coupling(t2, )  # TODO LS this is supposed to be pair-hopping; how does that work?
+		self.add_coupling(t, 0, 'Bd', 0, 'B', 1)  # Single-particle hopping
+		self.add_coupling(t, 0, 'B', 0, 'Bd', 1)
 
 		# 4) Initialize MPO
 		MPOModel.__init__(self, lat, self.calc_H_MPO())
