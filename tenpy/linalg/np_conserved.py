@@ -280,7 +280,7 @@ class Array(object):
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
         dtype : None | type | string
-            The data type of the output entries.
+            The data type of the output entries. Defaults to np.float64.
             Defaults to `None`: obtain it from the return value of the function.
             Note that this argument is not given to func, but rather a type conversion
             is performed afterwards. You might want to set a `dtype` in `func_kwargs` as well.
@@ -1900,7 +1900,7 @@ class Array(object):
     def _set_shape(self):
         """Deduce self.shape from self.legs."""
         if len(self.legs) == 0:
-            raise ValueError("We don't allow 0-dimensional arrays. Why should we?" "")
+            raise ValueError("We don't allow 0-dimensional arrays. Why should we?")
         self.shape = tuple([lc.ind_len for lc in self.legs])
 
     def _iter_all_blocks(self):
@@ -2384,9 +2384,8 @@ class Array(object):
         new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
 
         res = self.copy(deep=False)
-        legs = res.legs
         for a in reversed(split_axes):
-            legs[a:a + 1] = legs[a].legs  # replace pipes with saved original legs
+            res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
         res._set_shape()
 
         # get new qdata by stacking columns
@@ -3619,6 +3618,8 @@ def to_iterable_arrays(array_list):
     array_list = to_iterable(array_list)
     return array_list
 
+
+# internal helper functions
 
 def _nontrivial_grid_entries(grid):
     """Return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""

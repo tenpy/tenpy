@@ -186,6 +186,11 @@ class ChargeInfo(object):
     def check_valid(self, charges):
         r"""Check, if `charges` has all entries as expected from self.mod.
 
+        Parameters
+        ----------
+        charges : 2D ndarray QTYPE_t
+            Charge values to be checked.
+
         Returns
         -------
         res : bool
@@ -707,7 +712,7 @@ class LegCharge(object):
         block_masks : 1D array
             The bool mask for each of the *remaining* blocks.
         projected_copy : :class:`LegCharge`
-            Aopy of self with the qind projected by `mask`.
+            Copy of self with the qind projected by `mask`.
         """
         mask = np.asarray(mask, dtype=np.bool_)
         cp = copy.copy(self)

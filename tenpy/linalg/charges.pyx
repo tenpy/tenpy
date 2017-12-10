@@ -145,7 +145,6 @@ cdef class ChargeInfo(object):
         mod[charge] = new_qmod
         return cls(mod, names)
 
-
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if len(self.names) != self.qnumber:
@@ -351,7 +350,7 @@ cdef class LegCharge(object):
             chargeinfo = ChargeInfo()
             charges = [[]]
         else:
-            charges = [[0]*chargeinfo.qnumber]
+            charges = [[0] * chargeinfo.qnumber]
         return cls(chargeinfo, [0, ind_len], charges, qconj)
 
     @classmethod
@@ -409,7 +408,7 @@ cdef class LegCharge(object):
         Parameters
         ----------
         chargeinfo : :class:`ChargeInfo`
-            The nature of the charge
+            The nature of the charge.
         qdict : dict
             A dictionary mapping a tuple of charges to slices.
         """
@@ -664,11 +663,11 @@ cdef class LegCharge(object):
         if flat_index < 0:
             flat_index += self.ind_len
             if flat_index < 0:
-                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}"
-                                 .format(flat_index - self.ind_len, self.ind_len))
+                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}".format(
+                    flat_index - self.ind_len, self.ind_len))
         elif flat_index > self.ind_len:
-            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}"
-                             .format(flat_index, self.ind_len))
+            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}".format(
+                flat_index, self.ind_len))
         qind = bisect.bisect(self.slices, flat_index) - 1
         return qind, flat_index - self.slices[qind]
 
@@ -734,7 +733,7 @@ cdef class LegCharge(object):
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
         if self.bunched:  # nothing to do
-            return np.arange(self.block_number+1, dtype=np.intp), self
+            return np.arange(self.block_number + 1, dtype=np.intp), self
         cp = copy.copy(self)
         idx = _c_find_row_differences(self.charges)
         cp._set_charges(cp.charges[idx[:-1]])  # avanced indexing -> copy
@@ -795,8 +794,8 @@ cdef class LegCharge(object):
 
     def __repr__(self):
         """Full string representation."""
-        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(self.chinfo, self.qconj,
-                                                                      self.slices, self.charges)
+        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(
+            self.chinfo, self.qconj, self.slices, self.charges)
 
     cpdef void _set_charges(LegCharge self, np.ndarray[QTYPE_t,ndim=2] charges):
         """Provide hook to set 'private' charges."""
