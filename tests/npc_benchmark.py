@@ -5,8 +5,6 @@ New TenPyLight npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 Run ``python npc_benchmark.py --help`` for usage options.
 """
 
-
-
 import timeit
 import cProfile
 import time
@@ -134,7 +132,6 @@ def tensordot_timing(do_flat=True,
                      do_old_npc=True,
                      rep_bestof=3,
                      rep_tdot=3,
-                     seed_range=list(range(3)),
                      **kwargs):
     """run tensordot timing for given kwargs of ``setup_npc``.
 

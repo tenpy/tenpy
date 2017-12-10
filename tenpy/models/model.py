@@ -103,7 +103,7 @@ class CouplingModel(object):
                 if not site_i.valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site".format(op=op_i))
                 for j, d3 in d2.items():
-                    for op_j in list(d3.keys()):
+                    for op_j in d3.keys():
                         if not sites[j].valid_opname(op_j):
                             raise ValueError("Operator {op!r} not in site".format(op=op_j))
         # done

@@ -437,9 +437,9 @@ class PurificationTEBD2(PurificationTEBD):
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
         if odd:
-            sweep = list(range(1, self.psi.L))  # start with 1: only finite!
+            sweep = range(1, self.psi.L)  # start with 1: only finite!
         else:
-            sweep = list(range(self.psi.L - 1, 0, -1))
+            sweep = range(self.psi.L - 1, 0, -1)
         for i_bond in sweep:
             if Us[i_bond] is None:
                 if self.verbose >= 10:

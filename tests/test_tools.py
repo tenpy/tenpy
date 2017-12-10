@@ -45,7 +45,7 @@ def test_speigs():
 
 
 def test_perm_sign():
-    res = [tools.math.perm_sign(u) for u in it.permutations(list(range(4)))]
+    res = [tools.math.perm_sign(u) for u in it.permutations(range(4))]
     check = [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]
     npt.assert_equal(res, check)
 

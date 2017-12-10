@@ -198,9 +198,9 @@ class PurificationMPS(MPS):
         segment = np.sort(segment)
         if first_site is None:
             if self.finite:
-                first_site = list(range(0, self.L - segment[-1]))
+                first_site = range(0, self.L - segment[-1])
             else:
-                first_site = list(range(self.L))
+                first_site = range(self.L)
         N = len(segment)
 
         def labels(choice):

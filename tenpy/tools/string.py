@@ -1,30 +1,6 @@
 """Tools for handling strings."""
 
 
-def uni_to_str(d):
-    """convert unicode to string in a nested structure 'd' of tuples, lists, dict.
-
-    Given a nested structure (though assuming all iterables are either tuples, lists, or dicts),
-    recursively converts unicode objects to python strings.
-    This is useful when importing from json format (as it imports text as unicode).
-    """
-    if type(d) == str:
-        return str(d)
-    elif type(d) == dict:
-        dn = {}
-        for k, v in list(d.items()):
-            if type(k) == str:
-                k = str(k)
-            dn[k] = uni_to_str(v)
-        return dn
-    elif type(d) == list:
-        return [uni_to_str(v) for v in d]
-    elif type(d) == tuple:
-        return tuple([uni_to_str(v) for v in d])
-    else:
-        return d
-
-
 def is_non_string_iterable(x):
     """Check if x is a non-string iterable, (e.g., list, tuple, dictionary, np.ndarray)"""
     if isinstance(x, str):

@@ -744,7 +744,7 @@ class MPS(object):
         """
         if bonds is None:
             nt = self.nontrivial_bonds
-            bonds = list(range(nt.start, nt.stop))
+            bonds = range(nt.start, nt.stop)
         res = []
         for ib in bonds:
             s = self._S[ib]
@@ -796,9 +796,9 @@ class MPS(object):
         segment = np.sort(segment)
         if first_site is None:
             if self.finite:
-                first_site = list(range(0, self.L - segment[-1]))
+                first_site = range(0, self.L - segment[-1])
             else:
-                first_site = list(range(self.L))
+                first_site = range(self.L)
         comb_legs = [
             self._get_p_labels(len(segment), False),
             self._get_p_labels(len(segment), True)
@@ -1453,9 +1453,9 @@ class MPS(object):
         L = self.L
         if sites is None:
             if self.finite:
-                sites = list(range(L - (n - 1)))
+                sites = range(L - (n - 1))
             else:
-                sites = list(range(L))
+                sites = range(L)
         sites = to_iterable(sites)
         if axes is None:
             if n == 1:
@@ -1471,13 +1471,13 @@ class MPS(object):
     def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
         """get default arguments of self.correlation_function()"""
         if sites1 is None:
-            sites1 = list(range(0, self.L))
+            sites1 = range(0, self.L)
         elif type(sites1) == int:
-            sites1 = list(range(0, sites1))
+            sites1 = range(0, sites1)
         if sites2 is None:
-            sites2 = list(range(0, self.L))
+            sites2 = range(0, self.L)
         elif type(sites2) == int:
-            sites2 = list(range(0, sites2))
+            sites2 = range(0, sites2)
         ops1 = npc.to_iterable_arrays(ops1)
         ops2 = npc.to_iterable_arrays(ops2)
         opstr = npc.to_iterable_arrays(opstr)

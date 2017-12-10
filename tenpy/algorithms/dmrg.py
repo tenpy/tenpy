@@ -152,7 +152,7 @@ def run(psi, model, DMRG_params):
     # prepare parameters
     chi_max_default = engine.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
     chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
-    chi_max = chi_list[max([k for k in list(chi_list.keys()) if k <= engine.sweeps])]
+    chi_max = chi_list[max([k for k in chi_list.keys() if k <= engine.sweeps])]
     engine.trunc_params['chi_max'] = chi_max
     if verbose >= 1:
         print("Setting chi_max =", chi_max)

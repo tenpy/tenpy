@@ -139,7 +139,7 @@ class Site(object):
         for name in self.opnames:
             if not hasattr(self, name):
                 raise ValueError("missing onsite operator " + name)
-        for op in list(self.onsite_ops.values()):
+        for op in self.onsite_ops.values():
             if op.rank != 2:
                 raise ValueError("only rank-2 onsite operators allowed")
             op.legs[0].test_equal(self.leg)
@@ -921,7 +921,7 @@ class BosonSite(Site):
         ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
         if conserve == 'N':
             chinfo = npc.ChargeInfo([1], ['N'])
-            leg = npc.LegCharge.from_qflat(chinfo, list(range(dim)))
+            leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
             chinfo = npc.ChargeInfo([2], ['parity'])
             leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])

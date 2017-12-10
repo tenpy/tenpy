@@ -202,13 +202,13 @@ class Lattice(object):
             shape = self.Ls[::-1] + (len(self.unit_cell), )
             res = np.mgrid[tuple([slice(0, L) for L in shape])]
             res = res.reshape((self.dim + 1, self.N_sites)).T
-            perm = np.array(list(range(self.dim))[::-1] + [-1])
+            perm = np.arange(self.dim - 1, -2, -1)
             return res[:, perm]
         elif name in ["snake", "snakeCstyle"]:
             return _ordering_snake(self.shape)
         elif name == "snakeFstyle":
             res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
-            perm = np.array(list(range(self.dim))[::-1] + [-1])
+            perm = np.arange(self.dim-1, -2, -1)
             return res[:, perm]
         # in a derived lattice ``class DerivedLattice(Lattice)``, use:
         # return super(DerivedLattice, self).ordering(name)
