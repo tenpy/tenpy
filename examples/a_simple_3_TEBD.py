@@ -14,15 +14,15 @@ def calc_U_bonds(H_bonds, dt):
     d = H_bonds[0].shape[0]
     U_bonds = []
     for H in H_bonds:
-        H = np.reshape(H, [d*d, d*d])
-        U = expm(-dt*H)
+        H = np.reshape(H, [d * d, d * d])
+        U = expm(-dt * H)
         U_bonds.append(np.reshape(U, [d, d, d, d]))
     return U_bonds
 
 
 def run_TEBD(psi, U_bonds, N_steps, chi_max, eps):
     """Evolve for `N_steps` time steps with TEBD."""
-    Nbonds = psi.L-1 if psi.bc == 'finite' else psi.L
+    Nbonds = psi.L - 1 if psi.bc == 'finite' else psi.L
     assert len(U_bonds) == Nbonds
     for n in range(N_steps):
         for k in [0, 1]:  # even, odd
@@ -33,7 +33,7 @@ def run_TEBD(psi, U_bonds, N_steps, chi_max, eps):
 
 def update_bond(psi, i, U_bond, chi_max, eps):
     """Apply `U_bond` acting on i,j=(i+1) to `psi`."""
-    j = (i+1) % psi.L
+    j = (i + 1) % psi.L
     # construct theta matrix
     theta = psi.get_theta2(i)  # vL i j vR
     # apply U
@@ -63,7 +63,7 @@ def example_TEBD_gs_finite(L, g):
     if L < 20:
         E_ed = M.exact_finite_gs_energy()
         print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
-        print "relative error: ", abs((E-E_ed)/E_ed)
+        print "relative error: ", abs((E - E_ed) / E_ed)
     return E, psi, M
 
 
@@ -82,7 +82,7 @@ def example_TEBD_gs_infinite(g):
     print "correlation length:", psi.correlation_length()
     E_ex = M.exact_infinite_gs_energy()
     print "Analytic result: E/L = {E:.13f}".format(E=E_ex)
-    print "relative error: ", abs((E-E_ex)/E_ex)
+    print "relative error: ", abs((E - E_ex) / E_ex)
     return E, psi, M
 
 
@@ -96,18 +96,22 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     # apply sigmaz on site i0
     SzB = np.tensordot(M.sigmaz, psi.Bs[i0], axes=[1, 1])  # i [i*], vL [i] vR
     psi.Bs[i0] = np.transpose(SzB, [1, 0, 2])  # vL i vR
-    U_bonds = calc_U_bonds(M.H_bonds, 1.j*dt)  # (imaginary dt -> realtime evolution)
+    U_bonds = calc_U_bonds(M.H_bonds, 1.j * dt)  # (imaginary dt -> realtime evolution)
     S = []
-    Nsteps = int(tmax/dt+0.5)
+    Nsteps = int(tmax / dt + 0.5)
     for n in range(Nsteps):
-        if abs((n*dt + 0.1) % 0.2 - 0.1) < 1.e-10:
-            print "t =", n*dt, "chi =", psi.get_chi()
+        if abs((n * dt + 0.1) % 0.2 - 0.1) < 1.e-10:
+            print "t =", n * dt, "chi =", psi.get_chi()
         S.append(psi.entanglement_entropy())
         run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
     import pylab as pl
     pl.figure()
-    pl.imshow(S[::-1], vmin=0., aspect='auto', interpolation='nearest',
-              extent=(0, L-1., 0., Nsteps*dt))
+    pl.imshow(
+        S[::-1],
+        vmin=0.,
+        aspect='auto',
+        interpolation='nearest',
+        extent=(0, L - 1., 0., Nsteps * dt))
     pl.xlabel('site $i$')
     pl.ylabel('time $t/J$')
     pl.colorbar().set_label('entropy $S$')
@@ -116,7 +120,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
 
 if __name__ == "__main__":
     example_TEBD_gs_finite(L=10, g=1.)
-    print "-"*80
+    print "-" * 80
     example_TEBD_gs_infinite(g=1.5)
-    print "-"*80
+    print "-" * 80
     example_TEBD_lightcone(L=20, g=1.5, tmax=3., dt=0.001)

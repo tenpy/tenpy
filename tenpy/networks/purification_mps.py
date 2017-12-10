@@ -128,9 +128,9 @@ class PurificationMPS(MPS):
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
     _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
+
     # thanks to using `self._replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
-
 
     def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
@@ -219,7 +219,7 @@ class PurificationMPS(MPS):
             comb_legs = labels(['q'])
         res = []
         for i0 in first_site:
-            rho = self.get_rho_segment(segment+i0)  # p0, q0, p0*, q0*, ...
+            rho = self.get_rho_segment(segment + i0)  # p0, q0, p0*, q0*, ...
             # extra contraction
             for a, b in zip(*tr_legs):
                 rho = npc.trace(rho, a, b)
@@ -273,8 +273,9 @@ class PurificationMPS(MPS):
         elif legs == 'q':
             tr_legs = labels(['p'])
             comb_legs = labels(['q'])
-        contr_rho = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
-                     ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        contr_rho = (
+            ['vR*'] + self._get_p_label(1, False),  # 'vL', 'p1'
+            ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
         mutinf = []
         coord = []
         for i in range(self.L):
@@ -283,7 +284,7 @@ class PurificationMPS(MPS):
             jmax = i + max_range + 1
             if self.finite:
                 jmax = min(jmax, self.L)
-            for j in range(i+1, jmax):
+            for j in range(i + 1, jmax):
                 B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
                 rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
                 rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))

@@ -28,7 +28,7 @@ class SimpleHeff(scipy.sparse.linalg.LinearOperator):
         chi1, chi2 = LP.shape[0], RP.shape[2]
         d1, d2 = W1.shape[2], W2.shape[2]
         self.theta_shape = (chi1, d1, d2, chi2)  # vL i j vR
-        self.shape = (chi1*d1*d2*chi2, chi1*d1*d2*chi2)
+        self.shape = (chi1 * d1 * d2 * chi2, chi1 * d1 * d2 * chi2)
         self.dtype = W1.dtype
 
     def _matvec(self, theta):
@@ -69,8 +69,8 @@ class SimpleDMRGEngine(object):
         assert psi.L == model.L and psi.bc == model.bc  # ensure compatibility
         self.H_mpo = model.H_mpo
         self.psi = psi
-        self.LPs = [None]*psi.L
-        self.RPs = [None]*psi.L
+        self.LPs = [None] * psi.L
+        self.RPs = [None] * psi.L
         self.chi_max = chi_max
         self.eps = eps
         # initialize left and right environment
@@ -79,23 +79,23 @@ class SimpleDMRGEngine(object):
         LP = np.zeros([chi, D, chi], dtype=np.float)  # vL wL* vL*
         RP = np.zeros([chi, D, chi], dtype=np.float)  # vR* wR* vR
         LP[:, 0, :] = np.eye(chi)
-        RP[:, D-1, :] = np.eye(chi)
+        RP[:, D - 1, :] = np.eye(chi)
         self.LPs[0] = LP
         self.RPs[-1] = RP
         # initialize necessary RPs
-        for i in range(psi.L-1, 1, -1):
+        for i in range(psi.L - 1, 1, -1):
             self.update_RP(i)
 
     def sweep(self):
         # sweep from left to right
-        for i in range(self.psi.nbonds-1):
+        for i in range(self.psi.nbonds - 1):
             self.update_bond(i)
         # sweep from right to left
-        for i in range(self.psi.nbonds-1, 0, -1):
+        for i in range(self.psi.nbonds - 1, 0, -1):
             self.update_bond(i)
 
     def update_bond(self, i):
-        j = (i+1) % self.psi.L
+        j = (i + 1) % self.psi.L
         # get effective Hamiltonian
         Heff = SimpleHeff(self.LPs[i], self.RPs[j], self.H_mpo[i], self.H_mpo[j])
         # Diagonalize Heff, find ground state `theta`
@@ -114,27 +114,27 @@ class SimpleDMRGEngine(object):
 
     def update_RP(self, i):
         """Calculate RP right of site `i-1` from RP right of site `i`."""
-        j = (i-1) % self.psi.L
+        j = (i - 1) % self.psi.L
         RP = self.RPs[i]  # vR* wR* vR
-        B = self.psi.Bs[i]    # vL i vR
-        Bc = B.conj()         # vL* i* vR*
-        W = self.H_mpo[i]     # wL wR i i*
-        RP = np.tensordot(B, RP, axes=[2, 0])             # vL i [vR], [vR*] wR* vR
-        RP = np.tensordot(RP, W, axes=[[1, 2], [3, 1]])   # vL [i] [wR*] vR, wL [wR] i [i*]
+        B = self.psi.Bs[i]  # vL i vR
+        Bc = B.conj()  # vL* i* vR*
+        W = self.H_mpo[i]  # wL wR i i*
+        RP = np.tensordot(B, RP, axes=[2, 0])  # vL i [vR], [vR*] wR* vR
+        RP = np.tensordot(RP, W, axes=[[1, 2], [3, 1]])  # vL [i] [wR*] vR, wL [wR] i [i*]
         RP = np.tensordot(RP, Bc, axes=[[1, 3], [2, 1]])  # vL [vR] wL [i], vL* [i*] [vR*]
         self.RPs[j] = RP  # vL wL vL* (== vR* wR* vR on site i-1)
 
     def update_LP(self, i):
         """Calculate LP left of site `i+1` from LP left of site `i`."""
-        j = (i+1) % self.psi.L
+        j = (i + 1) % self.psi.L
         LP = self.LPs[i]  # vL wL vL*
         B = self.psi.Bs[i]  # vL i vR
         G = np.tensordot(np.diag(self.psi.Ss[i]), B, axes=[1, 0])  # vL [vL*], [vL] i vR
         A = np.tensordot(G, np.diag(self.psi.Ss[j]**-1), axes=[2, 0])  # vL i [vR], [vR*] vR
-        Ac = A.conj()         # vL* i* vR*
-        W = self.H_mpo[i]     # wL wR i i*
-        LP = np.tensordot(LP, A, axes=[2, 0])             # vL wL* [vL*], [vL] i vR
-        LP = np.tensordot(W, LP, axes=[[0, 3], [1, 2]])   # [wL] wR i [i*], vL [wL*] [i] vR
+        Ac = A.conj()  # vL* i* vR*
+        W = self.H_mpo[i]  # wL wR i i*
+        LP = np.tensordot(LP, A, axes=[2, 0])  # vL wL* [vL*], [vL] i vR
+        LP = np.tensordot(W, LP, axes=[[0, 3], [1, 2]])  # [wL] wR i [i*], vL [wL*] [i] vR
         LP = np.tensordot(Ac, LP, axes=[[0, 1], [2, 1]])  # [vL*] [i*] vR*, wR [i] [vL] vR
         self.LPs[j] = LP  # vR* wR vR (== vL wL* vL* on site i+1)
 
@@ -149,12 +149,12 @@ def example_DMRG_finite(L, g):
     for i in range(10):
         eng.sweep()
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
-        print "sweep {i:2d}: E = {E:.13f}".format(i=i+1, E=E)
+        print "sweep {i:2d}: E = {E:.13f}".format(i=i + 1, E=E)
     print "final bond dimensions: ", psi.get_chi()
     if L < 20:
         E_ed = M.exact_finite_gs_energy()
         print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
-        print "relative error: ", abs((E-E_ed)/E_ed)
+        print "relative error: ", abs((E - E_ed) / E_ed)
     return E, psi, M
 
 
@@ -168,16 +168,16 @@ def example_DMRG_infinite(g):
     for i in range(20):
         eng.sweep()
         E = np.mean(psi.bond_expectation_value(M.H_bonds))
-        print "sweep {i:2d}: E/L = {E:.13f}".format(i=i+1, E=E)
+        print "sweep {i:2d}: E/L = {E:.13f}".format(i=i + 1, E=E)
     print "final bond dimensions: ", psi.get_chi()
     print "correlation length:", psi.correlation_length()
     E_ed = M.exact_infinite_gs_energy()
     print "Analytic result: E/L = {E:.13f}".format(E=E_ed)
-    print "relative error: ", abs((E-E_ed)/E_ed)
+    print "relative error: ", abs((E - E_ed) / E_ed)
     return E, psi, M
 
 
 if __name__ == "__main__":
     example_DMRG_finite(L=10, g=1.)
-    print "-"*80
+    print "-" * 80
     example_DMRG_infinite(g=1.5)

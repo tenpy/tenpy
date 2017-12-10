@@ -25,7 +25,7 @@ from ..tools.string import vert_join
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 
-QTYPE = np.int_             # numpy dtype for the charges
+QTYPE = np.int_  # numpy dtype for the charges
 """Numpy data type for the charges."""
 
 
@@ -289,7 +289,7 @@ class LegCharge(object):
             chargeinfo = ChargeInfo()
             charges = [[]]
         else:
-            charges = [[0]*chargeinfo.qnumber]
+            charges = [[0] * chargeinfo.qnumber]
         return cls(chargeinfo, [0, ind_len], charges, qconj)
 
     @classmethod
@@ -574,8 +574,10 @@ class LegCharge(object):
         """
 
         if self.chinfo != other.chinfo:
-            raise ValueError(
-                ''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(other.chinfo)]))
+            raise ValueError(''.join(
+                ["incompatible ChargeInfo\n",
+                 str(self.chinfo),
+                 str(other.chinfo)]))
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
             return  # optimize: don't need to check all charges explicitly
@@ -611,11 +613,11 @@ class LegCharge(object):
         if flat_index < 0:
             flat_index += self.ind_len
             if flat_index < 0:
-                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}"
-                                 .format(flat_index - self.ind_len, self.ind_len))
+                raise IndexError("flat index {0:d} too negative for leg with ind_len {1:d}".format(
+                    flat_index - self.ind_len, self.ind_len))
         elif flat_index > self.ind_len:
-            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}"
-                             .format(flat_index, self.ind_len))
+            raise IndexError("flat index {0:d} too large for leg with ind_len {1:d}".format(
+                flat_index, self.ind_len))
         qind = bisect.bisect(self.slices, flat_index) - 1
         return qind, flat_index - self.slices[qind]
 
@@ -681,7 +683,7 @@ class LegCharge(object):
         --------
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
         if self.bunched:  # nothing to do
-            return np.arange(self.block_number+1, dtype=np.intp), self
+            return np.arange(self.block_number + 1, dtype=np.intp), self
         cp = copy.copy(self)
         idx = _find_row_differences(self.charges)
         cp.charges = cp.charges[idx[:-1]]  # avanced indexing -> copy
@@ -742,8 +744,8 @@ class LegCharge(object):
 
     def __repr__(self):
         """Full string representation."""
-        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(self.chinfo, self.qconj,
-                                                                      self.slices, self.charges)
+        return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(
+            self.chinfo, self.qconj, self.slices, self.charges)
 
     def _set_block_sizes(self, block_sizes):
         """Set self.slices from an list of the block-sizes."""
@@ -790,14 +792,8 @@ class LegCharge(object):
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        return (self.ind_len,
-                self.block_number,
-                self.chinfo,
-                self.slices,
-                self.charges,
-                self.qconj,
-                self.sorted,
-                self.bunched)
+        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
+                self.qconj, self.sorted, self.bunched)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
@@ -906,8 +902,8 @@ class LegPipe(LegCharge):
         self.legs = legs = tuple(legs)
         self.subshape = tuple([l.ind_len for l in self.legs])
         self.subqshape = tuple([l.block_number for l in self.legs])
-        self.q_map = None           # overwritten in _init_from_legs, but necessary for copies
-        self.q_map_slices = None    # overwritten in _init_from_legs, but necessary for copies
+        self.q_map = None  # overwritten in _init_from_legs, but necessary for copies
+        self.q_map_slices = None  # overwritten in _init_from_legs, but necessary for copies
         # the diffuclt part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
         self._init_from_legs(sort, bunch)
         self.test_sanity()
@@ -998,15 +994,15 @@ class LegPipe(LegCharge):
         qind_in = np.empty((1, self.nlegs), dtype=np.intp)
         within_block_out = 0
         stride = 1
-        for ax in range(self.nlegs -1, -1, -1):   # reversed: C order within the block
+        for ax in range(self.nlegs - 1, -1, -1):  # reversed: C order within the block
             leg = self.legs[ax]
             qind, within_block = leg.get_qindex(incoming_indices[ax])
             qind_in[0, ax] = qind
             within_block_out += stride * within_block
-            stride *= (leg.slices[qind+1] - leg.slices[qind])
+            stride *= (leg.slices[qind + 1] - leg.slices[qind])
         j = self._map_incoming_qind(qind_in)[0]
         q_map = self.q_map[j, :]
-        assert(q_map[1] - q_map[0] == stride)
+        assert (q_map[1] - q_map[0] == stride)
         qind_out = q_map[2]  # I_s
         return self.slices[qind_out] + q_map[0] + within_block_out
 
@@ -1014,10 +1010,11 @@ class LegPipe(LegCharge):
         """Fairly short debug output."""
         res_lines = [
             "LegPipe(shape {0!s}->{1:d}, ".format(self.subshape, self.ind_len),
-            "    qconj {0}->{1:+1};".format(
-                '(' + ', '.join(['%+d' % l.qconj for l in self.legs]) + ')', self.qconj),
-            "    block numbers {0!s}->{1:d})".format(self.subqshape, self.block_number), vert_join(
-                [str(l) for l in self.legs], delim=' | '), ')'
+            "    qconj {0}->{1:+1};".format('(' + ', '.join(['%+d' % l.qconj
+                                                             for l in self.legs]) + ')',
+                                            self.qconj), "    block numbers {0!s}->{1:d})".format(
+                                                self.subqshape, self.block_number),
+            vert_join([str(l) for l in self.legs], delim=' | '), ')'
         ]
         return '\n'.join(res_lines)
 
@@ -1103,7 +1100,7 @@ class LegPipe(LegCharge):
             q_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
         else:
             q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
-            idx = np.arange(len(q_map)+1, dtype=np.intp)
+            idx = np.arange(len(q_map) + 1, dtype=np.intp)
         # calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
         self.q_map = q_map  # finished
@@ -1140,15 +1137,8 @@ class LegPipe(LegCharge):
     def __getstate__(self):
         """Allow to pickle and copy."""
         super_state = super(LegPipe, self).__getstate__()
-        return (super_state,
-                self.nlegs,
-                self.legs,
-                self.subshape,
-                self.subqshape,
-                self.q_map,
-                self.q_map_slices,
-                self._perm,
-                self._strides)
+        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
+                self.q_map_slices, self._perm, self._strides)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""

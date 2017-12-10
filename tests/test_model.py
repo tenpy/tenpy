@@ -64,7 +64,7 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         If True, check that the Hamiltonian is hermitian.
     """
     for vals in itertools.product(*check_pars.values()):
-        print "-"*40
+        print "-" * 40
         params = model_pars.copy()
         for k, v in zip(check_pars.keys(), vals):
             params[k] = v

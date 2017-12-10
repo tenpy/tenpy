@@ -34,13 +34,12 @@ from __future__ import division
 
 import numpy as np
 
-
 __all__ = ['standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1', 'U_close_1']
 
 
 def standard_normal_complex(size):
     """return ``(R + 1.j*I)`` for independent `R` and `I` from np.random.standard_normal."""
-    return np.random.standard_normal(size) + 1.j*np.random.standard_normal(size)
+    return np.random.standard_normal(size) + 1.j * np.random.standard_normal(size)
 
 
 def GOE(size):
@@ -58,7 +57,7 @@ def GOE(size):
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`
     """
     A = np.random.standard_normal(size)
-    return (A + A.T)*0.5
+    return (A + A.T) * 0.5
 
 
 def GUE(size):
@@ -100,7 +99,7 @@ def CRE(size):
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
     # Q' = Q*L; R' = L^{-1} *R, where L = diag(phase(diagonal(R)))
     L = np.diagonal(R)
-    Q *= L/abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
+    Q *= L / abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
     return Q
 
 
@@ -142,7 +141,7 @@ def CUE(size):
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
     # Q' = Q*L; R' = L^{-1} *R, where L = diag(phase(diagonal(R)))
     L = np.diagonal(R)
-    Q *= L/abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
+    Q *= L / abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
     return Q
 
 
@@ -164,11 +163,11 @@ def O_close_1(size, a=0.01):
     """
     n, m = size
     assert n == m
-    A = GOE(size) / (2.*n)**0.5  # scale such that eigenvalues are in [-1, 1]
+    A = GOE(size) / (2. * n)**0.5  # scale such that eigenvalues are in [-1, 1]
     E = np.eye(size[0])
     Q, R = np.linalg.qr(E + a * A)
     L = np.diagonal(R)  # make QR decomposition unique & ensure Q is close to one for small `a`
-    Q *= L/abs(L)
+    Q *= L / abs(L)
     return Q
 
 
@@ -192,5 +191,5 @@ def U_close_1(size, a=0.01):
     n, m = size
     assert n == m
     U = CUE(size)  # random unitary
-    E = np.exp(1.j*a*(np.random.rand(n)*2. - 1.))
-    return np.dot(U*E, U.T.conj())
+    E = np.exp(1.j * a * (np.random.rand(n) * 2. - 1.))
+    return np.dot(U * E, U.T.conj())

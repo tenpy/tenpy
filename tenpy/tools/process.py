@@ -52,7 +52,9 @@ def memory_usage():
     return -1.
 
 
-def load_omp_library(libs=["libiomp5.so", find_library("libiomp5md"), find_library("gomp")],
+def load_omp_library(libs=["libiomp5.so",
+                           find_library("libiomp5md"),
+                           find_library("gomp")],
                      verbose=True):
     """Tries to load openMP library.
 

@@ -334,13 +334,7 @@ class Array(object):
         return res
 
     @classmethod
-    def from_func_square(cls,
-                         func,
-                         leg,
-                         dtype=None,
-                         func_args=(),
-                         func_kwargs={},
-                         shape_kw=None):
+    def from_func_square(cls, func, leg, dtype=None, func_args=(), func_kwargs={}, shape_kw=None):
         """Create an Array from a (numpy) function.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -571,8 +565,8 @@ class Array(object):
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.Array shape={0!s} charge={1!s} labels={2!s}>".format(self.shape, self.chinfo,
-                                                                          self.get_leg_labels())
+        return "<npc.Array shape={0!s} charge={1!s} labels={2!s}>".format(
+            self.shape, self.chinfo, self.get_leg_labels())
 
     def __str__(self):
         res = [repr(self)[:-1], vert_join([str(l) for l in self.legs], delim='|')]
@@ -807,7 +801,8 @@ class Array(object):
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
         res._qdata = np.hstack(
-            [res._qdata[:, :axis], np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]])
+            [res._qdata[:, :axis],
+             np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]])
         if label is not None:
             labs = list(self.get_leg_labels())
             labs.insert(axis, label)
@@ -845,7 +840,7 @@ class Array(object):
         qi, _ = leg.get_qindex(i)
         qtotal = self.chinfo.make_valid(self.qtotal + leg.get_charge(qi))
         extended = Array(legs, self.dtype, qtotal)
-        slices = [slice(None, None)]*self.rank
+        slices = [slice(None, None)] * self.rank
         slices[axis] = i
         extended[tuple(slices)] = self  # use existing implementation
         if label is not None:
@@ -931,8 +926,10 @@ class Array(object):
             if self.rank == 0:
                 raise ValueError("Rank 0: can't derive `chinfo`")
             chinfo = ChargeInfo.add(self.chinfo, add_legs[0].chinfo)
-        legs = [LegCharge.from_add_charge(leg, leg2, chinfo) for (leg, leg2) in zip(self.legs,
-                                                                                    add_legs)]
+        legs = [
+            LegCharge.from_add_charge(leg, leg2, chinfo)
+            for (leg, leg2) in zip(self.legs, add_legs)
+        ]
         if qtotal is None:
             for block, slices, _, _ in self:
                 leg_slices = []
@@ -947,7 +944,7 @@ class Array(object):
         else:
             qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=charges.QTYPE)))
         res = Array(legs, self.dtype, qtotal)
-        for block, slices, _, _ in self:   # use __iter__
+        for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
         return res
 
@@ -979,9 +976,9 @@ class Array(object):
             if isinstance(charge, str):
                 charge = self.chinfo.names.index(charge)
             qtotal = np.delete(self.qtotal, charge, 0)
-        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
-                    self.dtype, qtotal)
-        for block, slices, _, _ in self:   # use __iter__
+        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2)
+                     for leg in self.legs], self.dtype, qtotal)
+        for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
         return res
 
@@ -1013,8 +1010,10 @@ class Array(object):
             chinfo2 = chinfo
         res = self.copy(deep=True)
         res.chinfo = chinfo2
-        res.legs = [LegCharge.from_change_charge(leg, charge, new_qmod, new_name, chinfo2)
-                    for leg in self.legs]
+        res.legs = [
+            LegCharge.from_change_charge(leg, charge, new_qmod, new_name, chinfo2)
+            for leg in self.legs
+        ]
         res.test_sanity()
         return res
 
@@ -1056,7 +1055,7 @@ class Array(object):
         # idea: encapsulate legs into pipes wich are sorted/bunched ...
         axes = []
         pipes = []
-        perms = [None]*self.rank
+        perms = [None] * self.rank
         for ax in range(self.rank):
             if sort[ax] or bunch[ax]:
                 axes.append([ax])
@@ -1872,8 +1871,8 @@ class Array(object):
         """Return ``self / other`` for scalar `other` with ``__future__.division``."""
         if np.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError(
-                    "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
+                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
+                    type(self), type(other)))
             return self.__mul__(1. / other)
         raise NotImplemented
 
@@ -1887,8 +1886,8 @@ class Array(object):
         """``self /= other`` for scalar `other`` with ``__future__.division``."""
         if np.isscalar(other):
             if other == 0.:
-                raise ZeroDivisionError(
-                    "a/b for b=0. Types: {0!s}, {1!s}".format(type(self), type(other)))
+                raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
+                    type(self), type(other)))
             return self.__imul__(1. / other)
         raise NotImplemented
 
@@ -1912,8 +1911,8 @@ class Array(object):
         qindices : tuple of int
             A qindex for each of the legs.
         """
-        for block_inds in itertools.product(
-                * [xrange(l.block_number) for l in reversed(self.legs)]):
+        for block_inds in itertools.product(*[xrange(l.block_number)
+                                              for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
             yield tuple(block_inds[::-1])  # back to legs in correct order
 
@@ -1998,7 +1997,7 @@ class Array(object):
             idx, new_leg = cp.legs[li].bunch()
             cp.legs[li] = new_leg
             # generate entries in map_qindex and bunch_qdindex
-            bunch_qindex[li] = ((idx[1:]-idx[:-1]) > 1)
+            bunch_qindex[li] = ((idx[1:] - idx[:-1]) > 1)
             m_qindex = np.zeros(idx[-1], dtype=np.intp)
             m_qindex[idx[:-1]] = 1
             map_qindex[li] = np.cumsum(m_qindex, axis=0)
@@ -2191,7 +2190,7 @@ class Array(object):
             # advanced indexing in numpy is tricky ^_^
             # np.ix_ can't handle integer entries reducing the dimension.
             # we have to call it only on the entries with arrays
-            ix_block_mask = np.ix_(* [block_mask[a] for a in not_slice_axes])
+            ix_block_mask = np.ix_(*[block_mask[a] for a in not_slice_axes])
             # and put the result back into block_mask
             for a, bm in zip(not_slice_axes, ix_block_mask):
                 block_mask[a] = bm
@@ -3580,7 +3579,7 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
         if mode != 'complete':
             q1, q2 = qindices
             i0 = a_leg0.slices[q1]
-            inner_leg_mask[i0:i0+q_block.shape[1]] = True
+            inner_leg_mask[i0:i0 + q_block.shape[1]] = True
     if mode != 'complete':
         # map qindices
         with warnings.catch_warnings():
@@ -3972,12 +3971,16 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
             if anynan(U_b) or anynan(VH_b) or anynan(S_b):
                 # give it another try with the other (more stable) svd driver
-                U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a,
-                                          check_finite=True, lapack_driver='gesvd')
+                U_b, S_b, VH_b = svd_flat(
+                    block,
+                    full_matrices,
+                    True,
+                    overwrite_a,
+                    check_finite=True,
+                    lapack_driver='gesvd')
             if anynan(U_b) or anynan(VH_b) or anynan(S_b):
-                raise ValueError(
-                    "NaN in U_b {0:d} and/or VH_b: {1:d}".format(np.sum(np.isnan(U_b)),
-                                                                 np.sum(np.isnan(VH_b))))
+                raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
+                    np.sum(np.isnan(U_b)), np.sum(np.isnan(VH_b))))
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
         if anynan(S_b):

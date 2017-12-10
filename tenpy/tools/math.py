@@ -23,7 +23,7 @@ def matvec_to_array(H):
         a dense array version of `H`.
     """
     dim, dim2 = H.shape
-    assert(dim == dim2)
+    assert (dim == dim2)
     X = np.zeros((dim, dim), H.dtype)
     v = np.zeros((dim), H.dtype)
     for i in range(dim):
@@ -36,6 +36,7 @@ def matvec_to_array(H):
 ##########################################################################
 ##########################################################################
 # Actual Math functions
+
 
 def entropy(p, n=1):
     r"""Calculate the entropy of a distribution.
@@ -60,7 +61,7 @@ def entropy(p, n=1):
     if n == 1:
         return -np.inner(np.log(p), p)
     elif n == np.inf:
-        return - np.log(np.max(p))
+        return -np.log(np.max(p))
     else:  # general n != 1, inf
         return np.log(np.sum(p**n)) / (1. - n)
 

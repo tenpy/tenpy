@@ -371,6 +371,7 @@ class DoubleSite(Site):
     label0, label1 : str
         The labels which are added to the single-site operators during construction.
     """
+
     def __init__(self, site0, site1, label0='0', label1='1', charges='drop', JW=False):
         if charges == 'drop':
             leg0 = npc.LegCharge.from_drop_charge(site0.leg)
@@ -380,7 +381,7 @@ class DoubleSite(Site):
             site0 = site0.copy_change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
             site1 = site1.copy_change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
         elif charges == 'same':
-            pass   # nothing to do
+            pass  # nothing to do
         elif charges == 'independent':
             # charges are separately conserved
             leg0_triv1 = npc.LegCharge.from_trivial(site0.dim, site1.leg.chinfo)
@@ -397,12 +398,12 @@ class DoubleSite(Site):
         self.site0 = site0
         self.site1 = site1
         pipe = npc.LegPipe([site0.leg, site1.leg])
-        self.leg = pipe     # needed in kroneckerproduct
+        self.leg = pipe  # needed in kroneckerproduct
         states = [None] * pipe.ind_len
         for st0 in site0.state_labels:
             for st1 in site1.state_labels:
-                ind_pipe = pipe.map_incoming_flat([site0.state_labels[st0],
-                                                   site1.state_labels[st1]])
+                ind_pipe = pipe.map_incoming_flat(
+                    [site0.state_labels[st0], site1.state_labels[st1]])
                 states[ind_pipe] = ''.join([st0, '_', label0, ' ', st1, '_', label1])
         JW0 = site0.JW
         JW1 = site1.JW
@@ -413,13 +414,13 @@ class DoubleSite(Site):
         for opname, op in site0.onsite_ops.iteritems():
             if opname != 'Id':
                 need_JW = opname in site0.need_JW_string
-                self.add_op(opname+label0, self.kroneckerproduct(op, Id1), need_JW)
+                self.add_op(opname + label0, self.kroneckerproduct(op, Id1), need_JW)
         Id0 = site0.Id
         for opname, op in site1.onsite_ops.iteritems():
             if opname != 'Id':
                 need_JW = opname in site1.need_JW_string
                 op0 = JW0 if need_JW else Id0
-                self.add_op(opname+label1, self.kroneckerproduct(op0, op), need_JW)
+                self.add_op(opname + label1, self.kroneckerproduct(op0, op), need_JW)
         # done
 
     def kroneckerproduct(self, op0, op1):
@@ -505,9 +506,9 @@ class SpinHalfSite(Site):
         self.conserve = conserve
         super(SpinHalfSite, self).__init__(leg, ['up', 'down'], **ops)
         if conserve != 'Sz':
-            self.add_op('Sigmax', 2.*self.Sx)
-            self.add_op('Sigmay', 2.*self.Sy)
-        self.add_op('Sigmaz', 2.*self.Sz)
+            self.add_op('Sigmax', 2. * self.Sx)
+            self.add_op('Sigmay', 2. * self.Sy)
+        self.add_op('Sigmaz', 2. * self.Sz)
 
     def __repr__(self):
         """Debug representation of self"""
@@ -557,7 +558,7 @@ class SpinSite(Site):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         self.S = S = float(S)
-        d = 2*S+1
+        d = 2 * S + 1
         if d <= 1:
             raise ValueError("negative S?")
         if np.rint(d) != d:
@@ -566,10 +567,10 @@ class SpinSite(Site):
         Sz_diag = -S + np.arange(d)
         Sz = np.diag(Sz_diag)
         Sp = np.zeros([d, d])
-        for n in np.arange(d-1):
+        for n in np.arange(d - 1):
             # Sp |m> =sqrt( S(S+1)-m(m+1)) |m+1>
             m = n - S
-            Sp[n+1, n] = np.sqrt(S*(S+1) - m*(m+1))
+            Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
         Sm = np.transpose(Sp)
         # Sp = Sx + i Sy, Sm = Sx - i Sy
         Sx = (Sp + Sm) * 0.5
@@ -582,7 +583,7 @@ class SpinSite(Site):
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
-            leg = npc.LegCharge.from_qflat(chinfo, np.array(2*Sz_diag, dtype=np.int))
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int))
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
@@ -591,7 +592,7 @@ class SpinSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
-        names = [None]*d
+        names = [None] * d
         names[0] = 'down'
         names[-1] = 'up'
         super(SpinSite, self).__init__(leg, names, **ops)
@@ -757,6 +758,7 @@ class SpinHalfFermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
+
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
         if cons_N not in ['N', 'parity', None]:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
@@ -772,9 +774,9 @@ class SpinHalfFermionSite(Site):
         Ntot = np.diag(Nu_diag + Nd_diag)
         dN = np.diag(Nu_diag + Nd_diag - filling)
         NuNd = np.diag(Nu_diag * Nd_diag)
-        JWu = np.diag(1. - 2 * Nu_diag)     # (-1)^Nu
-        JWd = np.diag(1. - 2 * Nd_diag)     # (-1)^Nd
-        JW = JWu * JWd                      # (-1)^{Nu+Nd}
+        JWu = np.diag(1. - 2 * Nu_diag)  # (-1)^Nu
+        JWd = np.diag(1. - 2 * Nd_diag)  # (-1)^Nd
+        JW = JWu * JWd  # (-1)^{Nu+Nd}
 
         Cu = np.zeros((d, d))
         Cu[0, 1] = Cu[2, 3] = 1
@@ -784,7 +786,7 @@ class SpinHalfFermionSite(Site):
         # c.f. the chapter on the Jordan-Wigner trafo in the userguide
         Cd_noJW = np.zeros((d, d))
         Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1
-        Cd = np.dot(JWu, Cd_noJW)           # (don't do this for spin-up...)
+        Cd = np.dot(JWu, Cd_noJW)  # (don't do this for spin-up...)
         Cdd = np.transpose(Cd)
 
         # spin operators are defined as  (Cdu, Cdd) S^gamma (Cu, Cd)^T,
@@ -792,8 +794,8 @@ class SpinHalfFermionSite(Site):
         Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
         Sp = np.dot(Cdu, Cd)
         Sm = np.dot(Cdd, Cu)
-        Sx = 0.5*(Sp + Sm)
-        Sy = -0.5j*(Sp - Sm)
+        Sx = 0.5 * (Sp + Sm)
+        Sy = -0.5j * (Sp - Sm)
 
         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
                    Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
@@ -820,7 +822,7 @@ class SpinHalfFermionSite(Site):
             del ops['Sy']
         elif cons_Sz == 'parity':
             qnames.append('Sz')
-            qmod.append(4)    # difference between up and down is 2!
+            qmod.append(4)  # difference between up and down is 2!
             charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
             # chosen s.t. Cu, Cd have well-defined charges!
 

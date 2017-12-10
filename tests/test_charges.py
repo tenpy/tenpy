@@ -51,9 +51,9 @@ def test_ChargeInfo():
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
     npt.assert_equal(qs_valid, chinfo.make_valid(qs))
     chinfo2 = charges.ChargeInfo([3, 1], ['some', ''])
-    assert(chinfo2 == chinfo)
+    assert (chinfo2 == chinfo)
     chinfo3 = charges.ChargeInfo([3, 1], ['other', ''])
-    assert(chinfo3 != chinfo)
+    assert (chinfo3 != chinfo)
 
 
 def test__find_row_differences():

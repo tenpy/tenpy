@@ -17,7 +17,7 @@ spin_half = site.SpinHalfSite(conserve='Sz')
 
 def test_mps():
     site_triv = site.SpinHalfSite(conserve=None)
-    psi = mps.MPS.from_product_state([site_triv]*4, [0, 1, 0, 1], bc='finite')
+    psi = mps.MPS.from_product_state([site_triv] * 4, [0, 1, 0, 1], bc='finite')
     psi.test_sanity()
     for L in [4, 2, 1]:
         print L
@@ -36,21 +36,20 @@ def test_mps():
         C = psi.correlation_function('Sz', 'Sz')
         npt.assert_array_almost_equal_nulp(C, np.outer(E, E), 100)
         norm_err = psi.norm_test()
-        assert(np.linalg.norm(norm_err) < 1.e-13)
+        assert (np.linalg.norm(norm_err) < 1.e-13)
 
 
 def test_mps_add():
     s = site.SpinHalfSite(conserve='Sz')
-    psi1 = mps.MPS.from_product_state([s]*4, [0, 1, 0, 0], bc='finite')
-    psi2 = mps.MPS.from_product_state([s]*4, [0, 0, 1, 0], bc='finite')
+    psi1 = mps.MPS.from_product_state([s] * 4, [0, 1, 0, 0], bc='finite')
+    psi2 = mps.MPS.from_product_state([s] * 4, [0, 0, 1, 0], bc='finite')
     psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
     print psi_sum
     print psi_sum._B[1]
     print psi_sum._B[2]
     # check overlap with singlet state
     # TODO: doesn't work due to gauging of charges....
-    psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3],
-                                up=0, down=1, bc='finite')
+    psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=0, down=1, bc='finite')
     print psi.expectation_value('Sz')
     #  ov = psi.overlap(psi_sum)[0]
     #  print "ov = ", ov
@@ -73,23 +72,24 @@ def test_MPSEnvironment():
         assert (abs(abs(ov) - 1.) < 1.e-14)
     env.expectation_value('Sz')
 
+
 def test_singlet_mps():
     pairs = [(0, 3), (1, 6), (2, 5)]
     bond_singlets = np.array([1, 2, 3, 2, 2, 1, 0])
     lonely = [4, 7]
-    L = 2*len(pairs) + len(lonely)
+    L = 2 * len(pairs) + len(lonely)
     print "singlet pairs: ", pairs
     print "lonely sites: ", lonely
     psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, up=0, down=1, bc='finite')
     psi.test_sanity()
     print 'chi = ', psi.chi
-    assert(np.all(2**bond_singlets == np.array(psi.chi)))
+    assert (np.all(2**bond_singlets == np.array(psi.chi)))
     ent = psi.entanglement_entropy() / np.log(2)
     npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
     psi.entanglement_spectrum(True)  # (just check that the function runs)
     print psi.overlap(psi)
     print psi.expectation_value('Id')
-    ent_segm = psi.entanglement_entropy_segment(range(4)) /np.log(2)
+    ent_segm = psi.entanglement_entropy_segment(range(4)) / np.log(2)
     print ent_segm
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
     coord, mutinf = psi.mutinf_two_site()
@@ -111,7 +111,6 @@ def test_singlet_mps():
     #      product_state[k] = 0
     #  psi2 = mps.MPS.from_product_state([spin_half]*L, product_state, bc='finite')
     #  ov = psi.overlap(psi2)
-
 
 
 if __name__ == "__main__":

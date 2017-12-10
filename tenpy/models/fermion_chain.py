@@ -41,6 +41,7 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         MPS boundary conditions. Coupling boundary conditions are chosen
         appropriately.
     """
+
     def __init__(self, model_param):
         # 0) read out/set default parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)
@@ -62,7 +63,8 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         self.add_onsite(mu, 0, 'N')
         J = np.asarray(J)  # convert to array: allow `array_like` J
         self.add_coupling(J, 0, 'Cd', 0, 'C', 1, 'JW', True)  # (for a nearest neighbor model, we
-        self.add_coupling(J, 0, 'Cd', 0, 'C', -1, 'JW', True)  # could actually leave the `JW` away)
+        self.add_coupling(J, 0, 'Cd', 0, 'C', -1, 'JW',
+                          True)  # could actually leave the `JW` away)
         self.add_coupling(V, 0, 'N', 0, 'N', 1)
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())

@@ -534,8 +534,8 @@ class MPOGraph(object):
         charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
         charges[0]['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
         chis = [len(s) for s in self.states]
-        for _ in xrange(1000 *
-                        self.L):  # I don't expect interactions with larger range than that...
+        for _ in xrange(
+                1000 * self.L):  # I don't expect interactions with larger range than that...
             for i in xrange(self.L):
                 chL, chR = charges[i:i + 2]
                 stL, stR = states[i:i + 2]

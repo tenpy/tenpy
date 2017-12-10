@@ -135,8 +135,16 @@ class CouplingModel(object):
             term = self.onsite_terms[i]
             term[opname] = term.get(opname, 0) + strength[tuple(i_lat)]
 
-    def add_coupling(self, strength, u1, op1, u2, op2, dx, op_string='Id',
-                     str_on_first=True, raise_op2_left=False):
+    def add_coupling(self,
+                     strength,
+                     u1,
+                     op1,
+                     u2,
+                     op2,
+                     dx,
+                     op_string='Id',
+                     str_on_first=True,
+                     raise_op2_left=False):
         """Add twosite coupling terms to the Hamiltonian.
 
         Represents couplings of the form
@@ -298,8 +306,8 @@ class CouplingModel(object):
                     # i, j in terms are defined such that we expect j = j2,
                     # (including the case N_sites = 2 and iMPS
                     if j != j2:
-                        raise ValueError(
-                            "Can't give H_bond for long-range: {i:d} {j:d}".format(i=i, j=j2))
+                        raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
+                            i=i, j=j2))
                     for op2, strength in d3.iteritems():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
             H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])

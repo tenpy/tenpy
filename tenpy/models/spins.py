@@ -91,13 +91,13 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        self.add_coupling((Jx + Jy)/4., 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling((Jx + Jy)/4., 0, 'Sm', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy)/4., 0, 'Sp', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy)/4., 0, 'Sm', 0, 'Sm', 1)
+        self.add_coupling((Jx + Jy) / 4., 0, 'Sp', 0, 'Sm', 1)
+        self.add_coupling((Jx + Jy) / 4., 0, 'Sm', 0, 'Sp', 1)
+        self.add_coupling((Jx - Jy) / 4., 0, 'Sp', 0, 'Sp', 1)
+        self.add_coupling((Jx - Jy) / 4., 0, 'Sm', 0, 'Sm', 1)
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
-        self.add_coupling(muJ*0.5j, 0, 'Sm', 0, 'Sp', 1)
-        self.add_coupling(muJ*-0.5j, 0, 'Sp', 0, 'Sm', 1)
+        self.add_coupling(muJ * 0.5j, 0, 'Sm', 0, 'Sp', 1)
+        self.add_coupling(muJ * -0.5j, 0, 'Sp', 0, 'Sm', 1)
         # 4) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         # 5) initialize H_bond

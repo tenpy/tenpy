@@ -19,15 +19,19 @@ def run(Jzs):
     bc = 'infinite'
     model_params = dict(L=L, Jx=1., Jy=1., Jz=1., bc_MPS=bc, conserve='Sz', verbose=0)
     chi = 300
-    dmrg_params = dict(trunc_params={'chi_max': chi,
-                                     'svd_min': 1.e-10,
-                                     'trunc_cut': None}, update_env=20,
-                       start_env=20,
-                       max_E_err=0.0001, max_S_err=0.0001,
-                       verbose=1, mixer=True) # TODO: mixer?
+    dmrg_params = dict(
+        trunc_params={'chi_max': chi,
+                      'svd_min': 1.e-10,
+                      'trunc_cut': None},
+        update_env=20,
+        start_env=20,
+        max_E_err=0.0001,
+        max_S_err=0.0001,
+        verbose=1,
+        mixer=True)  # TODO: mixer?
 
     M = SpinChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [1, 0]*(L//2), bc)
+    psi = MPS.from_product_state(M.lat.mps_sites(), [1, 0] * (L // 2), bc)
     #  B = np.zeros([2, 2, 2])
     #  B[0, 0, 0] = B[1, 1, 1] = 1.
     #  psi = MPS.from_Bflat(M.lat.mps_sites(), [B]*L, bc=bc)
@@ -35,9 +39,9 @@ def run(Jzs):
     np.set_printoptions(linewidth=120)
     corr_length = []
     for Jz in Jzs:
-        print "-"*80
+        print "-" * 80
         print "Jz =", Jz
-        print "-"*80
+        print "-" * 80
         model_params['Jz'] = Jz
         M = SpinChain(model_params)
         #  #  psi = MPS.from_product_state(M.lat.mps_sites(), [1, 1]*(L//2), bc)
@@ -62,18 +66,20 @@ def run(Jzs):
         else:
             print psi.correlation_function('Sz', 'Sz')
     corr_length = np.array(corr_length)
-    results = {'model_params': model_params,
-               'dmrg_params': dmrg_params,
-               'Jzs': Jzs,
-               'corr_length': corr_length,
-               'eval_transfermatrix': np.exp(-1./corr_length)}
+    results = {
+        'model_params': model_params,
+        'dmrg_params': dmrg_params,
+        'Jzs': Jzs,
+        'corr_length': corr_length,
+        'eval_transfermatrix': np.exp(-1. / corr_length)
+    }
     return results
 
 
 def plot(results, filename):
     corr_length = results['corr_length']
     Jzs = results['Jzs']
-    pl.plot(Jzs, np.exp(-1./corr_length))
+    pl.plot(Jzs, np.exp(-1. / corr_length))
     pl.xlabel(r'$J_z/J_x$')
     pl.ylabel(r'$t = \exp(-\frac{1}{\xi})$')
     pl.savefig(filename)
@@ -89,10 +95,10 @@ if __name__ == "__main__":
     import cPickle
     import os.path
     if not os.path.exists(filename):
-        results = run(list(np.arange(4.0, 1.5, -0.25))+list(np.arange(1.5, 0.8, -0.05)))
+        results = run(list(np.arange(4.0, 1.5, -0.25)) + list(np.arange(1.5, 0.8, -0.05)))
         with open(filename, 'w') as f:
             cPickle.dump(results, f)
     else:
         with open(filename) as f:
             results = cPickle.load(f)
-        plot(results, filename[:-4]+'.pdf')
+        plot(results, filename[:-4] + '.pdf')

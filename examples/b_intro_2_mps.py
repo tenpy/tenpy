@@ -65,11 +65,11 @@ print "3) define 'environments' left and right"
 # this is automatically done during initialization of MPOEnvironment
 env = MPOEnvironment(psi, H, psi)
 envL = env.get_LP(0)
-envR = env.get_RP(L-1)
+envR = env.get_RP(L - 1)
 
 print "4) contract MPS and MPO to calculate the energy <psi|H|psi>"
 
-E = env.full_contraction(L-1)
+E = env.full_contraction(L - 1)
 print "E =", E
 
 print "5) calculate two-site hamiltonian ``H2`` from the MPO"

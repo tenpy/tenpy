@@ -16,12 +16,12 @@ from ..linalg import random_matrix as rand_mat
 
 import numpy as np
 
-
-__all__ = ['PurificationTEBD', 'PurificationTEBD2', 'Disentangler', 'BackwardDisentangler',
-           'RenyiDisentangler', 'NormDisentangler', 'DiagonalizeDisentangler',
-           'GradientDescentDisentangler', 'NoiseDisentangler', 'LastDisentangler',
-           'CompositeDisentangler', 'MinDisentangler', 'disentanglers_atom_parse_dict',
-           'get_disentangler']
+__all__ = [
+    'PurificationTEBD', 'PurificationTEBD2', 'Disentangler', 'BackwardDisentangler',
+    'RenyiDisentangler', 'NormDisentangler', 'DiagonalizeDisentangler',
+    'GradientDescentDisentangler', 'NoiseDisentangler', 'LastDisentangler',
+    'CompositeDisentangler', 'MinDisentangler', 'disentanglers_atom_parse_dict', 'get_disentangler'
+]
 
 
 class PurificationTEBD(tebd.Engine):
@@ -52,6 +52,7 @@ class PurificationTEBD(tebd.Engine):
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
+
     def __init__(self, psi, model, TEBD_params):
         super(PurificationTEBD, self).__init__(psi, model, TEBD_params)
         self._disent_iterations = np.zeros(psi.L)
@@ -87,7 +88,7 @@ class PurificationTEBD(tebd.Engine):
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
         """see :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
         super(PurificationTEBD, self).calc_U(order, delta_t, type_evo, E_offset)
-        self._guess_U_disent = [[None]*len(Us) for Us in self._U]
+        self._guess_U_disent = [[None] * len(Us) for Us in self._U]
 
     def update_bond(self, i, U_bond):
         """Updates the B matrices on a given bond.
@@ -252,7 +253,7 @@ class PurificationTEBD(tebd.Engine):
         if self.verbose > 10:
             print 'disentangle global pair ' + repr((i, j))
         self._disentangle_two_site(i, j)
-        return i, j   # TODO
+        return i, j  # TODO
         # done
 
     def disentangle_global_nsite(self, n=2):
@@ -263,11 +264,11 @@ class PurificationTEBD(tebd.Engine):
         n: int
             maximal number of sites to disentangle at once.
         """
-        for i in range(0, self.psi.L-n+1):  # sweep left to right
+        for i in range(0, self.psi.L - n + 1):  # sweep left to right
             self._update_index = None, i
             theta = self.psi.get_theta(i, n=n)
             self.disentangle_n_site(i, n, theta)  # works recursively
-        for i in range(self.psi.L-n, -1, -1):  # sweep right to left
+        for i in range(self.psi.L - n, -1, -1):  # sweep right to left
             self._update_index = None, i
             theta = self.psi.get_theta(i, n=n)
             self.disentangle_n_site(i, n, theta)  # works recursively
@@ -281,11 +282,11 @@ class PurificationTEBD(tebd.Engine):
         Recursively proceed to disentangle left and right parts afterwards.
         Scales (for even `n`) as :math:`O(\chi^3 d^n d^{n/2})`.
         """
-        assert(n >= 2)
+        assert (n >= 2)
         n1 = n // 2
         n2 = n - n1
-        p = ['p'+str(j) for j in range(n)]  # labels of theta to be separated
-        q = ['q'+str(j) for j in range(n)]
+        p = ['p' + str(j) for j in range(n)]  # labels of theta to be separated
+        q = ['q' + str(j) for j in range(n)]
         pL, pR = p[:n1], p[n1:]
         qL, qR = q[:n1], q[n1:]
         theta = theta.combine_legs([pL, qL, pR, qR], qconj=[+1, -1, +1, -1], new_axes=[1, 2, 3, 4])
@@ -297,7 +298,7 @@ class PurificationTEBD(tebd.Engine):
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
             theta, self.trunc_params, inner_labels=['vR', 'vL'])
-        self.psi.set_SL(i+n1, S)  # update S
+        self.psi.set_SL(i + n1, S)  # update S
         if n1 == 1:
             # save U as left B in psi
             U = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['(p)', '(q)'])
@@ -312,32 +313,32 @@ class PurificationTEBD(tebd.Engine):
             # save V as right B in psi
             V = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['(p)', '(q)'])
             V = V.split_legs(['(p)', '(q)'])
-            self.psi.set_B(i+n1, V, form='B')
+            self.psi.set_B(i + n1, V, form='B')
         else:
             # disentangle right n2-site wave function recursively
             theta_R = V.iscale_axis(S, 0).split_legs(1)
             theta_R = theta_R.ireplace_labels(['p1', 'q1'], [p1, q1]).split_legs([p1, q1])
             theta_R.ireplace_labels(pR, p[:n2]).ireplace_labels(qR, q[:n2])
-            self.disentangle_n_site(i+n1, n2, theta_R)
+            self.disentangle_n_site(i + n1, n2, theta_R)
 
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`disentangle`; swap back."""
         on_way = get_parameter(self.TEBD_params, 'disent_gl_on_swap', False, 'PurificationTEBD')
         if not self.psi.finite:
             raise NotImplementedError  # adjust: what's the shortest path?
-        assert(i < j)
-        for j0 in range(j, i+1, -1):  # j0 = current site of `j`
+        assert (i < j)
+        for j0 in range(j, i + 1, -1):  # j0 = current site of `j`
             # originial leg `j` is at j0
             self._update_index = None, j0
             self._swap_disentangle_bond(j0, swap=True, disentangle=False)  # swap j0-1, j0
             # originial leg is at `j0-1`
         # disentangle i, i+1
-        self._update_index = None, i+1
-        self._swap_disentangle_bond(i+1, swap=False, disentangle=True)
-        for j0 in range(i+1, j):  # j0 = current site of `j`
+        self._update_index = None, i + 1
+        self._swap_disentangle_bond(i + 1, swap=False, disentangle=True)
+        for j0 in range(i + 1, j):  # j0 = current site of `j`
             # originial leg `j` is at j0
-            self._update_index = None, j0+1
-            self._swap_disentangle_bond(j0+1, disentangle=on_way)  # swap j0, j0+1
+            self._update_index = None, j0 + 1
+            self._swap_disentangle_bond(j0 + 1, disentangle=on_way)  # swap j0, j0+1
             # originial leg is at `j0+1`
         self._update_index = None  # done
 
@@ -404,7 +405,7 @@ class PurificationTEBD2(PurificationTEBD):
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
-        assert(order == 2 and self.psi.finite)
+        assert (order == 2 and self.psi.finite)
         for i in range(N_steps):
             trunc_err += self.update_step(0, False)
             trunc_err += self.update_step(0, True)
@@ -438,7 +439,7 @@ class PurificationTEBD2(PurificationTEBD):
         if odd:
             sweep = range(1, self.psi.L)  # start with 1: only finite!
         else:
-            sweep = range(self.psi.L-1, 0, -1)
+            sweep = range(self.psi.L - 1, 0, -1)
         for i_bond in sweep:
             if Us[i_bond] is None:
                 if self.verbose >= 10:
@@ -482,6 +483,7 @@ class Disentangler:
     parent: :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
     """
+
     def __init__(self, parent):
         self.parent = parent
 
@@ -519,6 +521,7 @@ class BackwardDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __call__(self, theta):
         eng = self.parent
         if eng._U_param['type_evo'] == 'imag':
@@ -548,6 +551,7 @@ class RenyiDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
+
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -557,8 +561,9 @@ class RenyiDisentangler(Disentangler):
     def __call__(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy."""
         U_idx_dt, i = self.parent._update_index
-        U = npc.outer(npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-                      npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(
+            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
+            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
         Sold = np.inf
         S0 = None
         for j in xrange(self.max_iter):
@@ -571,7 +576,8 @@ class RenyiDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S0-Sold)
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
+                j=j, DS=S0 - Sold)
         return theta, U
 
     def iter(self, theta, U):
@@ -616,13 +622,13 @@ class RenyiDisentangler(Disentangler):
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         # same legs as theta: 'vL', 'p0', 'q0', 'p1', 'q1', 'vR'
         # contract diagram from bottom to top
-        dS = npc.tensordot(U_theta, U_theta.conj(), axes=[['p1', 'q1', 'vR'],
-                                                          ['p1*', 'q1*', 'vR*']])
+        dS = npc.tensordot(
+            U_theta, U_theta.conj(), axes=[['p1', 'q1', 'vR'], ['p1*', 'q1*', 'vR*']])
         # dS has legs 'vL', 'p0', 'q0', 'vL*', 'p0*', 'q0*'
         dS = npc.tensordot(U_theta.conj(), dS, axes=[['vL*', 'p0*', 'q0*'], ['vL', 'p0', 'q0']])
         # dS has legs 'vL', 'p0', 'q0', 'vR', 'p1', 'q1'
-        dS = npc.tensordot(theta, dS, axes=[['vL', 'p0', 'vR', 'p1'],
-                                            ['vL*', 'p0*', 'vR*', 'p1*']])
+        dS = npc.tensordot(
+            theta, dS, axes=[['vL', 'p0', 'vR', 'p1'], ['vL*', 'p0*', 'vR*', 'p1*']])
         S2 = npc.inner(U, dS, axes=[['q0', 'q1', 'q0*', 'q1*'], ['q0*', 'q1*', 'q0', 'q1']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
@@ -651,18 +657,20 @@ class NormDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
+
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
         self.eps = get_parameter(parent.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
-        self.trunc_par = get_parameter(parent.TEBD_params, 'disent_trunc_par',
-                                       parent.trunc_params, 'PurificationTEBD')
+        self.trunc_par = get_parameter(parent.TEBD_params, 'disent_trunc_par', parent.trunc_params,
+                                       'PurificationTEBD')
         self.parent = parent
 
     def __call__(self, theta):
         _, i = self.parent._update_index
-        U = npc.outer(npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-                      npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(
+            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
+            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
         err = None
         for j in range(self.max_iter):
             err2, U = self.iter(theta, U, self.trunc_par)
@@ -701,8 +709,8 @@ class NormDisentangler(Disentangler):
         lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
         X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
         lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
-        dS = npc.tensordot(theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'],
-                                                        ['vL*', 'vR*', 'p0*', 'p1*']])
+        dS = npc.tensordot(
+            theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
         # Find unitary U2 which maximizes `trace(U dS)`.
@@ -731,6 +739,7 @@ class GradientDescentDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -759,7 +768,8 @@ class GradientDescentDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j, DS=S0-Sold)
+            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
+                j=j, DS=S0 - Sold)
         return theta, U
 
     def iter(self, theta):
@@ -798,26 +808,26 @@ class GradientDescentDisentangler(Disentangler):
         X, Y, Z = npc.svd(theta2, inner_labels=['vR', 'vL'])
         n = self.n
         if n == 1:
-            r = Y*np.log(Y)*2
+            r = Y * np.log(Y) * 2
             r[Y < 1.e-14] = 0.
             #  S = -np.inner(Y**2, np.log(Y**2))
         else:
             Y[Y < 1.e-20] = 1.e-20
-            tr_pn = np.sum(Y**(2*n))
-            ss = Y**(2*(n-1))
-            r = Y*ss * (n/(n - 1.) / tr_pn)  # TODO: why?
+            tr_pn = np.sum(Y**(2 * n))
+            ss = Y**(2 * (n - 1))
+            r = Y * ss * (n / (n - 1.) / tr_pn)  # TODO: why?
             #  r = Y*ss *(1 - n.)  # TODO: why not?
             #  S = np.log(tr_pn)/(1 - n)
         XrZ = npc.tensordot(X.scale_axis(r, 'vR'), Z, axes=['vR', 'vL']).split_legs()
-        dS = npc.tensordot(theta, XrZ.conj(), axes=[['vL', 'p0', 'p1', 'vR'],
-                                                    ['vL*', 'p0*', 'p1*', 'vR*']])
+        dS = npc.tensordot(
+            theta, XrZ.conj(), axes=[['vL', 'p0', 'p1', 'vR'], ['vL*', 'p0*', 'p1*', 'vR*']])
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[1, -1])
         dS = dS - dS.conj().transpose(['(q0.q1)', '(q0*.q1*)'])  # project: anti-hermitian part
         new_Ss = []
         new_thetas = []
         new_Us = []
         for t in self.stepsizes:
-            U = npc.expm((-t)*dS).split_legs()   # dS anti-hermitian => exp(-tdS) unitary
+            U = npc.expm((-t) * dS).split_legs()  # dS anti-hermitian => exp(-tdS) unitary
             new_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
             new_Ss.append(self._entropy_theta(new_theta, n))
             new_thetas.append(new_theta)
@@ -837,6 +847,7 @@ class NoiseDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __init__(self, parent):
         self.a = get_parameter(parent.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
 
@@ -857,6 +868,7 @@ class LastDisentangler(Disentangler):
 
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler."""
+
     def __call__(self, theta):
         # result was saved in :meth:`PurificationTEBD.disentangle`
         U = None
@@ -878,16 +890,17 @@ class DiagonalizeDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
+
     def __call__(self, theta):
-        rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR', 'p0', 'p1'],
-                                                       ['vL*', 'vR*', 'p0*', 'p1*']))
+        rho = npc.tensordot(
+            theta, theta.conj(), axes=(['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']))
         # eigh sorts only within the charge blocks...
         E, V = npc.eigh(rho.combine_legs((['q0', 'q1'], ['q0*', 'q1*']), qconj=[+1, -1]))
         # the phase of the eigenvectors is not well defined. Thus, even if V is the identity,
         # we might actually increase the entanglement due to the random phases!
         # Try to get rid of them by choosing the phase of the maximal element.
         V_flat = V.to_ndarray()
-        phases = V_flat[np.argmax(np.abs(V_flat), axis=0), np.arange(len(V_flat))]   # max values
+        phases = V_flat[np.argmax(np.abs(V_flat), axis=0), np.arange(len(V_flat))]  # max values
         phases = phases / np.abs(phases)  # divided by absolute value
         V.iscale_axis(np.conj(phases), 'eig')
         V.ireplace_label('eig', '(q0*.q1*)')
@@ -912,6 +925,7 @@ class CompositeDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
+
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
 
@@ -947,6 +961,7 @@ class MinDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
+
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
         self.n = get_parameter(parent.TEBD_params, 'disent_min_n', 1., 'PurificationTEBD')
@@ -976,14 +991,16 @@ If you define your own disentanglers, you can dynamically append them to this di
 CompositeDisentangler and MinDisentangler separate: they have non-default constructor and
 special syntax.
 """
-disentanglers_atom_parse_dict = {'None': Disentangler,
-                                 'backwards': BackwardDisentangler,
-                                 'renyi': RenyiDisentangler,
-                                 'norm': NormDisentangler,
-                                 'graddesc': GradientDescentDisentangler,
-                                 'noise': NoiseDisentangler,
-                                 'last': LastDisentangler,
-                                 'diag': DiagonalizeDisentangler}
+disentanglers_atom_parse_dict = {
+    'None': Disentangler,
+    'backwards': BackwardDisentangler,
+    'renyi': RenyiDisentangler,
+    'norm': NormDisentangler,
+    'graddesc': GradientDescentDisentangler,
+    'noise': NoiseDisentangler,
+    'last': LastDisentangler,
+    'diag': DiagonalizeDisentangler
+}
 
 
 def get_disentangler(method, parent):

@@ -14,23 +14,26 @@ from tenpy.algorithms.dmrg import run as run_DMRG
 
 
 def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init=None):
-    model_params = dict(L=L, Jx=1., Jy=1., Jz=Jz, hz=hz, bc_MPS='finite',
-                        conserve='best', verbose=1)
+    model_params = dict(
+        L=L, Jx=1., Jy=1., Jz=Jz, hz=hz, bc_MPS='finite', conserve='best', verbose=1)
     result = {}
     M = SpinChain(model_params)
     result['model'] = 'SpinChain'
     result['model_params'] = model_params
 
     result['sites'] = np.arange(L)
-    result['bonds'] = np.arange(L-1)+0.5
+    result['bonds'] = np.arange(L - 1) + 0.5
 
-    psi = MPS.from_product_state(M.lat.mps_sites(), ([0, 1]*L)[:L])
-    dmrg_params = {'trunc_params': {'chi_max': chi_max,
-                                    'svd_min': 1.e-10,
-                                    'trunc_cut': None},
-                   'mixer': True,
-                   'verbose': 1
-                   }
+    psi = MPS.from_product_state(M.lat.mps_sites(), ([0, 1] * L)[:L])
+    dmrg_params = {
+        'trunc_params': {
+            'chi_max': chi_max,
+            'svd_min': 1.e-10,
+            'trunc_cut': None
+        },
+        'mixer': True,
+        'verbose': 1
+    }
     if Jz_init:
         # run first time with small hx to break the symmetry
         model_params_Jz = model_params.copy()
@@ -43,7 +46,7 @@ def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init
     t0 = time.time()
 
     info = run_DMRG(psi, M, dmrg_params)
-    print "DMRG finished after", time.time()-t0, "s"
+    print "DMRG finished after", time.time() - t0, "s"
 
     # save results in output file
     result['chi'] = np.array(psi.chi)

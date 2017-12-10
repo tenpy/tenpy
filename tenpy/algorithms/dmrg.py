@@ -308,9 +308,7 @@ def run(psi, model, DMRG_params):
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
         print msg.format(
-            sweep=engine.sweeps,
-            age=engine.statistics['age'][-1],
-            chimax=np.max(psi.chi))
+            sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi))
         print "=" * 80
     unused_parameters(DMRG_params['lanczos_params'], "DMRG")
     unused_parameters(DMRG_params['trunc_params'], "DMRG")

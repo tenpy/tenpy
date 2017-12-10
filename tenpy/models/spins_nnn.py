@@ -71,8 +71,8 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         # check what we can conserve
         if conserve == 'best':
             # check how much we can conserve:
-            if not any_nonzero(model_param, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
-                               "check Sz conservation"):
+            if not any_nonzero(model_param, [('Jx', 'Jy'),
+                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
                 conserve = 'Sz'
             elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
@@ -101,28 +101,28 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        self.add_onsite((Jx + Jy)/4., 0, 'Sp0 Sm1')
-        self.add_onsite((Jx + Jy)/4., 0, 'Sm0 Sp1')
-        self.add_onsite((Jx - Jy)/4., 0, 'Sp0 Sp1')
-        self.add_onsite((Jx - Jy)/4., 0, 'Sm0 Sm1')
+        self.add_onsite((Jx + Jy) / 4., 0, 'Sp0 Sm1')
+        self.add_onsite((Jx + Jy) / 4., 0, 'Sm0 Sp1')
+        self.add_onsite((Jx - Jy) / 4., 0, 'Sp0 Sp1')
+        self.add_onsite((Jx - Jy) / 4., 0, 'Sm0 Sm1')
         self.add_onsite(Jz, 0, 'Sz0 Sz1')
-        self.add_coupling((Jx + Jy)/4., 0, 'Sp1', 0, 'Sm0', 1)
-        self.add_coupling((Jx + Jy)/4., 0, 'Sm1', 0, 'Sp0', 1)
-        self.add_coupling((Jx - Jy)/4., 0, 'Sp1', 0, 'Sp0', 1)
-        self.add_coupling((Jx - Jy)/4., 0, 'Sm1', 0, 'Sm0', 1)
+        self.add_coupling((Jx + Jy) / 4., 0, 'Sp1', 0, 'Sm0', 1)
+        self.add_coupling((Jx + Jy) / 4., 0, 'Sm1', 0, 'Sp0', 1)
+        self.add_coupling((Jx - Jy) / 4., 0, 'Sp1', 0, 'Sp0', 1)
+        self.add_coupling((Jx - Jy) / 4., 0, 'Sm1', 0, 'Sm0', 1)
         self.add_coupling(Jz, 0, 'Sz1', 0, 'Sz0', 1)
         # next-nearest neighbor couplings
         Jxp = np.asarray(Jxp)
         Jyp = np.asarray(Jyp)
-        self.add_coupling((Jxp + Jyp)/4., 0, 'Sp0', 0, 'Sm0', 1)
-        self.add_coupling((Jxp + Jyp)/4., 0, 'Sm0', 0, 'Sp0', 1)
-        self.add_coupling((Jxp - Jyp)/4., 0, 'Sp0', 0, 'Sp0', 1)
-        self.add_coupling((Jxp - Jyp)/4., 0, 'Sm0', 0, 'Sm0', 1)
+        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp0', 0, 'Sm0', 1)
+        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sm0', 0, 'Sp0', 1)
+        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp0', 0, 'Sp0', 1)
+        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm0', 0, 'Sm0', 1)
         self.add_coupling(Jzp, 0, 'Sz0', 0, 'Sz0', 1)
-        self.add_coupling((Jxp + Jyp)/4., 0, 'Sp1', 0, 'Sm1', 1)
-        self.add_coupling((Jxp + Jyp)/4., 0, 'Sm1', 0, 'Sp1', 1)
-        self.add_coupling((Jxp - Jyp)/4., 0, 'Sp1', 0, 'Sp1', 1)
-        self.add_coupling((Jxp - Jyp)/4., 0, 'Sm1', 0, 'Sm1', 1)
+        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp1', 0, 'Sm1', 1)
+        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sm1', 0, 'Sp1', 1)
+        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp1', 0, 'Sp1', 1)
+        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm1', 0, 'Sm1', 1)
         self.add_coupling(Jzp, 0, 'Sz1', 0, 'Sz1', 1)
         # 4) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())

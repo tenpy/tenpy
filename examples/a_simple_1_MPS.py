@@ -1,7 +1,7 @@
 """Toy code implementing a matrix product state."""
 
 import numpy as np
-from tenpy.linalg.svd_robust import svd   # (works like scipy.linalg.svd)
+from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
 
 
 class SimpleMPS(object):
@@ -37,7 +37,7 @@ class SimpleMPS(object):
         self.Ss = Ss
         self.bc = bc
         self.L = len(Bs)
-        self.nbonds = self.L-1 if self.bc == 'finite' else self.L
+        self.nbonds = self.L - 1 if self.bc == 'finite' else self.L
 
     def copy(self):
         return SimpleMPS([B.copy() for B in self.Bs], [S.copy() for S in self.Ss], self.bc)
@@ -52,7 +52,7 @@ class SimpleMPS(object):
         """Calculate effective two-site wave function on sites i,j=(i+1) in mixed canonical form.
 
         The returned array has legs ``vL, i, j, vR``."""
-        j = (i+1) % self.L
+        j = (i + 1) % self.L
         return np.tensordot(self.get_theta1(i), self.Bs[j], [2, 0])  # vL i [vR], [vL] j vR
 
     def get_chi(self):
@@ -87,7 +87,7 @@ class SimpleMPS(object):
         for i in bonds:
             S = self.Ss[i].copy()
             S[S < 1.e-20] = 0.  # 0*log(0) should give 0; avoid warning or NaN.
-            result.append(-np.sum(S*np.log(S)))
+            result.append(-np.sum(S * np.log(S)))
         return np.array(result)
 
     def correlation_length(self):
@@ -106,7 +106,7 @@ class SimpleMPS(object):
         T = np.reshape(T, (chi**2, chi**2))
         # Obtain the 2nd largest eigenvalue
         eta = arp.eigs(T, k=2, which='LM', return_eigenvectors=False, ncv=20)
-        return -self.L/np.log(np.min(np.abs(eta)))
+        return -self.L / np.log(np.min(np.abs(eta)))
 
 
 def init_FM_MPS(L, d, bc='finite'):
@@ -148,14 +148,14 @@ def split_truncate_theta(theta, chi_max, eps):
         Right-canonical matrix on site j, with legs ``vC, j, vR``
     """
     chivL, dL, dR, chivR = theta.shape
-    theta = np.reshape(theta, [chivL*dL, dR*chivR])
+    theta = np.reshape(theta, [chivL * dL, dR * chivR])
     X, Y, Z = svd(theta, full_matrices=False)
     # truncate
     chivC = min(chi_max, np.sum(Y > eps))
     piv = np.argsort(Y)[::-1][:chivC]  # keep the largest `chivC` singular values
     X, Y, Z = X[:, piv], Y[piv], Z[piv, :]
     # renormalize
-    S = Y/np.linalg.norm(Y)  # == Y/sqrt(sum(Y**2))
+    S = Y / np.linalg.norm(Y)  # == Y/sqrt(sum(Y**2))
     # split legs of X and Z
     A = np.reshape(X, [chivL, dL, chivC])
     B = np.reshape(Z, [chivC, dR, chivR])

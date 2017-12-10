@@ -106,7 +106,7 @@ class Engine(object):
         self._calc_bond_eig()  # calculates `self._bond_eig_vals`, `self._bond_eig_vecs`.
         self._U = None
         self._U_param = {}
-        self._trunc_err_bonds = [TruncationError() for i in range(psi.L+1)]
+        self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
         self._update_index = None
 
     def __del__(self):
@@ -164,8 +164,15 @@ class Engine(object):
             DeltaS = np.abs(Sold - S)
             msg = ("--> time={t:3.3f}, max_chi={chi:d}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
                    "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
-            print msg.format(t=self.evolved_time, chi=max(self.psi.chi), dE=DeltaE, dS=DeltaS,
-                             E=E.real, S=S.real, time=time.time() - start_time,)
+            print msg.format(
+                t=self.evolved_time,
+                chi=max(self.psi.chi),
+                dE=DeltaE,
+                dS=DeltaS,
+                E=E.real,
+                S=S.real,
+                time=time.time() - start_time,
+            )
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -201,9 +208,10 @@ class Engine(object):
         """
 
         # initialize parameters
-        delta_tau_list = get_parameter(self.TEBD_params, 'delta_tau_list', [
-            0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.
-        ], 'run_GS')
+        delta_tau_list = get_parameter(
+            self.TEBD_params, 'delta_tau_list',
+            [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.],
+            'run_GS')
         max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-13, 'run_GS')
         N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
         TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
@@ -233,9 +241,16 @@ class Engine(object):
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
                            "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, " +
                            "S={S:.10f}, time simulated: {time:.1f} s")
-                    print msg.format(step=step, t=self.evolved_time, chi=max(self.psi.chi),
-                                     dE=DeltaE, dS=DeltaS, E=E.real, S=S.real,
-                                     time=time.time() - start_time,)
+                    print msg.format(
+                        step=step,
+                        t=self.evolved_time,
+                        chi=max(self.psi.chi),
+                        dE=DeltaE,
+                        dS=DeltaS,
+                        E=E.real,
+                        S=S.real,
+                        time=time.time() - start_time,
+                    )
         # done
 
     @staticmethod
@@ -511,10 +526,10 @@ class Engine(object):
         order = self._U_param['order']
         # allow only second order evolution
         if order != 2 or not self.psi.finite:
-            raise NotImplementedError() # Would lead to loss of canonical form. What about DMRG?
+            raise NotImplementedError()  # Would lead to loss of canonical form. What about DMRG?
         U_idx_dt = 0  # always with dt=0.5
-        assert(self.suzuki_trotter_time_steps(order)[U_idx_dt] == 0.5)
-        assert(self.psi.finite)  # finite or segment bc
+        assert (self.suzuki_trotter_time_steps(order)[U_idx_dt] == 0.5)
+        assert (self.psi.finite)  # finite or segment bc
         Us = self._U[U_idx_dt]
         for _ in range(N_steps):
             # sweep right
@@ -528,7 +543,7 @@ class Engine(object):
                 self._update_index = (U_idx_dt, i_bond)
                 trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
             # sweep left
-            for i_bond in xrange(self.psi.L-1, -1, -1):
+            for i_bond in xrange(self.psi.L - 1, -1, -1):
                 if Us[i_bond] is None:
                     if self.verbose >= 10:
                         print "Skip U_bond element:", i_bond

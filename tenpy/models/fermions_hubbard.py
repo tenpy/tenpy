@@ -17,7 +17,7 @@ from tenpy.networks.site import SpinHalfFermionSite
 
 
 class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
-	r"""Spin-1/2 fermionic Hubbard model in 1D.
+    r"""Spin-1/2 fermionic Hubbard model in 1D.
 
 	The Hamiltonian reads:
 
@@ -42,39 +42,40 @@ class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 	"""
-	def __init__(self, model_param):
-		# 0) Read out/set default parameters.
-		L = get_parameter(model_param, 'L', 2, self.__class__)
-		t = get_parameter(model_param, 't', 1., self.__class__)
-		U = get_parameter(model_param, 'U', 0, self.__class__)
-		mu = get_parameter(model_param, 'mu', 0., self.__class__)
-		bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-		cons_N = get_parameter(model_param, 'cons_N', 'N', self.__class__)  
-		cons_Sz = get_parameter(model_param, 'cons_Sz', 'Sz', self.__class__)
-		unused_parameters(model_param, self.__class__)
 
-		# 1) Define the site and the lattice.
-		site = SpinHalfFermionSite(conserve=conserve)
-		lat = Chain(L ,site, bc_MPS=bc_MPS)
- 
-		# 2) Initialize CouplingModel
-		if bc_MPS == 'periodic' or bc_MPS == 'infinite':  #TODO Is this correct for mps 'periodic'?
-			bc_coupling == 'periodic'
-		else:
-			bc_coupling == 'open'
-		CouplingModel.__init__(self, lat, bc_coupling)
+    def __init__(self, model_param):
+        # 0) Read out/set default parameters.
+        L = get_parameter(model_param, 'L', 2, self.__class__)
+        t = get_parameter(model_param, 't', 1., self.__class__)
+        U = get_parameter(model_param, 'U', 0, self.__class__)
+        mu = get_parameter(model_param, 'mu', 0., self.__class__)
+        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
+        cons_N = get_parameter(model_param, 'cons_N', 'N', self.__class__)
+        cons_Sz = get_parameter(model_param, 'cons_Sz', 'Sz', self.__class__)
+        unused_parameters(model_param, self.__class__)
 
-		# 3) Add terms of the hamiltonian.
-		# 3a) On-site terms
-		self.add_onsite(mu, 0, 'Ntot')
+        # 1) Define the site and the lattice.
+        site = SpinHalfFermionSite(conserve=conserve)
+        lat = Chain(L, site, bc_MPS=bc_MPS)
 
-		# 3b) Coupling terms
-		self.add_coupling(t, 0, 'Cdu', 0, 'Cu', 1, 'JW', True) 
-		self.add_coupling(t, 0, 'Cu', 0, 'Cdu', 1, 'JW', True)
-		self.add_coupling(t, 0, 'Cdd', 0, 'Cd', 1, 'JW', True)
-		self.add_coupling(t, 0, 'Cd', 0, 'Cdd', 1, 'JW', True)
-		self.add_coupling(U, 0, 'Nu', 0, 'Nd', 0)  #TODO Should this be done as onsite?
+        # 2) Initialize CouplingModel
+        if bc_MPS == 'periodic' or bc_MPS == 'infinite':  #TODO Is this correct for mps 'periodic'?
+            bc_coupling == 'periodic'
+        else:
+            bc_coupling == 'open'
+        CouplingModel.__init__(self, lat, bc_coupling)
 
-		# 4) Initialize MPO and bonds (order does not matter).
-		MPOModel.__init__(self, lat, self.calc_H_MPO())
-		NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        # 3) Add terms of the hamiltonian.
+        # 3a) On-site terms
+        self.add_onsite(mu, 0, 'Ntot')
+
+        # 3b) Coupling terms
+        self.add_coupling(t, 0, 'Cdu', 0, 'Cu', 1, 'JW', True)
+        self.add_coupling(t, 0, 'Cu', 0, 'Cdu', 1, 'JW', True)
+        self.add_coupling(t, 0, 'Cdd', 0, 'Cd', 1, 'JW', True)
+        self.add_coupling(t, 0, 'Cd', 0, 'Cdd', 1, 'JW', True)
+        self.add_coupling(U, 0, 'Nu', 0, 'Nd', 0)  #TODO Should this be done as onsite?
+
+        # 4) Initialize MPO and bonds (order does not matter).
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())

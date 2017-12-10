@@ -27,7 +27,7 @@ def test_site():
     leg = gen_random_legcharge(chinfo, 8)
     op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    labels = ['up'] + [None] * (leg.ind_len-2) + ['down']
+    labels = ['up'] + [None] * (leg.ind_len - 2) + ['down']
     s = site.Site(leg, labels, silly_op=op1)
     nst.eq_(s.state_index('up'), 0)
     nst.eq_(s.state_index('down'), leg.ind_len - 1)
@@ -37,8 +37,8 @@ def test_site():
     assert (s.op2 is op2)
     assert (s.get_op('op2') is op2)
     assert (s.get_op('silly_op') is op1)
-    npt.assert_equal(s.get_op('silly_op op2').to_ndarray(),
-                     npc.tensordot(op1, op2, [1, 0]).to_ndarray())
+    npt.assert_equal(
+        s.get_op('silly_op op2').to_ndarray(), npc.tensordot(op1, op2, [1, 0]).to_ndarray())
     leg2 = npc.LegCharge.from_drop_charge(leg, 1)
     leg2 = npc.LegCharge.from_change_charge(leg2, 0, 2, 'changed')
     s2 = s.copy_change_charge(leg2)
@@ -57,14 +57,14 @@ def test_site():
 
 def test_double_site():
     ss = site.SpinHalfSite('Sz')
-    for site0, site1 in [[site.SpinHalfSite(None)]*2, [ss]*2]:
+    for site0, site1 in [[site.SpinHalfSite(None)] * 2, [ss] * 2]:
         for charges in ['same', 'drop', 'independent']:
             ds = site.DoubleSite(site0, site1, charges=charges)
             ds.test_sanity()
     fs = site.FermionSite('N')
     ds = site.DoubleSite(fs, fs, 'a', 'b', charges='same')
-    assert ds.need_JW_string == set([op+'a' for op in fs.need_JW_string] +
-                                    [op+'b' for op in fs.need_JW_string])
+    assert ds.need_JW_string == set([op + 'a' for op in fs.need_JW_string] +
+                                    [op + 'b' for op in fs.need_JW_string])
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
@@ -88,7 +88,7 @@ def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
             # for pauli matrices ``sigma_a . sigma_b = 1.j * epsilon_{a,b,c} sigma_c``
             # with ``Sa = 0.5 sigma_a``, we get ``Sa . Sb = 0.5j epsilon_{a,b,c} Sc``.
             #  npt.assert_almost_equal(np.dot(Sa, Sb), 0.5j*Sc, 13) # holds only for S=1/2
-            npt.assert_almost_equal(commutator(Sa, Sb), 1.j*Sc, 13)
+            npt.assert_almost_equal(commutator(Sa, Sb), 1.j * Sc, 13)
 
 
 def test_spin_half_site():

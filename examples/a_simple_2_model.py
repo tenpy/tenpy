@@ -52,16 +52,16 @@ class TFIModel(object):
         """Initialize `H_bonds` hamiltonian. Called by __init__()."""
         sx, sz, id = self.sigmax, self.sigmaz, self.id
         d = self.d
-        nbonds = self.L-1 if self.bc == 'finite' else self.L
+        nbonds = self.L - 1 if self.bc == 'finite' else self.L
         H_list = []
         for i in range(nbonds):
             gL = gR = 0.5 * self.g
             if self.bc == 'finite':
                 if i == 0:
                     gL = self.g
-                if i+1 == self.L-1:
+                if i + 1 == self.L - 1:
                     gR = self.g
-            H_bond = - self.J * np.kron(sz, sz) - gL * np.kron(sx, id) - gR * np.kron(id, sx)
+            H_bond = -self.J * np.kron(sz, sz) - gL * np.kron(sx, id) - gR * np.kron(id, sx)
             # H_bond has legs ``i, j, i*, j*``
             H_list.append(np.reshape(H_bond, [d, d, d, d]))
         self.H_bonds = H_list
@@ -74,8 +74,8 @@ class TFIModel(object):
             w = np.zeros((3, 3, self.d, self.d), dtype=np.float)
             w[0, 0] = w[2, 2] = self.id
             w[0, 1] = self.sigmaz
-            w[0, 2] = - self.g * self.sigmax
-            w[1, 2] = - self.J * self.sigmaz
+            w[0, 2] = -self.g * self.sigmax
+            w[1, 2] = -self.J * self.sigmaz
             w_list.append(w)
         self.H_mpo = w_list
 
@@ -94,7 +94,7 @@ class TFIModel(object):
         sx = sparse.csr_matrix(self.sigmax)
         sz = sparse.csr_matrix(self.sigmaz)
         id = sparse.csr_matrix(self.id)
-        sx_list = []   # sx_list[i] = kron([id, id, ..., id, sx, id, .... id])
+        sx_list = []  # sx_list[i] = kron([id, id, ..., id, sx, id, .... id])
         sz_list = []
         for i_site in range(L):
             x_ops = [id] * L
@@ -110,8 +110,8 @@ class TFIModel(object):
             sz_list.append(Z)
         H_zz = sparse.csr_matrix((2**L, 2**L))
         H_x = sparse.csr_matrix((2**L, 2**L))
-        for i in range(L-1):
-            H_zz = H_zz + sz_list[i] * sz_list[(i+1) % L]
+        for i in range(L - 1):
+            H_zz = H_zz + sz_list[i] * sz_list[(i + 1) % L]
         for i in range(L):
             H_x = H_x + sx_list[i]
         H = -self.J * H_zz - self.g * H_x
@@ -123,7 +123,7 @@ class TFIModel(object):
         import scipy.integrate
 
         def f(k, g):
-            return -2*np.sqrt(1+g**2-2*g*np.cos(k))/np.pi/2.
+            return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
-        E0_exact = scipy.integrate.quad(f, 0, np.pi, args=(self.g/self.J, ))[0]
+        E0_exact = scipy.integrate.quad(f, 0, np.pi, args=(self.g / self.J, ))[0]
         return E0_exact

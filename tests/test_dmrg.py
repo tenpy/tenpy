@@ -17,16 +17,16 @@ def e0_tranverse_ising(g=0.5):
 
     H = - J sigma_z sigma_z + g sigma_x
     Can be obtained by mapping to free fermions."""
-    return integrate.quad(_f_tfi, 0, np.pi, args=(g,))[0]
+    return integrate.quad(_f_tfi, 0, np.pi, args=(g, ))[0]
 
 
 def _f_tfi(k, g):
-    return -2*np.sqrt(1+g**2-2*g*np.cos(k))/np.pi/2.
+    return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
 
 def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=0.5):
     # factor of 4 (2) for J (h) to change spin-1/2 to Pauli matrices
-    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2.*g, bc_MPS=bc_MPS, conserve=None)
+    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = ([0, 0] * L)[:L]  # Ferromagnetic Ising
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
@@ -67,8 +67,8 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=0.5):
         Eexact = e0_tranverse_ising(g)
         print "E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact)
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
-        assert(abs((Edmrg-Eexact)/Eexact) < 1.e-12)
-        assert(abs((Edmrg-Edmrg2)/Edmrg2) < 1.e-12)
+        assert (abs((Edmrg - Eexact) / Eexact) < 1.e-12)
+        assert (abs((Edmrg - Edmrg2) / Edmrg2) < 1.e-12)
 
 
 @attr('slow')

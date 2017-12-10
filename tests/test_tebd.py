@@ -29,15 +29,22 @@ def check_tebd(bc_MPS='finite', g=0.5):
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
     # factor of 4 (2) for J (h) to change spin-1/2 to Pauli matrices
-    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2.*g, bc_MPS=bc_MPS, conserve=None)
+    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = ([[1, -1.], [1, -1.]] * L)[:L]  # pointing in (-x)-direction
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
-    tebd_param = {'verbose': 2, 'dt': 0.01, 'order': 4,
-                  'delta_tau_list': [0.1, 1.e-4, 1.e-8, 1.e-10],
-                  'max_error_E': 1.e-10,
-                  'trunc_params': {'chi_max': 50, 'trunc_cut': 1.e-13}}
+    tebd_param = {
+        'verbose': 2,
+        'dt': 0.01,
+        'order': 4,
+        'delta_tau_list': [0.1, 1.e-4, 1.e-8, 1.e-10],
+        'max_error_E': 1.e-10,
+        'trunc_params': {
+            'chi_max': 50,
+            'trunc_cut': 1.e-13
+        }
+    }
     engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 
@@ -51,7 +58,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
         Etebd = np.sum(M.bond_energies(psi))
         Eexact = np.min(ED.E)
         print "E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact)
-        assert(abs((Etebd-Eexact)/Eexact) < 1.e-8)
+        assert (abs((Etebd - Eexact) / Eexact) < 1.e-8)
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
         print "compare with ED: overlap = ", abs(ov)**2
         assert (abs(abs(ov) - 1.) < 1.e-8)
@@ -62,8 +69,8 @@ def check_tebd(bc_MPS='finite', g=0.5):
             engine.run()
         Enew = np.sum(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
-        assert (abs(Enew-Etebd) < 1.e-8)
-        assert (abs(Sold-Snew) < 1.e-6)   # somehow we need larger tolerance here....
+        assert (abs(Enew - Etebd) < 1.e-8)
+        assert (abs(Sold - Snew) < 1.e-6)  # somehow we need larger tolerance here....
 
     if bc_MPS == 'infinite':
         Etebd = np.average(M.bond_energies(psi))
@@ -76,7 +83,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
         assert (abs(Etebd - Enew) < 1.e-10)
-        assert (abs(Sold-Snew) < 1.e-6)   # somehow we need larger tolerance here....
+        assert (abs(Sold - Snew) < 1.e-6)  # somehow we need larger tolerance here....
 
 
 @attr('slow')

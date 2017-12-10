@@ -214,7 +214,8 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
 
 def _load_lapack(libs=[
         "libLAPACK.dylib", "libmkl_rt.so", "libmkl_intel_lp64.so", "liblapack.so",
-        "libopenblas.dll", find_library('lapack')
+        "libopenblas.dll",
+        find_library('lapack')
 ],
                  warn=True):
     """load & return a CLAPACK library."""

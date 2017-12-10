@@ -287,10 +287,10 @@ class MPS(object):
             raise ValueError("Length of Bflat does not match number of sites.")
         ci = sites[0].leg.chinfo
         if legL is None:
-            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)]*Bflat[0].shape[1])
+            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * Bflat[0].shape[1])
         if SVs is None:
-            SVs = [np.ones(B.shape[1])/np.sqrt(B.shape[1]) for B in Bflat]
-            SVs.append(np.ones(Bflat[-1].shape[2])/np.sqrt(Bflat[-1].shape[2]))
+            SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
+            SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
         Bs = []
         for i, site in enumerate(sites):
             B = np.array(Bflat[i], dtype)
@@ -369,7 +369,14 @@ class MPS(object):
         return res
 
     @classmethod
-    def from_singlets(cls, site, L, pairs, up='up', down='down', lonely=[], lonely_state=0,
+    def from_singlets(cls,
+                      site,
+                      L,
+                      pairs,
+                      up='up',
+                      down='down',
+                      lonely=[],
+                      lonely_state=0,
                       bc='finite'):
         """Create an MPS of entangled singlets.
 
@@ -432,7 +439,7 @@ class MPS(object):
                 lbl = 's{0:d}-{1:d}'.format(i, j)
                 pairs.pop(0)
                 open_singlets.append(j)
-                next_Ts.append(Id.copy().iset_leg_labels([lbl+'L', lbl]))
+                next_Ts.append(Id.copy().iset_leg_labels([lbl + 'L', lbl]))
                 Open.iset_leg_labels(['p', lbl])
                 Ts.append(Open.copy(deep=False))
                 labels_R.append(lbl)
@@ -443,7 +450,7 @@ class MPS(object):
                 forms.append('B')
             else:  # close a singlet
                 k = open_singlets.index(i)
-                Close.iset_leg_labels([labels_L[k]+'L', 'p'])
+                Close.iset_leg_labels([labels_L[k] + 'L', 'p'])
                 Ts[k] = Close
                 next_Ts.pop(k)
                 open_singlets.pop(k)
@@ -469,10 +476,10 @@ class MPS(object):
                 B = B.add_trivial_leg(2, label='vR', qconj=+1)
             Bs.append(B)
             N = 2**len(labels_R)
-            Ss.append(np.ones(N)/(N**0.5))
+            Ss.append(np.ones(N) / (N**0.5))
             Ts = next_Ts
             labels_L = labels_R
-        return cls([site]*L, Bs, Ss, bc=bc, form=forms)
+        return cls([site] * L, Bs, Ss, bc=bc, form=forms)
 
     def copy(self):
         """Returns a copy of `self`.
@@ -791,11 +798,13 @@ class MPS(object):
                 first_site = range(0, self.L - segment[-1])
             else:
                 first_site = range(self.L)
-        comb_legs = [self._get_p_labels(len(segment), False),
-                     self._get_p_labels(len(segment), True)]
+        comb_legs = [
+            self._get_p_labels(len(segment), False),
+            self._get_p_labels(len(segment), True)
+        ]
         res = []
         for i0 in first_site:
-            rho = self.get_rho_segment(segment+i0)
+            rho = self.get_rho_segment(segment + i0)
             rho = rho.combine_legs(comb_legs, qconj=[+1, -1])
             p = npc.eigvalsh(rho)
             res.append(entropy(p, n))
@@ -821,12 +830,12 @@ class MPS(object):
         """
         if by_charge:
             res = []
-            for i in range(self.L+1)[self.nontrivial_bonds]:
+            for i in range(self.L + 1)[self.nontrivial_bonds]:
                 ss = -np.log(self._S[i])
                 if i < self.L:
                     leg = self._B[i].get_leg('vL')
                 else:  # i == L: segment b.c.
-                    leg = self._B[i-1].get_leg('vR')
+                    leg = self._B[i - 1].get_leg('vR')
                 spectrum = [(leg.get_charge(qi), np.sort(ss[leg.get_slice(qi)]))
                             for qi in range(leg.block_number)]
                 res.append(spectrum)
@@ -852,14 +861,14 @@ class MPS(object):
             Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
         """
         segment = np.asarray(segment)
-        if np.all(segment[1:] == segment[:-1]+1):  # consecutive
-            theta = self.get_theta(segment[0], segment[-1]-segment[0]+1)
+        if np.all(segment[1:] == segment[:-1] + 1):  # consecutive
+            theta = self.get_theta(segment[0], segment[-1] - segment[0] + 1)
             rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
             return rho
         rho = self.get_theta(segment[0], 1)
         rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
         k = 1
-        for i in range(segment[0]+1, segment[-1]):
+        for i in range(segment[0] + 1, segment[-1]):
             B = self.get_B(i)
             if i == segment[k]:
                 B = B._replace_p_label(B, k)
@@ -904,8 +913,9 @@ class MPS(object):
         S_i = self.entanglement_entropy_segment(n=n)  # single-site entropy
         legs_ij = self._get_p_labels(2, False), self._get_p_labels(2, True)
         # = (['p0', 'p1'], ['p0*', 'p1*'])
-        contr_legs = (['vR*'] + self._get_p_label(1, False),   # 'vL', 'p1'
-                      ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+        contr_legs = (
+            ['vR*'] + self._get_p_label(1, False),  # 'vL', 'p1'
+            ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
         mutinf = []
         coord = []
         for i in range(self.L):
@@ -914,7 +924,7 @@ class MPS(object):
             jmax = i + max_range + 1
             if self.finite:
                 jmax = min(jmax, self.L)
-            for j in range(i+1, jmax):
+            for j in range(i + 1, jmax):
                 B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
                 rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
                 rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
@@ -1013,15 +1023,15 @@ class MPS(object):
 
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
-        ax_p = ['p'+str(k) for k in range(n)]
-        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
+        ax_p = ['p' + str(k) for k in range(n)]
+        ax_pstar = ['p' + str(k) + '*' for k in range(n)]
         E = []
         for i in sites:
             op = self.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()]*2, do_conj=True))
+            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()] * 2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def correlation_function(self,
@@ -1110,8 +1120,8 @@ class MPS(object):
 
             The condition ``<= r`` is replaced by a strict ``< r``, if ``str_on_first=False``.
         """
-        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(ops1, ops2, sites1,
-                                                                            sites2, opstr)
+        ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
+            ops1, ops2, sites1, sites2, opstr)
         if hermitian and sites1 != sites2:
             warnings.warn("MPS correlation function can't use the hermitian flag")
             hermitian = False
@@ -1238,8 +1248,8 @@ class MPS(object):
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if num_ev == 1:
-            return -1./np.log(abs(E[1]/E[0])) * self.L
-        return -1./np.log(np.abs(E[1:num_ev+1]/E[0])) * self.L
+            return -1. / np.log(abs(E[1] / E[0])) * self.L
+        return -1. / np.log(np.abs(E[1:num_ev + 1] / E[0])) * self.L
 
     def add(self, other, alpha, beta):
         """Return an MPS which represents `alpha self + beta others`.
@@ -1255,21 +1265,26 @@ class MPS(object):
             ``alpha * |self> + beta * |other>``
         """
         L = self.L
-        assert(other.L == L and L >= 2)  # (one could generalize this function...)
-        assert(self.bc == 'finite')  # not clear for segment: are left states orthogonal?
+        assert (other.L == L and L >= 2)  # (one could generalize this function...)
+        assert (self.bc == 'finite')  # not clear for segment: are left states orthogonal?
         # TODO: should gauge qtotal to zero.
         legs = ['vL', 'vR'] + self._p_label
         # alpha and beta appera only on the first site
-        Bs = [npc.grid_concat([[alpha*self.get_B(0).transpose(legs),
-                                beta*other.get_B(0).transpose(legs)]], axes=[0, 1])]
-        for i in range(1, L-1):
+        Bs = [
+            npc.grid_concat(
+                [[alpha * self.get_B(0).transpose(legs), beta * other.get_B(0).transpose(legs)]],
+                axes=[0, 1])
+        ]
+        for i in range(1, L - 1):
             B1 = self.get_B(i).transpose(legs)
             B2 = other.get_B(i).transpose(legs)
-            grid = [[B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')]+B1.legs[2:])],
-                    [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')]+B1.legs[2:]), B2]]
+            grid = [[B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')] + B1.legs[2:])],
+                    [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')] + B1.legs[2:]), B2]]
             Bs.append(npc.grid_concat(grid, [0, 1]))
-        Bs.append(npc.grid_concat([[self.get_B(L-1).transpose(legs)],
-                                   [other.get_B(L-1).transpose(legs)]], axes=[0, 1]))
+        Bs.append(
+            npc.grid_concat(
+                [[self.get_B(L - 1).transpose(legs)], [other.get_B(L - 1).transpose(legs)]],
+                axes=[0, 1]))
 
         Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
         psi = MPS(self.sites, Bs, Ss, 'finite', None)
@@ -1419,7 +1434,7 @@ class MPS(object):
             return [lbl + str(k) for lbl in self._p_label] + \
                    [lbl + str(k)+'*' for lbl in self._p_label]
         elif star:
-            return [lbl + str(k)+'*' for lbl in self._p_label]
+            return [lbl + str(k) + '*' for lbl in self._p_label]
         else:
             return [lbl + str(k) for lbl in self._p_label]
 
@@ -1498,20 +1513,21 @@ class MPS(object):
         return res
 
     def _canonical_form_finite(self):
-        assert(self.finite)
+        assert (self.finite)
         L = self.L
-        assert(L > 2)  # otherwise implement yourself...
+        assert (L > 2)  # otherwise implement yourself...
         # normalize very left singular values
         S = self.get_SL(0)
         if self.bc == 'segment':
             if S is None:
                 raise ValueError("Need S[0] for segment boundary conditions.")
-            self.set_SL(0, S/np.linalg.norm(S))  # must have correct singular values to the left...
-            S = self.get_SR(L-1)
-            self.set_SR(L-1, S/np.linalg.norm(S))
-        else:   # bc == 'finite':
+            self.set_SL(0,
+                        S / np.linalg.norm(S))  # must have correct singular values to the left...
+            S = self.get_SR(L - 1)
+            self.set_SR(L - 1, S / np.linalg.norm(S))
+        else:  # bc == 'finite':
             self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
-            self.set_SR(L-1, np.array([1.]))
+            self.set_SR(L - 1, np.array([1.]))
         # sweep from left to right to bring it into left canonical form.
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form
@@ -1526,26 +1542,26 @@ class MPS(object):
         Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
-        for i in range(1, L-1):
+        for i in range(1, L - 1):
             M = self.get_B(i, form)
             M = npc.tensordot(R, M, axes=['vR', 'vL'])
             Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
             self.set_B(i, Q.split_legs(0), form='A')
-        M = self.get_B(L-1, None)
+        M = self.get_B(L - 1, None)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         # sweep from right to left, calculating all the singular values
-        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                          inner_labels=['vR', 'vL'])
-        S = S/np.linalg.norm(S)  # normalize
-        self.set_SL(L-1, S)
-        self.set_B(L-1, V.split_legs(1), form='B')
-        for i in range(L-2, -1, -1):
+        U, S, V = npc.svd(
+            M.combine_legs(['vR'] + self._p_label, qconj=-1), inner_labels=['vR', 'vL'])
+        S = S / np.linalg.norm(S)  # normalize
+        self.set_SL(L - 1, S)
+        self.set_B(L - 1, V.split_legs(1), form='B')
+        for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                              inner_labels=['vR', 'vL'])
-            S = S/np.linalg.norm(S)  # normalize
+            U, S, V = npc.svd(
+                M.combine_legs(['vR'] + self._p_label, qconj=-1), inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
         # done: just discard the U on the left (trivial phase / norm for finite bc,
@@ -1868,8 +1884,8 @@ class MPSEnvironment(object):
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
-        ax_p = ['p'+str(k) for k in range(n)]
-        ax_pstar = ['p'+str(k)+'*' for k in range(n)]
+        ax_p = ['p' + str(k) for k in range(n)]
+        ax_pstar = ['p' + str(k) + '*' for k in range(n)]
         E = []
         for i in sites:
             LP = self.get_LP(i, store=True)
@@ -1883,7 +1899,7 @@ class MPSEnvironment(object):
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self.bra.get_theta(i, n)
-            E.append(npc.inner(theta_bra, C, axes=[th_labels]*2, do_conj=True))
+            E.append(npc.inner(theta_bra, C, axes=[th_labels] * 2, do_conj=True))
         return np.real_if_close(np.array(E))
 
     def _contract_LP(self, i, LP):

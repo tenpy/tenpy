@@ -10,10 +10,13 @@ libs = []
 lib_dirs = []
 
 extensions = [
-    Extension("*", ["tenpy/linalg/*.pyx"],
-              include_dirs=include_dirs, libraries=libs, library_dirs=lib_dirs),
+    Extension(
+        "*", ["tenpy/linalg/*.pyx"],
+        include_dirs=include_dirs,
+        libraries=libs,
+        library_dirs=lib_dirs),
 ]
 setup(
-    name = "TenPyLight",
-    ext_modules = cythonize(extensions),
+    name="TenPyLight",
+    ext_modules=cythonize(extensions),
 )

@@ -30,7 +30,6 @@ chinfoTr = npc.ChargeInfo()  # trivial charge
 
 lcTr = npc.LegCharge.from_qind(chinfoTr, [0, 2, 3, 5, 8], [[]] * 4)
 
-
 EPS = np.finfo(np.float_).eps
 
 
@@ -253,8 +252,8 @@ def test_npc_Array_reshape():
     a = random_Array((20, 15, 10), chinfo, sort=False)
     aflat = a.to_ndarray()
     for comb_legs, transpose in [([[1]], [0, 1, 2]), ([[1], [2]], [0, 1, 2]),
-                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
-                                 ([[2, 0, 1]], [2, 0, 1])]:
+                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]), ([[2, 0, 1]],
+                                                                                       [2, 0, 1])]:
         print 'combine legs', comb_legs
         acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print "=> labels: ", acomb.get_leg_labels()
@@ -318,7 +317,7 @@ def test_npc_Array_reshape_2():
     for i, j, k in it.product(*[range(s) for s in shape]):
         ij = pipe.map_incoming_flat([i, j])
         print i, j, ij
-        assert(acombflat[ij, k] == aflat[i, j, k])
+        assert (acombflat[ij, k] == aflat[i, j, k])
     # done
 
 
@@ -656,7 +655,7 @@ def test_eig():
     Aflat = A.to_ndarray()
     W, V = npc.eigh(A)
     recalc = npc.tensordot(V.scale_axis(W, axis=-1), V.conj(), axes=[1, 1])
-    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), 5*A.shape[0]**3)
+    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), 5 * A.shape[0]**3)
 
 
 def test_expm(size=10):
@@ -667,7 +666,7 @@ def test_expm(size=10):
     exp_A = npc.expm(A)
     exp_A.test_sanity()
     from scipy.linalg import expm
-    npt.assert_array_almost_equal_nulp(expm(A_flat), exp_A.to_ndarray(), size*size)
+    npt.assert_array_almost_equal_nulp(expm(A_flat), exp_A.to_ndarray(), size * size)
 
 
 def test_qr():
@@ -681,7 +680,7 @@ def test_qr():
             q.test_sanity()
             r.test_sanity()
             qr = npc.tensordot(q, r, axes=1)
-            npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), shape[0]*shape[1]*100)
+            npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), shape[0] * shape[1] * 100)
 
 
 def test_charge_detection():

@@ -62,8 +62,8 @@ def to_array(a, shape=(None, )):
         if shape[i] is None:
             continue
         if shape[i] % a.shape[i] != 0:
-            raise ValueError(
-                "incomensurate len for tiling from {0:d} to {1:d}".format(a.shape[i], shape[i]))
+            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                a.shape[i], shape[i]))
         reps[i] = shape[i] // a.shape[i]
     return np.tile(a, reps)
 
@@ -344,7 +344,7 @@ def any_nonzero(params, keys, verbose_msg=None):
                     return True
         else:
             val = params.get(k, None)
-            if val is not None and np.any(np.array(val) != 0.):    # count `None` as zero
+            if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
                     print verbose_mesg
                     print str(k) + " has nonzero entries"
