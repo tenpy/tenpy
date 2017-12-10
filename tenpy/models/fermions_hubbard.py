@@ -7,7 +7,7 @@
 	Write example simulation code?
 """
 
-from __future__ import division
+
 import numpy as np
 
 from .lattice import Chain

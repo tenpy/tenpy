@@ -25,7 +25,7 @@ Of course, we also provide ways to transform a :class:`NearestNeighborModel` int
 See also the introduction :doc:`../intro_model`.
 """
 
-from __future__ import division
+
 import numpy as np
 
 from ..linalg import np_conserved as npc
@@ -75,7 +75,7 @@ class CouplingModel(object):
     def __init__(self, lattice, bc_coupling='open'):
         self.lat = lattice
         global _bc_coupling_choices
-        if bc_coupling in _bc_coupling_choices.keys():
+        if bc_coupling in list(_bc_coupling_choices.keys()):
             bc_coupling = [_bc_coupling_choices[bc_coupling]] * self.lat.dim
         else:
             bc_coupling = [_bc_coupling_choices[bc] for bc in bc_coupling]
@@ -95,15 +95,15 @@ class CouplingModel(object):
         assert int(_bc_coupling_choices['periodic']) == 0
         sites = self.lat.mps_sites()
         for site, terms in zip(sites, self.onsite_terms):
-            for opname, strength in terms.iteritems():
+            for opname, strength in terms.items():
                 if not site.valid_opname(opname):
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
         for site_i, d1 in zip(sites, self.coupling_terms):
-            for (op_i, opstring), d2 in d1.iteritems():
+            for (op_i, opstring), d2 in d1.items():
                 if not site_i.valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                for j, d3 in d2.iteritems():
-                    for op_j in d3.keys():
+                for j, d3 in d2.items():
+                    for op_j in list(d3.keys()):
                         if not sites[j].valid_opname(op_j):
                             raise ValueError("Operator {op!r} not in site".format(op=op_j))
         # done
@@ -260,7 +260,7 @@ class CouplingModel(object):
         for i, terms in enumerate(self.onsite_terms):
             s = self.lat.site(i)
             H = npc.zeros([s.leg, s.leg.conj()])
-            for opname, strength in terms.iteritems():
+            for opname, strength in terms.items():
                 H = H + strength * s.get_op(opname)  # (can't use ``+=``: may change dtype)
             res.append(H)
         return res
@@ -301,14 +301,14 @@ class CouplingModel(object):
                 strength_i, strength_j = 0., 0.  # just to make the assert below happy
             H = npc.outer(strength_i * self.H_onsite[i], site_j.Id)
             H = H + npc.outer(site_i.Id, strength_j * self.H_onsite[j])
-            for (op1, op_str), d2 in d1.iteritems():
-                for j2, d3 in d2.iteritems():
+            for (op1, op_str), d2 in d1.items():
+                for j2, d3 in d2.items():
                     # i, j in terms are defined such that we expect j = j2,
                     # (including the case N_sites = 2 and iMPS
                     if j != j2:
                         raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
                             i=i, j=j2))
-                    for op2, strength in d3.iteritems():
+                    for op2, strength in d3.items():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
             H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             res[j] = H
@@ -336,18 +336,18 @@ class CouplingModel(object):
         # onsite terms
         self._remove_onsite_terms_zeros(tol_zero)
         for i, terms in enumerate(self.onsite_terms):
-            for opname, strength in terms.iteritems():
+            for opname, strength in terms.items():
                 graph.add(i, 'IdL', 'IdR', opname, strength)
         # coupling terms
         self._remove_coupling_terms_zeros(tol_zero)
         for i, d1 in enumerate(self.coupling_terms):
-            for (opname_i, op_string), d2 in d1.iteritems():
+            for (opname_i, op_string), d2 in d1.items():
                 label = (i, opname_i, op_string)
                 graph.add(i, 'IdL', label, opname_i, 1.)
-                for j, d3 in d2.iteritems():
+                for j, d3 in d2.items():
                     j2 = j if j > i else j + graph.L
                     graph.add_string(i, j2, label, op_string)
-                    for opname_j, strength in d3.iteritems():
+                    for opname_j, strength in d3.items():
                         graph.add(j, label, 'IdR', opname_j, strength)
         # add 'IdL' and 'IdR' and convert the graph to an MPO
         graph.add_missing_IdL_IdR()
@@ -358,7 +358,7 @@ class CouplingModel(object):
     def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
         """remove entries of strength `0` from ``self.onsite_terms``."""
         for term in self.onsite_terms:
-            for op in term.keys():
+            for op in list(term.keys()):
                 if abs(term[op]) < tol_zero:
                     del term[op]
         # done
@@ -367,9 +367,9 @@ class CouplingModel(object):
         """remove entries of strength `0` from ``self.coupling_terms``."""
         for d1 in self.coupling_terms:
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
-            for op_i_op_str, d2 in d1.items():
-                for j, d3 in d2.items():
-                    for op_j, st in d3.items():
+            for op_i_op_str, d2 in list(d1.items()):
+                for j, d3 in list(d2.items()):
+                    for op_j, st in list(d3.items()):
                         if abs(st) < tol_zero:
                             del d3[op_j]
                     if len(d3) == 0:

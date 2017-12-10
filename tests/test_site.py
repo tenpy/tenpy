@@ -1,7 +1,7 @@
 """A collection of tests for :mod:`tenpy.models.site`.
 """
 
-from __future__ import division
+
 
 import numpy as np
 import numpy.testing as npt
@@ -46,7 +46,7 @@ def test_site():
     perm_flat = leg2.perm_flat_from_perm_qind(perm_qind)
     s2s = s2.copy_change_charge(leg2s, perm_flat)
     for site_check in [s2, s2s]:
-        print "site_check.leg = ", site_check.leg
+        print("site_check.leg = ", site_check.leg)
         for opn in site_check.opnames:
             op1 = s.get_op(opn).to_ndarray()
             op2 = site_check.get_op(opn).to_ndarray()
@@ -104,9 +104,9 @@ def test_spin_half_site():
 
 def test_spin_site():
     for s in [0.5, 1, 1.5, 2, 5]:
-        print 's = ', s
+        print('s = ', s)
         for conserve in ['Sz', 'parity', None]:
-            print "conserve = ", conserve
+            print("conserve = ", conserve)
             S = site.SpinSite(s, conserve)
             S.test_sanity()
             if conserve != 'Sz':
@@ -138,7 +138,7 @@ def test_fermion_site():
 
 def test_spin_half_fermion_site():
     for cons_N, cons_Sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
-        print "conserve ", repr(cons_N), repr(cons_Sz)
+        print("conserve ", repr(cons_N), repr(cons_Sz))
         S = site.SpinHalfFermionSite(cons_N, cons_Sz)
         S.test_sanity()
         Id = S.Id.to_ndarray()

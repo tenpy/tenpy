@@ -5,7 +5,7 @@ New TenPyLight npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 Run ``python npc_benchmark.py --help`` for usage options.
 """
 
-from __future__ import division
+
 
 import timeit
 import cProfile
@@ -134,7 +134,7 @@ def tensordot_timing(do_flat=True,
                      do_old_npc=True,
                      rep_bestof=3,
                      rep_tdot=3,
-                     seed_range=range(3),
+                     seed_range=list(range(3)),
                      **kwargs):
     """run tensordot timing for given kwargs of ``setup_npc``.
 
@@ -173,12 +173,12 @@ def tensordot_profile(fn=None, dmax=None, rep_tdot=1, **kwargs):
     cmd = "npc.tensordot(a, b, axes)"
     if rep_tdot > 1:
         cmd = "for _ in range({rep_tdot:d}): ".format(rep_tdot=rep_tdot) + cmd
-    print "profile:"
-    print cmd
-    print "a: {a!r}\nb: {b!r}\naxes {axes!r}".format(a=a, b=b, axes=axes)
-    print "sparse stats:"
-    print a.sparse_stats()
-    print b.sparse_stats()
+    print("profile:")
+    print(cmd)
+    print("a: {a!r}\nb: {b!r}\naxes {axes!r}".format(a=a, b=b, axes=axes))
+    print("sparse stats:")
+    print(a.sparse_stats())
+    print(b.sparse_stats())
     cProfile.runctx(cmd, globals(), locals(), fn)
 
 
@@ -199,14 +199,14 @@ def skip_timing(dmax, size=20, mod_q=[1], n_qsectors=3, **kwargs):
     return skip_all, do_flat
 
 
-def run_tensordot_timing(sizes=range(1, 10) + range(10, 80, 5),
-                         num_qs=range(3),
-                         seeds=range(5),
+def run_tensordot_timing(sizes=list(range(1, 10)) + list(range(10, 80, 5)),
+                         num_qs=list(range(3)),
+                         seeds=list(range(5)),
                          dmax=2000,
                          **kwargs):
     """call `tensordot_timing` for different `sizes` and `num_qs`.
     """
-    print "------ tensordot_timing ------"
+    print("------ tensordot_timing ------")
     data = {}
     data['seeds'] = seeds
     data['sizes'] = sizes
@@ -214,10 +214,10 @@ def run_tensordot_timing(sizes=range(1, 10) + range(10, 80, 5),
     all_timings = []
     for num_q in num_qs:
         mod_q = [1] * num_q
-        print "num_q:", num_q
+        print("num_q:", num_q)
         num_q_timings = []
         for size in sizes:
-            print size  # just to notice that we're still running
+            print(size)  # just to notice that we're still running
             timing = np.zeros(3)  # average over seeds
             kwargs.update(mod_q=mod_q, size=size)
             skip_all, do_flat = skip_timing(dmax=dmax, **kwargs)
@@ -227,7 +227,7 @@ def run_tensordot_timing(sizes=range(1, 10) + range(10, 80, 5),
                     res = tensordot_timing(do_flat, True, **kwargs)
                     timing += res
             num_q_timings.append(timing / len(seeds))
-        print "-" * 80
+        print("-" * 80)
         all_timings.append(num_q_timings)
     all_timings = np.array(all_timings, dtype=np.float)
     data['timings'] = all_timings
@@ -237,12 +237,12 @@ def run_tensordot_timing(sizes=range(1, 10) + range(10, 80, 5),
 def run_save(fn_t='npc_benchmark_timeit_{legs}_{n_qsectors:d}.pkl', dmax=2000, **kwargs):
     """get a fairly exhaustive collection of timings for different n_qsectros and leg_*....
     """
-    sizes_all = [3, 5, 8, 10, 12] + range(15, 50, 5) + range(50, 200, 25) + \
-        range(200, 500, 100) + range(500, 3001, 250)
+    sizes_all = [3, 5, 8, 10, 12] + list(range(15, 50, 5)) + list(range(50, 200, 25)) + \
+        list(range(200, 500, 100)) + list(range(500, 3001, 250))
     for n_qsectors, legs in [(2, 1), (2, 2), (5, 1), (5, 2), (5, 3), (20, 1)]:
-        print "+" * 100
-        print "n_qsectors = {nq:d}, legs ={legs:d}".format(nq=n_qsectors, legs=legs)
-        print "sizes = ", sizes_all
+        print("+" * 100)
+        print("n_qsectors = {nq:d}, legs ={legs:d}".format(nq=n_qsectors, legs=legs))
+        print("sizes = ", sizes_all)
         kwargs.update(n_qsectors=n_qsectors, leg_a_out=legs, leg_b_out=legs, leg_contract=legs)
         data = run_tensordot_timing(sizes=sizes_all, dmax=dmax, **kwargs)
         data['kwargs'] = kwargs.copy()
@@ -255,17 +255,17 @@ def print_timing_res(data):
     num_qs = data['num_qs']
     sizes = data['sizes']
     timed = data['timings']
-    print "=" * 80
+    print("=" * 80)
     if 'version' in data:
-        print "version", data['version']
+        print("version", data['version'])
     # print "kwargs:", data['kwargs']
-    print "num_q size      flat       old       new   new-old"
+    print("num_q size      flat       old       new   new-old")
     row = "{qn: 5d}{s: 5d}{flat: 10.6f}{old: 10.6f}{new: 10.6f}{new_old: 10.6f}"
     for qnumber, timed_qn in zip(num_qs, timed):
         for size, timed_size in zip(sizes, timed_qn):
             new, old, flat = timed_size
-            print row.format(qn=qnumber, s=size, flat=flat, new=new, old=old, new_old=new - old)
-    print "=" * 80
+            print(row.format(qn=qnumber, s=size, flat=flat, new=new, old=old, new_old=new - old))
+    print("=" * 80)
 
 
 def plot_timing_res(data, fn=None):
@@ -302,14 +302,14 @@ def plot_timing_res(data, fn=None):
 
 def load(fn):
     import pickle
-    print "loading ", fn
+    print("loading ", fn)
     with open(fn, 'r') as f:
         return pickle.load(f)
 
 
 def save(data, fn):
     import pickle
-    print "save to ", fn
+    print("save to ", fn)
     with open(fn, 'w') as f:
         pickle.dump(data, f)
 
@@ -366,8 +366,8 @@ if __name__ == "__main__":
     if args.timing:
         t0 = time.time()
         run_save(**kwargs)
-        print "=" * 80
-        print "finished timing after", time.time() - t0, "seconds in total"
+        print("=" * 80)
+        print("finished timing after", time.time() - t0, "seconds in total")
     if args.plot:
         for fn in args.files:
             data = load(fn)

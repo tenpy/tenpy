@@ -33,9 +33,9 @@ def run_example(filename='npc_intro'):
     if ex_dir not in sys.path:
         sys.path[:0] = [ex_dir]  # add the directory to sys.path
     # to make sure the examples are found first with ``import``.
-    print "running example file ", filename
+    print("running example file ", filename)
     mod = importlib.import_module(filename)
-    print "finished example"
+    print("finished example")
     if sys.path[0] == ex_dir:  # restore original sys.path
         sys.path = sys.path[1:]
     return mod

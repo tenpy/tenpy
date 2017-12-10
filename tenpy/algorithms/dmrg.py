@@ -29,7 +29,7 @@ and then slowly turned off in the end.
     Allow to keep MPS orthogonal to other states, for finding excited states
 """
 
-from __future__ import division
+
 import numpy as np
 import time
 import itertools
@@ -152,10 +152,10 @@ def run(psi, model, DMRG_params):
     # prepare parameters
     chi_max_default = engine.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
     chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
-    chi_max = chi_list[max([k for k in chi_list.keys() if k <= engine.sweeps])]
+    chi_max = chi_list[max([k for k in list(chi_list.keys()) if k <= engine.sweeps])]
     engine.trunc_params['chi_max'] = chi_max
     if verbose >= 1:
-        print "Setting chi_max =", chi_max
+        print("Setting chi_max =", chi_max)
     p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', None, 'DMRG')
     if p_tol_to_trunc is not None:
         p_tol_min = get_parameter(DMRG_params, 'P_tol_min', None, 'DMRG')
@@ -215,8 +215,8 @@ def run(psi, model, DMRG_params):
                 break
             else:
                 if verbose >= 1:
-                    print "Convergence criterium reached with enabled mixer.\n" +  \
-                        "disable mixer and continue"
+                    print("Convergence criterium reached with enabled mixer.\n" +  \
+                        "disable mixer and continue")
                     engine.mixer = None
         if time.time() - start_time > max_seconds:
             shelve = True
@@ -230,7 +230,7 @@ def run(psi, model, DMRG_params):
             if engine.sweeps in chi_list:
                 engine.trunc_params['chi_max'] = chi_list[engine.sweeps]
                 if verbose >= 1:
-                    print "Setting chi_max =", chi_list[engine.sweeps]
+                    print("Setting chi_max =", chi_list[engine.sweeps])
         # update lancos_params depending on truncation error(s)
         if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
             engine.lanczos_params['P_tol'] = max(p_tol_min,
@@ -270,14 +270,14 @@ def run(psi, model, DMRG_params):
 
         if verbose >= 1:
             # print a status update
-            print "=" * 80
+            print("=" * 80)
             msg = "sweep {sweep:d}, age = {age:d}\n"
             msg += "Energy = {E:.16f}, norm_err = {norm_err:.1e}\n"
             msg += "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
             msg += "MPS bond dimensions: {chi!s}"
-            print msg.format(
+            print(msg.format(
                 sweep=engine.sweeps,
                 time=time.time() - start_time,
                 mem=memory_usage(),
@@ -288,7 +288,7 @@ def run(psi, model, DMRG_params):
                 DS=Delta_S,
                 trerr=max_trunc_err,
                 Eerr=max_E_trunc,
-                norm_err=norm_err)
+                norm_err=norm_err))
     # clean up from mixer
     engine.mixer_cleanup(optimize=False)
     # update environment until norm_tol is reached
@@ -304,12 +304,12 @@ def run(psi, model, DMRG_params):
                     break
 
     if verbose >= 1:
-        print "=" * 80
+        print("=" * 80)
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
-        print msg.format(
-            sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi))
-        print "=" * 80
+        print(msg.format(
+            sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
+        print("=" * 80)
     unused_parameters(DMRG_params['lanczos_params'], "DMRG")
     unused_parameters(DMRG_params['trunc_params'], "DMRG")
     unused_parameters(DMRG_params, "DMRG")
@@ -418,13 +418,13 @@ class Engine(object):
         if N_sweeps <= 0:
             return
         if self.verbose >= 1:
-            print "Updating environment"
+            print("Updating environment")
         for k in range(N_sweeps):
             self.sweep(optimize=False)
             if self.verbose >= 1:
-                print '.',
+                print('.', end=' ')
         if self.verbose >= 1:
-            print ""  # end line
+            print("")  # end line
 
     def sweep(self, optimize=True, meas_E_trunc=False):
         """One 'sweep' of the DMRG algorithm.
@@ -455,18 +455,18 @@ class Engine(object):
         # get schedule
         L = self.env.L
         if self.env.finite:
-            schedule_i0 = range(0, L - 1) + range(L - 3, 0, -1)
+            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
             update_env = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
         else:
             assert (L >= 2)
-            schedule_i0 = range(0, L) + range(L, 0, -1)
+            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
             update_env = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                          [[True, True]] * 2 + [[False, True]] * (L-2)
 
         # the actual sweep
-        for i0, upd_env in itertools.izip(schedule_i0, update_env):
+        for i0, upd_env in zip(schedule_i0, update_env):
             if self.verbose >= 10:
-                print "in sweep: i0 =", i0
+                print("in sweep: i0 =", i0)
             # --------- the main work --------------
             E_total, E_trunc, trunc_err, N_lanczos, age = self.update_bond(
                 i0, upd_env[0], upd_env[1], optimize=optimize, meas_E_trunc=meas_E_trunc)
@@ -1285,7 +1285,7 @@ class Mixer(object):
         self.amplitude /= self.decay
         if sweeps >= self.disable_after and self.amplitude >= np.finfo('float').eps:
             if self.verbose >= 0.1:  # increased verbosity: the same level as DMRG
-                print "disable mixer"
+                print("disable mixer")
             return None  # disable mixer
         return self
 

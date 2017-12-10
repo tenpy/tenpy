@@ -36,17 +36,17 @@ ch_1 = charges.ChargeInfo([1])
 def test_ChargeInfo():
     trivial = charges.ChargeInfo()
     trivial.test_sanity()
-    print "trivial: ", trivial
+    print("trivial: ", trivial)
     nst.eq_(trivial.qnumber, 0)
     chinfo = charges.ChargeInfo([3, 1], ['some', ''])
-    print "nontrivial chinfo: ", chinfo
+    print("nontrivial chinfo: ", chinfo)
     nst.eq_(chinfo.qnumber, 2)
     qs = [[0, 2], [2, 0], [5, 3], [-2, -3]]
     is_valid = [True, True, False, False]
     for q, valid in zip(qs, is_valid):
-        print q, valid
+        print(q, valid)
         check = chinfo.check_valid(np.array([q]))
-        print check
+        print(check)
         nst.eq_(check, valid)
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
     npt.assert_equal(qs_valid, chinfo.make_valid(qs))
@@ -103,7 +103,7 @@ def test_LegCharge():
     nst.eq_(lcus_sb.ind_len, lcus.ind_len)
 
     # test get_qindex
-    for i in xrange(lcs.ind_len):
+    for i in range(lcs.ind_len):
         qidx, idx_in_block = lcs.get_qindex(i)
         assert (lcs.slices[qidx] <= i < lcs.slices[qidx + 1])
         assert (lcs.slices[qidx] + idx_in_block == i)
@@ -116,7 +116,7 @@ def test_LegPipe():
         pipe = charges.LegPipe(legs, sort=sort, bunch=bunch)
         pipe.test_sanity()
         assert (pipe.ind_len == np.prod(shape))
-        print pipe.q_map
+        print(pipe.q_map)
         # test pipe._map_incoming_qind
         qind_inc = pipe.q_map[:, 3:].copy()  # all possible qindices
         np.random.shuffle(qind_inc)  # different order to make the test non-trivial

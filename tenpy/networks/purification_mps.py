@@ -95,7 +95,7 @@ see [Hauschild2017]_.
 
 """
 
-from __future__ import division
+
 import numpy as np
 
 from .mps import MPS
@@ -198,9 +198,9 @@ class PurificationMPS(MPS):
         segment = np.sort(segment)
         if first_site is None:
             if self.finite:
-                first_site = range(0, self.L - segment[-1])
+                first_site = list(range(0, self.L - segment[-1]))
             else:
-                first_site = range(self.L)
+                first_site = list(range(self.L))
         N = len(segment)
 
         def labels(choice):

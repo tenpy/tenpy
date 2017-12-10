@@ -1,6 +1,6 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 
-from __future__ import division
+
 
 import numpy as np
 
@@ -340,13 +340,13 @@ def any_nonzero(params, keys, verbose_msg=None):
             for k1 in k[1:]:
                 if not np.all(val == params[k1]):
                     if verbose:
-                        print "{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1)
+                        print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
                     return True
         else:
             val = params.get(k, None)
             if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
-                    print verbose_mesg
-                    print str(k) + " has nonzero entries"
+                    print(verbose_mesg)
+                    print(str(k) + " has nonzero entries")
                 return True
     return False

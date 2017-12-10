@@ -4,7 +4,7 @@
     A lot more to test...
 """
 
-from __future__ import division
+
 
 import numpy as np
 import numpy.testing as npt
@@ -40,7 +40,7 @@ def check_hermitian(H):
     i = H.get_IdR(H.L - 1)
     trHH = trHH[i, i]
     trHHd = trHHd[i, i]
-    print "check_hermitian: ", trHH, trHHd
+    print("check_hermitian: ", trHH, trHHd)
     npt.assert_array_almost_equal_nulp(trHH, trHHd, H.L * 20)
 
 
@@ -48,7 +48,7 @@ def test_MPO():
     s = spin_half
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
-            print bc, ", L =", L
+            print(bc, ", L =", L)
             grid = [[s.Id, s.Sp, s.Sz], [None, None, s.Sm], [None, None, s.Id]]
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()])
@@ -58,14 +58,14 @@ def test_MPO():
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 2:3, :, :]
             H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
-            print H.dim
-            print H.chi
+            print(H.dim)
+            print(H.chi)
 
 
 def test_MPOGraph():
     for bc in mpo.MPO._valid_bc:
         for L in [1, 2, 4]:
-            print "L =", L
+            print("L =", L)
             g = mpo.MPOGraph([spin_half] * L, bc)
             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
             if L > 1:
@@ -78,9 +78,9 @@ def test_MPOGraph():
                 g.add(3, (0, 'Sp'), 'IdR', 'Sm', 0.1)
             g.add_missing_IdL_IdR()
             g.test_sanity()
-            print repr(g)
-            print str(g)
-            print "build MPO"
+            print(repr(g))
+            print(str(g))
+            print("build MPO")
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
 
@@ -98,7 +98,7 @@ def test_MPOEnvironment():
     E_old = None
     for i in range(4):
         E = env.full_contraction(i)  # should be one
-        print "total energy for contraction at site ", i, ": E =", E
+        print("total energy for contraction at site ", i, ": E =", E)
         if E_old is not None:
             assert (abs(E - E_old) < 1.e-14)
         E_old = E

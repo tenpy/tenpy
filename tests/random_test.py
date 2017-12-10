@@ -16,7 +16,7 @@ __all__ = [
 
 def rand_permutation(n):
     """return a random permutation of length n"""
-    perm = range(n)
+    perm = list(range(n))
     np.random.shuffle(perm)
     return perm
 
@@ -33,7 +33,7 @@ def rand_distinct_int(a, b, n):
 def rand_partitions(a, b, n):
     """return [a] + `cuts` + [b], where `cuts` are ``n-1`` (strictly ordered) values inbetween."""
     if b - a <= n:
-        return np.array(range(a, b + 1))
+        return np.array(list(range(a, b + 1)))
     else:
         return np.concatenate(([a], rand_distinct_int(a + 1, b - 1, n - 1), [b]))
 
@@ -48,7 +48,7 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
         raise ValueError
     slices = rand_partitions(0, ind_len, np.prod(n_qsector, dtype=int))
     qs = np.zeros((len(slices) - 1, len(n_qsector)), int)
-    q_combos = [a for a in it.product(*[range(-(nq // 2), nq // 2 + 1) for nq in n_qsector])]
+    q_combos = [a for a in it.product(*[list(range(-(nq // 2), nq // 2 + 1)) for nq in n_qsector])]
     qs = np.array(q_combos)[rand_distinct_int(0, len(q_combos) - 1, len(slices) - 1), :]
     qs = chinfo.make_valid(qs)
     return charges.LegCharge.from_qind(chinfo, slices, qs)

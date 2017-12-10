@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
-from __future__ import division
+
 
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
@@ -48,7 +48,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
     engine = tebd.Engine(psi, M, tebd_param)
     engine.run_GS()
 
-    print "norm_test", psi.norm_test()
+    print("norm_test", psi.norm_test())
     if bc_MPS == 'finite':
         psi.canonical_form()
         ED = ExactDiag(M)
@@ -57,10 +57,10 @@ def check_tebd(bc_MPS='finite', g=0.5):
         psi_ED = ED.groundstate()
         Etebd = np.sum(M.bond_energies(psi))
         Eexact = np.min(ED.E)
-        print "E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact)
+        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
         assert (abs((Etebd - Eexact) / Eexact) < 1.e-8)
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
-        print "compare with ED: overlap = ", abs(ov)**2
+        print("compare with ED: overlap = ", abs(ov)**2)
         assert (abs(abs(ov) - 1.) < 1.e-8)
 
         # Test real time TEBD: should change on an eigenstate
@@ -75,7 +75,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
     if bc_MPS == 'infinite':
         Etebd = np.average(M.bond_energies(psi))
         Eexact = e0_tranverse_ising(g)
-        print "E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact)
+        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
 
         Sold = np.average(psi.entanglement_entropy())
         for i in range(2):
@@ -95,7 +95,7 @@ def test_tebd():
 if __name__ == "__main__":
     for f_args in test_tebd():
         f = f_args[0]
-        print "=" * 80
-        print ' '.join([str(a) for a in f_args])
-        print "=" * 80
+        print("=" * 80)
+        print(' '.join([str(a) for a in f_args]))
+        print("=" * 80)
         f(*f_args[1:])

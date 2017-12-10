@@ -22,9 +22,9 @@ Jxx, Jz = 1., 1.
 L = 20
 dt = 0.1
 cutoff = 1.e-10
-print "Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L)
+print("Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L))
 
-print "1) create Arrays for an Neel MPS"
+print("1) create Arrays for an Neel MPS")
 
 #  vL ->--B-->- vR
 #         |
@@ -58,7 +58,7 @@ Ss = [np.ones(1)] * L  # Ss[i] are singular values between Bs[i-1] and Bs[i]
 # The drawback is that this might introduce permutations in the indices of single legs,
 # which you have to keep in mind when converting dense numpy arrays to and from npc.Arrays.
 
-print "2) create an MPO representing the AFM Heisenberg Hamiltonian"
+print("2) create an MPO representing the AFM Heisenberg Hamiltonian")
 
 #         p*
 #         |
@@ -90,7 +90,7 @@ W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()])
 W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])  # wL/wR = virtual left/right of the MPO
 Ws = [W] * L
 
-print "3) define 'environments' left and right"
+print("3) define 'environments' left and right")
 
 #  .---->- vR     vL ->----.
 #  |                       |
@@ -105,7 +105,7 @@ envR = npc.zeros([W.get_leg('wR').conj(), Bs[-1].get_leg('vR').conj(), Bs[-1].ge
 envR.iset_leg_labels(['wL', 'vL', 'vL*'])
 envR[-1, :, :] = npc.diag(1., envR.legs[1])
 
-print "4) contract MPS and MPO to calculate the energy <psi|H|psi>"
+print("4) contract MPS and MPO to calculate the energy <psi|H|psi>")
 contr = envL
 for i in range(L):
     # contr labels: wR, vR, vR*
@@ -118,29 +118,29 @@ for i in range(L):
     # note that the order of the legs changed, but that's no problem with labels:
     # the arrays are automatically transposed as necessary
 E = npc.inner(contr, envR, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
-print "E =", E
+print("E =", E)
 
-print "5) calculate two-site hamiltonian ``H2`` from the MPO"
+print("5) calculate two-site hamiltonian ``H2`` from the MPO")
 # label left, right physical legs with p, q
 W0 = W.replace_labels(['p', 'p*'], ['p0', 'p0*'])
 W1 = W.replace_labels(['p', 'p*'], ['p1', 'p1*'])
 H2 = npc.tensordot(W0, W1, axes=('wR', 'wL')).itranspose(['wL', 'wR', 'p0', 'p1', 'p0*', 'p1*'])
 H2 = H2[0, -1]  # (If H has single-site terms, it's not that simple anymore)
-print "H2 labels:", H2.get_leg_labels()
+print("H2 labels:", H2.get_leg_labels())
 
-print "6) calculate exp(H2) by diagonalization of H2"
+print("6) calculate exp(H2) by diagonalization of H2")
 # diagonalization requires to view H2 as a matrix
 H2 = H2.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
-print "labels after combine_legs:", H2.get_leg_labels()
+print("labels after combine_legs:", H2.get_leg_labels())
 E2, U2 = npc.eigh(H2)
-print "Eigenvalues of H2:", E2
+print("Eigenvalues of H2:", E2)
 U_expE2 = U2.scale_axis(np.exp(-1.j * dt * E2), axis=1)  # scale_axis ~= apply an diagonal matrix
 exp_H2 = npc.tensordot(U_expE2, U2.conj(), axes=(1, 1))
 exp_H2.iset_leg_labels(H2.get_leg_labels())
 exp_H2 = exp_H2.split_legs()  # by default split all legs which are `LegPipe`
 # (this restores the originial labels ['p0', 'p1', 'p0*', 'p1*'] of `H2` in `exp_H2`)
 
-print "7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd"
+print("7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd")
 # (this implements one time step of first order TEBD)
 for even_odd in [0, 1]:
     for i in range(even_odd, L - 1, 2):
@@ -159,4 +159,4 @@ for even_odd in [0, 1]:
         U = U.iscale_axis(S / invsq, 'vR')
         Bs[i] = U.split_legs(0).iscale_axis(Ss[i]**(-1), 'vL').ireplace_label('p0', 'p')
         Bs[i + 1] = V.split_legs(1).ireplace_label('p1', 'p')
-print "finished"
+print("finished")

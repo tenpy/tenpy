@@ -49,7 +49,7 @@ def update_bond(psi, i, U_bond, chi_max, eps):
 
 
 def example_TEBD_gs_finite(L, g):
-    print "finite TEBD, imaginary time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    print("finite TEBD, imaginary time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
     import a_simple_1_MPS
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L, J=1., g=g)
@@ -58,17 +58,17 @@ def example_TEBD_gs_finite(L, g):
         U_bonds = calc_U_bonds(M.H_bonds, dt)
         run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
-        print "dt = {dt:.5f}: E = {E:.13f}".format(dt=dt, E=E)
-    print "final bond dimensions: ", psi.get_chi()
+        print("dt = {dt:.5f}: E = {E:.13f}".format(dt=dt, E=E))
+    print("final bond dimensions: ", psi.get_chi())
     if L < 20:
         E_ed = M.exact_finite_gs_energy()
-        print "Exact diagonalization: E = {E:.13f}".format(E=E_ed)
-        print "relative error: ", abs((E - E_ed) / E_ed)
+        print("Exact diagonalization: E = {E:.13f}".format(E=E_ed))
+        print("relative error: ", abs((E - E_ed) / E_ed))
     return E, psi, M
 
 
 def example_TEBD_gs_infinite(g):
-    print "infinite TEBD, imaginary time evolution, g={g:.2f}".format(g=g)
+    print("infinite TEBD, imaginary time evolution, g={g:.2f}".format(g=g))
     import a_simple_1_MPS
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L=2, J=1., g=g, bc='infinite')
@@ -77,17 +77,17 @@ def example_TEBD_gs_infinite(g):
         U_bonds = calc_U_bonds(M.H_bonds, dt)
         run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
         E = np.mean(psi.bond_expectation_value(M.H_bonds))
-        print "dt = {dt:.5f}: E/L = {E:.13f}".format(dt=dt, E=E)
-    print "final bond dimensions: ", psi.get_chi()
-    print "correlation length:", psi.correlation_length()
+        print("dt = {dt:.5f}: E/L = {E:.13f}".format(dt=dt, E=E))
+    print("final bond dimensions: ", psi.get_chi())
+    print("correlation length:", psi.correlation_length())
     E_ex = M.exact_infinite_gs_energy()
-    print "Analytic result: E/L = {E:.13f}".format(E=E_ex)
-    print "relative error: ", abs((E - E_ex) / E_ex)
+    print("Analytic result: E/L = {E:.13f}".format(E=E_ex))
+    print("relative error: ", abs((E - E_ex) / E_ex))
     return E, psi, M
 
 
 def example_TEBD_lightcone(L, g, tmax, dt):
-    print "finite TEBD, real time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g)
+    print("finite TEBD, real time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
     # find ground state with TEBD or DMRG
     #  E, psi, M = example_TEBD_gs_finite(L, g)
     from a_simple_4_DMRG import example_DMRG_finite
@@ -101,7 +101,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     Nsteps = int(tmax / dt + 0.5)
     for n in range(Nsteps):
         if abs((n * dt + 0.1) % 0.2 - 0.1) < 1.e-10:
-            print "t =", n * dt, "chi =", psi.get_chi()
+            print("t =", n * dt, "chi =", psi.get_chi())
         S.append(psi.entanglement_entropy())
         run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
     import pylab as pl
@@ -120,7 +120,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
 
 if __name__ == "__main__":
     example_TEBD_gs_finite(L=10, g=1.)
-    print "-" * 80
+    print("-" * 80)
     example_TEBD_gs_infinite(g=1.5)
-    print "-" * 80
+    print("-" * 80)
     example_TEBD_lightcone(L=20, g=1.5, tmax=3., dt=0.001)

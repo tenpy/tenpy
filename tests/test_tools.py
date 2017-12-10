@@ -33,19 +33,19 @@ def test_speigs():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')  # disable warngings temporarily
         for k in range(4, 9):
-            print k
+            print(k)
             W, V = tools.math.speigs(A, k, which='LM')
             W = W[tools.misc.argsort(W, 'LM')]
-            print W, x_LM[:k]
+            print(W, x_LM[:k])
             npt.assert_array_almost_equal_nulp(W, x_LM[:k], tol_NULP)
             W, V = tools.math.speigs(A, k, which='SM')
             W = W[tools.misc.argsort(W, 'SM')]
-            print W, x_SM[:k]
+            print(W, x_SM[:k])
             npt.assert_array_almost_equal_nulp(W, x_SM[:k], tol_NULP)
 
 
 def test_perm_sign():
-    res = [tools.math.perm_sign(u) for u in it.permutations(range(4))]
+    res = [tools.math.perm_sign(u) for u in it.permutations(list(range(4)))]
     check = [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]
     npt.assert_equal(res, check)
 
@@ -59,10 +59,10 @@ def test_omp(n=2):
         warnings.simplefilter('ignore')  # disable warngings temporarily
         if tools.process.omp_set_nthreads(n):
             nthreads = tools.process.omp_get_nthreads()
-            print nthreads
+            print(nthreads)
             assert (nthreads == n)
         else:
-            print "test_omp failed to import the OpenMP libaray."
+            print("test_omp failed to import the OpenMP libaray.")
 
 
 def test_mkl(n=2):
@@ -70,10 +70,10 @@ def test_mkl(n=2):
         warnings.simplefilter('ignore')  # disable warngings temporarily
         if tools.process.mkl_set_nthreads(n):
             nthreads = tools.process.mkl_get_nthreads()
-            print nthreads
+            print(nthreads)
             assert (nthreads == n)
         else:
-            print "test_mkl failed to import the shared MKL libaray."
+            print("test_mkl failed to import the shared MKL libaray.")
 
 
 if __name__ == "__main__":

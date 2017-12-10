@@ -37,7 +37,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
 
 """
 
-from __future__ import division
+
 import numpy as np
 import time
 
@@ -164,7 +164,7 @@ class Engine(object):
             DeltaS = np.abs(Sold - S)
             msg = ("--> time={t:3.3f}, max_chi={chi:d}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
                    "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
-            print msg.format(
+            print(msg.format(
                 t=self.evolved_time,
                 chi=max(self.psi.chi),
                 dE=DeltaE,
@@ -172,7 +172,7 @@ class Engine(object):
                 E=E.real,
                 S=S.real,
                 time=time.time() - start_time,
-            )
+            ))
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -223,7 +223,7 @@ class Engine(object):
 
         for delta_tau in delta_tau_list:
             if self.verbose >= 1:
-                print "delta_tau = {dt:e}".format(dt=delta_tau)
+                print("delta_tau = {dt:e}".format(dt=delta_tau))
             self.calc_U(TrotterOrder, delta_tau, type_evo='imag')
             DeltaE = 2 * max_error_E
             DeltaS = 2 * max_error_E
@@ -241,7 +241,7 @@ class Engine(object):
                     msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
                            "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, " +
                            "S={S:.10f}, time simulated: {time:.1f} s")
-                    print msg.format(
+                    print(msg.format(
                         step=step,
                         t=self.evolved_time,
                         chi=max(self.psi.chi),
@@ -250,7 +250,7 @@ class Engine(object):
                         E=E.real,
                         S=S.real,
                         time=time.time() - start_time,
-                    )
+                    ))
         # done
 
     @staticmethod
@@ -365,11 +365,11 @@ class Engine(object):
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
         if self._U_param == U_param:  # same keys and values as cached
             if self.verbose >= 10:
-                print "Skip recalculation of U with same parameters as before: ", U_param
+                print("Skip recalculation of U with same parameters as before: ", U_param)
             return  # nothing to do: U is cached
         self._U_param = U_param
         if self.verbose >= 1:
-            print "Calculate U for ", U_param
+            print("Calculate U for ", U_param)
 
         H_bond = self.model.H_bond
         L = len(H_bond)
@@ -440,10 +440,10 @@ class Engine(object):
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
             if Us[i_bond] is None:
                 if self.verbose >= 10:
-                    print "Skip U_bond element:", i_bond
+                    print("Skip U_bond element:", i_bond)
                 continue  # handles finite vs. infinite boundary conditions
             if self.verbose >= 10:
-                print "Apply U_bond element", i_bond
+                print("Apply U_bond element", i_bond)
             self._update_index = (U_idx_dt, i_bond)
             trunc_err += self.update_bond(i_bond, Us[i_bond])
         self._update_index = None
@@ -478,7 +478,7 @@ class Engine(object):
         """
         i0, i1 = i - 1, i
         if self.verbose >= 100:
-            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+            print("Update sites ({0:d}, {1:d})".format(i0, i1))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -533,23 +533,23 @@ class Engine(object):
         Us = self._U[U_idx_dt]
         for _ in range(N_steps):
             # sweep right
-            for i_bond in xrange(self.psi.L):
+            for i_bond in range(self.psi.L):
                 if Us[i_bond] is None:
                     if self.verbose >= 10:
-                        print "Skip U_bond element:", i_bond
+                        print("Skip U_bond element:", i_bond)
                     continue  # handles finite vs. infinite boundary conditions
                 if self.verbose >= 10:
-                    print "Apply U_bond element", i_bond
+                    print("Apply U_bond element", i_bond)
                 self._update_index = (U_idx_dt, i_bond)
                 trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
             # sweep left
-            for i_bond in xrange(self.psi.L - 1, -1, -1):
+            for i_bond in range(self.psi.L - 1, -1, -1):
                 if Us[i_bond] is None:
                     if self.verbose >= 10:
-                        print "Skip U_bond element:", i_bond
+                        print("Skip U_bond element:", i_bond)
                     continue  # handles finite vs. infinite boundary conditions
                 if self.verbose >= 10:
-                    print "Apply U_bond element", i_bond
+                    print("Apply U_bond element", i_bond)
                 self._update_index = (U_idx_dt, i_bond)
                 trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
         self._update_index = None
@@ -581,7 +581,7 @@ class Engine(object):
         """
         i0, i1 = i - 1, i
         if self.verbose >= 100:
-            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+            print("Update sites ({0:d}, {1:d})".format(i0, i1))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))

@@ -4,7 +4,7 @@
     simplify, document
 """
 
-from __future__ import division
+
 
 import numpy as np
 
@@ -39,9 +39,9 @@ def run(Jzs):
     np.set_printoptions(linewidth=120)
     corr_length = []
     for Jz in Jzs:
-        print "-" * 80
-        print "Jz =", Jz
-        print "-" * 80
+        print("-" * 80)
+        print("Jz =", Jz)
+        print("-" * 80)
         model_params['Jz'] = Jz
         M = SpinChain(model_params)
         #  #  psi = MPS.from_product_state(M.lat.mps_sites(), [1, 1]*(L//2), bc)
@@ -60,11 +60,11 @@ def run(Jzs):
             #  print "eigenvalues transfermatrix:", E
             #  print "norm_test:", psi.norm_test()
             corr_length.append(psi.correlation_length(charge_sector=0, tol_ev0=1.e-3))
-            print "corr. length", corr_length[-1]
-            print "corr. fct.", psi.correlation_function('Sz', 'Sz', sites1=[0], sites2=6)
-            print "<Sz>", psi.expectation_value('Sz')
+            print("corr. length", corr_length[-1])
+            print("corr. fct.", psi.correlation_function('Sz', 'Sz', sites1=[0], sites2=6))
+            print("<Sz>", psi.expectation_value('Sz'))
         else:
-            print psi.correlation_function('Sz', 'Sz')
+            print(psi.correlation_function('Sz', 'Sz'))
     corr_length = np.array(corr_length)
     results = {
         'model_params': model_params,
@@ -92,13 +92,13 @@ if __name__ == "__main__":
         filename = sys.argv[1]
     else:
         filename = 'xxz_corrlength.pkl'
-    import cPickle
+    import pickle
     import os.path
     if not os.path.exists(filename):
         results = run(list(np.arange(4.0, 1.5, -0.25)) + list(np.arange(1.5, 0.8, -0.05)))
         with open(filename, 'w') as f:
-            cPickle.dump(results, f)
+            pickle.dump(results, f)
     else:
         with open(filename) as f:
-            results = cPickle.load(f)
+            results = pickle.load(f)
         plot(results, filename[:-4] + '.pdf')

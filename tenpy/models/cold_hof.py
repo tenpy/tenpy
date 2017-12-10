@@ -7,7 +7,7 @@
 	In particular: hoppings along y at the boundary have to be different.
 """
 
-from __future__ import division
+
 import numpy as np
 
 from .lattice import Lattice

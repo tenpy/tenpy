@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
-from __future__ import division
+
 
 import itertools as it
 import tenpy.linalg.np_conserved as npc
@@ -58,14 +58,14 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=0.5):
         ED.full_diagonalization()
         psi_ED = ED.groundstate()
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
-        print "E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=np.min(ED.E))
-        print "compare with ED: overlap = ", abs(ov)**2
+        print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=np.min(ED.E)))
+        print("compare with ED: overlap = ", abs(ov)**2)
         assert (abs(abs(ov) - 1.) < 1.e-10)  # unique groundstate: finite size gap!
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
         Eexact = e0_tranverse_ising(g)
-        print "E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact)
+        print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
         assert (abs((Edmrg - Eexact) / Eexact) < 1.e-12)
         assert (abs((Edmrg - Edmrg2) / Edmrg2) < 1.e-12)
@@ -85,7 +85,7 @@ def test_dmrg():
 if __name__ == "__main__":
     for f_args in test_dmrg():
         f = f_args[0]
-        print "=" * 80
-        print ' '.join([str(a) for a in f_args])
-        print "=" * 80
+        print("=" * 80)
+        print(' '.join([str(a) for a in f_args]))
+        print("=" * 80)
         f(*f_args[1:])

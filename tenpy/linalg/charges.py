@@ -12,7 +12,7 @@ Contains implementation of classes
 A detailed introduction to `np_conserved` can be found in :doc:`../intro_npc`.
 """
 
-from __future__ import division
+
 
 import numpy as np
 import copy
@@ -209,7 +209,7 @@ class ChargeInfo(object):
             return True
         if not np.all(self.mod == other.mod):
             return False
-        for l, r in itertools.izip(self.names, other.names):
+        for l, r in zip(self.names, other.names):
             if r != l and l != '' and r != '':
                 return False
         return True
@@ -356,8 +356,8 @@ class LegCharge(object):
         qdict : dict
             A dictionary mapping a tuple of charges to slices.
         """
-        slices = np.array([(sl.start, sl.stop) for sl in qdict.values()], np.intp)
-        charges = np.array(qdict.keys(), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
+        slices = np.array([(sl.start, sl.stop) for sl in list(qdict.values())], np.intp)
+        charges = np.array(list(qdict.keys()), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
         sort = np.argsort(slices[:, 0])  # sort by slice start
         slices = slices[sort, :]
         charges = charges[sort, :]
@@ -490,14 +490,14 @@ class LegCharge(object):
     def to_qflat(self):
         """Return charges in `qflat` form."""
         qflat = np.empty((self.ind_len, self.chinfo.qnumber), dtype=QTYPE)
-        for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
+        for start, stop, ch in zip(self.slices[:-1], self.slices[1:], self.charges):
             qflat[slice(start, stop)] = ch
         return qflat
 
     def to_qdict(self):
         """Return charges in `qdict` form. Raises ValueError, if not blocked."""
         res = dict()
-        for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
+        for start, stop, ch in zip(self.slices[:-1], self.slices[1:], self.charges):
             res[tuple(ch)] = slice(start, stop)
         if len(res) < self.block_number:  # ensures self is blocked
             raise ValueError("can't convert qflat to qdict for non-blocked LegCharge")
@@ -762,7 +762,7 @@ class LegCharge(object):
 
     def _slice_start_stop(self):
         """Yield (start, stop) for each qindex."""
-        return itertools.izip(self.slices[:-1], self.slices[1:])
+        return zip(self.slices[:-1], self.slices[1:])
 
     def perm_flat_from_perm_qind(self, perm_qind):
         """Convert a permutation of qind (acting on self) into a flat permutation."""
@@ -1061,7 +1061,7 @@ class LegPipe(LegCharge):
         legbs = [l._get_block_sizes() for l in self.legs]
         # andvanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        blocksizes = np.prod([lbs[gr] for lbs, gr in itertools.izip(legbs, grid)], axis=0)
+        blocksizes = np.prod([lbs[gr] for lbs, gr in zip(legbs, grid)], axis=0)
         # q_map[:, :3] is initialized after sort/bunch.
 
         # calculate total charges
@@ -1071,7 +1071,7 @@ class LegPipe(LegCharge):
             legcharges = [(self.qconj * l.qconj) * l.charges for l in self.legs]
             # ``legcharges[li]`` is a 2D array mapping `q_li` to the charges.
             # thus ``(legcharges[li])[grid[li], :]`` gives a 2D array of shape (nblocks, qnumber)
-            charges = np.sum([lq[gr] for lq, gr in itertools.izip(legcharges, grid)], axis=0)
+            charges = np.sum([lq[gr] for lq, gr in zip(legcharges, grid)], axis=0)
             # now, we have what we need according to the charge **fusion rule**
             # namely for qi=`leg qindices` and li=`legs`:
             # charges[(q1, q2,...)] == self.qconj * (l1.qind[q1]*l1.qconj +
@@ -1111,7 +1111,7 @@ class LegPipe(LegCharge):
         self.q_map = q_map  # finished
 
         # finally calculate q_map_slices
-        self.q_map_slices = [q_map[i:j] for i, j in itertools.izip(idx[:-1], idx[1:])]
+        self.q_map_slices = [q_map[i:j] for i, j in zip(idx[:-1], idx[1:])]
         # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):

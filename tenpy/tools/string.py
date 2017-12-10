@@ -8,12 +8,12 @@ def uni_to_str(d):
     recursively converts unicode objects to python strings.
     This is useful when importing from json format (as it imports text as unicode).
     """
-    if type(d) == unicode:
+    if type(d) == str:
         return str(d)
     elif type(d) == dict:
         dn = {}
-        for k, v in d.items():
-            if type(k) == unicode:
+        for k, v in list(d.items()):
+            if type(k) == str:
                 k = str(k)
             dn[k] = uni_to_str(v)
         return dn

@@ -4,7 +4,7 @@ The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinC
 the idea of this class is more to serve as a pedagogical example for a 'model'.
 """
 
-from __future__ import division
+
 import numpy as np
 
 from .lattice import Site, Chain

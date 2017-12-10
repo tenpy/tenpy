@@ -70,7 +70,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
 ======== ========== =======================================================================
 """
 
-from __future__ import division
+
 import numpy as np
 import itertools
 import warnings
@@ -80,6 +80,7 @@ import scipy.sparse.linalg.eigen.arpack
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
+from functools import reduce
 
 
 class MPS(object):
@@ -743,7 +744,7 @@ class MPS(object):
         """
         if bonds is None:
             nt = self.nontrivial_bonds
-            bonds = range(nt.start, nt.stop)
+            bonds = list(range(nt.start, nt.stop))
         res = []
         for ib in bonds:
             s = self._S[ib]
@@ -795,9 +796,9 @@ class MPS(object):
         segment = np.sort(segment)
         if first_site is None:
             if self.finite:
-                first_site = range(0, self.L - segment[-1])
+                first_site = list(range(0, self.L - segment[-1]))
             else:
-                first_site = range(self.L)
+                first_site = list(range(self.L))
         comb_legs = [
             self._get_p_labels(len(segment), False),
             self._get_p_labels(len(segment), True)
@@ -1452,9 +1453,9 @@ class MPS(object):
         L = self.L
         if sites is None:
             if self.finite:
-                sites = range(L - (n - 1))
+                sites = list(range(L - (n - 1)))
             else:
-                sites = range(L)
+                sites = list(range(L))
         sites = to_iterable(sites)
         if axes is None:
             if n == 1:
@@ -1470,13 +1471,13 @@ class MPS(object):
     def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
         """get default arguments of self.correlation_function()"""
         if sites1 is None:
-            sites1 = range(0, self.L)
+            sites1 = list(range(0, self.L))
         elif type(sites1) == int:
-            sites1 = range(0, sites1)
+            sites1 = list(range(0, sites1))
         if sites2 is None:
-            sites2 = range(0, self.L)
+            sites2 = list(range(0, self.L))
         elif type(sites2) == int:
-            sites2 = range(0, sites2)
+            sites2 = list(range(0, sites2))
         ops1 = npc.to_iterable_arrays(ops1)
         ops2 = npc.to_iterable_arrays(ops2)
         opstr = npc.to_iterable_arrays(opstr)
@@ -1691,7 +1692,7 @@ class MPSEnvironment(object):
         assert (self.bra.L == self.ket.L)
         assert (self.bra.finite == self.ket.finite)
         # check that the network is contractable
-        for b_s, k_s in itertools.izip(self.bra.sites, self.ket.sites):
+        for b_s, k_s in zip(self.bra.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
@@ -2105,11 +2106,11 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         legs = vec.legs
         # the actual work
         if not self.transpose:
-            for N, M in itertools.izip(reversed(self._bra_N), reversed(self._ket_M)):
+            for N, M in zip(reversed(self._bra_N), reversed(self._ket_M)):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
         else:
-            for N, M in itertools.izip(self._bra_N, self._ket_M):
+            for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
         if np.any(self.qtotal != 0):
@@ -2199,7 +2200,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
             self.charge_sector = None
         else:
             # for given charge sector
-            for k in xrange(num_ev, max_num_ev + 1):
+            for k in range(num_ev, max_num_ev + 1):
                 if k > num_ev:
                     warnings.warn("increased `num_ev` to " + str(k + 1))
                 try:

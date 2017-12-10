@@ -1,6 +1,6 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
 
-from __future__ import division
+
 
 import warnings
 import numpy as np
@@ -19,7 +19,7 @@ spin_half = site.SpinHalfSite(conserve='Sz')
 
 def test_purification_mps():
     for L in [4, 2, 1]:
-        print L
+        print(L)
         psi = purification_mps.PurificationMPS.from_infinteT([spin_half] * L, bc='finite')
         psi.test_sanity()
         if L > 1:
@@ -32,7 +32,7 @@ def test_purification_mps():
         npt.assert_array_almost_equal_nulp(C, 0.5 * 0.5 * np.eye(L), 100)
         coords, mutinf = psi.mutinf_two_site()
         for (i, j), Iij in zip(coords, mutinf):
-            print repr((i, j)), Iij
+            print(repr((i, j)), Iij)
         if L > 1:
             assert np.max(np.abs(mutinf)) < 1.e-14
 
@@ -73,7 +73,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
     eng = PurificationTEBD(psi, M, {'verbose': 30, 'disentangle': 'renyi'})
     theta = eng.psi.get_theta(1, 2)
-    print theta[0, :, :, 0, :, :]
+    print(theta[0, :, :, 0, :, :])
     # find random unitary: SVD of random matix
     pleg = psi.sites[0].leg
     pipe = npc.LegPipe([pleg, pleg])
@@ -87,24 +87,24 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
         npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
     U = U0
     Sold = np.inf
-    for i in xrange(20):
+    for i in range(20):
         S, U = eng.used_disentangler.iter(theta, U)
         if i == 0:
             S_0 = S
-        print "iteration {i:d}: S={S:.5f}, DS={DS:.4e} ".format(i=i, S=S, DS=Sold - S)
+        print("iteration {i:d}: S={S:.5f}, DS={DS:.4e} ".format(i=i, S=S, DS=Sold - S))
         if abs(Sold - S) < eps:
-            print "break: S converged down to {eps:.1e}".format(eps=eps)
+            print("break: S converged down to {eps:.1e}".format(eps=eps))
             break
         Sold, S = S, Sold
     else:
-        print "maximum number of iterations reached"
+        print("maximum number of iterations reached")
     theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-    print "new theta = "
-    print theta.itranspose(['vL', 'vR', 'p0', 'q0', 'p1', 'q1'])
-    print theta[0, 0]
+    print("new theta = ")
+    print(theta.itranspose(['vL', 'vR', 'p0', 'q0', 'p1', 'q1']))
+    print(theta[0, 0])
     assert (S < S_0)  # this should always be true...
     if S > 100 * eps:
-        print "final S =", S
+        print("final S =", S)
         warnings.warn("test of purification failed to find the optimum.")
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
@@ -117,7 +117,7 @@ def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
     pairs_PQ = [None, None]
     for i in range(2):
         pairs = pairs_PQ[i] = []
-        have = range(L)
+        have = list(range(L))
         while len(have) > 0:
             i = have.pop(0)
             js = [j for j in have[:max_range] if abs(i - j) <= max_range]
@@ -154,21 +154,21 @@ def gen_disentangler_psi_prod(psiP, psiQ):
 def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     psi0, pairs_PQ = gen_disentangler_psi_singlets(site_P, L, max_range)
     psi0.test_sanity()
-    print "pairs: P", pairs_PQ[0]
-    print "pairs: Q", pairs_PQ[1]
-    print "entanglement entropy: ", psi0.entanglement_entropy() / np.log(2.)
+    print("pairs: P", pairs_PQ[0])
+    print("pairs: Q", pairs_PQ[1])
+    print("entanglement entropy: ", psi0.entanglement_entropy() / np.log(2.))
     coords, mutinf_pq = psi0.mutinf_two_site(legs='pq')
-    print "(i,j)=", [tuple(c) for c in coords]
-    print "PQ:", np.round(mutinf_pq / np.log(2), 3)
-    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3)
-    print "Q: ", np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3)
+    print("(i,j)=", [tuple(c) for c in coords])
+    print("PQ:", np.round(mutinf_pq / np.log(2), 3))
+    print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
+    print("Q: ", np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3))
     M = XXZChain(dict(L=L))
     tebd_pars = dict(verbose=31, trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
     for i in range(L):
         eng.disentangle_global()
-    print psi0.entanglement_entropy() / np.log(2)
+    print(psi0.entanglement_entropy() / np.log(2))
     mutinf_Q = psi0.mutinf_two_site(legs='q')[1]
-    print "P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3)
-    print "Q: ", np.round(mutinf_Q / np.log(2), 3)
+    print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
+    print("Q: ", np.round(mutinf_Q / np.log(2), 3))
     assert (np.all(mutinf_Q < 1.e-10))

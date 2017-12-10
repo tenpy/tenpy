@@ -11,7 +11,7 @@ The :class:`TFIModel2D` contains the same couplings but on a square lattice in 2
 As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.Lattice` classes.
 """
 
-from __future__ import division
+
 
 from .lattice import Chain, SquareLattice
 from .model import CouplingModel, NearestNeighborModel, MPOModel

@@ -28,19 +28,19 @@ Jxx, Jz = 1., 1.
 L = 20
 dt = 0.1
 cutoff = 1.e-10
-print "Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L)
+print("Jxx={Jxx}, Jz={Jz}, L={L:d}".format(Jxx=Jxx, Jz=Jz, L=L))
 
-print "1) create Arrays for an Neel MPS"
+print("1) create Arrays for an Neel MPS")
 site = SpinHalfSite(conserve='Sz')  # predefined charges and Sp,Sm,Sz operators
 p_leg = site.leg
 chinfo = p_leg.chinfo
 # make lattice from unit cell and create product state MPS
 lat = Chain(L, site, bc_MPS='finite')
 state = [0, 1] * (L // 2) + [0] * (L % 2)  # (right-canonical)
-print "state = ", state
+print("state = ", state)
 psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS)
 
-print "2) create an MPO representing the AFM Heisenberg Hamiltonian"
+print("2) create an MPO representing the AFM Heisenberg Hamiltonian")
 
 # predefined physical spin-1/2 operators Sz, S+, S-
 Sz, Sp, Sm, Id = site.Sz, site.Sp, site.Sm, site.Id
@@ -60,39 +60,39 @@ Ws[0] = W[:1, :]
 Ws[-1] = W[:, -1:]
 H = MPO(psi.sites, Ws, psi.bc, IdL=0, IdR=-1)
 
-print "3) define 'environments' left and right"
+print("3) define 'environments' left and right")
 
 # this is automatically done during initialization of MPOEnvironment
 env = MPOEnvironment(psi, H, psi)
 envL = env.get_LP(0)
 envR = env.get_RP(L - 1)
 
-print "4) contract MPS and MPO to calculate the energy <psi|H|psi>"
+print("4) contract MPS and MPO to calculate the energy <psi|H|psi>")
 
 E = env.full_contraction(L - 1)
-print "E =", E
+print("E =", E)
 
-print "5) calculate two-site hamiltonian ``H2`` from the MPO"
+print("5) calculate two-site hamiltonian ``H2`` from the MPO")
 # label left, right physical legs with p, q
 W0 = H.get_W(0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
 W1 = H.get_W(1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
 H2 = npc.tensordot(W0, W1, axes=('wR', 'wL')).itranspose(['wL', 'wR', 'p0', 'p1', 'p0*', 'p1*'])
 H2 = H2[H.IdL[0], H.IdR[2]]  # (If H has single-site terms, it's not that simple anymore)
-print "H2 labels:", H2.get_leg_labels()
+print("H2 labels:", H2.get_leg_labels())
 
-print "6) calculate exp(H2) by diagonalization of H2"
+print("6) calculate exp(H2) by diagonalization of H2")
 # diagonalization requires to view H2 as a matrix
 H2 = H2.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
-print "labels after combine_legs:", H2.get_leg_labels()
+print("labels after combine_legs:", H2.get_leg_labels())
 E2, U2 = npc.eigh(H2)
-print "Eigenvalues of H2:", E2
+print("Eigenvalues of H2:", E2)
 U_expE2 = U2.scale_axis(np.exp(-1.j * dt * E2), axis=1)  # scale_axis ~= apply a diagonal matrix
 exp_H2 = npc.tensordot(U_expE2, U2.conj(), axes=(1, 1))
 exp_H2.iset_leg_labels(H2.get_leg_labels())
 exp_H2 = exp_H2.split_legs()  # by default split all legs which are `LegPipe`
 # (this restores the originial labels ['p0', 'p1', 'p0*', 'p1*'] of `H2` in `exp_H2`)
 
-print "7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd"
+print("7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd")
 # (this implements one time step of first order TEBD)
 trunc_par = {'svd_min': cutoff, 'trunc_cut': None, 'verbose': 0}
 for even_odd in [0, 1]:
@@ -107,4 +107,4 @@ for even_odd in [0, 1]:
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
         psi.set_B(i, A_L, form='A')
         psi.set_B(i + 1, B_R, form='B')
-print "finished"
+print("finished")

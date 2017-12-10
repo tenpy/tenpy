@@ -1,7 +1,7 @@
 """test of :class:`tenpy.models.XXZChain`.
 """
 
-from __future__ import division
+
 
 from tenpy.models.tf_ising import TFIChain, TFIModel2D
 from test_model import check_general_model

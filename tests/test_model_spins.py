@@ -1,4 +1,4 @@
-from __future__ import division
+
 
 from tenpy.models import spins
 from test_model import check_general_model

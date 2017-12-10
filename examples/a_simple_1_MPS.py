@@ -82,7 +82,7 @@ class SimpleMPS(object):
 
     def entanglement_entropy(self):
         """Return the (von-Neumann) entanglement entropy for a bipartition at any of the bonds."""
-        bonds = range(1, self.L) if self.bc == 'finite' else range(0, self.L)
+        bonds = list(range(1, self.L)) if self.bc == 'finite' else list(range(0, self.L))
         result = []
         for i in bonds:
             S = self.Ss[i].copy()

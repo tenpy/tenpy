@@ -59,7 +59,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
                 vecs[i] -= ov_ji * vecs[j]
         else:
             if verbose >= 1:
-                print "GramSchmidt: Rank defficient", n
+                print("GramSchmidt: Rank defficient", n)
             vecs[j] = None
     vecs = [q for q in vecs if q is not None]
     if verbose >= 1:
@@ -68,7 +68,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         for i, v in enumerate(vecs):
             for j, w in enumerate(vecs):
                 G[i, j] = npc.inner(v, w, do_conj=True)
-        print "GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k))
+        print("GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k)))
     return vecs, ov
 
 
@@ -198,13 +198,13 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         if verbose >= 10:
             _plot_stats(Es)
         if k > 1:
-            print ''.join([
+            print(''.join([
                 "Lanczos N={0:d}, gap={1:.3e} ".format(N, gap),
                 "| DeltaE0={0:.3e} E_tol={1:e} ".format(Delta_E0, E_tol),
                 "| P_err={0:.3e} P_tol={1:e}".format(P_err, P_tol)
-            ])
+            ]))
         else:
-            print "Lanczos N={0:d}, alpha={1:.3e}, beta={2:.3e}".format(N, alpha, beta)
+            print("Lanczos N={0:d}, alpha={1:.3e}, beta={2:.3e}".format(N, alpha, beta))
 
     if N == 1:
         return E_T[0], psi.copy(), N  # no better estimate available
@@ -244,9 +244,9 @@ def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
         warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
     psi0 /= psi0_norm
     if verbose >= 1. and len(orthogonal_to) > 0:
-        print ''.join(["Lanczos orthogonality:"] + [
+        print(''.join(["Lanczos orthogonality:"] + [
             " {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True))) for o in orthogonal_to
-        ])
+        ]))
     return E_T[0], psi0, N
 
 

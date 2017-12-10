@@ -14,7 +14,7 @@ while still being failsave if the shared OpenMP library is not found.  In the la
 you might also try the equivalent :func:`mkl_get_num_threads` and :func:`mkl_set_num_threads`.
 """
 
-from __future__ import division
+
 import warnings
 import ctypes
 from ctypes.util import find_library
@@ -79,7 +79,7 @@ def load_omp_library(libs=["libiomp5.so",
             try:
                 _omp_lib = ctypes.CDLL(l)
                 if verbose:
-                    print "loaded " + l + " for omp"
+                    print("loaded " + l + " for omp")
                 break
             except OSError:
                 pass

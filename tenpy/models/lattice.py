@@ -6,7 +6,7 @@
     equality tests?
 """
 
-from __future__ import division
+
 
 import numpy as np
 
@@ -202,13 +202,13 @@ class Lattice(object):
             shape = self.Ls[::-1] + (len(self.unit_cell), )
             res = np.mgrid[tuple([slice(0, L) for L in shape])]
             res = res.reshape((self.dim + 1, self.N_sites)).T
-            perm = np.array(range(self.dim)[::-1] + [-1])
+            perm = np.array(list(range(self.dim))[::-1] + [-1])
             return res[:, perm]
         elif name in ["snake", "snakeCstyle"]:
             return _ordering_snake(self.shape)
         elif name == "snakeFstyle":
             res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
-            perm = np.array(range(self.dim)[::-1] + [-1])
+            perm = np.array(list(range(self.dim))[::-1] + [-1])
             return res[:, perm]
         # in a derived lattice ``class DerivedLattice(Lattice)``, use:
         # return super(DerivedLattice, self).ordering(name)
@@ -482,7 +482,7 @@ def _ordering_snake(Ls):
         L = Ls.pop()
         L0, D = order.shape
         new_order = np.empty((L * L0, D + 1), dtype=np.intp)
-        print order.shape, "- L =", L, "-->", new_order.shape
+        print(order.shape, "- L =", L, "-->", new_order.shape)
         new_order[:, 0] = np.repeat(np.arange(L), L0)
         new_order[:L0, 1:] = order
         if L > 1:

@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice"""
-from __future__ import division
+
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -19,7 +19,7 @@ def test_lattice():
     site1 = lattice.Site(leg, [('up', 0), ('down', -1)], op1=op1)
     site2 = lattice.Site(leg2, [('down', 0), ('up', -1)], op2=op2)
     for order in ['default', 'Fstyle', 'snake', 'snakeFstyle']:
-        print "order =", order
+        print("order =", order)
         Ls = [5, 2]
         basis = [[1., 1.], [0., 1.]]
         pos = [[0.1, 0.], [0.2, 0.]]
@@ -33,7 +33,7 @@ def test_lattice():
         npt.assert_equal([4.1, 5.], lat.position(idx))
         # test lat.mps2lat_values
         A = np.random.random([lat.N_sites, 2, lat.N_sites])
-        print A.shape
+        print(A.shape)
         Ares = lat.mps2lat_values(A, axes=[-1, 0])
         for i in range(lat.N_sites):
             idx_i = lat.mps2lat_idx(i)

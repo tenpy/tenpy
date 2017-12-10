@@ -3,7 +3,7 @@
 .. todo :
     document...
 """
-from __future__ import division
+
 
 import numpy as np
 import time
@@ -46,7 +46,7 @@ def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init
     t0 = time.time()
 
     info = run_DMRG(psi, M, dmrg_params)
-    print "DMRG finished after", time.time() - t0, "s"
+    print("DMRG finished after", time.time() - t0, "s")
 
     # save results in output file
     result['chi'] = np.array(psi.chi)

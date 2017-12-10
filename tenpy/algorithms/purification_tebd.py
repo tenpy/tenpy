@@ -5,7 +5,7 @@ Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
 """
 
-from __future__ import division
+
 
 from . import tebd
 from ..linalg import np_conserved as npc
@@ -77,8 +77,8 @@ class PurificationTEBD(tebd.Engine):
         if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
-            print "--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(
-                t=self.evolved_time, E=E.real, S=S.real)
+            print("--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(
+                t=self.evolved_time, E=E.real, S=S.real))
 
     @property
     def disent_iterations(self):
@@ -121,7 +121,7 @@ class PurificationTEBD(tebd.Engine):
         """
         i0, i1 = i - 1, i
         if self.verbose >= 30:
-            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+            print("Update sites ({0:d}, {1:d})".format(i0, i1))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -185,7 +185,7 @@ class PurificationTEBD(tebd.Engine):
         """
         i0, i1 = i - 1, i
         if self.verbose >= 100:
-            print "Update sites ({0:d}, {1:d})".format(i0, i1)
+            print("Update sites ({0:d}, {1:d})".format(i0, i1))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'q0', 'p1', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -251,7 +251,7 @@ class PurificationTEBD(tebd.Engine):
         i, j = pair
         #  for i, j in coords[sorted[-1:]]:
         if self.verbose > 10:
-            print 'disentangle global pair ' + repr((i, j))
+            print('disentangle global pair ' + repr((i, j)))
         self._disentangle_two_site(i, j)
         return i, j  # TODO
         # done
@@ -347,8 +347,8 @@ class PurificationTEBD(tebd.Engine):
         # very similar to update_bond
         i0, i1 = i - 1, i
         if self.verbose >= 30:
-            print "Update sites ({0:d}, {1:d}), swap={2!s}, disentangle={3!s}".format(
-                i0, i1, swap, disentangle)
+            print("Update sites ({0:d}, {1:d}), swap={2!s}, disentangle={3!s}".format(
+                i0, i1, swap, disentangle))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         if swap:
@@ -437,16 +437,16 @@ class PurificationTEBD2(PurificationTEBD):
         Us = self._U[U_idx_dt]
         trunc_err = TruncationError()
         if odd:
-            sweep = range(1, self.psi.L)  # start with 1: only finite!
+            sweep = list(range(1, self.psi.L))  # start with 1: only finite!
         else:
-            sweep = range(self.psi.L - 1, 0, -1)
+            sweep = list(range(self.psi.L - 1, 0, -1))
         for i_bond in sweep:
             if Us[i_bond] is None:
                 if self.verbose >= 10:
-                    print "Skip U_bond element:", i_bond
+                    print("Skip U_bond element:", i_bond)
                 continue  # handles finite vs. infinite boundary conditions
             if self.verbose >= 10:
-                print "Apply U_bond element", i_bond
+                print("Apply U_bond element", i_bond)
             self._update_index = (U_idx_dt, i_bond)
             trunc_err += self.update_bond(i_bond, Us[i_bond])
         self._update_index = None
@@ -566,7 +566,7 @@ class RenyiDisentangler(Disentangler):
             npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
         Sold = np.inf
         S0 = None
-        for j in xrange(self.max_iter):
+        for j in range(self.max_iter):
             S, U = self.iter(theta, U)
             if S0 is None:
                 S0 = S
@@ -576,8 +576,8 @@ class RenyiDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
-                j=j, DS=S0 - Sold)
+            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
+                j=j, DS=S0 - Sold))
         return theta, U
 
     def iter(self, theta, U):
@@ -680,7 +680,7 @@ class NormDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print "disentangle norm: {j:d} iterations, err={err!s}".format(j=j, err=err)
+            print("disentangle norm: {j:d} iterations, err={err!s}".format(j=j, err=err))
         return theta, U
 
     def iter(self, theta, U, trunc_params):
@@ -768,8 +768,8 @@ class GradientDescentDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print "disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
-                j=j, DS=S0 - Sold)
+            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
+                j=j, DS=S0 - Sold))
         return theta, U
 
     def iter(self, theta):
@@ -1084,7 +1084,7 @@ def _parse_min_atom(unparsed, parent):
 
 
 def _parse_atom(unparsed, parent):
-    for key, disent in disentanglers_atom_parse_dict.iteritems():
+    for key, disent in disentanglers_atom_parse_dict.items():
         if unparsed.startswith(key):
             return disent(parent), unparsed[len(key):]
     raise _ParseError

@@ -4,7 +4,7 @@
     A lot more to test, e.g. conversions of the different models
 """
 
-from __future__ import division
+
 
 import itertools
 
@@ -41,7 +41,7 @@ def check_model_sanity(M, hermitian=True):
                 if H is not None:
                     err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
                     if err > 1.e-14:
-                        print H
+                        print(H)
                         raise ValueError("H on bond {i:d} not hermitian".format(i=i))
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
@@ -63,12 +63,12 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
     hermitian : bool
         If True, check that the Hamiltonian is hermitian.
     """
-    for vals in itertools.product(*check_pars.values()):
-        print "-" * 40
+    for vals in itertools.product(*list(check_pars.values())):
+        print("-" * 40)
         params = model_pars.copy()
-        for k, v in zip(check_pars.keys(), vals):
+        for k, v in zip(list(check_pars.keys()), vals):
             params[k] = v
-        print "check_model_sanity with following parameters:"
-        print params
+        print("check_model_sanity with following parameters:")
+        print(params)
         M = ModelClass(params)
         check_model_sanity(M)

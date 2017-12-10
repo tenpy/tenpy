@@ -14,7 +14,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     without addional extra work.
 """
 
-from __future__ import division
+
 import numpy as np
 import warnings
 
@@ -184,7 +184,7 @@ class ExactDiag(object):
             raise ValueError("Full diagonalization works only on finite systems")
         psi = mps.get_theta(0, mps.L)  # does exactly what we need
         psi = psi.take_slice([0, 0], ['vL', 'vR'])
-        psi = psi.combine_legs(range(mps.L))
+        psi = psi.combine_legs(list(range(mps.L)))
         if self.charge_sector is not None:
             psi.legs[0] = psi.legs[0].to_LegCharge()
             psi = psi[self._mask]

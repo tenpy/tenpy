@@ -38,7 +38,7 @@ i.e. between sites ``i-1`` and ``i``.
     transfermatrix for MPO
 """
 
-from __future__ import division
+
 import itertools
 import numpy as np
 from ..linalg import np_conserved as npc
@@ -244,8 +244,8 @@ class MPOGraph(object):
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         # empty graph
-        self.states = [set() for _ in xrange(self.L + 1)]
-        self.graph = [{} for _ in xrange(self.L)]
+        self.states = [set() for _ in range(self.L + 1)]
+        self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
         self._grids = None
         self._grid_legs = None
@@ -385,7 +385,7 @@ class MPOGraph(object):
         self._calc_grid_legs(W_qtotal, leg0)
         # now build the `W` from the grid
         Ws = []
-        for i in xrange(self.L):
+        for i in range(self.L):
             legs = [self._grid_legs[i], self._grid_legs[i + 1].conj()]
             W = npc.grid_outer(self._grids[i], legs, W_qtotal)
             W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
@@ -447,9 +447,9 @@ class MPOGraph(object):
             stL, stR = states[i:i + 2]
             graph = self.graph[i]  # ``{keyL: {keyR: [(opname, strength)]}}``
             grid = [None] * len(stL)
-            for sL, a in stL.iteritems():
+            for sL, a in stL.items():
                 row = [None] * len(stR)
-                for sR, lst in graph[sL].iteritems():
+                for sR, lst in graph[sL].items():
                     b = stR[sR]
                     row[b] = lst
                 grid[a] = row
@@ -530,18 +530,18 @@ class MPOGraph(object):
         W_qtotal = chinfo.make_valid(W_qtotal)
         states = self._ordered_states
         assert (states is not None)  # make sure self._set_ordered_states() was called
-        charges = [{} for _ in xrange(self.L)]
+        charges = [{} for _ in range(self.L)]
         charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
         charges[0]['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
         chis = [len(s) for s in self.states]
-        for _ in xrange(
+        for _ in range(
                 1000 * self.L):  # I don't expect interactions with larger range than that...
-            for i in xrange(self.L):
+            for i in range(self.L):
                 chL, chR = charges[i:i + 2]
                 stL, stR = states[i:i + 2]
                 graph = self.graph[i]
                 grid = self._grids[i]
-                for keyL, qL in chL.copy().iteritems():  # copy: for L=1 infinite, chL is chR
+                for keyL, qL in chL.copy().items():  # copy: for L=1 infinite, chL is chR
                     for keyR in graph[keyL]:
                         # calculate charge qR from the entry of the grid
                         op = grid[stL[keyL]][stR[keyR]]
@@ -551,16 +551,16 @@ class MPOGraph(object):
                             chR[keyR] = qR
                         elif any(chR[keyR] != qR):
                             raise ValueError("incompatible charges while creating the MPO")
-            if all([len(qs) == chi for qs, chi in itertools.izip(charges, chis)]):
+            if all([len(qs) == chi for qs, chi in zip(charges, chis)]):
                 break
         else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
             # this should not happen (if we have no bugs), but who knows ^_^
             assert (False)  # maybe some unconnected parts in the graph?
         # finally generate LegCharge from the dictionaries
         self._grid_legs = []
-        for qs, st in itertools.izip(charges, states):
+        for qs, st in zip(charges, states):
             qfl = [None] * len(qs)
-            for key, q in qs.iteritems():
+            for key, q in qs.items():
                 qfl[st[key]] = q
             leg = npc.LegCharge.from_qflat(chinfo, qfl, qconj=+1)
             self._grid_legs.append(leg)
@@ -667,7 +667,7 @@ class MPOEnvironment(MPSEnvironment):
         assert (self.bra.L == self.ket.L == self.H.L)
         assert (self.bra.finite == self.ket.finite == self.H.finite)
         # check that the network is contractable
-        for b_s, H_s, k_s in itertools.izip(self.bra.sites, self.H.sites, self.ket.sites):
+        for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
             b_s.leg.test_equal(H_s.leg)
         assert any([LP is not None for LP in self._LP])

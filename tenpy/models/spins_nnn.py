@@ -3,7 +3,7 @@
 Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 """
 
-from __future__ import division
+
 import numpy as np
 
 from .lattice import Chain
@@ -79,7 +79,7 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
             else:
                 conserve = None
             if verbose >= 1:
-                print str(self.__class__) + ": set conserve to ", conserve
+                print(str(self.__class__) + ": set conserve to ", conserve)
         unused_parameters(model_param, self.__class__)
         # 1) define Site and lattice
         spinsite = SpinSite(S, conserve)

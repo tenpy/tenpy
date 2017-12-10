@@ -1,7 +1,7 @@
 """Defines a class describing the local physical Hilbert space.
 
 """
-from __future__ import division
+
 
 import copy
 import numpy as np
@@ -85,7 +85,7 @@ class Site(object):
         self.opnames = set()
         self.need_JW_string = set()
         self.add_op('Id', npc.diag(1., self.leg))
-        for name, op in site_ops.iteritems():
+        for name, op in site_ops.items():
             self.add_op(name, op)
         if not hasattr(self, 'perm'):  # default permutation for the local states
             self.perm = np.arange(self.dim)
@@ -131,7 +131,7 @@ class Site(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        for lab, ind in self.state_labels.iteritems():
+        for lab, ind in self.state_labels.items():
             if not isinstance(lab, str):
                 raise ValueError("wrong type of state label")
             if not 0 <= ind < self.dim:
@@ -139,7 +139,7 @@ class Site(object):
         for name in self.opnames:
             if not hasattr(self, name):
                 raise ValueError("missing onsite operator " + name)
-        for op in self.onsite_ops.values():
+        for op in list(self.onsite_ops.values()):
             if op.rank != 2:
                 raise ValueError("only rank-2 onsite operators allowed")
             op.legs[0].test_equal(self.leg)
@@ -411,12 +411,12 @@ class DoubleSite(Site):
         super(DoubleSite, self).__init__(pipe, states, JW=JW_both)
         # add remaining operators
         Id1 = site1.Id
-        for opname, op in site0.onsite_ops.iteritems():
+        for opname, op in site0.onsite_ops.items():
             if opname != 'Id':
                 need_JW = opname in site0.need_JW_string
                 self.add_op(opname + label0, self.kroneckerproduct(op, Id1), need_JW)
         Id0 = site0.Id
-        for opname, op in site1.onsite_ops.iteritems():
+        for opname, op in site1.onsite_ops.items():
             if opname != 'Id':
                 need_JW = opname in site1.need_JW_string
                 op0 = JW0 if need_JW else Id0
@@ -908,7 +908,7 @@ class BosonSite(Site):
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
         B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
-        for n in xrange(1, dim):
+        for n in range(1, dim):
             B[n - 1, n] = np.sqrt(n)
         Bd = np.transpose(B)  # .conj() wouldn't do anything
         # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
@@ -921,7 +921,7 @@ class BosonSite(Site):
         ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
         if conserve == 'N':
             chinfo = npc.ChargeInfo([1], ['N'])
-            leg = npc.LegCharge.from_qflat(chinfo, range(dim))
+            leg = npc.LegCharge.from_qflat(chinfo, list(range(dim)))
         elif conserve == 'parity':
             chinfo = npc.ChargeInfo([2], ['parity'])
             leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])

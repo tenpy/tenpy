@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.svd_robust"""
-from __future__ import division
+
 
 import numpy as np
 import numpy.testing as npt
@@ -21,9 +21,9 @@ def check_svd_function(svd_function):
     """check whether svd_function behaves as np.linalg.svd"""
     svd_robust._load_lapack(warn=False)
     for dtype in [np.float32, np.float64, np.complex64, np.complex128]:
-        print "dtype = ", dtype
+        print("dtype = ", dtype)
         for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
-            print "m, n = ", m, n
+            print("m, n = ", m, n)
             tol_NULP = 200 * max(max(m, n)**3,
                                  100)  # quite large tolerance, but seems to be required...
             if np.dtype(dtype).kind == 'c':  # complex?
@@ -42,7 +42,7 @@ def check_svd_function(svd_function):
             npt.assert_array_almost_equal_nulp(Sonly, S, tol_NULP)
             recalc = U.dot(np.diag(S)).dot(VT)
             npt.assert_array_almost_equal_nulp(recalc, A, tol_NULP)
-        print "types of U, S, VT = ", U.dtype, S.dtype, VT.dtype
+        print("types of U, S, VT = ", U.dtype, S.dtype, VT.dtype)
         nst.eq_(U.dtype, A.dtype)
 
 
