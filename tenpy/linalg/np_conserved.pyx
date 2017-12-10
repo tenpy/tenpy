@@ -41,8 +41,6 @@ Eigen systems:
 
 """
 
-from __future__ import division
-
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -546,7 +544,7 @@ cdef class Array(object):
     def get_leg_labels(self):
         """Return tuple of the leg labels, with `None` for anonymous legs."""
         lb = [None] * self.rank
-        for k, v in self.labels.iteritems():
+        for k, v in self.labels.items():
             lb[v] = k
         return tuple(lb)
 
@@ -661,10 +659,10 @@ cdef class Array(object):
         qdat : ndarray
             the qindex for each of the legs
         """
-        for block, qdat in itertools.izip(self._data, self._qdata):
+        for block, qdat in zip(self._data, self._qdata):
             blockslices = []
             qs = []
-            for (qi, l) in itertools.izip(qdat, self.legs):
+            for (qi, l) in zip(qdat, self.legs):
                 blockslices.append(l.get_slice(qi))
                 qs.append(l.get_charge(qi))
             yield block, tuple(blockslices), qs, qdat
@@ -775,7 +773,7 @@ cdef class Array(object):
         # qindex and index_within_block for each of the axes
         pos = np.array([self.legs[a].get_qindex(i) for a, i in zip(axes, indices)])
         # which axes to keep
-        keep_axes = [a for a in xrange(self.rank) if a not in axes]
+        keep_axes = [a for a in range(self.rank) if a not in axes]
         res.legs = [self.legs[a] for a in keep_axes]
         res._set_shape()
         labels = self.get_leg_labels()
@@ -796,7 +794,7 @@ cdef class Array(object):
             sl[a] = ri  # the indices within the blocks
         sl = tuple(sl)
         # finally take slices on _data
-        res._data = [block[sl] for block, k in itertools.izip(res._data, keep_blocks) if k]
+        res._data = [block[sl] for block, k in zip(res._data, keep_blocks) if k]
         return res
 
     def add_trivial_leg(self, axis=0, label=None, qconj=1):
@@ -1405,7 +1403,7 @@ cdef class Array(object):
             return self
         norm = np.array([np.linalg.norm(t, ord=norm_order) for t in self._data])
         keep = (norm > cutoff)  # bool array
-        self._data = [t for t, k in itertools.izip(self._data, keep) if k]
+        self._data = [t for t, k in zip(self._data, keep) if k]
         self._qdata = self._qdata[keep]
         # self._qdata_sorted is preserved
         return self
@@ -1523,7 +1521,7 @@ cdef class Array(object):
         data = []
         qdata = {}  # dict for fast look up: tuple(indices) -> _data index
         for old_qind, (beg, end) in enumerate(oldleg._slice_start_stop()):
-            old_range = xrange(beg, end)
+            old_range = range(beg, end)
             for old_data_index in np.nonzero(qdata_axis == old_qind)[0]:
                 old_block = self._data[old_data_index]
                 old_qindices = self._qdata[old_data_index]
@@ -1546,7 +1544,7 @@ cdef class Array(object):
         res._data = data
         res._qdata_sorted = False
         res_qdata = res._qdata = np.empty((len(data), self.rank), dtype=np.intp)
-        for qindices, i in qdata.iteritems():
+        for qindices, i in qdata.items():
             res_qdata[i] = qindices
         return res
 
@@ -1559,12 +1557,12 @@ cdef class Array(object):
             The new order of the axes. By default (None), reverse axes.
         """
         if axes is None:
-            axes = tuple(reversed(xrange(self.rank)))
+            axes = tuple(reversed(range(self.rank)))
         else:
             axes = tuple(self.get_leg_indices(axes))
             if len(axes) != self.rank or len(set(axes)) != self.rank:
                 raise ValueError("axes has wrong length: " + str(axes))
-            if axes == tuple(xrange(self.rank)):
+            if axes == tuple(range(self.rank)):
                 return self  # nothing to do
         axes_arr = np.array(axes)
         self.legs = [self.legs[a] for a in axes]
@@ -1592,7 +1590,7 @@ cdef class Array(object):
         swap[axis1], swap[axis2] = axis2, axis1
         legs = self.legs
         legs[axis1], legs[axis2] = legs[axis2], legs[axis1]
-        for k, v in self.labels.iteritems():
+        for k, v in self.labels.items():
             if v == axis1:
                 self.labels[k] = axis2
             if v == axis2:
@@ -1628,12 +1626,12 @@ cdef class Array(object):
         if axis != self.rank - 1:
             self._data = [
                 np.swapaxes(np.swapaxes(t, axis, -1) * s[leg.get_slice(qi)], axis, -1)
-                for qi, t in itertools.izip(self._qdata[:, axis], self._data)
+                for qi, t in zip(self._qdata[:, axis], self._data)
             ]
         else:  # optimize: no need to swap axes, if axis is -1.
             self._data = [
                 t * s[leg.get_slice(qi)]  # (it's slightly faster for large arrays)
-                for qi, t in itertools.izip(self._qdata[:, axis], self._data)
+                for qi, t in zip(self._qdata[:, axis], self._data)
             ]
         return self
 
@@ -1715,7 +1713,7 @@ cdef class Array(object):
         res.qtotal = -res.qtotal
         res.legs = [l.conj() for l in res.legs]
         labels = {}
-        for lab, ax in res.labels.iteritems():
+        for lab, ax in res.labels.items():
             labels[self._conj_leg_label(lab)] = ax
         res.labels = labels
         return res
@@ -1776,7 +1774,7 @@ cdef class Array(object):
 
         # If the q_dat structure is identical, we can immediately run through the data.
         if Na == Nb and np.array_equiv(aq, bq):
-            self._data = [func(at, bt, *args, **kwargs) for at, bt in itertools.izip(adata, bdata)]
+            self._data = [func(at, bt, *args, **kwargs) for at, bt in zip(adata, bdata)]
         else:  # otherwise we have to step through comparing left and right qdata
             i, j = 0, 0
             qdata = []
@@ -1933,7 +1931,7 @@ cdef class Array(object):
         qindices : tuple of int
             A qindex for each of the legs.
         """
-        for block_inds in itertools.product(*[xrange(l.block_number)
+        for block_inds in itertools.product(*[range(l.block_number)
                                               for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
             yield tuple(block_inds[::-1])  # back to legs in correct order
@@ -1945,17 +1943,17 @@ cdef class Array(object):
 
             qtotal = sum_{legs l} legs[l].get_charges(qindices[l])) modulo qmod
         """
-        q = np.sum([l.get_charge(qi) for l, qi in itertools.izip(self.legs, qindices)], axis=0)
+        q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
         return self.chinfo.make_valid(q)
 
     def _get_block_slices(self, qindices):
         """Returns tuple of slices for a block selected by `qindices`."""
-        return tuple([l.get_slice(qi) for l, qi in itertools.izip(self.legs, qindices)])
+        return tuple([l.get_slice(qi) for l, qi in zip(self.legs, qindices)])
 
     def _get_block_shape(self, qindices):
         """Return shape for the block given by qindices."""
         return tuple([(l.slices[qi + 1] - l.slices[qi])
-                      for l, qi in itertools.izip(self.legs, qindices)])
+                      for l, qi in zip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
         """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
@@ -2028,9 +2026,9 @@ cdef class Array(object):
         bunched_blocks = {}  # new qindices -> index in new _data
         new_data = []
         new_qdata = []
-        for old_block, old_qindices in itertools.izip(self._data, self._qdata):
-            new_qindices = tuple([m[qi] for m, qi in itertools.izip(map_qindex, old_qindices)])
-            bunch = any([b[qi] for b, qi in itertools.izip(bunch_qindex, new_qindices)])
+        for old_block, old_qindices in zip(self._data, self._qdata):
+            new_qindices = tuple([m[qi] for m, qi in zip(map_qindex, old_qindices)])
+            bunch = any([b[qi] for b, qi in zip(bunch_qindex, new_qindices)])
             if bunch:
                 if new_qindices not in bunched_blocks:
                     # create enlarged block
@@ -2042,10 +2040,10 @@ cdef class Array(object):
                 else:
                     new_block = new_data[bunched_blocks[new_qindices]]
                 # figure out where to insert the in the new bunched_blocks
-                old_slbeg = [l.slices[qi] for l, qi in itertools.izip(self.legs, old_qindices)]
-                new_slbeg = [l.slices[qi] for l, qi in itertools.izip(cp.legs, new_qindices)]
-                slbeg = [(o - n) for o, n in itertools.izip(old_slbeg, new_slbeg)]
-                sl = [slice(beg, beg + l) for beg, l in itertools.izip(slbeg, old_block.shape)]
+                old_slbeg = [l.slices[qi] for l, qi in zip(self.legs, old_qindices)]
+                new_slbeg = [l.slices[qi] for l, qi in zip(cp.legs, new_qindices)]
+                slbeg = [(o - n) for o, n in zip(old_slbeg, new_slbeg)]
+                sl = [slice(beg, beg + l) for beg, l in zip(slbeg, old_block.shape)]
                 # insert the old block into larger new block
                 new_block[tuple(sl)] = old_block
             else:
@@ -2160,7 +2158,7 @@ cdef class Array(object):
                             # In that way, we get the permuation within the projected indices.
                             permutations.append((a, inverse_permutation(perm)))
         res = self.take_slice(slice_inds, slice_axes)
-        res_axes = np.cumsum([(a not in slice_axes) for a in xrange(self.rank)]) - 1
+        res_axes = np.cumsum([(a not in slice_axes) for a in range(self.rank)]) - 1
         p_map_qinds, p_masks = res.iproject(project_masks, [res_axes[p] for p in project_axes])
         permutations = [(res_axes[a], p) for a, p in permutations]
         if permute:
@@ -2412,7 +2410,7 @@ cdef class Array(object):
         cdef int a, i, j, nsplit=split_axes.shape[0]
         pipes = [self.legs[a] for a in split_axes]
         cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
-            [i for i in xrange(self.rank) if i not in split_axes], dtype=np.intp)
+            [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
         # in result
         cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
         for a in split_axes:
@@ -2444,7 +2442,7 @@ cdef class Array(object):
         cdef charges.LegCharge leg
         cdef np.ndarray old_block, new_block
 
-        for old_block, qdata_row in itertools.izip(self._data, tmp_qdata):
+        for old_block, qdata_row in zip(self._data, tmp_qdata):
             for j in range(nonsplit_axes.shape[0]):
                 new_block_shape[new_nonsplit_axes[j]] = old_block.shape[nonsplit_axes[j]]
             for j in range(nsplit):
@@ -2519,7 +2517,7 @@ cdef class Array(object):
         res.append(label[beg:i + 1])
         if len(res) != count:
             raise ValueError("wrong number of splitted labels.")
-        for i in xrange(len(res)):
+        for i in range(len(res)):
             if res[i][0] == '?':
                 res[i] = None
         return res
@@ -2616,7 +2614,7 @@ def diag(s, leg, dtype=None):
     if scalar:
         res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
     else:
-        res._data = [np.diag(s[leg.get_slice(qi)]) for qi in xrange(leg.block_number)]
+        res._data = [np.diag(s[leg.get_slice(qi)]) for qi in range(leg.block_number)]
     return res
 
 
@@ -2649,7 +2647,7 @@ def concatenate(arrays, axis=0, copy=True):
     cdef Array res = arrays[0].zeros_like()
     res.labels = arrays[0].labels.copy()
     axis = res.get_leg_index(axis)
-    not_axis = range(res.rank)
+    not_axis = list(range(res.rank))
     del not_axis[axis]
     not_axis = np.array(not_axis, dtype=np.intp)
     # test for compatibility
@@ -2986,17 +2984,17 @@ def trace(a, leg1=0, leg2=1):
     if a.rank == 2:
         # full contraction: ax1, ax2 = 0, 1 or vice versa
         res_scalar = a.dtype.type(0.)
-        for qdata_row, block in itertools.izip(a._qdata, a._data):
+        for qdata_row, block in zip(a._qdata, a._data):
             if qdata_row[0] == qdata_row[1]:
                 res_scalar += np.trace(block)
         return res_scalar
     # non-complete contraction
-    keep = np.array([ax for ax in xrange(a.rank) if ax != ax1 and ax != ax2], dtype=np.intp)
+    keep = np.array([ax for ax in range(a.rank) if ax != ax1 and ax != ax2], dtype=np.intp)
     legs = [a.legs[ax] for ax in keep]
     cdef Array res = Array(legs, a.dtype, a.qtotal)
     if a.stored_blocks > 0:
         res_data = {}  # dictionary qdata_row -> block
-        for qdata_row, block in itertools.izip(a._qdata, a._data):
+        for qdata_row, block in zip(a._qdata, a._data):
             if qdata_row[ax1] != qdata_row[ax2]:
                 continue  # not on the diagonal => doesn't contribute
             new_qdata_row = tuple(qdata_row[keep])
@@ -3005,8 +3003,8 @@ def trace(a, leg1=0, leg2=1):
             else:
                 res_data[new_qdata_row] = np.trace(block, axis1=ax1, axis2=ax2)
         if len(res_data) > 0:
-            res._data = res_data.values()
-            res._qdata = np.array(res_data.keys(), np.intp)
+            res._data = list(res_data.values())
+            res._qdata = np.array(list(res_data.keys()), np.intp)
             res._qdata_sorted = False
     # labels
     a_labels = a.get_leg_labels()
@@ -3515,7 +3513,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
 
     # find the block correspoding to `charge_sector` in `a`
     block_exists = False
-    for qinds, block in itertools.izip(a._qdata, a._data):
+    for qinds, block in zip(a._qdata, a._data):
         qi = qinds[0]
         if np.any(a.chinfo.make_valid(a.legs[0].get_charge(qi)) != charge_sector):
             continue
@@ -3528,7 +3526,7 @@ def speigs(a, charge_sector, k, *args, **kwargs):
         break
 
     if not block_exists:  # block corresponding to charge_sector is zero
-        for qi in xrange(a.legs[0].block_number):
+        for qi in range(a.legs[0].block_number):
             if np.all(a.chinfo.make_valid(a.legs[0].get_charge(qi)) == charge_sector):
                 sl = a.legs[0].slices
                 block_size = sl[qi + 1] - sl[qi]
@@ -3578,7 +3576,7 @@ def expm(a):
 
     res = diag(1., a.legs[0], dtype=a.dtype)
     res.labels = a.labels.copy()
-    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+    for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         exp_block = scipy.linalg.expm(block)  # main work
         qi = qindices[0]  # `res` has all diagonal blocks,
         # so res._qdata = [[0, 0], [1, 1], [2, 2]...]
@@ -3624,7 +3622,7 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     i0 = 0
     a_leg0 = a.legs[0]
     inner_leg_mask = np.zeros(a_leg0.ind_len, dtype=np.bool_)
-    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+    for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         q_block, r_block = np.linalg.qr(block, mode)
         q_data.append(q_block)
         r_data.append(r_block)
@@ -4209,7 +4207,7 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         at_full = 0
 
     # main loop
-    for a_qdata_row, block in itertools.izip(a._qdata, a._data):
+    for a_qdata_row, block in zip(a._qdata, a._data):
         if compute_uv:
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
             if anynan(U_b) or anynan(VH_b) or anynan(S_b):
@@ -4295,7 +4293,7 @@ def _eig_worker(hermitian, a, sort, UPLO='L'):
     resw = np.zeros(a.shape[0], dtype=dtype)
     resv = diag(1., a.legs[0], dtype=np.promote_types(dtype, a.dtype))
     # w, v now default to 0 and the Identity
-    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+    for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         if hermitian:
             rw, rv = np.linalg.eigh(block, UPLO)
         else:
@@ -4324,7 +4322,7 @@ def _eigvals_worker(hermitian, a, sort, UPLO='L'):
     dtype = np.float if hermitian else np.complex
     resw = np.zeros(a.shape[0], dtype=dtype)
     # w now default to 0
-    for qindices, block in itertools.izip(a._qdata, a._data):  # non-zero blocks on the diagonal
+    for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         if hermitian:
             rw = np.linalg.eigvalsh(block, UPLO)
         else:

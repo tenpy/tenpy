@@ -13,14 +13,11 @@ Contains implementation of classes
 A detailed introduction to `np_conserved` can be found in :doc:`../intro_npc`.
 """
 
-from __future__ import division
-
 import numpy as np
 cimport numpy as np
 cimport cython
 
 import copy
-import itertools
 import bisect
 import warnings
 
@@ -267,7 +264,7 @@ cdef class ChargeInfo(object):
             return True
         if not np.all(self.mod == other.mod):
             return False
-        for l, r in itertools.izip(self.names, other.names):
+        for l, r in zip(self.names, other.names):
             if r != l and l != '' and r != '':
                 return False
         return True
@@ -413,7 +410,7 @@ cdef class LegCharge(object):
             A dictionary mapping a tuple of charges to slices.
         """
         slices = np.array([(sl.start, sl.stop) for sl in qdict.values()], np.intp)
-        charges = np.array(qdict.keys(), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
+        charges = np.array(list(qdict.keys()), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
         sort = np.argsort(slices[:, 0])  # sort by slice start
         slices = slices[sort, :]
         charges = charges[sort, :]
@@ -537,14 +534,14 @@ cdef class LegCharge(object):
     def to_qflat(self):
         """Return charges in `qflat` form."""
         qflat = np.empty((self.ind_len, self.chinfo.qnumber), dtype=QTYPE)
-        for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
+        for start, stop, ch in zip(self.slices[:-1], self.slices[1:], self.charges):
             qflat[slice(start, stop)] = ch
         return qflat
 
     def to_qdict(self):
         """Return charges in `qdict` form. Raises ValueError, if not blocked."""
         res = dict()
-        for start, stop, ch in itertools.izip(self.slices[:-1], self.slices[1:], self.charges):
+        for start, stop, ch in zip(self.slices[:-1], self.slices[1:], self.charges):
             res[tuple(ch)] = slice(start, stop)
         if len(res) < self.block_number:  # ensures self is blocked
             raise ValueError("can't convert qflat to qdict for non-blocked LegCharge")
@@ -817,7 +814,7 @@ cdef class LegCharge(object):
 
     def _slice_start_stop(self):
         """Yield (start, stop) for each qindex."""
-        return itertools.izip(self.slices[:-1], self.slices[1:])
+        return zip(self.slices[:-1], self.slices[1:])
 
     def perm_flat_from_perm_qind(self, perm_qind):
         """Convert a permutation of qind (acting on self) into a flat permutation."""

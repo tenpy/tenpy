@@ -12,11 +12,8 @@ Contains implementation of classes
 A detailed introduction to `np_conserved` can be found in :doc:`../intro_npc`.
 """
 
-
-
 import numpy as np
 import copy
-import itertools
 import bisect
 import warnings
 
@@ -356,7 +353,7 @@ class LegCharge(object):
         qdict : dict
             A dictionary mapping a tuple of charges to slices.
         """
-        slices = np.array([(sl.start, sl.stop) for sl in list(qdict.values())], np.intp)
+        slices = np.array([(sl.start, sl.stop) for sl in qdict.values()], np.intp)
         charges = np.array(list(qdict.keys()), dtype=QTYPE).reshape((-1, chargeinfo.qnumber))
         sort = np.argsort(slices[:, 0])  # sort by slice start
         slices = slices[sort, :]
