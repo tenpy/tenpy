@@ -1317,8 +1317,8 @@ class MPS(object):
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger.legs[0])) < 1.e-14
         if (type(op) == str):
             op = self.sites[i].get_op(op)
-        opB = npc.tensordot(op, self._Bs[i], axes=['p*', 'p'])
-        self._Bs[i] = opB
+        opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+        self._B[i] = opB
         if not unitary:
             self.canonical_form()
 
