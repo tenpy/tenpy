@@ -49,9 +49,6 @@ is the discarded part (orthogonal to the kept part) and the
     In the end, that leads just to a factor of 2 in TruncationError.__init__ ???
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)
-
-.. todo ::
-    Redefine trunc_cut to discard as long as ``sum_{i discarded} S[i]**2 <= trunc_cut **2``.
 """
 
 import numpy as np
@@ -158,7 +155,7 @@ def truncate(S, trunc_par):
         svd_min      float  Discard all small Schmidt values ``S[i] < svd_min``.
         ------------ ------ ----------------------------------------------------
         trunc_cut    float  Discard all small Schmidt values as long as
-                            ``sum_{i discarded} S[i]**2 <= trunc_cut``.
+                            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
         ============ ====== ====================================================
 
     Returns
@@ -219,7 +216,7 @@ def truncate(S, trunc_par):
         good = _combine_constraints(good, good2, "svd_min")
 
     if trunc_cut is not None:
-        good2 = (np.cumsum(S[piv]**2) > trunc_cut)
+        good2 = (np.cumsum(S[piv]**2) > trunc_cut*trunc_cut)
         good = _combine_constraints(good, good2, "trunc_cut")
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed

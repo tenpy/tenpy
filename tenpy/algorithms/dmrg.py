@@ -111,11 +111,11 @@ def run(psi, model, DMRG_params):
         min_sweeps     int       Minimum number of sweeps to be performed.
                                  Defaults to 1.5*N_sweeps_check.
         -------------- --------- ---------------------------------------------------------------
-        max_E_err      int       Convergence if the change of the energy in each step
+        max_E_err      float     Convergence if the change of the energy in each step
                                  satisfies ``-\Delta E / |E| < max_E_err``. Note that this is
                                  also satisfied if Delta E > 0, i.e. if the energy increases.
         -------------- --------- ---------------------------------------------------------------
-        max_S_err      int       Convergence if the relative change of the entropy in each step
+        max_S_err      float     Convergence if the relative change of the entropy in each step
                                  satisfies ``|\Delta S|/S < max_S_err``
         -------------- --------- ---------------------------------------------------------------
         max_hours      float     If the DMRG took longer (measured in wall-clock time),
@@ -257,7 +257,7 @@ def run(psi, model, DMRG_params):
                 E = (Es[-1] - Es[0]) / (age[-1] - age[0])
         else:
             E = engine.statistics['E_total'][-1]
-        Delta_E = E - E_old
+        Delta_E = (E - E_old) / N_sweeps_check
         E_old = E
         norm_err = np.linalg.norm(psi.norm_test())
         sweep_statistics['sweep'].append(engine.sweeps)
@@ -544,7 +544,7 @@ class Engine(object):
             E_trunc = E_trunc - E0
         return E0, E_trunc, err, N, age
 
-    def prepare_diag(self, i0):
+    def prepare_diag(self, i0, update_LP, update_RP):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
         Parameters
