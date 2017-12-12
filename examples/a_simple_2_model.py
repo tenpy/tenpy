@@ -8,7 +8,7 @@ class TFIModel(object):
 
     The Hamiltonian reads
     .. math ::
-        H = - J \sum_{i} \sigma^z_i \sigma^z_{i+1} - g \sum_{i} \sigma^x_i
+        H = - J \sum_{i} \sigma^x_i \sigma^x_{i+1} - g \sum_{i} \sigma^z_i
 
     Parameters
     ----------
@@ -61,7 +61,7 @@ class TFIModel(object):
                     gL = self.g
                 if i + 1 == self.L - 1:
                     gR = self.g
-            H_bond = -self.J * np.kron(sz, sz) - gL * np.kron(sx, id) - gR * np.kron(id, sx)
+            H_bond = -self.J * np.kron(sx, sx) - gL * np.kron(sz, id) - gR * np.kron(id, sz)
             # H_bond has legs ``i, j, i*, j*``
             H_list.append(np.reshape(H_bond, [d, d, d, d]))
         self.H_bonds = H_list
@@ -73,9 +73,9 @@ class TFIModel(object):
         for i in range(self.L):
             w = np.zeros((3, 3, self.d, self.d), dtype=np.float)
             w[0, 0] = w[2, 2] = self.id
-            w[0, 1] = self.sigmaz
-            w[0, 2] = -self.g * self.sigmax
-            w[1, 2] = -self.J * self.sigmaz
+            w[0, 1] = self.sigmax
+            w[0, 2] = -self.g * self.sigmaz
+            w[1, 2] = -self.J * self.sigmax
             w_list.append(w)
         self.H_mpo = w_list
 
@@ -108,13 +108,13 @@ class TFIModel(object):
                 Z = sparse.kron(Z, z_ops[j], 'csr')
             sx_list.append(X)
             sz_list.append(Z)
-        H_zz = sparse.csr_matrix((2**L, 2**L))
-        H_x = sparse.csr_matrix((2**L, 2**L))
+        H_xx = sparse.csr_matrix((2**L, 2**L))
+        H_z = sparse.csr_matrix((2**L, 2**L))
         for i in range(L - 1):
-            H_zz = H_zz + sz_list[i] * sz_list[(i + 1) % L]
+            H_xx = H_xx + sx_list[i] * sx_list[(i + 1) % L]
         for i in range(L):
-            H_x = H_x + sx_list[i]
-        H = -self.J * H_zz - self.g * H_x
+            H_z = H_z + sz_list[i]
+        H = -self.J * H_xx - self.g * H_z
         E, V = arp.eigsh(H, k=1, which='SA', return_eigenvectors=True, ncv=20)
         return E[0]
 

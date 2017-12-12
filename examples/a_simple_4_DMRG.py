@@ -145,7 +145,7 @@ def example_DMRG_finite(L, g):
     import a_simple_2_model
     M = a_simple_2_model.TFIModel(L=L, J=1., g=g, bc='finite')
     psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
-    eng = SimpleDMRGEngine(psi, M, chi_max=50, eps=1.e-15)
+    eng = SimpleDMRGEngine(psi, M, chi_max=30, eps=1.e-10)
     for i in range(10):
         eng.sweep()
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
@@ -179,5 +179,5 @@ def example_DMRG_infinite(g):
 
 if __name__ == "__main__":
     example_DMRG_finite(L=10, g=1.)
-    print("-" * 80)
+    print("-" * 100)
     example_DMRG_infinite(g=1.5)

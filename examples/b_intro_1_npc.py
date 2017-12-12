@@ -10,7 +10,7 @@ This example includes the following steps:
 7) apply ``exp(H2)`` to two sites of the MPS and truncate with svd
 
 Note that this example uses only np_conserved, but no other modules.
-Compare it to the example `01_mps_intro.py`,
+Compare it to the example `b_intro_2_mps.py`,
 which does the same steps using a few predefined classes like MPS and MPO.
 """
 

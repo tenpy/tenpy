@@ -97,30 +97,27 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     SzB = np.tensordot(M.sigmaz, psi.Bs[i0], axes=[1, 1])  # i [i*], vL [i] vR
     psi.Bs[i0] = np.transpose(SzB, [1, 0, 2])  # vL i vR
     U_bonds = calc_U_bonds(M.H_bonds, 1.j * dt)  # (imaginary dt -> realtime evolution)
-    S = []
+    S = [psi.entanglement_entropy()]
     Nsteps = int(tmax / dt + 0.5)
     for n in range(Nsteps):
         if abs((n * dt + 0.1) % 0.2 - 0.1) < 1.e-10:
-            print("t =", n * dt, "chi =", psi.get_chi())
-        S.append(psi.entanglement_entropy())
+            print("t = {t:.2f}, chi =".format(t=n*dt), psi.get_chi())
         run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
+        S.append(psi.entanglement_entropy())
     import pylab as pl
     pl.figure()
-    pl.imshow(
-        S[::-1],
-        vmin=0.,
-        aspect='auto',
-        interpolation='nearest',
-        extent=(0, L - 1., 0., Nsteps * dt))
+    pl.imshow(S[::-1], vmin=0., aspect='auto', interpolation='nearest',
+              extent=(0, L - 1., -0.5*dt, (Nsteps + 0.5) * dt))  # yapf:disable
     pl.xlabel('site $i$')
     pl.ylabel('time $t/J$')
+    pl.ylim(0., tmax)
     pl.colorbar().set_label('entropy $S$')
     pl.show()
 
 
 if __name__ == "__main__":
     example_TEBD_gs_finite(L=10, g=1.)
-    print("-" * 80)
+    print("-" * 100)
     example_TEBD_gs_infinite(g=1.5)
-    print("-" * 80)
+    print("-" * 100)
     example_TEBD_lightcone(L=20, g=1.5, tmax=3., dt=0.001)
