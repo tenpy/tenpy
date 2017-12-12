@@ -22,18 +22,11 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
 
     .. math ::
         H = \sum_{<i,j>}
-              \mathtt{Jx} S^x_i S^x_j
-            + \mathtt{Jy} S^y_i S^y_j
-            + \mathtt{Jz} S^z_i S^z_j
+                \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
             + \sum_{<<i,j>>}
-              \mathtt{Jx} S^x_i S^x_j
-            + \mathtt{Jy} S^y_i S^y_j
-            + \mathtt{Jz} S^z_i S^z_j
-            \\
-            + \sum_i
-              \mathtt{hx} S^x_i
-            + \mathtt{hy} S^y_i
-            + \mathtt{hz} S^z_i
+                \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
+            - \sum_i
+              \mathtt{hx} S^x_i + \mathtt{hy} S^y_i + \mathtt{hz} S^z_i
 
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
@@ -90,12 +83,13 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         CouplingModel.__init__(self, lat, bc_coupling)
         # 3) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(hx, 0, 'Sx0')
-        self.add_onsite(hy, 0, 'Sy0')
-        self.add_onsite(hz, 0, 'Sz0')
-        self.add_onsite(hx, 0, 'Sx1')
-        self.add_onsite(hy, 0, 'Sy1')
-        self.add_onsite(hz, 0, 'Sz1')
+        hx, hy, hz = np.asarray(hx), np.asarray(hy), np.asarray(hz)
+        self.add_onsite(-hx, 0, 'Sx0')
+        self.add_onsite(-hy, 0, 'Sy0')
+        self.add_onsite(-hz, 0, 'Sz0')
+        self.add_onsite(-hx, 0, 'Sx1')
+        self.add_onsite(-hy, 0, 'Sy1')
+        self.add_onsite(-hz, 0, 'Sz1')
         Jx = np.asarray(Jx)
         Jy = np.asarray(Jy)
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i

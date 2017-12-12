@@ -15,8 +15,7 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     .. math ::
         H = \sum_{<i,j>}
-              \mathtt{J} (c^{\dagger}_i c_{i+1} + c_i c^{\dagger}_{i+1})
-            + \mathtt{V} n_i n_{i+1} \\
+              - \mathtt{J} (c^{\dagger}_i c_j + c_i c^{\dagger}_j) + \mathtt{V} n_i n_j \\
             - \sum_i
               \mathtt{mu} n_{i}
 
@@ -25,10 +24,10 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`../intro_JordanWigner` for details
+        See :doc:`../intro_JordanWigner` for details.
 
     .. todo ::
-        check correct use of Jordan-Wigner string
+        Check correct use of Jordan-Wigner string.
 
     Parameters
     ----------
@@ -60,11 +59,10 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         CouplingModel.__init__(self, lat, bc_coupling)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(mu, 0, 'N')
+        self.add_onsite(-np.asarray(mu), 0, 'N')
         J = np.asarray(J)  # convert to array: allow `array_like` J
-        self.add_coupling(J, 0, 'Cd', 0, 'C', 1, 'JW', True)  # (for a nearest neighbor model, we
-        self.add_coupling(J, 0, 'Cd', 0, 'C', -1, 'JW',
-                          True)  # could actually leave the `JW` away)
+        self.add_coupling(-J, 0, 'Cd', 0, 'C', 1, 'JW', True)  # (for a nearest neighbor model, we
+        self.add_coupling(-J, 0, 'Cd', 0, 'C', -1, 'JW', True)  # could leave the `JW` away)
         self.add_coupling(V, 0, 'N', 0, 'N', 1)
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())

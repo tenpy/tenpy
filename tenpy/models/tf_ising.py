@@ -11,7 +11,7 @@ The :class:`TFIModel2D` contains the same couplings but on a square lattice in 2
 As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.Lattice` classes.
 """
 
-
+import numpy as np
 
 from .lattice import Chain, SquareLattice
 from .model import CouplingModel, NearestNeighborModel, MPOModel
@@ -27,7 +27,7 @@ class TFIChain(CouplingModel, NearestNeighborModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{i} \mathtt{J} \sigma^x_i \sigma^x_{i+1}
+        H = - \sum_{i} \mathtt{J} \sigma^x_i \sigma^x_{i+1}
             - \sum_{i} \mathtt{g} \sigma^z_i
 
     All parameters are collected in a single dictionary `model_param` and read out with
@@ -48,7 +48,7 @@ class TFIChain(CouplingModel, NearestNeighborModel, MPOModel):
     def __init__(self, model_param):
         # 0) read out/set default parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)
-        J = get_parameter(model_param, 'J', -1., self.__class__)
+        J = get_parameter(model_param, 'J', 1., self.__class__)
         g = get_parameter(model_param, 'g', 1., self.__class__)  # critical!
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         conserve = get_parameter(model_param, 'conserve', 'parity', self.__class__)
@@ -63,15 +63,16 @@ class TFIChain(CouplingModel, NearestNeighborModel, MPOModel):
         CouplingModel.__init__(self, lat, bc_coupling)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(g, 0, 'Sigmaz')
+        self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
+        J = np.asarray(J)
         if conserve is None:
-            self.add_coupling(J, 0, 'Sigmax', 0, 'Sigmax', 1)
+            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', 1)
         else:
             # individual 'Sigmax' does not conserve parity; rewrite in terms of Sp and Sm
-            self.add_coupling(J, 0, 'Sp', 0, 'Sp', 1)
-            self.add_coupling(J, 0, 'Sp', 0, 'Sm', 1)
-            self.add_coupling(J, 0, 'Sm', 0, 'Sp', 1)
-            self.add_coupling(J, 0, 'Sm', 0, 'Sm', 1)
+            self.add_coupling(-J, 0, 'Sp', 0, 'Sp', 1)
+            self.add_coupling(-J, 0, 'Sp', 0, 'Sm', 1)
+            self.add_coupling(-J, 0, 'Sm', 0, 'Sp', 1)
+            self.add_coupling(-J, 0, 'Sm', 0, 'Sm', 1)
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         # 8) initialize bonds (the order of 7/8 doesn't matter)
@@ -84,7 +85,7 @@ class TFIModel2D(CouplingModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{<i,j>} \mathtt{J} \sigma^x_i \sigma^x_{j}
+        H = - \sum_{<i,j>} \mathtt{J} \sigma^x_i \sigma^x_{j}
             - \sum_{i} \mathtt{g} \sigma^z_i
 
     All parameters are collected in a single dictionary `model_param` and read out with
@@ -113,7 +114,7 @@ class TFIModel2D(CouplingModel, MPOModel):
         # 0) read out/set default parameters
         Lx = get_parameter(model_param, 'Lx', 1, self.__class__)
         Ly = get_parameter(model_param, 'Ly', 4, self.__class__)
-        J = get_parameter(model_param, 'J', -1., self.__class__)
+        J = get_parameter(model_param, 'J', 1., self.__class__)
         g = get_parameter(model_param, 'g', 1., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
         bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
@@ -132,14 +133,15 @@ class TFIModel2D(CouplingModel, MPOModel):
         CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(g, 0, 'Sigmaz')
+        self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
+        J = -np.asarray(J)
         if conserve is None:
-            self.add_coupling(J, 0, 'Sigmax', 0, 'Sigmax', [1, 0])
-            self.add_coupling(J, 0, 'Sigmax', 0, 'Sigmax', [0, 1])
+            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [1, 0])
+            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [0, 1])
         else:
             for op1, op2 in [('Sp', 'Sp'), ('Sp', 'Sm'), ('Sm', 'Sp'), ('Sm', 'Sm')]:
-                self.add_coupling(J, 0, op1, 0, op2, [1, 0])
-                self.add_coupling(J, 0, op1, 0, op2, [0, 1])
+                self.add_coupling(-J, 0, op1, 0, op2, [1, 0])
+                self.add_coupling(-J, 0, op1, 0, op2, [0, 1])
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         # skip 8): not a NearestNeighborModel...

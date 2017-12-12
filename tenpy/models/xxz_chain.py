@@ -21,11 +21,9 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{i}
-              \mathtt{Jxx}/2 (S^{+}_i S^{-}_{i+1} + S^{-}_i S^{+}_{i+1})
-            + \mathtt{Jz} S^z_i S^z_{i+1}
-            - \sum_i
-              \mathtt{hz} S^z_i
+        H = \sum_i \mathtt{Jxx}/2 (S^{+}_i S^{-}_{i+1} + S^{-}_i S^{+}_{i+1})
+                 + \mathtt{Jz} S^z_i S^z_{i+1} \\
+            - \sum_i \mathtt{hz} S^z_i
 
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
@@ -68,7 +66,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         CouplingModel.__init__(self, lat, bc_coupling)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(hz, 0, 'Sz')
+        self.add_onsite(-np.asarray(hz), 0, 'Sz')
         Jxx_half = np.asarray(Jxx) * 0.5  # convert to array: allow `array_like` Jxx
         self.add_coupling(Jxx_half, 0, 'Sp', 0, 'Sm', 1)
         self.add_coupling(Jxx_half, 0, 'Sm', 0, 'Sp', 1)
