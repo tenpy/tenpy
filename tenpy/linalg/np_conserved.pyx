@@ -1,4 +1,3 @@
-# cython: profile=True
 r"""A module to handle charge conservation in tensor networks.
 
 A detailed introduction to this module (including notations) can be found in :doc:`../intro_npc`.
@@ -54,8 +53,9 @@ import warnings
 import itertools
 
 # import public API from charges
-import charges
-cimport charges #ChargeInfo, LegCharge, LegPipe, _c_find_row_differences
+from .charges import ChargeInfo, LegCharge, LegPipe, QTYPE
+from .charges cimport ChargeInfo, LegCharge, LegPipe
+from .charges cimport QTYPE_t, _c_find_row_differences, _partial_qtotal
 
 from scipy.linalg.cython_blas cimport dgemm, zgemm
 
@@ -73,11 +73,6 @@ __all__ = [
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
-
-# provide references to the classes of :mod:`tenpy.linalg.charges` for convenience
-ChargeInfo = charges.ChargeInfo
-LegCharge = charges.LegCharge
-LegPipe = charges.LegPipe
 
 
 cdef class Array(object):
@@ -134,7 +129,7 @@ cdef class Array(object):
     cdef readonly int rank
     cdef readonly tuple shape
     cdef public np.dtype dtype
-    cdef public charges.ChargeInfo chinfo
+    cdef public ChargeInfo chinfo
     cdef public np.ndarray qtotal
     cdef public list legs
     cdef public dict labels
@@ -400,7 +395,7 @@ cdef class Array(object):
         """
         blocked = leg.is_blocked()
         if not blocked:
-            pipe = charges.LegPipe([leg])
+            pipe = LegPipe([leg])
             legs = [pipe, pipe.conj()]
         else:
             legs = [leg, leg.conj()]
@@ -964,7 +959,7 @@ cdef class Array(object):
             else:
                 raise ValueError("no non-zero entry: can't detect qtotal")
         else:
-            qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=charges.QTYPE)))
+            qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=QTYPE)))
         res = Array(legs, self.dtype, qtotal)
         for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
@@ -1082,7 +1077,7 @@ cdef class Array(object):
             if sort[ax] or bunch[ax]:
                 axes.append([ax])
                 leg = self.legs[ax]
-                pipe = charges.LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
+                pipe = LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
                 pipes.append(pipe)
             else:
                 perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
@@ -1130,7 +1125,7 @@ cdef class Array(object):
         """
         axes = self.get_leg_indices(axes)
         legs = [self.legs[a] for a in axes]
-        return charges.LegPipe(legs, **kwargs)
+        return LegPipe(legs, **kwargs)
 
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
@@ -1700,7 +1695,8 @@ cdef class Array(object):
             Whether to apply changes to `self`, or to return a *deep* copy.
         """
         cdef Array res
-        if self.dtype.kind == 'c' and complex_conj:
+        cdef char _c = b'c'
+        if self.dtype.kind == _c and complex_conj:
             if inplace:
                 res = self.iunary_blockwise(np.conj)
             else:
@@ -2364,7 +2360,7 @@ cdef class Array(object):
         old_data = [self._data[s] for s in sort]
         qmap_inds = [qm[sort] for qm in qmap_inds]
         # divide into parts, which give a single new block
-        cdef np.ndarray[np.intp_t, ndim=1] diffs = charges._c_find_row_differences(qdata_s)
+        cdef np.ndarray[np.intp_t, ndim=1] diffs = _c_find_row_differences(qdata_s)
         # including the first and last row
 
         # now the hard part: map data
@@ -2374,7 +2370,7 @@ cdef class Array(object):
         cdef np.ndarray new_block, old_block #, new_block_view # TODO: shape doesn't work...
         cdef np.ndarray[np.intp_t, ndim=1] qindices
         cdef int beg, end, bi, j, old_data_idx, qi
-        cdef np.ndarray[charges.QTYPE_t, ndim=2] q_map
+        cdef np.ndarray[QTYPE_t, ndim=2] q_map
         cdef tuple sl
         cdef int npipes = len(combine_legs)
         for bi in range(diffs.shape[0]-1):
@@ -2438,8 +2434,8 @@ cdef class Array(object):
         cdef list block_slice = [slice(None)] * self.rank
         cdef list qmap_slices = [None] * nsplit
         cdef slice sl
-        cdef charges.LegPipe pipe
-        cdef charges.LegCharge leg
+        cdef LegPipe pipe
+        cdef LegCharge leg
         cdef np.ndarray old_block, new_block
 
         for old_block, qdata_row in zip(self._data, tmp_qdata):
@@ -2951,7 +2947,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         return legs
     qtotal = chargeinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
     legs_known = legs[:axis] + legs[axis + 1:]
-    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=charges.QTYPE)
+    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=QTYPE)
     for i in range(axis_len):
         A_i = np.take(flat_array, i, axis=axis)
         qflat[i] = detect_qtotal(A_i, legs_known, cutoff)
@@ -3810,8 +3806,8 @@ cdef _tensordot_pre_sort(Array a, Array b, int cut_a, int cut_b, np.dtype calc_d
 cdef _tensordot_match_charges(int n_rows_a,
                               int n_cols_b,
                               int qnumber,
-                              np.ndarray[charges.QTYPE_t, ndim=2] a_charges_keep,
-                              np.ndarray[charges.QTYPE_t, ndim=2] b_charges_match):
+                              np.ndarray[QTYPE_t, ndim=2] a_charges_keep,
+                              np.ndarray[QTYPE_t, ndim=2] b_charges_match):
     """Estimate number of blocks in res and get order for iteration over row_a and col_b
 
     Parameters
@@ -3994,8 +3990,8 @@ cdef _tensordot_worker(Array a, Array b, int axes):
     cdef int len_b_data = len(b_data)
 
     # find blocks where a_qdata_keep and b_qdata_keep change; use that they are sorted.
-    cdef np.ndarray[np.intp_t, ndim=1] a_slices = charges._c_find_row_differences(a_qdata_keep)
-    cdef np.ndarray[np.intp_t, ndim=1] b_slices = charges._c_find_row_differences(b_qdata_keep)
+    cdef np.ndarray[np.intp_t, ndim=1] a_slices = _c_find_row_differences(a_qdata_keep)
+    cdef np.ndarray[np.intp_t, ndim=1] b_slices = _c_find_row_differences(b_qdata_keep)
     # the slices divide a_data and b_data into rows and columns
     cdef int n_rows_a = a_slices.shape[0] - 1
     cdef int n_cols_b = b_slices.shape[0] - 1
@@ -4056,13 +4052,13 @@ cdef _tensordot_worker(Array a, Array b, int axes):
     # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
 
     # first find output colum/row indices of the result, which are compatible with the charges
-    cdef np.ndarray[charges.QTYPE_t, ndim=2] a_charges_keep = charges._partial_qtotal(
+    cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep = _partial_qtotal(
         a.chinfo, a.legs[:cut_a], a_qdata_keep)
-    cdef np.ndarray[charges.QTYPE_t, ndim=2] b_charges_keep = charges._partial_qtotal(
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_keep = _partial_qtotal(
         a.chinfo, b.legs[cut_b:], b_qdata_keep)
-    cdef np.ndarray[charges.QTYPE_t, ndim=1] qtotal = chinfo._make_valid_1D(a.qtotal + b.qtotal)
+    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = chinfo._make_valid_1D(a.qtotal + b.qtotal)
     # a_charges_match: for each row in a, which charge in b is compatible?
-    cdef np.ndarray[charges.QTYPE_t, ndim=2] b_charges_match = chinfo._make_valid_2D(qtotal - b_charges_keep)
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match = chinfo._make_valid_2D(qtotal - b_charges_keep)
     cdef np.ndarray[np.intp_t, ndim=1] row_a_sort
     cdef np.ndarray[np.intp_t, ndim=2] match_rows
     cdef int res_max_n_blocks, res_n_blocks = 0

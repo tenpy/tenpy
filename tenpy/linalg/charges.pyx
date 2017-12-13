@@ -1,4 +1,3 @@
-# cython: profile=True
 r"""Basic definitions of a charge.
 
 Contains implementation of classes
@@ -242,7 +241,6 @@ cdef class ChargeInfo(object):
             for i in range(L):
                 x = charges[i, j]
                 if x < 0 or x >= q:
-                    print "invalid at ", i , ",",  j
                     return False
         return True
 
