@@ -4,8 +4,6 @@
     A lot more to test, e.g. conversions of the different models
 """
 
-
-
 import itertools
 
 from tenpy.models import model, lattice

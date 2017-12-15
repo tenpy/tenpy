@@ -14,7 +14,6 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     without addional extra work.
 """
 
-
 import numpy as np
 import warnings
 

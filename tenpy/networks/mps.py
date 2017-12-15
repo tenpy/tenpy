@@ -70,7 +70,6 @@ as they return the `B` in the desired form (which can be chosed as an argument).
 ======== ========== =======================================================================
 """
 
-
 import numpy as np
 import itertools
 import warnings

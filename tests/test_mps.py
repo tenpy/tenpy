@@ -4,8 +4,6 @@
     A lot more to test...
 """
 
-
-
 import numpy as np
 import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain

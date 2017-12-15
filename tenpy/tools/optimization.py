@@ -62,7 +62,6 @@ run these few lines of python code::
     p.print_stats(30)   # prints first 30 entries
 """
 
-
 from enum import IntEnum
 
 all = ['bottleneck', 'OptimizationFlag', 'set_level', 'get_level', 'optimize', 'debug']

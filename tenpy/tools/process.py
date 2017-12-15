@@ -14,7 +14,6 @@ while still being failsave if the shared OpenMP library is not found.  In the la
 you might also try the equivalent :func:`mkl_get_num_threads` and :func:`mkl_set_num_threads`.
 """
 
-
 import warnings
 import ctypes
 from ctypes.util import find_library

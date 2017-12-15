@@ -1,8 +1,6 @@
 """A collection of tests for :module:`tenpy.linalg.random_matrix`.
 """
 
-
-
 import numpy as np
 import numpy.testing as npt
 import tenpy.linalg.random_matrix as rmat

@@ -29,7 +29,6 @@ and then slowly turned off in the end.
     Allow to keep MPS orthogonal to other states, for finding excited states
 """
 
-
 import numpy as np
 import time
 import itertools
@@ -277,18 +276,19 @@ def run(psi, model, DMRG_params):
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
             msg += "MPS bond dimensions: {chi!s}"
-            print(msg.format(
-                sweep=engine.sweeps,
-                time=time.time() - start_time,
-                mem=memory_usage(),
-                chi=psi.chi,
-                age=engine.statistics['age'][-1],
-                E=E,
-                DE=Delta_E,
-                DS=Delta_S,
-                trerr=max_trunc_err,
-                Eerr=max_E_trunc,
-                norm_err=norm_err))
+            print(
+                msg.format(
+                    sweep=engine.sweeps,
+                    time=time.time() - start_time,
+                    mem=memory_usage(),
+                    chi=psi.chi,
+                    age=engine.statistics['age'][-1],
+                    E=E,
+                    DE=Delta_E,
+                    DS=Delta_S,
+                    trerr=max_trunc_err,
+                    Eerr=max_E_trunc,
+                    norm_err=norm_err))
     # clean up from mixer
     engine.mixer_cleanup(optimize=False)
     # update environment until norm_tol is reached
@@ -307,8 +307,9 @@ def run(psi, model, DMRG_params):
         print("=" * 80)
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
-        print(msg.format(
-            sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
+        print(
+            msg.format(
+                sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
         print("=" * 80)
     unused_parameters(DMRG_params['lanczos_params'], "DMRG")
     unused_parameters(DMRG_params['trunc_params'], "DMRG")

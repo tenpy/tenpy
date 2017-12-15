@@ -6,8 +6,6 @@
     equality tests?
 """
 
-
-
 import numpy as np
 
 from ..tools.misc import to_iterable
@@ -208,7 +206,7 @@ class Lattice(object):
             return _ordering_snake(self.shape)
         elif name == "snakeFstyle":
             res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
-            perm = np.arange(self.dim-1, -2, -1)
+            perm = np.arange(self.dim - 1, -2, -1)
             return res[:, perm]
         # in a derived lattice ``class DerivedLattice(Lattice)``, use:
         # return super(DerivedLattice, self).ordering(name)

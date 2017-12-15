@@ -95,7 +95,6 @@ see [Hauschild2017]_.
 
 """
 
-
 import numpy as np
 
 from .mps import MPS

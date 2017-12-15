@@ -216,7 +216,7 @@ def truncate(S, trunc_par):
         good = _combine_constraints(good, good2, "svd_min")
 
     if trunc_cut is not None:
-        good2 = (np.cumsum(S[piv]**2) > trunc_cut*trunc_cut)
+        good2 = (np.cumsum(S[piv]**2) > trunc_cut * trunc_cut)
         good = _combine_constraints(good, good2, "trunc_cut")
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed

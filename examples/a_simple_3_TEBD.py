@@ -101,7 +101,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     Nsteps = int(tmax / dt + 0.5)
     for n in range(Nsteps):
         if abs((n * dt + 0.1) % 0.2 - 0.1) < 1.e-10:
-            print("t = {t:.2f}, chi =".format(t=n*dt), psi.get_chi())
+            print("t = {t:.2f}, chi =".format(t=n * dt), psi.get_chi())
         run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
         S.append(psi.entanglement_entropy())
     import pylab as pl

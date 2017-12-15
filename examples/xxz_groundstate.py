@@ -4,7 +4,6 @@
     document...
 """
 
-
 import numpy as np
 import time
 

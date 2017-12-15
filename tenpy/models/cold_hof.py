@@ -7,7 +7,6 @@
     In particular: hoppings along y at the boundary have to be different.
 """
 
-
 import numpy as np
 
 from .lattice import Lattice

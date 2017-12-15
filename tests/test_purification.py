@@ -1,7 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
 
-
-
 import warnings
 import numpy as np
 import numpy.testing as npt

@@ -16,10 +16,18 @@ def example_TEBD_gs_finite(L, g):
     print("finite TEBD, imaginary time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc='finite')
-    tebd_params = {'order': 2, 'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5], 'N_steps': 10,
-                   'max_error_E': 1.e-6, 'trunc_params': {'chi_max': 30, 'svd_min': 1.e-10},
-                   'verbose': 1}
+    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc='finite')
+    tebd_params = {
+        'order': 2,
+        'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
+        'N_steps': 10,
+        'max_error_E': 1.e-6,
+        'trunc_params': {
+            'chi_max': 30,
+            'svd_min': 1.e-10
+        },
+        'verbose': 1
+    }
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
     E = np.sum(psi.expectation_value(M.H_bond[1:]))
@@ -37,10 +45,18 @@ def example_TEBD_gs_infinite(g):
     print("infinite TEBD, imaginary time evolution, g={g:.2f}".format(g=g))
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [0]*2, bc='infinite')
-    tebd_params = {'order': 2, 'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5], 'N_steps': 10,
-                   'max_error_E': 1.e-8, 'trunc_params': {'chi_max': 30, 'svd_min': 1.e-10},
-                   'verbose': 1}
+    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * 2, bc='infinite')
+    tebd_params = {
+        'order': 2,
+        'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
+        'N_steps': 10,
+        'max_error_E': 1.e-8,
+        'trunc_params': {
+            'chi_max': 30,
+            'svd_min': 1.e-10
+        },
+        'verbose': 1
+    }
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
     E = np.mean(psi.expectation_value(M.H_bond))
@@ -65,8 +81,16 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     psi.apply_local_op(i0, 'Sigmaz', unitary=True)
     dt_measure = 0.05
     # tebd.Engine makes 'N_steps' steps of `dt` at once; for second order this is more efficient.
-    tebd_params = {'order': 2, 'dt': dt, 'N_steps': int(dt_measure//dt),
-                   'trunc_params': {'chi_max': 50, 'svd_min': 1.e-10, 'trunc_cut': None}}
+    tebd_params = {
+        'order': 2,
+        'dt': dt,
+        'N_steps': int(dt_measure // dt),
+        'trunc_params': {
+            'chi_max': 50,
+            'svd_min': 1.e-10,
+            'trunc_cut': None
+        }
+    }
     eng = tebd.Engine(psi, M, tebd_params)
     S = [psi.entanglement_entropy()]
     for n in range(int(tmax / dt_measure + 0.5)):

@@ -40,7 +40,6 @@ Eigen systems:
 
 """
 
-
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
@@ -464,8 +463,8 @@ class Array(object):
         try:
             res = int(res)
         except:
-            raise KeyError("label not found: " + repr(label) + ", current labels" + repr(
-                self.get_leg_labels()))
+            raise KeyError("label not found: " + repr(label) + ", current labels" +
+                           repr(self.get_leg_labels()))
         if res < 0:
             res += self.rank
         if res > self.rank or res < 0:
@@ -976,8 +975,8 @@ class Array(object):
             if isinstance(charge, str):
                 charge = self.chinfo.names.index(charge)
             qtotal = np.delete(self.qtotal, charge, 0)
-        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2)
-                     for leg in self.legs], self.dtype, qtotal)
+        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
+                    self.dtype, qtotal)
         for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
         return res
@@ -1911,8 +1910,7 @@ class Array(object):
         qindices : tuple of int
             A qindex for each of the legs.
         """
-        for block_inds in itertools.product(*[range(l.block_number)
-                                              for l in reversed(self.legs)]):
+        for block_inds in itertools.product(*[range(l.block_number) for l in reversed(self.legs)]):
             # loop over all charge sectors in lex order (last leg most siginificant)
             yield tuple(block_inds[::-1])  # back to legs in correct order
 
@@ -1932,8 +1930,7 @@ class Array(object):
 
     def _get_block_shape(self, qindices):
         """Return shape for the block given by qindices."""
-        return tuple([(l.slices[qi + 1] - l.slices[qi])
-                      for l, qi in zip(self.legs, qindices)])
+        return tuple([(l.slices[qi + 1] - l.slices[qi]) for l, qi in zip(self.legs, qindices)])
 
     def _get_block(self, qindices, insert=False, raise_incomp_q=False):
         """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
@@ -2813,8 +2810,8 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
             raise ValueError("different grid entries lead to different charges at index " + str(i))
     if any([q is None for q in qflat]):
         raise ValueError("can't derive flat charge for all indices:" + str(qflat))
-    grid_legs[axis] = LegCharge.from_qflat(chinfo,
-                                           chinfo.make_valid(qconj * np.array(qflat)), qconj)
+    grid_legs[axis] = LegCharge.from_qflat(chinfo, chinfo.make_valid(qconj * np.array(qflat)),
+                                           qconj)
     return grid_legs
 
 
@@ -3621,6 +3618,7 @@ def to_iterable_arrays(array_list):
 
 # internal helper functions
 
+
 def _nontrivial_grid_entries(grid):
     """Return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
     grid = np.asarray(grid, dtype=np.object)
@@ -3783,8 +3781,8 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
     b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
     a_charges_keep = a.chinfo.make_valid(
-        np.sum([l.get_charge(qi) for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0)
-        if cut_a > 0 else None)
+        np.sum([l.get_charge(qi)
+                for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0) if cut_a > 0 else None)
     if a_charges_keep.ndim < 2:
         a_charges_keep = a_charges_keep.reshape((-1, a.chinfo.qnumber))
     b_charges_keep = a.chinfo.make_valid(
@@ -3906,8 +3904,8 @@ def _tensordot_worker(a, b, axes):
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
-        return zeros(a.legs[:-axes] + b.legs[axes:],
-                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
+        return zeros(a.legs[:-axes] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
+                     a.qtotal + b.qtotal)
     cut_a = a.rank - axes
     cut_b = axes
     a_pre_result, b_pre_result, fast_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)

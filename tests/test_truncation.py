@@ -1,6 +1,5 @@
 """A test for tenpy.algorithms.truncation"""
 
-
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst

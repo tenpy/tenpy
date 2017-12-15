@@ -1,6 +1,5 @@
 """A collection of tests for tenpy.linalg.np_conserved"""
 
-
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 import numpy.testing as npt

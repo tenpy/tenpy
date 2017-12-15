@@ -1,6 +1,5 @@
 """A test for tenpy.tools.params"""
 
-
 import warnings
 from tenpy.tools import params
 import nose.tools as nst

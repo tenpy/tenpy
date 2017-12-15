@@ -1,9 +1,7 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 
-
 import numpy as np
 from .optimization import bottleneck
-
 
 all = [
     'to_iterable', 'to_ndarray', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',

@@ -30,8 +30,6 @@ corresponding ensemble, for example ::
 
 """
 
-
-
 import numpy as np
 
 __all__ = ['standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1', 'U_close_1']

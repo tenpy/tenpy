@@ -25,7 +25,6 @@ Of course, we also provide ways to transform a :class:`NearestNeighborModel` int
 See also the introduction :doc:`../intro_model`.
 """
 
-
 import numpy as np
 
 from ..linalg import np_conserved as npc

@@ -1,6 +1,5 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization"""
 
-
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.models.xxz_chain import XXZChain

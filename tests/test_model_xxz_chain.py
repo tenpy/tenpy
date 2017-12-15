@@ -4,8 +4,6 @@
     more tests...
 """
 
-
-
 import numpy as np
 import numpy.testing as npt
 import pprint
@@ -56,8 +54,7 @@ def test_XXZChain():
 
 
 def test_XXZChain_general():
-    check_general_model(XXZChain,
-                        dict(L=4, Jxx=1., hz=0., bc_MPS='finite'), {
-                            'Jz': [0., 1., 2.],
-                            'hz': [0., 0.2]
-                        })
+    check_general_model(XXZChain, dict(L=4, Jxx=1., hz=0., bc_MPS='finite'), {
+        'Jz': [0., 1., 2.],
+        'hz': [0., 0.2]
+    })

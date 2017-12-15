@@ -5,8 +5,6 @@ Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
 """
 
-
-
 from . import tebd
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError

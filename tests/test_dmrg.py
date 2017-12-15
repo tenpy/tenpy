@@ -1,6 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
 
-
 import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
@@ -67,7 +66,7 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         Edmrg = res['E']
         Eexact = e0_tranverse_ising(g)
         print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
-        print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact)/Eexact)))
+        print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
         assert (abs((Edmrg - Eexact) / Eexact) < 1.e-10)

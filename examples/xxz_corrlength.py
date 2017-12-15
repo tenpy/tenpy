@@ -4,8 +4,6 @@
     simplify, document
 """
 
-
-
 import numpy as np
 
 from tenpy.models.spins import SpinChain

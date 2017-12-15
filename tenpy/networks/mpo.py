@@ -38,7 +38,6 @@ i.e. between sites ``i-1`` and ``i``.
     transfermatrix for MPO
 """
 
-
 import itertools
 import numpy as np
 from ..linalg import np_conserved as npc

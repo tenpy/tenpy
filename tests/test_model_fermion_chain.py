@@ -1,5 +1,3 @@
-
-
 from tenpy.models.fermion_chain import FermionChain
 from test_model import check_general_model
 

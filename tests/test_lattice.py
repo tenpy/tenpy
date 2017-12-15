@@ -1,6 +1,5 @@
 """A collection of tests for tenpy.models.lattice"""
 
-
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
 import numpy as np

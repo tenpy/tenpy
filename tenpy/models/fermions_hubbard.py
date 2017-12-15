@@ -7,7 +7,6 @@
     Write example simulation code?
 """
 
-
 import numpy as np
 
 from .lattice import Chain

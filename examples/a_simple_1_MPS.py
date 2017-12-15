@@ -87,8 +87,8 @@ class SimpleMPS(object):
         for i in bonds:
             S = self.Ss[i].copy()
             S[S < 1.e-20] = 0.  # 0*log(0) should give 0; avoid warning or NaN.
-            S2 = S*S
-            assert abs(np.linalg.norm(S) -1.)< 1.e-14
+            S2 = S * S
+            assert abs(np.linalg.norm(S) - 1.) < 1.e-14
             result.append(-np.sum(S2 * np.log(S2)))
         return np.array(result)
 

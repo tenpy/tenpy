@@ -3,7 +3,6 @@
 Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 """
 
-
 import numpy as np
 
 from .lattice import Chain
