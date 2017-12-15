@@ -19,6 +19,7 @@ import warnings
 
 from ..tools.misc import lexsort, inverse_permutation
 from ..tools.string import vert_join
+from ..tools.optimization import optimize, OptimizationFlag
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 
@@ -455,6 +456,8 @@ class LegCharge(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
         sl = self.slices
         ch = self.charges
         if sl.shape != (self.block_number + 1, ):
@@ -556,6 +559,8 @@ class LegCharge(object):
             ``self.test_contractible(other)`` just performs ``self.test_equal(other.conj())``.
 
         """
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
         self.test_equal(other.conj())
 
     def test_equal(self, other):
@@ -574,7 +579,8 @@ class LegCharge(object):
         test_contractible :
             ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
         """
-
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
         if self.chinfo != other.chinfo:
             raise ValueError(''.join(
                 ["incompatible ChargeInfo\n",
@@ -917,6 +923,8 @@ class LegPipe(LegCharge):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
         super(LegPipe, self).test_sanity()
         if not hasattr(self, "subshape"):
             return  # omit further check during ``super(LegPipe, self).__init__``

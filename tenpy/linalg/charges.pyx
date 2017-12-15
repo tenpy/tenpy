@@ -22,6 +22,9 @@ import warnings
 
 from ..tools.misc import lexsort, inverse_permutation
 from ..tools.string import vert_join
+from ..tools import optimization
+
+cdef int optimization_compare = optimization.OptimizationFlag.skip_arg_checks
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 
@@ -141,13 +144,15 @@ cdef class ChargeInfo(object):
         mod[charge] = new_qmod
         return cls(mod, names)
 
-    def test_sanity(self):
+    cpdef void test_sanity(ChargeInfo self) except *:
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        cdef int opt_level = optimization._level
+        if opt_level >= optimization_compare:
+            return
         if len(self.names) != self.qnumber:
             raise ValueError("names has incompatible length with mod")
         if np.any(self.mod < 0):
             raise ValueError("mod with negative entries???")
-
 
     cpdef np.ndarray make_valid(ChargeInfo self, charges=None):
         """Take charges modulo self.mod.
@@ -507,8 +512,11 @@ cdef class LegCharge(object):
         charges = chinfo.make_valid(leg.charges)
         return cls.from_qind(chinfo, leg.slices, charges, leg.qconj)
 
-    def test_sanity(self):
+    cpdef void test_sanity(LegCharge self) except *:
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        cdef int opt_level = optimization._level
+        if opt_level >= optimization_compare:
+            return
         cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
         cdef np.ndarray[QTYPE_t,ndim=2] ch = self.charges
         if sl.ndim != 1 or sl.shape[0] != self.block_number + 1:
@@ -521,7 +529,6 @@ cdef class LegCharge(object):
             raise ValueError("charges invalid for " + str(self.chinfo) + "\n" + str(self))
         if self.qconj != -1 and self.qconj != 1:
             raise ValueError("qconj has invalid value != +-1 :" + repr(self.qconj))
-
 
     cpdef LegCharge conj(LegCharge self):
         """Return a (shallow) copy with opposite ``self.qconj``."""
@@ -601,6 +608,9 @@ cdef class LegCharge(object):
             ``self.test_contractible(other)`` just performs ``self.test_equal(other.conj())``.
 
         """
+        cdef int opt_level = optimization._level
+        if opt_level >= optimization_compare:
+            return
         self.test_equal(other.conj())
 
     cpdef void test_equal(LegCharge self, LegCharge other) except *:
@@ -619,7 +629,9 @@ cdef class LegCharge(object):
         test_contractible :
             ``self.test_equal(other)`` is equivalent to ``self.test_contractible(other.conj())``.
         """
-
+        cdef int opt_level = optimization._level
+        if opt_level >= optimization_compare:
+            return
         if self.chinfo != other.chinfo:
             raise ValueError(
                 ''.join(["incompatible ChargeInfo\n", str(self.chinfo), str(other.chinfo)]))
@@ -971,8 +983,11 @@ cdef class LegPipe(LegCharge):
         self._init_from_legs(sort, bunch)
         self.test_sanity()
 
-    def test_sanity(self):
+    cpdef void test_sanity(LegPipe self) except *:
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        cdef int opt_level = optimization._level
+        if opt_level >= optimization_compare:
+            return
         super(LegPipe, self).test_sanity()
         assert (all([l.chinfo == self.chinfo for l in self.legs]))
         assert (self.subshape == tuple([l.ind_len for l in self.legs]))

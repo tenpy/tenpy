@@ -41,7 +41,6 @@ Eigen systems:
 """
 
 
-
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
@@ -57,6 +56,7 @@ from .svd_robust import svd as svd_flat
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join, is_non_string_iterable
+from ..tools.optimization import optimize, OptimizationFlag
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
@@ -389,16 +389,16 @@ class Array(object):
         res._qdata_sorted = True
         return res
 
-    def test_sanity(self, quick=False):
+    def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
         if len(self.legs) == 0:
             raise ValueError("We don't allow rank-0 tensors without legs")
         for l in self.legs:
             if l.chinfo != self.chinfo:
                 raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
                     l.chinfo, self.chinfo))
-        if quick:  # Previous checks to test the arguments of __init__
-            return
         if self.shape != tuple([lc.ind_len for lc in self.legs]):
             raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
                 self.shape, tuple([lc.ind_len for lc in self.legs])))

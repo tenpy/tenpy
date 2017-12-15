@@ -274,8 +274,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     piv, new_norm, err = truncate(S, trunc_par)
     new_len_S = np.sum(piv, dtype=np.int_)
     if new_len_S * 100 < len(S):
-        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}, str(len(Y))\n".format(
-            len(S), new_len_S)
+        msg = "Catastrophic reduction in chi: {0:d} -> {1:d}".format(len(S), new_len_S)
         # NANs are excluded in npc.svd
         UHU = npc.tensordot(U.conj(), U, axes=[[0], [0]])
         msg += " |U^d U - 1| = {0:f}".format(npc.norm(UHU - npc.eye_like(UHU)))

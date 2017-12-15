@@ -1,15 +1,9 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 
 
-
 import numpy as np
+from .optimization import bottleneck
 
-try:
-    """you can ``pip install bottleneck`` to use this framework for fast NaN processing"""
-    import bottleneck as bn
-    has_bottleneck = True
-except:
-    has_bottleneck = False
 
 all = [
     'to_iterable', 'to_ndarray', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
@@ -68,8 +62,8 @@ def to_array(a, shape=(None, )):
     return np.tile(a, reps)
 
 
-if has_bottleneck:
-    anynan = bn.anynan
+if bottleneck is not None:
+    anynan = bottleneck.anynan
 else:
 
     def anynan(a):

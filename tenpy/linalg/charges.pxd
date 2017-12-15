@@ -1,4 +1,3 @@
-
 cimport numpy as np
 ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
 
@@ -11,6 +10,7 @@ cdef class ChargeInfo(object):
                                                    np.ndarray[QTYPE_t,ndim=1] charges)
     cdef np.ndarray[QTYPE_t,ndim=2] _make_valid_2D(ChargeInfo self,
                                                    np.ndarray[QTYPE_t,ndim=2] charges)
+    cpdef void test_sanity(ChargeInfo self) except *
 
 cdef class LegCharge(object):
     cdef readonly int ind_len
@@ -21,6 +21,7 @@ cdef class LegCharge(object):
     cdef readonly int qconj
     cdef public bint sorted
     cdef public bint bunched
+    cpdef void test_sanity(LegCharge self) except *
     cpdef LegCharge conj(LegCharge self)
     cpdef bint is_blocked(self)
     cpdef void test_contractible(LegCharge self, LegCharge other) except *
@@ -42,6 +43,7 @@ cdef class LegPipe(LegCharge):
     cdef readonly list q_map_slices
     cdef readonly np.ndarray _perm
     cdef readonly np.ndarray _strides
+    cpdef void test_sanity(LegPipe self) except *
     cpdef LegPipe conj(self)
     cdef void _init_from_legs(LegPipe self, bint sort=?, bint bunch=?) except *
     cpdef void __setstate__(LegPipe self, tuple state)

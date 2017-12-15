@@ -48,7 +48,7 @@ Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execu
 Currently, the library itself supports no other way of parallelization.
 
 If you don't have a python version which is built against MKL, 
-we recommend using the `anaconda <https://www.continuum.io/downloads>` distribution, which ships with Intel MKL
+we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL
 and is available for Linux, Mac and Windows. Note that you don't need administrator rights to install it.
 Simply follow the (straight-forward) instructions of the web page for the installation.
 It installs everything needed into a single folder (by default ``$HOME/anaconda2``).
@@ -60,7 +60,7 @@ Once you managed to install conda, ensure that you have the needed packages with
 
     conda install mkl scipy numpy
 
-The optional packages can be installed with::
+Optional packages (see `Optional Requirements`_ below) can be installed with::
 
     conda install matplotlib sphinx numpydoc pip nose bottleneck
     pip install yapf    # (if you want to contribute)
@@ -69,8 +69,10 @@ The optional packages can be installed with::
     MKL uses different threads to parallelize different BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
-    cluster.  The easiest way to acchieve to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
+    cluster. The easiest way to acchieve to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
+
+For further optimization, look at :mod:`tenpy.tools.optimization`.
 
 
 Checking the installation
@@ -83,9 +85,9 @@ You can also run the automated testsuite with `nose` to make sure everything wor
     cd $HOME/path/to/TenPyLight/tests
     nosetests
 
-This should run some tests, hopefully indicated by a lot of dots ``.....`` and 
-no ``E`` or ``F`` indicating errors and failures, respectively.
-In case of failures it gives a detailed traceback and possibly some output of the test.
+This should run some tests, hopefully indicated by a lot of dots ``.`` and 
+no ``E`` or ``F``, which indicate successfully run tests, errors and failures, respectively.
+In case of errors or failures it gives a detailed traceback and possibly some output of the test.
 At least the stable releases should run these tests without any failures.
 
 If you can run the examples but not the tests, you might want to check whether `nosetests` actually uses the correct
@@ -138,5 +140,5 @@ After that, go to the root directory of tenpy and simply run ::
 
     bash ./compile.sh
 
-It is not required to separately download (and install Intel MKL): the compilation just obtains the includes from numpy.
-In other words, if your current numpy version uses (as the one provided in anaconda), the compiled code will also use it.
+It is not required to separately download (and install) Intel MKL: the compilation just obtains the includes from numpy.
+In other words, if your current numpy version uses MKL (as the one provided in anaconda), the compiled code will also use it.
