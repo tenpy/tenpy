@@ -1,9 +1,9 @@
 """Simple Bose-Hubbard chain model.
 
 .. todo::
-	Work in checks for common errors and raise some exceptions?
-	Run some tests, and perhaps benchmarks comparing to old TenPy?
-	Write example simulation code?
+    Work in checks for common errors and raise some exceptions?
+    Run some tests, and perhaps benchmarks comparing to old TenPy?
+    Write example simulation code?
 """
 
 import numpy as np
@@ -18,34 +18,34 @@ from ..tools.misc import any_nonzero
 class BoseHubbardChain(CouplingModel, MPOModel, NearestNeighborModel):
     r"""Spinless Bose-Hubbard model on a chain.
 
-	The Hamiltonian is:
+    The Hamiltonian is:
 
-	.. math :: 
-		H = t \sum_i (b_i^{\dagger} b_{i+1} + b_{i+1}^{\dagger} b_i)
-			+ \frac{U}{2} \sum_i n_i (n_i - 1) + \mu \sum_i n_i
+    .. math ::
+        H = t \sum_i (b_i^{\dagger} b_{i+1} + b_{i+1}^{\dagger} b_i)
+            + \frac{U}{2} \sum_i n_i (n_i - 1) + \mu \sum_i n_i
 
-	Note that the signs of all parameters as defined in the Hamiltonian are positive.
+    Note that the signs of all parameters as defined in the Hamiltonian are positive.
 
-	All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
     ----------
     L : int
-    	Length of the chain
+        Length of the chain
     n_max : int
-    	Maximum number of bosons per site.
+        Maximum number of bosons per site.
     filling : float
-    	Average filling.
+        Average filling.
     conserve: {'N' | 'parity' | None}
-    	What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
+        What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
     t, U, Mu : float | array
-    	Couplings as defined in the Hamiltonian above.
+        Couplings as defined in the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-    verbose : int 
-    	Level of verbosity
-	"""
+    verbose : int
+        Level of verbosity
+    """
 
     def __init__(self, model_param):
         # 0) Read and set parameters.

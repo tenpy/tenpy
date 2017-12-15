@@ -1,10 +1,10 @@
 """A TenPyLight implementation of the cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 
 .. todo::
-	Define unit_cell.
-	Sort out the lattice (including correct bc handling for cylinder/strip).
-	Implement the Hamiltonian.
-	In particular: hoppings along y at the boundary have to be different.
+    Define unit_cell.
+    Sort out the lattice (including correct bc handling for cylinder/strip).
+    Implement the Hamiltonian.
+    In particular: hoppings along y at the boundary have to be different.
 """
 
 
@@ -22,24 +22,23 @@ __all__ = ['cold_hof_model']
 class cold_hof_model(CouplingModel, NearestNeighborModel, MPOModel):
     """To be implemented.
 
-    Parameters (model_pars)
+    Parameters
     ----------
     Lx, Ly : int
         size of the simulation unit cell (in terms of magnetic unit cells)
     mx, my : int
-    	size of the magnetic unit cell
+        size of the magnetic unit cell
     N_max : int
-    	maximum number of bosons per site
+        maximum number of bosons per site
     filling : float
-    	average number of bosons per site
-	Jx, Jy, phi_0, phi_ext, kappa, omega, delta, u, mu : float
-		Hamiltonian parameters
-	bc : {0 | 1}
-		boundary conditions along the circumference. 0 = open, 1 = periodic.
-	conserve : {'N' | 'parity' | None'}
-		What quantum number to conserve. Right now, BosonSite cannot conserve N and parity at the
-		same time.
-	verbose : int
+        average number of bosons per site
+    Jx, Jy, phi_0, phi_ext, kappa, omega, delta, u, mu : float
+        Hamiltonian parameters
+    bc : {0 | 1}
+        boundary conditions along the circumference. 0 = open, 1 = periodic.
+    conserve : {'N' | 'parity' | None'}
+        What quantum number to conserve. Right now, BosonSite cannot conserve N and parity at the
+        same time.
     """
 
     def __init__(self, model_pars):

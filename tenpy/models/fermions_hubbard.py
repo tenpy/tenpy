@@ -1,10 +1,10 @@
-"""Fermionic Hubbard model. 
+"""Fermionic Hubbard model.
 
-''todo::
-	Decide between on-site or nn density-density (mediated by U)
-	Work in checks for common errors and raise some exceptions?
-	Run some tests, and perhaps benchmarks comparing to old TenPy?
-	Write example simulation code?
+.. todo ::
+    Decide between on-site or nn density-density (mediated by U)
+    Work in checks for common errors and raise some exceptions?
+    Run some tests, and perhaps benchmarks comparing to old TenPy?
+    Write example simulation code?
 """
 
 
@@ -19,14 +19,14 @@ from tenpy.networks.site import SpinHalfFermionSite
 class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
     r"""Spin-1/2 fermionic Hubbard model in 1D.
 
-	The Hamiltonian reads:
+    The Hamiltonian reads:
 
-	.. math :: 
-		H = \sum_{\langle i, j \rangle, \sigma} t (c^{\dagger}_{\uparrow, i} c_{\uparrow j} + h.c.)
-			+ \sum_i U n_{\uparrow, i} n_{\downarrow, i} 
-			+ \sum_i \mu ( n_{\uparrow, i} + n_{\downarrow, i} )
+    .. math ::
+        H = \sum_{\langle i, j \rangle, \sigma} t (c^{\dagger}_{\uparrow, i} c_{\uparrow j} + h.c.)
+            + \sum_i U n_{\uparrow, i} n_{\downarrow, i}
+            + \sum_i \mu ( n_{\uparrow, i} + n_{\downarrow, i} )
 
-	All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
@@ -34,14 +34,14 @@ class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
     L : int
         Length of the chain
     t, U, mu : float | array
-    	Parameters as defined for the Hamiltonian above
+        Parameters as defined for the Hamiltonian above
     cons_N : {'N' | 'parity' | None}
-    	Whether particle number is conserved, see :class:`SpinHalfFermionSite` for details.
+        Whether particle number is conserved, see :class:`SpinHalfFermionSite` for details.
     cons_Sz : {'Sz' | 'parity' | None}
         Whether spin is conserved, see :class:`SpinHalfFermionSite` for details.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-	"""
+    """
 
     def __init__(self, model_param):
         # 0) Read out/set default parameters.

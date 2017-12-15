@@ -6,13 +6,13 @@ Uniform lattice of bosons, including:
 - U(1) symmetry-breaking fields
 - density-density ineraction
 
-.. todo::
-	Work out the hamiltonian, give example Hamiltonian in docstrings.
-	Add correct Hamiltonian entries using add_onsite() and add_coupling()
-	Work in checks for common errors and raise some exceptions.
-	Clean up.
-	Run some tests, and perhaps benchmarks comparing to old TenPy?
-	Write example simulation code?
+.. todo ::
+    Work out the hamiltonian, give example Hamiltonian in docstrings.
+    Add correct Hamiltonian entries using add_onsite() and add_coupling()
+    Work in checks for common errors and raise some exceptions.
+    Clean up.
+    Run some tests, and perhaps benchmarks comparing to old TenPy?
+    Write example simulation code?
 """
 
 # Original TenPy Hamiltonian: H = - sum_{j, r > 0} t_{j r} psi^D_{j+r} psi_{j} + h.c.
