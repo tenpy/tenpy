@@ -15,6 +15,10 @@
 import sys
 import os
 
+if not sys.version_info >= (3, 0):
+    print("ERROR: old python version, called by python version\n" + sys.version)
+    sys.exit(1)
+
 try:
     import tenpy.version
 except:

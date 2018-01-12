@@ -1,10 +1,14 @@
-#!/usr/bin/env python
-
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 import numpy
+import sys
 import os
+
+if not sys.version_info >= (3, 0):
+    print("ERROR: old python version, the script got called by\n" + sys.version)
+    sys.exit(1)
+
 
 # options
 # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
