@@ -56,7 +56,7 @@ from ..linalg import np_conserved as npc
 import warnings
 from ..tools.params import get_parameter
 
-__all__ = ['TruncationError', 'truncate']
+__all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
 class TruncationError(object):

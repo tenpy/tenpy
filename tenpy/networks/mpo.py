@@ -38,7 +38,6 @@ i.e. between sites ``i-1`` and ``i``.
     transfermatrix for MPO
 """
 
-import itertools
 import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.string import vert_join
@@ -713,8 +712,10 @@ class MPOEnvironment(MPSEnvironment):
     def full_contraction(self, i0):
         """Calculate the energy by a full contraction of the network.
 
-        The full contraction of the environments gives the value ``<bra|H|ket>``,
-        i.e. if `bra` is `ket`, the total energy. For this purpose, this function contracts
+        The full contraction of the environments gives the value
+        ``<bra|H|ket> / (norm(|bra>)*norm(|ket>))``,
+        i.e. if `bra` is `ket` and normalized, the total energy.
+        For this purpose, this function contracts
         ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
 
         Parameters

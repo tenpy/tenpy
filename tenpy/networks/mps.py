@@ -20,8 +20,9 @@ independent of the boundary conditions.
 However, be aware that e.g. :attr:`MPS.chi` returns only the dimensions of the
 :attr:`MPS.nontrivial_bonds` depending on the boundary conditions.
 
-We restrict ourselves to normalized states (i.e. ``np.linalg.norm(psi._S[ib]) == 1`` up to
-roundoff errors).
+The matrices and singular values always represent a normalized state
+(i.e. ``np.linalg.norm(psi._S[ib]) == 1`` up to roundoff errors),
+but we keep track of the norm in :attr:`MPS.norm` (which is respected by :meth:`MPS.overlap`, ...).
 
 For efficient simulations, it is crucial that the MPS is in a 'canonical form'.
 The different forms and boundary conditions are easiest described in Vidal's
@@ -71,7 +72,6 @@ as they return the `B` in the desired form (which can be chosed as an argument).
 """
 
 import numpy as np
-import itertools
 import warnings
 import scipy.sparse as sparse
 import scipy.sparse.linalg.eigen.arpack
@@ -85,12 +85,6 @@ from functools import reduce
 class MPS(object):
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
-    .. todo ::
-        Somewhere keep track of the norm of the wave function?
-        Even if we don't use it in most cases,
-        it might be useful e.g. for imaginary time evolution (giving the partition function)
-        or for calculating overlaps. Tricky for infinite boundary conditions; keep norm per site?
-
     Parameters
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`
@@ -103,7 +97,7 @@ class MPS(object):
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the tabel of the module doc-string.
     form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
-        The form the stored 'matrices'. The table in module doc-string.
+        The form of the stored 'matrices', see table in module doc-string.
         A single choice holds for all of the entries.
 
     Attributes
@@ -125,6 +119,8 @@ class MPS(object):
         The nature of the charge.
     dtype : type
         The data type of the `_B`.
+    norm : float
+        The norm of the state, i.e. ``sqrt(<psi|psi>)``.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
@@ -156,12 +152,13 @@ class MPS(object):
     _valid_bc = ('finite', 'segment', 'infinite')
     _p_label = ['p']
 
-    def __init__(self, sites, Bs, SVs, bc='finite', form='B'):
+    def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1.):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([B.dtype for B in Bs], [])
         self.form = self._parse_form(form)
         self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
+        self.norm = norm
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True) for B in Bs]
@@ -231,6 +228,11 @@ class MPS(object):
             A single choice holds for all of the entries.
         chargeL : charges
             Leg charge at bond 0, which are purely conventional.
+
+        Returns
+        -------
+        product_mps : :class:`MPS`
+            An MPS representing the specified product state.
         """
         sites = list(sites)
         L = len(sites)
@@ -279,6 +281,11 @@ class MPS(object):
         leg_L : LegCharge | ``None``
             Leg charges at bond 0, which are purely conventional.
             If ``None``, use trivial charges.
+
+        Returns
+        -------
+        mps : :class:`MPS`
+            An MPS with the matrices `Bflat` converted to npc arrays.
         """
         sites = list(sites)
         L = len(sites)
@@ -309,7 +316,7 @@ class MPS(object):
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
     @classmethod
-    def from_full(cls, sites, psi, form='B', cutoff=1.e-16):
+    def from_full(cls, sites, psi, form='B', cutoff=1.e-16, normalize=True):
         """Construct an MPS from a single tensor `psi` with one leg per physical site.
 
         Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
@@ -327,11 +334,13 @@ class MPS(object):
             The canonical form of the resulting MPS, see module doc-string.
         cutoff : float
             Cutoff of singular values used in the SVDs.
+        normalize : bool
+            Whether the resulting MPS should have 'norm' 1.
 
         Returns
         -------
         psi_mps : :class:`MPS`
-            MPS representation of `psi`, normalized and in canonical form.
+            MPS representation of `psi`, in canonical form and possibly normalized.
         """
         if form not in ['B', 'A', 'C', 'G']:
             raise ValueError("Invalid form: " + repr(form))
@@ -340,6 +349,7 @@ class MPS(object):
         assert (L >= 2)
         B_list = [None] * L
         S_list = [1] * (L + 1)
+        norm = 1. if normalize else npc.norm(psi)
         labels = ['p' + str(i) for i in range(L)]
         psi.itranspose(labels)
         # combine legs from left
@@ -363,7 +373,7 @@ class MPS(object):
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
         B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
-        res = cls(sites, B_list, S_list, bc='finite', form='B')
+        res = cls(sites, B_list, S_list, bc='finite', form='B', norm=norm)
         if form != 'B':
             res.convert_form(form)
         return res
@@ -947,7 +957,7 @@ class MPS(object):
         Returns
         -------
         overlap : dtype
-            The contraction <self|other>.
+            The contraction <self|other>, taking into account the :attr:`norm` of both MPS.
         env : MPSEnvironment
             The environment (storing the LP and RP) used to calculate the overlap.
         """
@@ -958,7 +968,7 @@ class MPS(object):
         return env.full_contraction(0), env
 
     def expectation_value(self, ops, sites=None, axes=None):
-        """Expectation value ``<psi|ops|psi>`` of (n-site) operator(s).
+        """Expectation value ``<psi|ops|psi>/<psi|psi>`` of (n-site) operator(s).
 
         Given the MPS in canonical form, it calculates n-site expectation values.
         For example the contraction for a two-site (`n` = 2) operator on site `i` would look like::
@@ -1042,7 +1052,7 @@ class MPS(object):
                              opstr=None,
                              str_on_first=True,
                              hermitian=False):
-        r"""Correlation function  ``<psi|op1_i op2_j|psi>`` of single site operators `op1`, `op2`.
+        r"""Correlation function  ``<psi|op1_i op2_j|psi>/<psi|psi>`` of single site operators.
 
         Given the MPS in canonical form, it calculates n-site expectation values.
         For examples the contraction for a two-site operator on site `i` would look like::
@@ -1193,7 +1203,7 @@ class MPS(object):
             err[i, 1] = npc.norm(rho_R - rho_R2)
         return err
 
-    def canonical_form(self):
+    def canonical_form(self, renormalize=True):
         """Bring self into canonical 'B' form, calculate singular values.
 
         Works only for finite/segment boundary conditions.
@@ -1207,7 +1217,7 @@ class MPS(object):
             Also, implement 'canonical_form_infinite' by diagonalizing the transfer matrix...
         """
         if self.finite:
-            self._canonical_form_finite()
+            self._canonical_form_finite(renormalize)
         else:
             self._canonical_form_infinite()
 
@@ -1252,9 +1262,10 @@ class MPS(object):
         return -1. / np.log(np.abs(E[1:num_ev + 1] / E[0])) * self.L
 
     def add(self, other, alpha, beta):
-        """Return an MPS which represents `alpha self + beta others`.
+        """Return an MPS which represents ``alpha|self> + beta |others>``.
 
         Works only for 'finite' boundary conditions.
+        Takes into account :attr:`norm`.
 
         Parameters
         ----------
@@ -1263,13 +1274,20 @@ class MPS(object):
         alpha, beta : complex float
             Prefactors for self and other. We calculate
             ``alpha * |self> + beta * |other>``
+
+        Returns
+        -------
+        sum : :class:`MPS`
+            An MPS representing ``alpha|self> + beta |others>``.
         """
         L = self.L
         assert (other.L == L and L >= 2)  # (one could generalize this function...)
         assert (self.bc == 'finite')  # not clear for segment: are left states orthogonal?
         # TODO: should gauge qtotal to zero.
         legs = ['vL', 'vR'] + self._p_label
-        # alpha and beta appera only on the first site
+        # alpha and beta appear only on the first site
+        alpha = alpha * self.norm
+        beta = beta * other.norm
         Bs = [
             npc.grid_concat(
                 [[alpha * self.get_B(0).transpose(legs), beta * other.get_B(0).transpose(legs)]],
@@ -1289,10 +1307,10 @@ class MPS(object):
         Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
         psi = MPS(self.sites, Bs, Ss, 'finite', None)
         # bring to canonical form, calculate Ss
-        psi._canonical_form_finite()
+        psi._canonical_form_finite(renormalize=False)
         return psi
 
-    def apply_local_op(self, i, op, unitary=None):
+    def apply_local_op(self, i, op, unitary=None, renormalize=False):
         """Apply a local operator to `self`.
 
         .. note ::
@@ -1308,8 +1326,12 @@ class MPS(object):
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             :attr:`sites`.
         unitary : None | bool
-            Whether `op` is unitary, i.e., whether the canonical form is preserved.
+            Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
+            or whether we should call :meth:`canonical_form` (``False``).
             ``None`` checks whether ``norm(op dagger(op) - identity)`` is small.
+        renormalize : bool
+            Whether the final state should keep track of the norm (False, default) or be
+            renormalized to have norm 1 (True).
         """
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
@@ -1319,7 +1341,7 @@ class MPS(object):
         opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         self._B[i] = opB
         if not unitary:
-            self.canonical_form()
+            self.canonical_form(renormalize)
 
     def __str__(self):
         """Some status information about the MPS."""
@@ -1512,7 +1534,7 @@ class MPS(object):
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
         return res
 
-    def _canonical_form_finite(self):
+    def _canonical_form_finite(self, renormalize):
         assert (self.finite)
         L = self.L
         assert (L > 2)  # otherwise implement yourself...
@@ -1553,6 +1575,8 @@ class MPS(object):
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(
             M.combine_legs(['vR'] + self._p_label, qconj=-1), inner_labels=['vR', 'vL'])
+        if not renormalize:
+            self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
         self.set_SL(L - 1, S)
         self.set_B(L - 1, V.split_legs(1), form='B')
@@ -1789,10 +1813,11 @@ class MPSEnvironment(object):
         self._RP_age[i] = None
 
     def full_contraction(self, i0):
-        """Calculate the energy by a full contraction of the network.
+        """Calculate the overlap by a full contraction of the network.
 
-        The full contraction of the environments gives the value ``<bra|H|ket>``,
-        i.e. if `bra` is `ket`, the total energy. For this purpose, this function contracts
+        The full contraction of the environments gives the overlap ``<bra|ket>``,
+        taking into account :attr:`MPS.norm` of both `bra` and `ket`.
+        For this purpose, this function contracts
         ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
 
         Parameters
@@ -1814,7 +1839,8 @@ class MPSEnvironment(object):
         S_ket = self.ket.get_SR(i0)
         LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
         RP = self.get_RP(i0, store=False)
-        return npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+        contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+        return contr * self.bra.norm * self.ket.norm
 
     def expectation_value(self, ops, sites=None, axes=None):
         """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
@@ -1832,6 +1858,10 @@ class MPSEnvironment(object):
 
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
         The call structure is the same as for :meth:`MPS.expectation_value`.
+
+        .. warning :
+            In contrast to :meth:`MPS.expectation_value`, this funciton does not normalize,
+            thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -1861,26 +1891,26 @@ class MPSEnvironment(object):
         --------
         One site examples (n=1):
 
-        >>> psi.expectation_value('Sz')
+        >>> env.expectation_value('Sz')
         [Sz0, Sz1, ..., Sz{L-1}]
-        >>> psi.expectation_value(['Sz', 'Sx'])
+        >>> env.expectation_value(['Sz', 'Sx'])
         [Sz0, Sx1, Sz2, Sx3, ... ]
-        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
+        >>> env.expectation_value('Sz', sites=[0, 3, 4])
         [Sz0, Sz3, Sz4]
 
         Two site example (n=2), assuming homogeneous sites:
 
         >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                              psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        >>> psi.expectation_value(SzSx)
+        >>> env.expectation_value(SzSx)
         [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len ``L-1`` for finite bc, or ``L`` for infinite
 
-        Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
+        Example measuring <bra|SzSx|ket> on each second site, for inhomogeneous sites:
 
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
                                    psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
                          for i in range(0, psi.L-1, 2)]
-        >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
+        >>> env.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)

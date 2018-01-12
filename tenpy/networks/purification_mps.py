@@ -58,12 +58,17 @@ infinite temperature expectation values for operators action only on the `p` leg
 
 Now, you go a step further and also apply imaginary time evolution (acting only on `p` legs)
 to the initial infinite temperature state.
-For example, the state :math:`\exp(-\beta/2 H)|\phi>` yields expecation values
-:math:`<O> = <\phi|\exp(-\beta/2 H) O \exp(-\beta/2 H)|\phi> = Tr(\exp(-\beta H) O)`.
+For example, the normalized state :math:`|\psi> \propto \exp(-\beta/2 H)|\phi>`
+yields expecation values
 
+.. math ::
+    <O>  = Tr(\exp(-\beta H) O) / Tr(\exp(-\beta H))
+    \propto <\phi|\exp(-\beta/2 H) O \exp(-\beta/2 H)|\phi>.
 
-An additional real-time evolution allows to calculate time correlation functions,
-e.g. :math:`<A(t)B(0)> = <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>`.
+An additional real-time evolution allows to calculate time correlation functions:
+
+.. math ::
+    <A(t)B(0)> \propto <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>
 
 
 See also [Karrasch2013]_ for additional tricks! On of their crucial observations is, that
@@ -75,7 +80,7 @@ From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to t
 If the state is modified (e.g. by applying `A` or `B` to calculate correlation functions),
 this is not true any more. However, we still can find unitaries, which are 'optimal' in the sense
 of reducing the entanglement of the MPS/MPO to the minimal value.
-For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.puficiation_tebd`),
+For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.purification_tebd`),
 see [Hauschild2017]_.
 
 .. Note :
@@ -97,9 +102,11 @@ see [Hauschild2017]_.
 
 import numpy as np
 
-from .mps import MPS
+from .mps import MPS, MPSEnvironment
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
+
+__all__ = ['PurificationMPS', 'PurificationMPSEnvironment']
 
 
 class PurificationMPS(MPS):
@@ -118,16 +125,10 @@ class PurificationMPS(MPS):
     `p` only, i.e. they act trivial on `q`, so we just trace over `q`,`q*`.
 
     See also the docstring of the module for details.
-
-    .. todo ::
-        Formally, the order of the algorithms is better if we split the `p` and `q` legs onto
-        different 'sites' (i.e. making a ladder-structure). For TEBD, this requires a `swap` of
-        the sites. Also, I'm not sure, how much faster this actually would be....
     """
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
     _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
-
     # thanks to using `self._replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
 
@@ -298,7 +299,26 @@ class PurificationMPS(MPS):
         return np.array(coord), np.array(mutinf)
 
     def overlap(self, other):
-        raise NotImplementedError("TODO: does this make sense? Need separate MPSEnvironment")
+        """Compute overlap :math:`<self|other>`.
+
+        Parameters
+        ----------
+        other : :class:`PurificationMPS`
+            An MPS with the same physical sites, and on which the same `disentanglers`
+            acted in the auxiliar space.
+
+        Returns
+        -------
+        overlap : dtype
+            The contraction <self|other>, taking into account the :attr:`norm` of both MPS.
+        env : PurificationMPSEnvironment
+            The environment (storing the LP and RP) used to calculate the overlap.
+        """
+        if not self.finite:
+            # requires TransferMatrix for finding dominant left/right parts
+            raise NotImplementedError("TODO")
+        env = PurificationMPSEnvironment(self, other)
+        return env.full_contraction(0), env
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
@@ -329,3 +349,24 @@ class PurificationMPS(MPS):
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*', 'q*'], ['vR*', 'p', 'q']])
         return res
+
+
+class PurificationMPSEnvironment(MPSEnvironment):
+    """Same as :class:`~tenpy.networks.mps.MPSEnvironment`, but for :class:`PurificationMPS`.
+
+    .. warning ::
+        This makes only sense if the same `disentanglers` were applied to `bra` and `ket`.
+    """
+    def _contract_LP(self, i, LP):
+        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(
+            self.bra.get_B(i, form='A').conj(), LP, axes=(['p*', 'q*', 'vL*'], ['p', 'q', 'vR*']))
+        return LP  # labels 'vR*', 'vR'
+
+    def _contract_RP(self, i, RP):
+        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(
+            self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'q*', 'vR*'], ['p', 'q', 'vL*']))
+        return RP  # labels 'vL', 'vL*'

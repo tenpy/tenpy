@@ -25,7 +25,6 @@ __all__ = [
 class PurificationTEBD(tebd.Engine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
-
     Parameters
     ----------
     psi : :class:`~tenpy.networs.purification_mps.PurificationMPS`
@@ -60,6 +59,8 @@ class PurificationTEBD(tebd.Engine):
 
     def run_imaginary(self, beta):
         """Run imaginary time evolution to cool down to the given `beta`.
+
+        Note that we don't change the `norm` attribute of the MPS, i.e. normalization is preserved.
 
         Parameters
         ----------
