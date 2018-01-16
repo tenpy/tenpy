@@ -139,6 +139,15 @@ class PurificationMPS(MPS):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
         super(PurificationMPS, self).test_sanity()
 
+    def copy(self):
+        """Returns a copy of `self`.
+
+        The copy still shares the sites, chinfo, and LegCharges of the _B,
+        but the values of B and S are deeply copied.
+        """
+        # __init__ makes deep copies of B, S
+        return PurificationMPS(self.sites, self._B, self._S, self.bc, self.form)
+
     @classmethod
     def from_infinteT(cls, sites, bc='finite', form='B'):
         """Initial state corresponding to infinite-Temperature ensemble.

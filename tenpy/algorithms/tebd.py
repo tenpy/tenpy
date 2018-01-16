@@ -42,7 +42,7 @@ import time
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import get_parameter
+from ..tools.params import get_parameter, unused_parameters
 
 
 class Engine(object):
@@ -109,7 +109,6 @@ class Engine(object):
         self._update_index = None
 
     def __del__(self):
-        from ..tools.params import unused_parameters
         unused_parameters(self.TEBD_params['trunc_params'], "TEBD trunc_params")
         unused_parameters(self.TEBD_params, "TEBD")
 

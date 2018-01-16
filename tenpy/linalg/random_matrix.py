@@ -102,7 +102,7 @@ def CRE(size):
 
 
 def COE(size):
-    r"""Circular orthogonal ensemble (CUE).
+    r"""Circular orthogonal ensemble (COE).
 
     Parameters
     ----------
@@ -112,7 +112,7 @@ def COE(size):
     Returns
     -------
     U : ndarray
-        Unitary, symmetric (complex) matrix drawn from the CUE (=Haar measure on this space).
+        Unitary, symmetric (complex) matrix drawn from the COE (=Haar measure on this space).
     """
     U = CUE(size)
     return np.dot(U.T, U)
