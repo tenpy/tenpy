@@ -1171,9 +1171,15 @@ class MPS(object):
             The error ``norm_error[i, 0]`` is defined as the norm-difference between
             the following networks::
 
-                |   --s[i]--B[i]--.       --s[i]--.
-                |           |     |    vs         |
-                |   --s[i]--B*[i]-.       --s[i]--.
+                |   --theta[i]---.       --s[i]--.
+                |       |        |    vs         |
+                |   --theta*[i]--.       --s[i]--.
+
+            Similarly, ``norm_errror[i, 1]`` is the norm-difference of::
+
+                |   .--theta[i]---         .--s[i+1]--
+                |   |    |          vs     |
+                |   .--theta*[i]--         .--s[i+1]--
 
         """
         err = np.empty((self.L, 2), dtype=np.float)

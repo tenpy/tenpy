@@ -18,7 +18,7 @@ spin_half = site.SpinHalfSite(conserve='Sz')
 def test_purification_mps():
     for L in [4, 2, 1]:
         print(L)
-        psi = purification_mps.PurificationMPS.from_infinteT([spin_half] * L, bc='finite')
+        psi = purification_mps.PurificationMPS.from_infiniteT([spin_half] * L, bc='finite')
         psi.test_sanity()
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.)  # product state has no entanglement.
@@ -42,7 +42,7 @@ def test_purification_TEBD(L=3):
     for disent in [
             None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)'
     ]:
-        psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
+        psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
         TEBD_params = {
             'trunc_params': {
                 'chi_max': 16,
@@ -68,7 +68,7 @@ def test_purification_TEBD(L=3):
 def test_renyi_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
-    psi = purification_mps.PurificationMPS.from_infinteT(M.lat.mps_sites(), bc='finite')
+    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
     eng = PurificationTEBD(psi, M, {'verbose': 30, 'disentangle': 'renyi'})
     theta = eng.psi.get_theta(1, 2)
     print(theta[0, :, :, 0, :, :])

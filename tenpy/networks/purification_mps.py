@@ -25,7 +25,7 @@ the trace is simply a contraction::
     |         |   |   |   |   |   |
     |         :   :   :   :   :   :
 
-Clearly, we get the same result, if we insert an identiy operators, written as MPO, on the top
+Clearly, we get the same result, if we insert an identity operator, written as MPO, on the top
 and bottom::
 
     |         :   :   :   :   :   :
@@ -96,7 +96,7 @@ see [Hauschild2017]_.
     One can also look at the canonical ensembles by defining the conserved quantities
     differently, see Barthel (2016), arXiv:1607.01696 for details.
     Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
-    I think it should suffice to implement another `from_inifinite_T`.
+    I think it should suffice to implement another `from_infiniteT`.
 
 """
 
@@ -149,7 +149,7 @@ class PurificationMPS(MPS):
         return PurificationMPS(self.sites, self._B, self._S, self.bc, self.form)
 
     @classmethod
-    def from_infinteT(cls, sites, bc='finite', form='B'):
+    def from_infiniteT(cls, sites, bc='finite', form='B'):
         """Initial state corresponding to infinite-Temperature ensemble.
 
         Parameters
