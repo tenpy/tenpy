@@ -20,13 +20,15 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{<i,j>}
+        H = \sum_{\langle i,j \rangle, i < j}
                 \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
-            + \sum_{<<i,j>>}
+            + \sum_{\langle \langle i,j \rangle \rangle, i< j}
                 \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
             - \sum_i
               \mathtt{hx} S^x_i + \mathtt{hy} S^y_i + \mathtt{hz} S^z_i
 
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
+    :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 

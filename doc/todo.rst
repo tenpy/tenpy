@@ -5,7 +5,6 @@ Update doc/changes_TenPy.rst if you've done something.
 Primary goals for the coming release
 ------------------------------------
 - finish documentation and tests on existing stuff
-- script for automatic conversion to python3
 
 
 Concrete things to be fixed in different files
@@ -33,8 +32,6 @@ Wish-list
 - logging mechanism?
 - Johannes Motruk: extend simulation class: save standard variables like entropy, energy, etc?
 - Ruben: extend MPS TransferMatrix class
-- Johannes H: possible to convert to python3? 
-- Johannes H, Maximilian: ED code using the symmetries, including example/test?
 
 Auto-generated To-Do list
 -------------------------

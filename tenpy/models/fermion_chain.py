@@ -13,20 +13,18 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{<i,j>}
-              - \mathtt{J} (c^{\dagger}_i c_j + c_i c^{\dagger}_j) + \mathtt{V} n_i n_j \\
+        H = \sum_{\langle i,j\rangle, i<j}
+              - \mathtt{J} (c^{\dagger}_i c_j + c^{\dagger}_j c_i) + \mathtt{V} n_i n_j \\
             - \sum_i
               \mathtt{mu} n_{i}
 
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`../intro_JordanWigner` for details.
-
-    .. todo ::
-        Check correct use of Jordan-Wigner string.
 
     Parameters
     ----------

@@ -220,7 +220,7 @@ class ExactDiag(object):
         return npc.tensordot(self.full_H, psi, axes=1)
 
     def sparse_diag(self, k, *args, **kwargs):
-        """Call :func:`~tenpy.linalg.speigs`."""
+        """Call :func:`~tenpy.linalg.np_conserved.speigs`."""
         return npc.speigs(self.full_H, self.charge_sector, k, *args, **kwargs)
 
     def _set_full_H(self, full_H):
