@@ -4,7 +4,7 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 
 from random_test import gen_random_legcharge
-from tenpy.linalg import lanczos
+from tenpy.linalg import lanczos, sparse
 import tenpy.linalg.random_matrix as rmat
 
 ch = npc.ChargeInfo([2])
@@ -34,7 +34,7 @@ def test_lanczos(n=30, k=5, tol=5.e-15):
     E0_flat, psi0_flat = E_flat[0], psi_flat[:, 0]
     qtotal = npc.detect_qtotal(psi0_flat, [leg])
 
-    H_Op = lanczos.LinearOperator(H)
+    H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
     E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1})

@@ -67,16 +67,16 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     For stability reasons, we recommend to *not* use this form.
 ``None`` ``None``   General non-canoncial form.
                     Valid form for initialization, but you need to call
-                    :meth:`canonicalize` (or sub-functions) before using algorithms.
+                    :meth:`canonicalize` (or similar) before using algorithms.
 ======== ========== =======================================================================
 """
 
 import numpy as np
 import warnings
-import scipy.sparse as sparse
 import scipy.sparse.linalg.eigen.arpack
 
 from ..linalg import np_conserved as npc
+from ..linalg import sparse
 from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from functools import reduce
@@ -1256,6 +1256,7 @@ class MPS(object):
             for num_ev =1, return just the correlation length,
             otherwise an array of the `num_ev` largest correlation legths.
         """
+        self.convert_form('B')  # ensure uniform canonical form.
         T = TransferMatrix(self, self, charge_sector=charge_sector)
         E, V = T.eigenvectors(num_ev + 1, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
@@ -1595,7 +1596,7 @@ class MPS(object):
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
         # done: just discard the U on the left (trivial phase / norm for finite bc,
-        # and just re-shuffling of the states left for 'segment' bc
+        # and just re-shuffling of the states left for 'segment' bc)
 
     def _canonical_form_infinite(self):
         raise NotImplementedError("TODO")
@@ -1957,14 +1958,14 @@ class MPSEnvironment(object):
         return self.ket._to_valid_index(i)
 
 
-class TransferMatrix(sparse.linalg.LinearOperator):
+class TransferMatrix(sparse.NpcLinearOperator):
     r"""Transfer matrix of two MPS (bra & ket).
 
-    For an iMPS in the thermodynamic limit, we need to find the 'dominant `LP`' (and `RP`).
+    For an iMPS in the thermodynamic limit, we often need to find the 'dominant `LP`' (and `RP`).
     This mean nothing else than to take the transfer matrix of the unit cell and find the
     (left/right) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
     :math:`LP (TM)^n` (or :math:`(TM)^n RP`) in the limit :math:`n \rightarrow \infty` - whatever
-    the initial `LP` is. This class provides exactly that functionality with :meth:`dominant_vec`
+    the initial `LP` is. This class provides exactly that functionality with :meth:`eigenvectors`
 
     Given two MPS, we define the transfer matrix as::
 
@@ -1972,26 +1973,18 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         |       |      |             |
         |    ---N[j]*--N[j+1]* ... --N[j+L]*--
 
-    Here the `M` denotes the `B` of the bra (which are not necessarily in canonical form)
-    and `N` the ones of the ket, respectively.
-
+    Here the `M` denotes the `B` of the bra and `N` the ones of the ket, respectively.
     To view it as a `matrix`, we combine the left and right indices to pipes::
 
-        |  (vL.vL*) ->-TM->- (vR.vR*)
+        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-LP
 
-    In general, the transfer matrix is not Hermitian; thus you shouldn't use lanczos.
-    Instead, we support to select a charge sector and act on numpy arrays, which allows to use the
-    scipy.sparse routines.
-
-    .. todo ::
-        One could create a separate `LinearOperator` class working for both numpy and npc arrays,
-        checking the type of `vec`. Should implement `matvec` exactly as here.
-        Problem: At the time of writing this, the npc.Lanczos.LinalgOperator takes also
-        rank-n Arrays as inputs for matvec! How to infer `shape` and the necessary pipe?
-        Still, might also be useful in algorithms.exact_diag
+    .. warning ::
+        We don't use any canonical form of these `M` and `N` and no singular values,
+        only the matrices as stored. If your state is in canonical form,
+        use :meth:`MPS.convert_form` beforehand to ensure a uniform canonical form.
 
     .. todo ::
-        scipy.sparse.LinearOperator has a conflicting `transpose` method!
+        tests give warnings....
 
     Parameters
     ----------
@@ -1999,8 +1992,6 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         The MPS which is to be (complex) conjugated
     ket : MPS
         The MPS which is not (complex) conjugated.
-    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
-        The nature of the charge.
     shift_bra : int
         We start the `N` of the bra at site `shift_bra`.
     shift_ket : int | None
@@ -2008,10 +1999,9 @@ class TransferMatrix(sparse.linalg.LinearOperator):
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
-        Selects the charge sector of `RP` (for `transpose`=False) which is used for the `matvec`
-        with a dense ndarray.
-        ``None`` (default) stands for *all* sectors, ``0`` stands for the zero-charge sector.
-        Defaults to ``0``, i.e. assumes the dominant eigenvector is in charge sector 0.
+        Selects the charge sector of the vector onto which the Linear operator acts.
+        ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+        Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
 
 
     Attributes
@@ -2019,14 +2009,14 @@ class TransferMatrix(sparse.linalg.LinearOperator):
     L : int
         Number of physical sites involved in the transfer matrix, i.e. the least common multiple
         of `bra.L` and `ket.L`.
-    shape : (int, int)
-        The dimensions for the selected charge sector.
+    shift_bra : int
+        We start the `N` of the bra at site `shift_bra`.
+    shift_ket : int | None
+        We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     qtotal : charges
         Total charge of the transfer matrix (which is gauged away in matvec).
-    matvec_count : int
-        The number of `matvec` operations performed.
     _bra_N : list of npc.Array
         The matrices of the ket, transposed for fast `matvec`.
     _ket_M : list of npc.Array
@@ -2034,7 +2024,7 @@ class TransferMatrix(sparse.linalg.LinearOperator):
     _pipe : :class:`~tenpy.linalg.charges.LegPipe`
         Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
         or to ``'(vR.vR*)'`` for ``transpose=True``.
-    _charge_sector : None | charges
+    charge_sector : None | charges
         The charge sector of `RP` (`LP` for `transpose`) which is used for the :meth:`matvec`
         with a dense ndarray. ``None`` stands for *all* sectors.
     _mask : bool ndarray
@@ -2048,103 +2038,63 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
         self.transpose = transpose
-        if not transpose:
-            M = self._ket_M = [
-                ket.get_B(i, form='B').itranspose(['vL', 'p', 'vR'])
-                for i in range(shift_ket, shift_ket + L)
-            ]
-            N = self._bra_N = [
-                bra.get_B(i, form='B').conj().itranspose(['p*', 'vR*', 'vL*'])
-                for i in range(shift_bra, shift_bra + L)
-            ]
-        else:
-            M = self._ket_M = [
-                ket.get_B(i, form='A').itranspose(['vR', 'p', 'vL'])
-                for i in range(shift_ket, shift_ket + L)
-            ]
-            N = self._bra_N = [
-                bra.get_B(i, form='A').conj().itranspose(['p*', 'vL*', 'vR*'])
-                for i in range(shift_bra, shift_bra + L)
-            ]
-        self.chinfo = bra.chinfo
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
-        self.qtotal = self.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        self._pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1)
-        if transpose:
-            self._pipe = self._pipe.conj()
-        self.shape = (self._pipe.ind_len, self._pipe.ind_len)
-        self.dtype = np.promote_types(bra.dtype, ket.dtype)
-        self.matvec_count = 0
-        self._charge_sector = None
-        self._mask = None
-        self.charge_sector = charge_sector  # uses the setter
+        if not transpose:  # right to left
+            label = '(vL.vL*)'  # what we act on
+            M = self._ket_M = [
+                ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                for i in reversed(range(shift_ket, shift_ket + L))
+            ]
+            N = self._bra_N = [
+                bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                for i in reversed(range(shift_bra, shift_bra + L))
+            ]
+            pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
+        else:  # right to left
+            label = '(vR.vR*)'
+            M = self._ket_M = [
+                ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                for i in range(shift_ket, shift_ket + L)
+            ]
+            N = self._bra_N = [
+                bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                for i in range(shift_bra, shift_bra + L)
+            ]
+            pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=-1).conj()
+        dtype = np.promote_types(bra.dtype, ket.dtype)
+        self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
+        self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
 
-    @property
-    def charge_sector(self):
-        """Charge sector of `RP` (`LP` for `transpose) which is used for `matvec` with ndarray."""
-        return self._charge_sector
+    def matvec(self, vec):
+        """Given `vec` as an npc.Array, apply the transfer matrix.
 
-    @charge_sector.setter
-    def charge_sector(self, value):
-        if type(value) == int and value == 0:
-            value = self.chinfo.make_valid()  # zero charges
-        elif value is not None:
-            value = self.chinfo.make_valid(value)
-        self._charge_sector = value
-        if value is not None:
-            self._mask = np.all(self._pipe.to_qflat() == value[np.newaxis, :], axis=1)
-            self.shape = tuple([np.sum(self._mask)] * 2)
-        else:
-            chi2 = self._pipe.ind_len
-            self.shape = (chi2, chi2)
-            self._mask = np.ones([chi2], dtype=np.bool)
-
-    def _matvec(self, vec):
-        """Apply the transfer matrix to `vec`.
-
-        Parameters
-        ----------
-        vec : ndarray | :class:`~tenpy.linalg.np_conserved.Array`
-
+        Arguments
+        ---------
+        vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Vector to act on with the transfermatrix.
+            If not `transposed`, `vec` is the right part `RP` of an environment,
+            with legs ``'(vL.vL*)'`` in a pipe or separately.
+            If `transposed`, the left part `LP` of an environment with legs ``'(vR.vR*)'``.
 
         Returns
         -------
-        TM_vec : ndarray | :class:`~tenpy.linalg.np_conserved.Array`
-            The transfer matrix applied to `vec`, in the same type/form as `vec` was given.
+        mat_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            The tranfer matrix acted on `vec`, in the same form as given.
+            or as separate legs.
         """
-        self.matvec_count += 1
-        # handle both npc Arrays and ndarray....
-        if isinstance(vec, npc.Array):
-            return self._matvec_npc(vec)
-        return self._matvec_flat(vec)
-
-    def _matvec_flat(self, vec):
-        """matvec operation for a numpy ndarray corresponding to the selected charge sector."""
-        # convert into npc Array
-        npc_vec = self._flat_to_npc(vec)
-        # apply the transfer matrix
-        npc_vec = self._matvec_npc(npc_vec)
-        # convert back into numpy ndarray.
-        return self._npc_to_flat(npc_vec)
-
-    def _matvec_npc(self, vec):
-        """Given `vec` as an npc.Array, apply the transfer matrix.
-
-        The bra/ket legs of `vec` may be in a pipe, but don't have to be.
-        We return it the same way as we got it (with the same legs and charges)."""
         pipe = None
         if vec.rank == 1:
             vec = vec.split_legs(0)
-            pipe = self._pipe
+            pipe = self.flat_linop.leg
         qtotal = vec.qtotal
         legs = vec.legs
         # the actual work
-        if not self.transpose:
-            for N, M in zip(reversed(self._bra_N), reversed(self._ket_M)):
+        if not self.transpose:  # right to left
+            for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
-        else:
+        else:  # left to right
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
                 vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
@@ -2156,42 +2106,6 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         if pipe is not None:
             vec = vec.combine_legs([0, 1], pipes=pipe)
         return vec
-
-    def _flat_to_npc(self, vec):
-        """Convert flat vector of selected charge sector into npc Array.
-
-        Parameters
-        ----------
-        vec : 1D ndarray
-            Numpy vector to be converted. Should have the entries according to self.charge_sector.
-
-        Returns
-        -------
-        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Same as `vec`, but converted into a flat array.
-        """
-        full_vec = np.zeros(self._pipe.ind_len)
-        full_vec[self._mask] = vec
-        res = npc.Array.from_ndarray(full_vec, [self._pipe])
-        res.iset_leg_labels(['(vL.vL*)'])
-        return res
-
-    def _npc_to_flat(self, npc_vec):
-        """Convert npc Array with qtotal = self.charge_sector into ndarray.
-
-        Parameters
-        ----------
-        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Npc Array to be converted. Should have the entries according to self.charge_sector.
-
-        Returns
-        -------
-        vec : 1D ndarray
-            Same as `npc_vec`, but converted into a flat array.
-        """
-        if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
-            raise ValueError("npc_vec.qtotal and charge sector don't match!")
-        return npc_vec.to_ndarray()[self._mask]
 
     def eigenvectors(self, num_ev=1, max_num_ev=None, max_tol=1.e-12, which='LM', **kwargs):
         """Find (dominant) eigenvector(s) of self using scipy.sparse.
@@ -2223,25 +2137,26 @@ class TransferMatrix(sparse.linalg.LinearOperator):
         """
         if max_num_ev is None:
             max_num_ev = num_ev + 2
-        if self.charge_sector is None:
+        flat_linop = self.flat_linop
+        if flat_linop.charge_sector is None:
             # Try for all charge sectors
             eta = []
             A = []
-            for chsect in self._pipe.charge_sectors():
-                self.charge_sector = chsect
+            for chsect in flat_linop.possible_charge_sectors:
+                flat_linop.charge_sector = chsect
                 eta_cs, A_cs = self.eigenvectors(num_ev, max_num_ev, max_tol, which, **kwargs)
                 eta.extend(eta_cs)
                 A.extend(A_cs)
-            self.charge_sector = None
+            flat_linop.charge_sector = None
         else:
             # for given charge sector
             for k in range(num_ev, max_num_ev + 1):
                 if k > num_ev:
                     warnings.warn("increased `num_ev` to " + str(k + 1))
                 try:
-                    eta, A = speigs(self, k=k, which='LM', **kwargs)
+                    eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
                     A = np.real_if_close(A)
-                    A = [self._flat_to_npc(A[:, j]) for j in range(A.shape[1])]
+                    A = [flat_linop.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
                     break
                 except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
                     if k == max_num_ev:

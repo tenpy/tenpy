@@ -6,27 +6,6 @@ import numpy as np
 import warnings
 
 
-class LinearOperator(object):
-    """Generic Linear Operator for :class:`~tenpy.linalg.np_conserved.Array`.
-
-    This is a prototype for a Linear Operator as required by the Lanczos algorithm.
-    Note that ``__init__`` is not used by :func:`lanczos`; so any class
-    implementing the :meth:`matvec` method can be used as effective linear operator.
-
-    Parameters
-    ----------
-    M : :class:`~tenpy.linalg.np_conserved.Array`
-        A square matrix defining the `matvec` function as contraction
-    """
-
-    def __init__(self, M):
-        self.M = M
-
-    def matvec(self, v):
-        """Application of the Linear operator to a vector."""
-        return npc.tensordot(self.M, v, axes=[[1], [0]])
-
-
 def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
 
@@ -73,13 +52,13 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
 
 
 def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
-    """Frank's Lanczos Algorithm for finding the lowest Eigenvector.
+    """Lanczos Algorithm for finding the lowest Eigenvector.
 
     Parameters
     ----------
-    A : LinearOperator
+    A : :class:`~tenpy.linalg.sparse.LinearOperator`-like
         A hermitian linear operator. Must implement the method `matvec` acting on a
-        :class:`~tenpy.linalg.np_conserved.Array`.
+        :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
     psi : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector. Should be the best guess available.
     lanczos_params : dict

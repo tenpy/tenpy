@@ -37,6 +37,7 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
             5: 40
         },
         'max_E_err': 1.e-12,
+        #  'max_S_err': 1.e-12,
         'N_sweeps_check': 4,
         'mixer_params': {
             'disable_after': 6,
@@ -50,6 +51,8 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
     if mixer is None:
         del dmrg_pars['mixer_params']  # avoid warning of unused parameter
     if bc_MPS == 'infinite':
+        if mixer is not None:
+            dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
         dmrg_pars['start_env'] = 1
     res = dmrg.run(psi, M, dmrg_pars)
     if bc_MPS == 'finite':

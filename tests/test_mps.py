@@ -9,6 +9,8 @@ import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import mps, site
+from random_test import gen_random_legcharge
+import tenpy.linalg.np_conserved as npc
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -111,8 +113,27 @@ def test_singlet_mps():
     #  ov = psi.overlap(psi2)
 
 
+def test_transfermatrix(chi=6, d=3):
+    ch = npc.ChargeInfo([2])
+    p = gen_random_legcharge(ch, d, qconj=1)
+    vL = gen_random_legcharge(ch, chi, qconj=1)
+    vR = gen_random_legcharge(ch, chi, qconj=-1)
+    A = npc.Array.from_func(np.random.random, [vL, p, vR], shape_kw='size')
+    B = npc.Array.from_func(np.random.random, [vR.conj(), p, vL.conj()], shape_kw='size')
+    A.iset_leg_labels(['vL', 'p', 'vR'])
+    B.iset_leg_labels(['vL', 'p', 'vR'])
+    S = [np.ones(chi)]*3
+    psi = mps.MPS([site.Site(p)]*2, [A, B], S, 'infinite', form=None)
+    # now actually generate the transfermatrix
+    TM = mps.TransferMatrix(psi, psi, charge_sector=0)
+    eta, w = TM.eigenvectors(3)
+    print("transfer matrix yields:")
+    print(eta, w)
+
+
 if __name__ == "__main__":
     test_mps()
     test_mps_add()
     test_MPSEnvironment()
     test_singlet_mps()
+    test_transfermatrix()
