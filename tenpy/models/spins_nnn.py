@@ -23,7 +23,7 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         H = \sum_{\langle i,j \rangle, i < j}
                 \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
             + \sum_{\langle \langle i,j \rangle \rangle, i< j}
-                \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j \\
+                \mathtt{Jxp} S^x_i S^x_j + \mathtt{Jyp} S^y_i S^y_j + \mathtt{Jzp} S^z_i S^z_j \\
             - \sum_i
               \mathtt{hx} S^x_i + \mathtt{hy} S^y_i + \mathtt{hz} S^z_i
 

@@ -498,7 +498,7 @@ class MPS(object):
         but the values of B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
-        return MPS(self.sites, self._B, self._S, self.bc, self.form)
+        return MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
 
     @property
     def L(self):
@@ -1937,7 +1937,7 @@ class MPSEnvironment(object):
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self.bra.get_theta(i, n)
             E.append(npc.inner(theta_bra, C, axes=[th_labels] * 2, do_conj=True))
-        return np.real_if_close(np.array(E))
+        return np.real_if_close(np.array(E)) * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
