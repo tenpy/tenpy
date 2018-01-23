@@ -305,7 +305,7 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    acomb = a.combine_legs([[0, 1], [2]])
+    acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)
@@ -315,7 +315,7 @@ def test_npc_Array_reshape_2():
     # expensive: compare all entries
     for i, j, k in it.product(*[list(range(s)) for s in shape]):
         ij = pipe.map_incoming_flat([i, j])
-        print(i, j, ij)
+        print(i, j, k, ij)
         assert (acombflat[ij, k] == aflat[i, j, k])
     # done
 

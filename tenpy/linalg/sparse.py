@@ -173,7 +173,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         """
         if self._charge_sector is None:
             raise ValueError("By definition, this can't work for all charges at once!")
-        res = npc.zeros([self.leg], self.dtype, self._charge_sector)
+        res = npc.zeros([self.leg], vec.dtype, self._charge_sector)
         res[self._mask] = vec
         if self.vec_label is not None:
             res.iset_leg_labels([self.vec_label])
@@ -194,7 +194,9 @@ class FlatLinearOperator(ScipyLinearOperator):
         """
         if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
             raise ValueError("npc_vec.qtotal and charge sector don't match!")
-        return npc_vec.to_ndarray()[self._mask]
+        if isinstance(npc_vec.legs[0], npc.LegPipe):
+            npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
+        return npc_vec[self._mask].to_ndarray()
 
 
 class FlatHermitianOperator(FlatLinearOperator):

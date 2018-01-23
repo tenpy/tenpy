@@ -732,7 +732,11 @@ cdef class Array(object):
         # advanced indexing
         if not isinstance(other, Array):
             # if other is a flat array, convert it to an npc Array
-            like_other = self.zeros_like()._advanced_getitem(inds)
+            like_other = self.zeros_like()
+            for i, leg in enumerate(like_other.legs):
+                if isinstance(leg, LegPipe):
+                    like_other.legs[i] = leg.to_LegCharge()
+            like_other = like_other._advanced_getitem(inds)
             other = Array.from_ndarray(other, like_other.legs, self.dtype, like_other.qtotal)
         self._advanced_setitem_npc(inds, other)
 
