@@ -32,6 +32,7 @@ Wish-list
 - logging mechanism?
 - Johannes Motruk: extend simulation class: save standard variables like entropy, energy, etc?
 - Ruben: extend MPS TransferMatrix class
+- Jakob: function for Arrays: Perfrom trace over multiple pairs of legs at once. Tracing one after the other calculates unnecessary "off-diagonal" elements.
 
 Auto-generated To-Do list
 -------------------------
