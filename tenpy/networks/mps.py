@@ -1581,7 +1581,7 @@ class MPS(object):
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(
-            M.combine_legs(['vR'] + self._p_label, qconj=-1), inner_labels=['vR', 'vL'])
+            M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
         if not renormalize:
             self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
@@ -1591,7 +1591,7 @@ class MPS(object):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1), inner_labels=['vR', 'vL'])
+                M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')

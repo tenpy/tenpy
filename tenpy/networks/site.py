@@ -8,7 +8,7 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
-__all__ = ['Site', 'SpinHalfSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
+__all__ = ['Site', 'DoubleSite', 'SpinHalfSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
 
 
 class Site(object):
@@ -249,7 +249,7 @@ class Site(object):
         res = self.state_labels.get(label, label)
         try:
             res = int(res)
-        except:
+        except ValueError:
             raise KeyError("label not found: " + repr(label))
         return res
 
@@ -371,7 +371,7 @@ class DoubleSite(Site):
         The labels which are added to the single-site operators during construction.
     """
 
-    def __init__(self, site0, site1, label0='0', label1='1', charges='drop', JW=False):
+    def __init__(self, site0, site1, label0='0', label1='1', charges='drop'):
         if charges == 'drop':
             leg0 = npc.LegCharge.from_drop_charge(site0.leg)
             leg1 = npc.LegCharge.from_drop_charge(site1.leg, chargeinfo=leg0.chinfo)
@@ -446,7 +446,7 @@ class DoubleSite(Site):
 
 
 class SpinHalfSite(Site):
-    """Spin-1/2 site.
+    r"""Spin-1/2 site.
 
     Local states are ``up``(0) and ``down``(1).
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
@@ -515,7 +515,7 @@ class SpinHalfSite(Site):
 
 
 class SpinSite(Site):
-    """General Spin S site.
+    r"""General Spin S site.
 
     There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
     corresponding to ``Sz=-S, -S+1, ..., S-1, S``.

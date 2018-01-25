@@ -24,6 +24,8 @@ To be done at some point for the next releases
   e.g. if we use DMRG with charge conservation and want to quench and time evolve 
   with a different hamiltonian violating some charge conservation...
   Should be possible using Site.perm correctly...
+- suggest installing nose2 instead of nose, change compatibility as needed. Like numpy: tests directly in tenpy tree?
+- trace: allow multiple axes to be traced over; optimize
 
 
 Wish-list

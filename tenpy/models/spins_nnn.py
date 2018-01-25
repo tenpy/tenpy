@@ -77,7 +77,7 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         unused_parameters(model_param, self.__class__)
         # 1) define Site and lattice
         spinsite = SpinSite(S, conserve)
-        site = DoubleSite(spinsite, spinsite)
+        site = DoubleSite(spinsite, spinsite, charges='same')
         lat = Chain(L, site, bc_MPS=bc_MPS)
         # 2) initialize CouplingModel
         bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
