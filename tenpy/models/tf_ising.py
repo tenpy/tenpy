@@ -85,9 +85,11 @@ class TFIModel2D(CouplingModel, MPOModel):
     The Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{<i,j>} \mathtt{J} \sigma^x_i \sigma^x_{j}
+        H = - \sum_{\langle i,j\rangle, i < j} \mathtt{J} \sigma^x_i \sigma^x_{j}
             - \sum_{i} \mathtt{g} \sigma^z_i
 
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
+    exactly once.
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
@@ -120,7 +122,7 @@ class TFIModel2D(CouplingModel, MPOModel):
         bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
         order = get_parameter(model_param, 'order', 'default', self.__class__)
         conserve = get_parameter(model_param, 'conserve', None, self.__class__)
-        assert conserve != 'Sz'
+        assert conserve != 'Sz'  # invalid!
         assert bc_y in ['cylinder', 'ladder']
         unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
         # 1-3)

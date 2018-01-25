@@ -5,6 +5,8 @@ Update doc/changes_TenPy.rst if you've done something.
 Primary goals for the coming release
 ------------------------------------
 - finish documentation and tests on existing stuff
+- Make it OpenSource :)
+- MPS.compute_K....
 
 
 Concrete things to be fixed in different files
