@@ -721,7 +721,7 @@ class MPS(object):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
         Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and
-        :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`rho_A = tr_B(\rho)`.
+        :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`\rho_A = tr_B(\rho)`.
         The von-Neumann entanglement entropy is defined as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
         The generalization for ``n != 1, n>0`` are the Renyi entropies:
@@ -833,15 +833,15 @@ class MPS(object):
         ent_spectrum : list
             For each (non-trivial) bond the entanglement spectrum.
             If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
-            with the convetion :math:`S_i = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
-            and math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
+            with the convetion :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
             If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
             for each possible charge on that bond.
         """
         if by_charge:
             res = []
             for i in range(self.L + 1)[self.nontrivial_bonds]:
-                ss = -np.log(self._S[i])
+                ss = -2.*np.log(self._S[i])
                 if i < self.L:
                     leg = self._B[i].get_leg('vL')
                 else:  # i == L: segment b.c.
@@ -851,7 +851,7 @@ class MPS(object):
                 res.append(spectrum)
             return res
         else:
-            return [np.sort(-np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
+            return [np.sort(-2.*np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
 
     def get_rho_segment(self, segment):
         """Return reduced density matrix for a segment.

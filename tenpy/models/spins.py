@@ -23,7 +23,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         H = \sum_{\langle i,j\rangle, i < j}
               \mathtt{Jx} S^x_i S^x_j + \mathtt{Jy} S^y_i S^y_j + \mathtt{Jz} S^z_i S^z_j
             + \mathtt{muJ} i/2 (S^{-}_i S^{+}_j - S^{+}_i S^{-}_j)  \\
-            - \sum_i \mathtt{hx} S^x_i + \mathtt{hy} S^y_i + \mathtt{hz} S^z_i
+            - \sum_i \mathtt{hx} S^x_i + \mathtt{hy} S^y_i + \mathtt{hz} S^z_i \\
+            + \sum_i \mathtt{D} (S^z_i)^2 + \mathtt{E} ((S^x_i)^2 - (S^y_i)^2)
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_param` and read out with
@@ -37,7 +38,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         The 2S+1 local states range from m = -S, -S+1, ... +S.
     conserve : 'best' | 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-    Jx, Jy, Jz, hx, hy, hz, muJ: float | array
+    Jx, Jy, Jz, hx, hy, hz, muJ, D, E: float | array
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
@@ -53,6 +54,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         hx = get_parameter(model_param, 'hx', 0., self.__class__)
         hy = get_parameter(model_param, 'hy', 0., self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
+        D = get_parameter(model_param, 'D', 0., self.__class__)
+        E = get_parameter(model_param, 'E', 0., self.__class__)
         muJ = get_parameter(model_param, 'muJ', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         S = get_parameter(model_param, 'S', 0.5, self.__class__)
@@ -60,7 +63,7 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         # check what we can conserve
         if conserve == 'best':
             # check how much we can conserve:
-            if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy'], "check Sz conservation"):
+            if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy', 'E'], "check Sz conservation"):
                 conserve = 'Sz'
             elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
@@ -80,6 +83,9 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_onsite(-np.asarray(hx), 0, 'Sx')
         self.add_onsite(-np.asarray(hy), 0, 'Sy')
         self.add_onsite(-np.asarray(hz), 0, 'Sz')
+        self.add_onsite(np.asarray(D), 0, 'Sz Sz')
+        self.add_onsite(np.asarray(E)*0.5, 0, 'Sp Sp')
+        self.add_onsite(np.asarray(E)*0.5, 0, 'Sm Sm')
         Jx = np.asarray(Jx)
         Jy = np.asarray(Jy)
         muJ = np.asarray(muJ)
