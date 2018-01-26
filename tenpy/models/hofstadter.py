@@ -4,12 +4,94 @@
 import numpy as np
 
 from .lattice import SquareLattice
-from ..networks.site import BosonSite
+from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 
-__all__ = ['HofstadterBosons']
+__all__ = ['HofstadterBosons', 'HofstadterFermions']
 
+class HofstadterFermions(CouplingModel, MPOModel):
+    r"""Fermions on a square lattice with magnetic flux.
+
+    For now, the Hamiltonian reads:
+
+    .. math ::
+        H = - \sum_{x, y} \mathtt{Jx} (c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi} x} c^\dagger_{x,y} c_{x,y+1} + h.c.)
+
+
+    All parameters are collected in a single dictionary `model_param` and read out with
+    :func:`~tenpy.tools.params.get_parameter`.
+
+    .. todo :
+        More complicated hopping amplitudes...
+
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        Size of the simulation unit cell in terms of lattice sites.
+    filling : float
+        Average number of fermions per site.
+        Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+    Jx, Jy, phi: float
+        Hamiltonian parameters as defined above.
+    bc_MPS : {'finite' | 'infinte'}
+        MPS boundary conditions along the x-direction.
+        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+        Coupling boundary conditions in x-direction are chosen accordingly.
+    bc_y : 'ladder' | 'cylinder'
+        Boundary conditions in y-direction.
+    conserve : {'N' | 'parity' | None}
+        What quantum number to conserve.
+    order : string
+        Ordering of the sites in the MPS, e.g. 'default', 'snake';
+        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+    """
+
+    def __init__(self, model_param):
+        # 0) read out/set default parameters
+        Lx = get_parameter(model_param, 'Lx', 4, self.__class__)
+        Ly = get_parameter(model_param, 'Ly', 2, self.__class__)
+        filling = get_parameter(model_param, 'filling', 0.125, self.__class__)
+        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
+        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
+        phi = get_parameter(model_param, 'phi', 2.*np.pi/Lx, self.__class__)
+        bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
+        bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
+        conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
+        order = get_parameter(model_param, 'order', 'default', self.__class__)
+        unused_parameters(model_param, self.__class__)
+
+        assert bc_y in ['cylinder', 'ladder']
+
+        # 1-4) Define the sites and the lattice.
+        site = FermionSite(conserve=conserve, filling=filling)
+        lat = SquareLattice(Lx, Ly, site, order, bc_MPS=bc_MPS)
+        bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        # 5) initialize CouplingModel
+        CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
+
+        # 6) add terms of the Hamiltonian
+        #self.add_onsite(np.asarray(U)/2, 0, 'NN')
+        #self.add_onsite(-np.asarray(U)/2 - np.asarray(mu), 0, 'N')
+
+        # hopping in x-direction: uniform
+        self.add_coupling(-Jx, 0, 'Cd', 0, 'C', (1, 0), 'JW', True)
+        self.add_coupling(-Jx, 0, 'Cd', 0, 'C', (-1, 0), 'JW', True)
+        #self.add_coupling(Jx, 0, 'C', 0, 'Cd', (1, 0), 'JW', True)
+        # hopping in y-direction:
+        # The hopping amplitudes depend on position -> use an array for couplings.
+        # If the array is smaller than the actual number of couplings,
+        # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
+        # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+        hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
+        self.add_coupling(hop_y, 0, 'Cd', 0, 'C', [0, 1], 'JW', True)
+        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', [0, -1], 'JW', True)
+
+        # 7) initialize MPO
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
 
 class HofstadterBosons(CouplingModel, MPOModel):
     r"""Bosons on a square lattice with magnetic flux.
@@ -93,8 +175,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
         # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
-        self.add_coupling(hop_y, 0, 'B', 0, 'Bd', [0, 1])
-        self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', [0, 1])
+        self.add_coupling(hop_y, 0, 'Bd', 0, 'B', [0, 1])
+        self.add_coupling(np.conj(hop_y), 0, 'B', 0, 'Bd', [0, 1])
 
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
