@@ -12,6 +12,8 @@ Primary goals for the coming release
 Concrete things to be fixed in different files
 ----------------------------------------------
 - The MPO class has no function for expectation value with MPS
+- Since we switched to python 3 completely, there's no need to subclass 'object' anymore.
+- npc.Array: comparison with ==, pickle, hashable?
 
 
 To be done at some point for the next releases

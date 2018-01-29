@@ -113,6 +113,19 @@ def test_singlet_mps():
     #  ov = psi.overlap(psi2)
 
 
+def test_mps_swap():
+    L = 6
+    pairs = [(0, 3), (1, 5), (2, 4)]
+    pairs_swap = [(0, 2), (1, 5), (3, 4)]
+    print("singlet pairs: ", pairs)
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='finite')
+    psi_swap = mps.MPS.from_singlets(spin_half, L, pairs_swap, bc='finite')
+    psi.swap_sites(2)
+    assert (psi.overlap(psi_swap)[0] - 1.) < 1.e-15
+    # now test permutation
+
+
+
 def test_transfermatrix(chi=6, d=3):
     ch = npc.ChargeInfo([2])
     p = gen_random_legcharge(ch, d, qconj=1)

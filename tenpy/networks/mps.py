@@ -80,6 +80,9 @@ from ..linalg import sparse
 from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from functools import reduce
+from ..algorithms.truncation import svd_theta
+
+__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
 
 
 class MPS(object):
@@ -624,7 +627,7 @@ class MPS(object):
         """
         i = self._to_valid_index(i)
         op = op_list[i % len(op_list)]
-        if (type(op) == str):
+        if (isinstance(op, str)):
             op = self.sites[i].get_op(op)
         return op
 
@@ -1343,12 +1346,79 @@ class MPS(object):
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger.legs[0])) < 1.e-14
-        if (type(op) == str):
+        if (isinstance(op, str)):
             op = self.sites[i].get_op(op)
         opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         self._B[i] = opB
         if not unitary:
             self.canonical_form(renormalize)
+
+    def swap_sites(self, i, swapOP='auto', trunc_par={}):
+        """Swap the two neighboring sites `i` and `i`+1.
+
+        Exchange two neighboring sites: form theta, 'swap' the physical legs and split
+        with an svd. While the 'swap' is just a transposition/relabeling for bosons, one needs to
+        be careful about the sign for fermions.
+
+        Parameters
+        ----------
+        i : int
+            Swap the two sites at positions `i` and `i`+1.
+        trunc_par : dict
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+        swapOP : ``None`` | ``'auto'`` | npc.Array
+            The operator used to swap the phyiscal legs of the two-site wave function `theta`.
+            For ``None``, just transpose/relabel the legs,
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state introduced by the truncation after the swap.
+        """
+        siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i+1)]
+        if swapOP == 'auto':
+            # get sign for Fermions.
+            # If we write the wave function as
+            # psi = sum_{ [n_i]} psi_[n_i] prod_i (c^dagger_i)^{n_i}  |vac>
+            # we see that switching i <-> i+1 the phase to be introduced is by commuting
+            # (c^dagger_i)^{n_i} with (c^dagger_{i+1})^{n_{i+1}}
+            # This gives a sign (-1)^{n_i * n_{i+1}}.
+            # site.JW_exponent is the `n_i` in the above equations, for each physical index.
+            sign = siteL.JW_exponent[:, np.newaxis] * siteR.JW_exponent[np.newaxis, :]
+            if np.any(sign):
+                dL, dR = siteL.dim, siteR.dim
+                sign = np.real_if_close(np.exp(1.j*np.pi*sign.reshape([dL*dR])))
+                swapOP = np.diag(sign).reshape([dL, dR, dL, dR])
+                legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
+                swapOP = npc.Array.from_ndarray(swapOP, legs)
+                swapOP.iset_leg_labels(['p1', 'p0', 'p0*', 'p1*'])
+            else:  # no sign necessary
+                swapOP = None  # continue with transposition as for Bosons
+        theta = self.get_theta(i, n=2)
+        C = self.get_theta(i, n=2, formL=0.)  # inversion free, see also TEBDEngine.update_bond()
+        if swapOP is None:
+            # just replace the labels, effectively this is a transposition.
+            theta.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
+            C.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
+        elif isinstance(swapOP, npc.Array):
+            theta = npc.tensordot(swapOP, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
+            C = npc.tensordot(swapOP, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        else:
+            raise ValueError("Invalid swapOP: got " + repr(swapOP))
+        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
+        U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+        B_R = V.split_legs(1).ireplace_label('p1', 'p')
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(vR.p1)', '(vR*.p1*)'])
+        B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
+        B_L /= renormalize  # re-normalize to <psi|psi> = 1
+        self.set_SR(i, S)
+        self.set_B(i, B_L, 'B')
+        self.set_B(i+1, B_R, 'B')
+        self.sites[self._to_valid_index(i)] = siteR  # swap 'sites' as well
+        self.sites[self._to_valid_index(i+1)] = siteL
+        return err
 
     def __str__(self):
         """Some status information about the MPS."""
@@ -1500,11 +1570,11 @@ class MPS(object):
         """get default arguments of self.correlation_function()"""
         if sites1 is None:
             sites1 = range(0, self.L)
-        elif type(sites1) == int:
+        elif isinstance(sites1, int):
             sites1 = range(0, sites1)
         if sites2 is None:
             sites2 = range(0, self.L)
-        elif type(sites2) == int:
+        elif isinstance(sites2, int):
             sites2 = range(0, sites2)
         ops1 = npc.to_iterable_arrays(ops1)
         ops2 = npc.to_iterable_arrays(ops2)
@@ -1590,8 +1660,9 @@ class MPS(object):
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              cutoff=0.,
+                              inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')

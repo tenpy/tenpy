@@ -329,6 +329,9 @@ class PurificationMPS(MPS):
         env = PurificationMPSEnvironment(self, other)
         return env.full_contraction(0), env
 
+    def swap_sites(self, i, swapOP='auto', trunc_par={}):
+        raise NotImplementedError()
+
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'
