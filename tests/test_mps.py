@@ -2,6 +2,7 @@
 
 .. todo ::
     A lot more to test...
+    Test for compute_K !
 """
 
 import numpy as np

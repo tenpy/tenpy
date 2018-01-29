@@ -6,7 +6,6 @@ Primary goals for the coming release
 ------------------------------------
 - finish documentation and tests on existing stuff
 - Make it OpenSource :)
-- MPS.compute_K....
 
 
 Concrete things to be fixed in different files
@@ -14,6 +13,11 @@ Concrete things to be fixed in different files
 - The MPO class has no function for expectation value with MPS
 - Since we switched to python 3 completely, there's no need to subclass 'object' anymore.
 - npc.Array: comparison with ==, pickle, hashable?
+- MPS class: bugfix: dtype as property, or check dtype in set_B
+- MPS class: group_sites, split_sites, pad
+- MPS class: probability_per_charge, charge_variance
+- MPS class: string correlation function
+- MPS class: pollmann_turner
 
 
 To be done at some point for the next releases

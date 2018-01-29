@@ -1364,9 +1364,12 @@ class MPS(object):
         ----------
         i : int
             Swap the two sites at positions `i` and `i`+1.
-        swap_op : ``None`` | ``'auto'`` | npc.Array
+        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
             The operator used to swap the phyiscal legs of the two-site wave function `theta`.
-            For ``None``, just transpose/relabel the legs,
+            For ``None``, just transpose/relabel the legs, for ``'auto'`` also take care of
+            fermionic signs. Alternative give an npc :class:`~tenpy.linalg.np_conserved.Array`
+            which represents the full operator used for the swap.
+            Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
 
@@ -1428,20 +1431,24 @@ class MPS(object):
         perm : ndarray[ndim=1, int]
             The applied permutation, such that ``psi.permute_sites(perm)[i] = psi[perm[i]]``
             (where ``[i]`` indicates the `i`-th site).
-        swap_op : ``None`` | ``'auto'`` | npc.Array
-            The operator used to swap the phyiscal legs of the two-site wave function `theta`.
-            For ``None``, just transpose/relabel the legs,
+        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
+            The operator used to swap the phyiscal legs of a two-site wave function `theta`,
+            see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-        verbose : int
-            Print status messages if verbose > 0.
+        verbose : float
+            Level of verbosity, print status messages if verbose > 0.
 
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
-        # In order to keep sites close together, we always scan from the left until we white
+        # In order to keep sites close together, we always scan from the left,
+        # keeping everything up to `i` in strictly ascending order.
+        # => more or less an 'insertion' sort algorithm.
+        # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
+        # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -1455,13 +1462,108 @@ class MPS(object):
                 num_swaps += 1
                 x, y = perm[i], perm[i+1]
                 perm[i+1], perm[i] = x, y
-                i = 0
+                # restart from very left; but we know it's already sorted up to i-1
+                if i > 0:
+                    i -= 1
                 trunc_err += trunc
             else:
                 i += 1
         if verbose > 0:
-            print("Total swaps in permute_sites:", num_swaps, ", total error:", trunc_err)
+            print("Total swaps in permute_sites:", num_swaps, repr(trunc_err))
         return trunc_err
+
+    def compute_K(self, perm, swap_op='auto', trunc_par={}, canonicalize=1.e-6, verbose=0):
+        r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
+
+        Works for an infinite MPS living on a cylinder, infinitely long in `x` direction and with
+        periodic boundary conditions in `y` directions.
+        If the state is invariant under 'rotations' around the cylinder axis, one can find the
+        momentum quantum numbers of it. (The rotation is nothing more than a translation in `y`.)
+        This function permutes some sites (on a copy of `self`) to enact the rotation, and then
+        finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
+        along the lines of [PollmannTurner2012]_.
+
+
+        Parameters
+        ----------
+        perm : 1D ndarray | :class:`~tenpy.models.lattice.Lattice`
+            Permuation to be applied to the physical indices, see :meth:`permute_sites`.
+            If a lattice is given, we use it to read out the lattice structure and shift
+            each site by one lattice-vector in y-direction (assuming periodic boundary conditions).
+            (If you have a :class:`~tenpy.models.model.CouplingModel`,
+            give its `lat` attribute for this argument)
+        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
+            The operator used to swap the phyiscal legs of a two-site wave function `theta`,
+            see :meth:`swap_sites`.
+        trunc_par : dict
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+        canonicalize : float
+            Check that `self` is in canonical form; call :meth:`canonical_form`
+            if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
+        verbose : float
+            Level of verbosity, print status messages if verbose > 0.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Unitary representation of the applied permutation on left Schmidt states.
+        W : ndarray
+            1D array of the form ``S**2 exp(i K)``, where `S` are the singular values
+            on the left bond.
+        q : :class:`~tenpy.linalg.charges.LegCharge`
+            LegCharge corresponding to `W`.
+        ov : complex
+            The eigenvalue of the mixed transfer matrix `<psi|T|psi>` per :attr:`L` sites.
+        """
+        from ..models.lattice import Lattice  # dynamical import to avoid import loops
+        if self.finite:
+            raise ValueError("Works only for infinite b.c.")
+
+        if isinstance(perm, Lattice):
+            lat = perm
+            assert lat.dim >= 2  # ensure that the lattice is at least 2D
+            assert lat.N_sites == self.L
+            shifted_lat_order = lat.order.copy()
+            shifted_lat_order[:, 1] = np.mod(shifted_lat_order[:, 1] + 1, lat.Ls[1])
+            perm = lat.lat2mps_idx(shifted_lat_order)
+            if verbose > 1:
+                print("permutation: ", perm)
+        # preliminary: check canonical form
+        self.convert_form('B')
+        norm_err = np.linalg.norm(self.norm_test())
+        if norm_err > canonicalize:
+            warnings.warn("self.norm_test() =", norm_err, "==> canonicalize")
+            self.canonical_form()
+        # get copy of self
+        psi_t = self.copy()
+        # apply permutation
+        perm = np.asarray(perm)
+        trunc_err = psi_t.permute_sites(perm, swap_op, trunc_par, verbose/10.)
+        # re-check canonical form
+        norm_err = np.linalg.norm(psi_t.norm_test())
+        if norm_err > canonicalize:
+            warnings.warn("psi_t.norm_test() =", norm_err, "==> canonicalize")
+            psi_t.canonical_form()
+        psi_t.convert_form('B')
+        TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
+        # Find left dominant eigenvector of this mixed transfer matrix.
+        # Because we are in B form and get the left eigenvector,
+        # the resulting vector should be sUs up to a scaling.
+        ov, sUs = TM.eigenvectors()
+        if verbose > 0:
+            print("compute_K: overlap ", ov[0], ", |o| = 1. -", 1. - np.abs(ov[0]))
+            # (should be 1 if state is invariant under translations)
+            print("compute_K:", trunc_err)
+        sUs = sUs[0].split_legs(0)
+        _, sUs_blocked = sUs.as_completely_blocked()
+        W = npc.eigvals(sUs_blocked, sort='m>')
+        # W = s^2 exp(i K ) up to overall scaling
+        # Strip S's from U
+        inv_S = 1./self.get_SL(0)
+        U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)
+        # U should be unitary - scale it
+        U *= (np.sqrt(U.shape[0])/npc.norm(U))
+        return U, W/np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err
 
     def __str__(self):
         """Some status information about the MPS."""
