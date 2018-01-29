@@ -80,7 +80,7 @@ from ..linalg import sparse
 from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from functools import reduce
-from ..algorithms.truncation import svd_theta
+from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
 
@@ -1353,8 +1353,8 @@ class MPS(object):
         if not unitary:
             self.canonical_form(renormalize)
 
-    def swap_sites(self, i, swapOP='auto', trunc_par={}):
-        """Swap the two neighboring sites `i` and `i`+1.
+    def swap_sites(self, i, swap_op='auto', trunc_par={}):
+        """Swap the two neighboring sites `i` and `i`+1 (inplace).
 
         Exchange two neighboring sites: form theta, 'swap' the physical legs and split
         with an svd. While the 'swap' is just a transposition/relabeling for bosons, one needs to
@@ -1364,11 +1364,11 @@ class MPS(object):
         ----------
         i : int
             Swap the two sites at positions `i` and `i`+1.
-        trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-        swapOP : ``None`` | ``'auto'`` | npc.Array
+        swap_op : ``None`` | ``'auto'`` | npc.Array
             The operator used to swap the phyiscal legs of the two-site wave function `theta`.
             For ``None``, just transpose/relabel the legs,
+        trunc_par : dict
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
 
         Returns
         -------
@@ -1376,7 +1376,7 @@ class MPS(object):
             The error of the represented state introduced by the truncation after the swap.
         """
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i+1)]
-        if swapOP == 'auto':
+        if swap_op == 'auto':
             # get sign for Fermions.
             # If we write the wave function as
             # psi = sum_{ [n_i]} psi_[n_i] prod_i (c^dagger_i)^{n_i}  |vac>
@@ -1388,23 +1388,23 @@ class MPS(object):
             if np.any(sign):
                 dL, dR = siteL.dim, siteR.dim
                 sign = np.real_if_close(np.exp(1.j*np.pi*sign.reshape([dL*dR])))
-                swapOP = np.diag(sign).reshape([dL, dR, dL, dR])
+                swap_op = np.diag(sign).reshape([dL, dR, dL, dR])
                 legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
-                swapOP = npc.Array.from_ndarray(swapOP, legs)
-                swapOP.iset_leg_labels(['p1', 'p0', 'p0*', 'p1*'])
+                swap_op = npc.Array.from_ndarray(swap_op, legs)
+                swap_op.iset_leg_labels(['p1', 'p0', 'p0*', 'p1*'])
             else:  # no sign necessary
-                swapOP = None  # continue with transposition as for Bosons
+                swap_op = None  # continue with transposition as for Bosons
         theta = self.get_theta(i, n=2)
         C = self.get_theta(i, n=2, formL=0.)  # inversion free, see also TEBDEngine.update_bond()
-        if swapOP is None:
+        if swap_op is None:
             # just replace the labels, effectively this is a transposition.
             theta.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
             C.ireplace_labels(['p0', 'p1'], ['p1', 'p0'])
-        elif isinstance(swapOP, npc.Array):
-            theta = npc.tensordot(swapOP, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
-            C = npc.tensordot(swapOP, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        elif isinstance(swap_op, npc.Array):
+            theta = npc.tensordot(swap_op, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
+            C = npc.tensordot(swap_op, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         else:
-            raise ValueError("Invalid swapOP: got " + repr(swapOP))
+            raise ValueError("Invalid swap_op: got " + repr(swap_op))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
@@ -1419,6 +1419,49 @@ class MPS(object):
         self.sites[self._to_valid_index(i)] = siteR  # swap 'sites' as well
         self.sites[self._to_valid_index(i+1)] = siteL
         return err
+
+    def permute_sites(self, perm, swap_op='auto', trunc_par={}, verbose=0):
+        """Applies the permutation perm to the state (inplace).
+
+        Parameters
+        ----------
+        perm : ndarray[ndim=1, int]
+            The applied permutation, such that ``psi.permute_sites(perm)[i] = psi[perm[i]]``
+            (where ``[i]`` indicates the `i`-th site).
+        swap_op : ``None`` | ``'auto'`` | npc.Array
+            The operator used to swap the phyiscal legs of the two-site wave function `theta`.
+            For ``None``, just transpose/relabel the legs,
+        trunc_par : dict
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+        verbose : int
+            Print status messages if verbose > 0.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state introduced by the truncation after the swaps.
+        """
+        # In order to keep sites close together, we always scan from the left until we white
+        trunc_err = TruncationError()
+        num_swaps = 0
+        i = 0
+        while i < self.L-1:
+            if perm[i] > perm[i+1]:
+                if verbose > 1:
+                    print(i, ": chi = ", self._S[i+1].shape[0], end='')
+                trunc = self.swap_sites(i, swap_op, trunc_par)
+                if verbose > 1:
+                    print("->", self._S[i+1].shape[0], ". eps = ", trunc.eps)
+                num_swaps += 1
+                x, y = perm[i], perm[i+1]
+                perm[i+1], perm[i] = x, y
+                i = 0
+                trunc_err += trunc
+            else:
+                i += 1
+        if verbose > 0:
+            print("Total swaps in permute_sites:", num_swaps, ", total error:", trunc_err)
+        return trunc_err
 
     def __str__(self):
         """Some status information about the MPS."""

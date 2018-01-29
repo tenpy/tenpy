@@ -9,7 +9,7 @@ import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import mps, site
-from random_test import gen_random_legcharge
+from random_test import gen_random_legcharge, rand_permutation
 import tenpy.linalg.np_conserved as npc
 
 spin_half = site.SpinHalfSite(conserve='Sz')
@@ -121,9 +121,16 @@ def test_mps_swap():
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='finite')
     psi_swap = mps.MPS.from_singlets(spin_half, L, pairs_swap, bc='finite')
     psi.swap_sites(2)
-    assert (psi.overlap(psi_swap)[0] - 1.) < 1.e-15
+    assert abs(psi.overlap(psi_swap)[0] - 1.) < 1.e-15
     # now test permutation
-
+    # recover original psi
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='finite')
+    perm = rand_permutation(L)
+    pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
+    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
+    psi.permute_sites(perm, verbose=2)
+    print(psi.overlap(psi_perm)[0], psi.norm_test())
+    assert abs(abs(psi.overlap(psi_perm)[0]) - 1.) < 1.e-10
 
 
 def test_transfermatrix(chi=6, d=3):
