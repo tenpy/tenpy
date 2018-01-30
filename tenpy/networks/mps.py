@@ -439,7 +439,7 @@ class MPS(object):
         Lonely[lonely_state] = 1
         Lonely = npc.Array.from_ndarray(Lonely, [site.leg])
         Bs = []
-        Ss = [np.arange(1.)]
+        Ss = [np.ones(1)]
         forms = []
         open_singlets = []  # the k-th open singlet should be closed at site open_singlets[k]
         Ts = []  # the tensors on the current site
@@ -582,6 +582,7 @@ class MPS(object):
         """
         i = self._to_valid_index(i)
         self.form[i] = self._to_valid_form(form)
+        self.dtype = np.find_common_type([self.dtype, B.dtype], [])
         self._B[i] = B
 
     def get_SL(self, i):
@@ -1514,6 +1515,8 @@ class MPS(object):
             LegCharge corresponding to `W`.
         ov : complex
             The eigenvalue of the mixed transfer matrix `<psi|T|psi>` per :attr:`L` sites.
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state introduced by the truncation after swaps.
         """
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
