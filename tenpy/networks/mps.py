@@ -1225,9 +1225,20 @@ class MPS(object):
         .. todo ::
             Should we try to avoid carrying around the total charge of the B matrices?
             Also, implement 'canonical_form_infinite' by diagonalizing the transfer matrix...
+        Parameters
+        ----------
+        renormalize: bool
+            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+
+        Returns
+        -------
+        U_L, V_R : :class:`~tenpy.linalg.np_conserved.Array`
+            Only returned for ``'segment'`` boundary conditions.
+            The unitaries defining the new left and right Schmidt states in terms of the old ones,
+            with legs ``'vL', 'vR'``.
         """
         if self.finite:
-            self._canonical_form_finite(renormalize)
+            return self._canonical_form_finite(renormalize)
         else:
             self._canonical_form_infinite()
 
@@ -1344,13 +1355,15 @@ class MPS(object):
             Whether the final state should keep track of the norm (False, default) or be
             renormalized to have norm 1 (True).
         """
+        i = self._to_valid_index(i)
+        if isinstance(op, str):
+            op = self.sites[i].get_op(op)
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger.legs[0])) < 1.e-14
-        if (isinstance(op, str)):
-            op = self.sites[i].get_op(op)
         opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         self._B[i] = opB
+        self.dtype = np.find_common_type([self.dtype, opB.dtype], [])
         if not unitary:
             self.canonical_form(renormalize)
 
@@ -1797,6 +1810,13 @@ class MPS(object):
             self.set_B(i, Q.split_legs(0), form='A')
         M = self.get_B(L - 1, None)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        if self.bc == 'segment':
+            # also neet to calculate new singular values on the very right
+            U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
+                                       cutoff=0., inner_labels=['vR', 'vL'])
+            S /= np.linalg.norm(S)
+            self.set_SR(L - 1, S)
+            M = U.scale_axis(S, 1).split_legs(0)
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(
             M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
@@ -1814,8 +1834,13 @@ class MPS(object):
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
-        # done: just discard the U on the left (trivial phase / norm for finite bc,
+        if self.bc == 'finite':
+            assert len(S) == 1
+            self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
+        # done. Discard the U for segment bc, although it might be a non-trivial unitary.
         # and just re-shuffling of the states left for 'segment' bc)
+        if self.bc == 'segment':
+            return U, VR_segment
 
     def _canonical_form_infinite(self):
         raise NotImplementedError("TODO")
