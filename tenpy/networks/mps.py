@@ -1556,7 +1556,7 @@ class MPS(object):
         if verbose > 0:
             print("compute_K: overlap ", ov[0], ", |o| = 1. -", 1. - np.abs(ov[0]))
             # (should be 1 if state is invariant under translations)
-            print("compute_K:", trunc_err)
+            print("compute_K: truncation error ", trunc_err.eps)
         sUs = sUs[0].split_legs(0)
         _, sUs_blocked = sUs.as_completely_blocked()
         W = npc.eigvals(sUs_blocked, sort='m>')
