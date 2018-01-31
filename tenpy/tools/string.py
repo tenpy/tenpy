@@ -19,9 +19,9 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     ----------
     strlist : list of str
         the strings to be joined vertically
-    valing : {'t', 'c', 'b'}
+    valing : ``'t', 'c', 'b'``
         vertical alignment of the strings: top, center, or bottom
-    halign : {'l', 'c', 'r'}
+    halign : ``'l', 'c', 'r'``
         horizontal alignment of the strings: left, center, or right
     delim : str
         field separator between the strings

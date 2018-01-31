@@ -8,9 +8,9 @@ Submodules
 
    tenpy.models.bose_hubbard_chain
    tenpy.models.boson_chain
-   tenpy.models.cold_hof
    tenpy.models.fermion_chain
    tenpy.models.fermions_hubbard
+   tenpy.models.hofstadter
    tenpy.models.lattice
    tenpy.models.model
    tenpy.models.spins

@@ -9,8 +9,8 @@ They can be cited from the python doc-strings using the format ``[Author####]_``
                S. White, Phys. Rev. B 84, 10345 (1992)
 .. [Vidal2004] G. Vidal, Phys. Rev. Lett. 93, 040502 (2004), arXiv:quant-ph/0310089
 .. [Singh2009] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), arXiv:0907.2994
-.. [PollmannTurner2012] F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), arXiv:1204.0704
 .. [Singh2010] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, arXiv:1008.4774
 .. [Schollwoeck2011] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
+.. [PollmannTurner2012] F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), arXiv:1204.0704
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
 .. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, arXiv:1711.01288

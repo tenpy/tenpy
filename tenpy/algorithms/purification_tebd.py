@@ -65,9 +65,9 @@ class PurificationTEBD(tebd.Engine):
         Parameters
         ----------
         beta : float
-            The inverse temperature `beta = 1/T`, by which we should cool down.
-            We evolve to the closest multiple of TEBD_params['dt'], c.f. :attr:`evolved_time,
-            c.f. :attr:`evolved_time`.
+            The inverse temperature `beta` = 1/T, by which we should cool down.
+            We evolve to the closest multiple of ``TEBD_params['dt']``,
+            see also :attr:`evolved_time`.
         """
         delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'PurificationTEBD')
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
@@ -108,7 +108,7 @@ class PurificationTEBD(tebd.Engine):
         ----------
         i : int
             Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+        U_bond : :class:`~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
             We expect labels ``'p0', 'p1', 'p0*', 'p1*'`` for `U_bond`.
 
@@ -172,7 +172,7 @@ class PurificationTEBD(tebd.Engine):
         ----------
         i : int
             Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+        U_bond : :class:`~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
             We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
 
@@ -474,12 +474,12 @@ class Disentangler:
 
     Parameters
     ----------
-    parent: :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
 
     Attributes
     ----------
-    parent: :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
     """
 
@@ -950,7 +950,7 @@ class MinDisentangler(Disentangler):
     ----------
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
-    parent: :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
 
     Attributes
@@ -1011,7 +1011,7 @@ def get_disentangler(method, parent):
         The method to be used, of the form 'method1-method2-min(method3,method4-method5)'.
         The usage should be clear from the examples, the precise rule follows:
         We parse the full `method` string as a `composite`, and define
-        ``composite := min_atom ['-' min_atom ...] ``,
+        ``composite := min_atom ['-' min_atom ...]``,
         ``min_atom := { 'min(' composite [',' composite ...] ')' } | atom``, and
         ``atom := {any key of `disentanglers_atom_parse_dict`}``.
     parent : :class:`~tenpy.algorithms.tebd.Engine`

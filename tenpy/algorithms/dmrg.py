@@ -126,14 +126,14 @@ def run(psi, model, DMRG_params):
         P_tol_min                truncation error. Therefore, if `P_tol_to_trunc` is not
                                  ``None``, we update `P_tol` of `lanczos_params` to
                                  ``max_trunc_err*P_tol_to_trunc``,
-                                 restricted to the interval [`P_tol_min`,`P_tol_max`].
+                                 restricted to the interval [`P_tol_min`, `P_tol_max`].
         -------------- --------- ---------------------------------------------------------------
         E_tol_to_trunc float     It's reasonable to choose the Lanczos convergence criteria
         E_tol_max                ``'E_tol'`` not many magnitudes lower than the current
         E_tol_min                truncation error. Therefore, if `E_tol_to_trunc` is not
                                  ``None``, we update `E_tol` of `lanczos_params` to
                                  ``max_E_trunc*E_tol_to_trunc``,
-                                 restricted to the interval [`E_tol_min`,`E_tol_max`].
+                                 restricted to the interval [`E_tol_min`, `E_tol_max`].
         ============== ========= ===============================================================
 
     Returns
@@ -836,10 +836,10 @@ class EngineCombine(Engine):
 
     Attributes
     ----------
-    LHeff: :class:`~tenpy.linalg.np_conserved.Array`
+    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Left part of the effective Hamiltonian.
         Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
-    RHeff: :class:`~tenpy.linalg.np_conserved.Array`
+    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
@@ -1041,11 +1041,11 @@ class EngineFracture(Engine):
 
     Attributes
     ----------
-    LP: :class:`~tenpy.linalg.np_conserved.Array`
+    LP : :class:`~tenpy.linalg.np_conserved.Array`
         Left part of the effective Hamiltonian. Labels ``'vR*', 'wR', 'vR'``.
-    RP: :class:`~tenpy.linalg.np_conserved.Array`
+    RP : :class:`~tenpy.linalg.np_conserved.Array`
         Right part of the effective Hamiltonian. Labels ``'vL*', 'wL', 'vL'``.
-    H0, H1: :class:`~tenpy.linalg.np_conserved.Array`
+    H0, H1 : :class:`~tenpy.linalg.np_conserved.Array`
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """

@@ -91,7 +91,8 @@ This can be done in three formats: **qflat**, as **qind** and as **qdict**.
 Let me explain them with examples, for simplicity considereing only a single charge (the most inner array has one entry
 for each charge).
 
-**qflat** form: simply a list of charges for each index. An example::
+**qflat** form: simply a list of charges for each index. 
+    An example::
 
         qflat = [[-2], [-1], [-1], [0], [0], [0], [0], [3], [3]]
 
@@ -562,10 +563,10 @@ So here is how it works:
     - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
     - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
       Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
-      Then if `b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'a.b': 0, 'c': 1}``.
+      Then if ``b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'(a.b)': 0, '(c)': 1}``.
       If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
     - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
-    - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a,(b*,c))' -> '(a*, (b, c*))'``
+    - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a.(b*.c))' -> '(a*.(b.c*))'``
     - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
     - Under `pinv`, the labels are transposed.
 

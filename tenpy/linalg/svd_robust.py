@@ -87,7 +87,7 @@ def svd(a,
         Ignored (i.e. set to ``False``) if ``lapack_driver='gesdd'``.
         Otherwise described in doc-string of `scipy.linalg.svd`.
     lapack_driver : {'gesdd', 'gesvd'}, optional
-        Whether to use the more efficient divide-and-conquer approach (`'gesdd'``)
+        Whether to use the more efficient divide-and-conquer approach (``'gesdd'``)
         or general rectangular approach (``'gesvd'``) to compute the SVD.
         MATLAB and Octave use the ``'gesvd'`` approach.
         Default is ``'gesdd'``.

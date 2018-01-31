@@ -76,20 +76,20 @@ def argsort(a, sort=None, **kwargs):
     ----------
     a : array_like
         the array to sort
-    sort : {'m>', 'm<', '>', '<', ``None``}
+    sort : ``'m>', 'm<', '>', '<', None``
         Specify how the arguments should be sorted.
 
-        ===========  ===========================
-        `sort`       order
-        ===========  ===========================
-        'm>', 'LM'   Largest magnitude first
-        'm<', 'SM'   Smallest magnitude first
-        '>', 'LR'    Largest real part first
-        '<', 'SR'    Smallest real part first
-        'LI'
-        'SR'
-        ``None``     numpy default: same as '<'
-        ===========  ===========================
+        ================ ===========================
+        `sort`           order
+        ================ ===========================
+        ``'m>', 'LM'``   Largest magnitude first
+        ``'m<', 'SM'``   Smallest magnitude first
+        ``'>', 'LR'``    Largest real part first
+        ``'<', 'SR'``    Smallest real part first
+        ``'LI'``         Largest imaginary part first
+        ``'Si'``         Smallest imaginary part first
+        ``None``         numpy default: same as '<'
+        ================ ===========================
     **kwargs :
         further keyword arguments given directly to ``numpy.argsort``.
 

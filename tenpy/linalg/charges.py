@@ -93,7 +93,7 @@ class ChargeInfo(object):
 
         Parameters
         ----------
-        chinfo: class:`ChargeInfo`
+        chinfo : :class:`ChargeInfo`
             The ChargeInfo from where to drop/remove a charge.
         charge : int | str
             Number or `name` of the charge (within `chinfo`) which is to be dropped.
@@ -402,7 +402,7 @@ class LegCharge(object):
 
         Parameters
         ----------
-        leg: class:`LegCharge`
+        leg : :class:`LegCharge`
             The leg from which to drop/remove a charge.
         charge : int | str
             Number or `name` of the charge (within `chinfo`) which is to be dropped.
@@ -431,7 +431,7 @@ class LegCharge(object):
 
         Parameters
         ----------
-        leg: class:`LegCharge`
+        leg : :class:`LegCharge`
             The leg from which to drop/remove a charge.
         charge : int | str
             Number or `name` of the charge (within `chinfo`) for which `mod` is to be changed.
@@ -547,7 +547,8 @@ class LegCharge(object):
 
         In general, there could also be a change of the total charge, see :doc:`../intro_npc`
         This special case is not considered here - instead use
-        :meth:~tenpy.linalg.np_conserved.gauge_total_charge`, if a change of the charge is desired.
+        :meth:`~tenpy.linalg.np_conserved.gauge_total_charge`,
+        if a change of the charge is desired.
 
         If you are sure that the legs should be contractable,
         check whether the charges are actually valid
@@ -852,7 +853,7 @@ class LegPipe(LegCharge):
     subqshape : tuple of int
         `block_number` for each of the incoming legs.
     q_map:  2D array
-        Shape (`block_number`, 3+`nlegs`). Rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
+        Shape (`block_number`, 3 + `nlegs`). Rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         See Notes below for details.
     q_map_slices : list of views onto q_map
         Defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``.

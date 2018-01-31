@@ -34,6 +34,7 @@ To be done at some point for the next releases
   Should be possible using Site.perm correctly...
 - suggest installing nose2 instead of nose, change compatibility as needed. Like numpy: tests directly in tenpy tree?
 - trace: allow multiple axes to be traced over; optimize
+- simplify DMRG?
 
 
 Wish-list

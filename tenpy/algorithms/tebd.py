@@ -31,7 +31,7 @@ After each application of a `Ui`, the MPS needs to be truncated - otherwise the 
 If one chooses imaginary :math:`dt`, the exponential projects
 (for sufficiently long 'time' evolution) onto the ground state of the Hamiltonian.
 
-.. Note ::
+.. note ::
     The application of DMRG is typically much more efficient than imaginary TEBD!
     Yet, imaginary TEBD might be usefull for cross-checks and testing.
 
@@ -71,7 +71,7 @@ class Engine(object):
         the sequence of update steps.
     psi : :class:`~tenpy.networks.mps.MPS`
         The MPS time evolved in-place.
-    model: :class:`~tenpy.models.NearestNeigborModel`
+    model : :class:`~tenpy.models.NearestNeigborModel`
         The model defining the Hamiltonian.
     TEBD_params: dict
         Optional parameters, see above.
@@ -80,7 +80,7 @@ class Engine(object):
     _bond_eig_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
         Eigenvectors for each of `model.H_bond`; necessary to calculate `_U`.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
-        Exponentiated `H_bond` (bond Hamiltonians), i.e. (roughly``exp(-i H_bond dt_i)``.
+        Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,
         second list for the `L` different bonds.
     _U_param : dict
@@ -466,7 +466,7 @@ class Engine(object):
         ----------
         i : int
             Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+        U_bond : :class:`~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
             We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
 
@@ -569,7 +569,7 @@ class Engine(object):
         ----------
         i : int
             Bond index; we update the matrices at sites ``i-1, i``.
-        U_bond : :class:~tenpy.linalg.np_conserved.Array`
+        U_bond : :class:`~tenpy.linalg.np_conserved.Array`
             The bond operator which we apply to the wave function.
             We expect labels ``'p0', 'p1', 'p0*', 'p1*'``.
 

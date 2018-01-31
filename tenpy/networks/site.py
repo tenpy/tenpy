@@ -457,7 +457,7 @@ class DoubleSite(Site):
 class SpinHalfSite(Site):
     r"""Spin-1/2 site.
 
-    Local states are ``up``(0) and ``down``(1).
+    Local states are ``up`` (0) and ``down`` (1).
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
     ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
 

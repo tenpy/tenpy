@@ -12,6 +12,7 @@ Submodules
    tenpy.linalg.np_conserved
    tenpy.linalg.np_conserved
    tenpy.linalg.random_matrix
+   tenpy.linalg.sparse
    tenpy.linalg.svd_robust
 
 Module contents

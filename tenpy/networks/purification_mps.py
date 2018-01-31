@@ -122,7 +122,7 @@ class PurificationMPS(MPS):
             npc.eye_like(B, axes='vL')  # up to round-off errors
 
     For expectation values / correlation functions, all operators are to understood to act on
-    `p` only, i.e. they act trivial on `q`, so we just trace over `q`,`q*`.
+    `p` only, i.e. they act trivial on `q`, so we just trace over ``'q', 'q*'``.
 
     See also the docstring of the module for details.
     """

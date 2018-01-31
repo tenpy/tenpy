@@ -72,8 +72,8 @@ class Lattice(object):
     bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice.
     basis: ndarray (dim, dim)
-        translation vectors shifting the unit cell. The ``i``th row gives the vector shifting in
-        direction ``i``.
+        translation vectors shifting the unit cell. The row `i` gives the vector shifting in
+        direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), dim)
         for each site in the unit cell a vector giving its position within the unit cell.
     _strides : ndarray (dim, )
@@ -319,7 +319,7 @@ class Lattice(object):
         mps_idx : array
             MPS indices `i` for which ``self.site(i) is self.unit_cell[u]``.
         lat_idx : 2D array
-            The `j`th row contains the lattice index (without `u`) corresponding to ``mps_idx[j]``.
+            The row `j` contains the lattice index (without `u`) corresponding to ``mps_idx[j]``.
         """
         mps_idx = self.mps_idx_fix_u(u)
         return mps_idx, self.order[mps_idx, :-1]
