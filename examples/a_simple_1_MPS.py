@@ -5,7 +5,7 @@ from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
 
 
 class SimpleMPS(object):
-    r"""Simple class for a matrix product state.
+    """Simple class for a matrix product state.
 
     We index sites with `i` from 0 to L-1; bond `i` is left of site `i`.
     We *assume* that the state is in right-canonical form.

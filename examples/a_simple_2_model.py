@@ -4,11 +4,11 @@ import numpy as np
 
 
 class TFIModel(object):
-    r"""Simple class generating the Hamiltonian of the transverse-field Ising model.
+    """Simple class generating the Hamiltonian of the transverse-field Ising model.
 
     The Hamiltonian reads
     .. math ::
-        H = - J \sum_{i} \sigma^x_i \sigma^x_{i+1} - g \sum_{i} \sigma^z_i
+        H = - J \\sum_{i} \\sigma^x_i \\sigma^x_{i+1} - g \\sum_{i} \\sigma^z_i
 
     Parameters
     ----------

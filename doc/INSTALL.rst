@@ -13,12 +13,9 @@ If you don't want to contribute, you should checkout the latest stable release::
 
 Minimal Requirements
 --------------------
-This code is (currently) pure Python 2.7.  with 
-Beside the standard library, you will only need fairly recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
-Beside the standard library you will only need few things listed below.
-
-Some kind of LAPACK/BLAS library is a prerequisite for SciPy.
-If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.
+This code works with a minimal requirement of pure Python 3 
+and fairly recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
+(If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.)
 
 Including tenpy into PYTHONPATH
 -------------------------------
@@ -28,7 +25,7 @@ This folder `tenpy` should placed in (one of the folders of) the environment var
 Whenever the path is set, you should be able to use the library from within python::
 
     >>> import tenpy
-    >>> print tenpy.__full__version__
+    >>> print(tenpy.__full__version__)
 
 This should output you the current version of this library as well as the used python, numpy and scipy libraries.
 (For reproducability, you might want to save this along with your data.)
@@ -51,10 +48,10 @@ If you don't have a python version which is built against MKL,
 we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL
 and is available for Linux, Mac and Windows. Note that you don't need administrator rights to install it.
 Simply follow the (straight-forward) instructions of the web page for the installation.
-It installs everything needed into a single folder (by default ``$HOME/anaconda2``).
-Note that on linux it may add a line to your ``.bashrc`` to add ``$HOME/andaconda2/bin`` to the ``$PATH`` environment
+It installs everything needed into a single folder (by default ``$HOME/anaconda3``).
+Note that on linux it may add a line to your ``.bashrc`` to add ``$HOME/andaconda3/bin`` to the ``$PATH`` environment
 variable, thus changing the default ``python``. If you run ``python`` interactively, the first output line should 
-state the python version (2.7.#) and contain ``Anaconda``.
+state the python version and contain ``Anaconda``.
 
 Once you managed to install conda, ensure that you have the needed packages with::
 
@@ -141,4 +138,4 @@ After that, go to the root directory of tenpy and simply run ::
     bash ./compile.sh
 
 It is not required to separately download (and install) Intel MKL: the compilation just obtains the includes from numpy.
-In other words, if your current numpy version uses MKL (as the one provided in anaconda), the compiled code will also use it.
+In other words, if your current numpy version uses MKL (as the one provided by anaconda), the compiled tenpy code will also use it.
