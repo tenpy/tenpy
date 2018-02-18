@@ -60,7 +60,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
       1.25
       >>> print 5 // 4
       1
-- Use relative imports within TenPy. Example::
+- Use relative imports within TeNPy. Example::
 
       from ..linalg import np_conserved as npc
 

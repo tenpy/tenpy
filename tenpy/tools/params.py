@@ -21,7 +21,7 @@ def get_parameter(par_dict, key, default, descr):
     (Wheter a parameter was used is saved in the set ``par_dict['_used_param']``.)
 
     This function should be used in the algorithms to read out parameters.
-    Then, when the algorithms are calleed by TenPy users,
+    Then, when the algorithms are calleed by tenpy users,
     simply including ``verbose=1`` into a parameter dictionary will trigger the algorithms to
     print all the actually used parameters during runtime.
 

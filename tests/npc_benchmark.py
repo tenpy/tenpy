@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Benchmark comparison:
 
-New TenPyLight npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
+New TenPy npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 Run ``python npc_benchmark.py --help`` for usage options.
 """
 

@@ -1,4 +1,4 @@
-Changes compared to previous TenPy
+Changes compared to previous TeNPy
 ==================================
 
 Global Changes

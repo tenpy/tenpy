@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# TenPy documentation build configuration file, created by
+# TeNPy documentation build configuration file, created by
 # sphinx-quickstart on Tue Sep 20 02:12:10 2016.
 #
 # This file is execfile()d with the current directory set to its
@@ -46,6 +46,7 @@ extensions = [
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
+    'sphinx.ext.githubpages',
     'numpydoc',
 ]
 
@@ -62,8 +63,9 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'TenPy'
-copyright = '2016, TenPy community'
+project = 'TeNPy'
+copyright = '2016-2018, TeNPy Developers'
+author = 'TeNPy Developers'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -153,12 +155,12 @@ html_theme = 'default'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "logo.png"
+html_logo = "images/logo.png"
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs. This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-html_favicon = "logo.ico"
+html_favicon = "images/logo.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -215,7 +217,7 @@ html_sidebars = {
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'TenPydoc'
+htmlhelp_basename = 'TeNPydoc'
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -234,12 +236,12 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    ('index', 'TenPy.tex', 'TenPy Documentation', 'TenPy community', 'manual'),
+    ('index', 'TeNPy.tex', 'TeNPy Documentation', 'TeNPy community', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-#latex_logo = None
+latex_logo = "images/logo.pdf"
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.
@@ -261,7 +263,7 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [('index', 'tenpylight', 'TenPy Documentation', ['TenPy community'], 1)]
+man_pages = [('index', 'tenpy', 'TeNPy Documentation', ['TeNPy Developers'], 1)]
 
 # If true, show URL addresses after external links.
 #man_show_urls = False
@@ -272,7 +274,7 @@ man_pages = [('index', 'tenpylight', 'TenPy Documentation', ['TenPy community'],
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    ('index', 'TenPy', 'TenPy Documentation', 'TenPy community', 'TenPy',
+    ('index', 'TeNPy', 'TeNPy Documentation', 'TeNPy community', 'TeNPy',
      'One line description of project.', 'Miscellaneous'),
 ]
 
@@ -289,4 +291,4 @@ texinfo_documents = [
 #texinfo_no_detailmenu = False
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'https://docs.python.org/2.7': None}
+intersphinx_mapping = {'https://docs.python.org/3': None}

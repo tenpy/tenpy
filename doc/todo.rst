@@ -1,6 +1,5 @@
 To-Do list
 ==========
-Update doc/changes_TenPy.rst if you've done something.
 
 Primary goals for the coming release
 ------------------------------------
@@ -57,6 +56,6 @@ Here, you can report Bugs that need to be fixed.
 
 Known limitations
 -----------------
-TenPyLight is meant to be a simple and readably library. Therefore, it may not handle every special case correctly.
+TeNPy is meant to be a simple and readably library. Therefore, it may not handle every special case correctly.
 Here, we collect a list of some known 'bugs' that won't be fixed (at least not in the near future).
 

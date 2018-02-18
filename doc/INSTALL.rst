@@ -2,11 +2,11 @@ Installation instructions
 =========================
 
 Right now, this documentetion is only distributed with the code, so I guess you already have the code somehow.
-Let's assume you got the code with ``git clone {url-to-gitrepo} $HOME/TenPyLight``.
+Let's assume you got the code with ``git clone {url-to-gitrepo} $HOME/TeNPy``.
 
 If you don't want to contribute, you should checkout the latest stable release::
 
-    cd $HOME/TenPyLight
+    cd $HOME/TeNPy
     git tag   # this prints the available version tags
     git co v0.0.0  # or whatever is the lastest stable version
 
@@ -32,7 +32,7 @@ This should output you the current version of this library as well as the used p
 
 On Linux, to set the PYTHONPATH permanently you can add the following line to your `~/.bashrc`::
 
-    export PYTHONPATH=$HOME/path/to/TenPyLight
+    export PYTHONPATH=$HOME/TeNPy
 
 (If you have already a path in there, separate the paths with a colon ``:``.) 
 You might need to start a new terminal session or relogin to reload the ``~/.bashrc``.
@@ -80,7 +80,7 @@ should run without error.
 
 You can also run the automated testsuite with `nose` to make sure everything works fine::
 
-    cd $HOME/path/to/TenPyLight/tests
+    cd $HOME/TeNPy/tests
     nosetests
 
 This should run some tests, hopefully indicated by a lot of dots ``.`` and 

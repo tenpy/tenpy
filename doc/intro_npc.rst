@@ -80,7 +80,7 @@ but they preserve the total parity, i.e., :math:`N % 2` is conserved. Thus, you 
 
 In the above examples, we had only a single charge conserved at a time, but you might be lucky and have multiple
 conserved quantities, e.g. if you have two chains coupled only by interactions. 
-TenPy is designed to handle the general case of multiple charges.
+TeNPy is designed to handle the general case of multiple charges.
 When giving examples, we will restrict to one charge, but everything generalizes to multiple charges.
 
 

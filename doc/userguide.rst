@@ -42,6 +42,6 @@ Content
    intro_npc
    intro_model
    intro_JordanWigner
-   changes_TenPy
+   changes_TeNPy
    contribution
    todo
