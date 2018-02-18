@@ -12,6 +12,7 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see arXiv
 - _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
 
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import warnings

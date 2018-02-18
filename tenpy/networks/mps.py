@@ -73,6 +73,7 @@ as they return the `B` in the desired form (which can be chosed as an argument).
                     before using algorithms.
 ======== ========== =======================================================================
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import warnings

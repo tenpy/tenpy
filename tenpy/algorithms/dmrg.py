@@ -28,6 +28,7 @@ and then slowly turned off in the end.
     Write UserGuide/Example!!!
     Allow to keep MPS orthogonal to other states, for finding excited states
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import time

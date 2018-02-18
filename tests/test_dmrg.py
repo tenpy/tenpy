@@ -1,4 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.dmrg`"""
+# Copyright 2018 TeNPy Developers
 
 import itertools as it
 import tenpy.linalg.np_conserved as npc

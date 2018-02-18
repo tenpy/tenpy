@@ -1,4 +1,5 @@
 """Toy code implementing the density-matrix renormalization group (DMRG)."""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 from a_simple_1_MPS import split_truncate_theta

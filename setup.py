@@ -1,3 +1,4 @@
+# Copyright 2018 TeNPy Developers
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize

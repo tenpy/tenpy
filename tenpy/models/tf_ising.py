@@ -10,6 +10,7 @@ The :class:`TFIModel2D` contains the same couplings but on a square lattice in 2
 (with chooseable boundary conditions).
 As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.Lattice` classes.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

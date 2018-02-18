@@ -3,6 +3,7 @@
 .. todo ::
     A lot more to test...
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import numpy.testing as npt

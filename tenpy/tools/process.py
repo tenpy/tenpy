@@ -13,6 +13,7 @@ which give their best to get and set the number of threads at runtime,
 while still being failsave if the shared OpenMP library is not found.  In the latter case,
 you might also try the equivalent :func:`mkl_get_num_threads` and :func:`mkl_set_num_threads`.
 """
+# Copyright 2018 TeNPy Developers
 
 import warnings
 import ctypes

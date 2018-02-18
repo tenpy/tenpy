@@ -3,6 +3,8 @@
 Sorry that this is not well documented!
 ED is meant to be used for debugging only ;)
 """
+# Copyright 2018 TeNPy Developers
+
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks.mps import MPS

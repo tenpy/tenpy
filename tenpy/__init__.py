@@ -16,6 +16,7 @@ The library provides:
   an array class to handle charge conservation for abelian symmetries
 
 """
+# Copyright 2018 TeNPy Developers
 # This file marks this directory as a python package.
 
 from . import version

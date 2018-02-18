@@ -2,6 +2,7 @@
 
 See the doc-string of :func:`get_parameter` for details.
 """
+# Copyright 2018 TeNPy Developers
 
 import warnings
 

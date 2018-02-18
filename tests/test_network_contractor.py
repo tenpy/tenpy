@@ -1,4 +1,5 @@
 """ a collection of tests to check the functionality of network_contractor.py"""
+# Copyright 2018 TeNPy Developers
 
 from tenpy.algorithms.network_contractor import contract, outer_product
 import numpy as np

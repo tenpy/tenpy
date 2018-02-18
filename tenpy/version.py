@@ -12,6 +12,7 @@ This module provides the three variables `version`, `git_version` and `full_vers
 `git_version` is a string including information about the current git commit,
 `full_version` includes the versions of the used python, numpy and scipy libraries.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy
 import scipy

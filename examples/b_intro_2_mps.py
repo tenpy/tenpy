@@ -12,6 +12,7 @@ This example includes the following steps:
 Note that this example performs the same steps as `b_intro_1_npc.py`,
 but makes use of other predefined classes except npc.
 """
+# Copyright 2018 TeNPy Developers
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np

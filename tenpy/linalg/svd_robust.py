@@ -33,6 +33,7 @@ The idea is that you just import the `svd` from this module and use it as replac
 >>> from svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., [1.]])
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import scipy

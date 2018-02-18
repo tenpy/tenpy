@@ -1,9 +1,9 @@
-#!/usr/bin/env python
 """Benchmark comparison:
 
 New TenPy npc --vs.-- old TenPy npc --vs.-- flat basic numpy.
 Run ``python npc_benchmark.py --help`` for usage options.
 """
+# Copyright 2018 TeNPy Developers
 
 import timeit
 import cProfile

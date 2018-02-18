@@ -13,6 +13,7 @@ Further, we have the predefined lattices, namely :class:`Chain` and :class:`Squa
     add further lattices: honeycomb, ...
     Above, make table with pictures of them (-> use Lattice.plot_ordering)
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

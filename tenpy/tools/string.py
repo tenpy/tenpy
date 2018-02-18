@@ -1,4 +1,5 @@
 """Tools for handling strings."""
+# Copyright 2018 TeNPy Developers
 
 
 def is_non_string_iterable(x):

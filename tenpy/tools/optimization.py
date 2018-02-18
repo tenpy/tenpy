@@ -61,6 +61,7 @@ run these few lines of python code::
     p.sort_stats('cumtime')  # sort by 'cumtime' column
     p.print_stats(30)   # prints first 30 entries
 """
+# Copyright 2018 TeNPy Developers
 
 from enum import IntEnum
 

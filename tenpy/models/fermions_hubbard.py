@@ -6,6 +6,7 @@
     Run some tests, and perhaps benchmarks comparing to old TenPy?
     Write example simulation code?
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

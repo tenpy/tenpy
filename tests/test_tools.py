@@ -1,4 +1,5 @@
 """A collection of tests for tenpy.tools submodules"""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import numpy.testing as npt

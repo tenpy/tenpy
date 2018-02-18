@@ -1,4 +1,5 @@
 """Lanczos implementation for np_conserved arrays."""
+# Copyright 2018 TeNPy Developers
 
 from . import np_conserved as npc
 from ..tools.params import get_parameter

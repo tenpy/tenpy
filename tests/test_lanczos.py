@@ -1,4 +1,5 @@
 """A collection of tests for tenpy.linalg.lanczos"""
+# Copyright 2018 TeNPy Developers
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np

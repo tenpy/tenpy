@@ -99,6 +99,7 @@ see [Hauschild2017]_.
     I think it should suffice to implement another `from_infiniteT`.
 
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

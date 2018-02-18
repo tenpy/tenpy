@@ -1,4 +1,5 @@
 """A collection of tests for tenpy.linalg.svd_robust"""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import numpy.testing as npt

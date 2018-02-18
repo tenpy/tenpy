@@ -1,3 +1,4 @@
+# Copyright 2018 TeNPy Developers
 from tenpy.models.hofstadter import HofstadterBosons
 from test_model import check_general_model
 

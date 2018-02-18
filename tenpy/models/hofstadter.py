@@ -1,5 +1,6 @@
 """Cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

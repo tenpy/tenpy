@@ -1,4 +1,5 @@
 """A test for tenpy.tools.params"""
+# Copyright 2018 TeNPy Developers
 
 import warnings
 from tenpy.tools import params

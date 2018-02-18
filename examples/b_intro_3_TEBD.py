@@ -3,6 +3,7 @@
 The example functions in this class do the same as the ones in `a_simple_3_TEBD.py`,
 but make use of the classes defined in tenpy.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

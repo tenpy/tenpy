@@ -9,6 +9,7 @@ As such, it consits of
 MPS/MPO based algorithms like DMRG require to map this general model to a 1D-model with (possibly)
 long range order.
 """
+# Copyright 2018 TeNPy Developers
 
 from . import lattice, model
 

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Copyright 2018 TeNPy Developers
 #
 # TeNPy documentation build configuration file, created by
 # sphinx-quickstart on Tue Sep 20 02:12:10 2016.

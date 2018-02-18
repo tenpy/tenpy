@@ -1,3 +1,4 @@
+# Copyright 2018 TeNPy Developers
 cimport numpy as np
 ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
 

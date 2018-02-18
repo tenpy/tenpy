@@ -3,6 +3,7 @@
 .. todo ::
     A lot more to test, e.g. conversions of the different models
 """
+# Copyright 2018 TeNPy Developers
 
 import itertools
 

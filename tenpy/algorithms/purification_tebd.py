@@ -4,6 +4,7 @@ See introduction in :mod:`~tenpy.networks.purification_mps`.
 Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
 """
+# Copyright 2018 TeNPy Developers
 
 from . import tebd
 from ..linalg import np_conserved as npc

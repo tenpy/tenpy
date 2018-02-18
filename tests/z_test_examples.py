@@ -5,6 +5,7 @@ runs *all* the 'examples/*.py' (except files listed in `exclude`).
 However, the files are only imported, so you can protect example code from running with
 ``if __name__ == "__main__": ... `` clauses, if you want to demonstrate an interactive code.
 """
+# Copyright 2018 TeNPy Developers
 
 import sys
 import os

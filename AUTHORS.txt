@@ -1,0 +1,12 @@
+The following people are part of the TeNPy developer team
+A full list might also by obtained by using the command ``git shortlog -sn``
+
+Johannes Hauschild
+Frank Pollmann
+Maximilian Schulz
+Leon Schoonderwoert
+Jakob Unfried
+Yu-Chin Tzeng
+
+Further, the code is based on an earlier version of the library, mainly developed by
+Frank Pollmann, Michael P. Zaletel and Roger S. K. Mong

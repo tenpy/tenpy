@@ -8,6 +8,7 @@ Relevant contenents of :mod:`~tenpy.linalg.charges`
 are imported to :mod:`~tenpy.linalg.np_conserved`,
 so you propably won't need to import `charges` directly.
 """
+# Copyright 2018 TeNPy Developers
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
 

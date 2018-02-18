@@ -1,4 +1,5 @@
 """tools to fit to an algebraic decay"""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import scipy.optimize as optimize

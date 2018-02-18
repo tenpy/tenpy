@@ -1,4 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 from .optimization import bottleneck

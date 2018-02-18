@@ -4,6 +4,7 @@ Some functions are explicitly imported in other parts of the library,
 others might just be useful when using the libary.
 Common to all tools is that they are not just useful for a single algorithm but fairly general.
 """
+# Copyright 2018 TeNPy Developers
 
 from . import fit, math, misc, params, process, string
 

@@ -1,4 +1,5 @@
 """Toy code implementing a matrix product state."""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)

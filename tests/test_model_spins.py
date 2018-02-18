@@ -1,3 +1,4 @@
+# Copyright 2018 TeNPy Developers
 from tenpy.models import spins
 from test_model import check_general_model
 

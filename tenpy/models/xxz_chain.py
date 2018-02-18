@@ -3,6 +3,7 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`;
 the idea of this class is more to serve as a pedagogical example for a 'model'.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

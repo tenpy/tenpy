@@ -3,6 +3,7 @@
 The :class:`Site` is the prototype, read it's docstring.
 We
 """
+# Copyright 2018 TeNPy Developers
 
 import copy
 import numpy as np

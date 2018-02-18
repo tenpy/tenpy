@@ -3,6 +3,7 @@
 .. todo :
     document...
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import time

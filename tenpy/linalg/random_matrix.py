@@ -29,6 +29,7 @@ corresponding ensemble, for example ::
     npc.Array.from_func_square(GOE, [leg, leg.conj()])
 
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

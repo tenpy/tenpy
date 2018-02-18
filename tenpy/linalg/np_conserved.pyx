@@ -39,6 +39,7 @@ Eigen systems:
 :func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
 
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 cimport numpy as np

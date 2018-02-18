@@ -2,6 +2,8 @@
 conjunction with the general tensor networks.
 
 """
+# Copyright 2018 TeNPy Developers
+
 from . import truncation, dmrg, tebd, exact_diag, purification_tebd
 
 __all__ = ["truncation", "dmrg", "tebd", "exact_diag", "purification_tebd"]

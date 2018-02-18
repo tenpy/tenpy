@@ -1,4 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
+# Copyright 2018 TeNPy Developers
 
 import warnings
 import numpy as np

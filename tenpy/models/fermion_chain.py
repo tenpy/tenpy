@@ -1,3 +1,5 @@
+# Copyright 2018 TeNPy Developers
+
 import numpy as np
 
 from .lattice import Chain

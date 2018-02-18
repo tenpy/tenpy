@@ -24,6 +24,7 @@ Of course, we also provide ways to transform a :class:`NearestNeighborModel` int
 
 See also the introduction :doc:`../intro_model`.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

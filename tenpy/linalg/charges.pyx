@@ -11,6 +11,7 @@ Contains implementation of classes
 
 A detailed introduction to `np_conserved` can be found in :doc:`../intro_npc`.
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 cimport numpy as np

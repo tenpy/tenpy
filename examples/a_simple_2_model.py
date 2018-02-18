@@ -1,4 +1,5 @@
 """Toy code implementing the transverse-field ising model."""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 

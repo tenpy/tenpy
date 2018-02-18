@@ -4,6 +4,7 @@
     A lot more to test...
     Test for compute_K !
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import numpy.testing as npt

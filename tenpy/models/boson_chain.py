@@ -14,6 +14,7 @@ Uniform lattice of bosons, including:
     Run some tests, and perhaps benchmarks comparing to old TenPy?
     Write example simulation code?
 """
+# Copyright 2018 TeNPy Developers
 
 # Original TenPy Hamiltonian: H = - sum_{j, r > 0} t_{j r} psi^D_{j+r} psi_{j} + h.c.
 # This includes only nn-hopping and nothing else...

@@ -1,5 +1,5 @@
-"""A collection of tests for :mod:`tenpy.models.site`.
-"""
+"""A collection of tests for :mod:`tenpy.models.site`.  """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import numpy.testing as npt

@@ -37,6 +37,7 @@ i.e. between sites ``i-1`` and ``i``.
 .. todo ::
     transfermatrix for MPO
 """
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 from ..linalg import np_conserved as npc

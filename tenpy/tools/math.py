@@ -1,4 +1,6 @@
 """Different math functions needed at some point in the library."""
+# Copyright 2018 TeNPy Developers
+
 import numpy as np
 import warnings
 from . import misc

@@ -1,4 +1,5 @@
 """Toy code implementing the time evolving block decimation (TEBD)."""
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 from scipy.linalg import expm

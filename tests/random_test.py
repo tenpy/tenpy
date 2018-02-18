@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# Copyright 2018 TeNPy Developers
 
 import numpy as np
 import itertools as it
