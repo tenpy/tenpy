@@ -221,10 +221,14 @@ class MPS(object):
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
-        p_state : iterable of {int | 1D array}
+        p_state : iterable of {int | str | 1D array}
             Defines the product state.
-            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``
-            If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``
+            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``.
+            If ``p_state[i]`` is str, then site ``i`` is in state
+            ``self.sites[i].state_label(p_state[i])``.
+            If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``.
+            Note that what an int means can change depending in the charges;
+            see the warning in the doc-string of :class:`~tenpy.networks.site.Site`.
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
@@ -239,6 +243,20 @@ class MPS(object):
         -------
         product_mps : :class:`MPS`
             An MPS representing the specified product state.
+
+        Examples
+        --------
+        To get a Neel state:
+
+        >>> M = SpinChain(model_params)
+        >>> p_state = ["up", "down"]*(L//2)  # repeats entries L/2 times
+        >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
+
+        For Spin S=1/2, you could get a state with all sites pointing in negative x-direction with:
+
+        >>> neg_x_state = np.array([1., -1.])
+        >>> p_state = [neg_x_state/np.linalg.norm(neg_x_state)]*L  # other parameters as above
+
         """
         sites = list(sites)
         L = len(sites)

@@ -5,7 +5,7 @@ Update doc/changes_TenPy.rst if you've done something.
 Primary goals for the coming release
 ------------------------------------
 - finish documentation and tests on existing stuff
-- Make it OpenSource :)
+- MPS._canonical_form_infinite !!!
 
 
 Concrete things to be fixed in different files
@@ -18,15 +18,12 @@ Concrete things to be fixed in different files
 - MPS class: probability_per_charge, charge_variance
 - MPS class: string correlation function
 - MPS class: pollmann_turner
+- Sites: Define state labels for *each* state
 
 
 To be done at some point for the next releases
 ----------------------------------------------
-- documentation on the idea of algorithms, references in doc strings.
-
-  - overview and usage introduction to the overall library
-  - np_conserved needs an introduction for newbies
-  - usage introduction with very simple (few-line) examples for newbies.
+- overview and usage introduction to the overall library
 
 - functionality to remove charges from an MPS, 
   e.g. if we use DMRG with charge conservation and want to quench and time evolve 
@@ -35,11 +32,11 @@ To be done at some point for the next releases
 - suggest installing nose2 instead of nose, change compatibility as needed. Like numpy: tests directly in tenpy tree?
 - trace: allow multiple axes to be traced over; optimize
 - simplify DMRG?
+- Summary of defined classes/functions at the beginning of a module in the reference
 
 
 Wish-list
 ---------
-- Open Source on GitHub? -> Licence? Documentation on readthedocs.org?
 - logging mechanism?
 - Johannes Motruk: extend simulation class: save standard variables like entropy, energy, etc?
 - Ruben: extend MPS TransferMatrix class

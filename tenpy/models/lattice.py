@@ -1,18 +1,27 @@
 """Classes to define the lattice structure of a model.
 
+The base class :class:`lattice` defines the general structure of a lattice,
+you can subclass this to define you own lattice.
+Further, we have the predefined lattices, namely :class:`Chain` and :class:`SquareLattice`.
+
 .. todo ::
     documentation, how to generate new lattices, examples, ...
     implement some __repr__ and/or __str__...
     equality tests?
+
+.. todo ::
+    add further lattices: honeycomb, ...
+    Above, make table with pictures of them (-> use Lattice.plot_ordering)
 """
 
 import numpy as np
 
-from ..tools.misc import to_iterable
 from ..networks.site import Site
+from ..tools.misc import to_iterable
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Site', 'Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
+# (update module doc string if you add further lattices)
 
 
 class Lattice(object):
@@ -30,7 +39,7 @@ class Lattice(object):
     ``(a_0, ..., a_{D-1}, u) = tuple(self.order[i])``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
     :meth:`mps2lat_values` perform the necessary reshaping and re-ordering from arrays indexed in
-    MPS from to arrays indexed in lattice form.
+    MPS form to arrays indexed in lattice form.
 
     .. todo ::
         some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
@@ -39,7 +48,7 @@ class Lattice(object):
     ----------
     Ls : list of int
         the length in each direction
-    unit_cell : list of :class:`Site`
+    unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
     order : str
         a string specifying the order, given to :meth:`ordering`.
@@ -64,7 +73,7 @@ class Lattice(object):
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
         The nature of the charge (which is the same for all sites).
-    unit_cell : list of :class:`Site`
+    unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
     order : ndarray (N_sites, dim+1)
         Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
@@ -267,7 +276,7 @@ class Lattice(object):
         return res
 
     def site(self, i):
-        """return :class:`Site` instance corresponding to an MPS index `i`"""
+        """return :class:`~tenpy.networks.Site` instance corresponding to an MPS index `i`"""
         return self.unit_cell[self.order[i, -1]]
 
     def mps_sites(self):
@@ -424,7 +433,7 @@ class SimpleLattice(Lattice):
     ----------
     Ls : list of int
         the length in each direction
-    site : :class:`Site`
+    site : :class:`~tenpy.networks.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     order : str
         A string specifying the order, given to :meth:`ordering`.
@@ -455,7 +464,7 @@ class Chain(SimpleLattice):
     ----------
     L : int
         The lenght of the chain.
-    site : :class:`Site`
+    site : :class:`~tenpy.networks.Site`
         Definition of local Hilbert space.
     bc_MPS : {'finite', 'segment', 'infinite'}
         MPS boundary conditions.

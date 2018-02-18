@@ -1,11 +1,16 @@
-Welcome to TenPy!
-=================================
+Welcome to TeNPy!
+=================
 
 Introduction
 ------------
-TenPy is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
-It's based on TenPy2, but tries to be readable and easy to understand for new peoples.
-A list of changes compared to the previous TenPy can be found in doc/changes_TenPy.rst
+TeNPy (short for TEnsor Networks Python) is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
+It originated from an earlier version of the library (which is not open source). 
+However, that early version grew over the years and became quite unreadable for newcommers.
+The philosophy of this version is to get a new balance of readability and at the same time powerful algorithms.
+Therefore, next to the code it includes an extensive documentation (both in Python doc strings and separately as "user
+guides") as well as simple example codes, and even some toy codes,
+which demonstrate various algorithms (like TEBD and DMRG) in ~100 Lines per file.
+
 
 How do I get set up?
 --------------------

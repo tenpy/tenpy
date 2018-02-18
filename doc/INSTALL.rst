@@ -45,13 +45,14 @@ Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execu
 Currently, the library itself supports no other way of parallelization.
 
 If you don't have a python version which is built against MKL, 
-we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL
-and is available for Linux, Mac and Windows. Note that you don't need administrator rights to install it.
+we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL,
+or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`.
+Both are available for Linux, Mac and Windows; note that you don't need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
-It installs everything needed into a single folder (by default ``$HOME/anaconda3``).
-Note that on linux it may add a line to your ``.bashrc`` to add ``$HOME/andaconda3/bin`` to the ``$PATH`` environment
-variable, thus changing the default ``python``. If you run ``python`` interactively, the first output line should 
-state the python version and contain ``Anaconda``.
+After a successfull installation, if you run ``python`` interactively, the first output line should 
+state the python version and contain ``Anaconda`` or ``intelpython``, respectively.
+(On Linux, make sure that ``$PATH`` contains the ``bin/`` folder of the installation; you might want to adjust your
+``~/.bashrc`` if necessary).
 
 Once you managed to install conda, ensure that you have the needed packages with::
 
@@ -69,7 +70,7 @@ Optional packages (see `Optional Requirements`_ below) can be installed with::
     cluster. The easiest way to acchieve to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
 
-For further optimization, look at :mod:`tenpy.tools.optimization`.
+For further optimization options, look at :mod:`tenpy.tools.optimization`.
 
 
 Checking the installation
@@ -92,8 +93,8 @@ python version.
 
 Optional Requirements
 ---------------------
-In addition, some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting and visualization.
-However, this is not necessary for running the simulations.
+Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
+However, having matplotlib is not necessary for running the simulations.
 
 For building the documentation, you need
 `Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.

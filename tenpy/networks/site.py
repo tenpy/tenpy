@@ -1,5 +1,7 @@
 """Defines a class describing the local physical Hilbert space.
 
+The :class:`Site` is the prototype, read it's docstring.
+We
 """
 
 import copy
@@ -8,16 +10,24 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
-__all__ = ['Site', 'DoubleSite', 'SpinHalfSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
+__all__ = ['Site', 'DoubleSite', 'SpinHalfSite', 'SpinSite',
+           'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
 
 
 class Site(object):
     """Collects necessary information about a single local site of a lattice.
 
-    It has the on-site operators as attributes, e.g. ``self.Id`` is the identy.
+    This class defines what the local basis states are: it provides the :attr:`leg`
+    defining the charges of the physical leg for this site.
+    Moreover, it stores (local) on-site operators, which are directly available as attribute,
+    e.g., ``self.Sz`` is the Sz operator for the :class:`SpinSite`.
+    Alternatively, operators can be obained with :meth:`get_op`.
+    The operator names ``Id`` and ``JW`` are reserved for the identy and Jordan-Wigner strings.
 
-    (This class is implemented in :mod:`tenpy.networks.site` but also imported in
-    :mod:`tenpy.models.lattice` for convenience.)
+    .. warning ::
+        The order of the local basis can change depending on the charge conservation!
+        This is a *necessary* feature since we need to sort the basis by charges for efficiency.
+        We use the :attr:`state_labels` (and :attr:`perm`) to keep track of these permutations.
 
     Parameters
     ----------
@@ -603,6 +613,8 @@ class SpinSite(Site):
         names = [None] * d
         names[0] = 'down'
         names[-1] = 'up'
+        if int(2*S) % 2 == 0:
+            names[int(S)] = '0'
         super(SpinSite, self).__init__(leg, names, **ops)
 
     def __repr__(self):
