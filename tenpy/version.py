@@ -23,7 +23,7 @@ import os
 __all__ = ["version", "git_version", "full_version"]
 
 # hard-coded version for people without git...
-version = (0, 2, 0)
+version = (0, 3, 0)
 
 
 def _get_git_version(file=__file__):
