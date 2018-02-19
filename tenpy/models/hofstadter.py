@@ -1,4 +1,8 @@
 """Cold atomic (Harper-)Hofstadter model on a strip or cylinder.
+
+.. todo :
+    WARNGING: These models are still under development and not yet tested for correctness.
+    Use at your own risk!
 """
 # Copyright 2018 TeNPy Developers
 
@@ -10,6 +14,7 @@ from .model import CouplingModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions']
+
 
 class HofstadterFermions(CouplingModel, MPOModel):
     r"""Fermions on a square lattice with magnetic flux.
