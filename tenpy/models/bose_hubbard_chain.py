@@ -64,12 +64,8 @@ class BoseHubbardChain(CouplingModel, MPOModel, NearestNeighborModel):
         # 1) Sites and lattice.
         site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
         lat = Chain(L, site, bc_MPS=bc_MPS)
-
         # 2) Initialize CouplingModel
-        if bc_MPS == 'infinite' or bc_MPS == 'periodic':  #TODO Check if this is correct for mps 'periodic'
-            bc_coupling = 'periodic'
-        else:
-            bc_coupling = 'open'
+        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
         CouplingModel.__init__(self, lat, bc_coupling)
 
         # 3) Build the Hamiltonian.
@@ -83,6 +79,5 @@ class BoseHubbardChain(CouplingModel, MPOModel, NearestNeighborModel):
 
         # 4) Initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
-
         # 5) Initialize H bond  # LS: what does this mean?
         NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
