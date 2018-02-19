@@ -4,6 +4,7 @@
 *.dat
 .DS_Store
 ._*
+__pycache__
 playground
 build
 tenpy/linalg/*.c
