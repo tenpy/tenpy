@@ -7,7 +7,7 @@ Authors of TeNPy
 License
 =======
 
-The source code documented here is published under a GPL v3 license, we we include below.
+The source code documented here is published under a GPL v3 license, which we include below.
 
 .. include:: ../LICENSE
     :literal:

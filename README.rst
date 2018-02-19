@@ -72,3 +72,8 @@ I found a bug
 If you know how to fix it, just do it. ``git commit`` with a message containing ``bug`` in the description.
 
 Alternatively, you can report it in the `BUGS` section of :doc:`doc/todo.rst <todo>`.
+
+License
+-------
+The license for this code is given in the file ``LICENSE`` of the code, in the online documentation included in  
+:doc:`this page <license>`.
