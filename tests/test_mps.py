@@ -145,8 +145,8 @@ def test_transfermatrix(chi=6, d=3):
     B = npc.Array.from_func(np.random.random, [vR.conj(), p, vL.conj()], shape_kw='size')
     A.iset_leg_labels(['vL', 'p', 'vR'])
     B.iset_leg_labels(['vL', 'p', 'vR'])
-    S = [np.ones(chi)]*3
-    psi = mps.MPS([site.Site(p)]*2, [A, B], S, 'infinite', form=None)
+    S = [np.ones(chi)] * 3
+    psi = mps.MPS([site.Site(p)] * 2, [A, B], S, 'infinite', form=None)
     # now actually generate the transfermatrix
     TM = mps.TransferMatrix(psi, psi, charge_sector=0)
     eta, w = TM.eigenvectors(3)
@@ -160,7 +160,7 @@ def test_compute_K():
     psi.test_sanity()
     lat = SquareLattice(3, 2, spin_half, order='default', bc_MPS='infinite')
     U, W, q, ov, te = psi.compute_K(lat, verbose=100)
-    assert(ov == -1.)
+    assert (ov == -1.)
     npt.assert_array_equal(W, [1.])
 
 

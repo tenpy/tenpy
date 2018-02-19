@@ -64,7 +64,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         # check what we can conserve
         if conserve == 'best':
             # check how much we can conserve:
-            if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy', 'E'], "check Sz conservation"):
+            if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
+                               "check Sz conservation"):
                 conserve = 'Sz'
             elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
@@ -85,8 +86,8 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_onsite(-np.asarray(hy), 0, 'Sy')
         self.add_onsite(-np.asarray(hz), 0, 'Sz')
         self.add_onsite(np.asarray(D), 0, 'Sz Sz')
-        self.add_onsite(np.asarray(E)*0.5, 0, 'Sp Sp')
-        self.add_onsite(np.asarray(E)*0.5, 0, 'Sm Sm')
+        self.add_onsite(np.asarray(E) * 0.5, 0, 'Sp Sp')
+        self.add_onsite(np.asarray(E) * 0.5, 0, 'Sm Sm')
         Jx = np.asarray(Jx)
         Jy = np.asarray(Jy)
         muJ = np.asarray(muJ)

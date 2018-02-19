@@ -192,12 +192,11 @@ def skip_timing(dmax, size=20, mod_q=[1], n_qsectors=3, **kwargs):
     return skip_all, do_flat
 
 
-def run_tensordot_timing(
-        sizes=list(range(1, 10)) + list(range(10, 80, 5)),
-        num_qs=list(range(3)),
-        seeds=list(range(5)),
-        dmax=2000,
-        **kwargs):
+def run_tensordot_timing(sizes=list(range(1, 10)) + list(range(10, 80, 5)),
+                         num_qs=list(range(3)),
+                         seeds=list(range(5)),
+                         dmax=2000,
+                         **kwargs):
     """call `tensordot_timing` for different `sizes` and `num_qs`.
     """
     print("------ tensordot_timing ------")

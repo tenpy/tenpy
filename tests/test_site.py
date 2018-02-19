@@ -36,8 +36,7 @@ def test_site():
     assert (s.get_op('op2') is op2)
     assert (s.get_op('silly_op') is op1)
     npt.assert_equal(
-        s.get_op('silly_op op2').to_ndarray(),
-        npc.tensordot(op1, op2, [1, 0]).to_ndarray())
+        s.get_op('silly_op op2').to_ndarray(), npc.tensordot(op1, op2, [1, 0]).to_ndarray())
     leg2 = npc.LegCharge.from_drop_charge(leg, 1)
     leg2 = npc.LegCharge.from_change_charge(leg2, 0, 2, 'changed')
     s2 = s.copy_change_charge(leg2)
@@ -62,8 +61,8 @@ def test_double_site():
             ds.test_sanity()
     fs = site.FermionSite('N')
     ds = site.DoubleSite(fs, fs, 'a', 'b', charges='same')
-    assert ds.need_JW_string == set(
-        [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string])
+    assert ds.need_JW_string == set([op + 'a' for op in fs.need_JW_string] +
+                                    [op + 'b' for op in fs.need_JW_string])
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):

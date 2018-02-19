@@ -10,7 +10,6 @@ if not sys.version_info >= (3, 0):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
 
-
 # options
 # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
 TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 0))

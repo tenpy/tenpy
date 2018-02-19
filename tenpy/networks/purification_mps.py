@@ -130,6 +130,7 @@ class PurificationMPS(MPS):
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
     _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
+
     # thanks to using `self._replace_p_label`
     # correlation_function works as it should, if we adjust _corr_up_diag
 
@@ -370,6 +371,7 @@ class PurificationMPSEnvironment(MPSEnvironment):
     .. warning ::
         This makes only sense if the same `disentanglers` were applied to `bra` and `ket`.
     """
+
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))

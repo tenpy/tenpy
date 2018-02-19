@@ -1,4 +1,5 @@
 """Tools for handling strings."""
+
 # Copyright 2018 TeNPy Developers
 
 

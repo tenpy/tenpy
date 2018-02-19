@@ -11,8 +11,10 @@ import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
-__all__ = ['Site', 'DoubleSite', 'SpinHalfSite', 'SpinSite',
-           'FermionSite', 'SpinHalfFermionSite', 'BosonSite']
+__all__ = [
+    'Site', 'DoubleSite', 'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite',
+    'BosonSite'
+]
 
 
 class Site(object):
@@ -160,8 +162,8 @@ class Site(object):
             op.test_sanity()
         for op in self.need_JW_string:
             assert op in self.opnames
-        np.testing.assert_array_almost_equal(np.diag(np.exp(1.j*np.pi*self.JW_exponent)),
-                                             self.JW.to_ndarray(), 15)
+        np.testing.assert_array_almost_equal(
+            np.diag(np.exp(1.j * np.pi * self.JW_exponent)), self.JW.to_ndarray(), 15)
 
     @property
     def dim(self):
@@ -215,7 +217,7 @@ class Site(object):
         if need_JW:
             self.need_JW_string.add(name)
         if name == 'JW':
-            self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray()))/np.pi)
+            self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray())) / np.pi)
 
     def rename_op(self, old_name, new_name):
         """Rename an added operator.
@@ -239,7 +241,7 @@ class Site(object):
         if need_JW:
             self.need_JW_string.add(new_name)
         if new_name == 'JW':
-            self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray()))/np.pi)
+            self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray())) / np.pi)
 
     def remove_op(self, name):
         """Remove an added operator.
@@ -614,7 +616,7 @@ class SpinSite(Site):
         names = [None] * d
         names[0] = 'down'
         names[-1] = 'up'
-        if int(2*S) % 2 == 0:
+        if int(2 * S) % 2 == 0:
             names[int(S)] = '0'
         super(SpinSite, self).__init__(leg, names, **ops)
 

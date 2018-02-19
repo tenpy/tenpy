@@ -8,7 +8,6 @@ import tenpy.linalg.random_matrix as rmat
 import scipy.sparse.linalg
 import scipy.linalg
 
-
 ch = npc.ChargeInfo([2])
 
 
@@ -31,7 +30,7 @@ def test_FlatLinearOperator(n=30, k=5, tol=5.e-15):
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
-    assert(abs((E0 - E0_flat) / E0_flat) < tol)
+    assert (abs((E0 - E0_flat) / E0_flat) < tol)
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
     print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
@@ -56,7 +55,7 @@ def test_FlatHermitianOperator(n=30, k=5, tol=5.e-15):
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
-    assert(abs((E0 - E0_flat) / E0_flat) < tol)
+    assert (abs((E0 - E0_flat) / E0_flat) < tol)
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
     print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)

@@ -62,7 +62,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
         filling = get_parameter(model_param, 'filling', 0.125, self.__class__)
         Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
         Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_param, 'phi', 2.*np.pi/Lx, self.__class__)
+        phi = get_parameter(model_param, 'phi', 2. * np.pi / Lx, self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
         bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
         conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
@@ -98,6 +98,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
 
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
+
 
 class HofstadterBosons(CouplingModel, MPOModel):
     r"""Bosons on a square lattice with magnetic flux.
@@ -149,7 +150,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         filling = get_parameter(model_param, 'filling', 0.125, self.__class__)
         Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
         Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_param, 'phi', 2.*np.pi/Lx, self.__class__)
+        phi = get_parameter(model_param, 'phi', 2. * np.pi / Lx, self.__class__)
         mu = get_parameter(model_param, 'mu', 0, self.__class__)
         U = get_parameter(model_param, 'U', 0, self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
@@ -169,8 +170,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
 
         # 6) add terms of the Hamiltonian
-        self.add_onsite(np.asarray(U)/2, 0, 'NN')
-        self.add_onsite(-np.asarray(U)/2 - np.asarray(mu), 0, 'N')
+        self.add_onsite(np.asarray(U) / 2, 0, 'NN')
+        self.add_onsite(-np.asarray(U) / 2 - np.asarray(mu), 0, 'N')
 
         # hopping in x-direction: uniform
         self.add_coupling(-Jx, 0, 'B', 0, 'Bd', [1, 0])

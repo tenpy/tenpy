@@ -867,7 +867,7 @@ class MPS(object):
         if by_charge:
             res = []
             for i in range(self.L + 1)[self.nontrivial_bonds]:
-                ss = -2.*np.log(self._S[i])
+                ss = -2. * np.log(self._S[i])
                 if i < self.L:
                     leg = self._B[i].get_leg('vL')
                 else:  # i == L: segment b.c.
@@ -877,7 +877,7 @@ class MPS(object):
                 res.append(spectrum)
             return res
         else:
-            return [np.sort(-2.*np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
+            return [np.sort(-2. * np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
 
     def get_rho_segment(self, segment):
         """Return reduced density matrix for a segment.
@@ -1416,7 +1416,7 @@ class MPS(object):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
         """
-        siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i+1)]
+        siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
         if swap_op == 'auto':
             # get sign for Fermions.
             # If we write the wave function as
@@ -1428,7 +1428,7 @@ class MPS(object):
             sign = siteL.JW_exponent[:, np.newaxis] * siteR.JW_exponent[np.newaxis, :]
             if np.any(sign):
                 dL, dR = siteL.dim, siteR.dim
-                sign = np.real_if_close(np.exp(1.j*np.pi*sign.reshape([dL*dR])))
+                sign = np.real_if_close(np.exp(1.j * np.pi * sign.reshape([dL * dR])))
                 swap_op = np.diag(sign).reshape([dL, dR, dL, dR])
                 legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
                 swap_op = npc.Array.from_ndarray(swap_op, legs)
@@ -1449,16 +1449,17 @@ class MPS(object):
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
-        B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
-                            V.conj(),
-                            axes=['(vR.p1)', '(vR*.p1*)'])
+        B_L = npc.tensordot(
+            C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
+            V.conj(),
+            axes=['(vR.p1)', '(vR*.p1*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.set_SR(i, S)
         self.set_B(i, B_L, 'B')
-        self.set_B(i+1, B_R, 'B')
+        self.set_B(i + 1, B_R, 'B')
         self.sites[self._to_valid_index(i)] = siteR  # swap 'sites' as well
-        self.sites[self._to_valid_index(i+1)] = siteL
+        self.sites[self._to_valid_index(i + 1)] = siteL
         return err
 
     def permute_sites(self, perm, swap_op='auto', trunc_par={}, verbose=0):
@@ -1490,16 +1491,16 @@ class MPS(object):
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
-        while i < self.L-1:
-            if perm[i] > perm[i+1]:
+        while i < self.L - 1:
+            if perm[i] > perm[i + 1]:
                 if verbose > 1:
-                    print(i, ": chi = ", self._S[i+1].shape[0], end='')
+                    print(i, ": chi = ", self._S[i + 1].shape[0], end='')
                 trunc = self.swap_sites(i, swap_op, trunc_par)
                 if verbose > 1:
-                    print("->", self._S[i+1].shape[0], ". eps = ", trunc.eps)
+                    print("->", self._S[i + 1].shape[0], ". eps = ", trunc.eps)
                 num_swaps += 1
-                x, y = perm[i], perm[i+1]
-                perm[i+1], perm[i] = x, y
+                x, y = perm[i], perm[i + 1]
+                perm[i + 1], perm[i] = x, y
                 # restart from very left; but we know it's already sorted up to i-1
                 if i > 0:
                     i -= 1
@@ -1578,7 +1579,7 @@ class MPS(object):
         psi_t = self.copy()
         # apply permutation
         perm = np.asarray(perm)
-        trunc_err = psi_t.permute_sites(perm, swap_op, trunc_par, verbose/10.)
+        trunc_err = psi_t.permute_sites(perm, swap_op, trunc_par, verbose / 10.)
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
@@ -1599,11 +1600,11 @@ class MPS(object):
         W = npc.eigvals(sUs_blocked, sort='m>')
         # W = s^2 exp(i K ) up to overall scaling
         # Strip S's from U
-        inv_S = 1./self.get_SL(0)
+        inv_S = 1. / self.get_SL(0)
         U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)
         # U should be unitary - scale it
-        U *= (np.sqrt(U.shape[0])/npc.norm(U))
-        return U, W/np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err
+        U *= (np.sqrt(U.shape[0]) / npc.norm(U))
+        return U, W / np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err
 
     def __str__(self):
         """Some status information about the MPS."""
@@ -1836,8 +1837,8 @@ class MPS(object):
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
-            U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
-                                       cutoff=0., inner_labels=['vR', 'vL'])
+            U, S, VR_segment = npc.svd(
+                M.combine_legs(['vL'] + self._p_label), cutoff=0., inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
@@ -1852,9 +1853,10 @@ class MPS(object):
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                              cutoff=0.,
-                              inner_labels=['vR', 'vL'])
+            U, S, V = npc.svd(
+                M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                cutoff=0.,
+                inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')

@@ -22,6 +22,7 @@ from ..tools.misc import to_iterable
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
+
 # (update module doc string if you add further lattices)
 
 

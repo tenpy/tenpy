@@ -7,9 +7,10 @@ This is an implementation of 'NCON: A tensor network contractor for MATLAB'
 by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see arXiv:1402.0939
 
 .. todo ::
-- implement or wrap netcon.m, a function to find optimal contractionn sequences (arXiv:1304.6112)
-- improve helpfulness of Warnings
-- _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
+    - implement or wrap netcon.m, a function to find optimal contractionn sequences
+      (arXiv:1304.6112)
+    - improve helpfulness of Warnings
+    - _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
 
 """
 # Copyright 2018 TeNPy Developers
@@ -24,7 +25,7 @@ __all__ = ['outer_product', 'contract']
 outer_product = -66666666  # a constant that represents an outer product in the sequence of ncon
 
 
-def contract(tensor_list, tensor_names = None, leg_contractions = None, open_legs = None, sequence=None):
+def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=None, sequence=None):
     """
 
     Contract a network of tensors.
@@ -32,21 +33,23 @@ def contract(tensor_list, tensor_names = None, leg_contractions = None, open_leg
 
     Parameters
     ----------
-    tensor_list : list of :class:`Array`
-        The tensors to be contracted
-    leg_contractions : list of list
+    tensor_list : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The tensors to be contracted.
+    leg_contractions : list of ``[n1, l1, n2, l2]``
         A list of contraction instructions. An entry of leg_contractions has the form
-        [n1,l1,n2,l2]
-        where n1, n2 are entries of tensor_names and each identify an :class:`Array` in tensor_list
-        l1, l2 are leg labels of the corresponding :class:`Array`s
-        The instruction implies to contract leg l1 of tensor n1 with leg l2 of tensor n2
-    open_legs : list of list
+        ``[n1, l1, n2, l2]``, where ``n1, n2`` are entries of `tensor_names` and each identify an
+        :class:`~tenpy.linalg.np_conserved.Array` in `tensor_list`.
+        ``l1, l2`` are leg labels of the corresponding :class:`~tenpy.linalg.np_conserved.Array`.
+        The instruction implies to contract leg ``l1`` of tensor ``n1``
+        with leg ``l2`` of tensor ``n2``.
+    open_legs : list of ``[n1, l1, l]``
         A list of instructions for "open" (uncontracted) legs.
-        [n1,l1,l]
-        implies that leg l1 of tensor n1 is not contracted and is labelled l in the result
+        ``[n1, l1, l]`` implies that leg ``l1`` of tensor ``n1`` is not contracted
+        and is labelled ``l`` in the result.
     tensor_names : list of str
-        A list of names for each tensor, to be used in leg_contractions and open_legs.
-        The default value is list(range(len(tensor_list))), so that the tensor "names" are 0,1,2,...
+        A list of names for each tensor, to be used in `leg_contractions` and `open_legs`.
+        The default value is list(range(len(tensor_list))), so that the tensor "names" are
+        ``0, 1, 2, ...``.
     sequence : list of int
         The order in which the leg_contractions are to be performed.
         An entry of network_contractor.outer_product indicates performing an outer product.
@@ -55,7 +58,7 @@ def contract(tensor_list, tensor_names = None, leg_contractions = None, open_leg
     Returns
     -------
     result : :class:`Array` | complex
-        The number or tensor resulting from the contraction
+        The number or tensor resulting from the contraction.
 
     """
 
@@ -94,11 +97,11 @@ def contract(tensor_list, tensor_names = None, leg_contractions = None, open_leg
         leg_idx2 = tensor_list[con[2]].get_leg_index(con[3])
 
         if leg_links[con[0]][leg_idx1] is not None:
-            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[1])
-                               + ' of tensor ' + str(tensor_names[con[0]]) + 'were supplied')
+            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[1]) +
+                               ' of tensor ' + str(tensor_names[con[0]]) + 'were supplied')
         if leg_links[con[2]][leg_idx2] is not None:
-            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[3])
-                               + ' of tensor ' + str(tensor_names[con[2]]) + 'were supplied')
+            raise RuntimeError('Multiple contradictory contractions for the leg ' + str(con[3]) +
+                               ' of tensor ' + str(tensor_names[con[2]]) + 'were supplied')
 
         leg_links[con[0]][leg_idx1] = contraction_counter
         leg_links[con[2]][leg_idx2] = contraction_counter
@@ -123,22 +126,23 @@ def contract(tensor_list, tensor_names = None, leg_contractions = None, open_leg
 
 
 def _ncon(tensor_list, leg_links, sequence):
-    """
-    helper function for contract
+    """Helper function for contract.
+
     _ncon is a python implementation of ncon.m (arXiv:1304.6112) for tenpy :class:'Array's
     ncon is a wrapper that translates from a more python/tenpy input style
 
     Parameters
     ----------
     tensor_list : list of :class:'Array'
-        tensors to be contracted
-
+        Tensors to be contracted.
     leg_links : list of list of int
-        Each entry of leg_links describes the connectivity of the corresponding tensor in tensor_list.
+        Each entry of leg_links describes the connectivity of the corresponding tensor in
+        `tensor_list`.
         Each entry is a list that has an entry for each leg of the corresponding tensor.
-        values 0,1,2,... are labels of contracted legs and should appear exactly twice in leg_links
-        values -1,-2,-3,... are labels of uncontracted legs and indicate the final ordering (-1 is first axis)
-
+        Values ``0,1,2,...`` are labels of contracted legs and should appear
+        exactly twice in `leg_links`.
+        Values ``-1,-2,-3,...`` are labels of uncontracted legs and indicate the final ordering
+        (``-1`` is first axis).
     sequence : list of int
         The order in which the contractions are to be performed.
         An entry of network_contractor.outer_product indicates performing an outer product.
@@ -147,11 +151,12 @@ def _ncon(tensor_list, leg_links, sequence):
     Returns
     -------
     result : :class:`Array` | complex
-        The number or tensor resulting from the contraction
+        The number or tensor resulting from the contraction.
 
     """
 
     tensor_list = list(tensor_list)
+
     # check contractibility of legs?
 
     def flatten(l):
@@ -176,15 +181,17 @@ def _ncon(tensor_list, leg_links, sequence):
 
                 # find all traced indices on that tensor
                 traced_indices = np.sort(leg_links[tensors[0]])
-                traced_indices = [item for item, count in collections.Counter(traced_indices).items() if count == 2]
+                traced_indices = [
+                    item for item, count in collections.Counter(traced_indices).items()
+                    if count == 2
+                ]
 
                 # check if this is in accordance with sequence and update sequence
                 doing_traces, sequence = _find_in_sequence(traced_indices, sequence)
                 if not np.array_equal(np.sort(traced_indices), np.sort(doing_traces)):
-                    warnings.warn('Suboptimal contraction sequence. When tracing legs ' +
-                                  str(doing_traces) +
-                                  ' the legs '
-                                  + str(list(filter(lambda n: n not in doing_traces, traced_indices))) +
+                    warnings.warn('Suboptimal contraction sequence. When tracing legs ' + str(
+                        doing_traces) + ' the legs ' + str(
+                            list(filter(lambda n: n not in doing_traces, traced_indices))) +
                                   'should also be traced')
                 # TODO translate this back to human readable leg label?
 
@@ -208,21 +215,26 @@ def _ncon(tensor_list, leg_links, sequence):
                 # check if this is in accordance with sequence
                 contraction_indices, sequence = _find_in_sequence(common_indices, sequence)
                 if not np.array_equal(np.sort(contraction_indices), np.sort(common_indices)):
-                    warnings.warn('Suboptimal contraction sequence. When contracting legs ' +
-                                  str(contraction_indices) +
-                                  ' the legs '
-                                  + str(list(filter(lambda n: n not in contraction_indices, common_indices))) +
+                    warnings.warn('Suboptimal contraction sequence. When contracting legs ' + str(
+                        contraction_indices) + ' the legs ' + str(
+                            list(filter(lambda n: n not in contraction_indices, common_indices))) +
                                   'should also be traced')
                     # TODO translate this back to human readable leg names
 
                 # are there traced indices on either of these tensors?
                 # noinspection PyArgumentList
-                traces0 = [item for item, count in collections.Counter(leg_links[tensors[0]]).items() if count == 2]
-                traces1 = [item for item, count in collections.Counter(leg_links[tensors[1]]).items() if count == 2]
+                traces0 = [
+                    item for item, count in collections.Counter(leg_links[tensors[0]]).items()
+                    if count == 2
+                ]
+                traces1 = [
+                    item for item, count in collections.Counter(leg_links[tensors[1]]).items()
+                    if count == 2
+                ]
                 if len(traces0) + len(traces1) != 0:
-                    warnings.warn('Suboptimal contraction sequence. When processing '
-                                  + str(None)
-                                  + ' one of the involved tensors have legs that could be traced over first')
+                    warnings.warn(
+                        'Suboptimal contraction sequence. When processing ' + str(None) +
+                        ' one of the involved tensors have legs that could be traced over first')
                     # TODO human readable identifier
                 # contract all contraction_indices and update leg_links
                 tensor_list[tensors[0]], leg_links[tensors[0]] = \
@@ -235,10 +247,10 @@ def _ncon(tensor_list, leg_links, sequence):
 
 
 def _find_in_sequence(indices, sequence):
-    """
-    Helper function for _ncon
+    """Helper function for _ncon
 
     check if the supplied indices appear at the beggining of sequence
+
     Parameters
     ----------
     indices : list of int
@@ -265,7 +277,8 @@ def _do_trace(a, leg_link, traced_indices):
 
     Trace over pair(s) of legs on a given tensor
     Update the leg_link entry
-    TODO perform all traces simultaneously
+    .. todo :
+        perform all traces simultaneously
 
     Parameters
     ----------
@@ -300,7 +313,7 @@ def _do_trace(a, leg_link, traced_indices):
 
     new_order = block_untraced + [l[n] for n in range(len(block_a)) for l in [block_a, block_b]]
     a.itranspose(new_order)
-    for n in range(len(new_order)-1, len(block_untraced), -2):
+    for n in range(len(new_order) - 1, len(block_untraced), -2):
         a = npc.trace(a, n, n - 1)
     leg_link = untraced_indices
 
@@ -308,8 +321,7 @@ def _do_trace(a, leg_link, traced_indices):
 
 
 def _tcontract(t1, t2, links1, links2, contract_legs):
-    """
-    Helper function for _ncon
+    """Helper function for _ncon.
 
     Contract two tensors along one or multiple axis
 
@@ -397,7 +409,9 @@ def _outer_product(tensor_list, leg_links, sequence):
             warnings.warn('Not enough OP entries in sequence')
 
     # determine number of pending outer products
-    num_op = len(sequence)  # default value: if no entry in sequence is find that is not outer_product, all of them are
+    num_op = len(
+        sequence
+    )  # default value: if no entry in sequence is find that is not outer_product, all of them are
     for n in range(len(sequence)):
         if sequence[n] != outer_product:
             num_op = n
@@ -418,18 +432,22 @@ def _outer_product(tensor_list, leg_links, sequence):
         ptr = num_op  # sequence[num_op] is the first entry that is not _outer
         while sum(flags) < num_op + 2:
             if ptr >= len(sequence):
-                raise ValueError('sequence contains outer products but ended before finding enough '
-                                 'tensors for the outer product.')
+                raise ValueError(
+                    'sequence contains outer products but ended before finding enough '
+                    'tensors for the outer product.')
             if sequence[ptr] == outer_product:
-                raise ValueError('sequence contains outer products but ncon encountered another OP before '
-                                 'identifying all tensors involved in the first.')
+                raise ValueError(
+                    'sequence contains outer products but ncon encountered another OP before '
+                    'identifying all tensors involved in the first.')
             count = 0
             for a in range(len(leg_links)):
                 if sequence[ptr] in leg_links[a]:
                     flags[a] = True
                     count = count + 1
             if count != 2:
-                raise ValueError('sequence contains outer products. An index on one of the legs is not appearing twice.')
+                raise ValueError(
+                    'sequence contains outer products. An index on one of the legs is not appearing twice.'
+                )
             ptr = ptr + 1
 
         # identify which of these tensors is *not* participating in the OP
@@ -472,7 +490,8 @@ def _outer_product(tensor_list, leg_links, sequence):
         op_indices = [item for sublist in op_indices for item in sublist]
         for a in range(len(op_indices)):
             if not op_indices[a] in leg_links[post_op_tensor]:
-                raise ValueError('Outer product failure. OP tensor has contraction with multiple other tensors.')
+                raise ValueError(
+                    'Outer product failure. OP tensor has contraction with multiple other tensors.')
 
     # if either tensor is not an :class:'Array' try converting
     # this may occur if a closed disconnected diagram is part of the contraction.
@@ -487,10 +506,10 @@ def _outer_product(tensor_list, leg_links, sequence):
         order = np.argsort(op_sizes)
 
         # construct outer product of the two smallest tensors
-        tensor_list[op_list[order[0]]] = npc.outer(tensor_list[op_list[order[0]]], tensor_list[op_list[order[1]]])
+        tensor_list[op_list[order[0]]] = npc.outer(tensor_list[op_list[order[0]]],
+                                                   tensor_list[op_list[order[1]]])
         tensor_list.pop(op_list[order[1]])
-        leg_links[op_list[order[0]]] = leg_links[op_list[order[0]]] + leg_links[
-            op_list[order[1]]]
+        leg_links[op_list[order[0]]] = leg_links[op_list[order[0]]] + leg_links[op_list[order[1]]]
         leg_links.pop(op_list[order[1]])
 
         # re adjust op_sizes
