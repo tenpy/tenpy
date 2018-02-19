@@ -45,3 +45,4 @@ Content
    changes_TeNPy
    contribution
    todo
+   license
