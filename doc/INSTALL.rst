@@ -1,14 +1,15 @@
 Installation instructions
 =========================
 
-Right now, this documentetion is only distributed with the code, so I guess you already have the code somehow.
-Let's assume you got the code with ``git clone {url-to-gitrepo} $HOME/TeNPy``.
+To get the latest version of the code, simply clone it with `Git <https://git-scm.com/>`_ using the following command::
+    git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
+    cd $HOME/TeNPy
 
+Adjust $HOME/TeNPy to the path wherever you want to save the library.
 If you don't want to contribute, you should checkout the latest stable release::
 
-    cd $HOME/TeNPy
     git tag   # this prints the available version tags
-    git co v0.0.0  # or whatever is the lastest stable version
+    git co v0.3.0  # or whatever is the lastest stable version
 
 
 Minimal Requirements

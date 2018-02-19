@@ -24,25 +24,22 @@ All documentation should be formated as `reStructuredText <http://www.sphinx-doc
 This means it's readable in the source plain text, but one can also convert it to other formats.
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice, or just read the source.
 
+Morover, an auto-generated HTML documentaiton is available on `github pages <https://tenpy.github.io/documentation/>`_.
+
 Alternatively, you can also use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documentation 
-in various formats including HTML or PDF.
+in various formats (including HTML or PDF) yourself, as described in the following.
 You can install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
 
     sudo pip install --upgrade sphinx numpydoc
-
-.. note ::
-
-   If you don't have super user rights, try ``pip install --upgrade --user sphinx numpydoc`` to 
-   install the packages to your home directory.
 
 Afterwards, go to the folder `doc/` and run the following command::
 
     make html
 
-This should generate the html documentation in `doc/sphinx_build/html`.
+This should generate the html documentation in the folder `doc/sphinx_build/html`.
 Simply open this folder (or to be precise: the file `index.html` in it) in your webbroser
 and enjoy this and other documentation beautifully rendered, with cross links, math formulas
-and even a search function :-).
+and even a search function.
 
 .. note ::
 
