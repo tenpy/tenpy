@@ -215,8 +215,8 @@ def run(psi, model, DMRG_params):
                 break
             else:
                 if verbose >= 1:
-                    print("Convergence criterium reached with enabled mixer.\n" +  \
-                        "disable mixer and continue")
+                    print("Convergence criterium reached with enabled mixer.\n"
+                          "disable mixer and continue")
                     engine.mixer = None
         if time.time() - start_time > max_seconds:
             shelve = True
@@ -626,9 +626,9 @@ class Engine(object):
             |   -- theta --   ==>    -- U -- S --  VH -
             |      |   |                |          |
 
-        Whithout a mixer, this is done by a simple svd and truncation of Schmidt values.
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
 
-        Whith a mixer, we calculate the left and right reduced density using the mixer
+        With a mixer, we calculate the left and right reduced density using the mixer
         (which might include applications of `H`).
         These density matrices are diagonalized and truncated such that we effectively perform
         a svd for the case ``mixer.amplitude=0``.
@@ -681,6 +681,7 @@ class Engine(object):
         val_L /= np.sum(val_L)
         keep_L, _, errL = truncate(np.sqrt(val_L), self.trunc_params)
         U.iproject(keep_L, axes='vR')  # in place
+        U = U.gauge_total_charge(1, qtotal_i0)
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_L V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_L
         val_R, Vc = npc.eigh(rho_R)
@@ -691,6 +692,7 @@ class Engine(object):
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), self.trunc_params)
         VH.iproject(keep_R, axes='vL')
+        VH = VH.gauge_total_charge(0, self.env.ket.get_B(i0+1, form=None).qtotal)
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
