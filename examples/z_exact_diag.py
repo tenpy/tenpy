@@ -36,7 +36,7 @@ assert (abs(ov - 1.) < 1.e-13)
 
 # second way: convert ED vector to MPS
 psi_ED_mps = ED.full_to_mps(psi_ED)
-ov, _ = psi_ED_mps.overlap(psi_DMRG)
+ov = psi_ED_mps.overlap(psi_DMRG)
 print("|<psi_ED_mps|psi_DMRG>| =", abs(ov))
 assert (abs(abs(ov) - 1.) < 1.e-13)
 # -> advantange: expectation_value etc. of MPS are available!

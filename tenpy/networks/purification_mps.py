@@ -83,7 +83,16 @@ of reducing the entanglement of the MPS/MPO to the minimal value.
 For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.purification_tebd`),
 see [Hauschild2017]_.
 
-.. Note :
+.. note ::
+    The classes :class:`~tenpy.linalg.networks.mps.MPSEnvironment` and
+    :class:`~tenpy.linalg.networks.mps.TransferMatrix` should also work for the
+    :class:`PurificationMPS` defined here.
+    For example, you can use :meth:`~tenpy.networks.mps.MPSEnvironment.expectation_value`
+    for the expectation value of operators between different PurificationMPS.
+    However, this makes only sense if the *same* disentangler was applied
+    to the `bra` and `ket` PurificationMPS.
+
+.. note ::
     The literature (e.g. section 7.2 of [Schollwoeck2011]_ or [Karrasch2013]_) suggests to use
     a `singlet` as a maximally entangled state.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
@@ -309,28 +318,6 @@ class PurificationMPS(MPS):
                     rho = npc.tensordot(rho, B.conj(), axes=contr_rho)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other):
-        """Compute overlap :math:`<self|other>`.
-
-        Parameters
-        ----------
-        other : :class:`PurificationMPS`
-            An MPS with the same physical sites, and on which the same `disentanglers`
-            acted in the auxiliar space.
-
-        Returns
-        -------
-        overlap : dtype
-            The contraction <self|other>, taking into account the :attr:`norm` of both MPS.
-        env : PurificationMPSEnvironment
-            The environment (storing the LP and RP) used to calculate the overlap.
-        """
-        if not self.finite:
-            # requires TransferMatrix for finding dominant left/right parts
-            raise NotImplementedError("TODO")
-        env = PurificationMPSEnvironment(self, other)
-        return env.full_contraction(0), env
-
     def swap_sites(self, i, swapOP='auto', trunc_par={}):
         raise NotImplementedError()
 
@@ -363,25 +350,3 @@ class PurificationMPS(MPS):
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*', 'q*'], ['vR*', 'p', 'q']])
         return res
-
-
-class PurificationMPSEnvironment(MPSEnvironment):
-    """Same as :class:`~tenpy.networks.mps.MPSEnvironment`, but for :class:`PurificationMPS`.
-
-    .. warning ::
-        This makes only sense if the same `disentanglers` were applied to `bra` and `ket`.
-    """
-
-    def _contract_LP(self, i, LP):
-        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        LP = npc.tensordot(
-            self.bra.get_B(i, form='A').conj(), LP, axes=(['p*', 'q*', 'vL*'], ['p', 'q', 'vR*']))
-        return LP  # labels 'vR*', 'vR'
-
-    def _contract_RP(self, i, RP):
-        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(
-            self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'q*', 'vR*'], ['p', 'q', 'vL*']))
-        return RP  # labels 'vL', 'vL*'

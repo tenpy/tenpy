@@ -1,7 +1,7 @@
 """Cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 
 .. todo :
-    WARNGING: These models are still under development and not yet tested for correctness.
+    WARNING: These models are still under development and not yet tested for correctness.
     Use at your own risk!
 """
 # Copyright 2018 TeNPy Developers

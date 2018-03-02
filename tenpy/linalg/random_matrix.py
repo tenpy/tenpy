@@ -24,7 +24,7 @@ U_close_1   U(n)                     ?                       /                  
 All functions in this module take a tuple ``(n, n)`` as first argument, such that
 we can use the function :meth:`~tenpy.linalg.np_conserved.Array.from_func`
 to generate a block diagonal :class:`~tenpy.linalg.np_conserved.Array` with the block from the
-corresponding ensemble, for example ::
+corresponding ensemble, for example::
 
     npc.Array.from_func_square(GOE, [leg, leg.conj()])
 
@@ -33,7 +33,13 @@ corresponding ensemble, for example ::
 
 import numpy as np
 
-__all__ = ['standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1', 'U_close_1']
+__all__ = ['box', 'standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1',
+           'U_close_1']
+
+
+def box(size, W=1.):
+    """return random number uniform in (-W, W]."""
+    return (0.5-np.random.random(size))*(2.*W)
 
 
 def standard_normal_complex(size):

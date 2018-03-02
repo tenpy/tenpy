@@ -12,7 +12,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import SquareLattice
 
 from tenpy.networks import mps, site
-from random_test import gen_random_legcharge, rand_permutation
+from random_test import gen_random_legcharge, rand_permutation, random_MPS
 import tenpy.linalg.np_conserved as npc
 
 spin_half = site.SpinHalfSite(conserve='Sz')
@@ -30,7 +30,7 @@ def test_mps():
         print(repr(psi))
         print(str(psi))
         psi2 = psi.copy()
-        ov, env = psi.overlap(psi2)
+        ov = psi.overlap(psi2)
         assert (abs(ov - 1.) < 1.e-15)
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.)  # product state has no entanglement.
@@ -54,7 +54,7 @@ def test_mps_add():
     # TODO: doesn't work due to gauging of charges....
     psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=0, down=1, bc='finite')
     print(psi.expectation_value('Sz'))
-    #  ov = psi.overlap(psi_sum)[0]
+    #  ov = psi.overlap(psi_sum)
     #  print "ov = ", ov
     #  assert( abs(1.-ov) < 1.e-14)
 
@@ -124,7 +124,7 @@ def test_mps_swap():
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='finite')
     psi_swap = mps.MPS.from_singlets(spin_half, L, pairs_swap, bc='finite')
     psi.swap_sites(2)
-    assert abs(psi.overlap(psi_swap)[0] - 1.) < 1.e-15
+    assert abs(psi.overlap(psi_swap) - 1.) < 1.e-15
     # now test permutation
     # recover original psi
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='finite')
@@ -132,26 +132,38 @@ def test_mps_swap():
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
     psi.permute_sites(perm, verbose=2)
-    print(psi.overlap(psi_perm)[0], psi.norm_test())
-    assert abs(abs(psi.overlap(psi_perm)[0]) - 1.) < 1.e-10
+    print(psi.overlap(psi_perm), psi.norm_test())
+    assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
 
 
-def test_transfermatrix(chi=6, d=3):
-    ch = npc.ChargeInfo([2])
-    p = gen_random_legcharge(ch, d, qconj=1)
-    vL = gen_random_legcharge(ch, chi, qconj=1)
-    vR = gen_random_legcharge(ch, chi, qconj=-1)
-    A = npc.Array.from_func(np.random.random, [vL, p, vR], shape_kw='size')
-    B = npc.Array.from_func(np.random.random, [vR.conj(), p, vL.conj()], shape_kw='size')
-    A.iset_leg_labels(['vL', 'p', 'vR'])
-    B.iset_leg_labels(['vL', 'p', 'vR'])
-    S = [np.ones(chi)] * 3
-    psi = mps.MPS([site.Site(p)] * 2, [A, B], S, 'infinite', form=None)
-    # now actually generate the transfermatrix
-    TM = mps.TransferMatrix(psi, psi, charge_sector=0)
+def test_TransferMatrix(chi=4, d=2):
+    psi = random_MPS(2, d, chi, bc='infinite', form=None)
+    full_TM = npc.tensordot(psi._B[0], psi._B[0].conj(), axes=['p', 'p*'])
+    full_TM = npc.tensordot(full_TM, psi._B[1], axes=['vR', 'vL'])
+    full_TM = npc.tensordot(full_TM, psi._B[1].conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
+    full_TM = full_TM.combine_legs([['vL', 'vL*'], ['vR', 'vR*']], qconj=[+1, -1])
+    full_TM_dense = full_TM.to_ndarray()
+    eta_full, w_full = np.linalg.eig(full_TM_dense)
+    sort = np.argsort(np.abs(eta_full))[::-1]
+    eta_full = eta_full[sort]
+    w_full = w_full[:, sort]
+    TM = mps.TransferMatrix(psi, psi, charge_sector=0, form=None)
     eta, w = TM.eigenvectors(3)
-    print("transfer matrix yields:")
-    print(eta, w)
+    print("transfer matrix yields eigenvalues ", eta)
+    print(eta.shape, eta_full.shape)
+    print(psi.dtype)
+    # note: second and third eigenvalue are complex conjugates
+    if bool(eta[1].imag > 0.) == bool(eta_full[1].imag > 0.):
+        npt.assert_allclose(eta[:3], eta_full[:3])
+    else:
+        npt.assert_allclose(eta[:3], eta_full[:3].conj())
+    # compare largest eigenvector
+    w0_full = w_full[:, 0]
+    w0 = w[0].to_ndarray()
+    assert(abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
+    w0_full /= np.sum(w0_full)  # fixes norm & phase
+    w0 /= np.sum(w0)
+    npt.assert_allclose(w0, w0_full)
 
 
 def test_compute_K():
@@ -169,5 +181,5 @@ if __name__ == "__main__":
     test_mps_add()
     test_MPSEnvironment()
     test_singlet_mps()
-    test_transfermatrix()
+    test_TransferMatrix()
     test_compute_K()

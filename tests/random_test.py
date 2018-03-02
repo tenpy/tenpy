@@ -4,13 +4,16 @@ import numpy as np
 import itertools as it
 import tenpy.linalg.charges as charges
 import tenpy.linalg.np_conserved as npc
+import tenpy.linalg.random_matrix as randmat
+from tenpy.networks.site import Site
+from tenpy.networks.mps import MPS
 
 # fix the random number generator such that tests are reproducible
 np.random.seed(3141592)  # (it should work for any seed)
 
 __all__ = [
     'rand_permutation', 'rand_distinct_int', 'rand_partitions', 'gen_random_legcharge_nq',
-    'gen_random_legcharge', 'random_Array'
+    'gen_random_legcharge', 'random_Array', 'random_MPS'
 ]
 
 
@@ -77,3 +80,20 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
     if sort:
         _, a = a.sort_legcharge(True, True)  # increase the probability for larger blocks
     return a
+
+
+def random_MPS(L, d, chimax, func=randmat.standard_normal_complex, bc='finite', form='B'):
+    site = Site(charges.LegCharge.from_trivial(d))
+    chi = [chimax]*(L+1)
+    if bc == 'finite':
+        for i in range(L//2+1):
+            chi[i] = chi[L-i] = min(chi[i], d**i)
+    Bs = []
+    for i in range(L):
+        Bs.append(func((d, chi[i], chi[i+1])))
+    dtype = np.common_type(*Bs)
+    psi = MPS.from_Bflat([site]*L, Bs, bc=bc, dtype=dtype, form=None)
+    if form is not None:
+        psi.canonical_form()
+        psi.convert_form(form)
+    return psi

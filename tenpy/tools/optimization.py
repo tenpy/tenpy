@@ -109,7 +109,7 @@ class OptimizationFlag(IntEnum):
     skip_arg_checks = 3
 
 
-def set_level(new_level):
+def set_level(new_level=1):
     """Set the global optimization level.
 
     Parameters

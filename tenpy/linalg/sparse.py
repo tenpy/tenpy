@@ -204,7 +204,7 @@ class FlatLinearOperator(ScipyLinearOperator):
 class FlatHermitianOperator(FlatLinearOperator):
     """Hermitian variant of :class:`FlatLinearOperator`.
 
-    Note that we don't check :meth:`matvec` to correspond to return a hermitian result,
+    Note that we don't check :meth:`matvec` to return a hermitian result,
     we only define an adjoint to be `self`."""
 
     def _adjoint(self):

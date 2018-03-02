@@ -2783,6 +2783,7 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
     -------
     new_grid_legs : list of :class:`LegCharge`
         A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
+        The new LegCharge is neither bunched nor sorted!
 
     See also
     --------
@@ -2878,7 +2879,8 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
     Returns
     -------
     new_legcharges : list of :class:`LegCharge`
-        A copy of the given `grid_legs` with the ``None`` replaced by a compatible LegCharge.
+        A copy of the given `legcharges` with the ``None`` replaced by a compatible LegCharge.
+        The new legcharge is 'bunched', but not sorted!
 
     See also
     --------
@@ -2895,7 +2897,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         raise ValueError("array shape incompatible with legcharges")
     axis = [a for a, l in enumerate(legs) if l is None]
     if len(axis) > 1:
-        raise ValueError("can only derive one charges for one leg.")
+        raise ValueError("can only derive charges for one leg.")
     axis = axis[0]
     axis_len = flat_array.shape[axis]
     if chargeinfo.qnumber == 0:
@@ -2908,7 +2910,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         A_i = np.take(flat_array, i, axis=axis)
         qflat[i] = detect_qtotal(A_i, legs_known, cutoff)
     qflat = chargeinfo.make_valid((qtotal - qflat) * qconj)
-    legs[axis] = LegCharge.from_qflat(chargeinfo, qflat, qconj)
+    legs[axis] = LegCharge.from_qflat(chargeinfo, qflat, qconj).bunch()[1]
     return legs
 
 

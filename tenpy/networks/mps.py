@@ -22,12 +22,8 @@ However, be aware that e.g. :attr:`~tenpy.networks.mps.MPS.chi` returns only the
 
 The matrices and singular values always represent a normalized state
 (i.e. ``np.linalg.norm(psi._S[ib]) == 1`` up to roundoff errors),
-but we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
+but (for finite MPS) we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
 (which is respected by :meth:`~tenpy.networks.mps.MPS.overlap`, ...).
-
-For efficient simulations, it is crucial that the MPS is in a 'canonical form'.
-The different forms and boundary conditions are easiest described in Vidal's
-:math:`\Gamma, \Lambda` notation [Vidal2004]_.
 
 Valid MPS boundary conditions (not to confuse with `bc_coupling` of
 :class:`tenpy.models.model.CouplingModel`)  are the following:
@@ -55,7 +51,7 @@ An MPS can be in different 'canonical forms' (see [Vidal2004]_, [Schollwoeck2011
 To take care of the different canonical forms, algorithms should use functions like
 :meth:`~tenpy.networks.mps.MPS.get_theta`, :meth:`~tenpy.networks.mps.MPS.get_B`
 and :meth:`~tenpy.networks.mps.MPS.set_B` instead of accessing them directly,
-as they return the `B` in the desired form (which can be chosed as an argument).
+as they return the `B` in the desired form (which can be chosen as an argument).
 
 ======== ========== =======================================================================
 `form`   tuple      description
@@ -128,11 +124,12 @@ class MPS(object):
         The data type of the ``_B``.
     norm : float
         The norm of the state, i.e. ``sqrt(<psi|psi>)``.
+        Ignored for (normalized) :meth:`expectation_value`, but important for :meth:`overlap`.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : None | list of 1D arrays
+    _S : list of (``None`` | 1D array)
         The singular values on each virtual bond, length ``L+1``.
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
@@ -267,7 +264,7 @@ class MPS(object):
         ci = sites[0].leg.chinfo
         Bs = []
         chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
-        legL = npc.LegCharge.from_qflat(ci, [chargeL])
+        legL = npc.LegCharge.from_qflat(ci, [chargeL])  # (no need to bunch)
         for p_st, site in zip(p_state, sites):
             try:
                 iter(p_st)
@@ -320,6 +317,7 @@ class MPS(object):
         ci = sites[0].leg.chinfo
         if legL is None:
             legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * Bflat[0].shape[1])
+            legL = legL.bunch()[1]
         if SVs is None:
             SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
             SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
@@ -686,6 +684,7 @@ class MPS(object):
                 raise ValueError("i = {0:d} out of bounds".format(i))
 
         if self.form[i] is None or self.form[(i + n - 1) % self.L] is None:
+            # TODO: raise error if intermediate form is None
             # we allow intermediate `form`=None except at the very left and right.
             raise ValueError("can't calculate theta for non-canonical form")
 
@@ -907,7 +906,7 @@ class MPS(object):
         for i in range(segment[0] + 1, segment[-1]):
             B = self.get_B(i)
             if i == segment[k]:
-                B = B._replace_p_label(B, k)
+                B = self._replace_p_label(B, k)
                 k += 1
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
                 rho = npc.tensordot(rho, B.conj(), axes=('vR*', 'vL*'))
@@ -972,26 +971,42 @@ class MPS(object):
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other):
+    def overlap(self, other, ignore_form=False):
         """Compute overlap :math:`<self|other>`.
 
         Parameters
         ----------
         other : :class:`MPS`
             An MPS with the same physical sites.
+        ignore_form : bool
+            If ``False`` (default), take into account the canonical form :attr:`form` at each site.
+            If ``True``, we ignore the canonical form (i.e., whether the MPS is in left, right,
+            mixed or no canonical form) and just contract all the :attr:`_B` as they are.
+            (This can give different results!)
 
         Returns
         -------
         overlap : dtype
-            The contraction <self|other>, taking into account the :attr:`norm` of both MPS.
-        env : MPSEnvironment
-            The environment (storing the LP and RP) used to calculate the overlap.
+            The contraction ``<self|other> * self.norm * other.norm``
+            (i.e., taking into account the :attr:`norm` of both MPS).
+            For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
+            the largest eigenvalue of the TransferMatrix.
         """
-        if not self.finite:
-            # requires TransferMatrix for finding dominant left/right parts
-            raise NotImplementedError("TODO")
-        env = MPSEnvironment(self, other)
-        return env.full_contraction(0), env
+        if self.finite:
+            if ignore_form:
+                # Use TransferMatrix with option to ignore the form
+                # (drawback: makes full copies of the states)
+                TM = TransferMatrix(self, other, form=None)
+                res = TM.matvec(TM.initial_guess(1.))  # apply transfer matrix to identity
+                return npc.trace(res, 0, 1) * self.norm * other.norm
+            else:
+                env = MPSEnvironment(self, other)
+                return env.full_contraction(0)
+        else:  # infinite
+            form = None if ignore_form else 'B'
+            TM = TransferMatrix(self, other, form=form)
+            ov, _ = TM.eigenvectors()
+            return ov[0] * self.norm * other.norm
 
     def expectation_value(self, ops, sites=None, axes=None):
         """Expectation value ``<psi|ops|psi>/<psi|psi>`` of (n-site) operator(s).
@@ -1265,28 +1280,25 @@ class MPS(object):
         else:
             self._canonical_form_infinite()
 
-    def correlation_length(self, num_ev=1, charge_sector=None, tol_ev0=1.e-8):
+    def correlation_length(self, num_ev=1, tol_ev0=1.e-8):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Works only for infinite MPS, where the transfer matrix is a useful concept.
         For an MPS, any correlation function splits into :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
         with some parts left and right and the :math:`j-i-1`-th power of the transfer matrix in
-        between. The largest eigenvalue is 1 and gives the dominant contribution of
-        :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`, and the second largest one
-        gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
+        between. The largest eigenvalue is 1 (if self is properly normalized)
+        and gives the dominant contribution of
+        :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`,
+        and the second largest one gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
         Thus :math:`\lambda_2 = \exp(-\frac{1}{\xi})`.
         Assumes that `self` is in canonical form.
-
-        .. todo ::
-            might want to insert OpString.
 
         Parameters
         ----------
         num_ev : int
             We look for the `num_ev` + 1 largest eigenvalues.
-        charge_sector : ``None`` | 0 | charges
-            The charge sector of the transfer matrix,
-            in which we look for the most dominant eigenvalues.
+        tol_ev0 : float
+            Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
 
         Returns
         -------
@@ -1294,12 +1306,12 @@ class MPS(object):
             for num_ev =1, return just the correlation length,
             otherwise an array of the `num_ev` largest correlation legths.
         """
-        self.convert_form('B')  # ensure uniform canonical form.
-        T = TransferMatrix(self, self, charge_sector=charge_sector)
+        T = TransferMatrix(self, self, charge_sector=0, form='B')
         E, V = T.eigenvectors(num_ev + 1, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
         if abs(E[0] - 1.) > tol_ev0:
-            raise ValueError("largest eigenvalue not one: was not in canonical form!")
+            warnings.warn("Correlation length: largest eigenvalue not one. "
+                          "Not in canonical form/normalized?")
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if num_ev == 1:
@@ -1724,7 +1736,7 @@ class MPS(object):
             return [lbl + str(k) for lbl in self._p_label]
 
     def _get_p_labels(self, ks, star=False):
-        """join ``self._get_p_label(k) for k in range(ks)`` to a single list."""
+        """join ``self._get_p_label(k, star) for k in range(ks)`` to a single list."""
         res = []
         for k in range(ks):
             res.extend(self._get_p_label(k, star))
@@ -2212,15 +2224,17 @@ class MPSEnvironment(object):
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        LP = npc.tensordot(
-            self.bra.get_B(i, form='A').conj(), LP, axes=(['p*', 'vL*'], ['p', 'vR*']))
+        axes = (self.ket._get_p_label('', True) + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(
-            self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
+        axes = (self.ket._get_p_label('', True) + ['vR*'], self.ket._p_label + ['vL*'])
+        # for a ususal MPS, axes = (['p*', 'vR*'], ['p', 'vL*'])
+        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP, axes=axes)
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):
@@ -2231,11 +2245,11 @@ class MPSEnvironment(object):
 class TransferMatrix(sparse.NpcLinearOperator):
     r"""Transfer matrix of two MPS (bra & ket).
 
-    For an iMPS in the thermodynamic limit, we often need to find the 'dominant `LP`' (and `RP`).
+    For an iMPS in the thermodynamic limit, we often need to find the 'dominant `RP`' (and `LP`).
     This mean nothing else than to take the transfer matrix of the unit cell and find the
-    (left/right) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
-    :math:`LP (TM)^n` (or :math:`(TM)^n RP`) in the limit :math:`n \rightarrow \infty` - whatever
-    the initial `LP` is. This class provides exactly that functionality with :meth:`eigenvectors`
+    (right/left) eigenvector with the largest (magnitude) eigenvalue, since it will dominate
+    :math:`(TM)^n RP` (or :math:`LP (TM)^n`) in the limit :math:`n \rightarrow \infty` - whatever
+    the initial `RP` is. This class provides exactly that functionality with :meth:`eigenvectors`.
 
     Given two MPS, we define the transfer matrix as::
 
@@ -2243,18 +2257,13 @@ class TransferMatrix(sparse.NpcLinearOperator):
         |       |      |             |
         |    ---N[j]*--N[j+1]* ... --N[j+L]*--
 
-    Here the `M` denotes the `B` of the bra and `N` the ones of the ket, respectively.
+    Here the `M` denotes the matrices of the bra and `N` the ones of the ket, respectively.
     To view it as a `matrix`, we combine the left and right indices to pipes::
 
-        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-LP
+        |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
 
-    .. warning ::
-        We don't use any canonical form of these `M` and `N` and no singular values,
-        only the matrices as stored. If your state is in canonical form,
-        use :meth:`MPS.convert_form` beforehand to ensure a uniform canonical form.
+    Note that we keep all M and N as copies.
 
-    .. todo ::
-        tests give warnings....
 
     Parameters
     ----------
@@ -2263,15 +2272,18 @@ class TransferMatrix(sparse.NpcLinearOperator):
     ket : MPS
         The MPS which is not (complex) conjugated.
     shift_bra : int
-        We start the `N` of the bra at site `shift_bra`.
+        We start the `N` of the bra at site `shift_bra` (i.e. the `j` in the above network).
     shift_ket : int | None
-        We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
+        We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
+        ``None`` defaults to `shift_bra`.
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
         Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+    form : ``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)
+        In which canonical form we take the `M` and `N` matrices.
 
 
     Attributes
@@ -2287,21 +2299,24 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     qtotal : charges
         Total charge of the transfer matrix (which is gauged away in matvec).
-    _bra_N : list of npc.Array
-        The matrices of the ket, transposed for fast `matvec`.
-    _ket_M : list of npc.Array
-        Complex conjugated matrices of the bra, transposed for fast `matvec`.
-    _pipe : :class:`~tenpy.linalg.charges.LegPipe`
+    form : tuple(float, float) | None
+        In which canonical form (all of) the `M` and `N` matrices are.
+    flat_linop : :class:`~tenpy.linalg.sparse.FlatLinearOperator`
+        Class lifting :meth:`matvec` to ndarrays in order to use :func:`~tenpy.tools.math.speigs`.
+    pipe : :class:`~tenpy.linalg.charges.LegPipe`
         Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
         or to ``'(vR.vR*)'`` for ``transpose=True``.
-    charge_sector : None | charges
-        The charge sector of `RP` (`LP` for `transpose`) which is used for the :meth:`matvec`
-        with a dense ndarray. ``None`` stands for *all* sectors.
-    _mask : bool ndarray
-        Selects the indices of the pipe which are used in `matvec`, mapping from
+    label_split :
+        ``['vL', 'vL*']`` if ``tranpose=False`` or ``['vR', 'vR*']`` if ``transpose=True``.
+    _bra_N : list of npc.Array
+        Complex conjugated matrices of the bra, transposed for fast `matvec`.
+    _ket_M : list of npc.Array
+        The matrices of the ket, transposed for fast `matvec`.
+    _contract_legs : int
+        Number of physical legs per site + 1.
     """
 
-    def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0):
+    def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0, form='B'):
         L = self.L = lcm(bra.L, ket.L)
         if shift_ket is None:
             shift_ket = shift_bra
@@ -2310,31 +2325,39 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.transpose = transpose
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
+        form = ket._to_valid_form(form)
+        p = ket._get_p_label('', False)  # for ususal MPS just ['p']
+        pstar = ket._get_p_label('', True)
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
+            label_split = ['vL', 'vL*']
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vL', 'p', 'vR'])
+                ket.get_B(i, form=form).itranspose(['vL'] + p + ['vR'])
                 for i in reversed(range(shift_ket, shift_ket + L))
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vR*', 'vL*'])
+                bra.get_B(i, form=form).conj().itranspose(pstar + ['vR*', 'vL*'])
                 for i in reversed(range(shift_bra, shift_bra + L))
             ]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
-        else:  # right to left
-            label = '(vR.vR*)'
+        else:  # left to right
+            label = '(vR*.vR)'   # mathematically more natural
+            label_split = ['vR*', 'vR']
             M = self._ket_M = [
-                ket.get_B(i, form=None).itranspose(['vR', 'p', 'vL'])
+                ket.get_B(i, form=form).itranspose(['vL'] + p + ['vR'])
                 for i in range(shift_ket, shift_ket + L)
             ]
             N = self._bra_N = [
-                bra.get_B(i, form=None).conj().itranspose(['p*', 'vL*', 'vR*'])
+                bra.get_B(i, form=form).conj().itranspose(['vR*', 'vL*'] + pstar)
                 for i in range(shift_bra, shift_bra + L)
             ]
-            pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=-1).conj()
+            pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1).conj()
         dtype = np.promote_types(bra.dtype, ket.dtype)
+        self.pipe = pipe
+        self.label_split = label_split
         self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
         self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
+        self._contract_legs = len(ket._p_label) + 1  # for a ususal MPS: 2
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -2344,30 +2367,31 @@ class TransferMatrix(sparse.NpcLinearOperator):
         vec : :class:`~tenpy.linalg.np_conserved.Array`
             Vector to act on with the transfermatrix.
             If not `transposed`, `vec` is the right part `RP` of an environment,
-            with legs ``'(vL.vL*)'`` in a pipe or separately.
+            with legs ``'(vL.vL*)'`` in a pipe or splitted.
             If `transposed`, the left part `LP` of an environment with legs ``'(vR.vR*)'``.
 
         Returns
         -------
         mat_vec : :class:`~tenpy.linalg.np_conserved.Array`
             The tranfer matrix acted on `vec`, in the same form as given.
-            or as separate legs.
         """
         pipe = None
         if vec.rank == 1:
             vec = vec.split_legs(0)
-            pipe = self.flat_linop.leg
+            pipe = self.pipe
+        vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
         qtotal = vec.qtotal
         legs = vec.legs
+        contract = self._contract_legs  # number of physical legs per site + 1
         # the actual work
         if not self.transpose:  # right to left
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
-                vec = npc.tensordot(vec, N, axes=[['p', 'vL*'], ['p*', 'vR*']])
+                vec = npc.tensordot(M, vec, axes=1)         # axes=['vR', 'vL']
+                vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
         else:  # left to right
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=['vL', 'vR'])
-                vec = npc.tensordot(vec, N, axes=[['p', 'vR*'], ['p*', 'vL*']])
+                vec = npc.tensordot(vec, M, axes=1)         # axes=['vR', 'vL']
+                vec = npc.tensordot(N, vec, axes=contract)   # [['vL*', 'p*'], ['vR*', 'p']])
         if np.any(self.qtotal != 0):
             # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
             vec.qtotal = qtotal
@@ -2377,7 +2401,23 @@ class TransferMatrix(sparse.NpcLinearOperator):
             vec = vec.combine_legs([0, 1], pipes=pipe)
         return vec
 
-    def eigenvectors(self, num_ev=1, max_num_ev=None, max_tol=1.e-12, which='LM', **kwargs):
+    def initial_guess(self, diag=1.):
+        """Return a diagonal matrix as initial guess for the eigenvector.
+
+        Parameters
+        ----------
+        diag : float | 1D ndarray
+            Should be ``1.`` for the identity or some singular values squared.
+
+        Returns
+        -------
+        mat : :class:`~tenpy.linalg.np_conserved.Array`
+            A 2D array with `diag` on the diagonal such that :meth:`matvec` can act on it.
+        """
+        return npc.diag(diag, self.pipe.legs[0]).iset_leg_labels(self.label_split)
+
+    def eigenvectors(self, num_ev=1, max_num_ev=None, max_tol=1.e-12, which='LM', v0=None,
+                     **kwargs):
         """Find (dominant) eigenvector(s) of self using scipy.sparse.
 
         If no charge_sector was selected, we look in *all* charge sectors.
@@ -2419,10 +2459,12 @@ class TransferMatrix(sparse.NpcLinearOperator):
                 A.extend(A_cs)
             flat_linop.charge_sector = None
         else:
+            if v0 is not None:
+                kwargs['v0'] = self.flat_linop.npc_to_flat(v0)
             # for given charge sector
             for k in range(num_ev, max_num_ev + 1):
                 if k > num_ev:
-                    warnings.warn("increased `num_ev` to " + str(k + 1))
+                    warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
                 try:
                     eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
                     A = np.real_if_close(A)
@@ -2431,8 +2473,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
                 except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
                     if k == max_num_ev:
                         raise
-                    # just retry with larger k and 'tol'
-                    kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+                # just retry with larger k and 'tol'
+                kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
