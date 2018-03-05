@@ -140,6 +140,9 @@ class MPS(object):
         ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
     _valid_bc : tuple of str
         Valid boundary conditions.
+    _transfermatrix_keep : int
+        How many states to keep at least when diagonalizing a :class:`TransferMatrix`.
+        Important if the state develops a near-degeneracy.
     """
 
     # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
@@ -173,6 +176,7 @@ class MPS(object):
             self._S[-1] = self._S[0]
         elif self.bc == 'finite':
             self._S[0] = self._S[-1] = np.ones([1])
+        self._transfermatrix_keep = 1
         self.test_sanity()
 
     def test_sanity(self):
@@ -521,7 +525,9 @@ class MPS(object):
         but the values of B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
-        return MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
+        cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
+        cp._transfermatrix_keep = self._transfermatrix_keep
+        return cp
 
     @property
     def L(self):
@@ -1251,17 +1257,29 @@ class MPS(object):
         return err
 
     def canonical_form(self, renormalize=True):
-        """Bring self into canonical 'B' form, calculate singular values.
+        """Bring self into canonical 'B' form, (re-)calculate singular values.
 
-        Works only for finite/segment boundary conditions.
-        If any `B` is in `form` ``None``, it does *not* use any of the singular values `S`
+        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite`.
+        """
+        if self.finite:
+            return self.canonical_form_finite(renormalize)
+        else:
+            self.canonical_form_infinite(renormalize)
+
+    def canonical_form_finite(self, renormalize=True):
+        """Bring a finite (or segment) MPS into canonical form (in place).
+
+        If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
         (for 'finite' boundary conditions, or only the very left `S` for 'segment' b.c.).
-        If all sites have a `form` label (like ``'A','B'``), it respects the `form` to ensure
+        If all sites have a `form`, it respects the `form` to ensure
         that one `S` is included per bond.
+        The final state is always in right-canonical 'B' form.
+
+        Performs one sweep left to right doing QR decompositions, and one sweep right to left
+        doing SVDs calculating the singular values.
 
         .. todo ::
             Should we try to avoid carrying around the total charge of the B matrices?
-            Also, implement 'canonical_form_infinite' by diagonalizing the transfer matrix...
 
         Parameters
         ----------
@@ -1275,12 +1293,157 @@ class MPS(object):
             The unitaries defining the new left and right Schmidt states in terms of the old ones,
             with legs ``'vL', 'vR'``.
         """
-        if self.finite:
-            return self._canonical_form_finite(renormalize)
+        assert (self.finite)
+        L = self.L
+        assert (L > 2)  # otherwise implement yourself...
+        # normalize very left singular values
+        S = self.get_SL(0)
+        if self.bc == 'segment':
+            if S is None:
+                raise ValueError("Need S[0] for segment boundary conditions.")
+            self.set_SL(0,
+                        S / np.linalg.norm(S))  # must have correct singular values to the left...
+            S = self.get_SR(L - 1)
+            self.set_SR(L - 1, S / np.linalg.norm(S))
+        else:  # bc == 'finite':
+            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
+            self.set_SR(L - 1, np.array([1.]))
+        # sweep from left to right to bring it into left canonical form.
+        if any([(f is None) for f in self.form]):
+            # ignore any 'S' and canonical form
+            M = self.get_B(0, None)
+            form = None
         else:
-            self._canonical_form_infinite()
+            # we actually had a canonical form before, so we should *not* ignore the 'S'
+            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
+            form = 'B'  # for other 'M'
+        if self.bc == 'segment':
+            M.iscale_axis(self.get_SL(0), axis='vL')
+        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+        # Q = unitary, R has to be multiplied to the right
+        self.set_B(0, Q.split_legs(0), form='A')
+        for i in range(1, L - 1):
+            M = self.get_B(i, form)
+            M = npc.tensordot(R, M, axes=['vR', 'vL'])
+            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
+            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
+            self.set_B(i, Q.split_legs(0), form='A')
+        M = self.get_B(L - 1, None)
+        M = npc.tensordot(R, M, axes=['vR', 'vL'])
+        if self.bc == 'segment':
+            # also neet to calculate new singular values on the very right
+            U, S, VR_segment = npc.svd(
+                M.combine_legs(['vL'] + self._p_label), cutoff=0., inner_labels=['vR', 'vL'])
+            S /= np.linalg.norm(S)
+            self.set_SR(L - 1, S)
+            M = U.scale_axis(S, 1).split_legs(0)
+        # sweep from right to left, calculating all the singular values
+        U, S, V = npc.svd(
+            M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
+        if not renormalize:
+            self.norm = self.norm * np.linalg.norm(S)
+        S = S / np.linalg.norm(S)  # normalize
+        self.set_SL(L - 1, S)
+        self.set_B(L - 1, V.split_legs(1), form='B')
+        for i in range(L - 2, -1, -1):
+            M = self.get_B(i, 'A')
+            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+            U, S, V = npc.svd(
+                M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                cutoff=0.,
+                inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)  # normalize
+            self.set_SL(i, S)
+            self.set_B(i, V.split_legs(1), form='B')
+        if self.bc == 'finite':
+            assert len(S) == 1
+            self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
+        # done. Discard the U for segment bc, although it might be a non-trivial unitary.
+        # and just re-shuffling of the states left for 'segment' bc)
+        if self.bc == 'segment':
+            return U, VR_segment
 
-    def correlation_length(self, num_ev=1, tol_ev0=1.e-8):
+    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
+        """Bring an infinite MPS into canonical form (in place).
+
+        If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
+        If all sites have a `form`, it respects the `form` to ensure
+        that one `S` is included per bond.
+        The final state is always in right-canonical 'B' form.
+
+        Proceeds in three steps, namely 1) diagonalize right and left transfermatrix on a given
+        bond to bring that bond into canonical form, and then
+        2) sweep right to left, and 3) left to right to bringing other bonds into canonical form.
+
+        .. warning :
+            You might *loose* precision when calling this function.
+            When we diagonalize the transfermatrix, we get the singular values squared as
+            eigenvalues, with numerical noise on the order of machine precision (usually ~1.e-15).
+            Taking the square root, the new singular values are only precise to *half* the machine
+            precision (usually ~1.e-7).
+
+        Parameters
+        ----------
+        renormalize: bool
+            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+        tol_xi : float
+            Raise an error if the correlation length is larger than that
+            (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
+        """
+        i1 = np.argmin(self.chi)  # start at this bond
+        if any([(f is None) for f in self.form]):
+            # ignore any 'S' and canonical form, just state that we are in 'B' form
+            self.form = self._parse_form('B')
+            self._S[i1] = np.ones(self.chi[i1], dtype=np.float)  # (is later used for guess of Gl)
+        else:
+            # was in canonical form before; bring back into canonical form
+            # -> make sure we don't use multiple S on one bond in our definition of the MPS
+            self.convert_form('B')
+        L = self.L
+        Wr_list = [None] * L  # right eigenvectors of TM on each bond after ..._correct_right
+
+        # phase 1: bring bond (i1-1, i1) in canonical form
+        # find dominant right eigenvector
+        norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
+        self._B[i1] /= np.sqrt(norm)  # correct norm
+        if not renormalize:
+            self.norm *= np.sqrt(norm)
+        # make Gr diagonal to Wr
+        Wr, Gl = self._canonical_form_correct_right(i1, Gr, return_Gl_guess=True)
+        # find dominant left eigenvector
+        norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
+        if abs(1. - norm) > 1.e-13:
+            warnings.warn("Although we renormalized the TransferMatrix, "
+                          "the largest eigenvalue is not 1")  # (this shouldn't happen)
+        self._B[i1] /= np.sqrt(norm)  # correct norm again
+        if not renormalize:
+            self.norm *= np.sqrt(norm)
+        # bring bond to canonical form
+        Gl, Wr = self._canonical_form_correct_left(i1, Gl, Wr)
+        # now the bond (i1-1,i1) is in canonical form
+
+        # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
+        Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
+        for j1 in range(i1 - 1, i1 - L, -1):
+            B1 = self.get_B(j1)
+            Gr = npc.tensordot(
+                B1.scale_axis(Wr, 'vR'), B1.conj(), axes=[['p', 'vR'], ['p*', 'vR*']])
+            Wr_list[j1 % L] = Wr = self._canonical_form_correct_right(j1, Gr)
+
+        B1 = self.get_B(i1)
+
+        # phase 3: sweep from left to right; find other left eigenvectors,
+        # bring each bond into canonical form
+        for j1 in range(i1 - L + 1, i1, +1):
+            # find Gl on bond j1-1, j1
+            B1 = self.get_B(j1 - 1)
+            Gl = npc.tensordot(
+                B1.conj(),  # old B1; now on site j1-1
+                npc.tensordot(Gl, B1, axes=['vR', 'vL']),
+                axes=[['p*', 'vL*'], ['p', 'vR*']])
+            Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
+
+    def correlation_length(self, target=1, tol_ev0=1.e-8):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Works only for infinite MPS, where the transfer matrix is a useful concept.
@@ -1295,28 +1458,30 @@ class MPS(object):
 
         Parameters
         ----------
-        num_ev : int
-            We look for the `num_ev` + 1 largest eigenvalues.
+        target : int
+            We look for the `target` + 1 largest eigenvalues.
         tol_ev0 : float
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
 
         Returns
         -------
         xi : float | 1D array
-            for num_ev =1, return just the correlation length,
-            otherwise an array of the `num_ev` largest correlation legths.
+            If `target`=1, return just the correlation length,
+            otherwise an array of the `target` largest correlation lengths.
         """
+        assert (not self.finite)
         T = TransferMatrix(self, self, charge_sector=0, form='B')
-        E, V = T.eigenvectors(num_ev + 1, which='LM')
+        num = max(target + 1, self._transfermatrix_keep)
+        E, V = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
         if abs(E[0] - 1.) > tol_ev0:
             warnings.warn("Correlation length: largest eigenvalue not one. "
                           "Not in canonical form/normalized?")
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
-        if num_ev == 1:
+        if target == 1:
             return -1. / np.log(abs(E[1] / E[0])) * self.L
-        return -1. / np.log(np.abs(E[1:num_ev + 1] / E[0])) * self.L
+        return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
 
     def add(self, other, alpha, beta):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
@@ -1364,7 +1529,7 @@ class MPS(object):
         Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
         psi = MPS(self.sites, Bs, Ss, 'finite', None)
         # bring to canonical form, calculate Ss
-        psi._canonical_form_finite(renormalize=False)
+        psi.canonical_form_finite(renormalize=False)
         return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False):
@@ -1602,7 +1767,7 @@ class MPS(object):
         # Find left dominant eigenvector of this mixed transfer matrix.
         # Because we are in B form and get the left eigenvector,
         # the resulting vector should be sUs up to a scaling.
-        ov, sUs = TM.eigenvectors()
+        ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
         if verbose > 0:
             print("compute_K: overlap ", ov[0], ", |o| = 1. -", 1. - np.abs(ov[0]))
             # (should be 1 if state is invariant under translations)
@@ -1809,79 +1974,119 @@ class MPS(object):
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
         return res
 
-    def _canonical_form_finite(self, renormalize):
-        assert (self.finite)
-        L = self.L
-        assert (L > 2)  # otherwise implement yourself...
-        # normalize very left singular values
-        S = self.get_SL(0)
-        if self.bc == 'segment':
-            if S is None:
-                raise ValueError("Need S[0] for segment boundary conditions.")
-            self.set_SL(0,
-                        S / np.linalg.norm(S))  # must have correct singular values to the left...
-            S = self.get_SR(L - 1)
-            self.set_SR(L - 1, S / np.linalg.norm(S))
-        else:  # bc == 'finite':
-            self.set_SL(0, np.array([1.]))  # trivial singular value on very left/right
-            self.set_SR(L - 1, np.array([1.]))
-        # sweep from left to right to bring it into left canonical form.
-        if any([(f is None) for f in self.form]):
-            # ignore any 'S' and canonical form
-            M = self.get_B(0, None)
-            form = None
-        else:
-            # we actually had a canonical form before, so we should *not* ignore the 'S'
-            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
-            form = 'B'  # for other 'M'
-        if self.bc == 'segment':
-            M.iscale_axis(self.get_SL(0), axis='vL')
-        Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
-        # Q = unitary, R has to be multiplied to the right
-        self.set_B(0, Q.split_legs(0), form='A')
-        for i in range(1, L - 1):
-            M = self.get_B(i, form)
-            M = npc.tensordot(R, M, axes=['vR', 'vL'])
-            Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
-            # Q is unitary, i.e. left canonical, R has to be multiplied to the right
-            self.set_B(i, Q.split_legs(0), form='A')
-        M = self.get_B(L - 1, None)
-        M = npc.tensordot(R, M, axes=['vR', 'vL'])
-        if self.bc == 'segment':
-            # also neet to calculate new singular values on the very right
-            U, S, VR_segment = npc.svd(
-                M.combine_legs(['vL'] + self._p_label), cutoff=0., inner_labels=['vR', 'vL'])
-            S /= np.linalg.norm(S)
-            self.set_SR(L - 1, S)
-            M = U.scale_axis(S, 1).split_legs(0)
-        # sweep from right to left, calculating all the singular values
-        U, S, V = npc.svd(
-            M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
-        if not renormalize:
-            self.norm = self.norm * np.linalg.norm(S)
-        S = S / np.linalg.norm(S)  # normalize
-        self.set_SL(L - 1, S)
-        self.set_B(L - 1, V.split_legs(1), form='B')
-        for i in range(L - 2, -1, -1):
-            M = self.get_B(i, 'A')
-            M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                cutoff=0.,
-                inner_labels=['vR', 'vL'])
-            S = S / np.linalg.norm(S)  # normalize
-            self.set_SL(i, S)
-            self.set_B(i, V.split_legs(1), form='B')
-        if self.bc == 'finite':
-            assert len(S) == 1
-            self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
-        # done. Discard the U for segment bc, although it might be a non-trivial unitary.
-        # and just re-shuffling of the states left for 'segment' bc)
-        if self.bc == 'segment':
-            return U, VR_segment
+    def _canonical_form_dominant_gram_matrix(self, bond0, transpose, tol_xi, guess=None):
+        """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
-    def _canonical_form_infinite(self):
-        raise NotImplementedError("TODO")
+        Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
+        """
+        TM = TransferMatrix(self, self, bond0, transpose=transpose, charge_sector=0)
+        if guess is None:
+            diag = self.get_SL(bond0)**2 if transpose else 1.
+            guess = TM.initial_guess(diag)
+        guess = guess.combine_legs([0, 1], pipes=TM.pipe)
+        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0=guess, which='LM')
+        self._transfermatrix_keep = len(eta)
+        if len(eta) > 1:
+            if np.abs(eta[0]) > np.abs(eta[1]):
+                xi = -self.L / np.log(np.abs((eta[1] / eta[0])))
+            else:
+                xi = np.inf
+            if xi > tol_xi:
+                raise ValueError("Degenerate spectrum of TransferMatrix "
+                                 "(corr length xi={xi:.3e})".format(xi=xi))
+        eta, G = eta[0], V[0]
+        G = G.split_legs()
+        # note: the dominant eigenvector should be hermitian and positive
+        # removes phase (arbitrary for eigenvectors!) and normalize
+        # right eigenvectors should have trace chi, left ones trace 1
+        # (since we expect something close to eye(chi) for right and diag(S**2) for left G)
+        norm = 1. if transpose else G.shape[0]
+        G *= norm / npc.trace(G, 0, 1)
+        if self.dtype.kind != 'c':  # psi is real -> G should be real
+            eta = np.abs(eta)
+            G.iunary_blockwise(np.real)
+        return eta, G  # G has legs vL, vL* or vR, vR*
+
+    def _canonical_form_correct_right(self,
+                                      i1,
+                                      Gr,
+                                      return_Gl_guess=False,
+                                      eps=2. * np.finfo(np.double).eps):
+        """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
+
+        Diagonalise Gr = X^H Wr X and update
+        ``B[i0] -> B[i0] X^H / norm``,
+        ``B[i1] -> X B[i1] * norm``, where norm = sqrt(chi/sum(Wr)) == sqrt(chi/tr(Gr))
+        If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
+        Then ``Gr -> Wr``.
+        Return Wr normalized to ``sum(Wr) = chi``.
+        If `return_Gl_guess`, return also ``Gl_guess = X S[i1]**2 X^H``.
+        """
+        Gr.itranspose(['vL', 'vL*'])
+        W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
+        if np.sign(W[np.argmax(np.abs(W))]) == -1:  # fix sign
+            W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
+        # discard small values on order of machine precision
+        proj = (W > eps)
+        if np.count_nonzero(proj) < len(W):
+            # project into non-degenerate subspace, reducing the bond dimensions!
+            warnings.warn("canonical_form_infinite: project to smaller bond dimension")
+            XH.iproject(proj, axes=1)
+            W = W[proj]
+        norm = len(W) / np.sum(W)
+        W *= norm
+        norm = np.sqrt(norm)  # (norm doesn't change eigenvalue of TM)
+        Kl = XH.iset_leg_labels(['vL', 'vR']) * (1. / norm)
+        Kr = XH.transpose().iconj().iset_leg_labels(['vL', 'vR']) * norm
+        i0 = i1 - 1
+        self.set_B(i0, npc.tensordot(self.get_B(i0), Kl, axes=['vR', 'vL']))
+        self.set_B(i1, npc.tensordot(Kr, self.get_B(i1), axes=['vR', 'vL']))
+        if return_Gl_guess:
+            guess = npc.tensordot(Kr.scale_axis(self.get_SL(i1)**2, 1), Kl, axes=['vR', 'vL'])
+            return W, guess.iset_leg_labels(['vR*', 'vR'])
+        return W
+
+    def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2. * np.finfo(np.double).eps):
+        """Bring into canonical form on bond (i0, i1) where i0= i1 - 1.
+
+        Given the left Gram matrix Gl (with legs 'vR*', 'vR')
+        and right diag(Wr), compute and diagonalize the density matrix
+        ``rho = sqrt(Wr) Gl sqrt(Wr) -> Y^H S^2 Y`` (Y acting on ket, Y^H on bra).
+        Then we can update
+        B[i0] -> B[i0] sqrt(Wr) Y^H
+        B[i1] -> Y 1/sqrt(Wr) B[i1]
+        Thus the new dominant left eigenvector is
+        Gl -> Y sqrt(Wr) Gl sqrt(Wr) Y^H = S^2
+        and dominant right eigenvector is
+        diag(Wr) -> Y 1/sqrt(Wr) diag(Wr) 1/sqrt(W) Y^H = diag(1)
+        i.e., we brought the bond to canonical form and `S` is the Schmidt spectrum.
+        """
+        sqrt_Wr = np.sqrt(Wr)
+        Gl.itranspose(['vR*', 'vR'])
+        rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
+        S2, YH = npc.eigh(rhor)  # YH has legs 'vR*', 'vR'
+        S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
+        s_norm = 1.
+        # discard small values on order of machine precision
+        proj = (S2 > eps)
+        if np.count_nonzero(proj) < len(S2):
+            # project into non-degenerate subspace, reducing the bond dimensions!
+            warnings.warn("canonical_form_infinite: project to smaller bond dimension")
+            YH.iproject(proj, axes=1)
+            S2 = S2[proj]
+            s_norm = np.sqrt(np.sum(S2))
+        S = np.sqrt(S2) / s_norm
+        self.set_SL(i1, S)
+        Yl = YH.scale_axis(sqrt_Wr / s_norm, 0).iset_leg_labels(['vL', 'vR'])
+        Yr = YH.transpose().iconj().scale_axis(1. / sqrt_Wr, 1).iset_leg_labels(['vL', 'vR'])
+        i0 = i1 - 1
+        self.set_B(i0, npc.tensordot(self.get_B(i0), Yl, axes=['vR', 'vL']))
+        self.set_B(i1, npc.tensordot(Yr, self.get_B(i1), axes=['vR', 'vL']))
+        Gl = npc.tensordot(Gl, Yl, axes=['vR', 'vL'])
+        Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
+        Gl /= npc.trace(Gl)
+        # Gl is diag(S**2) up to numerical errors...
+        return Gl, np.ones(Yr.legs[0].ind_len, np.float)
 
 
 class MPSEnvironment(object):
@@ -2316,7 +2521,14 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Number of physical legs per site + 1.
     """
 
-    def __init__(self, bra, ket, shift_bra=0, shift_ket=None, transpose=False, charge_sector=0, form='B'):
+    def __init__(self,
+                 bra,
+                 ket,
+                 shift_bra=0,
+                 shift_ket=None,
+                 transpose=False,
+                 charge_sector=0,
+                 form='B'):
         L = self.L = lcm(bra.L, ket.L)
         if shift_ket is None:
             shift_ket = shift_bra
@@ -2341,7 +2553,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             ]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
         else:  # left to right
-            label = '(vR*.vR)'   # mathematically more natural
+            label = '(vR*.vR)'  # mathematically more natural
             label_split = ['vR*', 'vR']
             M = self._ket_M = [
                 ket.get_B(i, form=form).itranspose(['vL'] + p + ['vR'])
@@ -2351,7 +2563,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                 bra.get_B(i, form=form).conj().itranspose(['vR*', 'vL*'] + pstar)
                 for i in range(shift_bra, shift_bra + L)
             ]
-            pipe = npc.LegPipe([M[0].get_leg('vL'), N[0].get_leg('vL*')], qconj=+1).conj()
+            pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
         dtype = np.promote_types(bra.dtype, ket.dtype)
         self.pipe = pipe
         self.label_split = label_split
@@ -2368,7 +2580,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             Vector to act on with the transfermatrix.
             If not `transposed`, `vec` is the right part `RP` of an environment,
             with legs ``'(vL.vL*)'`` in a pipe or splitted.
-            If `transposed`, the left part `LP` of an environment with legs ``'(vR.vR*)'``.
+            If `transposed`, the left part `LP` of an environment with legs ``'(vR*.vR)'``.
 
         Returns
         -------
@@ -2386,12 +2598,12 @@ class TransferMatrix(sparse.NpcLinearOperator):
         # the actual work
         if not self.transpose:  # right to left
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=1)         # axes=['vR', 'vL']
+                vec = npc.tensordot(M, vec, axes=1)  # axes=['vR', 'vL']
                 vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
         else:  # left to right
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(vec, M, axes=1)         # axes=['vR', 'vL']
-                vec = npc.tensordot(N, vec, axes=contract)   # [['vL*', 'p*'], ['vR*', 'p']])
+                vec = npc.tensordot(vec, M, axes=1)  # axes=['vR', 'vL']
+                vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
         if np.any(self.qtotal != 0):
             # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
             vec.qtotal = qtotal
@@ -2416,7 +2628,12 @@ class TransferMatrix(sparse.NpcLinearOperator):
         """
         return npc.diag(diag, self.pipe.legs[0]).iset_leg_labels(self.label_split)
 
-    def eigenvectors(self, num_ev=1, max_num_ev=None, max_tol=1.e-12, which='LM', v0=None,
+    def eigenvectors(self,
+                     num_ev=1,
+                     max_num_ev=None,
+                     max_tol=1.e-12,
+                     which='LM',
+                     v0=None,
                      **kwargs):
         """Find (dominant) eigenvector(s) of self using scipy.sparse.
 

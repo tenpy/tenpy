@@ -12,7 +12,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import SquareLattice
 
 from tenpy.networks import mps, site
-from random_test import gen_random_legcharge, rand_permutation, random_MPS
+from random_test import rand_permutation, random_MPS
 import tenpy.linalg.np_conserved as npc
 
 spin_half = site.SpinHalfSite(conserve='Sz')
@@ -176,6 +176,32 @@ def test_compute_K():
     npt.assert_array_equal(W, [1.])
 
 
+def check_canonical_form(bc):
+    psi = random_MPS(8, 2, 6, form=None, bc=bc)
+    psi2 = psi.copy()
+    norm = np.sqrt(psi2.overlap(psi2, ignore_form=True))
+    print("norm =", norm)
+    psi2.norm /= norm  # normalize psi2
+    norm2 = psi.overlap(psi2, ignore_form=True)
+    print("norm2 =", norm2)
+    assert abs(norm2 - norm) < 1.e-14 * norm
+    psi.canonical_form(renormalize=False)
+    psi.test_sanity()
+    assert abs(psi.norm - norm) < 1.e-14 * norm
+    psi.norm = 1.  # normalized psi
+    ov = psi.overlap(psi2, ignore_form=True)
+    print("normalized states: overlap <psi_canonical|psi> = 1.-", 1.-ov)
+    assert abs(ov - 1.) < 1.e-14
+    print("norm_test")
+    print(psi.norm_test())
+    assert np.max(psi.norm_test()) < 1.e-14
+
+
+def test_canonical_form():
+    yield check_canonical_form, 'finite'
+    yield check_canonical_form, 'infinite'
+
+
 if __name__ == "__main__":
     test_mps()
     test_mps_add()
@@ -183,3 +209,5 @@ if __name__ == "__main__":
     test_singlet_mps()
     test_TransferMatrix()
     test_compute_K()
+    check_canonical_form('finite')
+    check_canonical_form('infinite')
