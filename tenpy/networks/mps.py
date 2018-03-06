@@ -1561,7 +1561,7 @@ class MPS(object):
             op = self.sites[i].get_op(op)
         if unitary is None:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
-            unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger.legs[0])) < 1.e-14
+            unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < 1.e-14
         opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         self._B[i] = opB
         self.dtype = np.find_common_type([self.dtype, opB.dtype], [])

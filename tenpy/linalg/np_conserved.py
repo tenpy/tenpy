@@ -2527,7 +2527,7 @@ def zeros(legcharges, dtype=np.float64, qtotal=None):
 
 
 def eye_like(a, axis=0):
-    """An identity matrix contractible with the axis of `a`."""
+    """Return an identity matrix contractible with the leg `axis` of the :class:`Array` `a`."""
     axis = a.get_leg_index(axis)
     return diag(1., a.legs[axis])
 
