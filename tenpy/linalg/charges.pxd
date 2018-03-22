@@ -8,9 +8,9 @@ cdef class ChargeInfo(object):
     cdef readonly list names
     cpdef np.ndarray make_valid(ChargeInfo self, charges=?)
     cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self,
-                                                   np.ndarray[QTYPE_t,ndim=1] charges)
+                                                   np.ndarray charges)
     cdef np.ndarray[QTYPE_t,ndim=2] _make_valid_2D(ChargeInfo self,
-                                                   np.ndarray[QTYPE_t,ndim=2] charges)
+                                                   np.ndarray charges)
     cpdef void test_sanity(ChargeInfo self) except *
 
 cdef class LegCharge(object):
@@ -28,8 +28,8 @@ cdef class LegCharge(object):
     cpdef void test_contractible(LegCharge self, LegCharge other) except *
     cpdef void test_equal(LegCharge self, LegCharge other) except *
     cpdef slice get_slice(LegCharge self, int qindex)
-    cpdef void _set_charges(LegCharge self, np.ndarray[QTYPE_t,ndim=2] charges)
-    cpdef void _set_slices(LegCharge self, np.ndarray[np.intp_t,ndim=1] slices)
+    cpdef void _set_charges(LegCharge self, np.ndarray charges)
+    cpdef void _set_slices(LegCharge self, np.ndarray slices)
     cpdef _set_block_sizes(self, block_sizes)
     cpdef _get_block_sizes(self)
     cpdef void __setstate__(LegCharge self, tuple state)
@@ -49,7 +49,7 @@ cdef class LegPipe(LegCharge):
     cdef void _init_from_legs(LegPipe self, bint sort=?, bint bunch=?) except *
     cpdef void __setstate__(LegPipe self, tuple state)
 
-cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat)
-cdef np.ndarray[QTYPE_t,ndim=2] _partial_qtotal(ChargeInfo chinfo,
+cdef np.ndarray _c_find_row_differences(np.ndarray qflat)
+cdef np.ndarray _partial_qtotal(ChargeInfo chinfo,
                                                 list legs,
-                                                np.ndarray[np.intp_t, ndim=2] qdata)
+                                                np.ndarray qdata)

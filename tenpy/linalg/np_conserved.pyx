@@ -2351,7 +2351,7 @@ cdef class Array(object):
 
         # get new qdata
         cdef np.ndarray[np.intp_t, ndim=2] qdata = np.empty((self.stored_blocks, res.rank),
-                                                            dtype=self._qdata.dtype)
+                                                            dtype=np.intp)
         qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
         for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
             np.take(
@@ -3705,7 +3705,7 @@ cdef inline np.ndarray _np_zeros(np.PyArray_Dims dims, int type):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 cdef np.ndarray _iter_common_sorted(
-        np.ndarray[np.intp_t, ndim=1] a, np.ndarray[np.intp_t, ndim=1] b):
+        np.ndarray a, np.ndarray b):
     """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
     *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
@@ -3814,8 +3814,8 @@ cdef _tensordot_pre_sort(Array a, Array b, int cut_a, int cut_b, np.dtype calc_d
 cdef _tensordot_match_charges(int n_rows_a,
                               int n_cols_b,
                               int qnumber,
-                              np.ndarray[QTYPE_t, ndim=2] a_charges_keep,
-                              np.ndarray[QTYPE_t, ndim=2] b_charges_match):
+                              np.ndarray a_charges_keep,
+                              np.ndarray b_charges_match):
     """Estimate number of blocks in res and get order for iteration over row_a and col_b
 
     Parameters

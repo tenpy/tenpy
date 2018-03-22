@@ -183,8 +183,8 @@ cdef class ChargeInfo(object):
     @cython.wraparound(False)
     @cython.boundscheck(False)
     @cython.cdivision(True)
-    cdef np.ndarray[QTYPE_t,ndim=1] _make_valid_1D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=1] charges):
-        cdef np.ndarray[QTYPE_t,ndim=1] res = np.empty_like(charges)
+    cdef np.ndarray _make_valid_1D(ChargeInfo self, np.ndarray charges):
+        cdef np.ndarray res = np.empty_like(charges)
         cdef int j
         cdef QTYPE_t q
         for j in range(self.qnumber):
@@ -200,9 +200,9 @@ cdef class ChargeInfo(object):
     @cython.wraparound(False)
     @cython.boundscheck(False)
     @cython.cdivision(True)
-    cdef np.ndarray[QTYPE_t,ndim=2] _make_valid_2D(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
-        cdef np.ndarray[QTYPE_t,ndim=2] res = np.empty_like(charges)
-        cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
+    cdef np.ndarray _make_valid_2D(ChargeInfo self, np.ndarray charges):
+        cdef np.ndarray res = np.empty_like(charges)
+        cdef np.ndarray mod = self.mod
         cdef int L = charges.shape[0]
         cdef int i, j
         cdef QTYPE_t q, x
@@ -222,7 +222,7 @@ cdef class ChargeInfo(object):
     @cython.wraparound(False)
     @cython.boundscheck(False)
     @cython.cdivision(True)
-    def check_valid(ChargeInfo self, np.ndarray[QTYPE_t,ndim=2] charges):
+    def check_valid(ChargeInfo self, np.ndarray charges):
         r"""Check, if `charges` has all entries as expected from self.mod.
 
         Parameters
@@ -236,7 +236,7 @@ cdef class ChargeInfo(object):
             True, if all 0 <= charges <= self.mod (wherever self.mod != 1)
         """
         assert (charges.shape[1] == self.qnumber)
-        cdef np.ndarray[QTYPE_t,ndim=1] mod = self.mod
+        cdef np.ndarray mod = self.mod
         cdef int i, j, x
         cdef QTYPE_t q
         cdef int L = charges.shape[0]
@@ -518,8 +518,8 @@ cdef class LegCharge(object):
         cdef int opt_level = optimization._level
         if opt_level >= optimization_compare:
             return
-        cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
-        cdef np.ndarray[QTYPE_t,ndim=2] ch = self.charges
+        cdef np.ndarray sl = self.slices
+        cdef np.ndarray ch = self.charges
         if sl.ndim != 1 or sl.shape[0] != self.block_number + 1:
             raise ValueError("wrong len of `slices`")
         if sl[0] != 0:
@@ -806,12 +806,12 @@ cdef class LegCharge(object):
         return "LegCharge({0!r}, qconj={1:+d},\n{2!r}, {3!r})".format(
             self.chinfo, self.qconj, self.slices, self.charges)
 
-    cpdef void _set_charges(LegCharge self, np.ndarray[QTYPE_t,ndim=2] charges):
+    cpdef void _set_charges(LegCharge self, np.ndarray charges):
         """Provide hook to set 'private' charges."""
         self.charges = charges
         self.block_number = charges.shape[0]
 
-    cpdef void _set_slices(LegCharge self, np.ndarray[np.intp_t,ndim=1] slices):
+    cpdef void _set_slices(LegCharge self, np.ndarray slices):
         self.slices = slices
         self.ind_len = slices[-1]
 
@@ -821,7 +821,7 @@ cdef class LegCharge(object):
 
     cpdef _get_block_sizes(self):
         """Return block sizes."""
-        cdef np.ndarray[QTYPE_t,ndim=1] sl = self.slices
+        cdef np.ndarray sl = self.slices
         return sl[1:] - sl[:-1]
 
     def _slice_start_stop(self):
@@ -1111,7 +1111,7 @@ cdef class LegPipe(LegCharge):
         # and the documentation of np.mgrid
         cdef int nlegs = self.nlegs
         cdef int qnumber = self.chinfo.qnumber
-        cdef np.ndarray[QTYPE_t, ndim=1] qshape = np.array(self.subqshape, dtype=QTYPE)
+        cdef np.ndarray qshape = np.array(self.subqshape, dtype=QTYPE)
         cdef int i, j, sign
         cdef QTYPE_t a
 
@@ -1119,31 +1119,31 @@ cdef class LegPipe(LegCharge):
         grid = np.mgrid[[slice(0, l) for l in qshape]]
         # grid is an array with shape ``(nlegs,) + qshape``,
         # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
-        cdef np.ndarray[QTYPE_t, ndim=1] strides =  \
+        cdef np.ndarray strides =  \
             np.array(grid.strides, np.intp)[1:] // grid.itemsize
         self._strides = strides  # save for :meth:`_map_incoming_qind`
         # collapse the different directions into one.
-        cdef np.ndarray[QTYPE_t, ndim=2] grid2 = grid.reshape(nlegs, -1)
+        cdef np.ndarray grid2 = grid.reshape(nlegs, -1)
             # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
         cdef int nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
-        cdef np.ndarray[QTYPE_t, ndim=2] q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
+        cdef np.ndarray q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
         # determine q_map -- it's essentially the grid.
         q_map[:, 3:] = grid2.T  # transpose -> rows are possible combinations.
         # q_map[:, :3] is initialized after sort/bunch.
 
         # determine block sizes
-        cdef np.ndarray[QTYPE_t, ndim=1] blocksizes = np.ones((nblocks,), dtype=QTYPE)
-        cdef np.ndarray[QTYPE_t, ndim=1] leg_bs
+        cdef np.ndarray blocksizes = np.ones((nblocks,), dtype=QTYPE)
+        cdef np.ndarray leg_bs
         for i in range(nlegs):
             leg_bs = self.legs[i]._get_block_sizes()
             for j in range(nblocks):
                 blocksizes[j] *= leg_bs[grid2[i, j]]
 
         # calculate total charges
-        cdef np.ndarray[QTYPE_t, ndim=2] charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
-        cdef np.ndarray[QTYPE_t, ndim=2] legcharges
+        cdef np.ndarray charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
+        cdef np.ndarray legcharges
         if qnumber > 0:
             for i in range(nlegs):
                 legcharges = self.legs[i].charges
@@ -1171,12 +1171,12 @@ cdef class LegPipe(LegCharge):
         self._set_charges(charges)
         self.sorted = sort
         self._set_block_sizes(blocksizes)  # sets self.slices
-        cdef np.ndarray[QTYPE_t, ndim=1] slices = self.slices
+        cdef np.ndarray slices = self.slices
         for j in range(nblocks):
             q_map[j, 0] = slices[j]
             q_map[j, 1] = slices[j+1]
 
-        cdef np.ndarray[QTYPE_t, ndim=1] idx
+        cdef np.ndarray idx
         if bunch:
             # call LegCharge.bunch(), which also calculates new blocksizes
             idx, bunched = super(LegPipe, self).bunch()
@@ -1281,13 +1281,13 @@ def _find_row_differences(qflat):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
+cdef np.ndarray _c_find_row_differences(np.ndarray qflat):
     """C-version of :func:`_find_row_differences` (which uses numpy for optimization)"""
     if qflat.shape[1] == 0:
         return np.array([0, qflat.shape[0]], dtype=np.intp)
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
-    cdef np.ndarray[np.intp_t, ndim=1] res = np.empty(L + 1, dtype=np.intp)
+    cdef np.ndarray res = np.empty(L + 1, dtype=np.intp)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
@@ -1301,9 +1301,9 @@ cdef np.ndarray _c_find_row_differences(np.ndarray[QTYPE_t,ndim=2] qflat):
     res[n] = L
     return res[:n+1]
 
-cdef np.ndarray[QTYPE_t,ndim=2] _partial_qtotal(ChargeInfo chinfo,
+cdef np.ndarray _partial_qtotal(ChargeInfo chinfo,
                                                 list legs,
-                                                np.ndarray[np.intp_t, ndim=2] qdata):
+                                                np.ndarray qdata):
     """Calculate qtotal of a part of the legs of a npc.Array.
 
     Parameters
@@ -1321,10 +1321,10 @@ cdef np.ndarray[QTYPE_t,ndim=2] _partial_qtotal(ChargeInfo chinfo,
         Valid 2D version of
         ``chinfo.make_valid(np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0))``.
     """
-    cdef np.ndarray[QTYPE_t, ndim=2] res = np.zeros([qdata.shape[0], chinfo.qnumber], QTYPE)
+    cdef np.ndarray res = np.zeros([qdata.shape[0], chinfo.qnumber], QTYPE)
     cdef int a, k, qi
     cdef LegCharge leg
-    cdef np.ndarray[QTYPE_t, ndim=2] charges
+    cdef np.ndarray charges
     for a in range(qdata.shape[1]):
         leg = legs[a]
         charges  = leg.charges
