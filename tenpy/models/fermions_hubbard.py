@@ -34,9 +34,11 @@ class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
     t, U, mu : float | array
         Parameters as defined for the Hamiltonian above
     cons_N : {'N' | 'parity' | None}
-        Whether particle number is conserved, see :class:`SpinHalfFermionSite` for details.
+        Whether particle number is conserved,
+        see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
     cons_Sz : {'Sz' | 'parity' | None}
-        Whether spin is conserved, see :class:`SpinHalfFermionSite` for details.
+        Whether spin is conserved,
+        see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
@@ -67,7 +69,7 @@ class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
 
         # 3b) Coupling terms
         self.add_coupling(t, 0, 'Cdu', 0, 'Cu', 1, 'JW', True)
-        self.add_coupling(t, 0, 'Cdu', 0, 'Cd', -1, 'JW', True)
+        self.add_coupling(t, 0, 'Cdu', 0, 'Cu', -1, 'JW', True)
         self.add_coupling(t, 0, 'Cdd', 0, 'Cd', 1, 'JW', True)
         self.add_coupling(t, 0, 'Cdd', 0, 'Cd', -1, 'JW', True)
         self.add_coupling(V, 0, 'Ntot', 0, 'Ntot', 1)
