@@ -32,6 +32,9 @@ To be done at some point for the next releases
 - trace: allow multiple axes to be traced over; optimize
 - simplify DMRG?
 - Summary of defined classes/functions at the beginning of a module in the reference
+- remove this file: use GitHub issues instead
+- Inconsistency: `NearestNeighborModel.H_bond` with ``bc_MPS='infinite'`` has bonds ``[(L, 0), (0, 1), ...]``, 
+  but :class:`~tenpy.networks.mps.MPS.expectation_value()` takes two-site operators on bonds ``[(0, 1), (1, 2), ...(L,0)]``.
 
 
 Wish-list

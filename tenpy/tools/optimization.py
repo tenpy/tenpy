@@ -65,7 +65,7 @@ run these few lines of python code::
 
 from enum import IntEnum
 
-all = ['bottleneck', 'OptimizationFlag', 'set_level', 'get_level', 'optimize', 'debug']
+all = ['bottleneck', 'OptimizationFlag', 'set_level', 'get_level', 'optimize']
 
 try:
     import bottleneck
@@ -146,4 +146,4 @@ def optimize(level_compare=OptimizationFlag.default):
     return (_level >= level_compare)
 
 
-_level = OptimizationFlag.none  # by default don't optimize
+_level = OptimizationFlag.default  # set default optimization level

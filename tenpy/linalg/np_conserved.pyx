@@ -64,7 +64,7 @@ from .svd_robust import svd as svd_flat
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join, is_non_string_iterable
-from ..tools import optimization
+from ..tools.optimization import optimize, OptimizationFlag
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
@@ -416,7 +416,7 @@ cdef class Array(object):
 
     cpdef void test_sanity(Array self) except *:
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if optimization.optimize():
+        if optimize(OptimizationFlag.skip_arg_checks):
             return
         if len(self.legs) == 0:
             raise ValueError("We don't allow rank-0 tensors without legs")

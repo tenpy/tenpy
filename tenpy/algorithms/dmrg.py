@@ -6,7 +6,7 @@ with its enormous success in finding ground states in 1D.
 
 We implement DMRG in the modern formulation of matrix product states [Schollwoeck2011]_,
 both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
-and in the thermodynamic limit (``'periodic'`` b.c.).
+and in the thermodynamic limit (``'infinite'`` b.c.).
 
 The function :func:`run` - well - runs one DMRG simulation.
 Internally, it generates an instance of an :class:`Engine`.
@@ -32,7 +32,6 @@ and then slowly turned off in the end.
 
 import numpy as np
 import time
-import itertools
 import warnings
 
 from ..linalg import np_conserved as npc
@@ -272,7 +271,7 @@ def run(psi, model, DMRG_params):
             # print a status update
             print("=" * 80)
             msg = "sweep {sweep:d}, age = {age:d}\n"
-            msg += "Energy = {E:.16f}, norm_err = {norm_err:.1e}\n"
+            msg += "Energy = {E:.16f}, S = {S:.16f}, norm_err = {norm_err:.1e}\n"
             msg += "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
@@ -284,6 +283,7 @@ def run(psi, model, DMRG_params):
                 chi=psi.chi,
                 age=engine.statistics['age'][-1],
                 E=E,
+                S=S,
                 DE=Delta_E,
                 DS=Delta_S,
                 trerr=max_trunc_err,
@@ -437,7 +437,7 @@ class Engine(object):
         Parameters
         ----------
         optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
         meas_E_trunc : bool
             Wheter to measure the energy after truncation.
@@ -660,7 +660,7 @@ class Engine(object):
         # get qtotal_LR from i0
         qtotal_i0 = self.env.ket.get_B(i0, form=None).qtotal
         if self.mixer is None:
-            # simple case: real svd, devined elsewhere.
+            # simple case: real svd, defined elsewhere.
             U, S, VH, err, _ = svd_theta(
                 theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
             return U, S, VH, err
@@ -829,7 +829,7 @@ class Engine(object):
 
 
 class EngineCombine(Engine):
-    """Engine which combines legs into pipes as far as possible.
+    r"""Engine which combines legs into pipes as far as possible.
 
     This engine combines the virtual and physical leg for the left site and right site into pipes.
     This reduces the overhead of calculating charge combinations in the contractions,
