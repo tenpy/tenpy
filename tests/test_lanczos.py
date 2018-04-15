@@ -26,7 +26,7 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
     assert (np.linalg.norm(ovs - np.eye(k)) < 2 * n * k * k * tol)
 
 
-def test_lanczos(n=30, k=5, tol=5.e-15):
+def test_lanczos(n=30, tol=5.e-15):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg)
@@ -56,7 +56,7 @@ def test_lanczos(n=30, k=5, tol=5.e-15):
     for i in range(1, len(E_flat)):
         E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
         qtotal = npc.detect_qtotal(psi1_flat, psi0.legs)
-        if np.all(qtotal == psi0.qtotal):
+        if np.all(qtotal == psi0.qtotal) and E1_flat < -0.01:
             break  # found psi1 in same charge sector
     else:
         print("warning: test didn't find a second eigenvector in the same charge sector!")
@@ -76,3 +76,8 @@ def test_lanczos(n=30, k=5, tol=5.e-15):
     ov = npc.inner(psi0, psi1, do_conj=True)
     print("|<psi0|psi1>| =", abs(ov))
     assert (abs(ov) < tol**0.5)
+
+
+if __name__ == "__main__":
+    for n in [1, 2, 3, 4, 5, 10, 20, 30]:
+        test_lanczos(n)

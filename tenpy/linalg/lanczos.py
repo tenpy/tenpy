@@ -1,10 +1,243 @@
-"""Lanczos implementation for np_conserved arrays."""
+"""Lanczos algorithm for np_conserved arrays."""
 # Copyright 2018 TeNPy Developers
 
 from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
-import warnings
+
+
+class Lanczos:
+    r"""Lanczos algorithm working on npc arrays.
+
+    The Lanczos algorithm can finds extremal eigenvalues (in terms of magnitude) along with
+    the corresponding eigenvectors. It assumes that the linear operator `H` is hermitian.
+    Given a start vector `psi0`, it generates an orthonormal basis of the Krylov space,
+    in which `H` is a small tridiagonal matrix, and solves the eigenvalue problem there.
+    Finally, it transform the resulting ground state back into the original space.
+
+    Parameters
+    ----------
+    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+        A hermitian linear operator. Must implement the method `matvec` acting on a
+        :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
+        The result has to have the same legs as the argument.
+    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+        The starting vector defining the Krylov basis.
+        For finding the ground state, this should be the best guess available.
+    params : dict
+        Further optional parameters as described in the following table.
+        Add a parameter ``verbose >=1`` to print the used parameters during runtime.
+        The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
+        or if the maximum number of steps was reached.
+
+        ======= ====== ===============================================================
+        key     type   description
+        ======= ====== ===============================================================
+        N_min   int    Minimum number of steps to perform.
+        ------- ------ ---------------------------------------------------------------
+        N_max   int    Maximum number of steps to perform.
+        ------- ------ ---------------------------------------------------------------
+        E_tol   float  Stop if energy difference per step < `E_tol`
+        ------- ------ ---------------------------------------------------------------
+        P_tol   float  Tolerance for the error estimate from the
+                       Ritz Residual, stop if ``(RitzRes/gap)**2 < P_tol``
+        ------- ------ ---------------------------------------------------------------
+        min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
+        ------- ------ ---------------------------------------------------------------
+        N_cache int    The maximum number of `psi` to keep in memory.
+        ======= ====== ===============================================================
+
+    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
+        Vectors (same tensor structure as psi) Lanczos will orthogonalize against,
+        ensuring that the result is perpendicular to them.
+
+    Attribues
+    ---------
+    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+        The hermitian linear operator.
+    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+        The starting vector.
+    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
+        Vectors to orthogonalize against.
+    N_min, N_max, E_tol, P_tol, N_cache :
+        Parameters as described above.
+    Es : ndarray, shape(N_max, N_max)
+        ``Es[n, :]`` contains the energies of ``_T[:n+1, :n+1]`` in step `n`.
+    _T : ndarray, shape (N_max + 1, N_max +1)
+        The tridiagonal matrix representing `H` in the orthonormalized Krylov basis.
+    _cutoff : float
+        cutoff to abort if `beta` (= norm of next vector in Krylov basis before normalizing)
+        is too small.
+        This is necessary if the rank of A is smaller than N_max - then we get a complete
+        basis of the Krylov space, and beta will be zero.
+    _cache : list of psi0-like vectors
+        The ONB of the Krylov space generated during the iteration.
+        FIFO (first in first out) cache of at most N_cache vectors.
+    _result_krylov : ndarray
+        Result in the ONB of the Krylov space: ground state of `_T`.
+
+    Notes
+    -----
+    I have computed the Ritz residual `RitzRes` according to
+    http://web.eecs.utk.edu/~dongarra/etemplates/node103.html#estimate_residual.
+    Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
+    ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
+    """
+    def __init__(self, H, psi0, params, orthogonal_to=[]):
+        self.H = H
+        self.psi0 = psi0.copy()
+        self._params = params
+        self.N_min = get_parameter(params, 'N_min', 2, "Lanczos")
+        self.N_max = get_parameter(params, 'N_max', 20, "Lanczos")
+        self.E_tol = get_parameter(params, 'E_tol', 5.e-15, "Lanczos")
+        self.P_tol = get_parameter(params, 'P_tol', 1.e-14, "Lanczos")
+        self.N_cache = get_parameter(params, 'N_cache', 6, "Lanczos")
+        self.min_gap = get_parameter(params, 'min_gap', 1.e-12, "Lanczos")
+        if self.N_cache < 2:
+            raise ValueError("Need to cache at least two vectors.")
+        if self.N_min < 2:
+            raise ValueError("Should perform at least 2 steps.")
+        self._cutoff = np.finfo(psi0.dtype).eps * 100
+        self.verbose = params.get('verbose', 0)
+        if len(orthogonal_to) > 0:
+            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, self.verbose / 10)
+        else:
+            self.orthogonal_to = []
+        self._cache = []
+        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float)
+        # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
+        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float)
+
+    def run(self):
+        """Obtain the final result.
+
+        Returns
+        -------
+        E0 : float
+            Ground state energy (estimate).
+        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state vector (estimate).
+        N : int
+            Number of steps performed.
+        """
+        N = self._calc_T()
+        E0 = self.Es[N-1, 0]
+        if self.verbose >= 1:
+            if N > 1:
+                msg = "Lanczos N={0:d}, gap={1:.3e}, DeltaE0={2:.3e}, _result_krylov[-1]={3:.3e}"
+                print(msg.format(N,
+                                 self.Es[N-1, 1] - E0,
+                                 self.Es[N-2, 0] - E0,
+                                 self._result_krylov[-1]))
+            else:
+                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
+                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N == 1:
+            return E0, self.psi0.copy(), N  # no better estimate available
+        return E0, self._calc_result_full(N), N
+
+    def _calc_T(self):
+        """Build the tridiagonal matrix `_T`. Returns the number of steps performed."""
+        T = self._T
+        w = self.psi0  # initialize
+        beta = npc.norm(w)
+        for k in range(self.N_max):
+            w /= beta
+            self._to_cache(w)
+            # project out the orthogonal parts:
+            w = self._apply_H(w)
+            alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
+            T[k, k] = alpha
+            self._calc_result_krylov(k)
+            if k > 0:
+                w -= self._cache[-2] * beta
+            w -= self._cache[-1] * alpha
+            beta = npc.norm(w)
+            T[k, k + 1] = T[k + 1, k] = beta  # needed for the next step and convergence criteria
+            if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
+                break
+        return k + 1
+
+    def _calc_result_full(self, N):
+        """Transform self._result_krylov from the Krylov ONB to the original (npc) basis.
+
+        Construct the result ``psi_f = sum_k  _result_krylov[k] psi[k]``, where ``psi[k]``
+        is the k-th vector of the ONB of the Krylov space generated during the iteration.
+        """
+        vf = self._result_krylov
+        assert N == len(vf) > 1
+        psif = self.psi0 * vf[0]  # the start vector is still known
+        len_cache = len(self._cache)
+        # and the last len_cache vectors have been cached
+        for k in range(1, min(len_cache + 1, N)):
+            psif += self._cache[-k] * vf[N - k]
+        # other vectors are not cached, so we need to restart the Lanczos iteration.
+        self._cache = []  # free memory: we need at least two more vectors
+        # keep q0 and q1 as cache
+        q0 = None
+        q1 = self.psi0
+        beta = 1.  # start vector is already normalized
+        T = self._T
+        for k in range(0, N - len_cache - 1):
+            w = self._apply_H(q1)
+            if k > 0:
+                w -= q0 * beta
+            alpha = T[k, k]
+            w -= q1 * alpha
+            beta = T[k, k + 1]
+            w /= beta
+            q0 = q1
+            q1 = w
+            psif += q1 * vf[k + 1]
+        psif_norm = npc.norm(psif)
+        if abs(1. - psif_norm) > 1.e-5 and self.verbose > 0:
+            print("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psif_norm))
+        return psif / psif_norm
+
+    def _to_cache(self, psi):
+        """add psi to cache, keep at most N_cache."""
+        cache = self._cache
+        cache.append(psi)
+        if len(cache) > self.N_cache:
+            cache.pop(0)  # remove *first* entry
+
+    def _apply_H(self, w):
+        """apply H to w, but orthogonalize agains self.orthogonal_to."""
+        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
+        if len(self.orthogonal_to) > 0:
+            w = w.copy()
+            for o in self.orthogonal_to:  # Project out
+                w -= o * npc.inner(o, w, do_conj=True)
+        w = self.H.matvec(w)
+        for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
+            w -= o * npc.inner(o, w, do_conj=True)
+        return w
+
+    def _calc_result_krylov(self, k):
+        """calculate ground state of _T[:k+1, :k+1]"""
+        T = self._T
+        if k == 0:
+            self.Es[0, 0] = T[0, 0]
+            self._result_krylov = np.ones(1, np.float)
+        else:
+            # Diagonalize T
+            E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
+            self.Es[k, :k+1] = E_T
+            self._result_krylov = v_T[:, 0]  # ground state of _T
+
+    def _converged(self, k):
+        v0 = self._result_krylov
+        E = self.Es[k, :]  # current energies
+        RitzRes = np.abs(v0[k-1] * self._T[k, k + 1])
+        gap = max(E[1] - E[0], self.min_gap)
+        P_err = (RitzRes / gap)**2
+        Delta_E0 = self.Es[k-1, 0] - E[0]
+        return P_err < self.P_tol and Delta_E0 < self.E_tol
+
+
+def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
+    """Simple wrapper calling ``Lanczos(H, psi, params, orthogonal_to).run()``"""
+    return Lanczos(H, psi, lanczos_params, orthogonal_to).run()
 
 
 def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
@@ -52,192 +285,14 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     return vecs, ov
 
 
-def lanczos(A, psi, lanczos_params={}, orthogonal_to=[]):
-    """Lanczos Algorithm for finding the lowest Eigenvector.
+def plot_stats(Es):
+    """Plot the convergence of the energies.
 
     Parameters
     ----------
-    A : :class:`~tenpy.linalg.sparse.LinearOperator`-like
-        A hermitian linear operator. Must implement the method `matvec` acting on a
-        :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
-    psi : :class:`~tenpy.linalg.np_conserved.Array`
-        The starting vector. Should be the best guess available.
-    lanczos_params : dict
-        Further optional parameters as described in the following table.
-        Use ``verbose=1`` to print the used parameters during runtime.
-
-        ======= ====== ===============================================================
-        key     type   description
-        ======= ====== ===============================================================
-        N_min   int    Minimum number of steps to perform.
-        ------- ------ ---------------------------------------------------------------
-        N_max   int    Maximum number of steps to perform.
-        ------- ------ ---------------------------------------------------------------
-        E_tol   float  Stop if energy difference per step < `E_tol`
-        ------- ------ ---------------------------------------------------------------
-        P_tol   float  Tolerance for the error estimate from the
-                       Ritz Residual, stop if ``(RitzRes/gap)**2 < P_tol``
-        ------- ------ ---------------------------------------------------------------
-        min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
-        ------- ------ ---------------------------------------------------------------
-        N_cache int    The maximum number of `psi` to keep in memory.
-        ======= ====== ===============================================================
-
-        The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
-        or if the maximum number of steps was reached.
-
-    orthogonal_to : A list of :class:`~tenpy.linalg.np_conserved.Array`
-        Vectors (same tensor structure as psi) Lanczos will orthogonalize against,
-        ensuring that the result is perpendicular to them.
-
-    Returns
-    -------
-    E0 : float
-        Ground state energy (estimate).
-    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
-        Ground state vector (estimate).
-    N : int
-        Number of steps performed.
-        The results are optimal in the
-
-    Notes
-    -----
-    I have computed the Ritz residual (RitzRes) according to
-    http://web.eecs.utk.edu/~dongarra/etemplates/node103.html#estimate_residual.
-    Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
-    ``err < (RitzRes/gap)**2``.
-    I estimate the gap from the full Lanczos spectrum.
-
-
-    .. todo :
-        Even the Wikipedia page contains a warning that one can quickly loose orthogonality.
-        Should we include a way of Re-orthogonalization?
-        At least orthogonalize against the cached states?
-        (it should be much faster than applying A)
+    Es : list of ndarray.
+        The energies :attr:`Lanczos.Es`.
     """
-    verbose = lanczos_params.get('verbose', 0)
-    if len(orthogonal_to) > 0:
-        orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose / 10)
-    N_cache = get_parameter(lanczos_params, 'N_cache', 6, "Lanczos")
-    if N_cache < 2:
-        raise ValueError("Need to cache at least two vectors.")
-    cache = []
-
-    N_min = get_parameter(lanczos_params, 'N_min', 2, "Lanczos")
-    N_max = get_parameter(lanczos_params, 'N_max', 20, "Lanczos")
-    E_tol = get_parameter(lanczos_params, 'E_tol', 5.e-15, "Lanczos")
-    P_tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
-    min_gap = get_parameter(lanczos_params, 'min_gap', 1.e-12, "Lanczos")
-    Delta_E0 = 2.
-    P_err = 2.
-    Es = []
-
-    # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
-    T = np.zeros([N_max + 1, N_max + 1], dtype=np.float)
-    ULP = 5.e-15  # Cutoff (ULP=unit last place) to abort if beta (= norm of next v) is too small.
-    # This is necessary if the rank of A is smaller than N_max - then we get a complete
-    # basis of the Krylov space, and beta will be zero.
-    above_ULP = True
-    w = psi  # initialize
-    beta = npc.norm(w)
-    for k in range(N_max):
-        w /= beta
-        _to_cache(w, cache, N_cache)
-        w = cache[-1].copy()
-        # project out the orthogonal parts:
-        # equivalent to using A' = P A P
-        for o in orthogonal_to:  # Project out
-            w -= o * npc.inner(o, w, do_conj=True)
-        w = A.matvec(w)
-        for o in orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w -= o * npc.inner(o, w, do_conj=True)
-        alpha = np.real(npc.inner(w, cache[-1], do_conj=True)).item()
-        T[k, k] = alpha
-        if k > 0:
-            w -= beta * cache[-2]
-        w -= alpha * cache[-1]
-        beta = npc.norm(w)
-        above_ULP = abs(beta) > ULP
-        if above_ULP:
-            T[k, k + 1] = T[k + 1, k] = beta
-
-        # Diagonalize T
-        if k == 0:
-            E_T = [alpha]
-        else:
-            E_T, v_T = np.linalg.eigh(T[0:k + 1, 0:k + 1])  # returns eigenvalues sorted ascending
-            RitzRes = np.abs(v_T[k, 0] * T[k, k + 1])
-            Delta_E0 = (Es[-1][0] - E_T[0])
-            gap = max(E_T[1] - E_T[0], min_gap)
-            P_err = (RitzRes / gap)**2
-        Es.append(E_T)
-        if not above_ULP or (k + 1 >= N_min and (P_err < P_tol or Delta_E0 < E_tol)):
-            break
-    N = k + 1  # == len(Es)
-    if verbose >= 1:
-        if verbose >= 10:
-            _plot_stats(Es)
-        if k > 1:
-            print(''.join([
-                "Lanczos N={0:d}, gap={1:.3e} ".format(N, gap),
-                "| DeltaE0={0:.3e} E_tol={1:e} ".format(Delta_E0, E_tol),
-                "| P_err={0:.3e} P_tol={1:e}".format(P_err, P_tol)
-            ]))
-        else:
-            print("Lanczos N={0:d}, alpha={1:.3e}, beta={2:.3e}".format(N, alpha, beta))
-
-    if N == 1:
-        return E_T[0], psi.copy(), N  # no better estimate available
-
-    # Second Lanczos iteration.
-    # Now that we know the (Ritz) eigenvector's coefficients v_T[:, 0] in the Krylov subspace,
-    # construct the actual vector ``psi0 = sum_k  v_T[k, 0] vec[k]``,
-    # where ``vec[k]`` is the k-th vector of the iteration.
-
-    psi0 = psi * v_T[0, 0]  # the start vector is still known
-    # and the last len(cache) vectors have been cached
-    for k in range(1, min(len(cache) + 1, N)):
-        psi0 += v_T[N - k, 0] * cache[-k]
-    len_cache = len(cache)
-    del cache  # free memory: we need at least two more vectors
-    # other vectors are not cached, so we need to restart the Lanczos iteration.
-    q0 = None
-    q1 = psi  # start vector; normalized above in place
-    for k in range(0, N - len_cache - 1):
-        w = q1.copy()
-        for o in orthogonal_to:  # Project out
-            w -= o * npc.inner(o, w, do_conj=True)
-        w = A.matvec(w)
-        for o in orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w -= o * npc.inner(o, w, do_conj=True)
-        if k > 0:
-            w -= beta * q0
-        alpha = T[k, k]
-        w -= alpha * q1
-        beta = T[k, k + 1]
-        w /= beta
-        q0 = q1
-        q1 = w
-        psi0 += q1 * v_T[k + 1, 0]
-    psi0_norm = npc.norm(psi0)
-    if abs(1. - psi0_norm) > 1.e-3:
-        warnings.warn("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psi0_norm))
-    psi0 /= psi0_norm
-    if verbose >= 1. and len(orthogonal_to) > 0:
-        print(''.join(["Lanczos orthogonality:"] + [
-            " {0:.3e}".format(np.abs(npc.inner(o, psi0, do_conj=True))) for o in orthogonal_to
-        ]))
-    return E_T[0], psi0, N
-
-
-def _to_cache(psi, cache, N):
-    """FIFO (first in first out) cache of at most N entries."""
-    cache.append(psi)
-    if len(cache) > N:
-        cache.pop(0)
-
-
-def _plot_stats(Es):
     import matplotlib.pyplot as plt
     ks = [[k] * len(E) for k, E in enumerate(Es)]
     ks = np.array(sum(ks, []))
