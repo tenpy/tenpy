@@ -7,6 +7,7 @@ import numpy as np
 from random_test import gen_random_legcharge
 from tenpy.linalg import lanczos, sparse
 import tenpy.linalg.random_matrix as rmat
+from scipy.linalg import expm
 
 ch = npc.ChargeInfo([2])
 
@@ -26,7 +27,7 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
     assert (np.linalg.norm(ovs - np.eye(k)) < 2 * n * k * k * tol)
 
 
-def test_lanczos(n=30, tol=5.e-15):
+def check_lanczos_gs(n=30, N_cache=6, tol=5.e-15):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg)
@@ -38,7 +39,7 @@ def test_lanczos(n=30, tol=5.e-15):
     H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
-    E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1})
+    E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1, 'N_cache': N_cache})
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
@@ -78,6 +79,43 @@ def test_lanczos(n=30, tol=5.e-15):
     assert (abs(ov) < tol**0.5)
 
 
+def check_lanczos_evolve(n=30, N_cache=6, tol=5.e-15):
+    # generate Hermitian test array
+    leg = gen_random_legcharge(ch, n)
+    H = npc.Array.from_func_square(rmat.GUE, leg) - npc.diag(1., leg)
+    H_flat = H.to_ndarray()
+    H_Op = H  # use `matvec` of the array
+    qtotal = leg.to_qflat()[0]
+    psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
+    psi_init /= npc.norm(psi_init)
+    psi_init_flat = psi_init.to_ndarray()
+    lanc = lanczos.LanczosEvolution(H_Op, psi_init, {'verbose': 1, 'N_cache': N_cache})
+    for delta in [-0.1j, 0.1j, 1.j]: #, 0.1, 1.]:
+        psi_final_flat = expm(H_flat* delta).dot(psi_init_flat)
+        psi_final, N = lanc.run(delta)
+        ov = np.inner(psi_final.to_ndarray().conj(), psi_final_flat)
+        ov /= np.linalg.norm(psi_final_flat)
+        print("<psi1|psi1_flat>/norm=", ov)
+        assert (abs(1. - abs(ov)) < tol)
+
+
+
+def test_lanczos_gs():
+    yield check_lanczos_gs, 10, 20
+    for n in [1, 2, 4, 20]:
+        yield check_lanczos_gs, n, 6
+
+def test_lanczos_evolve():
+    yield check_lanczos_evolve, 10, 20
+    for n in [1, 2, 4, 20]:
+        yield check_lanczos_evolve, n, 6
+
+
+
 if __name__ == "__main__":
-    for n in [1, 2, 3, 4, 5, 10, 20, 30]:
-        test_lanczos(n)
+    check_lanczos_gs(10, 20)
+    for n in [1, 2, 4, 20]:
+        check_lanczos_gs(n, 6)
+    check_lanczos_evolve(10, 20)
+    for n in [1, 2, 4, 20]:
+        check_lanczos_evolve(n, 6)

@@ -4,9 +4,10 @@
 from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
+from scipy.linalg import expm
 
 
-class Lanczos:
+class LanczosGroundState:
     r"""Lanczos algorithm working on npc arrays.
 
     The Lanczos algorithm can finds extremal eigenvalues (in terms of magnitude) along with
@@ -109,7 +110,7 @@ class Lanczos:
         self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float)
 
     def run(self):
-        """Obtain the final result.
+        """Find the ground state of H.
 
         Returns
         -------
@@ -118,7 +119,7 @@ class Lanczos:
         psi0 : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state vector (estimate).
         N : int
-            Number of steps performed.
+            Used dimension of the Krylov space, i.e., how many iterations where performed.
         """
         N = self._calc_T()
         E0 = self.Es[N-1, 0]
@@ -235,9 +236,91 @@ class Lanczos:
         return P_err < self.P_tol and Delta_E0 < self.E_tol
 
 
+class LanczosEvolution(LanczosGroundState):
+    """Calculate :math:`exp(delta H) |psi0>` using Lanczos.
+
+    It turns out that the Lanczos algorithm is also good for calculating the matrix exponential
+    applied to the starting vector. Instead of diagonalizing the tri-diagonal `T` and taking the
+    ground state, we now calculate ``exp(delta T) e_0 in the Krylov ONB, where
+    ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
+
+    Parameters
+    ----------
+    H, psi0, params :
+        Hamiltonian, starting vector and parameters as defined in :class:`LanczosGroundState`.
+        The parameters `E_tol` and `min_gap` are ignored,
+        the parameters `P_tol` defines when convergence is reached, see :meth:`_converged` for
+        details.
+
+    Attributes
+    ----------
+    delta : float/complex
+        Prefactor of H in the exponential.
+    _result_norm : float
+        Norm of the resulting vector.
+    """
+    def __init__(self, H, psi0, params):
+        super(LanczosEvolution, self).__init__(H, psi0, params)
+        self.delta = None
+        self._result_norm = 1.
+
+    def run(self, delta):
+        """Calculate ``expm(delta H).dot(psi0)`` using Lanczos.
+
+        Parameters
+        ----------
+        delta : float/complex
+            Time step by which we should evolve psi0: prefactor of H in the exponential.
+            Note that the complex `i` is *not* included!
+
+        Returns
+        -------
+        psi_f : :class:`~tenpy.linalg.np_conserved.Array`
+            Best approximation for ``expm(delta H).dot(psi0)``
+        N : int
+            Krylov space dimension used.
+        """
+        self.delta = delta
+        N = self._calc_T()
+        if self.verbose >= 1:
+            if N > 1:
+                msg = "Lanczos N={0:d}, |result_krylov[-1]|={1:.3e}"
+                print(msg.format(N, abs(self._result_krylov[-1])))
+            else:
+                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
+                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N == 1:
+            result_full = self._result_krylov[0] * self.psi0
+        else:
+            result_full = self._calc_result_full(N)
+        if delta.real != 0.:
+            return result_full * self._result_norm, N
+        # else:
+        return result_full, N
+
+    def _calc_result_krylov(self, k):
+        """calculate expm(delta T) e0 for T= _T[:k+1, :k+1]"""
+        T = self._T
+        delta = self.delta
+        if k == 0:
+            E = T[0, 0]
+            exp_dE = np.exp(delta*E)
+            self._result_norm = np.sqrt(np.abs(exp_dE))
+            self._result_krylov = np.ones(1, np.float) * (exp_dE/self._result_norm)
+        else:
+            e0 = np.zeros(k+1, dtype=np.float)
+            e0[0] = 1.
+            exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            self._result_norm = np.linalg.norm(exp_dT_e0)
+            self._result_krylov = exp_dT_e0 / self._result_norm
+
+    def _converged(self, k):
+        return np.abs(self._result_krylov[k]) < self.P_tol
+
+
 def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
-    """Simple wrapper calling ``Lanczos(H, psi, params, orthogonal_to).run()``"""
-    return Lanczos(H, psi, lanczos_params, orthogonal_to).run()
+    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``"""
+    return LanczosGroundState(H, psi, lanczos_params, orthogonal_to).run()
 
 
 def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
