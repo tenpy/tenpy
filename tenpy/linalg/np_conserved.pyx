@@ -155,7 +155,7 @@ cdef class Array(object):
         self._qdata_sorted = True
         self.test_sanity()
 
-    def copy(self, deep=False):
+    def copy(self, deep=True):
         """Return a (deep or shallow) copy of self.
 
         **Both** deep and shallow copies will share ``chinfo`` and the `LegCharges` in ``legs``.

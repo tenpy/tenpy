@@ -153,7 +153,7 @@ def test_TransferMatrix(chi=4, d=2):
     print(eta.shape, eta_full.shape)
     print(psi.dtype)
     # note: second and third eigenvalue are complex conjugates
-    if bool(eta[1].imag > 0.) == bool(eta_full[1].imag > 0.):
+    if bool(eta[2].imag > 0.) == bool(eta_full[2].imag > 0.):
         npt.assert_allclose(eta[:3], eta_full[:3])
     else:
         npt.assert_allclose(eta[:3], eta_full[:3].conj())

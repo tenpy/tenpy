@@ -1034,7 +1034,7 @@ class EngineCombine(Engine):
 
 
 class EngineFracture(Engine):
-    """Engine which keeps the legs separate.
+    r"""Engine which keeps the legs separate.
 
     Due to a different contraction order in :meth:`matvec`, this engine might be faster than
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
