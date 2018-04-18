@@ -112,11 +112,11 @@ see [Hauschild2017]_.
 
 import numpy as np
 
-from .mps import MPS, MPSEnvironment
+from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
 
-__all__ = ['PurificationMPS', 'PurificationMPSEnvironment']
+__all__ = ['PurificationMPS']
 
 
 class PurificationMPS(MPS):

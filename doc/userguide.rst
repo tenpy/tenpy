@@ -42,7 +42,7 @@ Content
    intro_npc
    intro_model
    intro_JordanWigner
-   changes_TeNPy
-   contribution
+   contributing
    todo
+   changelog
    license

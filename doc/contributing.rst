@@ -1,13 +1,14 @@
 Contributing
 ============
 
-The code is maintained in a git repository. You're welcome to contribute and push changes back.
-However, to keep consistency, we ask you to comply with the following guidelines:
+The code is maintained in a git repository, the official repository is on `github <https://github.com/tenpy/tenpy>`.
+You're welcome to contribute and submit pull requests on github. You are also welcome to become a member of the developer team, just ask nicely :)
+To keep consistency, we ask you to comply with the following guidelines for contributions:
 
-- Use code style based on :pep:`8`.
+- Use a code style based on :pep:`8`.
   The git repo includes a config file `.style.yapf` for the python package `yapf <http://github.com/google/yapf>`_.
   `yapf` is a tool to auto-format code, e.g., by the command ``yapf -i some/file``.
-  Run the following command to ensure consitency over the whole project::
+  We run the following command from time to time to ensure consitency over the whole project::
 
       yapf -r -i ./
 
@@ -17,7 +18,7 @@ However, to keep consistency, we ask you to comply with the following guidelines
   with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
 - Every function/class/module should be documented by its doc-string (c.f. :pep:`257`),
-  additional documentation is in ``doc/``
+  additional documentation is in ``doc/``.
   The documentation uses `reStructuredText`. If you're new to `reStructuredText`, consider reading this
   `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
   We use the `numpydoc` extension to sphinx, so please read and follow these
@@ -48,18 +49,6 @@ However, to keep consistency, we ask you to comply with the following guidelines
 
   Instructions for building the documentation are in :doc:`INSTALL`.
 
-- Every file should (after the doc-string) include::
-
-      from __future__ import division
-
-  This reduces the ambiguity of the ``/`` operator to give floating points even for integer division.
-  If you want true integer division, make it explicit with the new ``//`` operator.
-  See :pep:`238` for details. Example::
-
-      >>> print 5 / 4    # without __future__ division, this would be 1
-      1.25
-      >>> print 5 // 4
-      1
 - Use relative imports within TeNPy. Example::
 
       from ..linalg import np_conserved as npc
@@ -69,19 +58,39 @@ However, to keep consistency, we ask you to comply with the following guidelines
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
-  Long-running tests are marked with the attribute `slow`, so you can also run
-  ``nosetest -a '!slow'``
+  Long-running tests are marked with the attribute `slow`; for a quick check you can also run
+  ``nosetest -a '!slow'``.
 - Reversely, if you write new functions, please also include suitable tests!
-- A To-Do list can be found in :doc:`doc/todo.rst <todo>`. It also contains a bug list.
-  Sphinx also extract blocks following ``.. todo ::`` from doc-strings, 
-  collecting them in a list in the html documentation.
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
   If you're not 100% sure that you will remove it soon, please add a doc-string with a 
   ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
 
   Unfinished functions should ``raise NotImplementedError()``.
-  Locations of bugs may be marked with `# BUG`. But also add them to the bug list in :doc:`doc/todo.rst <todo>`
-
 - if you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 
 **Thank You** for helping with the development!
+
+
+Bulding the documentation
+-------------------------
+You can use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documentation 
+in various formats (including HTML or PDF) yourself, as described in the following.
+First, install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
+
+    sudo pip install --upgrade sphinx numpydoc
+
+Afterwards, simply go to the folder `doc/` and run the following command::
+
+    make html
+
+This should generate the html documentation in the folder `doc/sphinx_build/html`.
+Open this folder (or to be precise: the file `index.html` in it) in your webbroser
+and enjoy this and other documentation beautifully rendered, with cross links, math formulas
+and even a search function.
+Other output formats are available as other make targets, e.g., ``make latexpdf``.
+
+.. note ::
+
+   Building the (html) documentation requires loading the modules.
+   Thus make sure that the folder `tenpy` is included in your ``$PYTHONPATH``,
+   as described in :doc:`doc/INSTALL.rst <INSTALL>`.

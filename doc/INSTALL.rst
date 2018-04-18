@@ -18,6 +18,7 @@ This code works with a minimal requirement of pure Python 3
 and fairly recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
 (If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.)
 
+
 Including tenpy into PYTHONPATH
 -------------------------------
 The python source is in the directory `tenpy`. 
@@ -37,6 +38,7 @@ On Linux, to set the PYTHONPATH permanently you can add the following line to yo
 
 (If you have already a path in there, separate the paths with a colon ``:``.) 
 You might need to start a new terminal session or relogin to reload the ``~/.bashrc``.
+
 
 Recommendation for optimization
 -------------------------------
@@ -64,61 +66,14 @@ Optional packages (see `Optional Requirements`_ below) can be installed with::
     conda install matplotlib sphinx numpydoc pip nose bottleneck
     pip install yapf    # (if you want to contribute)
 
+If you have another python
+
 .. note :
     MKL uses different threads to parallelize different BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
     cluster. The easiest way to acchieve to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
-
-For further optimization options, look at :mod:`tenpy.tools.optimization`.
-
-
-Checking the installation
--------------------------
-As a first check of the installation you can try to run the python files in the `examples/` subfolder; all of them
-should run without error.
-
-You can also run the automated testsuite with `nose` to make sure everything works fine::
-
-    cd $HOME/TeNPy/tests
-    nosetests
-
-This should run some tests, hopefully indicated by a lot of dots ``.`` and 
-no ``E`` or ``F``, which indicate successfully run tests, errors and failures, respectively.
-In case of errors or failures it gives a detailed traceback and possibly some output of the test.
-At least the stable releases should run these tests without any failures.
-
-If you can run the examples but not the tests, you might want to check whether `nosetests` actually uses the correct
-python version.
-
-Optional Requirements
----------------------
-Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
-However, having matplotlib is not necessary for running the simulations.
-
-For building the documentation, you need
-`Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.
-
-If you plan to contribute to the code, you should use
-`yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
-
-If you have the python package manager ``pip``, all of these can be installed with (assuming some kind of linux) ::
-
-    sudo pip install --upgrade numpy scipy      # the required libraries
-    sudo pip install --upgrade matplotlib       # for plotting
-    sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
-    sudo pip install --upgrade yapf             # python formater to unify the code style
-    sudo pip install --upgrade nose             # nosetest: automated teseting to check if everything works as it should
-    sudo pip install --upgrade bottleneck       # some optimization of numpy bottlenecks
-
-
-.. note ::
-
-   If you don't have super user rights (``sudo``), try ``pip install --upgrade --user [packagenames...]``
-   instead to install the packages to your home directory.
-   If you still run into troubles, you might want to check whether the `pip` you call corresponds to the python version
-   you want to use.
 
 
 Compilation of np_conserved
@@ -141,3 +96,60 @@ After that, go to the root directory of tenpy and simply run ::
 
 It is not required to separately download (and install) Intel MKL: the compilation just obtains the includes from numpy.
 In other words, if your current numpy version uses MKL (as the one provided by anaconda), the compiled tenpy code will also use it.
+
+.. note ::
+    For further optimization options, look at :mod:`tenpy.tools.optimization`.
+
+
+Checking the installation
+-------------------------
+As a first check of the installation you can try to run the python files in the `examples/` subfolder; all of them
+should run without error.
+
+You can also run the automated testsuite with `nose` to make sure everything works fine::
+
+    cd $HOME/TeNPy/tests
+    nosetests
+
+This should run some tests, hopefully indicated by a lot of dots ``.`` and 
+no ``E`` or ``F``, which indicate successfully run tests, errors and failures, respectively.
+In case of errors or failures it gives a detailed traceback and possibly some output of the test.
+At least the stable releases should run these tests without any failures.
+
+If you can run the examples but not the tests, you might want to check whether `nosetests` actually uses the correct
+python version.
+
+
+Optional Requirements
+---------------------
+Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
+However, having matplotlib is not necessary for running the simulations.
+
+For building the documentation, you need
+`Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.
+
+If you plan to contribute to the code, you should use
+`yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
+
+If you have the python package manager ``pip``, all of these can be installed with (assuming some kind of linux) ::
+
+    sudo pip install --upgrade numpy scipy      # the required libraries
+    sudo pip install --upgrade matplotlib       # for plotting
+    sudo pip install --upgrade bottleneck       # some optimization of numpy bottlenecks
+    sudo pip install --upgrade nose             # nosetest: automated teseting to check if everything works as it should
+    sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
+    sudo pip install --upgrade yapf             # python formater to unify the code style
+
+
+.. note ::
+
+    If you don't have super user rights (``sudo``), try ``pip install --upgrade --user [packagenames...]``
+    instead to install the packages to your home directory.
+    If you still run into troubles, you might want to check whether the `pip` you call corresponds to the python version
+    you want to use.
+   
+.. warning ::
+    
+    Might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
+    the python distribution of anaconda. 
+    If you have installed intelpython/anaconda, use the `conda` packagemanager instead of `pip` for updating packages.
