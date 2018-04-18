@@ -1872,7 +1872,7 @@ class Array(object):
         raise NotImplemented
 
     def __truediv__(self, other):
-        """Return ``self / other`` for scalar `other` with ``__future__.division``."""
+        """Return ``self / other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
@@ -1880,14 +1880,8 @@ class Array(object):
             return self.__mul__(1. / other)
         raise NotImplemented
 
-    def __div__(self, other):
-        """``self / other`` for scalar `other` without ``__future__.division``.
-
-        Still broadcast to floats."""
-        return self.__truediv__(other)
-
     def __itruediv__(self, other):
-        """``self /= other`` for scalar `other`` with ``__future__.division``."""
+        """``self /= other`` for scalar `other`."""
         if np.isscalar(other):
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
@@ -1895,9 +1889,6 @@ class Array(object):
             return self.__imul__(1. / other)
         raise NotImplemented
 
-    def __idiv__(self, other):
-        """``self /= other`` for scalar `other`` without ``__future__.division``."""
-        return self.__itruediv__(other)
 
     # private functions =======================================================
 
