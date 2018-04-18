@@ -84,6 +84,7 @@ class LanczosGroundState:
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
     """
+
     def __init__(self, H, psi0, params, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
@@ -122,14 +123,13 @@ class LanczosGroundState:
             Used dimension of the Krylov space, i.e., how many iterations where performed.
         """
         N = self._calc_T()
-        E0 = self.Es[N-1, 0]
+        E0 = self.Es[N - 1, 0]
         if self.verbose >= 1:
             if N > 1:
                 msg = "Lanczos N={0:d}, gap={1:.3e}, DeltaE0={2:.3e}, _result_krylov[-1]={3:.3e}"
-                print(msg.format(N,
-                                 self.Es[N-1, 1] - E0,
-                                 self.Es[N-2, 0] - E0,
-                                 self._result_krylov[-1]))
+                print(
+                    msg.format(N, self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0,
+                               self._result_krylov[-1]))
             else:
                 msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
                 print(msg.format(N, self._T[0, 0], self._T[0, 1]))
@@ -223,16 +223,16 @@ class LanczosGroundState:
         else:
             # Diagonalize T
             E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
-            self.Es[k, :k+1] = E_T
+            self.Es[k, :k + 1] = E_T
             self._result_krylov = v_T[:, 0]  # ground state of _T
 
     def _converged(self, k):
         v0 = self._result_krylov
         E = self.Es[k, :]  # current energies
-        RitzRes = np.abs(v0[k-1] * self._T[k, k + 1])
+        RitzRes = np.abs(v0[k - 1] * self._T[k, k + 1])
         gap = max(E[1] - E[0], self.min_gap)
         P_err = (RitzRes / gap)**2
-        Delta_E0 = self.Es[k-1, 0] - E[0]
+        Delta_E0 = self.Es[k - 1, 0] - E[0]
         return P_err < self.P_tol and Delta_E0 < self.E_tol
 
 
@@ -259,6 +259,7 @@ class LanczosEvolution(LanczosGroundState):
     _result_norm : float
         Norm of the resulting vector.
     """
+
     def __init__(self, H, psi0, params):
         super(LanczosEvolution, self).__init__(H, psi0, params)
         self.delta = None
@@ -304,11 +305,11 @@ class LanczosEvolution(LanczosGroundState):
         delta = self.delta
         if k == 0:
             E = T[0, 0]
-            exp_dE = np.exp(delta*E)
+            exp_dE = np.exp(delta * E)
             self._result_norm = np.sqrt(np.abs(exp_dE))
-            self._result_krylov = np.ones(1, np.float) * (exp_dE/self._result_norm)
+            self._result_krylov = np.ones(1, np.float) * (exp_dE / self._result_norm)
         else:
-            e0 = np.zeros(k+1, dtype=np.float)
+            e0 = np.zeros(k + 1, dtype=np.float)
             e0[0] = 1.
             exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
             self._result_norm = np.linalg.norm(exp_dT_e0)

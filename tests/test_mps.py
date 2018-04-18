@@ -160,7 +160,7 @@ def test_TransferMatrix(chi=4, d=2):
     # compare largest eigenvector
     w0_full = w_full[:, 0]
     w0 = w[0].to_ndarray()
-    assert(abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
+    assert (abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
     w0_full /= np.sum(w0_full)  # fixes norm & phase
     w0 /= np.sum(w0)
     npt.assert_allclose(w0, w0_full)
@@ -190,7 +190,7 @@ def check_canonical_form(bc):
     assert abs(psi.norm - norm) < 1.e-14 * norm
     psi.norm = 1.  # normalized psi
     ov = psi.overlap(psi2, ignore_form=True)
-    print("normalized states: overlap <psi_canonical|psi> = 1.-", 1.-ov)
+    print("normalized states: overlap <psi_canonical|psi> = 1.-", 1. - ov)
     assert abs(ov - 1.) < 1.e-14
     print("norm_test")
     print(psi.norm_test())

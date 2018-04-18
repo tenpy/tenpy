@@ -33,13 +33,14 @@ corresponding ensemble, for example::
 
 import numpy as np
 
-__all__ = ['box', 'standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1',
-           'U_close_1']
+__all__ = [
+    'box', 'standard_normal_complex', 'GOE', 'GUE', 'CRE', 'COE', 'CUE', 'O_close_1', 'U_close_1'
+]
 
 
 def box(size, W=1.):
     """return random number uniform in (-W, W]."""
-    return (0.5-np.random.random(size))*(2.*W)
+    return (0.5 - np.random.random(size)) * (2. * W)
 
 
 def standard_normal_complex(size):

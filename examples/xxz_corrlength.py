@@ -19,9 +19,11 @@ def run(Jzs):
     model_params = dict(L=L, Jx=1., Jy=1., Jz=1., bc_MPS=bc, conserve='Sz', verbose=0)
     chi = 300
     dmrg_params = dict(
-        trunc_params={'chi_max': chi,
-                      'svd_min': 1.e-10,
-                      'trunc_cut': None},
+        trunc_params={
+            'chi_max': chi,
+            'svd_min': 1.e-10,
+            'trunc_cut': None
+        },
         update_env=20,
         start_env=20,
         max_E_err=0.0001,

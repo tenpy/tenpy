@@ -84,15 +84,15 @@ def random_Array(shape, chinfo, func=np.random.random, shape_kw='size', qtotal=N
 
 def random_MPS(L, d, chimax, func=randmat.standard_normal_complex, bc='finite', form='B'):
     site = Site(charges.LegCharge.from_trivial(d))
-    chi = [chimax]*(L+1)
+    chi = [chimax] * (L + 1)
     if bc == 'finite':
-        for i in range(L//2+1):
-            chi[i] = chi[L-i] = min(chi[i], d**i)
+        for i in range(L // 2 + 1):
+            chi[i] = chi[L - i] = min(chi[i], d**i)
     Bs = []
     for i in range(L):
-        Bs.append(func((d, chi[i], chi[i+1])))
+        Bs.append(func((d, chi[i], chi[i + 1])))
     dtype = np.common_type(*Bs)
-    psi = MPS.from_Bflat([site]*L, Bs, bc=bc, dtype=dtype, form=None)
+    psi = MPS.from_Bflat([site] * L, Bs, bc=bc, dtype=dtype, form=None)
     if form is not None:
         psi.canonical_form()
         psi.convert_form(form)

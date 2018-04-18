@@ -30,9 +30,9 @@ def _get_git_version(file=__file__):
     """Get current library version from git"""
     lib_dir = os.path.dirname(os.path.abspath(file))
     try:
-        return str(subprocess.check_output(['git', 'describe', '--always'],
-                                           cwd=lib_dir,
-                                           stderr=subprocess.STDOUT)).strip()
+        return str(
+            subprocess.check_output(
+                ['git', 'describe', '--always'], cwd=lib_dir, stderr=subprocess.STDOUT)).strip()
     except:
         pass
     return 'v' + '.'.join(map(str, version)) + ' git unknown'

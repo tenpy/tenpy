@@ -276,19 +276,20 @@ def run(psi, model, DMRG_params):
             msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
             msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
             msg += "MPS bond dimensions: {chi!s}"
-            print(msg.format(
-                sweep=engine.sweeps,
-                time=time.time() - start_time,
-                mem=memory_usage(),
-                chi=psi.chi,
-                age=engine.statistics['age'][-1],
-                E=E,
-                S=S,
-                DE=Delta_E,
-                DS=Delta_S,
-                trerr=max_trunc_err,
-                Eerr=max_E_trunc,
-                norm_err=norm_err))
+            print(
+                msg.format(
+                    sweep=engine.sweeps,
+                    time=time.time() - start_time,
+                    mem=memory_usage(),
+                    chi=psi.chi,
+                    age=engine.statistics['age'][-1],
+                    E=E,
+                    S=S,
+                    DE=Delta_E,
+                    DS=Delta_S,
+                    trerr=max_trunc_err,
+                    Eerr=max_E_trunc,
+                    norm_err=norm_err))
     # clean up from mixer
     engine.mixer_cleanup(optimize=False)
     # update environment until norm_tol is reached
@@ -307,8 +308,9 @@ def run(psi, model, DMRG_params):
         print("=" * 80)
         msg = "DMRG finished after {sweep:d} sweeps.\n"
         msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
-        print(msg.format(
-            sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
+        print(
+            msg.format(
+                sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
         print("=" * 80)
     unused_parameters(DMRG_params['lanczos_params'], "DMRG")
     unused_parameters(DMRG_params['trunc_params'], "DMRG")
@@ -692,7 +694,7 @@ class Engine(object):
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), self.trunc_params)
         VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, self.env.ket.get_B(i0+1, form=None).qtotal)
+        VH = VH.gauge_total_charge(0, self.env.ket.get_B(i0 + 1, form=None).qtotal)
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
