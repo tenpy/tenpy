@@ -644,16 +644,23 @@ class NormDisentangler(Disentangler):
 
     Reads of the following `TEBD_params` as break criteria for the iteration:
 
-    ================ ====== ======================================================
-    key              type   description
-    ================ ====== ======================================================
-    disent_eps       float  Break, if the change in the Renyi entropy ``S(n=2)``
-                            per iteration is smaller than this value.
-    ---------------- ------ ------------------------------------------------------
-    disent_max_iter  float  Maximum number of iterations to perform.
-    ---------------- ------ ------------------------------------------------------
-    disent_trunc_par dict   Truncation parameters; defaults to `trunc_params`.
-    ================ ====== ======================================================
+    ================ ========= ======================================================
+    key              type      description
+    ================ ========= ======================================================
+    disent_eps       float     Break, if the change in the Renyi entropy ``S(n=2)``
+                               per iteration is smaller than this value.
+    ---------------- --------- ------------------------------------------------------
+    disent_max_iter  float     Maximum number of iterations to perform.
+    ---------------- --------- ------------------------------------------------------
+    disent_trunc_par dict      Truncation parameters; defaults to `trunc_params`.
+    ---------------- --------- ------------------------------------------------------
+    disent_norm_chi  iterable  To find the optimal U it can help to increase `chi_max`
+                               of `disent_trunc_par` slowly, the default is
+                               ``range(1, disent_trunc_par['chi_max']+1)``.
+                               However, that's **very** slow for large `chi_max`,
+                               so we allow to change it. (In fact, it makes the
+                               disentangler *scale* worse than the rest of TEBD.)
+    ================ ========= ======================================================
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
@@ -664,6 +671,10 @@ class NormDisentangler(Disentangler):
         self.eps = get_parameter(parent.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
         self.trunc_par = get_parameter(parent.TEBD_params, 'disent_trunc_par', parent.trunc_params,
                                        'PurificationTEBD')
+        self.chi_max = get_parameter(self.trunc_par, 'chi_max', 100, 'PurificationTEBD')
+        self.trunc_cut = get_parameter(self.trunc_par, 'trunc_cut', None, 'PurificationTEBD')
+        self.chi_range = get_parameter(self.trunc_par, 'disent_norm_chi', range(1, self.chi_max+1),
+                                       'PurificationTEBD')
         self.parent = parent
 
     def __call__(self, theta):
@@ -672,11 +683,17 @@ class NormDisentangler(Disentangler):
             npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
             npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
         err = None
-        for j in range(self.max_iter):
-            err2, U = self.iter(theta, U, self.trunc_par)
-            if err is not None and abs(err.eps - err2.eps) <= err.eps * self.eps:
-                break
-            err = err2
+        trunc_par = self.trunc_par.copy()
+        for chi_opt in self.chi_range:
+            trunc_par['chi_max'] = chi_opt
+            for j in range(self.max_iter):
+                err2, U = self.iter(theta, U, trunc_par)
+                if err is not None and abs(err.eps - err2.eps) <= err.eps * self.eps:
+                    break
+                err = err2
+            if self.trunc_cut is not None:
+                if err2.eps < self.trunc_cut*self.trunc_cut:
+                    break
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
