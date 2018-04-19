@@ -12,7 +12,7 @@ class SimpleHeff(scipy.sparse.linalg.LinearOperator):
 
     To be diagonalized in `SimpleDMRGEnginge.update_bond`. Looks like this::
 
-        .--vL*           vL*--.
+        .--vL*           vR*--.
         |       i*    j*      |
         |       |     |       |
         (LP)---(W1)--(W2)----(RP)
