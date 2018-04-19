@@ -38,7 +38,7 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
             5: 40
         },
         'max_E_err': 1.e-12,
-        #  'max_S_err': 1.e-12,
+        'max_S_err': 1.e-8,
         'N_sweeps_check': 4,
         'mixer_params': {
             'disable_after': 6,
@@ -64,7 +64,7 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
         print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=np.min(ED.E)))
         print("compare with ED: overlap = ", abs(ov)**2)
-        assert (abs(abs(ov) - 1.) < 1.e-10)  # unique groundstate: finite size gap!
+        assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
@@ -73,8 +73,8 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
-        assert (abs((Edmrg - Eexact) / Eexact) < 1.e-10)
-        assert (abs((Edmrg - Edmrg2) / Edmrg2) < np.max(psi.norm_test()))
+        assert abs((Edmrg - Eexact) / Eexact) < 1.e-10
+        assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.e-10, np.max(psi.norm_test()))
 
 
 @attr('slow')

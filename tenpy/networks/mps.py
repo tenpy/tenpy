@@ -1724,8 +1724,9 @@ class MPS(object):
         U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary representation of the applied permutation on left Schmidt states.
         W : ndarray
-            1D array of the form ``S**2 exp(i K)``, where `S` are the singular values
-            on the left bond.
+            1D array of the form ``S**2 exp(i K)``, where `S` are the Schmidt values
+            on the left bond. You can use :func:`np.abs` and :func:`np.angle` to extract the
+            Schmidt values `S` and momenta `K` from `W`.
         q : :class:`~tenpy.linalg.charges.LegCharge`
             LegCharge corresponding to `W`.
         ov : complex
