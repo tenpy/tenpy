@@ -2,7 +2,7 @@ Contributing
 ============
 
 The code is maintained in a git repository, the official repository is on `github <https://github.com/tenpy/tenpy>`.
-You're welcome to contribute and submit pull requests on github. You are also welcome to become a member of the developer team, just ask nicely :)
+You're welcome to contribute and submit pull requests on github. You are also welcome to become a member of the developer team, just ask nicely :) (Contact details in the AUTHORS.txt) 
 To keep consistency, we ask you to comply with the following guidelines for contributions:
 
 - Use a code style based on :pep:`8`.

@@ -1,7 +1,7 @@
-The following people are part of the TeNPy developer team
-A full list might also by obtained by using the command ``git shortlog -sn``
+The following people are part of the TeNPy developer team.
+The full list of contributors can be obtained from the git repository with ``git shortlog -sn``.
 
-Johannes Hauschild
+Johannes Hauschild        tenpy@johannes-hauschild.de
 Frank Pollmann
 Maximilian Schulz
 Leon Schoonderwoert
