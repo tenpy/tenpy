@@ -12,7 +12,7 @@ Follow the instructions in :doc:`doc/INSTALL.rst <INSTALL>`.
 
 How to read the documentation
 -----------------------------
-The **documentation is available online** at `github <https://tenpy.github.io/>`_.
+The **documentation is available online** at https://tenpy.github.io.
 
 The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in the folder `doc/` of
 the repository.
@@ -20,7 +20,7 @@ All documentation should be formated as `reStructuredText <http://www.sphinx-doc
 whis means it is readable in the source plain text, but can also be converted to other formats.
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice (or jupyter notebooks), or just read the source.
 
-The documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, as mentioned above available online at `github pages <https://tenpy.github.io/documentation/>`_.
+The documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, as mentioned above available online at https://tenpy.github.io/.
 You can also build the documentation yourself, as described in :doc:`doc/contributing.rst <contributing>`.
 Sphinx can generate the documentation in various output formats, including HTML and LATEX/PDF.
 
@@ -36,4 +36,4 @@ If you already know how to fix it, you can just create a pull request :)
 License
 -------
 The code is licensed under GPL-v3.0 given in the file ``LICENSE`` of the repository, 
-in the online documentation readable :doc:`here <license>`.
+in the online documentation readable at https://tenpy.github.io/license.html.
