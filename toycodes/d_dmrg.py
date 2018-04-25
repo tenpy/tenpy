@@ -2,7 +2,7 @@
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
-from a_simple_1_MPS import split_truncate_theta
+from a_mps import split_truncate_theta
 import scipy.sparse
 import scipy.sparse.linalg.eigen.arpack as arp
 
@@ -58,7 +58,7 @@ class SimpleDMRGEngine(object):
     model :
         The model of which the groundstate is to be calculated.
     chi_max, eps:
-        Truncation parameters, see :func:`a_simple_1_MPS.split_truncate_theta`.
+        Truncation parameters, see :func:`a_mps.split_truncate_theta`.
     LPs, RPs : list of np.Array[ndim=3]
         Left and right parts ("environments") of the effective Hamiltonian.
         ``LPs[i]`` is the contraction of all parts left of site `i` in the network ``<psi|H|psi>``,
@@ -142,29 +142,30 @@ class SimpleDMRGEngine(object):
 
 def example_DMRG_finite(L, g):
     print("finite DMRG, L={L:d}, g={g:.2f}".format(L=L, g=g))
-    import a_simple_1_MPS
-    import a_simple_2_model
-    M = a_simple_2_model.TFIModel(L=L, J=1., g=g, bc='finite')
-    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    import a_mps
+    import b_model
+    M = b_model.TFIModel(L=L, J=1., g=g, bc='finite')
+    psi = a_mps.init_FM_MPS(M.L, M.d, M.bc)
     eng = SimpleDMRGEngine(psi, M, chi_max=30, eps=1.e-10)
     for i in range(10):
         eng.sweep()
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
         print("sweep {i:2d}: E = {E:.13f}".format(i=i + 1, E=E))
     print("final bond dimensions: ", psi.get_chi())
-    if L < 20:
-        E_ed = M.exact_finite_gs_energy()
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_ed))
-        print("relative error: ", abs((E - E_ed) / E_ed))
+    if L < 20:  # compare to exact result
+        from tfi_exact import exact_finite_gs_energy
+        E_exact = exact_finite_gs_energy(L, 1., g)
+        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_DMRG_infinite(g):
     print("infinite DMRG, g={g:.2f}".format(g=g))
-    import a_simple_1_MPS
-    import a_simple_2_model
-    M = a_simple_2_model.TFIModel(L=2, J=1., g=g, bc='infinite')
-    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    import a_mps
+    import b_model
+    M = b_model.TFIModel(L=2, J=1., g=g, bc='infinite')
+    psi = a_mps.init_FM_MPS(M.L, M.d, M.bc)
     eng = SimpleDMRGEngine(psi, M, chi_max=20, eps=1.e-14)
     for i in range(20):
         eng.sweep()
@@ -172,9 +173,11 @@ def example_DMRG_infinite(g):
         print("sweep {i:2d}: E/L = {E:.13f}".format(i=i + 1, E=E))
     print("final bond dimensions: ", psi.get_chi())
     print("correlation length:", psi.correlation_length())
-    E_ed = M.exact_infinite_gs_energy()
-    print("Analytic result: E/L = {E:.13f}".format(E=E_ed))
-    print("relative error: ", abs((E - E_ed) / E_ed))
+    # compare to exact result
+    from tfi_exact import exact_infinite_gs_energy
+    E_exact = exact_infinite_gs_energy(1., g)
+    print("Analytic result: E/L = {E:.13f}".format(E=E_exact))
+    print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 

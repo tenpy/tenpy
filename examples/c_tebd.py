@@ -1,6 +1,6 @@
 """Example illustrating the use of TEBD in tenpy.
 
-The example functions in this class do the same as the ones in `a_simple_3_TEBD.py`,
+The example functions in this class do the same as the ones in `toycodes/c_tebd.py`,
 but make use of the classes defined in tenpy.
 """
 # Copyright 2018 TeNPy Developers
@@ -10,7 +10,7 @@ import numpy as np
 from tenpy.networks.mps import MPS
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
-from a_simple_2_model import TFIModel as SimpleTFIModel
+import tfi_exact
 
 
 def example_TEBD_gs_finite(L, g):
@@ -34,11 +34,10 @@ def example_TEBD_gs_finite(L, g):
     E = np.sum(psi.expectation_value(M.H_bond[1:]))
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
-    if L < 20:
-        M2 = SimpleTFIModel(L=L, J=1., g=g, bc='finite')
-        E_ed = M2.exact_finite_gs_energy()
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_ed))
-        print("relative error: ", abs((E - E_ed) / E_ed))
+    if L < 20:  # compare to exact result
+        E_exact = tfi_exact.finite_gs_energy(L, 1., g)
+        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
@@ -64,10 +63,10 @@ def example_TEBD_gs_infinite(g):
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     print("correlation length:", psi.correlation_length())
-    M2 = SimpleTFIModel(L=2, J=1., g=g, bc='infinite')
-    E_ex = M2.exact_infinite_gs_energy()
-    print("Analytic result: E/L = {E:.13f}".format(E=E_ex))
-    print("relative error: ", abs((E - E_ex) / E_ex))
+    # compare to exact result
+    E_exact = tfi_exact.infinite_gs_energy(1., g)
+    print("Analytic result: E/L = {E:.13f}".format(E=E_exact))
+    print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
@@ -75,7 +74,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     print("finite TEBD, real time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
     # find ground state with TEBD or DMRG
     #  E, psi, M = example_TEBD_gs_finite(L, g)
-    from b_intro_4_DMRG import example_DMRG_finite
+    from d_dmrg import example_DMRG_finite
     E, psi, M = example_DMRG_finite(L, g)
     i0 = L // 2
     # apply sigmaz on site i0
@@ -105,8 +104,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     pl.ylabel('time $t/J$')
     pl.ylim(0., tmax)
     pl.colorbar().set_label('entropy $S$')
-    pl.show()
-
+    pl.savefig('c_tebd_lightcone.pdf')
 
 if __name__ == "__main__":
     example_TEBD_gs_finite(L=10, g=1.)
