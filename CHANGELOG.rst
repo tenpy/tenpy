@@ -13,8 +13,19 @@ Added
 
 Changed
 ^^^^^^^
+- moved toycodes from examples/ to a new folder toycodes/
 - Restructured lanczos into a class, added time evolution calculating exp(A*dt)|psi0>
 - By default, make deep copies of npc Arrays.
+- Restructured :mod:`tenpy.dmrg`:
+
+  - :func:`tenpy.dmrg.run` is now just a wrapper around the new 
+    :meth:`tenpy.dmrg.Engine.run`,
+    ``run(psi, model, pars)`` is roughly equivalent to
+    ``eng = EngineCombine(psi, model, pars); eng.run()``.
+  - Added :meth:`tenpy.dmrg.Engine.init_env` and :meth:`tenpy.dmrg.Engine.reset_stats`
+    to allow a simple restart of DMRG with slightly different parameters.
+  - call MPS.canonical_form() for infinite systems if the final state is not in canonical form.
+
 
 Fixed
 ^^^^^

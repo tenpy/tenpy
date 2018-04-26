@@ -583,4 +583,4 @@ A full example code for spin-1/2
 --------------------------------
 Below follows a full example demonstrating the creation and contraction of Arrays.
 
-.. literalinclude:: ../examples/b_intro_1_npc.py
+.. literalinclude:: ../examples/a_np_conserved.py

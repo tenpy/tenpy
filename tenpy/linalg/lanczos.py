@@ -64,8 +64,8 @@ class LanczosGroundState:
         Vectors (same tensor structure as psi) Lanczos will orthogonalize against,
         ensuring that the result is perpendicular to them.
 
-    Attribues
-    ---------
+    Attributes
+    ----------
     H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
         The hermitian linear operator.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`

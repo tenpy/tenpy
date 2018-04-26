@@ -23,7 +23,6 @@ The mixer should be used initially to avoid that the algorithm gets stuck in loc
 and then slowly turned off in the end.
 
 .. todo ::
-    abort on too large NormErr -> need MPS.normerr()
     Need function to plot the statistics in the end
     Write UserGuide/Example!!!
     Allow to keep MPS orthogonal to other states, for finding excited states
@@ -37,6 +36,7 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos
+from ..linalg.sparse import NpcLinearOperator
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
@@ -45,7 +45,7 @@ __all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer']
 
 
 def run(psi, model, DMRG_params):
-    r"""Run the DMRG algorithm to find the ground state of `M`.
+    r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
     ----------
@@ -84,6 +84,12 @@ def run(psi, model, DMRG_params):
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
         -------------- --------- ---------------------------------------------------------------
+        chi_list       dict      A dictionary to gradually increase the `chi_max` parameter of
+                                 `trunc_params`. The key defines starting from which sweep
+                                 `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
+                                 ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
+                                 afterwards.
+        -------------- --------- ---------------------------------------------------------------
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
         -------------- --------- ---------------------------------------------------------------
@@ -92,18 +98,21 @@ def run(psi, model, DMRG_params):
         -------------- --------- ---------------------------------------------------------------
         sweep_0        int       The number of sweeps already performed. (Useful for re-start).
         -------------- --------- ---------------------------------------------------------------
-        start_env      int       Number of initial sweeps without bond optimizaiton to
+        start_env      int       Number of initial sweeps performed without bond optimizaiton to
                                  initialize the environment.
         -------------- --------- ---------------------------------------------------------------
         update_env     int       Number of sweeps without bond optimizaiton to update the
-                                 environment for infinite bc,
+                                 environment for infinite boundary conditions,
                                  performed every `N_sweeps_check` sweeps.
         -------------- --------- ---------------------------------------------------------------
-        norm_tol       float     After the DMRG run, update the environment by 'update_env'
-                                 sweeps until ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+        norm_tol       float     After the DMRG run, update the environment with at most
+                                 `norm_tol_iter` sweeps until
+                                 ``np.linalg.norm(psi.norm_err()) < norm_tol``.
         -------------- --------- ---------------------------------------------------------------
-        norm_tol_iter  float     Perform at most `update_env` * `norm_tol_iter` iteration to
+        norm_tol_iter  float     Perform at most `norm_tol_iter`*`update_env` sweeps to
                                  converge the norm error below `norm_tol`.
+                                 If the state is not converged after that, call
+                                 :meth:`~tenpy.networks.mps.canonical_form` instead.
         -------------- --------- ---------------------------------------------------------------
         max_sweeps     int       Maximum number of sweeps to be performed.
         -------------- --------- ---------------------------------------------------------------
@@ -146,187 +155,15 @@ def run(psi, model, DMRG_params):
     if isinstance(Engine_class, str):
         Engine_class = globals()[Engine_class]
     engine = Engine_class(psi, model, DMRG_params)
-    verbose = engine.verbose
-
-    # prepare parameters
-    chi_max_default = engine.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
-    chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
-    chi_max = chi_list[max([k for k in chi_list.keys() if k <= engine.sweeps])]
-    engine.trunc_params['chi_max'] = chi_max
-    if verbose >= 1:
-        print("Setting chi_max =", chi_max)
-    p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', None, 'DMRG')
-    if p_tol_to_trunc is not None:
-        p_tol_min = get_parameter(DMRG_params, 'P_tol_min', None, 'DMRG')
-        p_tol_max = get_parameter(DMRG_params, 'P_tol_max', None, 'DMRG')
-    e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
-    if e_tol_to_trunc is not None:
-        e_tol_min = get_parameter(DMRG_params, 'E_tol_min', None, 'DMRG')
-        e_tol_max = get_parameter(DMRG_params, 'E_tol_max', None, 'DMRG')
-
-    # get parameters for DMRG convergence criteria
-    N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
-    min_sweeps = get_parameter(DMRG_params, 'min_sweeps', 1.5 * N_sweeps_check, 'DMRG')
-    max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
-    max_E_err = get_parameter(DMRG_params, 'max_E_err', 0.1, 'DMRG')
-    max_S_err = get_parameter(DMRG_params, 'max_S_err', 0.1, 'DMRG')
-    max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
-    start_time = time.time()
-
-    # initial sweeps of the environment
-    start_env = get_parameter(DMRG_params, 'start_env', 0, 'DMRG')
-    # update environement sweeps
-    default_update_env = min((N_sweeps_check // 2 + 1), 10)
-    if psi.finite:
-        default_update_env = 0
-    update_env = get_parameter(DMRG_params, 'update_env', default_update_env, 'DMRG')
-    norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-3, 'DMRG')
-    norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 10, 'DMRG')
-    if psi.finite:
-        if start_env > 0 or update_env > 0:
-            warnings.warn("Ignore `start_env` and `update_env` for finite MPS: nothing to do.")
-        start_env = update_env = 0
-        norm_tol = None
-    engine.environment_sweeps(start_env)
-
-    # initialize statistics
-    shelve = False
-    E_old, S_old = np.nan, np.nan  # initial dummy values
-    E, Delta_E, Delta_S = 1., 1., 1.
-
-    sweep_statistics = {
-        'sweep': [],
-        'E': [],
-        'S': [],
-        'max_trunc_err': [],
-        'max_E_trunc': [],
-        'max_chi': [],
-        'norm_err': []
-    }
-
-    while True:
-        # check abortion criteria
-        if engine.sweeps >= max_sweeps:
-            break
-        if engine.sweeps > min_sweeps and -Delta_E / abs(E) < max_E_err and abs(
-                Delta_S) < max_S_err:
-            if engine.mixer is None:
-                break
-            else:
-                if verbose >= 1:
-                    print("Convergence criterium reached with enabled mixer.\n"
-                          "disable mixer and continue")
-                    engine.mixer = None
-        if time.time() - start_time > max_seconds:
-            shelve = True
-            warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
-            break
-        # the time-consuming part: the actual sweeps
-        for i in range(N_sweeps_check):
-            # --------- the main work --------------
-            max_trunc_err, max_E_trunc = engine.sweep(meas_E_trunc=(i + 1 == N_sweeps_check))
-            # --------------------------------------
-            if engine.sweeps in chi_list:
-                engine.trunc_params['chi_max'] = chi_list[engine.sweeps]
-                if verbose >= 1:
-                    print("Setting chi_max =", chi_list[engine.sweeps])
-        # update lancos_params depending on truncation error(s)
-        if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
-            engine.lanczos_params['P_tol'] = max(p_tol_min,
-                                                 min(p_tol_max, max_trunc_err * p_tol_to_trunc))
-        if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
-            engine.lanczos_params['E_tol'] = max(e_tol_min,
-                                                 min(e_tol_max, max_E_trunc * e_tol_to_trunc))
-        # update environment
-        engine.environment_sweeps(update_env)
-        try:
-            S = np.average(psi.entanglement_entropy())
-            Delta_S = (S - S_old) / N_sweeps_check
-        except ValueError:
-            S = np.nan
-            Delta_S = 0.
-        S_old = S
-        if not psi.finite:  # iDMRG: need energy density
-            Es = engine.statistics['E_total']
-            age = engine.statistics['age']
-            if N_sweeps_check > 1:
-                growth = (age[-1] - age[-1 - 2 * engine.env.L])
-                E = (Es[-1] - Es[-1 - 2 * engine.env.L]) / growth
-            else:
-                E = (Es[-1] - Es[0]) / (age[-1] - age[0])
-        else:
-            E = engine.statistics['E_total'][-1]
-        Delta_E = (E - E_old) / N_sweeps_check
-        E_old = E
-        norm_err = np.linalg.norm(psi.norm_test())
-        sweep_statistics['sweep'].append(engine.sweeps)
-        sweep_statistics['E'].append(E)
-        sweep_statistics['S'].append(S)
-        sweep_statistics['max_trunc_err'].append(max_trunc_err)
-        sweep_statistics['max_E_trunc'].append(max_E_trunc)
-        sweep_statistics['max_chi'].append(np.max(psi.chi))
-        sweep_statistics['norm_err'].append(norm_err)
-
-        if verbose >= 1:
-            # print a status update
-            print("=" * 80)
-            msg = "sweep {sweep:d}, age = {age:d}\n"
-            msg += "Energy = {E:.16f}, S = {S:.16f}, norm_err = {norm_err:.1e}\n"
-            msg += "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
-            msg += "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
-            msg += "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
-            msg += "MPS bond dimensions: {chi!s}"
-            print(
-                msg.format(
-                    sweep=engine.sweeps,
-                    time=time.time() - start_time,
-                    mem=memory_usage(),
-                    chi=psi.chi,
-                    age=engine.statistics['age'][-1],
-                    E=E,
-                    S=S,
-                    DE=Delta_E,
-                    DS=Delta_S,
-                    trerr=max_trunc_err,
-                    Eerr=max_E_trunc,
-                    norm_err=norm_err))
-    # clean up from mixer
-    engine.mixer_cleanup(optimize=False)
-    # update environment until norm_tol is reached
-    if norm_tol is not None and norm_err > norm_tol:
-        warnings.warn("final DMRG state not in canonical form: too much truncation!")
-        if psi.finite:
-            psi.canonical_form()
-        else:
-            for _ in range(norm_tol_iter):
-                engine.environment_sweeps(update_env)
-                norm_err = np.linalg.norm(psi.norm_test())
-                if norm_err <= norm_tol:
-                    break
-
-    if verbose >= 1:
-        print("=" * 80)
-        msg = "DMRG finished after {sweep:d} sweeps.\n"
-        msg += "Age (=total size) = {age:d}, maximum chi = {chimax}"
-        print(
-            msg.format(
-                sweep=engine.sweeps, age=engine.statistics['age'][-1], chimax=np.max(psi.chi)))
-        print("=" * 80)
-    unused_parameters(DMRG_params['lanczos_params'], "DMRG")
-    unused_parameters(DMRG_params['trunc_params'], "DMRG")
-    unused_parameters(DMRG_params, "DMRG")
-    return {
-        'E': E,
-        'shelve': shelve,
-        'bond_statistics': engine.statistics,
-        'sweep_statistics': sweep_statistics
-    }
+    E, _ = engine.run()
+    return {'E': E, 'shelve': engine.shelve, 'bond_statistics': engine.update_stats,
+            'sweep_statistics': engine.sweep_stats}
 
 
-class Engine(object):
+class Engine(NpcLinearOperator):
     """Prototype for an DMRG 'Engine'.
 
-    This class is the working horse of :func:`DMRG`. It implements the :meth:`sweep` and large
+    This class is the working horse of DMRG. It implements the :meth:`sweep` and large
     parts of the (two-site) optimization.
     During the diagonalization (i.e. after calling :meth:`prepare_diag`), the class represents
     the effective two-site Hamiltonian, which looks like this::
@@ -354,13 +191,32 @@ class Engine(object):
     ----------
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The MPS to be optimized. After :meth:`run`, this should be (close to) the ground state.
     sweeps : int
         The number of performed sweeps (with ``optimize=True``, i.e. not counting the
         environment updates).
-    statistics : dict
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    DMRG_params : dict
+        Parameters used for the DMRG. See :func:`run` for more details.
+    lanczos_params : dict
+        Parameters for :func:`~tenpy.linalg.lanczos.lanczos`.
+    trunc_params : dict
+        Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
+    finite : bool
+        Wheter we perform DMRG for an MPS with finite/segment (True) or infinite boundary
+        conditions; same as `psi.finite`.
+    shelve : bool
+        True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
+    chi_list : dict
+        See DMRG_params `chi_list`.
+    update_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
-        added each :meth:`Engine.update_bond`.
+        added each time :meth:`Engine.update_bond` is called.
 
         =========== ===================================================================
         key         description
@@ -374,46 +230,270 @@ class Engine(object):
         N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
         =========== ===================================================================
 
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Environment for contraction ``<psi|H|psi>``.
-    mixer : :class:`Mixer` | ``None``
-        If ``None``, no mixer is used, otherwise the mixer instance.
-    lanczos_params : dict
-        Parameters for :func:`~tenpy.linalg.lanczos.lanczos`.
-    trunc_params : dict
-        Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
+    sweep_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy *before* truncation (as calculated by Lanczos).
+        ------------- -------------------------------------------------------------------
+        S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        max_trunc_err The maximum truncation error in the last sweep
+        ------------- -------------------------------------------------------------------
+        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
     """
 
     def __init__(self, psi, model, DMRG_params):
+        self.psi = psi
+        self.DMRG_params = DMRG_params
         self.verbose = get_parameter(DMRG_params, 'verbose', 1, 'DMRG')
-        self.sweeps = get_parameter(DMRG_params, 'sweep_0', 0, 'DMRG')
-        self.statistics = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': []}
 
-        # set up environment
-        LP = get_parameter(DMRG_params, 'LP', None, 'DMRG')
-        RP = get_parameter(DMRG_params, 'RP', None, 'DMRG')
-        LP_age = get_parameter(DMRG_params, 'LP_age', 0, 'DMRG')
-        RP_age = get_parameter(DMRG_params, 'RP_age', 0, 'DMRG')
-        self.env = MPOEnvironment(psi, model.H_MPO, psi, LP, RP, LP_age, RP_age)
-        # (checks compatibility of psi with model)
-
-        # generate mixer instance, if a mixer is to be used.
+        self.finite = psi.finite
         self.mixer = None  # means 'ignore mixer'
-        Mixer_class = get_parameter(DMRG_params, 'mixer', None, 'DMRG')
-        if Mixer_class is not None:
-            if Mixer_class is True:
-                Mixer_class = Mixer
-            if isinstance(Mixer_class, str):
-                Mixer_class = globals()[Mixer_class]
-            mixer_params = get_parameter(DMRG_params, 'mixer_params', {}, 'DMRG')
-            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-            self.mixer = Mixer_class(mixer_params)
+        # the mixer is activated in in :meth:`run`.
 
         self.lanczos_params = get_parameter(DMRG_params, 'lanczos_params', {}, 'DMRG')
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-
         self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        chi_max_default = self.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
+        self.chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
+
+        self.env = None
+        self.init_env(model)
+
+    def init_env(self, model=None):
+        """(Re-)initialize the environment.
+
+        This function is useful to re-start DMRG after with a slightly different model or
+        different parameters.
+        Calls :meth:`reset_stats`
+
+        Parameters
+        ----------
+        model : :class:`~tenpy.models.MPOModel`
+            The model representing the Hamiltonian for which we want to find the ground state.
+            If ``None``, keep the model used before.
+        """
+        H = model.H_MPO if model is not None else self.env.H
+        if self.env is None or self.finite:
+            LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
+            RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
+            LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
+            RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
+        else:  # re-initialize
+            compatible = True
+            if model is not None:
+                try:
+                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
+                except ValueError:
+                    compatible = False
+                    warings.warn("The leg of the new model is incompatible with the previous one."
+                                 "Rebuild environment from scratch.")
+            if compatible:
+                LP = self.env.get_LP(0, False)
+                LP_age = self.env.get_LP_age(0)
+                RP = self.env.get_RP(self.psi.L - 1, False)
+                RP_age = self.env.get_LP_age(self.psi.L - 1)
+                self.chi_list = {0: self.trunc_params['chi_max']}  # chi_list makes no sense
+            else:
+                LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
+                RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
+                LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
+                RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
+                # reset chi_list
+                self.chi_list = get_parameter(DMRG_params, 'chi_list', self.chi_list, 'DMRG')
+                chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+                self.trunc_params['chi_max'] = chi_max
+        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
+
+        self.reset_stats()
+
+        # initial sweeps of the environment (without mixer)
+        if not self.finite:
+            start_env = get_parameter(self.DMRG_params, 'start_env', 0, 'DMRG')
+            self.environment_sweeps(start_env)
+
+    def reset_stats(self):
+        """Reset the statistics. Useful if you want to start a new DMRG run."""
+        self.sweeps = get_parameter(self.DMRG_params, 'sweep_0', 0, 'DMRG')
+        self.update_stats = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': []}
+        self.sweep_stats = {
+            'sweep': [],
+            'E': [],
+            'S': [],
+            'max_trunc_err': [],
+            'max_E_trunc': [],
+            'max_chi': [],
+            'norm_err': []
+        }
+        self.shelve = False
+        chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+        self.trunc_params['chi_max'] = chi_max
+
+    def __del__(self):
+        DMRG_params = self.DMRG_params
+        unused_parameters(DMRG_params['lanczos_params'], "DMRG lanczos_params")
+        unused_parameters(DMRG_params['trunc_params'], "DMRG trunc_params")
+        if 'mixer_params' in DMRG_params:
+            unused_parameters(DMRG_params['mixer_params'], "DMRG mixer_params")
+        unused_parameters(DMRG_params, "DMRG")
+
+    def run(self):
+        DMRG_params = self.DMRG_params
+        start_time = time.time()
+        self.shelve = False
+        # parameters for lanczos
+        p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', None, 'DMRG')
+        if p_tol_to_trunc is not None:
+            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', None, 'DMRG')
+            p_tol_max = get_parameter(DMRG_params, 'P_tol_max', None, 'DMRG')
+        e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
+        if e_tol_to_trunc is not None:
+            e_tol_min = get_parameter(DMRG_params, 'E_tol_min', None, 'DMRG')
+            e_tol_max = get_parameter(DMRG_params, 'E_tol_max', None, 'DMRG')
+
+        # parameters for DMRG convergence criteria
+        N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
+        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
+        max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
+        max_E_err = get_parameter(DMRG_params, 'max_E_err', 0.1, 'DMRG')
+        max_S_err = get_parameter(DMRG_params, 'max_S_err', 0.1, 'DMRG')
+        max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
+        norm_tol = get_parameter(DMRG_params, 'norm_tol', None, 'DMRG')
+        if not self.finite:
+            update_env = get_parameter(DMRG_params, 'update_env', N_sweeps_check // 2, 'DMRG')
+            norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
+        E_old, S_old = np.nan, np.nan  # initial dummy values
+        E, Delta_E, Delta_S = 1., 1., 1.
+
+        self.mixer_activate()
+        # loop over sweeps
+        while True:
+            # check convergence criteria
+            if self.sweeps >= max_sweeps:
+                break
+            if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * abs(E) and
+                    abs(Delta_S) < max_S_err):
+                if self.mixer is None:
+                    break
+                else:
+                    if self.verbose >= 1:
+                        print("Convergence criterium reached with enabled mixer.\n"
+                              "disable mixer and continue")
+                        self.mixer = None
+            if time.time() - start_time > max_seconds:
+                shelve = True
+                warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
+                break
+            # --------- the main work --------------
+            for i in range(N_sweeps_check-1):
+                self.sweep(meas_E_trunc=False)
+            max_trunc_err, max_E_trunc = self.sweep(meas_E_trunc=True)
+            # --------------------------------------
+            # update lancos_params depending on truncation error(s)
+            if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
+                engine.lanczos_params['P_tol'] = max(p_tol_min,
+                                                    min(p_tol_max, max_trunc_err * p_tol_to_trunc))
+            if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
+                engine.lanczos_params['E_tol'] = max(e_tol_min,
+                                                    min(e_tol_max, max_E_trunc * e_tol_to_trunc))
+            # update environment
+            if not self.finite:
+                self.environment_sweeps(update_env)
+
+            # update values for checking the convergence
+            try:
+                S = np.average(self.psi.entanglement_entropy())
+                Delta_S = (S - S_old) / N_sweeps_check
+            except ValueError:
+                # with a mixer, psi._S can be 2D arrays s.t. entanglement_entropy() fails
+                S = np.nan
+                Delta_S = 0.
+            S_old = S
+            if not self.finite:  # iDMRG: need energy density
+                Es = self.update_stats['E_total']
+                age = self.update_stats['age']
+                if N_sweeps_check > 1:
+                    growth = (age[-1] - age[-1 - 2 * self.env.L])
+                    E = (Es[-1] - Es[-1 - 2 * self.env.L]) / growth
+                else:
+                    E = (Es[-1] - Es[0]) / (age[-1] - age[0])
+            else:
+                E = self.update_stats['E_total'][-1]
+            Delta_E = (E - E_old) / N_sweeps_check
+            E_old = E
+            norm_err = np.linalg.norm(self.psi.norm_test())
+
+            # update statistics
+            self.sweep_stats['sweep'].append(self.sweeps)
+            self.sweep_stats['E'].append(E)
+            self.sweep_stats['S'].append(S)
+            self.sweep_stats['max_trunc_err'].append(max_trunc_err)
+            self.sweep_stats['max_E_trunc'].append(max_E_trunc)
+            self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
+            self.sweep_stats['norm_err'].append(norm_err)
+
+            # print status update
+            if self.verbose >= 1:
+                print("=" * 80)
+                msg = ("sweep {sweep:d}, age = {age:d}\n"
+                       "Energy = {E:.16f}, S = {S:.16f}, norm_err = {norm_err:.1e}\n"
+                       "Current memory usage {mem:.1f} MB, time elapsed: {time:.1f} s\n"
+                       "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
+                       "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
+                       "MPS bond dimensions: {chi!s}")
+                print(msg.format(
+                        sweep=self.sweeps,
+                        mem=memory_usage(),
+                        time=time.time() - start_time,
+                        chi=self.psi.chi,
+                        age=self.update_stats['age'][-1],
+                        E=E,
+                        S=S,
+                        DE=Delta_E,
+                        DS=Delta_S,
+                        trerr=max_trunc_err,
+                        Eerr=max_E_trunc,
+                        norm_err=norm_err))
+
+        # clean up from mixer
+        self.mixer_cleanup()
+        # update environment until norm_tol is reached
+        if norm_tol is not None and norm_err > norm_tol:
+            warnings.warn("final DMRG state not in canonical form: too much truncation!")
+            if self.finite:
+                self.psi.canonical_form()
+            else:
+                for _ in range(norm_tol_iter):
+                    self.environment_sweeps(update_env)
+                    norm_err = np.linalg.norm(self.psi.norm_test())
+                    if norm_err <= norm_tol:
+                        break
+                else:
+                    msg = ("DMRG: norm_tol {nt:.1e} not reached by updating the environment."
+                           "Call psi.canonical_form()")
+                    warnings.warn(msg.format(nt=norm_tol))
+                    self.psi.canonical_form()
+        if self.verbose >= 1:
+            print("=" * 80)
+            msg = ("DMRG finished after {sweep:d} sweeps.\n"
+                   "total size = {age:d}, maximum chi = {chimax:d}")
+            print(msg.format(sweep=self.sweeps, age=self.update_stats['age'][-1],
+                             chimax=np.max(self.psi.chi)))
+            print("=" * 80)
+        return E, self.psi
 
     def environment_sweeps(self, N_sweeps):
         """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
@@ -424,9 +504,9 @@ class Engine(object):
         for k in range(N_sweeps):
             self.sweep(optimize=False)
             if self.verbose >= 1:
-                print('.', end=' ')
+                print('.', end='', flush=True)
         if self.verbose >= 1:
-            print("")  # end line
+            print("", flush=True)  # end line
 
     def sweep(self, optimize=True, meas_E_trunc=False):
         """One 'sweep' of the DMRG algorithm.
@@ -456,32 +536,37 @@ class Engine(object):
         trunc_err_list = []
         # get schedule
         L = self.env.L
-        if self.env.finite:
+        if self.finite:
             schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_env = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
+            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
         else:
             assert (L >= 2)
             schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
-            update_env = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                         [[True, True]] * 2 + [[False, True]] * (L-2)
+            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
+                           [[True, True]] * 2 + [[False, True]] * (L-2)
 
         # the actual sweep
-        for i0, upd_env in zip(schedule_i0, update_env):
+        for i0, upd_env in zip(schedule_i0, update_LP_RP):
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
             # --------- the main work --------------
             E_total, E_trunc, trunc_err, N_lanczos, age = self.update_bond(
                 i0, upd_env[0], upd_env[1], optimize=optimize, meas_E_trunc=meas_E_trunc)
             # collect statistics
-            self.statistics['i0'].append(i0)
-            self.statistics['age'].append(age)
-            self.statistics['E_total'].append(E_total)
-            self.statistics['N_lanczos'].append(N_lanczos)
+            self.update_stats['i0'].append(i0)
+            self.update_stats['age'].append(age)
+            self.update_stats['E_total'].append(E_total)
+            self.update_stats['N_lanczos'].append(N_lanczos)
             E_trunc_list.append(E_trunc)
             trunc_err_list.append(trunc_err.eps)
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
+            new_chi_max = self.chi_list.get(self.sweeps, None)
+            if new_chi_max is not None:
+                self.trunc_params['chi_max'] = new_chi_max
+                if self.verbose >= 1:
+                    print("Setting chi_max =", new_chi_max)
 
         # update mixer
         if self.mixer is not None:
@@ -660,7 +745,7 @@ class Engine(object):
             The truncation error introduced.
         """
         # get qtotal_LR from i0
-        qtotal_i0 = self.env.ket.get_B(i0, form=None).qtotal
+        qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
             U, S, VH, err, _ = svd_theta(
@@ -694,7 +779,7 @@ class Engine(object):
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), self.trunc_params)
         VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, self.env.ket.get_B(i0 + 1, form=None).qtotal)
+        VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
@@ -772,16 +857,28 @@ class Engine(object):
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def mixer_cleanup(self, *args, **kwargs):
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""
+        Mixer_class = get_parameter(self.DMRG_params, 'mixer', None, 'DMRG')
+        if Mixer_class is not None:
+            if Mixer_class is True:
+                Mixer_class = Mixer
+            if isinstance(Mixer_class, str):
+                Mixer_class = globals()[Mixer_class]
+            mixer_params = get_parameter(self.DMRG_params, 'mixer_params', {}, 'DMRG')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
+
+    def mixer_cleanup(self):
         """Cleanup the effects of the mixer.
 
         A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs a sweep with disabled mixer.
+        To recover the originial form, this function simply performs one sweep with disabled mixer.
         """
         if self.mixer is not None:
             mixer = self.mixer
             self.mixer = None  # disable the mixer
-            self.sweep(*args, **kwargs)  # (discard return value)
+            self.sweep(optimize=False)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
 
     def set_B(self, i0, U, S, VH):
@@ -799,11 +896,11 @@ class Engine(object):
         """
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(vR.p1)']).replace_label('p1', 'p')
-        self.env.ket.set_B(i0, B0, form='A')  # left-canonical
-        self.env.ket.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         self.env.del_LP(i0 + 1)  # the old stored environments are now invalid
         self.env.del_RP(i0)
-        self.env.ket.set_SR(i0, S)
+        self.psi.set_SR(i0, S)
 
     def update_LP(self, i0, U):
         """Update left part of the environment.
@@ -879,7 +976,7 @@ class EngineCombine(Engine):
             [['vL*', 'p1'], ['vL', 'p1*']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = env.ket.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
+        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
         theta = theta.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
         return theta
 
@@ -1076,7 +1173,7 @@ class EngineFracture(Engine):
                                                      ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = env.ket.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
+        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
         return theta.itranspose(['vL', 'p0', 'vR', 'p1'])
 
     def matvec(self, theta):

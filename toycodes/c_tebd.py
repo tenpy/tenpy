@@ -3,7 +3,8 @@
 
 import numpy as np
 from scipy.linalg import expm
-from a_simple_1_MPS import split_truncate_theta
+from a_mps import split_truncate_theta
+import tfi_exact
 
 
 def calc_U_bonds(H_bonds, dt):
@@ -51,29 +52,29 @@ def update_bond(psi, i, U_bond, chi_max, eps):
 
 def example_TEBD_gs_finite(L, g):
     print("finite TEBD, imaginary time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
-    import a_simple_1_MPS
-    import a_simple_2_model
-    M = a_simple_2_model.TFIModel(L, J=1., g=g)
-    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    import a_mps
+    import b_model
+    M = b_model.TFIModel(L, J=1., g=g)
+    psi = a_mps.init_FM_MPS(M.L, M.d, M.bc)
     for dt in [0.1, 0.01, 0.001, 1.e-4, 1.e-5]:
         U_bonds = calc_U_bonds(M.H_bonds, dt)
         run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
         print("dt = {dt:.5f}: E = {E:.13f}".format(dt=dt, E=E))
     print("final bond dimensions: ", psi.get_chi())
-    if L < 20:
-        E_ed = M.exact_finite_gs_energy()
-        print("Exact diagonalization: E = {E:.13f}".format(E=E_ed))
-        print("relative error: ", abs((E - E_ed) / E_ed))
+    if L < 20:  # compare to exact result
+        E_exact = tfi_exact.finite_gs_energy(L, 1., g)
+        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 def example_TEBD_gs_infinite(g):
     print("infinite TEBD, imaginary time evolution, g={g:.2f}".format(g=g))
-    import a_simple_1_MPS
-    import a_simple_2_model
-    M = a_simple_2_model.TFIModel(L=2, J=1., g=g, bc='infinite')
-    psi = a_simple_1_MPS.init_FM_MPS(M.L, M.d, M.bc)
+    import a_mps
+    import b_model
+    M = b_model.TFIModel(L=2, J=1., g=g, bc='infinite')
+    psi = a_mps.init_FM_MPS(M.L, M.d, M.bc)
     for dt in [0.1, 0.01, 0.001, 1.e-4, 1.e-5]:
         U_bonds = calc_U_bonds(M.H_bonds, dt)
         run_TEBD(psi, U_bonds, N_steps=500, chi_max=30, eps=1.e-10)
@@ -81,9 +82,10 @@ def example_TEBD_gs_infinite(g):
         print("dt = {dt:.5f}: E/L = {E:.13f}".format(dt=dt, E=E))
     print("final bond dimensions: ", psi.get_chi())
     print("correlation length:", psi.correlation_length())
-    E_ex = M.exact_infinite_gs_energy()
-    print("Analytic result: E/L = {E:.13f}".format(E=E_ex))
-    print("relative error: ", abs((E - E_ex) / E_ex))
+    # compare to exact result
+    E_exact = tfi_exact.infinite_gs_energy(1., g)
+    print("Analytic result: E/L = {E:.13f}".format(E=E_exact))
+    print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
@@ -91,7 +93,7 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     print("finite TEBD, real time evolution, L={L:d}, g={g:.2f}".format(L=L, g=g))
     # find ground state with TEBD or DMRG
     #  E, psi, M = example_TEBD_gs_finite(L, g)
-    from a_simple_4_DMRG import example_DMRG_finite
+    from d_dmrg import example_DMRG_finite
     E, psi, M = example_DMRG_finite(L, g)
     i0 = L // 2
     # apply sigmaz on site i0

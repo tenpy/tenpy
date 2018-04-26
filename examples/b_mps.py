@@ -1,4 +1,4 @@
-"""Simplified version of `00_npc_intro.py` making use of other classes (like MPS, MPO).
+"""Simplified version of `a_np_conserved.py` making use of other classes (like MPS, MPO).
 
 This example includes the following steps:
 1) create Arrays for an Neel MPS
@@ -9,7 +9,7 @@ This example includes the following steps:
 6) calculate ``exp(-1.j*dt*H2)`` by diagonalization of H2
 7) apply ``exp(H2)`` to two sites of the MPS and truncate with svd
 
-Note that this example performs the same steps as `b_intro_1_npc.py`,
+Note that this example performs the same steps as `a_np_conserved.py`,
 but makes use of other predefined classes except npc.
 """
 # Copyright 2018 TeNPy Developers

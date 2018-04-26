@@ -1,5 +1,5 @@
-Authors of TeNPy
-================
+TeNPy developer team
+====================
 
 .. include:: ../AUTHORS.txt
     :literal:

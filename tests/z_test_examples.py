@@ -13,38 +13,55 @@ import importlib
 from nose.plugins.attrib import attr
 
 # get directory where the examples can be found
-ex_dir = os.path.join(os.path.dirname(__file__), '../examples')
+examples_dir = os.path.join(os.path.dirname(__file__), '../examples')
+toycodes_dir = os.path.join(os.path.dirname(__file__), '../toycodes')
 
-exclude = []
+exclude = ["__pycache__"]
 
 
-def run_example(filename='npc_intro'):
+def import_file(filename, dir):
     """Import the module given by `filename`.
 
     Since the examples are not protected  by ``if __name__ == "__main__": ...``,
     they run immediately at import. Thus an ``import filename`` (where filename is the actual name,
-    not a string) executes the example. This function takes `filename` as string and uses
-    `importlib` to do something like ``eval("import " + filename)``.
-
+    not a string) executes the example.
     Paramters
     ---------
     filename : str
         the name of the file (without the '.py' ending) to import.
     """
-    if ex_dir not in sys.path:
-        sys.path[:0] = [ex_dir]  # add the directory to sys.path
+    old_sys_path = sys.path[:]
+    if dir not in sys.path:
+        sys.path[:0] = [dir]  # add the directory to sys.path
     # to make sure the examples are found first with ``import``.
-    print("running example file ", filename)
-    mod = importlib.import_module(filename)
-    print("finished example")
-    if sys.path[0] == ex_dir:  # restore original sys.path
-        sys.path = sys.path[1:]
+    print("importing file ", os.path.join(dir, filename))
+    try:
+        mod = importlib.import_module(filename)
+    finally:
+        sys.path[:] = old_sys_path
     return mod
 
 
 @attr('example')  # allow to skip the examples with ``$> nosetest -a '!example'``
 @attr('slow')
 def test_examples():
-    for fn in os.listdir(ex_dir):
+    for fn in sorted(os.listdir(examples_dir)):
+        if fn in exclude:
+            continue
+        if fn[-3:] == '.py':
+            yield import_file, fn[:-3], examples_dir
+
+
+@attr('example')
+@attr('slow')
+def test_toycodes():
+    for fn in sorted(os.listdir(toycodes_dir)):
         if fn[-3:] == '.py' and fn not in exclude:
-            yield run_example, fn[:-3]
+            yield import_file, fn[:-3], toycodes_dir
+
+
+if __name__ == "__main__":
+    for f, fn, dir in test_examples():
+        f(fn, dir)
+    for f, fn, dir in test_toycodes():
+        f(fn, dir)

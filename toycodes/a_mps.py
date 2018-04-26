@@ -2,7 +2,10 @@
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
-from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
+from scipy.linalg import svd
+# if you get an error message LinAlgError: SVD did not converge,
+# uncomment the following line. (This requires TeNPy to be installed.)
+#  from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
 
 
 class SimpleMPS(object):
