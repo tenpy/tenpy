@@ -47,6 +47,10 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         'trunc_params': {
             'svd_min': 1.e-10,
         },
+        'lanczos_params': {
+            'reortho': True,
+            'N_cache': 20
+        },
         'max_sweeps': 40,
     }
     if mixer is None:

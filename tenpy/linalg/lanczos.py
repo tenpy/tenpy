@@ -5,6 +5,7 @@ from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
 from scipy.linalg import expm
+import warnings
 
 
 class LanczosGroundState:
@@ -46,6 +47,17 @@ class LanczosGroundState:
         min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
         ------- ------ ---------------------------------------------------------------
         N_cache int    The maximum number of `psi` to keep in memory.
+        ------- ------ ---------------------------------------------------------------
+        reortho bool   For poorly conditioned matrices, one can quickly loose
+                       orthogonality of the generated Krylov basis.
+                       If `reortho` is True, we re-orthogonalize against all the
+                       vectors kept in cache to avoid that problem.
+        ------- ------ ---------------------------------------------------------------
+        cutoff  float  Cutoff to abort if `beta` (= norm of next vector in Krylov
+                       basis before normalizing) is too small.
+                       This is necessary if the rank of A is smaller than N_max -
+                       then we get a complete basis of the Krylov space,
+                       and `beta` will be zero.
         ======= ====== ===============================================================
 
     orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -60,6 +72,8 @@ class LanczosGroundState:
         The starting vector.
     orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
         Vectors to orthogonalize against.
+    reortho : bool
+        See parameter `reortho`.
     N_min, N_max, E_tol, P_tol, N_cache :
         Parameters as described above.
     Es : ndarray, shape(N_max, N_max)
@@ -67,10 +81,7 @@ class LanczosGroundState:
     _T : ndarray, shape (N_max + 1, N_max +1)
         The tridiagonal matrix representing `H` in the orthonormalized Krylov basis.
     _cutoff : float
-        cutoff to abort if `beta` (= norm of next vector in Krylov basis before normalizing)
-        is too small.
-        This is necessary if the rank of A is smaller than N_max - then we get a complete
-        basis of the Krylov space, and beta will be zero.
+        See parameter `cutoff`.
     _cache : list of psi0-like vectors
         The ONB of the Krylov space generated during the iteration.
         FIFO (first in first out) cache of at most N_cache vectors.
@@ -95,11 +106,12 @@ class LanczosGroundState:
         self.P_tol = get_parameter(params, 'P_tol', 1.e-14, "Lanczos")
         self.N_cache = get_parameter(params, 'N_cache', 6, "Lanczos")
         self.min_gap = get_parameter(params, 'min_gap', 1.e-12, "Lanczos")
+        self.reortho = get_parameter(params, 'reortho', False, "Lanczos")
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = np.finfo(psi0.dtype).eps * 100
+        self._cutoff = get_parameter(params, 'cutoff', np.finfo(psi0.dtype).eps * 100, "Lanczos")
         self.verbose = params.get('verbose', 0)
         if len(orthogonal_to) > 0:
             self.orthogonal_to, _ = gram_schmidt(orthogonal_to, self.verbose / 10)
@@ -145,14 +157,16 @@ class LanczosGroundState:
         for k in range(self.N_max):
             w /= beta
             self._to_cache(w)
-            # project out the orthogonal parts:
             w = self._apply_H(w)
             alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
-            if k > 0:
-                w -= self._cache[-2] * beta
             w -= self._cache[-1] * alpha
+            if self.reortho:
+                for c in self._cache[:-1]:
+                    w -= c * npc.inner(c, w, do_conj=True)
+            elif k > 0:
+                w -= self._cache[-2] * beta
             beta = npc.norm(w)
             T[k, k + 1] = T[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -167,32 +181,38 @@ class LanczosGroundState:
         """
         vf = self._result_krylov
         assert N == len(vf) > 1
-        psif = self.psi0 * vf[0]  # the start vector is still known
+        psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
         len_cache = len(self._cache)
         # and the last len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
             psif += self._cache[-k] * vf[N - k]
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
-        # keep q0 and q1 as cache
-        q0 = None
-        q1 = self.psi0
-        beta = 1.  # start vector is already normalized
+
         T = self._T
+        w = self.psi0  # initialize
         for k in range(0, N - len_cache - 1):
-            w = self._apply_H(q1)
-            if k > 0:
-                w -= q0 * beta
+            self._to_cache(w)
+            w = self._apply_H(w)
             alpha = T[k, k]
-            w -= q1 * alpha
-            beta = T[k, k + 1]
+            w -= self._cache[-1] * alpha
+            if self.reortho:
+                for c in self._cache[:-1]:
+                    w -= c * npc.inner(c, w, do_conj=True)
+            elif k > 0:
+                w -= self._cache[-2] * beta
+            beta = T[k, k + 1]  # = norm(w)
             w /= beta
-            q0 = q1
-            q1 = w
-            psif += q1 * vf[k + 1]
+            psif += w * vf[k + 1]
         psif_norm = npc.norm(psif)
-        if abs(1. - psif_norm) > 1.e-5 and self.verbose > 0:
-            print("poorly conditioned Lanczos: |psi_0| = {0:f}".format(psif_norm))
+        if abs(1. - psif_norm) > 1.e-5:
+            warnings.warn("Poorly conditioned Lanczos!")
+            # One reason can be that `H` is not Hermitian
+            # Otherwise, the matrix (even if small) might be ill conditioned.
+            # If you still get this warning, you can try to set the parameters
+            # `reortho`=True and `N_cache` >= `N_max`
+            if self.verbose > 1:
+                print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))
         return psif / psif_norm
 
     def _to_cache(self, psi):
