@@ -732,6 +732,39 @@ class LegCharge(object):
         cp.bunched = self.is_blocked()  # no, it's not `is_bunched`
         return map_qind, block_masks, cp
 
+    def extend(self, new_ind_len, charges=None):
+        """Return a new :class:`LegCharge`, which extends self with a new charge block.
+
+        This is needed to formally increase the dimension of an Array.
+
+        Parameters
+        ----------
+        new_ind_len : int
+            The `ind_len` for the new :class:`LegCharge`.
+        charges : array | None
+            The charge values to be used for the new charge block.
+            `None` defaults to trivial charges (i.e. 0 values).
+
+        Returns
+        -------
+        extended_leg : :class:`LegCharge`
+            Copy of `self` extended by one additional charge block with the specified `charges`
+            increasing the `ind_len` to `new_ind_len`.
+            If `new_ind_len` is not larger than the current `ind_len`, just return `self`.
+        """
+        if new_ind_len < self.ind_len:
+            raise ValueError("Can't reduce the ind_len with extend!")
+        if new_ind_len == self.ind_len:
+            return self
+        new_slices = np.zeros(self.block_number + 2, np.intp)
+        new_slices[:-1] = self.slices
+        new_slices[-1] = new_ind_len
+        new_charges = np.zeros((self.block_number + 1, self.chinfo.qnumber), dtype=QTYPE)
+        new_charges[:-1] = self.charges
+        if charges is not None:
+            new_charges[-1, :] = self.chinfo.make_valid(charges)
+        return LegCharge(self.chinfo, new_slices, new_charges, qconj=self.qconj)
+
     def charge_sectors(self):
         """Return unique rows of self.charges.
 

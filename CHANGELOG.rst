@@ -10,6 +10,7 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 Added
 ^^^^^
 - MPS.canonical_form_infinite()
+- npc.Array.extend() and charges.extend(), allowing to extend an Array with zeros.
 
 Changed
 ^^^^^^^

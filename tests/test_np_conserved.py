@@ -157,6 +157,17 @@ def test_npc_Array_project():
     npt.assert_equal(b.to_ndarray(), bflat)
 
 
+def test_npc_Array_extend():
+    a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
+    a = a.extend(0, 8)
+    a.test_sanity()
+    a.extend(1, 9)
+    a.test_sanity()
+    aflat = a.to_ndarray()
+    aflat[:5, :5] -= arr
+    assert np.all(aflat == 0)
+
+
 def test_npc_Array_permute():
     sh = (20, 15, 10)
     a = random_Array(sh, chinfo)
