@@ -549,7 +549,7 @@ class MPS(object):
     def chi(self):
         """Dimensions of the (nontrivial) virtual bonds."""
         # s.shape[0] == len(s) for 1D numpy array, but works also for a 2D npc Array.
-        return [s.shape[0] for s in self._S[self.nontrivial_bonds]]
+        return [min(s.shape) for s in self._S[self.nontrivial_bonds]]
 
     @property
     def nontrivial_bonds(self):

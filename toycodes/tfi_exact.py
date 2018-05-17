@@ -10,6 +10,7 @@ import scipy.sparse.linalg.eigen.arpack as arp
 import warnings
 import scipy.integrate
 
+
 def finite_gs_energy(L, J, g):
     """For comparison: obtain ground state energy from exact diagonalization.
 

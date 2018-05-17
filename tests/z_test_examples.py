@@ -11,6 +11,7 @@ import sys
 import os
 import importlib
 from nose.plugins.attrib import attr
+import warnings
 
 # get directory where the examples can be found
 examples_dir = os.path.join(os.path.dirname(__file__), '../examples')
@@ -36,7 +37,9 @@ def import_file(filename, dir):
     # to make sure the examples are found first with ``import``.
     print("importing file ", os.path.join(dir, filename))
     try:
-        mod = importlib.import_module(filename)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # disable warngings temporarily
+            mod = importlib.import_module(filename)
     finally:
         sys.path[:] = old_sys_path
     return mod

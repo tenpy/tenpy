@@ -46,7 +46,11 @@ class LanczosGroundState:
         ------- ------ ---------------------------------------------------------------
         min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
         ------- ------ ---------------------------------------------------------------
-        N_cache int    The maximum number of `psi` to keep in memory.
+        N_cache int    The maximum number of `psi` to keep in memory during the first
+                       iteration. By default, we keep all states (up to N_max).
+                       Set this to a number >= 2 if you are short on memory.
+                       The penalty is that one needs another Lanczos iteration to
+                       determine the ground state in the end, i.e., runtime is large.
         ------- ------ ---------------------------------------------------------------
         reortho bool   For poorly conditioned matrices, one can quickly loose
                        orthogonality of the generated Krylov basis.
@@ -72,9 +76,7 @@ class LanczosGroundState:
         The starting vector.
     orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
         Vectors to orthogonalize against.
-    reortho : bool
-        See parameter `reortho`.
-    N_min, N_max, E_tol, P_tol, N_cache :
+    N_min, N_max, E_tol, P_tol, N_cache, reortho:
         Parameters as described above.
     Es : ndarray, shape(N_max, N_max)
         ``Es[n, :]`` contains the energies of ``_T[:n+1, :n+1]`` in step `n`.
@@ -104,7 +106,7 @@ class LanczosGroundState:
         self.N_max = get_parameter(params, 'N_max', 20, "Lanczos")
         self.E_tol = get_parameter(params, 'E_tol', 5.e-15, "Lanczos")
         self.P_tol = get_parameter(params, 'P_tol', 1.e-14, "Lanczos")
-        self.N_cache = get_parameter(params, 'N_cache', 6, "Lanczos")
+        self.N_cache = get_parameter(params, 'N_cache', self.N_max, "Lanczos")
         self.min_gap = get_parameter(params, 'min_gap', 1.e-12, "Lanczos")
         self.reortho = get_parameter(params, 'reortho', False, "Lanczos")
         if self.N_cache < 2:
@@ -209,7 +211,7 @@ class LanczosGroundState:
             warnings.warn("Poorly conditioned Lanczos!")
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
-            # If you still get this warning, you can try to set the parameters
+            # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
             if self.verbose > 1:
                 print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))

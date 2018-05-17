@@ -16,16 +16,22 @@ Changed
 ^^^^^^^
 - moved toycodes from examples/ to a new folder toycodes/
 - Restructured lanczos into a class, added time evolution calculating exp(A*dt)|psi0>
+- Warning for poorly conditioned Lanczos; to overcome this enable the new parameter "reortho"
 - By default, make deep copies of npc Arrays.
 - Restructured :mod:`tenpy.dmrg`:
 
   - :func:`tenpy.dmrg.run` is now just a wrapper around the new 
-    :meth:`tenpy.dmrg.Engine.run`,
-    ``run(psi, model, pars)`` is roughly equivalent to
+    :meth:`tenpy.dmrg.Engine.run`, ``run(psi, model, pars)`` is roughly equivalent to
     ``eng = EngineCombine(psi, model, pars); eng.run()``.
   - Added :meth:`tenpy.dmrg.Engine.init_env` and :meth:`tenpy.dmrg.Engine.reset_stats`
     to allow a simple restart of DMRG with slightly different parameters.
-  - call MPS.canonical_form() for infinite systems if the final state is not in canonical form.
+  - call ``MPS.canonical_form()`` for infinite systems if the final state is not in canonical form.
+
+- Changed **default values** for some parameters:
+  - increase ``Lanczos_params['N_cache'] = N_max`` (i.e. keep all states)
+  - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
+  - increased (default) DMRG accuracy by setting
+    ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
 
 
 Fixed

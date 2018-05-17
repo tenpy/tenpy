@@ -2,6 +2,7 @@ Installation instructions
 =========================
 
 To get the latest version of the code, simply clone it with `Git <https://git-scm.com/>`_ using the following command::
+
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
     cd $HOME/TeNPy
 
@@ -49,7 +50,7 @@ Currently, the library itself supports no other way of parallelization.
 
 If you don't have a python version which is built against MKL, 
 we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL,
-or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`.
+or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`_.
 Both are available for Linux, Mac and Windows; note that you don't need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
 After a successfull installation, if you run ``python`` interactively, the first output line should 

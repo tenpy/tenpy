@@ -322,7 +322,7 @@ class Engine(NpcLinearOperator):
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            start_env = get_parameter(self.DMRG_params, 'start_env', 0, 'DMRG')
+            start_env = get_parameter(self.DMRG_params, 'start_env', 1, 'DMRG')
             self.environment_sweeps(start_env)
 
     def reset_stats(self):
@@ -355,21 +355,21 @@ class Engine(NpcLinearOperator):
         start_time = time.time()
         self.shelve = False
         # parameters for lanczos
-        p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', None, 'DMRG')
+        p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
         if p_tol_to_trunc is not None:
-            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', None, 'DMRG')
-            p_tol_max = get_parameter(DMRG_params, 'P_tol_max', None, 'DMRG')
+            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', 5.e-16, 'DMRG')
+            p_tol_max = get_parameter(DMRG_params, 'P_tol_max', 1.e-4, 'DMRG')
         e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
         if e_tol_to_trunc is not None:
-            e_tol_min = get_parameter(DMRG_params, 'E_tol_min', None, 'DMRG')
-            e_tol_max = get_parameter(DMRG_params, 'E_tol_max', None, 'DMRG')
+            e_tol_min = get_parameter(DMRG_params, 'E_tol_min', 5.e-16, 'DMRG')
+            e_tol_max = get_parameter(DMRG_params, 'E_tol_max', 1.e-4, 'DMRG')
 
         # parameters for DMRG convergence criteria
         N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
         min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
         max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
-        max_E_err = get_parameter(DMRG_params, 'max_E_err', 0.1, 'DMRG')
-        max_S_err = get_parameter(DMRG_params, 'max_S_err', 0.1, 'DMRG')
+        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-5, 'DMRG')
+        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-3, 'DMRG')
         max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
         norm_tol = get_parameter(DMRG_params, 'norm_tol', None, 'DMRG')
         if not self.finite:
@@ -384,7 +384,7 @@ class Engine(NpcLinearOperator):
             # check convergence criteria
             if self.sweeps >= max_sweeps:
                 break
-            if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * abs(E) and
+            if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * max(abs(E), 1.) and
                     abs(Delta_S) < max_S_err):
                 if self.mixer is None:
                     break
@@ -404,11 +404,11 @@ class Engine(NpcLinearOperator):
             # --------------------------------------
             # update lancos_params depending on truncation error(s)
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
-                engine.lanczos_params['P_tol'] = max(p_tol_min,
-                                                    min(p_tol_max, max_trunc_err * p_tol_to_trunc))
+                self.lanczos_params['P_tol'] = max(p_tol_min,
+                                                   min(p_tol_max, max_trunc_err * p_tol_to_trunc))
             if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
-                engine.lanczos_params['E_tol'] = max(e_tol_min,
-                                                    min(e_tol_max, max_E_trunc * e_tol_to_trunc))
+                self.lanczos_params['E_tol'] = max(e_tol_min,
+                                                   min(e_tol_max, max_E_trunc * e_tol_to_trunc))
             # update environment
             if not self.finite:
                 self.environment_sweeps(update_env)
