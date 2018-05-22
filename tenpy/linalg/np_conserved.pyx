@@ -2394,7 +2394,7 @@ cdef class Array(object):
         cdef np.ndarray new_block, old_block #, new_block_view # TODO: shape doesn't work...
         cdef np.ndarray[np.intp_t, ndim=1] qindices
         cdef int beg, end, bi, j, old_data_idx, qi
-        cdef np.ndarray[QTYPE_t, ndim=2] q_map
+        cdef np.ndarray[np.intp_t, ndim=2] q_map
         cdef tuple sl
         cdef int npipes = len(combine_legs)
         for bi in range(diffs.shape[0]-1):

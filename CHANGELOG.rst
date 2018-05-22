@@ -40,6 +40,7 @@ Fixed
 - Don't carry around total charge when using DMRG with a mixer
 - Corrected couplings of the FermionicHubbardChain
 - issue #2: memory leak in cython parts when using intelpython/anaconda
+- issue #4: incompatible data types.
 
 
 [0.3.0] - 2018-02-19

@@ -32,7 +32,7 @@ __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
 np.import_array()
 
 QTYPE = np.int_             # numpy dtype for the charges
-# QTYPE_T is declared in charges.pxd
+# QTYPE_t is declared in charges.pxd
 
 
 cdef class ChargeInfo(object):
@@ -205,7 +205,7 @@ cdef class ChargeInfo(object):
         cdef np.ndarray mod = self.mod
         cdef int L = charges.shape[0]
         cdef int i, j
-        cdef QTYPE_t q, x
+        cdef QTYPE_t q
         for j in range(self.qnumber):
             q = mod[j]
             if q == 1:
@@ -237,8 +237,8 @@ cdef class ChargeInfo(object):
         """
         assert (charges.shape[1] == self.qnumber)
         cdef np.ndarray mod = self.mod
-        cdef int i, j, x
-        cdef QTYPE_t q
+        cdef int i, j
+        cdef QTYPE_t q, x
         cdef int L = charges.shape[0]
         for j in range(self.qnumber):
             q = mod[j]
@@ -312,7 +312,7 @@ cdef class LegCharge(object):
     block_number
     chinfo : :class:`ChargeInfo` instance
         The nature of the charge. Can be shared between LegCharges.
-    slices : ndarray[QTYPE_t,ndim=1] (block_number+1)
+    slices : ndarray[np.intp_t,ndim=1] (block_number+1)
         A block with 'qindex' ``qi`` correspondes to the leg indices in
         ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slice`.
     charges : ndarray[QTYPE_t,ndim=1] (block_number, chinfo.qnumber)
@@ -335,7 +335,7 @@ cdef class LegCharge(object):
 
     def __init__(LegCharge self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
-        self.slices = np.array(slices, dtype=QTYPE)
+        self.slices = np.array(slices, dtype=np.intp)
         self.charges = np.array(charges, dtype=QTYPE)
         self.qconj = qconj
         self.sorted = False
@@ -955,7 +955,7 @@ cdef class LegPipe(LegCharge):
     subqshape : tuple of int
         `block_number` for each of the incoming legs.
     q_map:  2D array
-        Shape (`block_number`, 3 + `nlegs`). Rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
+        Shape (`block_number`, 3 + `nlegs`). Rows: ``[ b_j, b_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         See Notes below for details.
     q_map_slices : list of views onto q_map
         Defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``.
@@ -985,7 +985,7 @@ cdef class LegPipe(LegCharge):
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
     the total block `I_s`, i.e., ``b_j = a_j - self.slices[I_s]``.
 
-    The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``.
+    The rows of `q_map` are lex-sorted first by ``I_s``, then the ``i``.
     Each ``I_s`` will have multiple rows,
     and the order in which they are stored in `q_map` is the order the data is stored
     in the actual tensor, i.e., it might look like ::
@@ -1144,9 +1144,9 @@ cdef class LegPipe(LegCharge):
         # and the documentation of np.mgrid
         cdef int nlegs = self.nlegs
         cdef int qnumber = self.chinfo.qnumber
-        cdef np.ndarray qshape = np.array(self.subqshape, dtype=QTYPE)
+        cdef np.ndarray qshape = np.array(self.subqshape, dtype=np.intp)
         cdef int i, j, sign
-        cdef QTYPE_t a
+        cdef np.intp_t a
 
         # create a grid to select the multi-index sector
         grid = np.mgrid[[slice(0, l) for l in qshape]]
@@ -1161,13 +1161,13 @@ cdef class LegPipe(LegCharge):
         # *columns* of grid are now all possible cominations of qindices.
 
         cdef int nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
-        cdef np.ndarray q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
+        cdef np.ndarray q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         # determine q_map -- it's essentially the grid.
         q_map[:, 3:] = grid2.T  # transpose -> rows are possible combinations.
         # q_map[:, :3] is initialized after sort/bunch.
 
         # determine block sizes
-        cdef np.ndarray blocksizes = np.ones((nblocks,), dtype=QTYPE)
+        cdef np.ndarray blocksizes = np.ones((nblocks,), dtype=np.intp)
         cdef np.ndarray leg_bs
         for i in range(nlegs):
             leg_bs = self.legs[i]._get_block_sizes()

@@ -887,7 +887,7 @@ class LegPipe(LegCharge):
     subqshape : tuple of int
         `block_number` for each of the incoming legs.
     q_map:  2D array
-        Shape (`block_number`, 3 + `nlegs`). Rows: ``[ m_j, m_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
+        Shape (`block_number`, 3 + `nlegs`). Rows: ``[ b_j, b_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         See Notes below for details.
     q_map_slices : list of views onto q_map
         Defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``.
@@ -917,7 +917,7 @@ class LegPipe(LegCharge):
     Here, :math:`b_j:b_{j+1}` denotes the slice of this qindex combination *within*
     the total block `I_s`, i.e., ``b_j = a_j - self.slices[I_s]``.
 
-    The rows of map_qind are lex-sorted first by ``I_s``, then the ``i``.
+    The rows of `q_map` are lex-sorted first by ``I_s``, then the ``i``.
     Each ``I_s`` will have multiple rows,
     and the order in which they are stored in `q_map` is the order the data is stored
     in the actual tensor, i.e., it might look like ::
@@ -1094,7 +1094,7 @@ class LegPipe(LegCharge):
 
         nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
         # determine q_map -- it's essentially the grid.
-        q_map = np.empty((nblocks, 3 + nlegs), dtype=QTYPE)
+        q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
         # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
         legbs = [l._get_block_sizes() for l in self.legs]
@@ -1139,11 +1139,11 @@ class LegPipe(LegCharge):
             self.charges = bunched.charges  # copy information back to self
             self.slices = bunched.slices
             # calculate q_map[:, 2], the qindices corresponding to the rows of q_map
-            q_map_Qi = np.zeros(len(q_map), dtype=q_map.dtype)
+            q_map_Qi = np.zeros(len(q_map), dtype=np.intp)
             q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
             q_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
         else:
-            q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=q_map.dtype)
+            q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=np.intp)
             idx = np.arange(len(q_map) + 1, dtype=np.intp)
         # calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
