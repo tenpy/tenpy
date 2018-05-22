@@ -120,11 +120,12 @@ def run(psi, model, DMRG_params):
                                  Defaults to 1.5*N_sweeps_check.
         -------------- --------- ---------------------------------------------------------------
         max_E_err      float     Convergence if the change of the energy in each step
-                                 satisfies ``-\Delta E / |E| < max_E_err``. Note that this is
-                                 also satisfied if Delta E > 0, i.e. if the energy increases.
+                                 satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
+                                 this is also satisfied if ``Delta E > 0``,
+                                 i.e., if the energy increases (due to truncation).
         -------------- --------- ---------------------------------------------------------------
         max_S_err      float     Convergence if the relative change of the entropy in each step
-                                 satisfies ``|\Delta S|/S < max_S_err``
+                                 satisfies ``|Delta S|/S < max_S_err``
         -------------- --------- ---------------------------------------------------------------
         max_hours      float     If the DMRG took longer (measured in wall-clock time),
                                  'shelve' the simulation, i.e. stop and return with the flag

@@ -2355,6 +2355,10 @@ cdef class Array(object):
         cdef Array res = self.copy(deep=False)
         res.legs = legs
         res._set_shape()
+        if self.stored_blocks == 0:
+            res._data = []
+            res._qdata = np.empty((0, res.rank), dtype=np.intp)
+            return res
         non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
         cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
 

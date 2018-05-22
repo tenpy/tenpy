@@ -10,7 +10,7 @@ Adjust $HOME/TeNPy to the path wherever you want to save the library.
 If you don't want to contribute, you should checkout the latest stable release::
 
     git tag   # this prints the available version tags
-    git co v0.3.0  # or whatever is the lastest stable version
+    git checkout v0.3.0  # or whatever is the lastest stable version
 
 
 Minimal Requirements
@@ -70,10 +70,10 @@ Optional packages (see `Optional Requirements`_ below) can be installed with::
 If you have another python
 
 .. note :
-    MKL uses different threads to parallelize different BLAS and LAPACK routines.
+    MKL uses different threads to parallelize various BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
-    cluster. The easiest way to acchieve to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
+    cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
 
 

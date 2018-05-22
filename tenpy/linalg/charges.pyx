@@ -1320,7 +1320,7 @@ cdef np.ndarray _c_find_row_differences(np.ndarray qflat):
         return np.array([0, qflat.shape[0]], dtype=np.intp)
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
-    cdef np.ndarray res = np.empty(L + 1, dtype=np.intp)
+    cdef np.ndarray res = np.empty(max(L + 1, 2), dtype=np.intp)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
