@@ -1,6 +1,9 @@
 Installation instructions
 =========================
 
+The following instructions are for (some kind of) Linux, and tested on Ubuntu. 
+However, the code itself should work on other operating systems (in particular MacOS/Windows) as well.
+
 To get the latest version of the code, simply clone it with `Git <https://git-scm.com/>`_ using the following command::
 
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
@@ -132,7 +135,7 @@ For building the documentation, you need
 If you plan to contribute to the code, you should use
 `yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
 
-If you have the python package manager ``pip``, all of these can be installed with (assuming some kind of linux) ::
+If you have the python package manager ``pip``, all of these can be installed with::
 
     sudo pip install --upgrade numpy scipy      # the required libraries
     sudo pip install --upgrade matplotlib       # for plotting
@@ -151,6 +154,6 @@ If you have the python package manager ``pip``, all of these can be installed wi
    
 .. warning ::
     
-    Might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
+    It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
     the python distribution of anaconda. 
     If you have installed intelpython/anaconda, use the `conda` packagemanager instead of `pip` for updating packages.
