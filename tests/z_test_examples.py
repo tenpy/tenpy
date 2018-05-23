@@ -14,8 +14,8 @@ from nose.plugins.attrib import attr
 import warnings
 
 # get directory where the examples can be found
-examples_dir = os.path.join(os.path.dirname(__file__), '../examples')
-toycodes_dir = os.path.join(os.path.dirname(__file__), '../toycodes')
+examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
+toycodes_dir = os.path.join(os.path.dirname(__file__), '..', 'toycodes')
 
 exclude = ["__pycache__"]
 

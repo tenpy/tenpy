@@ -223,6 +223,8 @@ def _load_lapack(libs=[
     global _lapack_lib
     if _lapack_lib is None:
         for l in libs:
+            if l is None:
+                continue
             try:
                 _lapack_lib = CDLL(l)
                 _set_CLAPACK_callsignatures(_lapack_lib)
@@ -232,7 +234,8 @@ def _load_lapack(libs=[
             except OSError:
                 pass
     if _lapack_lib is None:
-        raise OSError("Couldn't find LAPACK library for 'gesvd' workaround.\nTried: " + str(libs))
+        msg = "Couldn't find LAPACK library for 'gesvd' workaround.\nTried: " + str(libs)
+        raise EnvironmentError(msg)
     return _lapack_lib
 
 

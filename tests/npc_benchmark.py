@@ -197,6 +197,7 @@ def run_tensordot_timing(
         num_qs=list(range(3)),
         seeds=list(range(5)),
         dmax=2000,
+        optimize=1,
         **kwargs):
     """call `tensordot_timing` for different `sizes` and `num_qs`.
     """
@@ -205,6 +206,9 @@ def run_tensordot_timing(
     data['seeds'] = seeds
     data['sizes'] = sizes
     data['num_qs'] = num_qs
+    orig_opt_level = tenpy.tools.optimization.get_level()
+    tenpy.tools.optimization.set_level(optimize)
+    print("optimization level set to", tenpy.tools.optimization.get_level())
     all_timings = []
     for num_q in num_qs:
         mod_q = [1] * num_q
@@ -225,6 +229,7 @@ def run_tensordot_timing(
         all_timings.append(num_q_timings)
     all_timings = np.array(all_timings, dtype=np.float)
     data['timings'] = all_timings
+    tenpy.tools.optimization.set_level(orig_opt_level)
     return data
 
 
@@ -348,6 +353,11 @@ if __name__ == "__main__":
         default=2,
         help="""number of legs to keep for each tensor and to contract""")
     parser.add_argument(
+        '--optimize',
+        type=int,
+        default=3,
+        help="""Set the level in tenpy.optimize to this value""")
+    parser.add_argument(
         'files', nargs='*', help='Specify filenames used depending on other options.')
     args = parser.parse_args()
     kwargs = dict(
@@ -356,6 +366,7 @@ if __name__ == "__main__":
         leg_b_out=args.legs,
         leg_contract=args.legs,
         rep_tdot=args.repeat,
+        optimize=args.optimize,
         dmax=args.dmax)
     if args.timing:
         t0 = time.time()
