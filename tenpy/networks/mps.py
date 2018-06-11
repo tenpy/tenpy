@@ -977,18 +977,29 @@ class MPS(object):
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other, ignore_form=False):
+    def overlap(self, other, charge_sector=0, ignore_form=False, **kwargs):
         """Compute overlap :math:`<self|other>`.
+
+        .. todo :
+            For finite MPS with form=False, different charge sectors don't work:
+            MPSEnvironment assumes same charge in bra and ket.
 
         Parameters
         ----------
         other : :class:`MPS`
             An MPS with the same physical sites.
+        charge_sector : None | charges | ``0``
+            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
         ignore_form : bool
             If ``False`` (default), take into account the canonical form :attr:`form` at each site.
             If ``True``, we ignore the canonical form (i.e., whether the MPS is in left, right,
             mixed or no canonical form) and just contract all the :attr:`_B` as they are.
             (This can give different results!)
+        **kwargs :
+            Further keyword arguments given to :meth:`TransferMatrix.eigenvectors`;
+            only used for infinite boundary conditions.
 
         Returns
         -------
@@ -1002,16 +1013,18 @@ class MPS(object):
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
                 # (drawback: makes full copies of the states)
-                TM = TransferMatrix(self, other, form=None)
+                TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
                 res = TM.matvec(TM.initial_guess(1.))  # apply transfer matrix to identity
                 return npc.trace(res, 0, 1) * self.norm * other.norm
             else:
+                if charge_sector != 0:
+                    raise NotImplementedError("TODO: doesn't work for different charges...")
                 env = MPSEnvironment(self, other)
                 return env.full_contraction(0)
         else:  # infinite
             form = None if ignore_form else 'B'
-            TM = TransferMatrix(self, other, form=form)
-            ov, _ = TM.eigenvectors()
+            TM = TransferMatrix(self, other, charge_sector=charge_sector, form=form)
+            ov, _ = TM.eigenvectors(**kwargs)
             return ov[0] * self.norm * other.norm
 
     def expectation_value(self, ops, sites=None, axes=None):
@@ -2128,7 +2141,7 @@ class MPSEnvironment(object):
     Thus, the special case ``ket=bra`` should yield identity matrices for `LP` and `RP`.
 
     .. todo ::
-        Functionality to find the dominant LP/RP in the TD limit -> requires TransferMatrix
+        Initial firstLP and first_RP could be calculated with the TransferMatrix. Usefull?
 
     .. todo ::
         Doesn't work for different qtotal in ket._B / bra._B -> Need MPS.gauge_qtotal()
