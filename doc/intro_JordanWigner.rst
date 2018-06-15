@@ -26,8 +26,8 @@ Note that this transformation maps the fermionic operators :math:`c_j` and :math
 a site, they actually act on all sites ``l <= j``!
 Thus, clearly the operators ``C`` and ``Cd`` defined in the :class:`~tenpy.networks.site.FermionSite` do *not* directly correspond to :math:`c_j` and
 :math:`c^\dagger_j`.
-:math:`(-1)^{\sum_{l < j} n_l}` is called Jordan-Wigner string and in the :class:`~tenpy.networks.site.FermionSite` is given by the local operator 
-``JW`` acting all sites ``l < j``.
+The part :math:`(-1)^{\sum_{l < j} n_l}` is called Jordan-Wigner string and in the :class:`~tenpy.networks.site.FermionSite` is given by the local operator 
+:math:`JW := (-1)^{n_l}` acting all sites ``l < j``.
 Since this important, let me stress it again:
 
 .. warning ::
