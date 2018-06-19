@@ -10,7 +10,7 @@ and in the thermodynamic limit (``'infinite'`` b.c.).
 
 The function :func:`run` - well - runs one DMRG simulation.
 Internally, it generates an instance of an :class:`Engine`.
-It implements the common functionality like defining a `sweep`,
+This class implements the common functionality like defining a `sweep`,
 but leaves the details of the contractions to be performed to the derived classes.
 
 Currently, there are two derived classes implementing the contractions.
@@ -25,7 +25,6 @@ and then slowly turned off in the end.
 .. todo ::
     Need function to plot the statistics in the end
     Write UserGuide/Example!!!
-    Allow to keep MPS orthogonal to other states, for finding excited states
 """
 # Copyright 2018 TeNPy Developers
 
@@ -34,6 +33,7 @@ import time
 import warnings
 
 from ..linalg import np_conserved as npc
+from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos
 from ..linalg.sparse import NpcLinearOperator
@@ -76,6 +76,14 @@ def run(psi, model, DMRG_params):
         mixer_params   dict      Non-default initialization arguments of the mixer.
                                  Options may be custom to the specified mixer, so they're
                                  documented in the class doc-string of the mixer.
+        -------------- --------- ---------------------------------------------------------------
+        orthogonal_to  list of   List of other matrix produc states to orthogonalize against.
+                       MPS       Works only for finite systems.
+                                 This parameter can be used to find (a few) excited states as
+                                 follows. First, run DMRG to find the ground state and then
+                                 run DMRG again while orthogonalizing against the ground state,
+                                 which yields the first excited state (in the same symmetry
+                                 sector), and so on.
         -------------- --------- ---------------------------------------------------------------
         engine         str |     Chooses the (derived class of) :class:`Engine` to be used.
                        class     A string stands for one of the engines defined in this module,
@@ -199,6 +207,9 @@ class Engine(NpcLinearOperator):
         environment updates).
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
         Environment for contraction ``<psi|H|psi>``.
+    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
+        Environments of the form ``<psi|orhto>`` for states `ortho` of the `orthogonal_to`
+        parameter; needed to find excited states.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     DMRG_params : dict
@@ -272,14 +283,15 @@ class Engine(NpcLinearOperator):
         self.chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
 
         self.env = None
+        self.ortho_to_envs = []
         self.init_env(model)
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
 
         This function is useful to re-start DMRG after with a slightly different model or
-        different parameters.
-        Calls :meth:`reset_stats`
+        different (DMRG) parameters. Note that we assume that we still have the same `psi`.
+        Calls :meth:`reset_stats`.
 
         Parameters
         ----------
@@ -319,6 +331,13 @@ class Engine(NpcLinearOperator):
                 self.trunc_params['chi_max'] = chi_max
         self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
 
+        # (re)initialize ortho_to_envs
+        orthogonal_to = get_parameter(self.DMRG_params, 'orthogonal_to', [], 'DMRG')
+        if len(orthogonal_to) > 0:
+            if not self.finite:
+                raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
+            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
+
         self.reset_stats()
 
         # initial sweeps of the environment (without mixer)
@@ -352,6 +371,16 @@ class Engine(NpcLinearOperator):
         unused_parameters(DMRG_params, "DMRG")
 
     def run(self):
+        """Run the DMRG simulation to find the ground state.
+
+        Returns
+        -------
+        E : float
+            The energy of the resulting ground state MPS.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS representing the ground state after the simluation,
+            i.e. just a reference to :attr:`psi`.
+        """
         DMRG_params = self.DMRG_params
         start_time = time.time()
         self.shelve = False
@@ -611,10 +640,10 @@ class Engine(NpcLinearOperator):
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
         """
-        theta = self.prepare_diag(i0, update_LP, update_RP)
+        theta, theta_ortho = self.prepare_diag(i0, update_LP, update_RP)
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
-            E0, theta, N = self.diag(theta)
+            E0, theta, N = self.diag(theta, theta_ortho)
         else:
             E0, N = None, 0
         theta = self.prepare_svd(theta)
@@ -622,8 +651,12 @@ class Engine(NpcLinearOperator):
         self.set_B(i0, U, S, VH)
         if update_LP:
             self.update_LP(i0, U)  # (requires updated B)
+            for o_env in self.ortho_to_envs:
+                o_env.get_LP(i0 + 1, store=True)
         if update_RP:
             self.update_RP(i0, VH)
+            for o_env in self.ortho_to_envs:
+                o_env.get_RP(i0, store=True)
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real
@@ -644,16 +677,45 @@ class Engine(NpcLinearOperator):
         -------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (with the same tensor structure) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def diag(self, theta_guess):
+    def get_theta_ortho(self, i0):
+        """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
+
+        Parameters
+        ----------
+        i0 : int
+            We want to optimize on sites ``(i0, i0+1)``.
+
+        Returns
+        -------
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'.
+        """
+        theta_ortho = []
+        for o_env in self.ortho_to_envs:
+            theta = o_env.ket.get_theta(i0, n=2)   # the envirionments are of the form <psi|ortho>
+            LP = o_env.get_LP(i0, store=True)
+            RP = o_env.get_RP(i0+1, store=True)
+            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+            theta_ortho.append(theta)
+        return theta_ortho
+
+    def diag(self, theta_guess, theta_ortho):
         """Diagonalize the effective Hamiltonian represented by self.
 
         Parameters
         ----------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta_guess`.
 
         Returns
         -------
@@ -664,7 +726,7 @@ class Engine(NpcLinearOperator):
         N : int
             Number of Lanczos iterations used.
         """
-        E, theta, N = lanczos(self, theta_guess, self.lanczos_params)
+        E, theta, N = lanczos(self, theta_guess, self.lanczos_params, theta_ortho)
         return E, theta, N
 
     def matvec(self, theta):
@@ -899,9 +961,13 @@ class Engine(NpcLinearOperator):
         B1 = VH.split_legs(['(vR.p1)']).replace_label('p1', 'p')
         self.psi.set_B(i0, B0, form='A')  # left-canonical
         self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
-        self.env.del_LP(i0 + 1)  # the old stored environments are now invalid
-        self.env.del_RP(i0)
         self.psi.set_SR(i0, S)
+        # the old stored environments are now invalid
+        for o_env in self.ortho_to_envs:
+            o_env.del_LP(i0 + 1)
+            o_env.del_RP(i0)
+        self.env.del_LP(i0 + 1)
+        self.env.del_RP(i0)
 
     def update_LP(self, i0, U):
         """Update left part of the environment.
@@ -958,6 +1024,9 @@ class EngineCombine(Engine):
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'(vL.p0)', '(vR.p1)'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'(vL.p0)', '(vR.p1)'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
         """
         env = self.env
         LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
@@ -979,7 +1048,10 @@ class EngineCombine(Engine):
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
         theta = theta.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
-        return theta
+        theta_ortho = self.get_theta_ortho(i0)
+        theta_ortho = [th_o.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
+                       for th_o in theta_ortho]
+        return theta, theta_ortho
 
     def matvec(self, theta):
         r"""Apply the effective Hamiltonian to `theta`.
@@ -1164,6 +1236,9 @@ class EngineFracture(Engine):
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
         """
         env = self.env
         self.LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
@@ -1175,7 +1250,11 @@ class EngineFracture(Engine):
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
-        return theta.itranspose(['vL', 'p0', 'vR', 'p1'])
+        theta.itranspose(['vL', 'p0', 'vR', 'p1'])
+        theta_ortho = self.get_theta_ortho(i0)
+        for th_o in theta_ortho:
+            th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
+        return theta, theta_ortho
 
     def matvec(self, theta):
         r"""Apply the effective Hamiltonian to `theta`.

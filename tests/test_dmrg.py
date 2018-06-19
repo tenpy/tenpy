@@ -105,7 +105,50 @@ def test_dmrg_rerun(L=2):
     assert abs(E2 - -1.50082324) < 1.e-6
 
 
+@attr('slow')
+def test_dmrg_excited(eps=1.e-12):
+    # checks ground state and 2 excited states (in same symmetry sector) for a small system
+    # (without truncation)
+    L, g = 8, 1.1
+    bc = 'finite'
+    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity', verbose=0)
+    M = TFIChain(model_params)
+    # compare to exact solution
+    ED = ExactDiag(M)
+    ED.build_full_H_from_mpo()
+    ED.full_diagonalization()
+    # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
+    print("Exact diag: E[:5] = ", ED.E[:5])
+    # first DMRG run
+    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': True}}
+    eng0 = dmrg.EngineCombine(psi0, M, dmrg_pars)
+    E0, psi0 = eng0.run()
+    assert abs((E0 - ED.E[0])/ED.E[0]) < eps
+    ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
+    assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
+    # second DMRG run for first excited state
+    dmrg_pars['orthogonal_to'] = [psi0]
+    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    eng1 = dmrg.EngineCombine(psi1, M, dmrg_pars)
+    E1, psi1 = eng1.run()
+    assert abs((E1 - ED.E[1])/ED.E[1]) < eps
+    ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
+    assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
+    # and a third one to check with 2 eigenstates
+    dmrg_pars['orthogonal_to'] = [psi0, psi1]
+    # note: different intitial state necessary, otherwise H is 0
+    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1]* (L//2), bc=bc)
+    eng2 = dmrg.EngineCombine(psi2, M, dmrg_pars)
+    E2, psi2 = eng2.run()
+    print(E2)
+    assert abs((E2 - ED.E[2])/ED.E[2]) < eps
+    ov = npc.inner(ED.V.take_slice(2, 'ps*'), ED.mps_to_full(psi2), do_conj=True)
+    assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
+
+
 if __name__ == "__main__":
+    test_dmrg_excited()
     test_dmrg_rerun()
     for f_args in test_dmrg():
         f = f_args[0]

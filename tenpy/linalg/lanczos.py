@@ -7,6 +7,8 @@ import numpy as np
 from scipy.linalg import expm
 import warnings
 
+__all__ = ['LanczosGroundState', 'LanczosEvolution', 'lanczos', 'gram_schmidt', 'plot_stats']
+
 
 class LanczosGroundState:
     r"""Lanczos algorithm working on npc arrays.
@@ -65,8 +67,10 @@ class LanczosGroundState:
         ======= ====== ===============================================================
 
     orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Vectors (same tensor structure as psi) Lanczos will orthogonalize against,
+        Vectors (same tensor structure as psi) against which Lanczos will orthogonalize,
         ensuring that the result is perpendicular to them.
+        (Assumes that the smallest eigenvalue is smaller than 0, which should *always* be the
+        case if you want to find ground states with Lanczos!)
 
     Attributes
     ----------

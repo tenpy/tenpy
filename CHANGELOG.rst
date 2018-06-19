@@ -11,6 +11,7 @@ Added
 ^^^^^
 - MPS.canonical_form_infinite()
 - npc.Array.extend() and charges.extend(), allowing to extend an Array with zeros.
+- DMRG parameter 'orthogonal_to' allows to calculate excited states for finite systems.
 
 Changed
 ^^^^^^^
