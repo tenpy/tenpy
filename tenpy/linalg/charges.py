@@ -72,21 +72,22 @@ class ChargeInfo(object):
         self.test_sanity()  # checks for invalid arguments
 
     @classmethod
-    def add(cls, chinfo1, chinfo2):
+    def add(cls, chinfos):
         """Create a :class:`ChargeInfo` combining multiple charges.
 
         Parameters
         ----------
-        chinfo1, chinfo2 : :class:`ChargeInfo`
-            Two ChargeInfo to be added into one.
-            The charges of `chinfo2` are appended at the end of `chinfo1`.
+        chinfos : iterable of :class:`ChargeInfo`
+            ChargeInfo instances to be combined into a single one (in the given order).
 
         Returns
         -------
         chinfo : :class:`ChargeInfo`
             ChargeInfo combining all the given charges.
         """
-        return cls(np.concatenate((chinfo1.mod, chinfo2.mod)), chinfo1.names + chinfo2.names)
+        charges = [ci.mod for ci in chinfos]
+        names = sum([ci.names for ci in chinfos], [])
+        return cls(np.concatenate(charges), names)
 
     @classmethod
     def drop(cls, chinfo, charge=None):
@@ -369,12 +370,12 @@ class LegCharge(object):
         return res
 
     @classmethod
-    def from_add_charge(cls, leg1, leg2, chargeinfo=None):
+    def from_add_charge(cls, legs, chargeinfo=None):
         """Add the (independent) charges of two legs to get larger `qnumber`.
 
         Parameters
         ----------
-        leg1, leg2 : :class:`LegCharge`
+        legs : iterable of :class:`LegCharge`
             The legs for which the charges are to be combined/added.
         chargeinfo : :class:`ChargeInfo`
             The ChargeInfo for all charges; create new if ``None``.
@@ -384,18 +385,24 @@ class LegCharge(object):
         combined : :class:`LegCharge`
             A LegCharge with the charges of both legs. Is neither sorted nor bunched!
         """
-        chinfo = ChargeInfo.add(leg1.chinfo, leg2.chinfo)
+        legs = list(legs)
+        chinfo = ChargeInfo.add([leg.chinfo for leg in legs])
         if chargeinfo is not None:
             assert chinfo == chargeinfo
             chinfo = chargeinfo
-        if leg1.ind_len != leg2.ind_len:
+        ind_len = legs[0].ind_len
+        qconj = legs[0].qconj
+        if any([ind_len != leg.ind_len for leg in legs]):
             raise ValueError("different length")
-        if leg1.qconj != leg2.qconj:
+        if any([qconj != leg.qconj for leg in legs]):
             raise ValueError("different qconj")
-        qflat = np.empty([leg1.ind_len, chinfo.qnumber], dtype=QTYPE)
-        qflat[:, :leg1.chinfo.qnumber] = leg1.to_qflat()
-        qflat[:, leg1.chinfo.qnumber:] = leg2.to_qflat()
-        return cls.from_qflat(chinfo, qflat, leg1.qconj)
+        qflat = np.empty([ind_len, chinfo.qnumber], dtype=QTYPE)
+        i0 = 0
+        for leg in legs:
+            i1 = i0 + leg.chinfo.qnumber
+            qflat[:, i0:i1] = leg.to_qflat()
+            i0 = i1
+        return cls.from_qflat(chinfo, qflat, qconj)
 
     @classmethod
     def from_drop_charge(cls, leg, charge=None, chargeinfo=None):

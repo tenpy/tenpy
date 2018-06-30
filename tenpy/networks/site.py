@@ -400,8 +400,8 @@ class DoubleSite(Site):
             # charges are separately conserved
             leg0_triv1 = npc.LegCharge.from_trivial(site0.dim, site1.leg.chinfo)
             leg1_triv0 = npc.LegCharge.from_trivial(site1.dim, site0.leg.chinfo)
-            leg0 = npc.LegCharge.from_add_charge(site0.leg, leg0_triv1)
-            leg1 = npc.LegCharge.from_add_charge(leg1_triv0, site1.leg, chargeinfo=leg0.chinfo)
+            leg0 = npc.LegCharge.from_add_charge([site0.leg, leg0_triv1])
+            leg1 = npc.LegCharge.from_add_charge([leg1_triv0, site1.leg], chargeinfo=leg0.chinfo)
             perm_qind0, leg0s = leg0.sort()
             perm_qind1, leg1s = leg1.sort()
             site0.change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))

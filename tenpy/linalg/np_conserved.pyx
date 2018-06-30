@@ -965,15 +965,12 @@ cdef class Array(object):
         if len(add_legs) != self.rank:
             raise ValueError("wrong number of legs in `add_legs`")
         if chinfo is not None:
-            if self.rank > 0:
-                chinfo2 = ChargeInfo.add(self.chinfo, add_legs[0].chinfo)
-                assert chinfo == chinfo2
+            chinfo2 = ChargeInfo.add([self.chinfo, add_legs[0].chinfo])
+            assert chinfo == chinfo2
         else:
-            if self.rank == 0:
-                raise ValueError("Rank 0: can't derive `chinfo`")
-            chinfo = ChargeInfo.add(self.chinfo, add_legs[0].chinfo)
+            chinfo = ChargeInfo.add([self.chinfo, add_legs[0].chinfo])
         legs = [
-            LegCharge.from_add_charge(leg, leg2, chinfo)
+            LegCharge.from_add_charge([leg, leg2], chinfo)
             for (leg, leg2) in zip(self.legs, add_legs)
         ]
         if qtotal is None:
