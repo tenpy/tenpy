@@ -52,6 +52,7 @@ from scipy.linalg import blas as BLAS  # python interface to BLAS
 import copy as copy_
 import warnings
 import itertools
+import numbers
 
 # import public API from charges
 from .charges import ChargeInfo, LegCharge, LegPipe, QTYPE
@@ -481,7 +482,7 @@ cdef class Array(object):
         iset_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
-        if not isinstance(res, int):
+        if not isinstance(res, numbers.Integral):
             raise KeyError("label not found: " + repr(label) + ", current labels" +
                            repr(self.get_leg_labels()))
         if res < 0:
