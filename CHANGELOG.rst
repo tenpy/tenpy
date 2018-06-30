@@ -33,7 +33,7 @@ Changed
   - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
-
+- don't print the energy during real-time TEBD evolution - it's preserved...
 
 Fixed
 ^^^^^

@@ -152,24 +152,19 @@ class Engine(object):
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
         if self.verbose >= 1:
-            Eold = np.average(self.model.bond_energies(self.psi))
             Sold = np.average(self.psi.entanglement_entropy())
             start_time = time.time()
         self.update(N_steps)
         if self.verbose >= 1:
-            E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
-            DeltaE = np.abs(Eold - E)
             DeltaS = np.abs(Sold - S)
-            msg = ("--> time={t:3.3f}, max_chi={chi:d}, Delta_E={dE:.2e}, E_bond={E:.10f}, " +
+            msg = ("--> time={t:3.3f}, max_chi={chi:d}, "
                    "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
             print(
                 msg.format(
                     t=self.evolved_time,
                     chi=max(self.psi.chi),
-                    dE=DeltaE,
                     dS=DeltaS,
-                    E=E.real,
                     S=S.real,
                     time=time.time() - start_time,
                 ))
