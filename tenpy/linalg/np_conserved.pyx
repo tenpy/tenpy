@@ -481,11 +481,9 @@ cdef class Array(object):
         iset_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
-        try:
-            res = int(res)
-        except:
-            raise KeyError("label not found: " + repr(label) + ", current labels" + repr(
-                self.get_leg_labels()))
+        if not isinstance(res, int):
+            raise KeyError("label not found: " + repr(label) + ", current labels" +
+                           repr(self.get_leg_labels()))
         if res < 0:
             res += self.rank
         if res > self.rank or res < 0:

@@ -461,9 +461,7 @@ class Array(object):
         iset_leg_labels : set the labels of different legs.
         """
         res = self.labels.get(label, label)
-        try:
-            res = int(res)
-        except:
+        if not isinstance(res, int):
             raise KeyError("label not found: " + repr(label) + ", current labels" +
                            repr(self.get_leg_labels()))
         if res < 0:
