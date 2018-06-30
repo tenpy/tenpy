@@ -8,10 +8,10 @@ A simple way to achieve this is to set a suitable enviornment variable before ca
 python program, e.g. on the linux bash ``export OMP_NUM_THREADS=4`` for 4 threads.
 (MKL used OpenMP and thus respects its settings.)
 
-Alternatively, this module provides :func:`omp_get_num_threads` and :func:`omp_set_num_threads`,
+Alternatively, this module provides :func:`omp_get_nthreads` and :func:`omp_set_nthreads`,
 which give their best to get and set the number of threads at runtime,
 while still being failsave if the shared OpenMP library is not found.  In the latter case,
-you might also try the equivalent :func:`mkl_get_num_threads` and :func:`mkl_set_num_threads`.
+you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nthreads`.
 """
 # Copyright 2018 TeNPy Developers
 

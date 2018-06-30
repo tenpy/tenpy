@@ -5,6 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
 import itertools as it
+import copy
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
@@ -40,10 +41,12 @@ def test_site():
         npc.tensordot(op1, op2, [1, 0]).to_ndarray())
     leg2 = npc.LegCharge.from_drop_charge(leg, 1)
     leg2 = npc.LegCharge.from_change_charge(leg2, 0, 2, 'changed')
-    s2 = s.copy_change_charge(leg2)
+    s2 = copy.deepcopy(s)
+    s2.change_charge(leg2)
     perm_qind, leg2s = leg2.sort()
     perm_flat = leg2.perm_flat_from_perm_qind(perm_qind)
-    s2s = s2.copy_change_charge(leg2s, perm_flat)
+    s2s = copy.deepcopy(s2)
+    s2s.change_charge(leg2s, perm_flat)
     for site_check in [s2, s2s]:
         print("site_check.leg = ", site_check.leg)
         for opn in site_check.opnames:

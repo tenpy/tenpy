@@ -1,11 +1,9 @@
 """Defines a class describing the local physical Hilbert space.
 
 The :class:`Site` is the prototype, read it's docstring.
-We
 """
 # Copyright 2018 TeNPy Developers
 
-import copy
 import numpy as np
 
 from ..linalg import np_conserved as npc
@@ -110,8 +108,8 @@ class Site(object):
             self.add_op('JW', self.Id)
         self.test_sanity()
 
-    def copy_change_charge(self, new_leg_charge=None, permute=None):
-        """Generate a copy of a site with different charges.
+    def change_charge(self, new_leg_charge=None, permute=None):
+        """Change the charges of the site (in place).
 
         Parameters
         ----------
@@ -119,30 +117,25 @@ class Site(object):
             The new charges to be used. If ``None``, use trivial charges.
         permute : ``None`` | ndarray
             Ignored if ``None``; otherwise an permuation applied to the physical leg.
-
-        Returns
-        -------
-        cpy : :class:`Site`
-            A copy of `self` with a different (possibly permuted) :attr:`leg`.
         """
         if new_leg_charge is None:
             new_leg_charge = npc.LegCharge.from_trivial(self.dim)
-        cpy = copy.deepcopy(self)
-        cpy.leg = new_leg_charge
+        self.leg = new_leg_charge
         if permute is not None:
             permute = np.asarray(permute, dtype=np.intp)
             inv_perm = inverse_permutation(permute)
-            cpy.perm = self.perm[permute]
-        for opname in self.opnames:
-            cpy.remove_op(opname)
+            self.perm = self.perm[permute]
+            state_labels = self.state_labels.copy()
+            for label in state_labels:
+                self.state_labels[label] = inv_perm[state_labels[label]]
+        for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
+            need_JW = opname in self.need_JW_string
+            self.remove_op(opname)
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
-            cpy.add_op(opname, op, opname in self.need_JW_string)
-        if permute is not None:
-            for label in self.state_labels:
-                cpy.state_labels[label] = inv_perm[self.state_labels[label]]
-        return cpy
+            self.add_op(opname, op, need_JW)
+        # done
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -399,8 +392,8 @@ class DoubleSite(Site):
             leg1 = npc.LegCharge.from_drop_charge(site1.leg, chargeinfo=leg0.chinfo)
             perm_qind0, leg0s = leg0.sort()
             perm_qind1, leg1s = leg1.sort()
-            site0 = site0.copy_change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1 = site1.copy_change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+            site0.change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1.change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
         elif charges == 'same':
             pass  # nothing to do
         elif charges == 'independent':
@@ -411,8 +404,8 @@ class DoubleSite(Site):
             leg1 = npc.LegCharge.from_add_charge(leg1_triv0, site1.leg, chargeinfo=leg0.chinfo)
             perm_qind0, leg0s = leg0.sort()
             perm_qind1, leg1s = leg1.sort()
-            site0 = site0.copy_change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1 = site1.copy_change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+            site0.change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1.change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
         else:
             raise ValueError("Unknown option for `charges`: " + repr(charges))
         assert site0.leg.chinfo == site1.leg.chinfo  # check for compatibility
