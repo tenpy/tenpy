@@ -178,3 +178,24 @@ def test_boson_site():
             S.test_sanity()
         npt.assert_array_almost_equal_nulp(
             np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()), S.N.to_ndarray(), 2)
+
+
+def test_multi_sites_combine_charges():
+   spin = site.SpinSite(0.5, 'Sz')
+   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+   site.multi_sites_combine_charges([spin, ferm])
+   assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
+   spin.test_sanity()
+   ferm.test_sanity()
+
+   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+   spin = site.SpinSite(0.5, 'Sz')
+   site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, '2*Sz')]])
+   assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz')
+   spin.test_sanity()
+   ferm.test_sanity()
+
+   # and finally a few more, changing orders as well
+   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+   spin = site.SpinSite(0.5, 'Sz')
+   # TODO: should compare operators as well...

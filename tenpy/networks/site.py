@@ -10,8 +10,8 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
 __all__ = [
-    'Site', 'DoubleSite', 'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite',
-    'BosonSite'
+    'Site', 'DoubleSite', 'multi_sites_combine_charges', 'SpinHalfSite', 'SpinSite', 'FermionSite',
+    'SpinHalfFermionSite', 'BosonSite'
 ]
 
 
@@ -392,8 +392,8 @@ class DoubleSite(Site):
             leg1 = npc.LegCharge.from_drop_charge(site1.leg, chargeinfo=leg0.chinfo)
             perm_qind0, leg0s = leg0.sort()
             perm_qind1, leg1s = leg1.sort()
-            site0.change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1.change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+            site0.change_charge(leg0s, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1.change_charge(leg1s, leg1.perm_flat_from_perm_qind(perm_qind1))
         elif charges == 'same':
             pass  # nothing to do
         elif charges == 'independent':
@@ -404,8 +404,8 @@ class DoubleSite(Site):
             leg1 = npc.LegCharge.from_add_charge([leg1_triv0, site1.leg], chargeinfo=leg0.chinfo)
             perm_qind0, leg0s = leg0.sort()
             perm_qind1, leg1s = leg1.sort()
-            site0.change_charge(leg0, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1.change_charge(leg1, leg1.perm_flat_from_perm_qind(perm_qind1))
+            site0.change_charge(leg0s, leg0.perm_flat_from_perm_qind(perm_qind0))
+            site1.change_charge(leg1s, leg1.perm_flat_from_perm_qind(perm_qind1))
         else:
             raise ValueError("Unknown option for `charges`: " + repr(charges))
         assert site0.leg.chinfo == site1.leg.chinfo  # check for compatibility
@@ -454,6 +454,106 @@ class DoubleSite(Site):
         pipe = self.leg
         op = npc.outer(op0.transpose(['p', 'p*']), op1.transpose(['p', 'p*']))
         return op.combine_legs([[0, 2], [1, 3]], qconj=[+1, -1], pipes=[pipe, pipe.conj()])
+
+
+def multi_sites_combine_charges(sites, same_charges=[]):
+    """Adjust the charges of the given sites (in place) such that they can be used together.
+
+    When we want to contract tensors corresponding to different :class:`Site` instances,
+    these sites need to share a single :class:`~tenpy.linalg.charges.ChargeInfo`.
+    This function adjusts the charges of these sites such that they can be used together.
+
+    Parameters
+    ----------
+    sites : list of :class:`Site`
+        The sites to be combined. Modified **in place**.
+    same_charges : ``[[(int, int|str), (int, int|str), ...], ...]``
+        Defines which charges actually are the same, i.e. their quantum numbers are added up.
+        Each charge is specified by a tuple ``(s, i)= (int, int|str)``, where `s` gives the index
+        of the site within ``sites`` and `i` the index or name of the charge in the
+        :class:`~tenpy.linalg.charges.ChargeInfo` of this site.
+
+    Returns
+    -------
+    perms : list of ndarray
+        For each site the permutation performed on the physical leg to sort by charges.
+
+    Examples
+    --------
+    >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    >>> spin = SpinSite(1.0, 'Sz')
+    >>> ferm.leg.chinfo is spin.leg.chinfo
+    False
+    >>> print(spin.leg)
+    +1
+    0 [[-1]
+    1  [ 1]]
+    2
+    >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, 0)]])
+    [array([0, 1, 2, 3]), array([0, 1])]
+    >>> # no permutations where needed
+    >>> ferm.leg.chinfo is spin.leg.chinfo
+    True
+    >> ferm.leg.chinfo.names
+    ['N', 'Sz']
+    >>> print(spin.leg)
+    +1
+    0 [[ 0 -1]
+    1  [ 0  1]]
+    2
+    """
+    # parse same_charges argument
+    same_charges = list(same_charges) # need to modify elements...
+    same_charges_flat = []
+    for j in range(len(same_charges)):
+        same_charges_j = []
+        for s, i in same_charges[j]:
+            if isinstance(i, str): # map string to ints
+                i = sites[s].leg.chinfo.names.index(i)
+            i = int(i)  # should be integer now...
+            same_charges_j.append((s, i))
+            same_charges_flat.append((s, i))
+        same_charges[j] = same_charges_j
+    if len(same_charges_flat) != len(set(same_charges_flat)):
+        raise ValueError("Can't have duplicates in same_charges!")
+    print("same_charges", same_charges)
+    # find out which charges we keep
+    keep_charges = [] # list of (s, i) which appear in the new ChargeInfo
+    map_charges = {}  # dict (s, i)->(s,i): those not appearing in keep_charges to the one in it
+    for s, site in enumerate(sites):
+        for i in range(site.leg.chinfo.qnumber):
+            keep_charges.append((s, i))  # first all, remove some below
+    for same_charges_j in same_charges:
+        s0, i0 = same_charges_j[0]
+        for s, i in same_charges_j[1:]:
+            idx = keep_charges.index((s, i))
+            del keep_charges[idx]
+            map_charges[(s, i)] = (s0, i0)
+    print("keep", keep_charges)
+    print("map", map_charges)
+    # define common ChargeInfo class
+    qnumber = len(keep_charges)
+    names = [sites[s].leg.chinfo.names[i] for (s, i) in keep_charges]
+    mod = [sites[s].leg.chinfo.mod[i] for (s, i) in keep_charges]
+    chinfo = npc.ChargeInfo(mod, names)
+    # now define the new legs and update the charges of the sites
+    perms = []
+    for s, site in enumerate(sites):
+        old_qflat = site.leg.to_qflat()
+        new_qflat = np.zeros((site.leg.ind_len, qnumber), old_qflat.dtype)
+        for old_i in range(site.leg.chinfo.qnumber):
+            if (s, old_i) in map_charges:
+                new_i = keep_charges.index(map_charges[(s, old_i)])
+            else:
+                new_i = keep_charges.index((s, old_i))
+            new_qflat[:, new_i] = old_qflat[:, old_i]
+        # other charges are 0 = trivial
+        leg_unsorted = npc.LegCharge.from_qflat(chinfo, new_qflat, site.leg.qconj)
+        perm_qind, leg = leg_unsorted.sort()
+        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+        perms.append(perm_flat)
+        site.change_charge(leg, perm_flat)
+    return perms
 
 
 # ------------------------------------------------------------------------------
