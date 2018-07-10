@@ -55,7 +55,7 @@ def test_mps_add():
     psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=0, down=1, bc='finite')
     print(psi.expectation_value('Sz'))
     #  ov = psi.overlap(psi_sum)
-    #  print "ov = ", ov
+    #  print("ov = ", ov)
     #  assert( abs(1.-ov) < 1.e-14)
 
 

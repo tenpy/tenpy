@@ -1,4 +1,4 @@
-"""This module contains a base class for a model.
+"""This module contains some base classes for a model.
 
 A 'model' is supposed to represent a Hamiltonian in a generalized way.
 Beside a :class:`~tenpy.models.lattice.Lattice` specifying the geometry and

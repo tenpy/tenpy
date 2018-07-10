@@ -14,3 +14,4 @@ They can be cited from the python doc-strings using the format ``[Author####]_``
 .. [PollmannTurner2012] F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), arXiv:1204.0704
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
 .. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, arXiv:1711.01288
+.. [TeNPyNotes2018] J. Hauschild, F. Pollmann, arXiv:1805.00055

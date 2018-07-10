@@ -151,7 +151,7 @@ def perm_sign(p):
     Examples
     --------
     >>> for p in itertools.permutations(range(3))]):
-    ...      print '{p!s}: {sign!s}'.format(p=p, sign=perm_sign(p))
+    ...      print('{p!s}: {sign!s}'.format(p=p, sign=perm_sign(p)))
     (0, 1, 2): 1
     (0, 2, 1): -1
     (1, 0, 2): -1

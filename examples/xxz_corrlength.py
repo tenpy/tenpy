@@ -54,12 +54,12 @@ def run(Jzs):
             #  T = TransferMatrix(psi, psi, charge_sector=None)
             #  E, V = T.eigenvectors(4, which='LM')
             #  chi = psi.chi[0]
-            #  print V[0].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5
+            #  print(V[0].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5)
             #  if len(V) > 1:
-            #      print V[1].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5
-            #  print "chi:", psi.chi
-            #  print "eigenvalues transfermatrix:", E
-            #  print "norm_test:", psi.norm_test()
+            #      print(V[1].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5)
+            #  print("chi:", psi.chi)
+            #  print("eigenvalues transfermatrix:", E)
+            #  print("norm_test:", psi.norm_test())
             corr_length.append(psi.correlation_length(charge_sector=0, tol_ev0=1.e-3))
             print("corr. length", corr_length[-1])
             print("corr. fct.", psi.correlation_function('Sz', 'Sz', sites1=[0], sites2=6))

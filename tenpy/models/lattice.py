@@ -362,7 +362,7 @@ class Lattice(object):
         `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
         Then this function gives you the expectation values ordered by the lattice:
 
-        >>> print lat.shape, A.shape
+        >>> print(lat.shape, A.shape)
         (10, 3, 2) (60,)
         >>> A_res = lat.mps2lat_values(A)
         >>> A_res.shape
@@ -372,7 +372,7 @@ class Lattice(object):
 
         If you have a correlation function ``C[i, j]``, it gets just slightly more complicated:
 
-        >>> print lat.shape, C.shape
+        >>> print(lat.shape, C.shape)
         (10, 3, 2) (60, 60)
         >>> lat.mps2lat_values(C, axes=[0, 1]).shape
         (10, 3, 2, 10, 3, 2)

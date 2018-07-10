@@ -77,13 +77,13 @@ class Site(object):
     >>> Sm = [[0, 0], [1., 0]]
     >>> Sz = [[0.5, 0], [0, -0.5]]
     >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
-    >>> print site.Splus.to_ndarray()
+    >>> print(site.Splus.to_ndarray())
     array([[ 0.,  1.],
            [ 0.,  0.]])
-    >>> print site.get_op('Sminus').to_ndarray()
+    >>> print(site.get_op('Sminus').to_ndarray())
     array([[ 0.,  0.],
            [ 1.,  0.]])
-    >>> print site.get_op('Splus Sminus').to_ndarry()
+    >>> print(site.get_op('Splus Sminus').to_ndarry())
     array([[ 1.,  0.],
            [ 0.,  0.]])
     """
@@ -453,7 +453,8 @@ class DoubleSite(Site):
         """
         pipe = self.leg
         op = npc.outer(op0.transpose(['p', 'p*']), op1.transpose(['p', 'p*']))
-        return op.combine_legs([[0, 2], [1, 3]], qconj=[+1, -1], pipes=[pipe, pipe.conj()])
+        op = op.combine_legs([[0, 2], [1, 3]], qconj=[+1, -1], pipes=[pipe, pipe.conj()])
+        return op.iset_leg_labels(['p', 'p*'])
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):

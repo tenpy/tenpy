@@ -28,8 +28,6 @@ def lin_fit_res(x, y):
     assert x.ndim == 1 and y.ndim == 1
     fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y)
     if len(fit[1]) < 1:
-        # print 'lin_fit_res', x, y
-        # print fit[1], type(fit)
         return np.max(y) - np.min(y)
     return fit[1][0]
 
@@ -64,14 +62,11 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
         # number of points inclusive
         brute_Ns = (power_mesh[i] if i == 0 else 2 * power_mesh[i]) + 1
         log_power_step = (log_power_range[1] - log_power_range[0]) / float(brute_Ns - 1)
-        # print 'iteration', i, ":", np.exp(np.arange(brute_Ns) *
-        # log_power_step + log_power_range[0])
         brute_fit = optimize.brute(
             alg_decay_fit_res, [log_power_range], (x, y), Ns=brute_Ns, finish=None)
         if brute_fit <= global_log_power_range[0] + 1e-6:
             return [0., 0., y[-1]]  # shit happened
         log_power_range = (brute_fit - log_power_step, brute_fit + log_power_step)
-        # print "-->", np.exp(brute_fit), "new range", np.exp(log_power_range)
     l_fit = linear_fit(x**(-np.exp(brute_fit)), y)
     return [l_fit[0], np.exp(brute_fit), l_fit[1]]
 
