@@ -1459,15 +1459,29 @@ class MPS(object):
     def correlation_length(self, target=1, tol_ev0=1.e-8):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
+        Assumes that `self` is in canonical form.
+
         Works only for infinite MPS, where the transfer matrix is a useful concept.
-        For an MPS, any correlation function splits into :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
+        Assuming a single-site unit cell, any correlation function splits into
+        :math:`C(A_i, B_j) = A'_i T^{j-i-1} B'_j`
         with some parts left and right and the :math:`j-i-1`-th power of the transfer matrix in
         between. The largest eigenvalue is 1 (if self is properly normalized)
         and gives the dominant contribution of
         :math:`A'_i E_1 * 1^{j-i-1} * E_1^T B'_j = <A> <B>`,
         and the second largest one gives a contribution :math:`\propto \lambda_2^{j-i-1}`.
         Thus :math:`\lambda_2 = \exp(-\frac{1}{\xi})`.
-        Assumes that `self` is in canonical form.
+
+        More general for a `L`-site unit cell we get :math:`\lambda_2 = \exp(-\frac{L}{\xi})`,
+        where the `xi` is given in units of 1 lattice spacing in the MPS.
+
+        .. warning ::
+            For a higher-dimensional lattice (which the MPS class doesn't know about),
+            the correct unit is the lattice spacing in x-direction, and the correct formula is
+            :math:`\lambda_2 = \exp(-\frac{L_x}{\xi})`,
+            where `L_x` is the number of lattice spacings in the infinite direction within the
+            MPS unit cell, e.g. the number of "rings" of a cylinder in the MPS unit cell.
+            To get to these units, divide the returned `xi` by the number of sites within a "ring",
+            for a lattice given in :attr:`~tenpy.networks.lattice.N_sites_per_ring`.
 
         Parameters
         ----------
@@ -1481,6 +1495,8 @@ class MPS(object):
         xi : float | 1D array
             If `target`=1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
+            It is measured in units of a single lattice spacing in the MPS language,
+            see the warning above.
         """
         assert (not self.finite)
         T = TransferMatrix(self, self, charge_sector=0, form='B')
@@ -2145,6 +2161,7 @@ class MPSEnvironment(object):
 
     .. todo ::
         Doesn't work for different qtotal in ket._B / bra._B -> Need MPS.gauge_qtotal()
+        Or just define firstLP and firstRP to have nonzero qtotal in this case...
 
     Parameters
     ----------

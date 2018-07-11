@@ -57,6 +57,8 @@ class Lattice(object):
         Defaults ``'default'``: First direction changing slowest, within the unit cell fastest.
     bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis : iterable of 1D arrays
         for each direction one translation vectors shifting the unit cell.
         Defaults to the standard ONB ``np.eye(dim)``.
@@ -67,8 +69,14 @@ class Lattice(object):
     Attributes
     ----------
     dim
-    N_cells
-    N_sites
+    N_cells : int
+        the number of unit cells in the lattice, ``np.prod(self.Ls)``.
+    N_sites : int
+        the number of sites in the lattice, ``np.prod(self.shape)``.
+    N_sites_per_ring : int
+        Defined as ``N_sites / Ls[0]``, for an infinite system the number of cites per "ring".
+    N_rings : int
+        Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
     Ls : tuple of int
         the length in each direction.
     shape : tuple of int
@@ -109,6 +117,8 @@ class Lattice(object):
         self.shape = self.Ls + (len(unit_cell), )
         self.chinfo = self.unit_cell[0].leg.chinfo
         self.N_sites = int(np.prod(self.shape))
+        self.N_sites_per_ring = int(self.N_sites // self.Ls[0])
+        self.N_rings = self.Ls[0]
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
