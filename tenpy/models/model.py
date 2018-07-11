@@ -49,7 +49,7 @@ class CouplingModel(object):
         The lattice defining the geometry and the local Hilbert space(s).
     bc_coupling : (iterable of) {'open' | 'periodic'}
         Boundary conditions of the couplings in each direction of the lattice. Defines how the
-        couplings are added in :meth:`add_coupling`. A singe string holds for all directions.
+        couplings are added in :meth:`add_coupling`. A single string holds for all directions.
 
     Attributes
     ----------
@@ -59,15 +59,15 @@ class CouplingModel(object):
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `_bc_coupling_choices`.
     onsite_terms : list of dict
-        For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
         Filled by :meth:`add_onsite`.
+        For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
     coupling_terms : list of dict
+        Filled by :meth:`add_coupling`.
         For each MPS index `i` a dictionary of the form
         ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``.
-        Entries with ``j < i`` are only allowed for ``lat.bc_MPS == 'infinite'``, in which case
-        they indicate couplings over the iMPS boundary, i.e., between the sites
-        ``(i, j+lat.N_sites)`` and between the sites ``(i-lat.N_sites, j)``.
-        Filled by :meth:`add_coupling`.
+        Note that always ``j > i``, entries with ``j >= lat.N_sites`` are allowed for
+        ``lat.bc_MPS == 'infinite'``, in which case they indicate couplings between different
+        iMPS unit cells.
     H_onsite : list of :class:`npc.Array`
         For each site (in MPS order) the onsite part of the Hamiltonian.
     """
@@ -93,18 +93,22 @@ class CouplingModel(object):
         assert self.bc_coupling.dtype == np.bool
         assert int(_bc_coupling_choices['open']) == 1  # this is used explicitly
         assert int(_bc_coupling_choices['periodic']) == 0
+        if self.bc_coupling[0] and self.lat.bc_MPS == 'infinite':
+            raise ValueError("Need periodic boundary conditions along the x-direction "
+                             "for 'infinite' `bc_MPS`")
         sites = self.lat.mps_sites()
         for site, terms in zip(sites, self.onsite_terms):
             for opname, strength in terms.items():
                 if not site.valid_opname(opname):
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
+        N_sites = self.lat.N_sites
         for site_i, d1 in zip(sites, self.coupling_terms):
             for (op_i, opstring), d2 in d1.items():
                 if not site_i.valid_opname(op_i):
                     raise ValueError("Operator {op!r} not in site".format(op=op_i))
                 for j, d3 in d2.items():
                     for op_j in d3.keys():
-                        if not sites[j].valid_opname(op_j):
+                        if not sites[j % N_sites].valid_opname(op_j):
                             raise ValueError("Operator {op!r} not in site".format(op=op_j))
         # done
 
@@ -201,36 +205,36 @@ class CouplingModel(object):
             raise ValueError("Coupling shouldn't be onsite!")
         idx_i, idx_i_lat = self.lat.mps_lat_idx_fix_u(u1)
         idx_j_lat_shifted = idx_i_lat + dx
-        idx_j_lat = idx_j_lat_shifted % np.array(self.lat.Ls)
+        idx_j_lat = np.mod(idx_j_lat_shifted, np.array(self.lat.Ls)) # assuming PBC
         keep = np.all(
             np.logical_or(
                 idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
-                ~self.bc_coupling),  # direction has periodic bound. cond.
+                np.logical_not(self.bc_coupling)),  # direction has PBC
             axis=1)
         idx_i = idx_i[keep]
         idx_i_lat = idx_i_lat[keep]
         idx_j_lat = idx_j_lat[keep]
         idx_j = self.lat.lat2mps_idx(np.hstack([idx_j_lat, [[u2]] * len(idx_i_lat)]))
-        for i, i_lat, j in zip(idx_i, idx_i_lat, idx_j):
+        j_shift_unitcells = (idx_j_lat_shifted[keep, 0] - idx_j_lat[:, 0]) // self.lat.N_rings
+        for i, i_lat, j, j_shift in zip(idx_i, idx_i_lat, idx_j, j_shift_unitcells):
             o1, o2 = op1, op2
             if self.lat.bc_MPS == 'infinite':
-                d_in = abs(i - j)  # distance within the chain
-                d_out = self.lat.N_sites - d_in  # distance over the boundary
-                if d_in < d_out:
-                    swap = (j < i)  # ensure coupling within the chain
-                elif d_in > d_out:
-                    swap = (i < j)  # ensure coupling over the iMPS boundary
-                else:  # d_in == d_out
-                    swap = False  # don't change the order
-                    # this is necessary for correct TEBD for iMPS with L=2
-            else:  # finite MPS: allow periodic boundary conditions
-                swap = (j < i)  # ensure i <= j
+                N_sites = self.lat.N_sites
+                if j_shift > 0:
+                    j = j + j_shift * N_sites  # ensures 0 <= i < N_sites <= j
+                elif j_shift < 0:
+                    i = i - j_shift * N_sites  # ensures 0 <= j < N_sites <= i
+                else:  # j_shift == 0
+                    swap = (j < i)
+            swap = (j < i)  # ensure i <= j
             if swap:
                 if raise_op2_left:
                     raise ValueError("Op2 is left")
                 i, o1, j, o2 = j, op2, i, op1  # swap OP1 <-> OP2
-            # now o1 is the "left" operator;
-            # if j < i, o2 acts one unit cell "right" of o1.
+            assert i < j # TODO
+            # now we have always i < j and 0 <= i < N_sites
+            # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
+            # o1 is the "left" operator; o2 is the "right" operator
             if str_on_first and op_string != 'Id':
                 if swap:
                     o1 = op_string + ' ' + o1  # o1==op2 should act first
@@ -289,6 +293,7 @@ class CouplingModel(object):
         if self.H_onsite is None:
             self.H_onsite = self.calc_H_onsite(tol_zero)
         finite = (self.lat.bc_MPS != 'infinite')
+        N_sites = self.lat.N_sites
         res = [None] * self.lat.N_sites
         for i, d1 in enumerate(self.coupling_terms):
             j = (i + 1) % self.lat.N_sites
@@ -303,9 +308,8 @@ class CouplingModel(object):
             H = H + npc.outer(site_i.Id, strength_j * self.H_onsite[j])
             for (op1, op_str), d2 in d1.items():
                 for j2, d3 in d2.items():
-                    # i, j in terms are defined such that we expect j = j2,
-                    # (including the case N_sites = 2 and iMPS
-                    if j != j2:
+                    # i, j in coupling_terms are defined such that we expect j2 = i + 1
+                    if j2 != i + 1:
                         raise ValueError("Can't give H_bond for long-range: {i:d} {j:d}".format(
                             i=i, j=j2))
                     for op2, strength in d3.items():
@@ -314,6 +318,7 @@ class CouplingModel(object):
             res[j] = H
         if finite:
             assert (res[0].norm(np.inf) <= tol_zero)
+            res[0] = None
         return res
 
     def calc_H_MPO(self, tol_zero=1.e-15):
@@ -345,10 +350,9 @@ class CouplingModel(object):
                 label = (i, opname_i, op_string)
                 graph.add(i, 'IdL', label, opname_i, 1.)
                 for j, d3 in d2.items():
-                    j2 = j if j > i else j + graph.L
-                    graph.add_string(i, j2, label, op_string)
+                    label_j = graph.add_string(i, j, label, op_string)
                     for opname_j, strength in d3.items():
-                        graph.add(j, label, 'IdR', opname_j, strength)
+                        graph.add(j, label_j, 'IdR', opname_j, strength)
         # add 'IdL' and 'IdR' and convert the graph to an MPO
         graph.add_missing_IdL_IdR()
         self.H_MPO_graph = graph

@@ -197,14 +197,14 @@ class MPOGraph(object):
 
     This representation is used for building H_MPO from the interactions.
     The idea is to view the MPO as a kind of 'finite state machine'.
-    The 'states' or **keys** of this finite state machine life on the MPO bonds *between* the `Ws`,
-    and are the **vertices** of the graph. They label the indices of the virtul bonds
-    of the MPOS (i.e. the indices on legs ``wL`` and ``wR``).
-    They can be anything hash-able like a ``str``, ``int`` or a tuple of them.
+    The **states** or **keys** of this finite state machine life on the MPO bonds *between* the
+    `Ws`. They label the indices of the virtul bonds of the MPOs, i.e., the indices on legs
+    ``wL`` and ``wR``. They can be anything hash-able like a ``str``, ``int`` or a tuple of them.
 
-    The **edges** of the graph are the entries ``W[wL, wR]``, which itself are onsite operators
-    on the local Hilbert space. The entry ``W[wL, wR]`` connects the vertex ``wL`` on bond
-    ``(i-1, i)`` with the vertex ``wR`` on bond ``(i, i+1)``.
+    The **edges** of the graph are the entries ``W[keyL, keyR]``, which itself are onsite operators
+    on the local Hilbert space. The indices `keyL` and `keyR` correspond to the legs ``'wL', 'wR'``
+    of the MPO. The entry ``W[keyL, keyR]`` connects the state ``keyL`` on bond ``(i-1, i)``
+    with the state ``keyR`` on bond ``(i, i+1)``.
 
     The keys ``'IdR'`` (for 'idenity left') and ``'IdR'`` (for 'identity right') are reserved to
     represent only ``'Id'`` (=identity) operators to the left and right of the bond, respectively.
@@ -313,12 +313,14 @@ class MPOGraph(object):
 
         Terms like :math:`S^z_i S^z_j` actually stand for
         :math:`S^z_i \otimes \prod_{i < k < j} \mathbb{1}_k \otimes S^z_j`.
-        This function adds the :math:`\mathbb{1}` terms.
+        This function adds the :math:`\mathbb{1}` terms to the graph.
 
         Parameters
         ----------
         i, j: int
-            An edge is inserted on all bonds between `i` and `j`.
+            An edge is inserted on all bonds between `i` and `j`, `i < j`.
+            `j` can be larger than :attr:`L`, in which case the operators are supposed to act on
+            different MPS unit cells.
         key: hashable
             The state at bond (i-1, i) to connect from and on bond (j-1, j) to connect to.
             Also used for the intermediate states.
@@ -326,15 +328,25 @@ class MPOGraph(object):
         opname : str
             Name of the operator to be used for the string.
             Useful for the Jordan-Wigner transformation to fermions.
+
+        Returns
+        -------
+        label_j : hashable
+            The `key` on the left of site j to connect to. Usually the same as the parameter `key`,
+            except if ``j - i > self.L``, in which case we use the additional labels ``(key, 1)``,
+            ``(key, 2)``, ... to generate couplings over multiple unit cells.
         """
         if j < i:
-            if self.bc != 'infinite':
-                raise ValueError("j < i not allowed for finite boundary conditions")
-            j += self.L
+            raise ValueError("j < i not allowed")
+        keyL = keyR = key
         for k in range(i + 1, j):
+            if (k - i) % self.L == 0:
+                keyR = (key, (k-i) // self.L)
             k = k % self.L
-            if not self.has_edge(k, key, key):
-                self.add(k, key, key, opname, 1., check_op=check_op)
+            if not self.has_edge(k, keyL, keyR):
+                self.add(k, keyL, keyR, opname, 1., check_op=check_op)
+            keyL = keyR
+        return keyL
 
     def add_missing_IdL_IdR(self):
         """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
@@ -347,14 +359,17 @@ class MPOGraph(object):
         This function should be called *after* all other operators have been inserted.
         """
         if self.bc == 'infinite':
-            # infinite boundary connections: add for all sites
-            self.add_string(-1, self.L, 'IdL')
-            self.add_string(-1, self.L, 'IdR')
+            max_IdL = self.L  # add identities for all sites
+            min_IdR = 0
         else:
             max_IdL = max([0] + [i for i, s in enumerate(self.states[:-1]) if 'IdL' in s])
-            self.add_string(-1, max_IdL, 'IdL', 'Id', 1.)
             min_IdR = min([self.L] + [i for i, s in enumerate(self.states[:-1]) if 'IdR' in s])
-            self.add_string(min_IdR - 1, self.L, 'IdR', 'Id', 1.)
+        for k in range(0, max_IdL):
+            if not self.has_edge(k, 'IdL', 'IdL'):
+                self.add(k, 'IdL', 'IdL', 'Id', 1.)
+        for k in range(min_IdR, self.L):
+            if not self.has_edge(k, 'IdR', 'IdR'):
+                self.add(k, 'IdR', 'IdR', 'Id', 1.)
         # done
 
     def has_edge(self, i, keyL, keyR):
@@ -446,10 +461,10 @@ class MPOGraph(object):
             stL, stR = states[i:i + 2]
             graph = self.graph[i]  # ``{keyL: {keyR: [(opname, strength)]}}``
             grid = [None] * len(stL)
-            for sL, a in stL.items():
+            for keyL, a in stL.items():
                 row = [None] * len(stR)
-                for sR, lst in graph[sL].items():
-                    b = stR[sR]
+                for keyR, lst in graph[keyL].items():
+                    b = stR[keyR]
                     row[b] = lst
                 grid[a] = row
             grid = self._grid_insert_ops(grid, i)  # replace `lst` by the actual operators
@@ -554,7 +569,8 @@ class MPOGraph(object):
                 break
         else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
             # this should not happen (if we have no bugs), but who knows ^_^
-            assert (False)  # maybe some unconnected parts in the graph?
+            # if it happens, there might be unconnected parts in the graph
+            raise ValueError("Can't determine LegCharge for the MPO")
         # finally generate LegCharge from the dictionaries
         self._grid_legs = []
         for qs, st in zip(charges, states):
