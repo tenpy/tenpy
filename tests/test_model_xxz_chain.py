@@ -1,8 +1,4 @@
-"""test of :class:`tenpy.models.XXZChain`.
-
-.. todo ::
-    more tests...
-"""
+"""test of :class:`tenpy.models.XXZChain`."""
 # Copyright 2018 TeNPy Developers
 
 import numpy as np

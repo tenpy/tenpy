@@ -20,17 +20,11 @@ Concrete things to be fixed in different files
 
 To be done at some point for the next releases
 ----------------------------------------------
+- remove this file: use GitHub issues instead
 - overview and usage introduction to the overall library
-
-- functionality to remove charges from an MPS, 
-  e.g. if we use DMRG with charge conservation and want to quench and time evolve 
-  with a different hamiltonian violating some charge conservation...
-  Should be possible using Site.perm correctly...
 - suggest installing nose2 instead of nose, change compatibility as needed. Like numpy: tests directly in tenpy tree?
 - trace: allow multiple axes to be traced over; optimize
-- simplify DMRG?
 - Summary of defined classes/functions at the beginning of a module in the reference
-- remove this file: use GitHub issues instead
 - Inconsistency: `NearestNeighborModel.H_bond` with ``bc_MPS='infinite'`` has bonds ``[(L, 0), (0, 1), ...]``, 
   but :class:`~tenpy.networks.mps.MPS.expectation_value()` takes two-site operators on bonds ``[(0, 1), (1, 2), ...(L,0)]``.
 

@@ -1,8 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.mps`.
 
-.. todo ::
-    A lot more to test...
-    Test for compute_K !
 """
 # Copyright 2018 TeNPy Developers
 

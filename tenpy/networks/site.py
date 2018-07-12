@@ -52,7 +52,7 @@ class Site(object):
         (Optional) labels for the local basis states.
     opnames : set
         Labels of all onsite operators (i.e. ``self.op`` exists if ``'op'`` in ``self.opnames``).
-        Note that :meth:`get_op` allow arbitrary concatenations of them.
+        Note that :meth:`get_op` allows arbitrary concatenations of them.
     need_JW_string : set
         Labels of all onsite operators that need a Jordan-Wigner string.
     ops : :class:`~tenpy.linalg.np_conserved.Array`
@@ -693,8 +693,9 @@ class SpinSite(Site):
         # Note: For S=1/2, Sy might look wrong compared to the Pauli matrix or SpinHalfSite.
         # Don't worry, I'm 99.99% sure it's correct (J. Hauschild)
         # The reason it looks wrong is simply that this class orders the states as ['down', 'up'],
-        # while the usual spin-1/2 convention is ['up', 'down'].
-        # (The commutation relations are checked explicitly in `tests/test_site.py`
+        # while the usual spin-1/2 convention is ['up', 'down'], as you can also see if you look
+        # at the Sz entries...
+        # (The commutation relations are checked explicitly in `tests/test_site.py`)
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])

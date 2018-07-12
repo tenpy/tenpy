@@ -9,32 +9,35 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Added
 ^^^^^
-- MPS.canonical_form_infinite()
-- npc.Array.extend() and charges.extend(), allowing to extend an Array with zeros.
-- DMRG parameter 'orthogonal_to' allows to calculate excited states for finite systems.
+- :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
+- :meth:`tenpy.linalg.np_conserved.Array.extend` and :meth:`tenpy.linalg.charges.LegCharge.extend`,
+  allowing to extend an Array with zeros.
+- DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.
 - possibility to change the number of charges after creating LegCharges/Arrays
 
 Changed
 ^^^^^^^
-- moved toycodes from examples/ to a new folder toycodes/
+- moved toycodes from the folder ``examples/`` to a new folder ``toycodes/`` to separate them clearly.
 - Restructured lanczos into a class, added time evolution calculating exp(A*dt)|psi0>
 - Warning for poorly conditioned Lanczos; to overcome this enable the new parameter "reortho"
 - By default, make deep copies of npc Arrays.
-- Restructured :mod:`tenpy.dmrg`:
+- Restructured :mod:`tenpy.algorithms.dmrg`:
 
-  - :func:`tenpy.dmrg.run` is now just a wrapper around the new 
-    :meth:`tenpy.dmrg.Engine.run`, ``run(psi, model, pars)`` is roughly equivalent to
+  - :func:`~tenpy.algorithms.dmrg.run` is now just a wrapper around the new 
+    :meth:`~tenpy.algorithms.dmrg.Engine.run`, ``run(psi, model, pars)`` is roughly equivalent to
     ``eng = EngineCombine(psi, model, pars); eng.run()``.
-  - Added :meth:`tenpy.dmrg.Engine.init_env` and :meth:`tenpy.dmrg.Engine.reset_stats`
+  - Added :meth:`~tenpy.algorithms.dmrg.Engine.init_env` and :meth:`~tenpy.algorithms.dmrg.Engine.reset_stats`
     to allow a simple restart of DMRG with slightly different parameters.
   - call ``MPS.canonical_form()`` for infinite systems if the final state is not in canonical form.
 
 - Changed **default values** for some parameters:
+
   - increase ``Lanczos_params['N_cache'] = N_max`` (i.e. keep all states)
   - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
-- don't print the energy during real-time TEBD evolution - it's preserved...
+
+- don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
 
 Fixed
 ^^^^^
@@ -43,6 +46,7 @@ Fixed
 - Corrected couplings of the FermionicHubbardChain
 - issue #2: memory leak in cython parts when using intelpython/anaconda
 - issue #4: incompatible data types.
+- issue #6: the CouplingModel generated wrong Couplings in some cases
 - more reasonable traceback in case of wrong labels
 
 
