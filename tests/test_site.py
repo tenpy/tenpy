@@ -118,7 +118,7 @@ def check_same_operators(sites):
     # done
 
 
-def test_spin_half_site():
+def test_spin_half_site_checks():
     for conserve in [None, 'Sz', 'parity']:
         S = site.SpinHalfSite(conserve)
         S.test_sanity()

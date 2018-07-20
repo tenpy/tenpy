@@ -964,13 +964,15 @@ class SpinHalfFermionSite(Site):
             states = [states[i] for i in perm_flat]
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
+        self.filling = filling
         super(SpinHalfFermionSite, self).__init__(leg, states, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd'])
 
     def __repr__(self):
         """Debug representation of self"""
-        return "SpinHalfFermionSite({c!r})".format(c=self.conserve)
+        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(
+            cN=self.cons_N, cS=self.cons_Sz, f=self.filling)
 
 
 class BosonSite(Site):
