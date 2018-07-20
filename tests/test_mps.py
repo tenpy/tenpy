@@ -6,7 +6,7 @@
 import numpy as np
 import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.lattice import SquareLattice
+from tenpy.models.lattice import Square
 
 from tenpy.networks import mps, site
 from random_test import rand_permutation, random_MPS
@@ -167,7 +167,7 @@ def test_compute_K():
     pairs = [(0, 1), (2, 3), (4, 5)]  # singlets on a 3x2 grid -> k_y = pi
     psi = mps.MPS.from_singlets(spin_half, 6, pairs, bc='infinite')
     psi.test_sanity()
-    lat = SquareLattice(3, 2, spin_half, order='default', bc_MPS='infinite')
+    lat = Square(3, 2, spin_half, order='default', bc_MPS='infinite')
     U, W, q, ov, te = psi.compute_K(lat, verbose=100)
     assert (ov == -1.)
     npt.assert_array_equal(W, [1.])

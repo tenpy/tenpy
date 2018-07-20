@@ -8,7 +8,7 @@
 
 import numpy as np
 
-from .lattice import SquareLattice
+from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
@@ -73,7 +73,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
 
         # 1-4) Define the sites and the lattice.
         site = FermionSite(conserve=conserve, filling=filling)
-        lat = SquareLattice(Lx, Ly, site, order, bc_MPS=bc_MPS)
+        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
         bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
         # 5) initialize CouplingModel
@@ -163,7 +163,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
 
         # 1-4) Define the sites and the lattice.
         site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
-        lat = SquareLattice(Lx, Ly, site, order, bc_MPS=bc_MPS)
+        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
         bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
         # 5) initialize CouplingModel

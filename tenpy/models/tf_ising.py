@@ -14,7 +14,7 @@ As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.L
 
 import numpy as np
 
-from .lattice import Chain, SquareLattice
+from .lattice import Chain, Square
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 from ..networks.site import SpinHalfSite
@@ -129,7 +129,7 @@ class TFIModel2D(CouplingModel, MPOModel):
         # 1-3)
         site = SpinHalfSite(conserve=conserve)
         # 4) lattice
-        lat = SquareLattice(Lx, Ly, site, order, bc_MPS=bc_MPS)
+        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
         bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
         # 5) initialize CouplingModel

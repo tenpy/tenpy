@@ -52,14 +52,14 @@ def test_lattice():
 def test_lattice_order():
     s = site.SpinHalfSite('Sz')
     # yapf: disable
-    square = lattice.SquareLattice(2, 2, s, 'default')
+    square = lattice.Square(2, 2, s, 'default')
     order_default = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
     npt.assert_equal(square.order, order_default)
-    square = lattice.SquareLattice(4, 3, s, 'snake')
+    square = lattice.Square(4, 3, s, 'snake')
     order_snake = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 1, 0], [1, 0, 0],
                             [2, 0, 0], [2, 1, 0], [2, 2, 0], [3, 2, 0], [3, 1, 0], [3, 0, 0]])
     npt.assert_equal(square.order, order_snake)
-    square = lattice.SquareLattice(2, 3, s, ((1, 0), (True, False)))
+    square = lattice.Square(2, 3, s, ((1, 0), (True, False)))
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
 

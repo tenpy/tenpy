@@ -42,7 +42,7 @@ def test_CouplingModel_fermions():
 
 
 def test_CouplingModel_explicit():
-    fermion_lat_cyl = lattice.SquareLattice(1, 2, fermion_site, bc_MPS='infinite')
+    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl, 'periodic')
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), 'JW')

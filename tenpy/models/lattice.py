@@ -2,7 +2,8 @@
 
 The base class :class:`lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
-Further, we have the predefined lattices, namely :class:`Chain` and :class:`SquareLattice`.
+Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`, and
+:class:`Honeycomb`.
 
 .. todo ::
     documentation, how to generate new lattices, examples, ...
@@ -10,7 +11,6 @@ Further, we have the predefined lattices, namely :class:`Chain` and :class:`Squa
     equality tests?
 
 .. todo ::
-    add further lattices: honeycomb, ...
     Above, make table with pictures of them (-> use Lattice.plot_ordering)
 """
 # Copyright 2018 TeNPy Developers
@@ -21,7 +21,7 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice', 'Honeycomb', 'get_order']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'get_order']
 
 # (update module doc string if you add further lattices)
 
@@ -439,7 +439,7 @@ class SimpleLattice(Lattice):
     From the point of internal algorithms, we handle this class like a :class:`Lattice` --
     in that way we don't need to distinguish special cases in the algorithms.
 
-    Yet, from the point of a tenpy user, for example if you measure and expectation value
+    Yet, from the point of a tenpy user, for example if you measure an expectation value
     on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
     not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
     ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
@@ -495,11 +495,11 @@ class Chain(SimpleLattice):
         super(Chain, self).__init__([L], site, bc_MPS=bc_MPS)  # and otherwise default values.
 
 
-class SquareLattice(SimpleLattice):
+class Square(SimpleLattice):
     """A simple uniform square lattice of `Lx` by `Ly` sites."""
 
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
-        super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
+        super(Square, self).__init__([Lx, Ly], site, order, bc_MPS)
 
 
 class Honeycomb(Lattice):

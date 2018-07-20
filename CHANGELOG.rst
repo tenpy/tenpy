@@ -40,6 +40,7 @@ Changed
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
 
 - don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
+- Renamed the `SquareLattice` class to :class:`tenpy.models.lattice.Square` for better consistency.
 
 Fixed
 ^^^^^
