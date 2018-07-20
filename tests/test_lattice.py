@@ -49,6 +49,23 @@ def test_lattice():
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
             npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
 
+
+def test_number_nn():
+    s = site.SpinHalfSite('Sz')
+    chain = lattice.Chain(2, s)
+    assert chain.number_nearest_neighbors() == 2
+    assert chain.number_next_nearest_neighbors() == 2
+    square = lattice.Square(2, 2, s)
+    print(square.number_next_nearest_neighbors())
+    assert square.number_nearest_neighbors() == 4
+    assert square.number_next_nearest_neighbors() == 4
+    hc = lattice.Honeycomb(2, 2, s, s)
+    assert hc.number_nearest_neighbors(0) == 3
+    assert hc.number_nearest_neighbors(1) == 3
+    assert hc.number_next_nearest_neighbors(0) == 6
+    assert hc.number_next_nearest_neighbors(1) == 6
+
+
 def test_lattice_order():
     s = site.SpinHalfSite('Sz')
     # yapf: disable

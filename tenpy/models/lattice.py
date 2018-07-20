@@ -43,9 +43,6 @@ class Lattice(object):
     :meth:`mps2lat_values` perform the necessary reshaping and re-ordering from arrays indexed in
     MPS form to arrays indexed in lattice form.
 
-    .. todo ::
-        some way to define what are the 'nearest neighbours'/'next nearest neighbours'?
-
     Parameters
     ----------
     Ls : list of int
@@ -94,6 +91,14 @@ class Lattice(object):
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), dim)
         for each site in the unit cell a vector giving its position within the unit cell.
+    nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
+        as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
+        couplings.
+        Note that we include each coupling only in one direction; to get both directions, use
+        ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+    next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
     _strides : ndarray (dim, )
         necessary for :meth:`mps2lat_idx`
     _perm : ndarray (N, )
@@ -147,6 +152,9 @@ class Lattice(object):
         for L in self.Ls:
             strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
+        for attr in ('nearest_neighbors', 'next_nearest_neighbors'):
+            if not hasattr(self, attr):
+                setattr(self, attr, None)
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -420,6 +428,60 @@ class Lattice(object):
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
 
+    def number_nearest_neighbors(self, u=0):
+        """Count the number of nearest neighbors for a site in the bulk.
+
+        Requires :attr:`nearest_neighbors` to be set.
+
+        Parameters
+        ----------
+        u : int
+            Specifies the site in the unit cell.
+
+        Returns
+        -------
+        number_NN : int
+            Number of nearest neighbors of the `u`-th site in the unit cell in the bulk of the
+            lattice, not that it might be different at the edges of the lattice for open boundary
+            conditions.
+        """
+        if self.nearest_neighbors is None:
+            raise ValueError("self.nearest_neighbors were not specified")
+        count = 0
+        for u1, u2, dx in self.nearest_neighbors:
+            if u1 == u:
+                count += 1
+            if u2 == u:
+                count += 1
+        return count
+
+    def number_next_nearest_neighbors(self, u=0):
+        """Count the number of next nearest neighbors for a site in the bulk.
+
+        Requires :attr:`next_nearest_neighbors` to be set.
+
+        Parameters
+        ----------
+        u : int
+            Specifies the site in the unit cell.
+
+        Returns
+        -------
+        number_NNN : int
+            Number of next nearest neighbors of the `u`-th site in the unit cell in the bulk of the
+            lattice, not that it might be different at the edges of the lattice for open boundary
+            conditions.
+        """
+        if self.next_nearest_neighbors is None:
+            raise ValueError("self.next_nearest_neighbors were not specified")
+        count = 0
+        for u1, u2, dx in self.next_nearest_neighbors:
+            if u1 == u:
+                count += 1
+            if u2 == u:
+                count += 1
+        return count
+
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to ndarray with valid entries >=0."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
@@ -492,6 +554,8 @@ class Chain(SimpleLattice):
     """
 
     def __init__(self, L, site, bc_MPS='finite'):
+        self.nearest_neighbors = [(0, 0, np.array([1,]))]
+        self.next_nearest_neighbors = [(0, 0, np.array([2,]))]
         super(Chain, self).__init__([L], site, bc_MPS=bc_MPS)  # and otherwise default values.
 
 
@@ -499,6 +563,10 @@ class Square(SimpleLattice):
     """A simple uniform square lattice of `Lx` by `Ly` sites."""
 
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
+        self.nearest_neighbors = [(0, 0, np.array([1, 0])),
+                                  (0, 0, np.array([0, 1]))]
+        self.next_nearest_neighbors = [(0, 0, np.array([1, 1])),
+                                       (0, 0, np.array([1, -1]))]
         super(Square, self).__init__([Lx, Ly], site, order, bc_MPS)
 
 
@@ -509,6 +577,15 @@ class Honeycomb(Lattice):
         basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
         delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
         pos = (-delta/2., delta/2)
+        self.nearest_neighbors = [(0, 1, np.array([0, 0])),
+                                  (1, 0, np.array([1, 0])),
+                                  (1, 0, np.array([0, 1]))]
+        self.next_nearest_neighbors = [(0, 0, np.array([1, 0])),
+                                       (1, 1, np.array([1, 0])),
+                                       (0, 0, np.array([0, 1])),
+                                       (1, 1, np.array([0, 1])),
+                                       (0, 0, np.array([1, -1])),
+                                       (1, 1, np.array([1, -1]))]
         super(Honeycomb, self).__init__([Lx, Ly], [siteA, siteB], order, bc_MPS, basis, pos)
 
     def ordering(self, order):
