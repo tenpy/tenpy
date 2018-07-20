@@ -153,8 +153,8 @@ def example_DMRG_finite(L, g):
         print("sweep {i:2d}: E = {E:.13f}".format(i=i + 1, E=E))
     print("final bond dimensions: ", psi.get_chi())
     if L < 20:  # compare to exact result
-        from tfi_exact import exact_finite_gs_energy
-        E_exact = exact_finite_gs_energy(L, 1., g)
+        from tfi_exact import finite_gs_energy
+        E_exact = finite_gs_energy(L, 1., g)
         print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
         print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
@@ -174,8 +174,8 @@ def example_DMRG_infinite(g):
     print("final bond dimensions: ", psi.get_chi())
     print("correlation length:", psi.correlation_length())
     # compare to exact result
-    from tfi_exact import exact_infinite_gs_energy
-    E_exact = exact_infinite_gs_energy(1., g)
+    from tfi_exact import infinite_gs_energy
+    E_exact = infinite_gs_energy(1., g)
     print("Analytic result: E/L = {E:.13f}".format(E=E_exact))
     print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
