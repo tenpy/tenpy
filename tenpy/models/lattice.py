@@ -16,6 +16,7 @@ Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
+import itertools
 
 from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
@@ -107,8 +108,6 @@ class Lattice(object):
         index array for reshape/reordering in :meth:`mps2lat_vals`
     _mps_fix_u : tuple of ndarray (N_cells, ) np.intp
         for each site of the unit cell an index array selecting the mps indices of that site.
-    _mps_fix_u_None : ndarray (N_sites, )
-        just np.arange(N_sites, np.intp)
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
@@ -243,41 +242,6 @@ class Lattice(object):
         else:
             priority, snake_winding = order
         return get_order(self.shape, snake_winding, priority)
-
-    def plot_ordering(self, order=None, ax=None):
-        """Vizualize the ordering by plotting the lattice.
-
-        Parameters
-        ----------
-        order : None | 2D array (self.N_sites, self.dim+1)
-            An order array as returned by :meth:`ordering`. ``None`` defaults to ``self.order``.
-        ax : matplotlib.pyplot.Axes
-            The axes on which the ordering should be plotted. Defaults to ``pylab.gca()``.
-        """
-        if order is None:
-            order = self.order
-        import pylab as pl
-        if ax is None:
-            ax = pl.gca()
-        pos = self.position(order)
-        D = pos.shape[1]
-        styles = ['o', '^', 's', 'p', 'h', 'D', 'd', 'v', '<', '>']
-        if D == 1:
-            ax.plot(pos[:, 0], np.zeros(len(pos)), 'r-')
-            for u in range(len(self.unit_cell)):
-                p = pos[self.mps_idx_fix_u(u), 0]
-                ax.plot(p, np.zeros(len(p)), styles[u % len(styles)])
-            for i, p in enumerate(pos):
-                ax.text(p[0], 0.1, str(i))
-        elif D == 2:
-            ax.plot(pos[:, 0], pos[:, 1], 'r-')
-            for u in range(len(self.unit_cell)):
-                p = pos[self.mps_idx_fix_u(u), :]
-                ax.plot(p[:, 0], p[:, 1], styles[u % len(styles)])
-            for i, p in enumerate(pos):
-                ax.text(p[0], p[1], str(i))
-        else:
-            raise NotImplementedError()  # D >= 3
 
     def position(self, lat_idx):
         """return 'space' position of one or multiple sites.
@@ -482,14 +446,116 @@ class Lattice(object):
                 count += 1
         return count
 
+    def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):
+        """Plot the sites of the lattice with markers.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        markers : list
+            List of values for the keywork `marker` of ``ax.plot()`` to distinguish the different
+            sites in the unit cell, a site `u` in the unit cell is plotted with a marker
+            ``markers[u % len(markers)]``.
+        **kwargs :
+            Further keyword arguments given to ``ax.plot()``.
+        """
+        kwargs.setdefault("linestyle", 'None')
+        use_marker = ('marker' not in kwargs)
+        for u in range(len(self.unit_cell)):
+            pos = self.position(self.order[self.mps_idx_fix_u(u), :])
+            if pos.shape[1] == 1:
+                pos = pos * np.array([[1., 0]])  # use broadcasting to add a column with zeros
+            if pos.shape[1] != 2:
+                raise ValueError("can only plot in 2 dimensions.")
+            if use_marker:
+                kwargs['marker'] = markers[u % len(markers)]
+            ax.plot(pos[:, 0], pos[:, 1], **kwargs)
+
+    def plot_order(self, ax, order=None, textkwargs={}, **kwargs):
+        """Plot a line connecting sites in the specified "order" and text labels enumerating them.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        order : None | 2D array (self.N_sites, self.dim+1)
+            The order as returned by :meth:`ordering`; by default (``None``) use :attr:`order`.
+        textkwargs: ``None`` | dict
+            If not ``None``, we add text labels enumerating the sites in the plot. The dictionary
+            can contain keyword arguments for ``ax.text()``.
+        **kwargs :
+            Further keyword arguments given to ``ax.plot()``.
+        """
+        if order is None:
+            order = self.order
+        pos = self.position(order)
+        kwargs.setdefault('color', 'r')
+        if pos.shape[1] == 1:
+            pos = pos * np.array([[1., 0]])  # use broadcasting to add a column with zeros
+        if pos.shape[1] != 2:
+            raise ValueError("can only plot in 2 dimensions.")
+        ax.plot(pos[:, 0], pos[:, 1], **kwargs)
+        if textkwargs is not None:
+            for i, p in enumerate(pos):
+                ax.text(p[0], p[1], str(i), **textkwargs)
+
+    def plot_coupling(self, ax, coupling=None, **kwargs):
+        """Plot lines connecting nearest neighbors of the lattice.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        coupling : list of (u1, u2, dx)
+            Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
+            we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
+            ``(i0+dx[0], i1+dx[1], ..., u1)``.
+            By default (``None``), use :attr:``nearest_neighbors``.
+        **kwargs :
+            Further keyword arguments given to ``ax.plot()``.
+        """
+        if coupling is None:
+            coupling = self.nearest_neighbors
+        kwargs.setdefault('color', 'k')
+        for u1, u2, dx in coupling:
+            dx = np.r_[np.array(dx), 0]  # append a 0 to dx
+            lat_idx_1 = self.order[self._mps_fix_u[u1], :]
+            lat_idx_2 = self.order[self._mps_fix_u[u2], :] + dx[np.newaxis, :]
+            pos1 = self.position(lat_idx_1)
+            pos2 = self.position(lat_idx_2)
+            pos = np.stack((pos1, pos2), axis=0)
+            # ax.plot connects columns of 2D array by lines
+            if pos.shape[2] == 1:
+                pos = pos * np.array([[[1., 0]]])  # use broadcasting to add a column with zeros
+            if pos.shape[2] != 2:
+                raise ValueError("can only plot in 2 dimensions.")
+            ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
+
+    def plot_basis(self, ax, **kwargs):
+        """Plot arrows indicating the basis vectors of the lattice
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        **kwargs :
+            Keyword arguments specifying the "arrowprops" of ``ax.annotate``.
+        """
+        kwargs.setdefault("arrowstyle", "->")
+        for i in range(self.dim):
+            vec = self.basis[i]
+            if vec.shape[0] == 1:
+                vec = vec * np.array([1., 0])
+            if vec.shape[0] != 2:
+                raise ValueError("can only plot in 2 dimensions.")
+            ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
+
     def _asvalid_latidx(self, lat_idx):
-        """convert lat_idx to ndarray with valid entries >=0."""
+        """convert lat_idx to an ndarray with correct last dimension."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
         if lat_idx.shape[-1] != len(self.shape):
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
-        lat_idx = np.choose(lat_idx < 0, [lat_idx, lat_idx + self.shape])
-        if np.any(lat_idx < 0) or np.any(lat_idx >= self.shape):
-            raise IndexError("lattice index out of bonds")
         return lat_idx
 
 

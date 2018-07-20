@@ -395,19 +395,19 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     return vecs, ov
 
 
-def plot_stats(Es):
+def plot_stats(ax, Es):
     """Plot the convergence of the energies.
 
     Parameters
     ----------
+    ax : matplotlib.pyplot.Axes
+        The axes on which we should plot.
     Es : list of ndarray.
         The energies :attr:`Lanczos.Es`.
     """
-    import matplotlib.pyplot as plt
     ks = [[k] * len(E) for k, E in enumerate(Es)]
     ks = np.array(sum(ks, []))
     Es = np.array(sum([list(E) for E in Es], []))
-    plt.scatter(ks, np.array(Es))
-    plt.xlabel("Lanczos step")
-    plt.ylabel("Ritz Values (= energy estimates)")
-    plt.show()
+    ax.scatter(ks, np.array(Es))
+    ax.set_xlabel("Lanczos step")
+    ax.set_ylabel("Ritz Values (= energy estimates)")

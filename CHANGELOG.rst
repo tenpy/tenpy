@@ -17,7 +17,8 @@ Added
 - more general way to specify the order of sites in a :class:`tenpy.models.lattice.Lattice`.
 - new :class:`tenpy.models.lattice.Honeycomb` lattice
 - a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
-  along with methods to count the number of nearest neighbors for sites in the bulk.
+  along with methods to count the number of nearest neighbors for sites in the bulk, and
+  a way to plot them (:meth:`~tenpy.models.lattice.plot_coupling`)
 
 Changed
 ^^^^^^^
