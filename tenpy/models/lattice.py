@@ -18,10 +18,10 @@ Further, we have the predefined lattices, namely :class:`Chain` and :class:`Squa
 import numpy as np
 
 from ..networks.site import Site
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice', 'get_order']
 
 # (update module doc string if you add further lattices)
 
@@ -52,9 +52,8 @@ class Lattice(object):
         the length in each direction
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
-    order : str
-        a string specifying the order, given to :meth:`ordering`.
-        Defaults ``'default'``: First direction changing slowest, within the unit cell fastest.
+    order : str | (priority, snake_winding)
+        A string or tuple specifying the order, given to :meth:`ordering`.
     bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
@@ -180,59 +179,62 @@ class Lattice(object):
         """the dimension of the lattice."""
         return len(self.Ls)
 
-    def ordering(self, name):
+    def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
         This function can be overwritten by derived lattices to define additional orderings.
-        The following orders are devined in this function:
+        The following orders are defined in this method:
 
-        =========== =============================================================================
-        name        ordering
-        =========== =============================================================================
-        Cstyle      First ascending within the unit cell, then through the lattice in
-                    C-style array order, i.e., the first direction changes slowest.
-        Fstyle      Similar as default, but use Fortran-style array order for the lattice sites,
-                    i.e., the last dimension changes slowest, unit cell fastest.
-        snakeCstyle like Cstyle but always alternate ascending/descending.
-        snakeFstyle like Fstyle but always alternate ascending/descending.
-        default     same as Cstyle
-        snake       same as snakeCstyle
-        =========== =============================================================================
+        ================== =========================== =============================
+        `order`            equivalent `priority`       equivalent ``snake_winding``
+        ================== =========================== =============================
+        ``'Cstyle'``       (0, 1, ..., dim-1, dim)     (False, ..., False, False)
+        ``'default'``
+        ``'snake'``        (0, 1, ..., dim-1, dim)     (True, ..., True, True)
+        ``'snakeCstyle'``
+        ``'Fstyle'``       (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
+        ``'snakeFstyle'``  (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
+        ================== =========================== =============================
 
         Parameters
         ----------
-        name : str
-            specifies the desired ordering, see table above.
+        order : str | (priority, snake_winding)
+            Specifies the desired ordering using one of the strings of the above tables.
+            Alternatively, an ordering is specified by the
+            `priority` (one value for each direction, winding along the highest value first)
+            and the `snake_winding` (True/False for each direction).
+            Further explanations of these tuples in :func:`get_order`.
 
         Returns
         -------
         order : array, shape (N, D+1), dtype np.intp
-            the order to be used for ``self.order``.
+            the order to be used for :attr:`order`.
 
         See also
         --------
-        plot_ordering : visualizes the ordering
+        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
+        :meth:`plot_ordering` : visualizes the ordering
         """
-        res = np.empty((self.N_sites, self.dim + 1), np.intp)
-        if name in ["default", "Cstyle"]:
-            res = np.mgrid[tuple([slice(0, L) for L in self.shape])]
-            return res.reshape((self.dim + 1, self.N_sites)).T
-        elif name == "Fstyle":
-            shape = self.Ls[::-1] + (len(self.unit_cell), )
-            res = np.mgrid[tuple([slice(0, L) for L in shape])]
-            res = res.reshape((self.dim + 1, self.N_sites)).T
-            perm = np.arange(self.dim - 1, -2, -1)
-            return res[:, perm]
-        elif name in ["snake", "snakeCstyle"]:
-            return _ordering_snake(self.shape)
-        elif name == "snakeFstyle":
-            res = _ordering_snake(self.Ls[::-1] + (len(self.unit_cell), ))
-            perm = np.arange(self.dim - 1, -2, -1)
-            return res[:, perm]
-        # in a derived lattice ``class DerivedLattice(Lattice)``, use:
-        # return super(DerivedLattice, self).ordering(name)
-        # such that the derived lattece also has the orderings defined in this function.
-        raise ValueError("unknown ordering name" + str(name))
+        if isinstance(order, str):
+            if order in ["default", "Cstyle"]:
+                priority = None
+                snake_winding = (False,) * (self.dim+1)
+            elif order == "Fstyle":
+                priority = range(self.dim, -1, -1)
+                snake_winding = (False,) * (self.dim+1)
+            elif order in ["snake", "snakeCstyle"]:
+                priority = None
+                snake_winding = (True,) * (self.dim+1)
+            elif order == "snakeFstyle":
+                priority = range(self.dim, -1, -1)
+                snake_winding = (True,) * (self.dim+1)
+            else:
+                # in a derived lattice use ``return super().ordering(order)`` as last option
+                # such that the derived lattice also has the orderings defined in this function.
+                raise ValueError("unknown ordering " + repr(order))
+        else:
+            priority, snake_winding = order
+        return get_order(self.shape, snake_winding, priority)
 
     def plot_ordering(self, order=None, ax=None):
         """Vizualize the ordering by plotting the lattice.
@@ -280,6 +282,7 @@ class Lattice(object):
         Returns
         -------
         pos : ndarray, ``(..., dim)``
+            The position of the lattice sites specified by `lat_idx` in real-space.
         """
         idx = self._asvalid_latidx(lat_idx)
         res = np.take(self.unit_cell_positions, idx[..., -1], axis=0)
@@ -447,9 +450,10 @@ class SimpleLattice(Lattice):
         the length in each direction
     site : :class:`~tenpy.networks.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    order : str
-        A string specifying the order, given to :meth:`ordering`.
-        Defaults ``'default'``: First direction changing slowest.
+    order : str | (priority, snake_winding)
+        A string or tuple specifying the order, given to :meth:`ordering`.
+        If a tuple, the priority and snake_winding should only be specified for the lattice
+        directions.
     bc_MPS : {'finite', 'segment', 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
     basis : iterable of 1D arrays
@@ -462,6 +466,11 @@ class SimpleLattice(Lattice):
     def __init__(self, Ls, site, order='default', bc_MPS='finite', basis=None, position=None):
         if position is not None:
             position = [position]
+        if not isinstance(order, str):
+            priority, snake_winding = order
+            priority = tuple(priority) +  (max(priority) + 1., )
+            snake_winding = tuple(snake_winding) + (False, )
+            order = priority, snake_winding
         super(SimpleLattice, self).__init__(Ls, [site], order, bc_MPS, basis, position)
 
     def mps2lat_values(self, A, axes=0, u=None):
@@ -493,25 +502,71 @@ class SquareLattice(SimpleLattice):
         super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
 
 
-def _ordering_snake(Ls):
-    """built the order of a snake winding through a (hyper-)cubic lattice in Cstyle order."""
-    Ls = list(Ls)
+def get_order(shape, snake_winding, priority=None):
+    """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
+
+    In this function, the word 'direction' referst to a physical direction of the lattice or the
+    index `u` of the unit cell as an "artificial direction".
+
+    Parameters
+    ----------
+    shape : tuple of int
+        The shape of the lattice, i.e., the length in each direction.
+    snake_winding : tuple of bool
+        For each direction one bool, whether we should wind as a "snake" (True) in that direction
+        (i.e., going forth and back) or simply repeat ascending (False)
+    priority: ``None`` | tuple of float
+        If ``None`` (default), use C-Style ordering.
+        Otherwise, this defines the priority along which direction to wind first;
+        the direction with the highest priority increases fastest.
+        For example, "C-Style" order is enforced by ``priority=(0, 1, 2, ...)``,
+        and Fortrans F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
+
+    Returns
+    -------
+    order : ndarray (np.prod(shape), len(shape))
+        An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
+    """
+    if priority is not None:
+        # reduce this case to C-style order and a few permutations
+        perm = np.argsort(priority)
+        inv_perm = inverse_permutation(perm)
+        transp_shape = np.array(shape)[perm]
+        transp_snake = np.array(snake_winding)[perm]
+        order = get_order(transp_shape, transp_snake, None)  # in plain C-style
+        order = order[:, inv_perm]
+        return order
+    # simpler case: generate C-style order
+    shape = tuple(shape)
+    if not any(snake_winding):
+        # optimize: can use np.mgrid
+        res = np.mgrid[tuple([slice(0, L) for L in shape])]
+        return res.reshape((len(shape), np.prod(shape))).T
+    # some snake: generate direction by direction, each time adding a new column to `order`
+    snake_winding = tuple(snake_winding) + (False, )
+    dim = len(shape)
     order = np.empty((1, 0), dtype=np.intp)
-    while len(Ls) > 0:
-        L = Ls.pop()
+    for i in range(dim):
+        L = shape[dim-1-i]
+        snake = snake_winding[dim-i] # previous direction snake?
         L0, D = order.shape
+        # insert a new first column into order
         new_order = np.empty((L * L0, D + 1), dtype=np.intp)
-        print(order.shape, "- L =", L, "-->", new_order.shape)
         new_order[:, 0] = np.repeat(np.arange(L), L0)
-        new_order[:L0, 1:] = order
-        if L > 1:
-            # reverse order to go back for second index
-            new_order[L0:2 * L0, 1:] = order[::-1]
-        if L > 2:
-            # repeat (ascending, descending) up to length L
-            rep = L // 2 - 1
-            new_order[2 * L0:(rep + 1) * 2 * L0, 1:] = np.tile(new_order[:2 * L0, 1:], [rep, 1])
-            if L % 2 == 1:
-                new_order[-L0:, 1:] = order
+        if not snake:
+            new_order[:, 1:] = np.tile(order, (L, 1))
+        else:  # snake
+            new_order[:L0, 1:] = order
+            L0_2 = 2 * L0
+            if L > 1:
+                # reverse order to go back for second index
+                new_order[L0:L0_2, 1:] = order[::-1, :]
+            if L > 2:
+                # repeat (ascending, descending) up to length L
+                rep = L // 2 - 1
+                if rep > 0:
+                    new_order[L0_2:(rep + 1) * L0_2, 1:] = np.tile(new_order[:L0_2, 1:], (rep, 1))
+                if L % 2 == 1:
+                    new_order[-L0:, 1:] = order
         order = new_order
     return order

@@ -3,6 +3,7 @@
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
+from tenpy.networks import site
 import numpy as np
 import numpy.testing as npt
 import nose.tools as nst
@@ -47,3 +48,18 @@ def test_lattice():
             A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
             npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
+
+def test_lattice_order():
+    s = site.SpinHalfSite('Sz')
+    # yapf: disable
+    square = lattice.SquareLattice(2, 2, s, 'default')
+    order_default = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
+    npt.assert_equal(square.order, order_default)
+    square = lattice.SquareLattice(4, 3, s, 'snake')
+    order_snake = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 1, 0], [1, 0, 0],
+                            [2, 0, 0], [2, 1, 0], [2, 2, 0], [3, 2, 0], [3, 1, 0], [3, 0, 0]])
+    npt.assert_equal(square.order, order_snake)
+    square = lattice.SquareLattice(2, 3, s, ((1, 0), (True, False)))
+    order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
+    npt.assert_equal(square.order, order_Fsnake)
+    # yapf: enable
