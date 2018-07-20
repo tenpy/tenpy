@@ -21,7 +21,7 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice', 'get_order']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'SquareLattice', 'Honeycomb', 'get_order']
 
 # (update module doc string if you add further lattices)
 
@@ -500,6 +500,57 @@ class SquareLattice(SimpleLattice):
 
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
         super(SquareLattice, self).__init__([Lx, Ly], site, order, bc_MPS)
+
+
+class Honeycomb(Lattice):
+    """A honeycomb lattice."""
+
+    def __init__(self, Lx, Ly, siteA, siteB, order='default', bc_MPS='finite'):
+        basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
+        delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
+        pos = (-delta/2., delta/2)
+        super(Honeycomb, self).__init__([Lx, Ly], [siteA, siteB], order, bc_MPS, basis, pos)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+
+        ================== =========================== =============================
+        `order`            equivalent `priority`       equivalent ``snake_winding``
+        ================== =========================== =============================
+        ``'default'``      (0, 2, 1)                   (False, False, False)
+        ``'snake'``        (0, 2, 1)                   (False, True, False)
+        ================== =========================== =============================
+
+        Parameters
+        ----------
+        order : str | (priority, snake_winding)
+            Specifies the desired ordering using one of the strings of the above tables.
+            Alternatively, an ordering is specified by the
+            `priority` (one value for each direction, winding along the highest value first)
+            and the `snake_winding` (True/False for each direction).
+            Further explanations of these tuples in :func:`get_order`.
+
+        Returns
+        -------
+        order : array, shape (N, D+1), dtype np.intp
+            the order to be used for :attr:`order`.
+
+        See also
+        --------
+        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
+        :meth:`plot_ordering` : visualizes the ordering
+        """
+        if isinstance(order, str):
+            if order == "default":
+                priority = (0, 2, 1)
+                snake_winding = (False, False, False)
+            elif order == "snake":
+                priority = (0, 2, 1)
+                snake_winding = (False, False, True)
+            return get_order(self.shape, snake_winding, priority)
+        return super().ordering(order)
 
 
 def get_order(shape, snake_winding, priority=None):

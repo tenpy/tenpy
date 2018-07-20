@@ -62,4 +62,13 @@ def test_lattice_order():
     square = lattice.SquareLattice(2, 3, s, ((1, 0), (True, False)))
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
+
+    hc = lattice.Honeycomb(2, 3, s, s, 'default')
+    order_hc_def = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1],
+                             [1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]])
+    npt.assert_equal(hc.order, order_hc_def)
+    hc = lattice.Honeycomb(2, 3, s, s, ((0.3, 0.1, -1.), (True, False, False)))
+    order_hc_mix = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0],
+                             [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 2, 1], [1, 2, 1]])
+    npt.assert_equal(hc.order, order_hc_mix)
     # yapf: enable
