@@ -1,8 +1,11 @@
 Contributing
 ============
 
-The code is maintained in a git repository, the official repository is on `github <https://github.com/tenpy/tenpy>`.
-You're welcome to contribute and submit pull requests on github. You are also welcome to become a member of the developer team, just ask nicely :) (Contact details in the AUTHORS.txt) 
+The code is maintained in a git repository, the official repository is on `github <https://github.com/tenpy/tenpy>`_.
+You're welcome to contribute and submit pull requests on github.
+If you're unsure how or what to do, you can ask for help in the community forum.
+If you want to become a member of the developer team, just ask ;-)
+
 To keep consistency, we ask you to comply with the following guidelines for contributions:
 
 - Use a code style based on :pep:`8`.
@@ -19,12 +22,9 @@ To keep consistency, we ask you to comply with the following guidelines for cont
 
 - Every function/class/module should be documented by its doc-string (c.f. :pep:`257`),
   additional documentation is in ``doc/``.
-  The documentation uses `reStructuredText`. If you're new to `reStructuredText`, consider reading this
-  `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
-  We use the `numpydoc` extension to sphinx, so please read and follow these
-  `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
-  In addition, you can take a look at the following
-  `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
+  The documentation uses `reStructuredText`. If you're new to `reStructuredText`, read this `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
+  We use the `numpydoc` extension to sphinx, so please read and follow these `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
+  In addition, you can take a look at the following `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
   Helpful hints on top of that::
 
         r"""<- this r makes me a raw string, thus '\' has no special meaning.
@@ -91,6 +91,6 @@ Other output formats are available as other make targets, e.g., ``make latexpdf`
 
 .. note ::
 
-   Building the (html) documentation requires loading the modules.
+   Building the documentation with sphinx requires loading the modules.
    Thus make sure that the folder `tenpy` is included in your ``$PYTHONPATH``,
    as described in :doc:`doc/INSTALL.rst <INSTALL>`.
