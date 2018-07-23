@@ -27,7 +27,7 @@ classes, methods, etc., and on the other hand the `userguide` containing some in
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
-We have set up a `community forum <https://tenpy.johannes-hauschild.de/>`, where you can post questions and hopefully find answers.
+We have set up a **community forum** at https://tenpy.johannes-hauschild.de/, where you can post questions and hopefully find answers.
 Once you got some experience, you might also be able to contribute to the community and answer some questions yourself ;-)
 We will also use this forum for official annoucements, for example when we release a new version.
 

@@ -13,6 +13,7 @@ Getting the source
 The following instructions are for (some kind of) Linux, and tested on Ubuntu. 
 However, the code itself should work on other operating systems as well (in particular MacOS and Windows).
 
+The offical repository is at https://github.com/tenpy/tenpy.git.
 To get the latest version of the code, you can clone it with `Git <https://git-scm.com/>`_ using the following commands::
 
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
@@ -56,7 +57,7 @@ Whenever the path is set, you should be able to use the library from within pyth
     [GCC 4.8.2 20140120 (Red Hat 4.8.2-15)] with numpy 1.13.3, scipy 1.0.0
 
 This should statement printes the current version of this TeNPy library as well as the versions of the used python, numpy and scipy libraries,
-which might be different on your computer.  For reproducability, you might want to save this along with your data.)
+which might be different on your computer. It is a good idea to save this along with your data.
 
 If you got a similar output as above: congratulations! You can now run the codes :)
 
@@ -100,12 +101,12 @@ Compilation of np_conserved
 ---------------------------
 At the heart of the TeNPy library is the module :mod:`tenpy.linalg.np_conseved`, which provides an Array class to exploit the
 conservation of abelian charges. The data model of python is not ideal for the required book-keeping, thus
-we have implemented the same np_conserved module in `Cython <http://cython.org>`_. 
+we have implemented the same np_conserved module in `Cython <http://cython.org>`_.
 This allows to compile (and thereby optimize) the corresponding python module, thereby speeding up the execution of the
 code. While this might give a significant speed-up for code with small matrix dimensions, don't expect the same speed-up in
-cases where most of the CPU-time is already spent in matrix dimensions (i.e. if the bond dimension of your MPS is huge).
+cases where most of the CPU-time is already spent in matrix multiplications (i.e. if the bond dimension of your MPS is huge).
 
-To compile the code, you first need to install cython ::
+To compile the code, you first need to install `Cython <http://cython.org>`_ ::
 
     conda install cython                    # when using anaconda, or
     sudo pip install --upgrade cython       # when using pip
