@@ -45,7 +45,7 @@ from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
 
-__all__ = ['MPO', 'MPOGraph', 'MPOEnvironment']
+__all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
 
 class MPO(object):
@@ -98,22 +98,75 @@ class MPO(object):
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
-        if IdL is None:
-            self.IdL = [None] * (self.L + 1)
-        else:
-            try:
-                self.IdL = list(IdL)
-            except TypeError:
-                self.IdL = [IdL] * (self.L + 1)
-        if IdR is None:
-            self.IdR = [None] * (self.L + 1)
-        else:
-            try:
-                self.IdR = list(IdR)
-            except TypeError:
-                self.IdR = [IdR] * (self.L + 1)
+        self.IdL = self._get_Id(IdL, len(sites))
+        self.IdR = self._get_Id(IdR, len(sites))
         self.bc = bc
         self.test_sanity()
+
+    @classmethod
+    def from_grids(cls, sites, grids, bc='finite', IdL=None, IdR=None, Ws_qtotal=None, leg0=None):
+        """Initialize an MPO from `grids`.
+
+        The `grid` specifies
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.models.lattice.Site`
+            Defines the local Hilbert space for each site.
+        grids : list of list of list of entries
+            For each site (outer-most list) a matrix-grid (corresponding to ``wL, wR``)
+            with entries being or representing onsite-operators.
+            `Entries` may be ``None``, :class:`~tenpy.linalg.np_conserved.Array` or of the
+            form ``[(opname, strength), ...]``, where 'opname' labels an operator in `site`.
+            In the last case, the entry is a sum of `strength`*`op`, where `op` is obtained
+            from the corresponding site with :meth:`~tenpy.networks.site.Site.get_op`.
+        bc : {'finite' | 'segment' | 'infinite'}
+            Boundary conditions as described in :mod:`~tenpy.networks.mps`.
+        IdL : (iterable of) {int | None}
+            Indices on the bonds, which correpond to 'only identities to the left'.
+            A single entry holds for all bonds.
+        IdR : (iterable of) {int | None}
+            Indices on the bonds, which correpond to 'only identities to the right'.
+
+        See also
+        --------
+        :meth:`~tenpy.linalg.np_conserved.grid_outer` : converts a grid into an Array
+        """
+        chinfo = sites[0].leg.chinfo
+        L = len(sites)
+        assert len(grids) == L  # wrong arguments?
+        grids = [grid_insert_ops(site, grid) for site, grid in zip(sites, grids)]
+        if Ws_qtotal is None:
+            Ws_qtotal = [chinfo.make_valid()] * L
+        else:
+            Ws_qtotal = chinfo.make_valid(Ws_qtotal)
+            if Ws_qtotal.ndim == 1:
+                Ws_qtotal = [Ws_qtotal] * L
+        IdL = cls._get_Id(IdL, L)
+        IdR = cls._get_Id(IdR, L)
+        if bc != 'infinite':
+            if leg0 is None:
+                # ensure that we have only a single entry in the first and last leg
+                # i.e. project grids[0][:, :] -> grids[0][IdL[0], :]
+                # and         grids[-1][:, :] -> grids[-1][:,IdR[-1], :]
+                first_grid = grids[0]
+                last_grid = grids[-1]
+                if len(first_grid) > 1:
+                    grids[0] = first_grid[IdL[0]]
+                    IdL[0] = 0
+                if len(last_grid[0]) > 1:
+                    grids[0] = [row[IdR[-1]] for row in last_grid]
+                    IdR[-1] = 0
+            legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0)
+        else:
+            legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL[0])
+        # now build the `W` from the grid
+        assert len(legs) == L + 1
+        Ws = []
+        for i in range(L):
+            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i])
+            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            Ws.append(W)
+        return cls(sites, Ws, bc, IdL, IdR)
 
     def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
@@ -133,7 +186,6 @@ class MPO(object):
             assert (self._W[-1].get_leg('wR').ind_len == 1)
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
             raise ValueError("wrong len of `IdL`/`IdR`")
-
     @property
     def L(self):
         """Number of physical sites. For an iMPO the len of the MPO unit cell."""
@@ -191,6 +243,17 @@ class MPO(object):
             raise ValueError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
 
+    @staticmethod
+    def _get_Id(Id, L):
+        """parse the IdL or IdR argument of __init__"""
+        if Id is None:
+            return [None] * (L + 1)
+        else:
+            try:
+                return list(Id)
+            except TypeError:
+                return [Id] * (L + 1)
+
 
 class MPOGraph(object):
     """Representation of an MPO by a graph, based on a 'finite state machine'.
@@ -246,8 +309,6 @@ class MPOGraph(object):
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
         self._ordered_states = None
-        self._grids = None
-        self._grid_legs = None
         self.test_sanity()
 
     def test_sanity(self):
@@ -376,13 +437,14 @@ class MPOGraph(object):
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
         return keyR in self.graph[i].get(keyL, [])
 
-    def build_MPO(self, W_qtotal=None, leg0=None):
+    def build_MPO(self, Ws_qtotal=None, leg0=None):
         """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
-        W_qtotal : None | charge
-            A single qtotal used for *each* of the individual `W`.
+        Ws_qtotal : None | (list of) charges
+            The `qtotal` for each of the Ws to be generated., default (``None``) means 0 charge.
+            A single qtotal holds for each site.
         leg0 : None | :class:`npc.LegCharge`
             The charges to be used for the very first leg (which is a gauge freedom).
             If ``None`` (default), use zeros.
@@ -395,18 +457,10 @@ class MPOGraph(object):
         self.test_sanity()
         # pre-work: generate the grid
         self._set_ordered_states()
-        self._build_grids()
-        self._calc_grid_legs(W_qtotal, leg0)
-        # now build the `W` from the grid
-        Ws = []
-        for i in range(self.L):
-            legs = [self._grid_legs[i], self._grid_legs[i + 1].conj()]
-            W = npc.grid_outer(self._grids[i], legs, W_qtotal)
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
-            Ws.append(W)
+        grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        return MPO(self.sites, Ws, self.bc, IdL, IdR)
+        return MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0)
 
     def __repr__(self):
         return "<MPOGraph L={L:d}>".format(L=self.L)
@@ -467,118 +521,8 @@ class MPOGraph(object):
                     b = stR[keyR]
                     row[b] = lst
                 grid[a] = row
-            grid = self._grid_insert_ops(grid, i)  # replace `lst` by the actual operators
             grids.append(grid)
-        self._grids = grids
-
-    def _grid_insert_ops(self, grid, i):
-        """Replaces ``[('opname', strength)]`` in a grid representing W[i] with actual Arrays.
-
-        Parameters
-        ----------
-        grid : list of list of entries
-            Entries may be ``None`` or like ``[(opname, strength)]``. Modified.
-        i : int
-            MPS index at which the grid is define
-
-        Returns
-        -------
-        grid : list of list of {None | :class:`~tenpy.linalg.np_conserved.Array`}
-            The grid W[i] with operators
-        """
-        site = self.sites[i]
-        for row in grid:
-            for i, entry in enumerate(row):
-                if entry is None:
-                    continue
-                opname, strength = entry[0]
-                res = strength * site.get_op(opname)
-                for opname, strength in entry[1:]:
-                    res = res + strength * site.get_op(opname)
-                row[i] = res  # replace entry
-        return grid
-
-    def _calc_grid_legs(self, W_qtotal, leg0):
-        """calculate LegCharges for the grids from self.grid"""
-        grids = self._grids
-        assert (grids is not None)  # make sure _grid_insert_ops was called
-        if self.bc != 'infinite':
-            self._calc_grid_legs_finite(grids, W_qtotal, leg0)
-        else:
-            self._calc_grid_legs_infinite(grids, W_qtotal, leg0)
-
-    def _calc_grid_legs_finite(self, grids, W_qtotal, leg0):
-        """calculate LegCharges from `self._grid` for a finite MPO.
-
-        This is the easier case. We just gauge the very first leg to the left to zeros,
-        then all other charges (hopefully) follow from the entries of the grid."""
-        if leg0 is None:
-            if len(grids[0]) != 1:
-                raise ValueError("finite MPO with len of first bond != 1: how????")
-            q = self.chinfo.make_valid()
-            leg0 = npc.LegCharge.from_qflat(self.chinfo, [q], qconj=+1)
-        legs = [leg0]
-        for i, gr in enumerate(grids):
-            gr_legs = [legs[-1], None]
-            gr_legs = npc.detect_grid_outer_legcharge(
-                gr, gr_legs, qtotal=W_qtotal, qconj=-1, bunch=False)
-            legs.append(gr_legs[1].conj())
-        self._grid_legs = legs
-
-    def _calc_grid_legs_infinite(self, grids, W_qtotal, leg0):
-        """calculate LegCharges from `self._grid` for an iMPO.
-
-        The hard case. Initially, we do not know all charges of the first leg; and they have to
-        be consistent with the final leg.
-
-        The way to go: gauge 'IdL' on the very left leg to 0, then gradually calculate the charges
-        by going along the edges of the graph (maybe also over the iMPO boundary).
-        """
-        if leg0 is not None:
-            # have charges of first leg: simple case, can use the *_finite version.
-            self._calc_grid_legs_finite(self, grids, W_qtotal, leg0)
-            # just make sure, that everything is self consistent over the MPS boundary.
-            self.legs[-1].test_contractible(self.legs[0])
-            return
-        chinfo = self.chinfo
-        W_qtotal = chinfo.make_valid(W_qtotal)
-        states = self._ordered_states
-        assert (states is not None)  # make sure self._set_ordered_states() was called
-        charges = [{} for _ in range(self.L)]
-        charges.append(charges[0])  # the *same* dictionary is shared for 0 and -1.
-        charges[0]['IdL'] = self.chinfo.make_valid(None)  # default charge = 0.
-        chis = [len(s) for s in self.states]
-        for _ in range(
-                1000 * self.L):  # I don't expect interactions with larger range than that...
-            for i in range(self.L):
-                chL, chR = charges[i:i + 2]
-                stL, stR = states[i:i + 2]
-                graph = self.graph[i]
-                grid = self._grids[i]
-                for keyL, qL in chL.copy().items():  # copy: for L=1 infinite, chL is chR
-                    for keyR in graph[keyL]:
-                        # calculate charge qR from the entry of the grid
-                        op = grid[stL[keyL]][stR[keyR]]
-                        assert (op is not None)
-                        qR = chinfo.make_valid(qL + op.qtotal - W_qtotal)
-                        if keyR not in chR:
-                            chR[keyR] = qR
-                        elif any(chR[keyR] != qR):
-                            raise ValueError("incompatible charges while creating the MPO")
-            if all([len(qs) == chi for qs, chi in zip(charges, chis)]):
-                break
-        else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
-            # this should not happen (if we have no bugs), but who knows ^_^
-            # if it happens, there might be unconnected parts in the graph
-            raise ValueError("Can't determine LegCharge for the MPO")
-        # finally generate LegCharge from the dictionaries
-        self._grid_legs = []
-        for qs, st in zip(charges, states):
-            qfl = [None] * len(qs)
-            for key, q in qs.items():
-                qfl[st[key]] = q
-            leg = npc.LegCharge.from_qflat(chinfo, qfl, qconj=+1)
-            self._grid_legs.append(leg)
+        return grids
 
 
 class MPOEnvironment(MPSEnvironment):
@@ -774,3 +718,105 @@ class MPOEnvironment(MPSEnvironment):
         RP = npc.tensordot(
             self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
         return RP  # labels 'vL', 'wL', 'vL*'
+
+
+def grid_insert_ops(site, grid):
+    """Replaces ``[('opname', strength), ...]`` in a grid of ``W[i]`` with actual npc.Arrays.
+
+    Parameters
+    ----------
+    site : :class:`~tenpy.networks.site`
+        The site at which
+    grid : list of list of `entries`
+        Represents a single matrix `W` of an MPO, i.e. the lists correspond to the legs
+        ``'vL', 'vR'``, and entries to onsite operators acting on the given `site`.
+        `Entries` may be ``None``, :class:`~tenpy.linalg.np_conserved.Array`
+        or of the form ``[(opname, strength), ...]``, where 'opname' labels an operator in `site`.
+
+    Returns
+    -------
+    grid : list of list of {None | :class:`~tenpy.linalg.np_conserved.Array`}
+        Copy of `grid` with ``[(opname, strength), ...]`` replace by
+        ``sum([strength*site.get_op(opname) for opname, strength in entry])``.
+    """
+    new_grid = []
+    for row in grid:
+        new_row = list(row)
+        for j, entry in enumerate(new_row):
+            if entry is None or isinstance(entry, npc.Array):
+                continue
+            opname, strength = entry[0]
+            res = strength * site.get_op(opname)
+            for opname, strength in entry[1:]:
+                res = res + strength * site.get_op(opname)
+            row[j] = res  # replace entry
+            #  row[j] = sum([strength*site.get_op(opname) for opname, strength in entry])
+    return grid
+
+
+def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
+    """Calculate LegCharges from `grids` for a finite MPO.
+
+    This is the easier case. We just gauge the very first leg to the left to zeros,
+    then all other charges (hopefully) follow from the entries of the grid."""
+    if leg0 is None:
+        if len(grids[0]) != 1:
+            raise ValueError("finite MPO with len of first bond != 1")
+        q = chinfo.make_valid()
+        leg0 = npc.LegCharge.from_qflat(chinfo, [q], qconj=+1)
+    legs = [leg0]
+    for i, gr in enumerate(grids):
+        gr_legs = [legs[-1], None]
+        gr_legs = npc.detect_grid_outer_legcharge(
+            gr, gr_legs, qtotal=Ws_qtotal[i], qconj=-1, bunch=False)
+        legs.append(gr_legs[1].conj())
+    return legs
+
+
+def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
+    """calculate LegCharges from `grids` for an iMPO.
+
+    The hard case. Initially, we do not know all charges of the first leg; and they have to
+    be consistent with the final leg.
+
+    The way this workso: gauge 'IdL' on the very left leg to 0,
+    then gradually calculate the charges by going along the edges of the graph (maybe also over the iMPO boundary).
+    """
+    if leg0 is not None:
+        # have charges of first leg: simple case, can use the _calc_grid_legs_finite version.
+        legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0)
+        legs[-1].test_contractible(legs[0])  # consistent?
+        return legs
+    L = len(grids)
+    chis = [len(g) for g in grids]
+    charges = [[None]*chi for chi in chis]
+    charges.append(charges[0])  # the *same* list is shared for 0 and -1.
+
+    charges[0][IdL_0] = chinfo.make_valid(None)  # default charge = 0.
+
+    for _ in range(1000 * L):  # I don't expect interactions with larger range than that...
+        for i in range(L):
+            grid = grids[i]
+            QsL, QsR = charges[i:i + 2]
+            for vL, row in enumerate(grid):
+                qL = QsL[vL]
+                if qL is None:
+                    continue  # don't know the charge on the left yet
+                for vR, op in enumerate(row):
+                    if op is None:
+                        continue
+                    # calculate charge qR from the entry of the grid
+                    qR = chinfo.make_valid(qL + op.qtotal - Ws_qtotal[i])
+                    if QsR[vR] is None:
+                        QsR[vR] = qR
+                    elif np.any(QsR[vR] != qR):
+                        raise ValueError("incompatible charges while creating the MPO")
+        if not any(q is None for Qs in charges for q in Qs):
+            break
+    else:  # no `break` in the for loop, i.e. we are unable to determine all grid legcharges.
+        # this should not happen (if we have no bugs), but who knows ^_^
+        # if it happens, there might be unconnected parts in the graph
+        raise ValueError("Can't determine LegCharge for the MPO")
+    legs = [npc.LegCharge.from_qflat(chinfo, qflat, qconj=+1) for qflat in charges[:-1]]
+    legs.append(legs[0])
+    return legs
