@@ -137,7 +137,7 @@ class TFIModel2D(CouplingModel, MPOModel):
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
-        J = -np.asarray(J)
+        J = np.asarray(J)
         if conserve is None:
             self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [1, 0])
             self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [0, 1])
