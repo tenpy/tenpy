@@ -279,7 +279,7 @@ class Lattice(object):
     def lat2mps_idx(self, lat_idx):
         """translate lattice indices ``(x_0, ..., x_{D-1}, u)`` to MPS index `i`."""
         i = np.sum(self._asvalid_latidx(lat_idx) * self._strides, axis=-1)
-        return self._perm[i]
+        return np.take(self._perm, i)
 
     def mps_idx_fix_u(self, u=None):
         """return an index array of MPS indices for which the site within the unit cell is `u`.

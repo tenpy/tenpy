@@ -45,6 +45,8 @@ Changed
 
 - don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
 - Renamed the `SquareLattice` class to :class:`tenpy.models.lattice.Square` for better consistency.
+- auto-determine wheter Jordan-Wigner strings are necessary in
+  :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 
 Fixed
 ^^^^^
