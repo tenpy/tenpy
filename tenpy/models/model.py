@@ -222,31 +222,36 @@ class CouplingModel(object):
                                  "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
-        idx_i, idx_i_lat = self.lat.mps_lat_idx_fix_u(u1)
-        idx_j_lat_shifted = idx_i_lat + dx
-        idx_j_lat = np.mod(idx_j_lat_shifted, np.array(self.lat.Ls)) # assuming PBC
+
+        # prepare: figure out the necessary mps indices
+        mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u1)
+        lat_j_shifted = lat_i + dx
+        lat_j = np.mod(lat_j_shifted, np.array(self.lat.Ls)) # assuming PBC
         keep = np.all(
             np.logical_or(
-                idx_j_lat_shifted == idx_j_lat,  # not accross the boundary
+                lat_j_shifted == lat_j,  # not accross the boundary
                 np.logical_not(self.bc_coupling)),  # direction has PBC
             axis=1)
-        idx_i = idx_i[keep]
-        idx_i_lat = idx_i_lat[keep]
-        idx_j_lat = idx_j_lat[keep]
-        idx_j = self.lat.lat2mps_idx(np.hstack([idx_j_lat, [[u2]] * len(idx_i_lat)]))
-        j_shift_unitcells = (idx_j_lat_shifted[keep, 0] - idx_j_lat[:, 0]) // self.lat.N_rings
-        for i, i_lat, j, j_shift in zip(idx_i, idx_i_lat, idx_j, j_shift_unitcells):
-            current_strength = strength[tuple(i_lat + shift_i_lat_strength)]
+        mps_i = mps_i[keep]
+        lat_i = lat_i[keep] + shift_i_lat_strength[np.newaxis, :]
+        lat_j = lat_j[keep]
+        mps_j = self.lat.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
+        N_sites = self.lat.N_sites
+        if self.lat.bc_MPS == 'infinite':
+            # shift j by whole unit cells for couplings along the infinite direction
+            mps_j_shift = (lat_j_shifted[keep, 0] - lat_j[:, 0]) * (N_sites // self.lat.N_rings)
+            mps_j += mps_j_shift
+            # finally, ensure 0 <= min(i, j) < N_sites.
+            mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
+            mps_i += mps_ij_shift
+            mps_j += mps_ij_shift
+
+        # loop to perform the sum over {x_0, x_1, ...}
+        for i, i_lat, j in zip(mps_i, lat_i, mps_j):
+            current_strength = strength[tuple(i_lat)]
             if current_strength == 0.:
                 continue
             o1, o2 = op1, op2
-            if self.lat.bc_MPS == 'infinite':
-                N_sites = self.lat.N_sites
-                if j_shift > 0:
-                    j = j + j_shift * N_sites  # ensures 0 <= i < N_sites <= j
-                elif j_shift < 0:
-                    i = i - j_shift * N_sites  # ensures 0 <= j < N_sites <= i
-                # else: j_shift == 0, just swap if necessary
             swap = (j < i)  # ensure i <= j
             if swap:
                 if raise_op2_left:
@@ -434,6 +439,230 @@ class CouplingModel(object):
         # done
 
 
+class MultiCouplingModel(CouplingModel):
+    """Generalizes :class:`CouplingModel` to allow couplings involving more than two sites.
+
+    Attributes
+    ----------
+    coupling_terms : dict of dict
+        Generalization of the coupling_terms of a :class:`CouplingModel` for M-site couplings.
+        Filled by :meth:`add_coupling` or :meth:`add_multi_coupling`.
+        Nested dictionaries of the following form::
+
+            {i: {('opname_i', 'opname_string_ij'):
+                 {j: {('opname_j', 'opname_string_jk'):
+                      {k: {('opname_k', 'opname_string_kl'):
+                           ...
+                           {l: {'opname_l': strength
+                           }   }
+                      }   }
+                 }   }
+            }   }
+
+        For a M-site coupling, this involves a nesting depth of 2*M dictionaries.
+        Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= lat.N_sites``
+        are allowed for ``lat.bc_MPS == 'infinite'``, in which case they indicate couplings
+        between different iMPS unit cells.
+    """
+
+    def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None):
+        r"""Add multi-site coupling terms to the Hamiltonian.
+
+        Represents couplings of the form
+        :math:`sum_{x_0, ..., x_{dim-1}} strength[loc(\vec{x})] * OP0 * OP1 * ... * OPM`,
+        where ``OP_0 := lat.unit_cell[u0].get_op(op0)`` acts on the site
+        ``(x_0, ..., x_{dim-1}, u0)``,
+        and ``OP_m := lat.unit_cell[other_u[m]].get_op(other_op[m])``, m=1...M, acts on the site
+        ``(x_0+other_dx[m][0], ..., x_{dim-1}+other_dx[m][dim-1], other_u[m])``.
+        For periodic boundary conditions along direction `a` (``bc_coupling[a] == False``)
+        the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
+        For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
+        ``0 <= x_a+other_dx[m,a] < lat.Ls[a]``.
+        The coupling `strength` may vary spatially, :math:`loc(\vec{x})` indicates the lower left
+        corner of the hypercube containing all the involved sites
+        :math:`\vec{x}, \vec{x}+\vec{other_dx[m, :]}`.
+
+        The necessary terms are just added to :attr:`coupling_terms`; doesn't rebuild the MPO.
+
+        Parameters
+        ----------
+        strength : scalar | array
+            Prefactor of the coupling. May vary spatially and is tiled to the required shape.
+        u0 : int
+            Picks the site ``lat.unit_cell[u0]`` for OP0.
+        op0 : str
+            Valid operator name of an onsite operator in ``lat.unit_cell[u0]`` for OP0.
+        other_ops : list of ``(u, op_m, dx)``
+            One tuple for each of the other operators ``OP1, OP2, ... OPM`` involved.
+            `u` picks the site ``lat.unit_cell[u]``, `op_name` is a valid operator acting on that
+            site, and `dx` gives the translation vector between ``OP0`` and the specified operator.
+        op_string : str | None
+            Name of an operator to be used inbetween the operators, excluding the sites on which
+            the operators act. This operator should be defined on all sites in the unit cell.
+
+            Special case: If ``None``, auto-determine whether a Jordan-Wigner string is needed
+            (using :meth:`~tenpy.networks.site.Site.op_needs_JW`), for each of the segments
+            inbetween the operators and also on the sites of the left operators.
+            Note that in this case the ordering of the operators *is* important and handled in the
+            usual convention that ``OPM`` acts first and ``OP0`` last on a physical state.
+
+            .. warning :
+                ``None`` figures out for each segment between the operators, whether a
+                Jordan-Wigner string is needed.
+                This is different from a plain ``'JW'``, which just applies a string on
+                each segment!
+        """
+        other_ops = list(other_ops)
+        M = len(other_ops)
+        all_us = np.array([u0] + [oop[0] for oop in other_ops], np.intp)
+        all_ops = [op0] + [oop[1] for oop in other_ops]
+        dx = np.array([oop[2] for oop in other_ops], np.intp).reshape([M, self.lat.dim])
+        shift_i_lat_strength, coupling_shape = self._coupling_shape(dx)
+        strength = to_array(strength, coupling_shape)  # tile to correct shape
+        if not np.any(strength != 0.):
+            return  # nothing to do: can even accept non-defined onsite operators
+        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op)
+                            for u, op in zip(all_us, all_ops)], dtype=np.bool_)
+        if op_string is None and not any(need_JW):
+            op_string = 'Id'
+        for u, op, _ in [(u0, op0, None)] + other_ops :
+            if not self.lat.unit_cell[u].valid_opname(op):
+                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
+        if op_string is not None:
+            if not np.sum(need_JW) % 2 == 0:
+                raise ValueError("Invalid coupling: would need 'JW' string on the very left")
+            for u in range(len(self.lat.unit_cell)):
+                if not self.lat.unit_cell[u].valid_opname(op_string):
+                    raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                                     "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
+        if np.all(dx == 0) and np.all(u0 == all_us):
+            # note: we DO allow couplings with some onsite terms, but not all of them
+            raise ValueError("Coupling shouldn't be purely onsite!")
+
+        # prepare: figure out the necessary mps indices
+        mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u0)
+        lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
+        lat_jkl = np.mod(lat_jkl_shifted, np.array(self.lat.Ls)) # assuming PBC
+        keep = np.all(
+            np.logical_or(
+                lat_jkl_shifted == lat_jkl,  # not accross the boundary
+                np.logical_not(self.bc_coupling)),  # direction has PBC
+            axis=(1, 2))
+        mps_i = mps_i[keep]
+        lat_i = lat_i[keep, :] + shift_i_lat_strength[np.newaxis, :]
+        lat_jkl = lat_jkl[keep, :, :]
+        latu_jkl = np.concatenate((lat_jkl, np.array([all_us[1:]]*len(lat_jkl))[:, :, np.newaxis]),
+                                  axis=2)
+        mps_jkl = self.lat.lat2mps_idx(latu_jkl)
+        N_sites = self.lat.N_sites
+        if self.lat.bc_MPS == 'infinite':
+            # shift by whole unit cells for couplings along the infinite direction
+            mps_jkl_shift = ((lat_jkl_shifted[keep, :, 0] - lat_jkl[:, :, 0])
+                             * (N_sites // self.lat.N_rings))
+            mps_jkl += mps_jkl_shift
+        mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
+
+        # loop to perform the sum over {x_0, x_1, ...}
+        for ijkl, i_lat in zip(mps_ijkl, lat_i):
+            current_strength = strength[tuple(i_lat)]
+            if current_strength == 0.:
+                continue
+            ijkl, ops, op_str = _multi_coupling_group_handle_JW(
+                ijkl, all_ops, need_JW, op_string, N_sites)
+            # create the nested structure
+            # {ijkl[0]: {(ops[0], op_str[0]):
+            #            {ijkl[1]: {(ops[1], op_str[1]):
+            #                       ...
+            #                           {ijkl[-1]: {ops[-1]: current_strength}
+            #            }         }
+            # }         }
+            d0 = self.coupling_terms
+            for x in range(len(ijkl)-1):
+                d1 = d0.setdefault(ijkl[x], dict())
+                d0 = d1.setdefault((ops[x], op_str[x]), dict())
+            d1 = d0.setdefault(ijkl[-1], dict())
+            op = ops[-1]
+            d1[op] = d1.get(op, 0) + current_strength
+        # done
+
+    def _test_coupling_terms(self, d0=None):
+        sites = self.lat.mps_sites()
+        N_sites = len(sites)
+        if d0 is None:
+            d0 = self.coupling_terms
+        for i, d1 in d0.items():
+            site_i = sites[i % N_sites]
+            for key, d2 in d1.items():
+                if isinstance(key, tuple):  # further couplings
+                    op_i, opstring_ij = key
+                    if not site_i.valid_opname(op_i):
+                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                    self._test_coupling_terms(d2)  # recursive!
+                else:  # last term of the coupling
+                    op_i = key
+                    if not site_i.valid_opname(opname_j):
+                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+        # done
+
+    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15, d0=None):
+        """remove entries of strength `0` from ``self.coupling_terms``."""
+        if d0 is None:
+            d0 = self.coupling_terms
+        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
+        for i, d1 in list(d0.items()):
+            for key, d2 in list(d1.items()):
+                if isinstance(key, tuple):
+                    self._remove_coupling_terms_zeros(tol_zero, d2)  # recursive!
+                    if len(d2) == 0:
+                        del d1[key]
+                else:
+                    # key is opname_j, d2 is strength
+                    if abs(d2) < tol_zero:
+                        del d1[key]
+            if len(d1) == 0:
+                del d0[i]
+        # done
+
+    def _coupling_shape(self, dx):
+        """calculate correct shape of the strengths for each coupling."""
+        if dx.ndim == 1:
+            return super()._coupling_shape(dx)
+        Ls = self.lat.Ls
+        shape = [None]*len(Ls)
+        shift_strength = [None]*len(Ls)
+        for a in range(len(Ls)):
+            max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
+            box_dx = max(max_dx, 0) - min(min_dx, 0)
+            shape[a] = Ls[a] - box_dx * int(self.bc_coupling[a])
+            shift_strength[a] = min(0, min_dx)
+        return np.array(shift_strength), tuple(shape)
+
+    def _graph_add_coupling_terms(self, graph, i=None, d1=None, label_left=None):
+        # nested structure of coupling_terms:
+        # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
+        if d1 is None:  # beginning of recursion
+            for i, d1 in self.coupling_terms.items():
+                self._graph_add_coupling_terms(graph, i, d1, 'IdL')
+        else:
+            for key, d2 in d1.items():
+                if isinstance(key, tuple): # further nesting
+                    op_i, op_string_ij = key
+                    if isinstance(label_left, str) and label_left == 'IdL':
+                        label = (i, op_i, op_string_ij)
+                    else:
+                        label = label_left + (i, op_i, op_string_ij)
+                    graph.add(i, label_left, label, op_i, 1.)
+                    for j, d3 in d2.items():
+                        label_j = graph.add_string(i, j, label, op_string_ij)
+                        self._graph_add_coupling_terms(graph, j, d3, label_j)
+                else:  # maximal nesting reached: exit recursion
+                    # i is actually the `l`
+                    op_i, strength = key, d2
+                    graph.add(i, label_left, 'IdR', op_i, strength)
+        # done
+
+
 class NearestNeighborModel(object):
     """Base class for a model of nearest neigbor interactions (w.r.t. the MPS index).
 
@@ -528,3 +757,56 @@ class MPOModel(object):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
 
+
+def _multi_coupling_group_handle_JW(ijkl, ops, ops_need_JW, op_string, N_sites):
+    """Helping function for MultiCouplingModel.add_multi_coupling.
+
+    Sort and groups the operators by sites `ijkl` they act on, such that the returned `new_ijkl`
+    is strictly ascending, i.e. has entries `i < j < k < l`.
+    Also, handle/figure out Jordan-Wigner strings if needed.
+    """
+    number_ops = len(ijkl)
+    reorder = np.argsort(ijkl, kind='mergesort')  # need stable kind!!!
+    if not 0 <= ijkl[reorder[0]] < N_sites:  # ensure this condition with a shift
+        ijkl += ijkl[reorder[0]] % N_sites - ijkl[reorder[0]]
+    # what we want to calculate:
+    new_ijkl = []
+    new_ops = []
+    new_op_str = []  # new_op_string[x] is right of new_ops[x]
+    # first make groups with strictly ``i < j < k < ... ``
+    i0 = -1  # != the first i since -1 <  0 <= ijkl[:]
+    grouped_reorder = []
+    for x in reorder:
+        i = ijkl[x]
+        if i != i0:
+            i0 = i
+            new_ijkl.append(i)
+            grouped_reorder.append([x])
+        else:
+            grouped_reorder[-1].append(x)
+    if op_string is not None:
+        # simpler case
+        for group in grouped_reorder:
+            new_ops.append(' '.join([ops[x] for x in group]))
+            new_op_str.append(op_string)
+        new_op_str.pop()  # remove last entry (created one too much)
+    else:
+        # more complicated: handle Jordan-Wigner
+        for a, group in enumerate(grouped_reorder):
+            right = [z for gr in grouped_reorder[a+1:] for z in gr]
+            onsite_ops = []
+            need_JW_right = False
+            JW_max = -1
+            for x in group + [number_ops]:
+                JW_min, JW_max = JW_max, x
+                need_JW = (np.sum([ops_need_JW[z] for z in right if JW_min < z < JW_max]) % 2 == 1)
+                if need_JW:
+                    onsite_ops.append('JW')
+                    need_JW_right = not need_JW_right
+                if x != number_ops:
+                    onsite_ops.append(ops[x])
+            new_ops.append(' '.join(onsite_ops))
+            op_str_right = 'JW' if need_JW_right else 'Id'
+            new_op_str.append(op_str_right)
+        new_op_str.pop()  # remove last entry (created one too much)
+    return new_ijkl, new_ops, new_op_str

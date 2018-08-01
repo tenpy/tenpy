@@ -20,6 +20,7 @@ Added
   along with methods to count the number of nearest neighbors for sites in the bulk, and
   a way to plot them (:meth:`~tenpy.models.lattice.plot_coupling`)
 - :meth:`tenpy.networks.mpo.MPO.from_grids` to generate the MPO from a grid.
+- :class:`tenpy.models.model.MultiCouplingModel` for couplings involving more than 2 sites.
 
 Changed
 ^^^^^^^

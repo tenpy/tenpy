@@ -35,7 +35,7 @@ def test_CouplingModel_fermions():
         fermion_lat = lattice.Chain(5, fermion_site, bc_MPS=bc_MPS)
         M = model.CouplingModel(fermion_lat, bc)
         M.add_coupling(1.2, 0, 'Cd', 0, 'C', 1, 'JW')
-        M.add_coupling(1.2, 0, 'C', 0, 'Cd', 1, 'JW')
+        M.add_coupling(1.2, 0, 'Cd', 0, 'C', -1, 'JW')
         M.test_sanity()
         M.calc_H_MPO()
         M.calc_H_bond()
@@ -45,13 +45,12 @@ def test_CouplingModel_explicit():
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl, 'periodic')
     M.add_onsite(0.125, 0, 'N')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), 'JW')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), 'JW')
-    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), 'JW')
-    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), 'JW')
-    M.add_coupling(4., 0, 'N', 0, 'N', (2, 1), 'Id')  # a full unit cell inbetween!
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None) # auto-determine JW-string!
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
+    M.add_coupling(4., 0, 'N', 0, 'N', (2, 1), None)  # a full unit cell inbetween!
     H_mpo = M.calc_H_MPO()
-    # MPO should be translation invariant!
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
@@ -86,10 +85,67 @@ def test_CouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
+def test_MultiCouplingModel_explicit():
+    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc_MPS='infinite')
+    M = model.MultiCouplingModel(fermion_lat_cyl, 'periodic')
+    # create a wired fermionic model with 3-body interactions
+    M.add_onsite(0.125, 0, 'N')
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1))
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), 'JW')
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), 'JW')
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), 'JW')
+    M.add_multi_coupling(4., 0, 'N', [(0, 'N', (2, 1))], 'Id')  # a full unit cell inbetween!
+    # some wired mediated hopping along the diagonal
+    M.add_multi_coupling(1.125, 0, 'N', other_ops=[(0, 'Cd', (0, 1)), (0, 'C', (1, 0))])
+    H_mpo = M.calc_H_MPO()
+    W0_new = H_mpo.get_W(0)
+    W1_new = H_mpo.get_W(1)
+    W2_new = H_mpo.get_W(2)
+    Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
+    Cd, C = fermion_site.Cd, fermion_site.C
+    CdJW = Cd.matvec(JW)
+    JWC = JW.matvec(C)
+    NJW = N.matvec(JW)
+    # yapf: disable
+    W0_ex = [[Id,   None, None, CdJW, None, JWC,  N,    None, None, None, N*0.125],
+             [None, None, Id,   None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, N*4.0],
+             [None, None, None, None, None, None, None, None, None, None, C*1.5],
+             [None, None, None, None, JW,   None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, Cd*1.5],
+             [None, Id,   None, None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, C*1.125],
+             [None, None, None, None, None, None, None, JW,   None, None, None],
+             [None, None, None, None, None, None, None, None, JW,   None, None],
+             [None, None, None, None, None, None, None, None, None, Id,   None],
+             [None, None, None, None, None, None, None, None, None, None, Id]]
+    W1_ex = [[Id,   None, None, None, None, None, None, None, CdJW, JWC,  N,    N*0.125],
+             [None, Id,   None, None, None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, None, N*4.0],
+             [None, None, None, JW,   NJW,  None, None, None, None, None, None, C*0.5],
+             [None, None, None, None, None, None, None, None, None, None, None, C*1.125],
+             [None, None, None, None, None, JW,   None, None, None, None, None, Cd*0.5],
+             [None, None, None, None, None, None, Id,   CdJW, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, None, C*1.5],
+             [None, None, None, None, None, None, None, None, None, None, None, Cd*1.5],
+             [None, None, Id,   None, None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, None, Id]]
+
+    # yapf: enable
+    W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
+    W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
+    assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
+    assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
+
+
+
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M"""
     if isinstance(M, model.CouplingModel):
-        model.CouplingModel.test_sanity(M)
+        if isinstance(M, model.MultiCouplingModel):
+            model.MultiCouplingModel.test_sanity(M)
+        else:
+            model.CouplingModel.test_sanity(M)
     if isinstance(M, model.NearestNeighborModel):
         model.NearestNeighborModel.test_sanity(M)
         if hermitian:
@@ -130,4 +186,4 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         check_model_sanity(M)
 
 if __name__ == "__main__":
-    test_CouplingModel_explicit()
+    test_MultiCouplingModel_explicit()
