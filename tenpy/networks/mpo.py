@@ -114,11 +114,7 @@ class MPO(object):
             Defines the local Hilbert space for each site.
         grids : list of list of list of entries
             For each site (outer-most list) a matrix-grid (corresponding to ``wL, wR``)
-            with entries being or representing onsite-operators.
-            `Entries` may be ``None``, :class:`~tenpy.linalg.np_conserved.Array` or of the
-            form ``[(opname, strength), ...]``, where 'opname' labels an operator in `site`.
-            In the last case, the entry is a sum of `strength`*`op`, where `op` is obtained
-            from the corresponding site with :meth:`~tenpy.networks.site.Site.get_op`.
+            with entries being or representing (see :func:`grid_insert_ops`) onsite-operators.
         bc : {'finite' | 'segment' | 'infinite'}
             Boundary conditions as described in :mod:`~tenpy.networks.mps`.
         IdL : (iterable of) {int | None}
@@ -129,6 +125,7 @@ class MPO(object):
 
         See also
         --------
+        :meth:`grid_insert_ops` : used to convert `entries` of the grid into operators
         :meth:`~tenpy.linalg.np_conserved.grid_outer` : converts a grid into an Array
         """
         chinfo = sites[0].leg.chinfo
@@ -721,37 +718,42 @@ class MPOEnvironment(MPSEnvironment):
 
 
 def grid_insert_ops(site, grid):
-    """Replaces ``[('opname', strength), ...]`` in a grid of ``W[i]`` with actual npc.Arrays.
+    """Replaces entries representing operators in a grid of ``W[i]`` with npc.Arrays.
 
     Parameters
     ----------
     site : :class:`~tenpy.networks.site`
-        The site at which
+        The site on which the grid acts.
     grid : list of list of `entries`
         Represents a single matrix `W` of an MPO, i.e. the lists correspond to the legs
         ``'vL', 'vR'``, and entries to onsite operators acting on the given `site`.
-        `Entries` may be ``None``, :class:`~tenpy.linalg.np_conserved.Array`
-        or of the form ``[(opname, strength), ...]``, where 'opname' labels an operator in `site`.
+        `entries` may be ``None``, :class:`~tenpy.linalg.np_conserved.Array`, a single string
+        or of the form ``[('opname', strength), ...]``, where ``'opname'`` labels an operator in
+        the `site`.
 
     Returns
     -------
     grid : list of list of {None | :class:`~tenpy.linalg.np_conserved.Array`}
-        Copy of `grid` with ``[(opname, strength), ...]`` replace by
-        ``sum([strength*site.get_op(opname) for opname, strength in entry])``.
+        Copy of `grid` with entries ``[('opname', strength), ...]`` replaced by
+        ``sum([strength*site.get_op('opname') for opname, strength in entry])``
+        and entries ``'opname'`` replaced by ``site.get_op('opname')``.
     """
-    new_grid = []
-    for row in grid:
-        new_row = list(row)
+    new_grid = [None]*len(grid)
+    for i, row in enumerate(grid):
+        new_row = new_grid[i] = list(row)
         for j, entry in enumerate(new_row):
             if entry is None or isinstance(entry, npc.Array):
                 continue
-            opname, strength = entry[0]
-            res = strength * site.get_op(opname)
-            for opname, strength in entry[1:]:
-                res = res + strength * site.get_op(opname)
-            row[j] = res  # replace entry
-            #  row[j] = sum([strength*site.get_op(opname) for opname, strength in entry])
-    return grid
+            if isinstance(entry, str):
+                new_row[j] = site.get_op(entry)
+            else:
+                opname, strength = entry[0]
+                res = strength * site.get_op(opname)
+                for opname, strength in entry[1:]:
+                    res = res + strength * site.get_op(opname)
+                new_row[j] = res  # replace entry
+                # new_row[j] = sum([strength*site.get_op(opname) for opname, strength in entry])
+    return new_grid
 
 
 def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
