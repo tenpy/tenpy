@@ -14,6 +14,54 @@ spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
 
 fermion_site = tenpy.networks.site.FermionSite('N')
 
+__all__ = ["check_model_sanity", "check_general_model"]
+
+def check_model_sanity(M, hermitian=True):
+    """call M.test_sanity() for all different subclasses of M"""
+    if isinstance(M, model.CouplingModel):
+        if isinstance(M, model.MultiCouplingModel):
+            model.MultiCouplingModel.test_sanity(M)
+        else:
+            model.CouplingModel.test_sanity(M)
+    if isinstance(M, model.NearestNeighborModel):
+        model.NearestNeighborModel.test_sanity(M)
+        if hermitian:
+            for i, H in enumerate(M.H_bond):
+                if H is not None:
+                    err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
+                    if err > 1.e-14:
+                        print(H)
+                        raise ValueError("H on bond {i:d} not hermitian".format(i=i))
+    if isinstance(M, model.MPOModel):
+        model.MPOModel.test_sanity(M)
+        test_mpo.check_hermitian(M.H_MPO)
+
+
+def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
+    """Create a model for different sets of parameters and check it's sanity.
+
+    Parameters
+    ----------
+    ModelClass :
+        We generate models of this class
+    model_pars : dict
+        Model parameters used.
+    check_pars : dict
+        pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
+        ``check_params[key]`` (in each possible combination!) and create a model for it.
+    hermitian : bool
+        If True, check that the Hamiltonian is hermitian.
+    """
+    for vals in itertools.product(*list(check_pars.values())):
+        print("-" * 40)
+        params = model_pars.copy()
+        for k, v in zip(list(check_pars.keys()), vals):
+            params[k] = v
+        print("check_model_sanity with following parameters:")
+        print(params)
+        M = ModelClass(params)
+        check_model_sanity(M)
+
 
 def test_CouplingModel():
     spin_half_lat = lattice.Chain(5, spin_half_site, bc_MPS='finite')
@@ -28,6 +76,15 @@ def test_CouplingModel():
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
             M.calc_H_bond()
+
+def test_MultiCouplingModel_shift():
+    spin_half_square = lattice.Square(2, 3, spin_half_site, bc_MPS='infinite')
+    bc = ['periodic', 1]
+    M = model.MultiCouplingModel(spin_half_square, bc)
+    M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
+    M.add_multi_coupling(0.8, 0, 'Sz', [(0, 'Sz', [0, 1]), (0, 'Sz', [1, 0])])
+    M.test_sanity()
+    M.calc_H_MPO()
 
 
 def test_CouplingModel_fermions():
@@ -130,60 +187,12 @@ def test_MultiCouplingModel_explicit():
              [None, None, None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, Id,   None, None, None, None, None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, None, None, Id]]
-
     # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
     assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
-
-
-def check_model_sanity(M, hermitian=True):
-    """call M.test_sanity() for all different subclasses of M"""
-    if isinstance(M, model.CouplingModel):
-        if isinstance(M, model.MultiCouplingModel):
-            model.MultiCouplingModel.test_sanity(M)
-        else:
-            model.CouplingModel.test_sanity(M)
-    if isinstance(M, model.NearestNeighborModel):
-        model.NearestNeighborModel.test_sanity(M)
-        if hermitian:
-            for i, H in enumerate(M.H_bond):
-                if H is not None:
-                    err = npc.norm(H - H.conj().transpose(H.get_leg_labels()))
-                    if err > 1.e-14:
-                        print(H)
-                        raise ValueError("H on bond {i:d} not hermitian".format(i=i))
-    if isinstance(M, model.MPOModel):
-        model.MPOModel.test_sanity(M)
-        test_mpo.check_hermitian(M.H_MPO)
-
-
-def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
-    """Create a model for different sets of parameters and check it's sanity.
-
-    Parameters
-    ----------
-    ModelClass :
-        We generate models of this class
-    model_pars : dict
-        Model parameters used.
-    check_pars : dict
-        pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
-        ``check_params[key]`` (in each possible combination!) and create a model for it.
-    hermitian : bool
-        If True, check that the Hamiltonian is hermitian.
-    """
-    for vals in itertools.product(*list(check_pars.values())):
-        print("-" * 40)
-        params = model_pars.copy()
-        for k, v in zip(list(check_pars.keys()), vals):
-            params[k] = v
-        print("check_model_sanity with following parameters:")
-        print(params)
-        M = ModelClass(params)
-        check_model_sanity(M)
 
 if __name__ == "__main__":
     test_MultiCouplingModel_explicit()

@@ -18,9 +18,10 @@ Added
 - new :class:`tenpy.models.lattice.Honeycomb` lattice
 - a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
   along with methods to count the number of nearest neighbors for sites in the bulk, and
-  a way to plot them (:meth:`~tenpy.models.lattice.plot_coupling`)
+  a way to plot them (:meth:`~tenpy.models.lattice.plot_coupling` and friends)
 - :meth:`tenpy.networks.mpo.MPO.from_grids` to generate the MPO from a grid.
 - :class:`tenpy.models.model.MultiCouplingModel` for couplings involving more than 2 sites.
+- request #8: Allow shift in boundary conditions of :class:`~tenpy.models.model.CouplingModel`.
 
 Changed
 ^^^^^^^
@@ -44,9 +45,9 @@ Changed
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
 
-- don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
+- Don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
 - Renamed the `SquareLattice` class to :class:`tenpy.models.lattice.Square` for better consistency.
-- auto-determine wheter Jordan-Wigner strings are necessary in
+- auto-determine whether Jordan-Wigner strings are necessary in
   :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 
 Fixed

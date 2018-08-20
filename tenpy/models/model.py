@@ -16,7 +16,7 @@ by explicitly specifying the couplings of onsite-terms, and providing functional
 for converting the specified couplings into an MPO or nearest-neighbor bonds.
 This allows to quickly generate new model classes for a broad class of Hamiltonians.
 For simplicity, the :class:`CouplingModel` is limited to interactions involving only two sites.
-However, we also provide the :class:`MultiCouplintModel` to generate Models for Hamiltonians
+However, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
 involving couplings between multiple sites.
 
 For other cases (e.g. exponentially decaying long-range interactions in 1D),
@@ -35,7 +35,7 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
-__all__ = ['CouplingModel', 'NearestNeighborModel', 'MPOModel']
+__all__ = ['CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
 
 _bc_coupling_choices = {'open': True, 'periodic': False}
 
@@ -50,9 +50,12 @@ class CouplingModel(object):
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    bc_coupling : (iterable of) {'open' | 'periodic'}
+    bc_coupling : (iterable of) {``'open'`` | ``'periodic'`` | ``int``}
         Boundary conditions of the couplings in each direction of the lattice. Defines how the
         couplings are added in :meth:`add_coupling`. A single string holds for all directions.
+        An integer `shift` means that we have periodic boundary conditions along this direction,
+        but shift/tilt by ``lattice.basis[0] * shift`` (=cylinder axis for ``bc_MPS='infinite'``)
+        when going around the boundary along this direction.
 
     Attributes
     ----------
@@ -61,6 +64,8 @@ class CouplingModel(object):
     bc_coupling : bool ndarray
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `_bc_coupling_choices`.
+    bc_shift : None | ndarray(int)
+        The shift in x-direction when going around periodic boundaries in other directions.
     onsite_terms : list of dict
         Filled by :meth:`add_onsite`.
         For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
@@ -80,8 +85,19 @@ class CouplingModel(object):
         global _bc_coupling_choices
         if bc_coupling in list(_bc_coupling_choices.keys()):
             bc_coupling = [_bc_coupling_choices[bc_coupling]] * self.lat.dim
+            self.bc_shift = None
         else:
-            bc_coupling = [_bc_coupling_choices[bc] for bc in bc_coupling]
+            self.bc_shift = np.zeros(self.lat.dim-1, np.int_)
+            for i, bc in enumerate(bc_coupling):
+                if isinstance(bc, int):
+                    if i == 0:
+                        raise ValueError("Invalid bc_coupling: first entry can't be a shift")
+                    self.bc_shift[i-1] = bc
+                    bc_coupling[i] = _bc_coupling_choices['periodic']
+                else:
+                    bc_coupling[i] = _bc_coupling_choices[bc]
+            if not np.any(self.bc_shift != 0):
+                self.bc_shift = None
         self.bc_coupling = np.array(bc_coupling)
         self.onsite_terms = [dict() for _ in range(self.lat.N_sites)]
         self.coupling_terms = dict()
@@ -95,7 +111,7 @@ class CouplingModel(object):
             raise ValueError("Wrong len of bc_coupling")
         assert self.bc_coupling.dtype == np.bool
         assert int(_bc_coupling_choices['open']) == 1  # this is used explicitly
-        assert int(_bc_coupling_choices['periodic']) == 0
+        assert int(_bc_coupling_choices['periodic']) == 0   # and this as well
         if self.bc_coupling[0] and self.lat.bc_MPS == 'infinite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
@@ -224,9 +240,13 @@ class CouplingModel(object):
             raise ValueError("Coupling shouldn't be onsite!")
 
         # prepare: figure out the necessary mps indices
+        Ls = np.array(self.lat.Ls)
+        N_sites = self.lat.N_sites
         mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
-        lat_j = np.mod(lat_j_shifted, np.array(self.lat.Ls)) # assuming PBC
+        lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
+        if self.bc_shift is not None:
+            lat_j[:, 0] += np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
         keep = np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not accross the boundary
@@ -235,11 +255,12 @@ class CouplingModel(object):
         mps_i = mps_i[keep]
         lat_i = lat_i[keep] + shift_i_lat_strength[np.newaxis, :]
         lat_j = lat_j[keep]
+        lat_j_shifted = lat_j_shifted[keep]
         mps_j = self.lat.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
-        N_sites = self.lat.N_sites
         if self.lat.bc_MPS == 'infinite':
-            # shift j by whole unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[keep, 0] - lat_j[:, 0]) * (N_sites // self.lat.N_rings)
+            # shift j by whole MPS unit cells for couplings along the infinite direction
+            mps_j_shift = lat_j_shifted[:, 0] - np.mod(lat_j_shifted[:, 0], Ls[0])
+            mps_j_shift *= (N_sites // Ls[0])
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -541,9 +562,15 @@ class MultiCouplingModel(CouplingModel):
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
+        Ls = np.array(self.lat.Ls)
+        N_sites = self.lat.N_sites
         mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u0)
         lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
-        lat_jkl = np.mod(lat_jkl_shifted, np.array(self.lat.Ls)) # assuming PBC
+        # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
+        lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
+        if self.bc_shift is not None:
+            lat_jkl[:, :, 0] += np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] *
+                                       self.bc_shift, axis=2)
         keep = np.all(
             np.logical_or(
                 lat_jkl_shifted == lat_jkl,  # not accross the boundary
@@ -552,15 +579,14 @@ class MultiCouplingModel(CouplingModel):
         mps_i = mps_i[keep]
         lat_i = lat_i[keep, :] + shift_i_lat_strength[np.newaxis, :]
         lat_jkl = lat_jkl[keep, :, :]
+        lat_jkl_shifted = lat_jkl_shifted[keep, :, :]
         latu_jkl = np.concatenate((lat_jkl, np.array([all_us[1:]]*len(lat_jkl))[:, :, np.newaxis]),
                                   axis=2)
         mps_jkl = self.lat.lat2mps_idx(latu_jkl)
-        N_sites = self.lat.N_sites
         if self.lat.bc_MPS == 'infinite':
-            # shift by whole unit cells for couplings along the infinite direction
-            mps_jkl_shift = ((lat_jkl_shifted[keep, :, 0] - lat_jkl[:, :, 0])
-                             * (N_sites // self.lat.N_rings))
-            mps_jkl += mps_jkl_shift
+            # shift by whole MPS unit cells for couplings along the infinite direction
+            mps_jkl_shift = lat_jkl_shifted[:, :, 0] - np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
+            mps_jkl += mps_jkl_shift * (N_sites // Ls[0])
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
 
         # loop to perform the sum over {x_0, x_1, ...}
@@ -601,7 +627,7 @@ class MultiCouplingModel(CouplingModel):
                     self._test_coupling_terms(d2)  # recursive!
                 else:  # last term of the coupling
                     op_i = key
-                    if not site_i.valid_opname(opname_j):
+                    if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
         # done
 
