@@ -689,10 +689,11 @@ class Honeycomb(Lattice):
             if order == "default":
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
+                return get_order(self.shape, snake_winding, priority)
             elif order == "snake":
                 priority = (0, 2, 1)
                 snake_winding = (False, False, True)
-            return get_order(self.shape, snake_winding, priority)
+                return get_order(self.shape, snake_winding, priority)
         return super().ordering(order)
 
 
