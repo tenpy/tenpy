@@ -697,6 +697,131 @@ class Honeycomb(Lattice):
         return super().ordering(order)
 
 
+class Kagome(Lattice):
+    def __init__(self, x, Lx, Ly, sites, order="default", bc_MPS="infinite"):
+        """
+        Parameters
+        ----------
+        x : bool
+            If `True`, the lattice has nearest-neighbor connections aligned
+            parallel to the x-axis, i.e. the triangles of the Kagome lattice
+            are pointing up/down. If `False`, the lattice has nearest-neighbor
+            connections aligned parallel to the y-axis, i.e. the triangles of
+            the Kagome lattice are pointing left/right. The x-version has a
+            3-site unit cell, whereas the y-version has a 6-site unit cell.
+        Lx : int
+            The unit cell is repeated `Lx` times into the x-direction.
+        Ly : int
+            The unit cell is repeated `Ly` times into the y-direction.
+        sites : list of :class:`~tenpy.networks.Site`
+            Definitions of the physical site. If `x`, `sites` has to be of
+            length 3, otherwise of length 6.
+        """
+
+        self.x = x
+
+        if x:
+            """
+               2
+              / \
+             /   \
+            0-----1
+            """
+            self.pos = np.empty((3, 2))
+            self.pos[0] = [0, 0]
+            self.pos[1] = [1, 0]
+            self.pos[2] = [0.5, 0.5 * 3**0.5]
+
+            self.basis = np.empty((2, 2))
+            self.basis[0] = 2 * self.pos[1]
+            self.basis[1] = 2 * self.pos[2]
+
+            self.nearest_neighbors = [
+                (0, 1, np.array([0, 0])),
+                (0, 2, np.array([0, 0])),
+                (1, 2, np.array([0, 0])),
+                (1, 0, np.array([1, 0])),
+                (2, 0, np.array([0, 1])),
+                (2, 1, np.array([-1, 1]))
+            ]
+            self.next_nearest_neighbors = [
+                (0, 1, np.array([0, -1])),
+                (0, 2, np.array([1, -1])),
+                (1, 0, np.array([1, -1])),
+                (1, 2, np.array([1,  0])),
+                (2, 0, np.array([1,  0])),
+                (2, 1, np.array([0,  1]))
+            ]
+            self.next_next_nearest_neighbors = [
+                (0, 0, np.array([1, -1])),
+                (1, 1, np.array([0,  1])),
+                (2, 2, np.array([1,  0]))
+            ]
+
+        else:
+            """
+                      5
+                     /
+            1      4
+            | \   /|
+            |   2  |
+            | /   \|
+            0      3
+            """
+            self.pos = np.empty((6, 2))
+            self.pos[0] = [0, 0]
+            self.pos[1] = [0, 1]
+            self.pos[2] = [0.5 * 3**0.5, 0.5]
+            self.pos[3] = [3**0.5, 0]
+            self.pos[4] = 2 * self.pos[2]
+            self.pos[5] = 3 * self.pos[2]
+
+            self.basis = np.empty((2, 2))
+            self.basis[0] = 2 * self.pos[3]
+            self.basis[1] = 2 * self.pos[1]
+
+            self.nearest_neighbors = [
+                (0, 2, np.array([0, 0])),
+                (0, 1, np.array([0, -1])),
+                (1, 0, np.array([0, 0])),
+                (1, 2, np.array([0, 0])),
+                (2, 3, np.array([0, 0])),
+                (2, 4, np.array([0, 0])),
+                (3, 4, np.array([0, -1])),
+                (3, 5, np.array([0, -1])),
+                (4, 5, np.array([0, 0])),
+                (4, 3, np.array([0, 0])),
+                (5, 1, np.array([1, 0])),
+                (5, 0, np.array([1, 1]))
+            ]
+            self.next_nearest_neighbors = [
+                (0, 3, np.array([0,  0])),
+                (0, 2, np.array([0, -1])),
+                (1, 4, np.array([0,  0])),
+                (1, 2, np.array([0,  1])),
+                (2, 3, np.array([0,  1])),
+                (2, 4, np.array([0, -1])),
+                (3, 0, np.array([1,  0])),
+                (3, 5, np.array([0,  0])),
+                (4, 1, np.array([1,  0])),
+                (4, 5, np.array([0, -1])),
+                (5, 0, np.array([1,  0])),
+                (5, 1, np.array([1,  1]))
+            ]
+            self.next_next_nearest_neighbors = [
+                (0, 4, np.array([0, -1])),
+                (1, 3, np.array([0,  1])),
+                (2, 2, np.array([0,  1])),
+                (3, 1, np.array([1,  0])),
+                (4, 0, np.array([1,  0])),
+                (5, 5, np.array([0,  1]))
+            ]
+
+        Lattice.__init__(
+            self, [Lx, Ly], sites, order, bc_MPS, self.basis, self.pos
+        )
+        
+
 def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
