@@ -54,7 +54,7 @@ class CouplingModel(object):
         Boundary conditions of the couplings in each direction of the lattice. Defines how the
         couplings are added in :meth:`add_coupling`. A single string holds for all directions.
         An integer `shift` means that we have periodic boundary conditions along this direction,
-        but shift/tilt by ``lattice.basis[0] * shift`` (=cylinder axis for ``bc_MPS='infinite'``)
+        but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
         when going around the boundary along this direction.
 
     Attributes
@@ -246,7 +246,7 @@ class CouplingModel(object):
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
         if self.bc_shift is not None:
-            lat_j[:, 0] += np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
+            lat_j[:, 0] -= np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
         keep = np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not accross the boundary
@@ -569,7 +569,7 @@ class MultiCouplingModel(CouplingModel):
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
         lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
         if self.bc_shift is not None:
-            lat_jkl[:, :, 0] += np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] *
+            lat_jkl[:, :, 0] -= np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] *
                                        self.bc_shift, axis=2)
         keep = np.all(
             np.logical_or(
