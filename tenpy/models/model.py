@@ -162,7 +162,7 @@ class CouplingModel(object):
                      op_string=None,
                      str_on_first=True,
                      raise_op2_left=False):
-        r"""Add twosite coupling terms to the Hamiltonian.
+        r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
         :math:`\sum_{x_0, ..., x_{dim-1}} strength[loc(\vec{x})] * OP1 * OP2`, where
@@ -287,11 +287,33 @@ class CouplingModel(object):
                     o1 = ' '.join([op_string, o1])  # o1==op2 should act first
                 else:
                     o1 = ' '.join([o1, op_string])  # o1==op2 should act first
-            d1 = self.coupling_terms.setdefault(i, dict())
-            # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': current_strength}}}``
-            d2 = d1.setdefault((o1, op_string), dict())
-            d3 = d2.setdefault(j, dict())
-            d3[o2] = d3.get(o2, 0) + current_strength
+            self.add_coupling_term(current_strength, i, j, o1, o2, op_string)
+        # done
+
+    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id'):
+        """Add a two-site coupling term on given MPS sites.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        i, j : int
+            The MPS indices of the two sites on which the operator acts.
+            We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
+            If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
+        op1, op2 : str
+            Names of the involved operators.
+        op_string : str
+            The operator to be inserted between `i` and `j`.
+        """
+        if not 0 <= i < self.lat.N_sites:
+            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
+        assert i < j
+        d1 = self.coupling_terms.setdefault(i, dict())
+        # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': current_strength}}}``
+        d2 = d1.setdefault((op_i, op_string), dict())
+        d3 = d2.setdefault(j, dict())
+        d3[op_j] = d3.get(op_j, 0) + strength
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
@@ -488,7 +510,7 @@ class MultiCouplingModel(CouplingModel):
     """
 
     def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None):
-        r"""Add multi-site coupling terms to the Hamiltonian.
+        r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
         :math:`sum_{x_0, ..., x_{dim-1}} strength[loc(\vec{x})] * OP0 * OP1 * ... * OPM`,
@@ -597,21 +619,42 @@ class MultiCouplingModel(CouplingModel):
                 continue
             ijkl, ops, op_str = _multi_coupling_group_handle_JW(
                 ijkl, all_ops, need_JW, op_string, N_sites)
-            # create the nested structure
-            # {ijkl[0]: {(ops[0], op_str[0]):
-            #            {ijkl[1]: {(ops[1], op_str[1]):
-            #                       ...
-            #                           {ijkl[-1]: {ops[-1]: current_strength}
-            #            }         }
-            # }         }
-            d0 = self.coupling_terms
-            for x in range(len(ijkl)-1):
-                d1 = d0.setdefault(ijkl[x], dict())
-                d0 = d1.setdefault((ops[x], op_str[x]), dict())
-            d1 = d0.setdefault(ijkl[-1], dict())
-            op = ops[-1]
-            d1[op] = d1.get(op, 0) + current_strength
+            self.add_multi_coupling_term(current_strength, ijkl, ops, op_str)
         # done
+
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string):
+        """Add a multi-site coupling term on given MPS sites.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        ijkl : list of int
+            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            we require that they are ordered ascending, ``i < j < k < ...`` and
+            that ``0 <= i < N_sites``.
+            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+        ops_ijkl : list of str
+            Names of the involved operators on sites `i, j, k, ...`.
+        op_string : list of str
+            Names of the operator to be inserted between the operators,
+            e.g., op_string[0] is inserted between `i` and `j`.
+        """
+        assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
+        # create the nested structure
+        # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
+        #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
+        #                       ...
+        #                           {ijkl[-1]: {ops_ijkl[-1]: strength}
+        #            }         }
+        # }         }
+        d0 = self.coupling_terms
+        for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
+            d1 = d0.setdefault(i, dict())
+            d0 = d1.setdefault((op, op_str), dict())
+        d1 = d0.setdefault(ijkl[-1], dict())
+        op = ops_ijkl[-1]
+        d1[op] = d1.get(op, 0) + strength
 
     def _test_coupling_terms(self, d0=None):
         sites = self.lat.mps_sites()
