@@ -246,7 +246,9 @@ class CouplingModel(object):
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
         if self.bc_shift is not None:
-            lat_j[:, 0] -= np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
+            shift = np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
+            lat_j_shifted[:, 0] -= shift
+            lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
         keep = np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not accross the boundary
@@ -259,8 +261,7 @@ class CouplingModel(object):
         mps_j = self.lat.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
         if self.lat.bc_MPS == 'infinite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = lat_j_shifted[:, 0] - np.mod(lat_j_shifted[:, 0], Ls[0])
-            mps_j_shift *= (N_sites // Ls[0])
+            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * (N_sites // Ls[0])
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -569,8 +570,9 @@ class MultiCouplingModel(CouplingModel):
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
         lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
         if self.bc_shift is not None:
-            lat_jkl[:, :, 0] -= np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] *
-                                       self.bc_shift, axis=2)
+            shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.bc_shift, axis=2)
+            lat_jkl_shifted[:, :, 0] -= shift
+            lat_jkl[:, :, 0] = np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
         keep = np.all(
             np.logical_or(
                 lat_jkl_shifted == lat_jkl,  # not accross the boundary
@@ -585,8 +587,7 @@ class MultiCouplingModel(CouplingModel):
         mps_jkl = self.lat.lat2mps_idx(latu_jkl)
         if self.lat.bc_MPS == 'infinite':
             # shift by whole MPS unit cells for couplings along the infinite direction
-            mps_jkl_shift = lat_jkl_shifted[:, :, 0] - np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
-            mps_jkl += mps_jkl_shift * (N_sites // Ls[0])
+            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
 
         # loop to perform the sum over {x_0, x_1, ...}

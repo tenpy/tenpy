@@ -77,14 +77,19 @@ def test_CouplingModel():
         else:
             M.calc_H_bond()
 
-def test_MultiCouplingModel_shift():
-    spin_half_square = lattice.Square(2, 3, spin_half_site, bc_MPS='infinite')
-    bc = ['periodic', 1]
+def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
+    spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc_MPS='infinite')
+    bc = ['periodic', shift]
     M = model.MultiCouplingModel(spin_half_square, bc)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, 0, 'Sz', [(0, 'Sz', [0, 1]), (0, 'Sz', [1, 0])])
     M.test_sanity()
-    M.calc_H_MPO()
+    H = M.calc_H_MPO()
+    dims = [W.shape[0] for W in H._W]
+    # check translation invariance of the MPO: at least the dimensions should fit
+    # (the states are differently ordered, so the matrices differ!)
+    for i in range(1, Lx):
+        assert dims[:Lx] == dims[Lx:2*Lx]
 
 
 def test_CouplingModel_fermions():
