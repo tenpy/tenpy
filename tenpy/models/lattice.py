@@ -697,6 +697,68 @@ class Honeycomb(Lattice):
         return super().ordering(order)
 
 
+class Kagome(Lattice):
+    def __init__(self, Lx, Ly, sites, order="default", bc_MPS="infinite"):
+        """
+        Parameters
+        ----------
+        Lx : int
+            The unit cell is repeated `Lx` times into the x-direction.
+        Ly : int
+            The unit cell is repeated `Ly` times into the y-direction.
+        sites : list of :class:`~tenpy.networks.Site`
+            Definitions of the physical sites. If `x`, `sites` has to be of
+            length 3, otherwise of length 6.
+        """
+
+        if len(sites) != 3:
+            raise ValueError(
+                "Parameter sites must be of length 3 "
+                "(but is of length {}).".format(len(sites))
+            )
+
+        """
+           2
+          / \
+         /   \
+        0-----1
+        """
+        self.pos = np.empty((3, 2))
+        self.pos[0] = [0, 0]
+        self.pos[1] = [1, 0]
+        self.pos[2] = [0.5, 0.5 * 3**0.5]
+
+        self.basis = np.empty((2, 2))
+        self.basis[0] = 2 * self.pos[1]
+        self.basis[1] = 2 * self.pos[2]
+
+        self.nearest_neighbors = [
+            (0, 1, np.array([0, 0])),
+            (0, 2, np.array([0, 0])),
+            (1, 2, np.array([0, 0])),
+            (1, 0, np.array([1, 0])),
+            (2, 0, np.array([0, 1])),
+            (2, 1, np.array([-1, 1]))
+        ]
+        self.next_nearest_neighbors = [
+            (0, 1, np.array([0, -1])),
+            (0, 2, np.array([1, -1])),
+            (1, 0, np.array([1, -1])),
+            (1, 2, np.array([1,  0])),
+            (2, 0, np.array([1,  0])),
+            (2, 1, np.array([0,  1]))
+        ]
+        self.next_next_nearest_neighbors = [
+            (0, 0, np.array([1, -1])),
+            (1, 1, np.array([0,  1])),
+            (2, 2, np.array([1,  0]))
+        ]
+
+        Lattice.__init__(
+            self, [Lx, Ly], sites, order, bc_MPS, self.basis, self.pos
+        )
+
+
 def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
