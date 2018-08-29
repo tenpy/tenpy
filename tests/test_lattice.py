@@ -76,7 +76,7 @@ def test_lattice_order():
     order_snake = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 1, 0], [1, 0, 0],
                             [2, 0, 0], [2, 1, 0], [2, 2, 0], [3, 2, 0], [3, 1, 0], [3, 0, 0]])
     npt.assert_equal(square.order, order_snake)
-    square = lattice.Square(2, 3, s, ((1, 0), (True, False)))
+    square = lattice.Square(2, 3, s, ("standard", (True, False), (1, 0)))
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
 
@@ -84,8 +84,15 @@ def test_lattice_order():
     order_hc_def = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1],
                              [1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_def)
-    hc = lattice.Honeycomb(2, 3, s, s, ((0.3, 0.1, -1.), (True, False, False)))
+    hc = lattice.Honeycomb(2, 3, s, s, ('standard', (True, False, False), (0.3, 0.1, -1.)))
     order_hc_mix = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0],
                              [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 2, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_mix)
+
+    kag = lattice.Kagome(2, 3, [s, s, s], ('grouped', [[1], [0, 2]]))
+    order_kag_gr = np.array([[0, 0, 1], [0, 1, 1], [0, 2, 1], [0, 0, 0], [0, 0, 2], [0, 1, 0],
+                             [0, 1, 2], [0, 2, 0], [0, 2, 2],
+                             [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 0, 0], [1, 0, 2], [1, 1, 0],
+                             [1, 1, 2], [1, 2, 0], [1, 2, 2]])
+    npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable

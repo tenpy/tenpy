@@ -2,8 +2,8 @@
 
 The base class :class:`lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
-Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`, and
-:class:`Honeycomb`.
+Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`,
+:class:`Honeycomb`, and :class:`Kagome`.
 
 .. todo ::
     documentation, how to generate new lattices, examples, ...
@@ -11,7 +11,7 @@ Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`
     equality tests?
 
 .. todo ::
-    Above, make table with pictures of them (-> use Lattice.plot_ordering)
+    Above, make table with pictures of them (-> use Lattice.plot_order)
 """
 # Copyright 2018 TeNPy Developers
 
@@ -22,7 +22,7 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'get_order']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order']
 
 # (update module doc string if you add further lattices)
 
@@ -50,7 +50,7 @@ class Lattice(object):
         the length in each direction
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
-    order : str | (priority, snake_winding)
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
     bc_MPS : {'finite' | 'segment' | 'infinite'}
         boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
@@ -205,12 +205,12 @@ class Lattice(object):
 
         Parameters
         ----------
-        order : str | (priority, snake_winding)
+        order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
             Specifies the desired ordering using one of the strings of the above tables.
-            Alternatively, an ordering is specified by the
-            `priority` (one value for each direction, winding along the highest value first)
-            and the `snake_winding` (True/False for each direction).
-            Further explanations of these tuples in :func:`get_order`.
+            Alternatively, an ordering is specified by a tuple with first entry specifying a
+            function, ``'standard'`` for :func:`get_order` and ``'grouped'`` for
+            :func:`get_order_grouped`, and other arguments in the tuple as specified in the
+            documentation of these functions.
 
         Returns
         -------
@@ -219,8 +219,9 @@ class Lattice(object):
 
         See also
         --------
-        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
-        :meth:`plot_ordering` : visualizes the ordering
+        :func:`get_order` : generates the `order` from equivalent `priority` and `snake_winding`.
+        :func:`get_order_grouped` : variant of `get_order`.
+        :meth:`plot_order` : visualizes the resulting `order`.
         """
         if isinstance(order, str):
             if order in ["default", "Cstyle"]:
@@ -240,7 +241,13 @@ class Lattice(object):
                 # such that the derived lattice also has the orderings defined in this function.
                 raise ValueError("unknown ordering " + repr(order))
         else:
-            priority, snake_winding = order
+            descr = order[0]
+            if descr == 'standard':
+                snake_winding, priority = order[1], order[2]
+            elif descr == 'grouped':
+                return get_order_grouped(self.shape, order[1])
+            else:
+                raise ValueError("unknown ordering " + repr(order))
         return get_order(self.shape, snake_winding, priority)
 
     def position(self, lat_idx):
@@ -578,7 +585,7 @@ class SimpleLattice(Lattice):
         the length in each direction
     site : :class:`~tenpy.networks.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    order : str | (priority, snake_winding)
+    order : str | ``('standard', snake_winding, priority)``
         A string or tuple specifying the order, given to :meth:`ordering`.
         If a tuple, the priority and snake_winding should only be specified for the lattice
         directions.
@@ -595,10 +602,11 @@ class SimpleLattice(Lattice):
         if position is not None:
             position = [position]
         if not isinstance(order, str):
-            priority, snake_winding = order
-            priority = tuple(priority) +  (max(priority) + 1., )
+            assert order[0] == 'standard'
+            descr, snake_winding, priority = order
             snake_winding = tuple(snake_winding) + (False, )
-            order = priority, snake_winding
+            priority = tuple(priority) +  (max(priority) + 1., )
+            order = descr, snake_winding, priority
         super(SimpleLattice, self).__init__(Ls, [site], order, bc_MPS, basis, position)
 
     def mps2lat_values(self, A, axes=0, u=None):
@@ -666,24 +674,6 @@ class Honeycomb(Lattice):
         ``'snake'``        (0, 2, 1)                   (False, True, False)
         ================== =========================== =============================
 
-        Parameters
-        ----------
-        order : str | (priority, snake_winding)
-            Specifies the desired ordering using one of the strings of the above tables.
-            Alternatively, an ordering is specified by the
-            `priority` (one value for each direction, winding along the highest value first)
-            and the `snake_winding` (True/False for each direction).
-            Further explanations of these tuples in :func:`get_order`.
-
-        Returns
-        -------
-        order : array, shape (N, D+1), dtype np.intp
-            the order to be used for :attr:`order`.
-
-        See also
-        --------
-        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
-        :meth:`plot_ordering` : visualizes the ordering
         """
         if isinstance(order, str):
             if order == "default":
@@ -699,7 +689,8 @@ class Honeycomb(Lattice):
 
 class Kagome(Lattice):
     def __init__(self, Lx, Ly, sites, order="default", bc_MPS="infinite"):
-        """
+        """A Kagome lattice.
+
         Parameters
         ----------
         Lx : int
@@ -707,8 +698,7 @@ class Kagome(Lattice):
         Ly : int
             The unit cell is repeated `Ly` times into the y-direction.
         sites : list of :class:`~tenpy.networks.Site`
-            Definitions of the physical sites. If `x`, `sites` has to be of
-            length 3, otherwise of length 6.
+            Definitions of the physical sites.
         """
 
         if len(sites) != 3:
@@ -717,12 +707,10 @@ class Kagome(Lattice):
                 "(but is of length {}).".format(len(sites))
             )
 
-        """
-           2
-          / \
-         /   \
-        0-----1
-        """
+        #     2
+        #    / \
+        #   /   \
+        #  0-----1
         self.pos = np.empty((3, 2))
         self.pos[0] = [0, 0]
         self.pos[1] = [1, 0]
@@ -772,17 +760,26 @@ def get_order(shape, snake_winding, priority=None):
     snake_winding : tuple of bool
         For each direction one bool, whether we should wind as a "snake" (True) in that direction
         (i.e., going forth and back) or simply repeat ascending (False)
-    priority: ``None`` | tuple of float
+    priority : ``None`` | tuple of float
         If ``None`` (default), use C-Style ordering.
         Otherwise, this defines the priority along which direction to wind first;
         the direction with the highest priority increases fastest.
         For example, "C-Style" order is enforced by ``priority=(0, 1, 2, ...)``,
         and Fortrans F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
+    group : ``None`` | tuple of tuple
+        If ``None`` (default), ignore it.
+        Otherwise, it specifies that we group the fastests changing dimension
 
     Returns
     -------
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
+
+    See also
+    --------
+    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
+    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
+    :func:`get_order_groups` : a variant grouping sites of the unit cell.
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
@@ -826,4 +823,64 @@ def get_order(shape, snake_winding, priority=None):
                 if L % 2 == 1:
                     new_order[-L0:, 1:] = order
         order = new_order
+    return order
+
+
+def get_order_grouped(shape, groups):
+    """Variant of :func:`get_order`, grouping some sites of the unit cell.
+
+    In this function, the word 'direction' referst to a physical direction of the lattice or the
+    index `u` of the unit cell as an "artificial direction".
+    This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
+    The argument `group` is a
+    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape (Lx, Ly, 3).
+    Calling this function with
+    then this function called with groups=((1), (2, 0)) returns an order
+    [[0, 0, 1], [0, 1, 1], [0, 1,
+
+    Parameters
+    ----------
+    shape : tuple of int
+        The shape of the lattice, i.e., the length in each direction.
+    groups : tuple of tuple of int
+        A partition and reordering of range(shape[-1]) into smaller groups.
+        The ordering goes first within a group, then along the last spatial dimensions, then
+        changing between different groups and finally in Cstyle order along the remaining spatial
+        dimensions.
+
+    Returns
+    -------
+    order : ndarray (np.prod(shape), len(shape))
+        An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
+
+    See also
+    --------
+    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
+    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
+    """
+    Ly = shape[-2]
+    Lu = shape[-1]
+    N_sites = np.prod(shape)
+    # sanity check for argument group
+    groups = list(groups)
+    all = [g for gr in groups for g in gr]
+    all_set = set(all)
+    assert all_set == set(range(Lu)) # does every number appear?
+    assert len(all) == len(all_set) == Lu # exactly once?
+    assert len(shape) > 1
+    rLy = np.arange(Ly)
+    pre_order = np.empty((Ly*Lu, 2), dtype=np.intp)
+    start = 0
+    for gr in groups:
+        gr = np.array(gr)
+        Lgr = len(gr)
+        end = start + Lgr * Ly
+        pre_order[start:end, 0] = np.repeat(rLy, Lgr)
+        pre_order[start:end, 1] = np.tile(gr, Ly)
+        start = end
+    assert end == Ly * Lu # TODO
+    other_order = get_order(shape[:-2], [False])
+    order = np.empty((N_sites, len(shape)), dtype=np.intp)
+    order[:, :-2] = np.repeat(other_order, Ly*Lu, axis=0)
+    order[:, -2:] = np.tile(pre_order, (N_sites//(Ly*Lu), 1))
     return order
