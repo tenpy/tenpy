@@ -59,7 +59,7 @@ def test_number_nn():
     print(square.number_next_nearest_neighbors())
     assert square.number_nearest_neighbors() == 4
     assert square.number_next_nearest_neighbors() == 4
-    hc = lattice.Honeycomb(2, 2, s, s)
+    hc = lattice.Honeycomb(2, 2, s)
     assert hc.number_nearest_neighbors(0) == 3
     assert hc.number_nearest_neighbors(1) == 3
     assert hc.number_next_nearest_neighbors(0) == 6
@@ -80,16 +80,16 @@ def test_lattice_order():
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
 
-    hc = lattice.Honeycomb(2, 3, s, s, 'default')
+    hc = lattice.Honeycomb(2, 3, s, 'default')
     order_hc_def = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1],
                              [1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_def)
-    hc = lattice.Honeycomb(2, 3, s, s, ('standard', (True, False, False), (0.3, 0.1, -1.)))
+    hc = lattice.Honeycomb(2, 3, s, ('standard', (True, False, False), (0.3, 0.1, -1.)))
     order_hc_mix = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0],
                              [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 2, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_mix)
 
-    kag = lattice.Kagome(2, 3, [s, s, s], ('grouped', [[1], [0, 2]]))
+    kag = lattice.Kagome(2, 3, s, ('grouped', [[1], [0, 2]]))
     order_kag_gr = np.array([[0, 0, 1], [0, 1, 1], [0, 2, 1], [0, 0, 0], [0, 0, 2], [0, 1, 0],
                              [0, 1, 2], [0, 2, 0], [0, 2, 2],
                              [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 0, 0], [1, 0, 2], [1, 1, 0],

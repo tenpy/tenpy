@@ -22,7 +22,8 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order',
+           'get_order_groups']
 
 # (update module doc string if you add further lattices)
 
@@ -52,8 +53,8 @@ class Lattice(object):
         the lattice sites making up a unit cell of the lattice.
     order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
-    bc_MPS : {'finite' | 'segment' | 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis : iterable of 1D arrays
@@ -85,8 +86,10 @@ class Lattice(object):
     order : ndarray (N_sites, dim+1)
         Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
         This order defines how an MPS/MPO winds through the lattice.
-    bc_MPS : {'finite' | 'segment' | 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis: ndarray (dim, dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
@@ -183,7 +186,7 @@ class Lattice(object):
 
     @property
     def dim(self):
-        """the dimension of the lattice."""
+        """The dimension of the lattice."""
         return len(self.Ls)
 
     def ordering(self, order):
@@ -589,8 +592,10 @@ class SimpleLattice(Lattice):
         A string or tuple specifying the order, given to :meth:`ordering`.
         If a tuple, the priority and snake_winding should only be specified for the lattice
         directions.
-    bc_MPS : {'finite', 'segment', 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis : iterable of 1D arrays
         for each direction one translation vectors shifting the unit cell.
         Defaults to the standard ONB ``np.eye(dim)``.
@@ -622,9 +627,11 @@ class Chain(SimpleLattice):
     L : int
         The lenght of the chain.
     site : :class:`~tenpy.networks.Site`
-        Definition of local Hilbert space.
-    bc_MPS : {'finite', 'segment', 'infinite'}
-        MPS boundary conditions.
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     """
 
     def __init__(self, L, site, bc_MPS='finite'):
@@ -634,7 +641,23 @@ class Chain(SimpleLattice):
 
 
 class Square(SimpleLattice):
-    """A simple uniform square lattice of `Lx` by `Ly` sites."""
+    """A simple uniform square lattice.
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    site : :class:`~tenpy.networks.Site`
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    order : str | ``('standard', snake_winding, priority)``
+        A string or tuple specifying the order, given to :meth:`ordering`.
+        If a tuple, the priority and snake_winding should only be specified for the lattice
+        directions.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    """
 
     def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
         self.nearest_neighbors = [(0, 0, np.array([1, 0])),
@@ -645,9 +668,30 @@ class Square(SimpleLattice):
 
 
 class Honeycomb(Lattice):
-    """A honeycomb lattice."""
+    """A honeycomb lattice.
 
-    def __init__(self, Lx, Ly, siteA, siteB, order='default', bc_MPS='finite'):
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)
+        A string or tuple specifying the order, given to :meth:`ordering`.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    """
+
+    def __init__(self, Lx, Ly, sites, order='default', bc_MPS='finite'):
+        try:  # allow to specify a single site
+            iter(sites)
+        except TypeError:
+            sites = [sites, sites]
+        if len(sites) != 2:
+            raise ValueError("need to specify a single site or exactly 2 sites")
         basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
         delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
         pos = (-delta/2., delta/2)
@@ -660,7 +704,7 @@ class Honeycomb(Lattice):
                                        (1, 1, np.array([0, 1])),
                                        (0, 0, np.array([1, -1])),
                                        (1, 1, np.array([1, -1]))]
-        super(Honeycomb, self).__init__([Lx, Ly], [siteA, siteB], order, bc_MPS, basis, pos)
+        super(Honeycomb, self).__init__([Lx, Ly], sites, order, bc_MPS, basis, pos)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -688,25 +732,31 @@ class Honeycomb(Lattice):
 
 
 class Kagome(Lattice):
+    """A Kagome lattice.
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)
+        A string or tuple specifying the order, given to :meth:`ordering`.
+        sites : (list of) :class:`~tenpy.networks.Site`
+        Definitions of the physical sites.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    """
     def __init__(self, Lx, Ly, sites, order="default", bc_MPS="infinite"):
-        """A Kagome lattice.
-
-        Parameters
-        ----------
-        Lx : int
-            The unit cell is repeated `Lx` times into the x-direction.
-        Ly : int
-            The unit cell is repeated `Ly` times into the y-direction.
-        sites : list of :class:`~tenpy.networks.Site`
-            Definitions of the physical sites.
-        """
-
+        try:  # allow to specify a single site
+            iter(sites)
+        except TypeError:
+            sites = [sites]*3
         if len(sites) != 3:
-            raise ValueError(
-                "Parameter sites must be of length 3 "
-                "(but is of length {}).".format(len(sites))
-            )
-
+            raise ValueError("need to specify a single site or exactly 3 sites")
         #     2
         #    / \
         #   /   \
@@ -878,7 +928,6 @@ def get_order_grouped(shape, groups):
         pre_order[start:end, 0] = np.repeat(rLy, Lgr)
         pre_order[start:end, 1] = np.tile(gr, Ly)
         start = end
-    assert end == Ly * Lu # TODO
     other_order = get_order(shape[:-2], [False])
     order = np.empty((N_sites, len(shape)), dtype=np.intp)
     order[:, :-2] = np.repeat(other_order, Ly*Lu, axis=0)
