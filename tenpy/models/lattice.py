@@ -1,8 +1,8 @@
 """Classes to define the lattice structure of a model.
 
-The base class :class:`lattice` defines the general structure of a lattice,
+The base class :class:`Lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
-Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`,
+Further, we have some predefined lattices, namely :class:`Chain`, :class:`Square`,
 :class:`Honeycomb`, and :class:`Kagome`.
 
 .. todo ::
@@ -23,7 +23,7 @@ from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order',
-           'get_order_groups']
+           'get_order_grouped']
 
 # (update module doc string if you add further lattices)
 
@@ -66,7 +66,8 @@ class Lattice(object):
 
     Attributes
     ----------
-    dim
+    dim : int
+    order : ndarray (N_sites, dim+1)
     N_cells : int
         the number of unit cells in the lattice, ``np.prod(self.Ls)``.
     N_sites : int
@@ -83,9 +84,6 @@ class Lattice(object):
         The nature of the charge (which is the same for all sites).
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
-    order : ndarray (N_sites, dim+1)
-        Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
-        This order defines how an MPS/MPO winds through the lattice.
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
@@ -103,6 +101,8 @@ class Lattice(object):
         ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
+    _order : ndarray (N_sites, dim+1)
+        The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
         necessary for :meth:`mps2lat_idx`
     _perm : ndarray (N, )
@@ -135,20 +135,6 @@ class Lattice(object):
         # calculate order for MPS
         self.order = self.ordering(order)
         # from order, calc necessary stuff for mps2lat and lat2mps
-        self._perm = np.lexsort(self.order.T)
-        # use advanced numpy indexing...
-        self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
-        self._mps2lat_vals_idx[tuple(self.order.T)] = np.arange(self.N_sites)
-        # versions for fixed u
-        self._mps_fix_u = []
-        self._mps2lat_vals_idx_fix_u = []
-        for u in range(len(self.unit_cell)):
-            mps_fix_u = np.nonzero(self.order[:, -1] == u)[0]
-            self._mps_fix_u.append(mps_fix_u)
-            mps2lat_vals_idx = np.empty(self.Ls, np.intp)
-            mps2lat_vals_idx[tuple(self.order[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
-            self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
-        self._mps_fix_u = tuple(self._mps_fix_u)
         # calculate _strides
         strides = [1]
         for L in self.Ls:
@@ -177,9 +163,9 @@ class Lattice(object):
         if self.basis.shape[1] != self.unit_cell_positions.shape[1]:
             raise ValueError("Different space dimensions of `basis` and `unit_cell_positions`")
         # if one of the following assert fails, the `ordering` function returned an invalid array
-        assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
+        assert np.all(self._order >= 0) and np.all(self._order <= self.shape)  # entries of `order`
         assert np.all(
-            np.sum(self.order * self._strides,
+            np.sum(self._order * self._strides,
                    axis=1)[self._perm] == np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
@@ -188,6 +174,33 @@ class Lattice(object):
     def dim(self):
         """The dimension of the lattice."""
         return len(self.Ls)
+
+    @property
+    def order(self):
+        """Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
+        This order defines how an MPS/MPO winds through the lattice.
+        """
+        return self._order
+
+    @order.setter
+    def order(self, value):
+        # update the value itself
+        self._order = value
+        # and the other stuff which is cached
+        self._perm = np.lexsort(value.T)
+        # use advanced numpy indexing...
+        self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
+        self._mps2lat_vals_idx[tuple(value.T)] = np.arange(self.N_sites)
+        # versions for fixed u
+        self._mps_fix_u = []
+        self._mps2lat_vals_idx_fix_u = []
+        for u in range(len(self.unit_cell)):
+            mps_fix_u = np.nonzero(value[:, -1] == u)[0]
+            self._mps_fix_u.append(mps_fix_u)
+            mps2lat_vals_idx = np.empty(self.Ls, np.intp)
+            mps2lat_vals_idx[tuple(value[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
+            self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
+        self._mps_fix_u = tuple(self._mps_fix_u)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -677,7 +690,7 @@ class Honeycomb(Lattice):
     sites : (list of) :class:`~tenpy.networks.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
         If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
-    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
@@ -741,7 +754,7 @@ class Kagome(Lattice):
     sites : (list of) :class:`~tenpy.networks.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
         If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
-    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
         sites : (list of) :class:`~tenpy.networks.Site`
         Definitions of the physical sites.
@@ -829,7 +842,7 @@ def get_order(shape, snake_winding, priority=None):
     --------
     :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
     :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
-    :func:`get_order_groups` : a variant grouping sites of the unit cell.
+    :func:`get_order_grouped` : a variant grouping sites of the unit cell.
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
