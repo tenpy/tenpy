@@ -107,7 +107,6 @@ class MPO(object):
     def from_grids(cls, sites, grids, bc='finite', IdL=None, IdR=None, Ws_qtotal=None, leg0=None):
         """Initialize an MPO from `grids`.
 
-        The `grid` specifies
         Parameters
         ----------
         sites : list of :class:`~tenpy.models.lattice.Site`

@@ -7,6 +7,11 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 [Unreleased]
 ------------
 
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- The argument order of :meth:`Lattice` could be a tuple ``(priority, snake_winding)`` before.
+  This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``
+
 Added
 ^^^^^
 - :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
