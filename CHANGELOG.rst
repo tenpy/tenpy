@@ -65,6 +65,9 @@ Fixed
 - issue #6: the CouplingModel generated wrong Couplings in some cases
 - more reasonable traceback in case of wrong labels
 
+Removed
+^^^^^^^
+- Attribute `chinfo` of :class:`~tenpy.models.lattice.Lattice`.
 
 [0.3.0] - 2018-02-19
 --------------------

@@ -50,7 +50,8 @@ class Lattice(object):
     Ls : list of int
         the length in each direction
     unit_cell : list of :class:`~tenpy.networks.Site`
-        the lattice sites making up a unit cell of the lattice.
+        The sites making up a unit cell of the lattice.
+        If you want to specify it only after initialization, use ``None`` entries in the list.
     order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
     bc_MPS : 'finite' | 'segment' | 'infinite'
@@ -80,8 +81,6 @@ class Lattice(object):
         the length in each direction.
     shape : tuple of int
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
-    chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-        The nature of the charge (which is the same for all sites).
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
     bc_MPS : 'finite' | 'segment' | 'infinite'
@@ -121,7 +120,6 @@ class Lattice(object):
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
         self.shape = self.Ls + (len(unit_cell), )
-        self.chinfo = self.unit_cell[0].leg.chinfo
         self.N_sites = int(np.prod(self.shape))
         self.N_sites_per_ring = int(self.N_sites // self.Ls[0])
         self.N_rings = self.Ls[0]
@@ -150,12 +148,16 @@ class Lattice(object):
         assert self.shape == self.Ls + (len(self.unit_cell), )
         assert self.N_cells == np.prod(self.Ls)
         assert self.N_sites == np.prod(self.shape)
+        chinfo = None
         for site in self.unit_cell:
+            if site is None:
+                continue
+            if chinfo is None:
+                chinfo = site.leg.chinfo
             if not isinstance(site, Site):
                 raise ValueError("element of Unit cell is not Site.")
-            if site.leg.chinfo != self.chinfo:
+            if site.leg.chinfo != chinfo:
                 raise ValueError("All sites must have the same ChargeInfo!")
-            site.test_sanity()
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
