@@ -22,8 +22,8 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order',
-           'get_order_grouped', 'bc_choices']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Honeycomb', 'Kagome',
+           'get_order', 'get_order_grouped', 'bc_choices']
 
 # (update module doc string if you add further lattices)
 
@@ -712,6 +712,36 @@ class Chain(SimpleLattice):
         kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3,]))])
         # and otherwise default values.
         super().__init__([L], site, **kwargs)
+
+
+class Ladder(Lattice):
+    """A ladder coupling two chains.
+
+    Parameters
+    ----------
+    L : int
+        The length of each chain, we have 2*L sites in total.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both chains.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+    """
+
+    def __init__(self, Lx, sites, **kwargs):
+        sites = _parse_sites(sites, 2)
+        basis = np.array([[1., 0.]])
+        pos = np.array([[0., 0.], [0., 1.]])
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [(0, 0, np.array([1])), (1, 1, np.array([1])), (0, 1, np.array([0]))]
+        nNN = [(0, 1, np.array([1])), (1, 0, np.array([1]))]
+        nnNN = [(0, 0, np.array([2])), (1, 1, np.array([2]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx], sites, **kwargs)
 
 
 class Square(SimpleLattice):
