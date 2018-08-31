@@ -549,6 +549,7 @@ class Lattice(object):
             raise ValueError("can only plot in 2 dimensions.")
         ax.plot(pos[:, 0], pos[:, 1], **kwargs)
         if textkwargs is not None:
+            textkwargs.setdefault('color', kwargs['color'])
             for i, p in enumerate(pos):
                 ax.text(p[0], p[1], str(i), **textkwargs)
 
@@ -570,12 +571,26 @@ class Lattice(object):
         if coupling is None:
             coupling = self.nearest_neighbors
         kwargs.setdefault('color', 'k')
+        Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
             dx = np.r_[np.array(dx), 0]  # append a 0 to dx
             lat_idx_1 = self.order[self._mps_fix_u[u1], :]
             lat_idx_2 = self.order[self._mps_fix_u[u2], :] + dx[np.newaxis, :]
-            pos1 = self.position(lat_idx_1)
-            pos2 = self.position(lat_idx_2)
+            lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
+            # handle boundary conditions
+            if self.bc_shift is not None:
+                shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
+                               axis=1)
+                lat_idx_2[:, 0] -= shift
+                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2[:, 0], self.Ls[0])
+            keep = np.all(
+                np.logical_or(
+                    lat_idx_2_mod == lat_idx_2[:, :-1],  # not accross the boundary
+                    np.logical_not(self.bc)),  # direction has PBC
+                axis=1)
+            # get positions
+            pos1 = self.position(lat_idx_1[keep, :])
+            pos2 = self.position(lat_idx_2[keep, :])
             pos = np.stack((pos1, pos2), axis=0)
             # ax.plot connects columns of 2D array by lines
             if pos.shape[2] == 1:
