@@ -30,14 +30,13 @@ See also the introduction :doc:`../intro_model`.
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
+import warnings
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
 __all__ = ['CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
-
-_bc_coupling_choices = {'open': True, 'periodic': False}
 
 
 class CouplingModel(object):
@@ -46,9 +45,13 @@ class CouplingModel(object):
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
     terms.
 
+    .. deprecated:: 0.4.0
+        `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice, it
+        is the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
+
     Parameters
     ----------
-    lattice : :class:`tenpy.model.lattice.Lattice`
+    lattice : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     bc_coupling : (iterable of) {``'open'`` | ``'periodic'`` | ``int``}
         Boundary conditions of the couplings in each direction of the lattice. Defines how the
@@ -59,13 +62,8 @@ class CouplingModel(object):
 
     Attributes
     ----------
-    lat : :class:`tenpy.model.lattice.Lattice`
+    lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    bc_coupling : bool ndarray
-        Boundary conditions of the couplings in each direction of the lattice,
-        translated into a bool array with the global `_bc_coupling_choices`.
-    bc_shift : None | ndarray(int)
-        The shift in x-direction when going around periodic boundaries in other directions.
     onsite_terms : list of dict
         Filled by :meth:`add_onsite`.
         For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
@@ -80,25 +78,12 @@ class CouplingModel(object):
         For each site (in MPS order) the onsite part of the Hamiltonian.
     """
 
-    def __init__(self, lattice, bc_coupling='open'):
+    def __init__(self, lattice, bc_coupling=None):
         self.lat = lattice
-        global _bc_coupling_choices
-        if bc_coupling in list(_bc_coupling_choices.keys()):
-            bc_coupling = [_bc_coupling_choices[bc_coupling]] * self.lat.dim
-            self.bc_shift = None
-        else:
-            self.bc_shift = np.zeros(self.lat.dim-1, np.int_)
-            for i, bc in enumerate(bc_coupling):
-                if isinstance(bc, int):
-                    if i == 0:
-                        raise ValueError("Invalid bc_coupling: first entry can't be a shift")
-                    self.bc_shift[i-1] = bc
-                    bc_coupling[i] = _bc_coupling_choices['periodic']
-                else:
-                    bc_coupling[i] = _bc_coupling_choices[bc]
-            if not np.any(self.bc_shift != 0):
-                self.bc_shift = None
-        self.bc_coupling = np.array(bc_coupling)
+        if bc_coupling is not None:
+            warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
+                          FutureWarning)
+            lattice._set_bc(bc_coupling)
         self.onsite_terms = [dict() for _ in range(self.lat.N_sites)]
         self.coupling_terms = dict()
         self.H_onsite = None
@@ -107,12 +92,7 @@ class CouplingModel(object):
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self.bc_coupling.shape != (self.lat.dim, ):
-            raise ValueError("Wrong len of bc_coupling")
-        assert self.bc_coupling.dtype == np.bool
-        assert int(_bc_coupling_choices['open']) == 1  # this is used explicitly
-        assert int(_bc_coupling_choices['periodic']) == 0   # and this as well
-        if self.bc_coupling[0] and self.lat.bc_MPS == 'infinite':
+        if self.lat.bc[0] and self.lat.bc_MPS == 'infinite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
         sites = self.lat.mps_sites()
@@ -169,7 +149,7 @@ class CouplingModel(object):
         ``OP1 := lat.unit_cell[u1].get_op(op1)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
         and ``OP2 := lat.unit_cell[u2].get_op(op2)`` acts on the site
         ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
-        For periodic boundary conditions (``bc_coupling[a] == False``)
+        For periodic boundary conditions (``lat.bc[a] == False``)
         the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
         ``0 <= x_a+dx[a] < lat.Ls[a]``.
@@ -245,14 +225,14 @@ class CouplingModel(object):
         mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
-        if self.bc_shift is not None:
-            shift = np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
+        if self.lat.bc_shift is not None:
+            shift = np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.lat.bc_shift, axis=1)
             lat_j_shifted[:, 0] -= shift
             lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
         keep = np.all(
             np.logical_or(
                 lat_j_shifted == lat_j,  # not accross the boundary
-                np.logical_not(self.bc_coupling)),  # direction has PBC
+                np.logical_not(self.lat.bc)),  # direction has PBC
             axis=1)
         mps_i = mps_i[keep]
         lat_i = lat_i[keep] + shift_i_lat_strength[np.newaxis, :]
@@ -465,7 +445,7 @@ class CouplingModel(object):
     def _coupling_shape(self, dx):
         """calculate correct shape of the strengths for each coupling."""
         shape = [La - abs(dxa) * int(bca)
-                 for La, dxa, bca in zip(self.lat.Ls, dx, self.bc_coupling)]
+                 for La, dxa, bca in zip(self.lat.Ls, dx, self.lat.bc)]
         shift_strength = [min(0, dxa) for dxa in dx]
         return np.array(shift_strength), tuple(shape)
 
@@ -518,7 +498,7 @@ class MultiCouplingModel(CouplingModel):
         ``(x_0, ..., x_{dim-1}, u0)``,
         and ``OP_m := lat.unit_cell[other_u[m]].get_op(other_op[m])``, m=1...M, acts on the site
         ``(x_0+other_dx[m][0], ..., x_{dim-1}+other_dx[m][dim-1], other_u[m])``.
-        For periodic boundary conditions along direction `a` (``bc_coupling[a] == False``)
+        For periodic boundary conditions along direction `a` (``lat.bc[a] == False``)
         the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
         ``0 <= x_a+other_dx[m,a] < lat.Ls[a]``.
@@ -591,14 +571,14 @@ class MultiCouplingModel(CouplingModel):
         lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
         lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
-        if self.bc_shift is not None:
-            shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.bc_shift, axis=2)
+        if self.lat.bc_shift is not None:
+            shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.lat.bc_shift, axis=2)
             lat_jkl_shifted[:, :, 0] -= shift
             lat_jkl[:, :, 0] = np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
         keep = np.all(
             np.logical_or(
                 lat_jkl_shifted == lat_jkl,  # not accross the boundary
-                np.logical_not(self.bc_coupling)),  # direction has PBC
+                np.logical_not(self.lat.bc)),  # direction has PBC
             axis=(1, 2))
         mps_i = mps_i[keep]
         lat_i = lat_i[keep, :] + shift_i_lat_strength[np.newaxis, :]
@@ -704,7 +684,7 @@ class MultiCouplingModel(CouplingModel):
         for a in range(len(Ls)):
             max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
             box_dx = max(max_dx, 0) - min(min_dx, 0)
-            shape[a] = Ls[a] - box_dx * int(self.bc_coupling[a])
+            shape[a] = Ls[a] - box_dx * int(self.lat.bc[a])
             shift_strength[a] = min(0, min_dx)
         return np.array(shift_strength), tuple(shape)
 

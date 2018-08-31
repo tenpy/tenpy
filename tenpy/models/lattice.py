@@ -23,9 +23,12 @@ from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'Kagome', 'get_order',
-           'get_order_grouped']
+           'get_order_grouped', 'bc_choices']
 
 # (update module doc string if you add further lattices)
+
+bc_choices = {'open': True, 'periodic': False}
+"""dict: maps possible choices of boundary conditions in a lattice to bool/int."""
 
 
 class Lattice(object):
@@ -54,15 +57,21 @@ class Lattice(object):
         If you want to specify it only after initialization, use ``None`` entries in the list.
     order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
+    bc : (iterable of) {'open' | 'periodic' | int}
+        Boundary conditions in each direction of the lattice.
+        A single string holds for all directions.
+        An integer `shift` means that we have periodic boundary conditions along this direction,
+        but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
+        when going around the boundary along this direction.
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis : iterable of 1D arrays
-        for each direction one translation vectors shifting the unit cell.
+        For each direction one translation vectors shifting the unit cell.
         Defaults to the standard ONB ``np.eye(dim)``.
     positions : iterable of 1D arrays
-        for each site of the unit cell the position within the unit cell.
+        For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
 
     Attributes
@@ -83,14 +92,19 @@ class Lattice(object):
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
+    bc : bool ndarray
+        Boundary conditions of the couplings in each direction of the lattice,
+        translated into a bool array with the global `bc_choices`.
+    bc_shift : None | ndarray(int)
+        The shift in x-direction when going around periodic boundaries in other directions.
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
-    basis: ndarray (dim, dim)
+    basis: ndarray (dim, Dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
-    unit_cell_positions : ndarray, shape (len(unit_cell), dim)
+    unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
         for each site in the unit cell a vector giving its position within the unit cell.
     nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
@@ -100,6 +114,8 @@ class Lattice(object):
         ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
+    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neigbhors.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -114,8 +130,15 @@ class Lattice(object):
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
 
-    def __init__(self, Ls, unit_cell, order='default', bc_MPS='finite', basis=None,
-                 positions=None):
+    def __init__(self, Ls, unit_cell,
+                 order='default',
+                 bc='open',
+                 bc_MPS='finite',
+                 basis=None,
+                 positions=None,
+                 nearest_neighbors=None,
+                 next_nearest_neighbors=None,
+                 next_next_nearest_neighbors=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
@@ -127,8 +150,9 @@ class Lattice(object):
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
             basis = np.eye(self.dim)
-        self.unit_cell_positions = np.asarray(positions)
-        self.basis = np.asarray(basis)
+        self.unit_cell_positions = np.array(positions)
+        self.basis = np.array(basis)
+        self._set_bc(bc)
         self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
@@ -138,9 +162,9 @@ class Lattice(object):
         for L in self.Ls:
             strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
-        for attr in ('nearest_neighbors', 'next_nearest_neighbors'):
-            if not hasattr(self, attr):
-                setattr(self, attr, None)
+        self.nearest_neighbors = nearest_neighbors
+        self.next_nearest_neighbors = next_nearest_neighbors
+        self.next_next_nearest_neighbors = next_next_nearest_neighbors
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -148,6 +172,9 @@ class Lattice(object):
         assert self.shape == self.Ls + (len(self.unit_cell), )
         assert self.N_cells == np.prod(self.Ls)
         assert self.N_sites == np.prod(self.shape)
+        if self.bc.shape != (self.dim, ):
+            raise ValueError("Wrong len of bc")
+        assert self.bc.dtype == np.bool
         chinfo = None
         for site in self.unit_cell:
             if site is None:
@@ -431,7 +458,7 @@ class Lattice(object):
         -------
         number_NN : int
             Number of nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice, not that it might be different at the edges of the lattice for open boundary
+            lattice. Note that it might be different at the edges of the lattice for open boundary
             conditions.
         """
         if self.nearest_neighbors is None:
@@ -458,7 +485,7 @@ class Lattice(object):
         -------
         number_NNN : int
             Number of next nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice, not that it might be different at the edges of the lattice for open boundary
+            lattice. Note that it might be different at the edges of the lattice for open boundary
             conditions.
         """
         if self.next_nearest_neighbors is None:
@@ -583,6 +610,26 @@ class Lattice(object):
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
         return lat_idx
 
+    def _set_bc(self, bc):
+        global bc_choices
+        if bc in list(bc_choices.keys()):
+            bc = [bc_choices[bc]] * self.dim
+            self.bc_shift = None
+        else:
+            bc = list(bc)  # we modify entries...
+            self.bc_shift = np.zeros(self.dim-1, np.int_)
+            for i, bc_i in enumerate(bc):
+                if isinstance(bc_i, int):
+                    if i == 0:
+                        raise ValueError("Invalid bc: first entry can't be a shift")
+                    self.bc_shift[i-1] = bc_i
+                    bc[i] = bc_choices['periodic']
+                else:
+                    bc[i] = bc_choices[bc_i]
+            if not np.any(self.bc_shift != 0):
+                self.bc_shift = None
+        self.bc = np.array(bc)
+
 
 class SimpleLattice(Lattice):
     """A lattice with a unit cell consiting of just a single site.
@@ -603,35 +650,28 @@ class SimpleLattice(Lattice):
         the length in each direction
     site : :class:`~tenpy.networks.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    order : str | ``('standard', snake_winding, priority)``
-        A string or tuple specifying the order, given to :meth:`ordering`.
-        If a tuple, the priority and snake_winding should only be specified for the lattice
-        directions.
-    bc_MPS : 'finite' | 'segment' | 'infinite'
-        Boundary conditions for an MPS/MPO living on the ordered lattice.
-        If the system is ``'infinite'``, the infinite direction is always along the first basis
-        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
-    basis : iterable of 1D arrays
-        for each direction one translation vectors shifting the unit cell.
-        Defaults to the standard ONB ``np.eye(dim)``.
-    position : 1D array
-        The position of the site within the unit cell. Defaults to ``np.zeros(dim))``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
     """
 
-    def __init__(self, Ls, site, order='default', bc_MPS='finite', basis=None, position=None):
-        if position is not None:
-            position = [position]
-        if not isinstance(order, str):
-            assert order[0] == 'standard'
-            descr, snake_winding, priority = order
+    def __init__(self, Ls, site, **kwargs):
+        if 'positions' in kwargs:
+            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
+            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
+        if 'order' in kwargs and not isinstance(kwargs['order'], str):
+            descr, snake_winding, priority = kwargs['order']
+            assert descr == 'standard'
             snake_winding = tuple(snake_winding) + (False, )
             priority = tuple(priority) +  (max(priority) + 1., )
-            order = descr, snake_winding, priority
-        super(SimpleLattice, self).__init__(Ls, [site], order, bc_MPS, basis, position)
+            kwargs['order'] = descr, snake_winding, priority
+        super().__init__(Ls, [site], **kwargs)
 
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        super(SimpleLattice, self).mps2lat_values(A, axes, 0)
+        super().mps2lat_values(A, axes, 0)
 
 
 class Chain(SimpleLattice):
@@ -643,16 +683,20 @@ class Chain(SimpleLattice):
         The lenght of the chain.
     site : :class:`~tenpy.networks.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    bc_MPS : 'finite' | 'segment' | 'infinite'
-        Boundary conditions for an MPS/MPO living on the ordered lattice.
-        If the system is ``'infinite'``, the infinite direction is always along the first basis
-        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
     """
 
-    def __init__(self, L, site, bc_MPS='finite'):
-        self.nearest_neighbors = [(0, 0, np.array([1,]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([2,]))]
-        super(Chain, self).__init__([L], site, bc_MPS=bc_MPS)  # and otherwise default values.
+    def __init__(self, L, site, **kwargs):
+        kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([1,]))])
+        kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([2,]))])
+        kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3,]))])
+        # and otherwise default values.
+        super().__init__([L], site, **kwargs)
 
 
 class Square(SimpleLattice):
@@ -664,22 +708,22 @@ class Square(SimpleLattice):
         The length in each direction.
     site : :class:`~tenpy.networks.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    order : str | ``('standard', snake_winding, priority)``
-        A string or tuple specifying the order, given to :meth:`ordering`.
-        If a tuple, the priority and snake_winding should only be specified for the lattice
-        directions.
-    bc_MPS : 'finite' | 'segment' | 'infinite'
-        Boundary conditions for an MPS/MPO living on the ordered lattice.
-        If the system is ``'infinite'``, the infinite direction is always along the first basis
-        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
     """
 
-    def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
-        self.nearest_neighbors = [(0, 0, np.array([1, 0])),
-                                  (0, 0, np.array([0, 1]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([1, 1])),
-                                       (0, 0, np.array([1, -1]))]
-        super(Square, self).__init__([Lx, Ly], site, order, bc_MPS)
+    def __init__(self, Lx, Ly, site, **kwargs):
+        NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
+        nNN = [(0, 0, np.array([1, 1])), (0, 0, np.array([1, -1]))]
+        nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], site, **kwargs)
 
 
 class Honeycomb(Lattice):
@@ -692,34 +736,26 @@ class Honeycomb(Lattice):
     sites : (list of) :class:`~tenpy.networks.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
         If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
-    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
-        A string or tuple specifying the order, given to :meth:`ordering`.
-    bc_MPS : 'finite' | 'segment' | 'infinite'
-        Boundary conditions for an MPS/MPO living on the ordered lattice.
-        If the system is ``'infinite'``, the infinite direction is always along the first basis
-        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
 
-    def __init__(self, Lx, Ly, sites, order='default', bc_MPS='finite'):
-        try:  # allow to specify a single site
-            iter(sites)
-        except TypeError:
-            sites = [sites, sites]
-        if len(sites) != 2:
-            raise ValueError("need to specify a single site or exactly 2 sites")
+    def __init__(self, Lx, Ly, sites, **kwargs):
+        sites = _parse_sites(sites, 2)
         basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
         delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
         pos = (-delta/2., delta/2)
-        self.nearest_neighbors = [(0, 1, np.array([0, 0])),
-                                  (1, 0, np.array([1, 0])),
-                                  (1, 0, np.array([0, 1]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([1, 0])),
-                                       (1, 1, np.array([1, 0])),
-                                       (0, 0, np.array([0, 1])),
-                                       (1, 1, np.array([0, 1])),
-                                       (0, 0, np.array([1, -1])),
-                                       (1, 1, np.array([1, -1]))]
-        super(Honeycomb, self).__init__([Lx, Ly], sites, order, bc_MPS, basis, pos)
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [(0, 1, np.array([0, 0])), (1, 0, np.array([1, 0])), (1, 0, np.array([0, 1]))]
+        nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
+               (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
+        nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], sites, **kwargs)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -756,36 +792,21 @@ class Kagome(Lattice):
     sites : (list of) :class:`~tenpy.networks.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
         If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
-    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
-        A string or tuple specifying the order, given to :meth:`ordering`.
-        sites : (list of) :class:`~tenpy.networks.Site`
-        Definitions of the physical sites.
-    bc_MPS : 'finite' | 'segment' | 'infinite'
-        Boundary conditions for an MPS/MPO living on the ordered lattice.
-        If the system is ``'infinite'``, the infinite direction is always along the first basis
-        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
-    def __init__(self, Lx, Ly, sites, order="default", bc_MPS="infinite"):
-        try:  # allow to specify a single site
-            iter(sites)
-        except TypeError:
-            sites = [sites]*3
-        if len(sites) != 3:
-            raise ValueError("need to specify a single site or exactly 3 sites")
+    def __init__(self, Lx, Ly, sites, **kwargs):
+        sites = _parse_sites(sites, 3)
         #     2
         #    / \
         #   /   \
         #  0-----1
-        self.pos = np.empty((3, 2))
-        self.pos[0] = [0, 0]
-        self.pos[1] = [1, 0]
-        self.pos[2] = [0.5, 0.5 * 3**0.5]
-
-        self.basis = np.empty((2, 2))
-        self.basis[0] = 2 * self.pos[1]
-        self.basis[1] = 2 * self.pos[2]
-
-        self.nearest_neighbors = [
+        pos = np.array([[0, 0], [1, 0], [0.5, 0.5 * 3**0.5]])
+        basis = [2*pos[1], 2*pos[2]]
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [
             (0, 1, np.array([0, 0])),
             (0, 2, np.array([0, 0])),
             (1, 2, np.array([0, 0])),
@@ -793,7 +814,7 @@ class Kagome(Lattice):
             (2, 0, np.array([0, 1])),
             (2, 1, np.array([-1, 1]))
         ]
-        self.next_nearest_neighbors = [
+        nNN = [
             (0, 1, np.array([0, -1])),
             (0, 2, np.array([1, -1])),
             (1, 0, np.array([1, -1])),
@@ -801,15 +822,15 @@ class Kagome(Lattice):
             (2, 0, np.array([1,  0])),
             (2, 1, np.array([0,  1]))
         ]
-        self.next_next_nearest_neighbors = [
+        nnNN = [
             (0, 0, np.array([1, -1])),
             (1, 1, np.array([0,  1])),
             (2, 2, np.array([1,  0]))
         ]
-
-        Lattice.__init__(
-            self, [Lx, Ly], sites, order, bc_MPS, self.basis, self.pos
-        )
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], sites, **kwargs)
 
 
 def get_order(shape, snake_winding, priority=None):
@@ -948,3 +969,14 @@ def get_order_grouped(shape, groups):
     order[:, :-2] = np.repeat(other_order, Ly*Lu, axis=0)
     order[:, -2:] = np.tile(pre_order, (N_sites//(Ly*Lu), 1))
     return order
+
+
+def _parse_sites(sites, expected_number):
+    try:  # allow to specify a single site
+        iter(sites)
+    except TypeError:
+        return [sites] * expected_number
+    if len(sites) != expected_number:
+        raise ValueError("need to specify a single site or exactly {0:d}, got {1:d}".format(
+            expected_number, len(sites)))
+    return sites

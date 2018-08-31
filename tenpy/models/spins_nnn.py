@@ -85,10 +85,10 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         # 1) define Site and lattice
         spinsite = SpinSite(S, conserve)
         site = DoubleSite(spinsite, spinsite, charges='same')
-        lat = Chain(L, site, bc_MPS=bc_MPS)
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 2) initialize CouplingModel
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
         # 3) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         hx, hy, hz = np.asarray(hx), np.asarray(hy), np.asarray(hz)
@@ -195,10 +195,10 @@ class SpinChainNNN2(CouplingModel, MPOModel):
         unused_parameters(model_param, self.__class__)
         # 1) define Site and lattice
         site = SpinSite(S, conserve)
-        lat = Chain(L, site, bc_MPS=bc_MPS)
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 2) initialize CouplingModel
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
         # 3) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         hx, hy, hz = np.asarray(hx), np.asarray(hy), np.asarray(hz)

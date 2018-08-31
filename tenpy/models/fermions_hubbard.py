@@ -57,10 +57,10 @@ class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
 
         # 1) Define the site and the lattice.
         site = SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
-        lat = Chain(L, site, bc_MPS=bc_MPS)
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 2) Initialize CouplingModel
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
 
         # 3) Add terms of the hamiltonian.
         # 3a) On-site terms

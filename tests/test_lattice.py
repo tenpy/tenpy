@@ -10,6 +10,10 @@ import nose.tools as nst
 
 from random_test import gen_random_legcharge
 
+def test_bc_choices():
+    assert int(lattice.bc_choices['open']) == 1  # this is used explicitly
+    assert int(lattice.bc_choices['periodic']) == 0   # and this as well
+
 
 def test_lattice():
     chinfo = npc.ChargeInfo([1, 3])
@@ -69,27 +73,27 @@ def test_number_nn():
 def test_lattice_order():
     s = site.SpinHalfSite('Sz')
     # yapf: disable
-    square = lattice.Square(2, 2, s, 'default')
+    square = lattice.Square(2, 2, s, order='default')
     order_default = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
     npt.assert_equal(square.order, order_default)
-    square = lattice.Square(4, 3, s, 'snake')
+    square = lattice.Square(4, 3, s, order='snake')
     order_snake = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 1, 0], [1, 0, 0],
                             [2, 0, 0], [2, 1, 0], [2, 2, 0], [3, 2, 0], [3, 1, 0], [3, 0, 0]])
     npt.assert_equal(square.order, order_snake)
-    square = lattice.Square(2, 3, s, ("standard", (True, False), (1, 0)))
+    square = lattice.Square(2, 3, s, order=("standard", (True, False), (1, 0)))
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
 
-    hc = lattice.Honeycomb(2, 3, s, 'default')
+    hc = lattice.Honeycomb(2, 3, s, order='default')
     order_hc_def = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1],
                              [1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_def)
-    hc = lattice.Honeycomb(2, 3, s, ('standard', (True, False, False), (0.3, 0.1, -1.)))
+    hc = lattice.Honeycomb(2, 3, s, order=('standard', (True, False, False), (0.3, 0.1, -1.)))
     order_hc_mix = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0],
                              [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 2, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_mix)
 
-    kag = lattice.Kagome(2, 3, s, ('grouped', [[1], [0, 2]]))
+    kag = lattice.Kagome(2, 3, s, order=('grouped', [[1], [0, 2]]))
     order_kag_gr = np.array([[0, 0, 1], [0, 1, 1], [0, 2, 1], [0, 0, 0], [0, 0, 2], [0, 1, 0],
                              [0, 1, 2], [0, 2, 0], [0, 2, 2],
                              [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 0, 0], [1, 0, 2], [1, 1, 0],
