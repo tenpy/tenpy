@@ -2,16 +2,13 @@
 
 The base class :class:`Lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
-Further, we have some predefined lattices, namely :class:`Chain`, :class:`Square`,
-:class:`Honeycomb`, and :class:`Kagome`.
+The :class:`SimpleLattice` is a slight simplification for lattices with a single-site unit cell.
+Further, we have some predefined lattices, namely
+:class:`Chain`, :class:`Ladder`,
+:class:`Square`, :class:`Honeycomb`, and :class:`Kagome`.
 
 .. todo ::
-    documentation, how to generate new lattices, examples, ...
-    implement some __repr__ and/or __str__...
-    equality tests?
-
-.. todo ::
-    Above, make table with pictures of them (-> use Lattice.plot_order)
+    documentation of boundary conditions, how to define new lattices
 """
 # Copyright 2018 TeNPy Developers
 
@@ -692,6 +689,8 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A simple uniform chain of L equal sites.
 
+    .. image :: ../images/lattices/Chain.*
+
     Parameters
     ----------
     L : int
@@ -716,6 +715,8 @@ class Chain(SimpleLattice):
 
 class Ladder(Lattice):
     """A ladder coupling two chains.
+
+    .. image :: ../images/lattice/Ladder.*
 
     Parameters
     ----------
@@ -747,6 +748,8 @@ class Ladder(Lattice):
 class Square(SimpleLattice):
     """A simple uniform square lattice.
 
+    .. image :: ../images/lattices/Square.*
+
     Parameters
     ----------
     Lx, Ly : int
@@ -773,6 +776,8 @@ class Square(SimpleLattice):
 
 class Honeycomb(Lattice):
     """A honeycomb lattice.
+
+    .. image :: ../images/lattices/Honeycomb.*
 
     Parameters
     ----------
@@ -829,6 +834,8 @@ class Honeycomb(Lattice):
 
 class Kagome(Lattice):
     """A Kagome lattice.
+
+    .. image :: ../images/lattices/Kagome.*
 
     Parameters
     ----------
