@@ -615,6 +615,49 @@ class Lattice(object):
                 raise ValueError("can only plot in 2 dimensions.")
             ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
 
+    def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
+        """Mark two sites indified by periodic boundary conditions
+
+        Works only for lattice with a 2-dimensional basis.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        direction : int
+            The direction of the lattice along which we should mark the idenitified sites.
+            If ``None``, mark it along all directions with periodic boundary conditions.
+        shift : None | np.ndarray
+            The origin starting from where we mark the identified sites.
+            Defaults to the first entry of :attr:`unit_cell_positions`.
+        **kwargs :
+            Keyword arguments for the used ``ax.plot``.
+        """
+        if direction is None:
+            dirs = [i for i in range(self.dim) if not self.bc[i]]
+        else:
+            if direction < 0:
+                direction += self.dim
+            dirs = [direction]
+        shift = self.unit_cell_positions[0]
+        kwargs.setdefault("marker", "o")
+        kwargs.setdefault("markersize", 10)
+        kwargs.setdefault("color", "orange")
+        x_y = []
+        for i in dirs:
+            if self.bc[i]:
+                raise ValueError("Boundary conditons are not periodic for given direction")
+            x_y.append(shift)
+            x_y.append(shift + self.Ls[i]*self.basis[i])
+            if self.bc_shift is not None and i > 0:
+                x_y[-1] = x_y[-1] - self.bc_shift[i-1] * self.basis[0]
+        x_y = np.array(x_y)
+        if x_y.shape[1] == 1:
+            x_y = np.hstack([x_y, np.zeros_like(x_y)])
+        if x_y.shape[1] != 2:
+            raise ValueError("can only plot in 2D")
+        ax.plot(x_y[:, 0], x_y[:, 1], **kwargs)
+
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
@@ -716,7 +759,7 @@ class Chain(SimpleLattice):
 class Ladder(Lattice):
     """A ladder coupling two chains.
 
-    .. image :: ../images/lattice/Ladder.*
+    .. image :: ../images/lattices/Ladder.*
 
     Parameters
     ----------
