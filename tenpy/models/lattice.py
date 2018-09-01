@@ -7,8 +7,7 @@ Further, we have some predefined lattices, namely
 :class:`Chain`, :class:`Ladder`,
 :class:`Square`, :class:`Honeycomb`, and :class:`Kagome`.
 
-.. todo ::
-    documentation of boundary conditions, how to define new lattices
+See also the :doc:`/intro_model`.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -578,8 +577,8 @@ class Lattice(object):
             if self.bc_shift is not None:
                 shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
                                axis=1)
-                lat_idx_2[:, 0] -= shift
-                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2[:, 0], self.Ls[0])
+                lat_idx_2_mod[:, 0] -= shift
+                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2_mod[:, 0], self.Ls[0])
             keep = np.all(
                 np.logical_or(
                     lat_idx_2_mod == lat_idx_2[:, :-1],  # not accross the boundary
@@ -732,7 +731,7 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A simple uniform chain of L equal sites.
 
-    .. image :: ../images/lattices/Chain.*
+    .. image :: /images/lattices/Chain.*
 
     Parameters
     ----------
@@ -759,7 +758,7 @@ class Chain(SimpleLattice):
 class Ladder(Lattice):
     """A ladder coupling two chains.
 
-    .. image :: ../images/lattices/Ladder.*
+    .. image :: /images/lattices/Ladder.*
 
     Parameters
     ----------
@@ -791,7 +790,7 @@ class Ladder(Lattice):
 class Square(SimpleLattice):
     """A simple uniform square lattice.
 
-    .. image :: ../images/lattices/Square.*
+    .. image :: /images/lattices/Square.*
 
     Parameters
     ----------
@@ -820,7 +819,7 @@ class Square(SimpleLattice):
 class Honeycomb(Lattice):
     """A honeycomb lattice.
 
-    .. image :: ../images/lattices/Honeycomb.*
+    .. image :: /images/lattices/Honeycomb.*
 
     Parameters
     ----------
@@ -878,7 +877,7 @@ class Honeycomb(Lattice):
 class Kagome(Lattice):
     """A Kagome lattice.
 
-    .. image :: ../images/lattices/Kagome.*
+    .. image :: /images/lattices/Kagome.*
 
     Parameters
     ----------
