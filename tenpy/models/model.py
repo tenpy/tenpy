@@ -129,8 +129,23 @@ class CouplingModel(object):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-            term = self.onsite_terms[i]
-            term[opname] = term.get(opname, 0) + strength[tuple(i_lat)]
+            self.add_onsite_term(strength[tuple(i_lat)], i, opname)
+
+    def add_onsite_term(self, strength, i, op):
+        """Add a onsite term on a given MPS site.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        i : int
+            The MPS index of the site on which the operator acts.
+            We require ``0 <= i < N_sites``.
+        op : str
+            Name of the involved operators.
+        """
+        term = self.onsite_terms[i]
+        term[op] = term.get(op, 0) + strength
 
     def add_coupling(self,
                      strength,
