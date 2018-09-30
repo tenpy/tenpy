@@ -15,6 +15,40 @@ from ..tools.misc import any_nonzero
 __all__ = ['SpinChain']
 
 
+class TFIModel(CouplingModel, MPOModel):
+    
+    def __init__(self, lattice, g, J=1):
+        
+        CouplingModel.__init__(self, lattice)
+        
+        for s in range(len(lattice.unit_cell)):
+            self.add_onsite(-np.asarray(g), s, 'Sigmaz')
+        
+        for s1, s2, uc_delta in lattice.nearest_neighbors:
+            self.add_coupling(-J, s1, 'Sp', s2, 'Sp', uc_delta)
+            self.add_coupling(-J, s1, 'Sp', s2, 'Sm', uc_delta)
+            self.add_coupling(-J, s1, 'Sm', s2, 'Sp', uc_delta)
+            self.add_coupling(-J, s1, 'Sm', s2, 'Sm', uc_delta)
+        
+        MPOModel.__init__(self, lattice, self.calc_H_MPO())
+
+
+class XXZModel(CouplingModel, MPOModel):
+
+    def __init__(self, lattice, Jxx=1, Jz=1, hz=0):
+    
+        CouplingModel.__init__(self, lattice)
+        
+        for s1, s2, uc_delta in lattice.nearest_neighbors:
+            self.add_onsite(-np.asarray(hz), 0, 'Sz')
+            Jxx_half = np.asarray(0.5 * Jxx)
+            self.add_coupling(Jxx_half, s1, 'Sp', s2, 'Sm', uc_delta)
+            self.add_coupling(Jxx_half, s1, 'Sm', s2, 'Sp', uc_delta)
+            self.add_coupling(Jz,       s1, 'Sz', s2, 'Sz', uc_delta)
+        
+        MPOModel.__init__(self, lattice, self.calc_H_MPO())
+
+
 class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
     r"""Spin-S sites coupled by nearest neighbour interactions.
 
