@@ -12,7 +12,7 @@ from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.misc import any_nonzero
 
-__all__ = ['SpinChain']
+__all__ = ['TFIModel', 'XXZModel', 'SpinChain']
 
 
 class TFIModel(CouplingModel, MPOModel):
