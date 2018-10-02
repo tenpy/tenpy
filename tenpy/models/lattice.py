@@ -1,17 +1,13 @@
 """Classes to define the lattice structure of a model.
 
-The base class :class:`lattice` defines the general structure of a lattice,
+The base class :class:`Lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
-Further, we have the predefined lattices, namely :class:`Chain`, :class:`Square`, and
-:class:`Honeycomb`.
+The :class:`SimpleLattice` is a slight simplification for lattices with a single-site unit cell.
+Further, we have some predefined lattices, namely
+:class:`Chain`, :class:`Ladder`,
+:class:`Square`, :class:`Honeycomb`, and :class:`Kagome`.
 
-.. todo ::
-    documentation, how to generate new lattices, examples, ...
-    implement some __repr__ and/or __str__...
-    equality tests?
-
-.. todo ::
-    Above, make table with pictures of them (-> use Lattice.plot_ordering)
+See also the :doc:`/intro_model`.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -22,9 +18,13 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Square', 'Honeycomb', 'get_order']
+__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Honeycomb', 'Kagome',
+           'get_order', 'get_order_grouped', 'bc_choices']
 
 # (update module doc string if you add further lattices)
+
+bc_choices = {'open': True, 'periodic': False}
+"""dict: maps possible choices of boundary conditions in a lattice to bool/int."""
 
 
 class Lattice(object):
@@ -49,23 +49,31 @@ class Lattice(object):
     Ls : list of int
         the length in each direction
     unit_cell : list of :class:`~tenpy.networks.Site`
-        the lattice sites making up a unit cell of the lattice.
-    order : str | (priority, snake_winding)
+        The sites making up a unit cell of the lattice.
+        If you want to specify it only after initialization, use ``None`` entries in the list.
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
         A string or tuple specifying the order, given to :meth:`ordering`.
-    bc_MPS : {'finite' | 'segment' | 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
+    bc : (iterable of) {'open' | 'periodic' | int}
+        Boundary conditions in each direction of the lattice.
+        A single string holds for all directions.
+        An integer `shift` means that we have periodic boundary conditions along this direction,
+        but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
+        when going around the boundary along this direction.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
     basis : iterable of 1D arrays
-        for each direction one translation vectors shifting the unit cell.
+        For each direction one translation vectors shifting the unit cell.
         Defaults to the standard ONB ``np.eye(dim)``.
     positions : iterable of 1D arrays
-        for each site of the unit cell the position within the unit cell.
+        For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
 
     Attributes
     ----------
-    dim
+    dim : int
+    order : ndarray (N_sites, dim+1)
     N_cells : int
         the number of unit cells in the lattice, ``np.prod(self.Ls)``.
     N_sites : int
@@ -78,19 +86,21 @@ class Lattice(object):
         the length in each direction.
     shape : tuple of int
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
-    chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-        The nature of the charge (which is the same for all sites).
     unit_cell : list of :class:`~tenpy.networks.Site`
         the lattice sites making up a unit cell of the lattice.
-    order : ndarray (N_sites, dim+1)
-        Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
-        This order defines how an MPS/MPO winds through the lattice.
-    bc_MPS : {'finite' | 'segment' | 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice.
-    basis: ndarray (dim, dim)
+    bc : bool ndarray
+        Boundary conditions of the couplings in each direction of the lattice,
+        translated into a bool array with the global `bc_choices`.
+    bc_shift : None | ndarray(int)
+        The shift in x-direction when going around periodic boundaries in other directions.
+    bc_MPS : 'finite' | 'segment' | 'infinite'
+        Boundary conditions for an MPS/MPO living on the ordered lattice.
+        If the system is ``'infinite'``, the infinite direction is always along the first basis
+        vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
+    basis: ndarray (dim, Dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
-    unit_cell_positions : ndarray, shape (len(unit_cell), dim)
+    unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
         for each site in the unit cell a vector giving its position within the unit cell.
     nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
@@ -100,6 +110,10 @@ class Lattice(object):
         ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
+    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neigbhors.
+    _order : ndarray (N_sites, dim+1)
+        The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
         necessary for :meth:`mps2lat_idx`
     _perm : ndarray (N, )
@@ -112,13 +126,19 @@ class Lattice(object):
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
 
-    def __init__(self, Ls, unit_cell, order='default', bc_MPS='finite', basis=None,
-                 positions=None):
+    def __init__(self, Ls, unit_cell,
+                 order='default',
+                 bc='open',
+                 bc_MPS='finite',
+                 basis=None,
+                 positions=None,
+                 nearest_neighbors=None,
+                 next_nearest_neighbors=None,
+                 next_next_nearest_neighbors=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
         self.shape = self.Ls + (len(unit_cell), )
-        self.chinfo = self.unit_cell[0].leg.chinfo
         self.N_sites = int(np.prod(self.shape))
         self.N_sites_per_ring = int(self.N_sites // self.Ls[0])
         self.N_rings = self.Ls[0]
@@ -126,34 +146,21 @@ class Lattice(object):
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
             basis = np.eye(self.dim)
-        self.unit_cell_positions = np.asarray(positions)
-        self.basis = np.asarray(basis)
+        self.unit_cell_positions = np.array(positions)
+        self.basis = np.array(basis)
+        self._set_bc(bc)
         self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
         # from order, calc necessary stuff for mps2lat and lat2mps
-        self._perm = np.lexsort(self.order.T)
-        # use advanced numpy indexing...
-        self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
-        self._mps2lat_vals_idx[tuple(self.order.T)] = np.arange(self.N_sites)
-        # versions for fixed u
-        self._mps_fix_u = []
-        self._mps2lat_vals_idx_fix_u = []
-        for u in range(len(self.unit_cell)):
-            mps_fix_u = np.nonzero(self.order[:, -1] == u)[0]
-            self._mps_fix_u.append(mps_fix_u)
-            mps2lat_vals_idx = np.empty(self.Ls, np.intp)
-            mps2lat_vals_idx[tuple(self.order[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
-            self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
-        self._mps_fix_u = tuple(self._mps_fix_u)
         # calculate _strides
         strides = [1]
         for L in self.Ls:
             strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
-        for attr in ('nearest_neighbors', 'next_nearest_neighbors'):
-            if not hasattr(self, attr):
-                setattr(self, attr, None)
+        self.nearest_neighbors = nearest_neighbors
+        self.next_nearest_neighbors = next_nearest_neighbors
+        self.next_next_nearest_neighbors = next_next_nearest_neighbors
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -161,12 +168,19 @@ class Lattice(object):
         assert self.shape == self.Ls + (len(self.unit_cell), )
         assert self.N_cells == np.prod(self.Ls)
         assert self.N_sites == np.prod(self.shape)
+        if self.bc.shape != (self.dim, ):
+            raise ValueError("Wrong len of bc")
+        assert self.bc.dtype == np.bool
+        chinfo = None
         for site in self.unit_cell:
+            if site is None:
+                continue
+            if chinfo is None:
+                chinfo = site.leg.chinfo
             if not isinstance(site, Site):
                 raise ValueError("element of Unit cell is not Site.")
-            if site.leg.chinfo != self.chinfo:
+            if site.leg.chinfo != chinfo:
                 raise ValueError("All sites must have the same ChargeInfo!")
-            site.test_sanity()
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
@@ -174,17 +188,44 @@ class Lattice(object):
         if self.basis.shape[1] != self.unit_cell_positions.shape[1]:
             raise ValueError("Different space dimensions of `basis` and `unit_cell_positions`")
         # if one of the following assert fails, the `ordering` function returned an invalid array
-        assert np.all(self.order >= 0) and np.all(self.order <= self.shape)  # entries of `order`
+        assert np.all(self._order >= 0) and np.all(self._order <= self.shape)  # entries of `order`
         assert np.all(
-            np.sum(self.order * self._strides,
+            np.sum(self._order * self._strides,
                    axis=1)[self._perm] == np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
 
     @property
     def dim(self):
-        """the dimension of the lattice."""
+        """The dimension of the lattice."""
         return len(self.Ls)
+
+    @property
+    def order(self):
+        """Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
+        This order defines how an MPS/MPO winds through the lattice.
+        """
+        return self._order
+
+    @order.setter
+    def order(self, value):
+        # update the value itself
+        self._order = value
+        # and the other stuff which is cached
+        self._perm = np.lexsort(value.T)
+        # use advanced numpy indexing...
+        self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
+        self._mps2lat_vals_idx[tuple(value.T)] = np.arange(self.N_sites)
+        # versions for fixed u
+        self._mps_fix_u = []
+        self._mps2lat_vals_idx_fix_u = []
+        for u in range(len(self.unit_cell)):
+            mps_fix_u = np.nonzero(value[:, -1] == u)[0]
+            self._mps_fix_u.append(mps_fix_u)
+            mps2lat_vals_idx = np.empty(self.Ls, np.intp)
+            mps2lat_vals_idx[tuple(value[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
+            self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
+        self._mps_fix_u = tuple(self._mps_fix_u)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -205,12 +246,12 @@ class Lattice(object):
 
         Parameters
         ----------
-        order : str | (priority, snake_winding)
+        order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
             Specifies the desired ordering using one of the strings of the above tables.
-            Alternatively, an ordering is specified by the
-            `priority` (one value for each direction, winding along the highest value first)
-            and the `snake_winding` (True/False for each direction).
-            Further explanations of these tuples in :func:`get_order`.
+            Alternatively, an ordering is specified by a tuple with first entry specifying a
+            function, ``'standard'`` for :func:`get_order` and ``'grouped'`` for
+            :func:`get_order_grouped`, and other arguments in the tuple as specified in the
+            documentation of these functions.
 
         Returns
         -------
@@ -219,8 +260,9 @@ class Lattice(object):
 
         See also
         --------
-        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
-        :meth:`plot_ordering` : visualizes the ordering
+        :func:`get_order` : generates the `order` from equivalent `priority` and `snake_winding`.
+        :func:`get_order_grouped` : variant of `get_order`.
+        :meth:`plot_order` : visualizes the resulting `order`.
         """
         if isinstance(order, str):
             if order in ["default", "Cstyle"]:
@@ -240,7 +282,13 @@ class Lattice(object):
                 # such that the derived lattice also has the orderings defined in this function.
                 raise ValueError("unknown ordering " + repr(order))
         else:
-            priority, snake_winding = order
+            descr = order[0]
+            if descr == 'standard':
+                snake_winding, priority = order[1], order[2]
+            elif descr == 'grouped':
+                return get_order_grouped(self.shape, order[1])
+            else:
+                raise ValueError("unknown ordering " + repr(order))
         return get_order(self.shape, snake_winding, priority)
 
     def position(self, lat_idx):
@@ -406,7 +454,7 @@ class Lattice(object):
         -------
         number_NN : int
             Number of nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice, not that it might be different at the edges of the lattice for open boundary
+            lattice. Note that it might be different at the edges of the lattice for open boundary
             conditions.
         """
         if self.nearest_neighbors is None:
@@ -433,7 +481,7 @@ class Lattice(object):
         -------
         number_NNN : int
             Number of next nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice, not that it might be different at the edges of the lattice for open boundary
+            lattice. Note that it might be different at the edges of the lattice for open boundary
             conditions.
         """
         if self.next_nearest_neighbors is None:
@@ -497,6 +545,7 @@ class Lattice(object):
             raise ValueError("can only plot in 2 dimensions.")
         ax.plot(pos[:, 0], pos[:, 1], **kwargs)
         if textkwargs is not None:
+            textkwargs.setdefault('color', kwargs['color'])
             for i, p in enumerate(pos):
                 ax.text(p[0], p[1], str(i), **textkwargs)
 
@@ -518,12 +567,26 @@ class Lattice(object):
         if coupling is None:
             coupling = self.nearest_neighbors
         kwargs.setdefault('color', 'k')
+        Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
             dx = np.r_[np.array(dx), 0]  # append a 0 to dx
             lat_idx_1 = self.order[self._mps_fix_u[u1], :]
             lat_idx_2 = self.order[self._mps_fix_u[u2], :] + dx[np.newaxis, :]
-            pos1 = self.position(lat_idx_1)
-            pos2 = self.position(lat_idx_2)
+            lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
+            # handle boundary conditions
+            if self.bc_shift is not None:
+                shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
+                               axis=1)
+                lat_idx_2_mod[:, 0] -= shift
+                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2_mod[:, 0], self.Ls[0])
+            keep = np.all(
+                np.logical_or(
+                    lat_idx_2_mod == lat_idx_2[:, :-1],  # not accross the boundary
+                    np.logical_not(self.bc)),  # direction has PBC
+                axis=1)
+            # get positions
+            pos1 = self.position(lat_idx_1[keep, :])
+            pos2 = self.position(lat_idx_2[keep, :])
             pos = np.stack((pos1, pos2), axis=0)
             # ax.plot connects columns of 2D array by lines
             if pos.shape[2] == 1:
@@ -551,12 +614,75 @@ class Lattice(object):
                 raise ValueError("can only plot in 2 dimensions.")
             ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
 
+    def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
+        """Mark two sites indified by periodic boundary conditions
+
+        Works only for lattice with a 2-dimensional basis.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes
+            The axes on which we should plot.
+        direction : int
+            The direction of the lattice along which we should mark the idenitified sites.
+            If ``None``, mark it along all directions with periodic boundary conditions.
+        shift : None | np.ndarray
+            The origin starting from where we mark the identified sites.
+            Defaults to the first entry of :attr:`unit_cell_positions`.
+        **kwargs :
+            Keyword arguments for the used ``ax.plot``.
+        """
+        if direction is None:
+            dirs = [i for i in range(self.dim) if not self.bc[i]]
+        else:
+            if direction < 0:
+                direction += self.dim
+            dirs = [direction]
+        shift = self.unit_cell_positions[0]
+        kwargs.setdefault("marker", "o")
+        kwargs.setdefault("markersize", 10)
+        kwargs.setdefault("color", "orange")
+        x_y = []
+        for i in dirs:
+            if self.bc[i]:
+                raise ValueError("Boundary conditons are not periodic for given direction")
+            x_y.append(shift)
+            x_y.append(shift + self.Ls[i]*self.basis[i])
+            if self.bc_shift is not None and i > 0:
+                x_y[-1] = x_y[-1] - self.bc_shift[i-1] * self.basis[0]
+        x_y = np.array(x_y)
+        if x_y.shape[1] == 1:
+            x_y = np.hstack([x_y, np.zeros_like(x_y)])
+        if x_y.shape[1] != 2:
+            raise ValueError("can only plot in 2D")
+        ax.plot(x_y[:, 0], x_y[:, 1], **kwargs)
+
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
         lat_idx = np.asarray(lat_idx, dtype=np.intp)
         if lat_idx.shape[-1] != len(self.shape):
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
         return lat_idx
+
+    def _set_bc(self, bc):
+        global bc_choices
+        if bc in list(bc_choices.keys()):
+            bc = [bc_choices[bc]] * self.dim
+            self.bc_shift = None
+        else:
+            bc = list(bc)  # we modify entries...
+            self.bc_shift = np.zeros(self.dim-1, np.int_)
+            for i, bc_i in enumerate(bc):
+                if isinstance(bc_i, int):
+                    if i == 0:
+                        raise ValueError("Invalid bc: first entry can't be a shift")
+                    self.bc_shift[i-1] = bc_i
+                    bc[i] = bc_choices['periodic']
+                else:
+                    bc[i] = bc_choices[bc_i]
+            if not np.any(self.bc_shift != 0):
+                self.bc_shift = None
+        self.bc = np.array(bc)
 
 
 class SimpleLattice(Lattice):
@@ -578,81 +704,150 @@ class SimpleLattice(Lattice):
         the length in each direction
     site : :class:`~tenpy.networks.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    order : str | (priority, snake_winding)
-        A string or tuple specifying the order, given to :meth:`ordering`.
-        If a tuple, the priority and snake_winding should only be specified for the lattice
-        directions.
-    bc_MPS : {'finite', 'segment', 'infinite'}
-        boundary conditions for an MPS/MPO living on the ordered lattice. Default 'finite'.
-    basis : iterable of 1D arrays
-        for each direction one translation vectors shifting the unit cell.
-        Defaults to the standard ONB ``np.eye(dim)``.
-    position : 1D array
-        The position of the site within the unit cell. Defaults to ``np.zeros(dim))``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
     """
 
-    def __init__(self, Ls, site, order='default', bc_MPS='finite', basis=None, position=None):
-        if position is not None:
-            position = [position]
-        if not isinstance(order, str):
-            priority, snake_winding = order
-            priority = tuple(priority) +  (max(priority) + 1., )
+    def __init__(self, Ls, site, **kwargs):
+        if 'positions' in kwargs:
+            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
+            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
+        if 'order' in kwargs and not isinstance(kwargs['order'], str):
+            descr, snake_winding, priority = kwargs['order']
+            assert descr == 'standard'
             snake_winding = tuple(snake_winding) + (False, )
-            order = priority, snake_winding
-        super(SimpleLattice, self).__init__(Ls, [site], order, bc_MPS, basis, position)
+            priority = tuple(priority) +  (max(priority) + 1., )
+            kwargs['order'] = descr, snake_winding, priority
+        super().__init__(Ls, [site], **kwargs)
 
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        super(SimpleLattice, self).mps2lat_values(A, axes, 0)
+        super().mps2lat_values(A, axes, 0)
 
 
 class Chain(SimpleLattice):
     """A simple uniform chain of L equal sites.
+
+    .. image :: /images/lattices/Chain.*
 
     Parameters
     ----------
     L : int
         The lenght of the chain.
     site : :class:`~tenpy.networks.Site`
-        Definition of local Hilbert space.
-    bc_MPS : {'finite', 'segment', 'infinite'}
-        MPS boundary conditions.
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
     """
 
-    def __init__(self, L, site, bc_MPS='finite'):
-        self.nearest_neighbors = [(0, 0, np.array([1,]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([2,]))]
-        super(Chain, self).__init__([L], site, bc_MPS=bc_MPS)  # and otherwise default values.
+    def __init__(self, L, site, **kwargs):
+        kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([1,]))])
+        kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([2,]))])
+        kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3,]))])
+        # and otherwise default values.
+        super().__init__([L], site, **kwargs)
+
+
+class Ladder(Lattice):
+    """A ladder coupling two chains.
+
+    .. image :: /images/lattices/Ladder.*
+
+    Parameters
+    ----------
+    L : int
+        The length of each chain, we have 2*L sites in total.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both chains.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+    """
+
+    def __init__(self, Lx, sites, **kwargs):
+        sites = _parse_sites(sites, 2)
+        basis = np.array([[1., 0.]])
+        pos = np.array([[0., 0.], [0., 1.]])
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [(0, 0, np.array([1])), (1, 1, np.array([1])), (0, 1, np.array([0]))]
+        nNN = [(0, 1, np.array([1])), (1, 0, np.array([1]))]
+        nnNN = [(0, 0, np.array([2])), (1, 1, np.array([2]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx], sites, **kwargs)
 
 
 class Square(SimpleLattice):
-    """A simple uniform square lattice of `Lx` by `Ly` sites."""
+    """A simple uniform square lattice.
 
-    def __init__(self, Lx, Ly, site, order='default', bc_MPS='finite'):
-        self.nearest_neighbors = [(0, 0, np.array([1, 0])),
-                                  (0, 0, np.array([0, 1]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([1, 1])),
-                                       (0, 0, np.array([1, -1]))]
-        super(Square, self).__init__([Lx, Ly], site, order, bc_MPS)
+    .. image :: /images/lattices/Square.*
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    site : :class:`~tenpy.networks.Site`
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
+    """
+
+    def __init__(self, Lx, Ly, site, **kwargs):
+        NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
+        nNN = [(0, 0, np.array([1, 1])), (0, 0, np.array([1, -1]))]
+        nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], site, **kwargs)
 
 
 class Honeycomb(Lattice):
-    """A honeycomb lattice."""
+    """A honeycomb lattice.
 
-    def __init__(self, Lx, Ly, siteA, siteB, order='default', bc_MPS='finite'):
+    .. image :: /images/lattices/Honeycomb.*
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+    """
+
+    def __init__(self, Lx, Ly, sites, **kwargs):
+        sites = _parse_sites(sites, 2)
         basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
         delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
         pos = (-delta/2., delta/2)
-        self.nearest_neighbors = [(0, 1, np.array([0, 0])),
-                                  (1, 0, np.array([1, 0])),
-                                  (1, 0, np.array([0, 1]))]
-        self.next_nearest_neighbors = [(0, 0, np.array([1, 0])),
-                                       (1, 1, np.array([1, 0])),
-                                       (0, 0, np.array([0, 1])),
-                                       (1, 1, np.array([0, 1])),
-                                       (0, 0, np.array([1, -1])),
-                                       (1, 1, np.array([1, -1]))]
-        super(Honeycomb, self).__init__([Lx, Ly], [siteA, siteB], order, bc_MPS, basis, pos)
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [(0, 1, np.array([0, 0])), (1, 0, np.array([1, 0])), (1, 0, np.array([0, 1]))]
+        nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
+               (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
+        nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], sites, **kwargs)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -666,24 +861,6 @@ class Honeycomb(Lattice):
         ``'snake'``        (0, 2, 1)                   (False, True, False)
         ================== =========================== =============================
 
-        Parameters
-        ----------
-        order : str | (priority, snake_winding)
-            Specifies the desired ordering using one of the strings of the above tables.
-            Alternatively, an ordering is specified by the
-            `priority` (one value for each direction, winding along the highest value first)
-            and the `snake_winding` (True/False for each direction).
-            Further explanations of these tuples in :func:`get_order`.
-
-        Returns
-        -------
-        order : array, shape (N, D+1), dtype np.intp
-            the order to be used for :attr:`order`.
-
-        See also
-        --------
-        :func:`get_order` : generates the ordering from the equivalent `priority` and `snake_winding`.
-        :meth:`plot_ordering` : visualizes the ordering
         """
         if isinstance(order, str):
             if order == "default":
@@ -698,41 +875,32 @@ class Honeycomb(Lattice):
 
 
 class Kagome(Lattice):
-    def __init__(self, Lx, Ly, sites, order="default", bc_MPS="infinite"):
-        """
-        Parameters
-        ----------
-        Lx : int
-            The unit cell is repeated `Lx` times into the x-direction.
-        Ly : int
-            The unit cell is repeated `Ly` times into the y-direction.
-        sites : list of :class:`~tenpy.networks.Site`
-            Definitions of the physical sites. If `x`, `sites` has to be of
-            length 3, otherwise of length 6.
-        """
+    """A Kagome lattice.
 
-        if len(sites) != 3:
-            raise ValueError(
-                "Parameter sites must be of length 3 "
-                "(but is of length {}).".format(len(sites))
-            )
+    .. image :: /images/lattices/Kagome.*
 
-        """
-           2
-          / \
-         /   \
-        0-----1
-        """
-        self.pos = np.empty((3, 2))
-        self.pos[0] = [0, 0]
-        self.pos[1] = [1, 0]
-        self.pos[2] = [0.5, 0.5 * 3**0.5]
-
-        self.basis = np.empty((2, 2))
-        self.basis[0] = 2 * self.pos[1]
-        self.basis[1] = 2 * self.pos[2]
-
-        self.nearest_neighbors = [
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    sites : (list of) :class:`~tenpy.networks.Site`
+        The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+    """
+    def __init__(self, Lx, Ly, sites, **kwargs):
+        sites = _parse_sites(sites, 3)
+        #     2
+        #    / \
+        #   /   \
+        #  0-----1
+        pos = np.array([[0, 0], [1, 0], [0.5, 0.5 * 3**0.5]])
+        basis = [2*pos[1], 2*pos[2]]
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [
             (0, 1, np.array([0, 0])),
             (0, 2, np.array([0, 0])),
             (1, 2, np.array([0, 0])),
@@ -740,7 +908,7 @@ class Kagome(Lattice):
             (2, 0, np.array([0, 1])),
             (2, 1, np.array([-1, 1]))
         ]
-        self.next_nearest_neighbors = [
+        nNN = [
             (0, 1, np.array([0, -1])),
             (0, 2, np.array([1, -1])),
             (1, 0, np.array([1, -1])),
@@ -748,15 +916,15 @@ class Kagome(Lattice):
             (2, 0, np.array([1,  0])),
             (2, 1, np.array([0,  1]))
         ]
-        self.next_next_nearest_neighbors = [
+        nnNN = [
             (0, 0, np.array([1, -1])),
             (1, 1, np.array([0,  1])),
             (2, 2, np.array([1,  0]))
         ]
-
-        Lattice.__init__(
-            self, [Lx, Ly], sites, order, bc_MPS, self.basis, self.pos
-        )
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        super().__init__([Lx, Ly], sites, **kwargs)
 
 
 def get_order(shape, snake_winding, priority=None):
@@ -772,17 +940,26 @@ def get_order(shape, snake_winding, priority=None):
     snake_winding : tuple of bool
         For each direction one bool, whether we should wind as a "snake" (True) in that direction
         (i.e., going forth and back) or simply repeat ascending (False)
-    priority: ``None`` | tuple of float
+    priority : ``None`` | tuple of float
         If ``None`` (default), use C-Style ordering.
         Otherwise, this defines the priority along which direction to wind first;
         the direction with the highest priority increases fastest.
         For example, "C-Style" order is enforced by ``priority=(0, 1, 2, ...)``,
         and Fortrans F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
+    group : ``None`` | tuple of tuple
+        If ``None`` (default), ignore it.
+        Otherwise, it specifies that we group the fastests changing dimension
 
     Returns
     -------
     order : ndarray (np.prod(shape), len(shape))
         An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
+
+    See also
+    --------
+    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
+    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
+    :func:`get_order_grouped` : a variant grouping sites of the unit cell.
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
@@ -827,3 +1004,73 @@ def get_order(shape, snake_winding, priority=None):
                     new_order[-L0:, 1:] = order
         order = new_order
     return order
+
+
+def get_order_grouped(shape, groups):
+    """Variant of :func:`get_order`, grouping some sites of the unit cell.
+
+    In this function, the word 'direction' referst to a physical direction of the lattice or the
+    index `u` of the unit cell as an "artificial direction".
+    This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
+    The argument `group` is a
+    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape (Lx, Ly, 3).
+    Calling this function with
+    then this function called with groups=((1), (2, 0)) returns an order
+    [[0, 0, 1], [0, 1, 1], [0, 1,
+
+    Parameters
+    ----------
+    shape : tuple of int
+        The shape of the lattice, i.e., the length in each direction.
+    groups : tuple of tuple of int
+        A partition and reordering of range(shape[-1]) into smaller groups.
+        The ordering goes first within a group, then along the last spatial dimensions, then
+        changing between different groups and finally in Cstyle order along the remaining spatial
+        dimensions.
+
+    Returns
+    -------
+    order : ndarray (np.prod(shape), len(shape))
+        An order of the sites for :attr:`Lattice.order` in the specified `ordering`.
+
+    See also
+    --------
+    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
+    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
+    """
+    Ly = shape[-2]
+    Lu = shape[-1]
+    N_sites = np.prod(shape)
+    # sanity check for argument group
+    groups = list(groups)
+    all = [g for gr in groups for g in gr]
+    all_set = set(all)
+    assert all_set == set(range(Lu)) # does every number appear?
+    assert len(all) == len(all_set) == Lu # exactly once?
+    assert len(shape) > 1
+    rLy = np.arange(Ly)
+    pre_order = np.empty((Ly*Lu, 2), dtype=np.intp)
+    start = 0
+    for gr in groups:
+        gr = np.array(gr)
+        Lgr = len(gr)
+        end = start + Lgr * Ly
+        pre_order[start:end, 0] = np.repeat(rLy, Lgr)
+        pre_order[start:end, 1] = np.tile(gr, Ly)
+        start = end
+    other_order = get_order(shape[:-2], [False])
+    order = np.empty((N_sites, len(shape)), dtype=np.intp)
+    order[:, :-2] = np.repeat(other_order, Ly*Lu, axis=0)
+    order[:, -2:] = np.tile(pre_order, (N_sites//(Ly*Lu), 1))
+    return order
+
+
+def _parse_sites(sites, expected_number):
+    try:  # allow to specify a single site
+        iter(sites)
+    except TypeError:
+        return [sites] * expected_number
+    if len(sites) != expected_number:
+        raise ValueError("need to specify a single site or exactly {0:d}, got {1:d}".format(
+            expected_number, len(sites)))
+    return sites

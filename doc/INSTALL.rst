@@ -29,15 +29,15 @@ Optionally, if you don't want to contribute, you can checkout the latest stable 
 .. note ::
 
     In case you don't have Git, you can download the repository as a ZIP archive.
-    The released versions can be found `here <https://github.com/tenpy/tenpy/releases>`_,
-    the latest development version `here <https://github.com/tenpy/tenpy/archive/master.zip>`_.
+    You can find under `releases <https://github.com/tenpy/tenpy/releases>`_,
+    or the `latest development version <https://github.com/tenpy/tenpy/archive/master.zip>`_.
 
 
 Minimal installation: Including tenpy into PYTHONPATH
 -----------------------------------------------------
 The python source is in the directory `tenpy/` of the repository.
 This folder `tenpy/` should be placed in (one of the folders of) the environment variable 
-`$PYTHONPATH <http://docs.python.org/2/using/cmdline.html#envvar-PYTHONPATH>`_.
+`PYTHONPATH <http://docs.python.org/2/using/cmdline.html#envvar-PYTHONPATH>`_.
 On Linux, you can simply do this with the following line in the terminal::
 
     export PYTHONPATH=$HOME/TeNPy

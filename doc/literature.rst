@@ -3,6 +3,8 @@ Literature
 
 This is a (by far non-exhaustive) list of some references for the various ideas behind the code, sorted by year and author.
 They can be cited from the python doc-strings using the format ``[Author####]_``.
+If you're looking for introductory notes, don't forget the 'official' [TeNPyNotes]_. The review by [Schollwoeck2011]_ is
+also a classic introduction.
 
 
 .. [White1992] S. White, Phys. Rev. Lett. 69, 2863 (1992),
@@ -12,6 +14,6 @@ They can be cited from the python doc-strings using the format ``[Author####]_``
 .. [Singh2010] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, arXiv:1008.4774
 .. [Schollwoeck2011] U. Schollwoeck, Annals of Physics 326, 96 (2011), arXiv:1008.3477
 .. [PollmannTurner2012] F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), arXiv:1204.0704
+.. [CincioVidal2013] L. Cincio, G. Vidal, Phys. Rev. Lett. 110, 067208 (2013), arXiv:1208.2623
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
 .. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, arXiv:1711.01288
-.. [TeNPyNotes2018] J. Hauschild, F. Pollmann, arXiv:1805.00055

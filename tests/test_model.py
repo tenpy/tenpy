@@ -64,9 +64,9 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
 
 
 def test_CouplingModel():
-    spin_half_lat = lattice.Chain(5, spin_half_site, bc_MPS='finite')
     for bc in ['open', 'periodic']:
-        M = model.CouplingModel(spin_half_lat, bc)
+        spin_half_lat = lattice.Chain(5, spin_half_site, bc=bc, bc_MPS='finite')
+        M = model.CouplingModel(spin_half_lat)
         M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', 1)
         M.test_sanity()
         M.calc_H_MPO()
@@ -77,20 +77,25 @@ def test_CouplingModel():
         else:
             M.calc_H_bond()
 
-def test_MultiCouplingModel_shift():
-    spin_half_square = lattice.Square(2, 3, spin_half_site, bc_MPS='infinite')
-    bc = ['periodic', 1]
-    M = model.MultiCouplingModel(spin_half_square, bc)
+def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
+    bc = ['periodic', shift]
+    spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
+    M = model.MultiCouplingModel(spin_half_square)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, 0, 'Sz', [(0, 'Sz', [0, 1]), (0, 'Sz', [1, 0])])
     M.test_sanity()
-    M.calc_H_MPO()
+    H = M.calc_H_MPO()
+    dims = [W.shape[0] for W in H._W]
+    # check translation invariance of the MPO: at least the dimensions should fit
+    # (the states are differently ordered, so the matrices differ!)
+    for i in range(1, Lx):
+        assert dims[:Lx] == dims[Lx:2*Lx]
 
 
 def test_CouplingModel_fermions():
     for bc, bc_MPS in zip(['open', 'periodic'], ['finite', 'infinite']):
-        fermion_lat = lattice.Chain(5, fermion_site, bc_MPS=bc_MPS)
-        M = model.CouplingModel(fermion_lat, bc)
+        fermion_lat = lattice.Chain(5, fermion_site, bc=bc, bc_MPS=bc_MPS)
+        M = model.CouplingModel(fermion_lat)
         M.add_coupling(1.2, 0, 'Cd', 0, 'C', 1, 'JW')
         M.add_coupling(1.2, 0, 'Cd', 0, 'C', -1, 'JW')
         M.test_sanity()
@@ -99,8 +104,8 @@ def test_CouplingModel_fermions():
 
 
 def test_CouplingModel_explicit():
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc_MPS='infinite')
-    M = model.CouplingModel(fermion_lat_cyl, 'periodic')
+    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
+    M = model.CouplingModel(fermion_lat_cyl)
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None) # auto-determine JW-string!
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
@@ -143,8 +148,8 @@ def test_CouplingModel_explicit():
 
 
 def test_MultiCouplingModel_explicit():
-    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc_MPS='infinite')
-    M = model.MultiCouplingModel(fermion_lat_cyl, 'periodic')
+    fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
+    M = model.MultiCouplingModel(fermion_lat_cyl)
     # create a wired fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1))

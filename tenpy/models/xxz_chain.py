@@ -31,7 +31,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     Parameters
     ----------
     L : int
-        Length of the chain
+        Length of the chain.
     Jxx, Jz, hz : float | array
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
@@ -46,6 +46,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
         unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
+
         # 1) charges of the physical leg. The only time that we actually define charges!
         leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
         # 2) onsite operators
@@ -55,15 +56,15 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
         # 3) local physical site
         site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
-        # NOTE: the most common `site` are pre-defined in tenpy.networks.site.
+        # NOTE: the most common sites are pre-defined in tenpy.networks.site.
         # you could (and should) replace steps 1)-3) by::
         #     from tenpy.networks.site import SpinHalfSite
         #     site = SpinHalfSite(conserve='Sz')
         # 4) lattice
-        lat = Chain(L, site, bc_MPS=bc_MPS)
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-np.asarray(hz), 0, 'Sz')

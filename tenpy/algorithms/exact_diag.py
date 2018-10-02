@@ -70,7 +70,7 @@ class ExactDiag(object):
         if model.lat.bc_MPS != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")
         self.model = model
-        self.chinfo = model.lat.chinfo
+        self.chinfo = model.lat.unit_cell[0].leg.chinfo
         self.full_H = None
         self.E = None
         self.V = None

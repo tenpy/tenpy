@@ -7,6 +7,13 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 [Unreleased]
 ------------
 
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- The argument order of :class:`tenpy.models.lattice.Lattice` could be a tuple ``(priority, snake_winding)`` before. 
+  This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``.
+- Moved the boundary conditions `bc_coupling` from the :class:`tenpy.models.model.CouplingModel` into the :class:`tenpy.models.lattice.Lattice` (as `bc`).
+  Using the parameter `bc_coupling` will raise a FutureWarning, one should set the boundary conditions directly in the lattice.
+
 Added
 ^^^^^
 - :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
@@ -15,7 +22,7 @@ Added
 - DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.
 - possibility to change the number of charges after creating LegCharges/Arrays
 - more general way to specify the order of sites in a :class:`tenpy.models.lattice.Lattice`.
-- new :class:`tenpy.models.lattice.Honeycomb` lattice
+- new :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
 - a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
   along with methods to count the number of nearest neighbors for sites in the bulk, and
   a way to plot them (:meth:`~tenpy.models.lattice.plot_coupling` and friends)
@@ -60,6 +67,9 @@ Fixed
 - issue #6: the CouplingModel generated wrong Couplings in some cases
 - more reasonable traceback in case of wrong labels
 
+Removed
+^^^^^^^
+- Attribute `chinfo` of :class:`~tenpy.models.lattice.Lattice`.
 
 [0.3.0] - 2018-02-19
 --------------------

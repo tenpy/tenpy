@@ -10,6 +10,10 @@ import nose.tools as nst
 
 from random_test import gen_random_legcharge
 
+def test_bc_choices():
+    assert int(lattice.bc_choices['open']) == 1  # this is used explicitly
+    assert int(lattice.bc_choices['periodic']) == 0   # and this as well
+
 
 def test_lattice():
     chinfo = npc.ChargeInfo([1, 3])
@@ -55,37 +59,55 @@ def test_number_nn():
     chain = lattice.Chain(2, s)
     assert chain.number_nearest_neighbors() == 2
     assert chain.number_next_nearest_neighbors() == 2
+    ladd = lattice.Ladder(2, s)
+    assert ladd.number_nearest_neighbors(0) == 3
+    assert ladd.number_nearest_neighbors(1) == 3
+    assert ladd.number_next_nearest_neighbors(0) == 2
+    assert ladd.number_next_nearest_neighbors(1) == 2
     square = lattice.Square(2, 2, s)
-    print(square.number_next_nearest_neighbors())
     assert square.number_nearest_neighbors() == 4
     assert square.number_next_nearest_neighbors() == 4
-    hc = lattice.Honeycomb(2, 2, s, s)
+    hc = lattice.Honeycomb(2, 2, s)
     assert hc.number_nearest_neighbors(0) == 3
     assert hc.number_nearest_neighbors(1) == 3
     assert hc.number_next_nearest_neighbors(0) == 6
     assert hc.number_next_nearest_neighbors(1) == 6
+    kag = lattice.Kagome(2, 2, s)
+    assert kag.number_nearest_neighbors(0) == 4
+    assert kag.number_nearest_neighbors(1) == 4
+    assert kag.number_nearest_neighbors(2) == 4
+    assert kag.number_next_nearest_neighbors(0) == 4
+    assert kag.number_next_nearest_neighbors(1) == 4
+    assert kag.number_next_nearest_neighbors(2) == 4
 
 
 def test_lattice_order():
     s = site.SpinHalfSite('Sz')
     # yapf: disable
-    square = lattice.Square(2, 2, s, 'default')
+    square = lattice.Square(2, 2, s, order='default')
     order_default = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
     npt.assert_equal(square.order, order_default)
-    square = lattice.Square(4, 3, s, 'snake')
+    square = lattice.Square(4, 3, s, order='snake')
     order_snake = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 1, 0], [1, 0, 0],
                             [2, 0, 0], [2, 1, 0], [2, 2, 0], [3, 2, 0], [3, 1, 0], [3, 0, 0]])
     npt.assert_equal(square.order, order_snake)
-    square = lattice.Square(2, 3, s, ((1, 0), (True, False)))
+    square = lattice.Square(2, 3, s, order=("standard", (True, False), (1, 0)))
     order_Fsnake = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]])
     npt.assert_equal(square.order, order_Fsnake)
 
-    hc = lattice.Honeycomb(2, 3, s, s, 'default')
+    hc = lattice.Honeycomb(2, 3, s, order='default')
     order_hc_def = np.array([[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1],
                              [1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_def)
-    hc = lattice.Honeycomb(2, 3, s, s, ((0.3, 0.1, -1.), (True, False, False)))
+    hc = lattice.Honeycomb(2, 3, s, order=('standard', (True, False, False), (0.3, 0.1, -1.)))
     order_hc_mix = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0],
                              [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 2, 1], [1, 2, 1]])
     npt.assert_equal(hc.order, order_hc_mix)
+
+    kag = lattice.Kagome(2, 3, s, order=('grouped', [[1], [0, 2]]))
+    order_kag_gr = np.array([[0, 0, 1], [0, 1, 1], [0, 2, 1], [0, 0, 0], [0, 0, 2], [0, 1, 0],
+                             [0, 1, 2], [0, 2, 0], [0, 2, 2],
+                             [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 0, 0], [1, 0, 2], [1, 1, 0],
+                             [1, 1, 2], [1, 2, 0], [1, 2, 2]])
+    npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable

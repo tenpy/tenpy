@@ -15,6 +15,7 @@ As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.L
 import numpy as np
 
 from .lattice import Chain, Square
+from . import lattice
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 from ..networks.site import SpinHalfSite
@@ -58,10 +59,10 @@ class TFIChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 1-3)
         site = SpinHalfSite(conserve=conserve)
         # 4) lattice
-        lat = Chain(L, site, bc_MPS=bc_MPS)
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
@@ -96,8 +97,11 @@ class TFIModel2D(CouplingModel, MPOModel):
 
     Parameters
     ----------
+    lattice : str | :class:`~tenpy.models.lattice.Lattice`
+        The lattice class for the underlaying geometry. A string should be one of the lattices
+        defined in th :mod:`~tenpy.models.lattice`.
     Lx, Ly : int
-        Length of the chain in x- and y-direction.
+        Length of the lattice in x- and y-direction.
     J, g : float | array
         Couplings as defined for the Hamiltonian above.
     bc_MPS : {'finite' | 'infinte'}
@@ -115,6 +119,7 @@ class TFIModel2D(CouplingModel, MPOModel):
 
     def __init__(self, model_param):
         # 0) read out/set default parameters
+        lat = get_parameter(model_param, 'lattice', "Square", self.__class__)
         Lx = get_parameter(model_param, 'Lx', 1, self.__class__)
         Ly = get_parameter(model_param, 'Ly', 4, self.__class__)
         J = get_parameter(model_param, 'J', 1., self.__class__)
@@ -129,22 +134,24 @@ class TFIModel2D(CouplingModel, MPOModel):
         # 1-3)
         site = SpinHalfSite(conserve=conserve)
         # 4) lattice
-        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
-        bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        if isinstance(lat, str):
+            lat = lattice.__dict__.get(lat)  # the corresponding class
+            lat = lat(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)  # instance of the class
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
+        CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
         J = np.asarray(J)
         if conserve is None:
-            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [1, 0])
-            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', [0, 1])
+            for u1, u2, dx in self.lat.nearest_neighbors:
+                self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
         else:
             for op1, op2 in [('Sp', 'Sp'), ('Sp', 'Sm'), ('Sm', 'Sp'), ('Sm', 'Sm')]:
-                self.add_coupling(-J, 0, op1, 0, op2, [1, 0])
-                self.add_coupling(-J, 0, op1, 0, op2, [0, 1])
+                for u1, u2, dx in self.lat.nearest_neighbors:
+                    self.add_coupling(-J, u1, op1, u2, op2, dx)
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         # skip 8): not a NearestNeighborModel...

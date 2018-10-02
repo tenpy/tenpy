@@ -2422,7 +2422,7 @@ class Array(object):
                     new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
                                            for l, qi in zip(pipe.legs, block_qind)]
                     block_slice[a] = slice(qm[0], qm[1])
-                new_block = old_block[block_slice].reshape(new_block_shape)
+                new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
                 # all charges are compatible by construction, but some might be zero
                 if not np.any(np.abs(new_block) > cutoff):
                     continue

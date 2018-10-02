@@ -1726,7 +1726,8 @@ class MPS(object):
         momentum quantum numbers of it. (The rotation is nothing more than a translation in `y`.)
         This function permutes some sites (on a copy of `self`) to enact the rotation, and then
         finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
-        along the lines of [PollmannTurner2012]_.
+        along the lines of [PollmannTurner2012]_, see also (the appendix and Fig. 11 in the arXiv
+        version of) [CincioVidal2013]_.
 
 
         Parameters
@@ -1760,8 +1761,11 @@ class MPS(object):
             LegCharge corresponding to `W`.
         ov : complex
             The eigenvalue of the mixed transfer matrix `<psi|T|psi>` per :attr:`L` sites.
+            An absolute value different smaller than 1 indicates that the state is not invariant
+            under the permutation or that the truncation error `trunc_err` was too large!
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The error of the represented state introduced by the truncation after swaps.
+            The error of the represented state introduced by the truncation after swaps when
+            performing the truncation.
         """
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:

@@ -73,11 +73,11 @@ class HofstadterFermions(CouplingModel, MPOModel):
 
         # 1-4) Define the sites and the lattice.
         site = FermionSite(conserve=conserve, filling=filling)
-        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
-        bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        lat = Square(Lx, Ly, site, order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
+        CouplingModel.__init__(self, lat)
 
         # 6) add terms of the Hamiltonian
         #self.add_onsite(np.asarray(U)/2, 0, 'NN')
@@ -163,11 +163,11 @@ class HofstadterBosons(CouplingModel, MPOModel):
 
         # 1-4) Define the sites and the lattice.
         site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
-        lat = Square(Lx, Ly, site, order, bc_MPS=bc_MPS)
-        bc_coupling_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_coupling_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, [bc_coupling_x, bc_coupling_y])
+        CouplingModel.__init__(self, lat)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(np.asarray(U) / 2, 0, 'NN')

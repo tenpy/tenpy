@@ -52,10 +52,10 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 1) - 3)
         site = FermionSite(conserve=conserve)
         # 4) lattice
-        lat = Chain(L, site, bc_MPS=bc_MPS)
-        bc_coupling = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, bc_coupling)
+        CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-np.asarray(mu), 0, 'N')
