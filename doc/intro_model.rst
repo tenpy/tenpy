@@ -52,7 +52,7 @@ The full Hilbert space is a tensor product of the local Hilbert space on each si
 (If you are not familiar with the charges, read the :doc:`intro_npc`)
 An example where :func:`~tenpy.networks.site.multi_sites_combine_charges` is needed would be a coupling of different
 types of sites, e.g., when a tight binding chain of fermions is coupled to some local spin degrees of freedom.
-Another use case of this function would be a model with a $U(1)$ symmetry involving only half the sites, say :math:`sum_{i=0}^{L/2} n_{2i}`.
+Another use case of this function would be a model with a $U(1)$ symmetry involving only half the sites, say :math:`\sum_{i=0}^{L/2} n_{2i}`.
 
 
 The geometry : lattices
@@ -155,7 +155,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
       
       The method :meth:`~tenpy.models.model.CouplingModel.add_coupling` adds the coupling only in one direction, i.e.
       not switching `i` and `j` in a :math:`\sum_{\langle i, j\rangle}`.
-      If you have terms like :math:`c^\dagger_i c^_j` in your Hamiltonian, you *need* to add it in both directions to get
+      If you have terms like :math:`c^\dagger_i c_j` in your Hamiltonian, you *need* to add it in both directions to get
       a hermitian hamiltonian! Simply add another line ``self.add_coupling(J, u1, 'Sz', u2, 'Sz', -dx)``.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.

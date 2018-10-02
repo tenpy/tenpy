@@ -33,7 +33,7 @@ class Site(object):
     Parameters
     ----------
     leg : :class:`~tenpy.linalg.charges.LegCharge`
-        Charges of the physical states, to be used for the physical leg of MPS & co).
+        Charges of the physical states, to be used for the physical leg of MPS.
     state_labels : None | list of str
         Optionally a label for each local basis states. ``None`` entries are ignored / not set.
     **site_ops :
@@ -210,7 +210,7 @@ class Site(object):
         if need_JW:
             self.need_JW_string.add(name)
         if name == 'JW':
-            self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray())) / np.pi)
+            self.JW_exponent = np.angle(np.real_if_close(np.diag(op.to_ndarray()))) / np.pi
 
     def rename_op(self, old_name, new_name):
         """Rename an added operator.
@@ -568,17 +568,15 @@ class SpinHalfSite(Site):
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
     ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
 
-    ==============  ================================================
-    operator        description
-    ==============  ================================================
-    ``Id, JW``      Identity :math:`\mathbb{1}`
-    ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
-                    equal to half the Pauli matrices.
-    ``Sigmax``      Pauli matrix :math:`Sigmax`
-    ``Sigmay``
-    ``Sigmaz``
-    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
-    ==============  ================================================
+    =========================== ================================================
+    operator                    description
+    =========================== ================================================
+    ``Id, JW``                  Identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``              Spin components :math:`S^{x,y,z}`,
+                                equal to half the Pauli matrices.
+    ``Sigmax, Sigmay, Sigmaz``  Pauli matrices :math:`\sigma^{x,y,z}`
+    ``Sp, Sm``                  Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    =========================== ================================================
 
     ============== ====  ============================
     `conserve`     qmod  *excluded* onsite operators
