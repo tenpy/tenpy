@@ -15,6 +15,7 @@ Submodules
    tenpy.models.spins
    tenpy.models.spins_nnn
    tenpy.models.tf_ising
+   tenpy.models.toric_code
    tenpy.models.xxz_chain
 
 Module contents
