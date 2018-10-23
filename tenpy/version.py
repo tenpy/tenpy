@@ -41,5 +41,5 @@ def _get_git_version(file=__file__):
 git_version = _get_git_version()
 
 # git version + numpy, scipy versions
-full_version = "{0!s} using python {3!s} with numpy {1!s}, scipy {2!s}".format(
+full_version = "tenpy {0!s} using \npython {3!s}\nnumpy {1!s}, scipy {2!s}".format(
     git_version, numpy.version.full_version, scipy.version.full_version, sys.version)

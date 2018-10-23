@@ -17,7 +17,8 @@ def example_DMRG_finite(L, g):
     print("finite DMRG, L={L:d}, g={g:.2f}".format(L=L, g=g))
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc='finite')
+    product_state = ["up"] * model_params['L']
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=model_params['bc_MPS'])
     dmrg_params = {
         'mixer': None,
         'trunc_params': {
@@ -42,7 +43,8 @@ def example_DMRG_infinite(g):
     print("infinite DMRG, g={g:.2f}".format(g=g))
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [0] * 2, bc='infinite')
+    product_state = ["up"] * model_params['L']
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=model_params['bc_MPS'])
     dmrg_params = {
         'mixer': True,
         'trunc_params': {

@@ -28,7 +28,7 @@ class Site(object):
     .. warning ::
         The order of the local basis can change depending on the charge conservation!
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
-        We use the :attr:`state_labels` (and :attr:`perm`) to keep track of these permutations.
+        We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
 
     Parameters
     ----------
@@ -60,7 +60,9 @@ class Site(object):
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
         All onsite operators have labels ``'p', 'p*'``.
     perm : 1D array
-        Index permutation of the physical leg compared to `conserve=None`.
+        Index permutation of the physical leg compared to `conserve=None`,
+        i.e. ``OP_conserved = OP_nonconserved[np.ix_(perm,perm)]`` and
+        ``perm[state_labels_conserved["some_state"]] == state_labels_nonconserved["some_state"]``.
     JW_exponent : 1D array
         Exponents of the ``'JW'`` operator, such that
         ``self.JW.to_ndarray() = np.diag(np.exp(1.j*np.pi* JW_exponent))``
@@ -115,8 +117,12 @@ class Site(object):
         ----------
         new_leg_charge : :class:`LegCharge` | None
             The new charges to be used. If ``None``, use trivial charges.
-        permute : ``None`` | ndarray
-            Ignored if ``None``; otherwise an permuation applied to the physical leg.
+        permute : ndarray | None
+            The permuation applied to the physical leg,
+            which gets used to adjust :attr:`state_labels` and :att:`perm`.
+            If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
+            use ``leg.perm_flat_from_perm_qind(perm_qind)``.
+            Ignored if ``None``.
         """
         if new_leg_charge is None:
             new_leg_charge = npc.LegCharge.from_trivial(self.dim)
@@ -618,6 +624,10 @@ class SpinHalfSite(Site):
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         super(SpinHalfSite, self).__init__(leg, ['up', 'down'], **ops)
+        # further alias for state labels
+        self.state_labels['-0.5'] = self.state_labels['down']
+        self.state_labels['0.5'] = self.state_labels['up']
+        # Add Pauli matrices
         if conserve != 'Sz':
             self.add_op('Sigmax', 2. * self.Sx)
             self.add_op('Sigmay', 2. * self.Sy)
@@ -706,12 +716,11 @@ class SpinSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
-        names = [None] * d
-        names[0] = 'down'
-        names[-1] = 'up'
-        if int(2 * S) % 2 == 0:
-            names[int(S)] = '0'
+        names = [str(i) for i in np.arange(-S, S, 1.)]
         super(SpinSite, self).__init__(leg, names, **ops)
+        self.state_labels["up"] = self.state_labels[names[0]]
+        self.state_labels["up"] = self.state_labels[names[-1]]
+
 
     def __repr__(self):
         """Debug representation of self"""
@@ -1058,6 +1067,7 @@ class BosonSite(Site):
         self.conserve = conserve
         self.filling = filling
         super(BosonSite, self).__init__(leg, states, **ops)
+        self.state_labels['0'] = self.state_labels['vac'] # alias
 
     def __repr__(self):
         """Debug representation of self"""

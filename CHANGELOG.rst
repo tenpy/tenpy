@@ -13,6 +13,10 @@ Backwards incompatible changes
   This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``.
 - Moved the boundary conditions `bc_coupling` from the :class:`tenpy.models.model.CouplingModel` into the :class:`tenpy.models.lattice.Lattice` (as `bc`).
   Using the parameter `bc_coupling` will raise a FutureWarning, one should set the boundary conditions directly in the lattice.
+- Added parameter `permute` (True by default) in :meth:`tenpy.networks.mps.from_product_state` and :meth:`tenpy.networks.mps.from_Bflat`.
+  The resulting state will therefore be independent of the "conserve" parameter of the Sites - unlike before, 
+  where the meaning of the p_state argument might have changed.
+
 
 Added
 ^^^^^
@@ -29,6 +33,7 @@ Added
 - :meth:`tenpy.networks.mpo.MPO.from_grids` to generate the MPO from a grid.
 - :class:`tenpy.models.model.MultiCouplingModel` for couplings involving more than 2 sites.
 - request #8: Allow shift in boundary conditions of :class:`~tenpy.models.model.CouplingModel`.
+- Allow to use state labels in :meth:`tenpy.networks.mps.from_product_state`.
 
 Changed
 ^^^^^^^

@@ -140,8 +140,8 @@ class Lattice(object):
         self.N_cells = int(np.prod(self.Ls))
         self.shape = self.Ls + (len(unit_cell), )
         self.N_sites = int(np.prod(self.shape))
-        self.N_sites_per_ring = int(self.N_sites // self.Ls[0])
         self.N_rings = self.Ls[0]
+        self.N_sites_per_ring = int(self.N_sites // self.N_rings)
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:

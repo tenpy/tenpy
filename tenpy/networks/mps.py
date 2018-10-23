@@ -215,6 +215,7 @@ class MPS(object):
                            p_state,
                            bc='finite',
                            dtype=np.float,
+                           permute=True,
                            form='B',
                            chargeL=None):
         """Construct a matrix product state from a given product state.
@@ -224,17 +225,21 @@ class MPS(object):
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
         p_state : iterable of {int | str | 1D array}
-            Defines the product state.
-            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``.
+            Defines the product state to be represented.
             If ``p_state[i]`` is str, then site ``i`` is in state
-            ``self.sites[i].state_label(p_state[i])``.
+            ``self.sites[i].state_labels(p_state[i])``.
+            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``.
             If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``.
-            Note that what an int means can change depending in the charges;
-            see the warning in the doc-string of :class:`~tenpy.networks.site.Site`.
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
             The data type of the array entries.
+        permute : bool
+            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            conservation gets enabled.
+            If `permute` is True (default), we permute the given `p_state` locally according to
+            each site's :attr:`~tenpy.networks.Site.perm`.
+            The `p_state` argument should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
@@ -270,20 +275,28 @@ class MPS(object):
         chargeL = ci.make_valid(chargeL)  # sets to zero if `None`
         legL = npc.LegCharge.from_qflat(ci, [chargeL])  # (no need to bunch)
         for p_st, site in zip(p_state, sites):
+            perm = permute
+            if isinstance(p_st, str):
+                p_st = site.state_labels[p_st]  # translate labels into "int"
+                perm = False
             try:
                 iter(p_st)
                 if len(p_st) != site.dim:
                     raise ValueError("p_state incompatible with local dim:" + repr(p_st))
                 B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             except TypeError:
+                # just an int for p_st
                 B = np.zeros((site.dim, 1, 1), dtype)
                 B[p_st, 0, 0] = 1.0
+            if perm:
+                B = B[site.perm, :, :]
             Bs.append(B)
         SVs = [[1.]] * (L + 1)
-        return cls.from_Bflat(sites, Bs, SVs, bc=bc, dtype=dtype, form=form, legL=legL)
+        return cls.from_Bflat(sites, Bs, SVs, bc=bc, dtype=dtype, perm=False, form=form, legL=legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, form='B', legL=None):
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, perm=True, form='B',
+                   legL=None):
         """Construct a matrix product state from a given product state.
 
         Parameters
@@ -301,6 +314,12 @@ class MPS(object):
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
             The data type of the array entries.
+        permute : bool
+            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            conservation gets enabled.
+            If `permute` is True (default), we permute the given `Bflat` locally according to
+            each site's :attr:`~tenpy.networks.Site.perm`.
+            The `p_state` argument should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -328,6 +347,8 @@ class MPS(object):
         Bs = []
         for i, site in enumerate(sites):
             B = np.array(Bflat[i], dtype)
+            if permute:
+                B = B[site.perm, :, :]
             # calculate the LegCharge of the right leg
             legs = [site.leg, legL, None]  # other legs are known
             legs = npc.detect_legcharge(B, ci, legs, None, qconj=-1)
