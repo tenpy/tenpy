@@ -10,7 +10,7 @@ import numpy as np
 from tenpy.models.spins import SpinChain
 from tenpy.networks.mps import MPS, TransferMatrix
 from tenpy.algorithms.dmrg import run as run_DMRG
-import pylab as pl
+import matplotlib.pyplot as plt
 
 
 def run(Jzs):
@@ -80,11 +80,11 @@ def run(Jzs):
 def plot(results, filename):
     corr_length = results['corr_length']
     Jzs = results['Jzs']
-    pl.plot(Jzs, np.exp(-1. / corr_length))
-    pl.xlabel(r'$J_z/J_x$')
-    pl.ylabel(r'$t = \exp(-\frac{1}{\xi})$')
-    pl.savefig(filename)
-    #  pl.show()
+    plt.plot(Jzs, np.exp(-1. / corr_length))
+    plt.xlabel(r'$J_z/J_x$')
+    plt.ylabel(r'$t = \exp(-\frac{1}{\xi})$')
+    plt.savefig(filename)
+    #  plt.show()
 
 
 if __name__ == "__main__":

@@ -42,4 +42,4 @@ if TENPY_OPTIMIZE < 0:
 comp_flags = {'TENPY_OPTIMIZE': TENPY_OPTIMIZE}
 
 ext_modules = cythonize(extensions, compiler_directives=comp_direct, compile_time_env=comp_flags)
-setup(name="TeNPy", ext_modules=ext_modules)
+setup(name="tenpy", ext_modules=ext_modules, packages=['tenpy'])

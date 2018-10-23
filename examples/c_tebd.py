@@ -98,19 +98,19 @@ def example_TEBD_lightcone(L, g, tmax, dt):
     for n in range(int(tmax / dt_measure + 0.5)):
         eng.run()
         S.append(psi.entanglement_entropy())
-    import pylab as pl
-    pl.figure()
-    pl.imshow(
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.imshow(
         S[::-1],
         vmin=0.,
         aspect='auto',
         interpolation='nearest',
         extent=(0, L - 1., -0.5 * dt_measure, eng.evolved_time + 0.5 * dt_measure))
-    pl.xlabel('site $i$')
-    pl.ylabel('time $t/J$')
-    pl.ylim(0., tmax)
-    pl.colorbar().set_label('entropy $S$')
-    pl.savefig('c_tebd_lightcone.pdf')
+    plt.xlabel('site $i$')
+    plt.ylabel('time $t/J$')
+    plt.ylim(0., tmax)
+    plt.colorbar().set_label('entropy $S$')
+    plt.savefig('c_tebd_lightcone.pdf')
 
 
 if __name__ == "__main__":

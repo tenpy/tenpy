@@ -272,31 +272,31 @@ def plot_timing_res(data, fn=None):
     markers = num_q
     colors = method
     """
-    import pylab as pl
+    import matplotlib.pyplot as plt
     num_qs = data['num_qs']
     sizes = data['sizes']
     timed = data['timings']
     timed = np.ma.array(timed, mask=(timed == 0.))
     markers = ['o', 's', 'v', 'x']  # num_q
-    pl.figure(figsize=(10, 7))
+    plt.figure(figsize=(10, 7))
     for qn, t_qn, m in zip(num_qs, timed, markers):
         for t, lab, col in [(t_qn[:, 0], 'npc', 'r'), (t_qn[:, 1], 'old_npc', 'g'),
                             (t_qn[:, 2], 'numpy', 'b')]:
             lab = "qnumber {qn:d}, {lab}".format(lab=lab, qn=qn)
             if np.any(t != 0.):  # only if we have data
-                pl.plot(sizes, t, col + m + '-', markersize=8, label=lab)
+                plt.plot(sizes, t, col + m + '-', markersize=8, label=lab)
     if 'kwargs' in data:
-        pl.title(', '.join(
+        plt.title(', '.join(
             [k + "=" + str(data['kwargs'][k]) for k in sorted(data['kwargs'].keys())]))
-    pl.xlabel('size (of each leg)')
-    pl.ylabel('total time [s]')
-    pl.loglog()
-    pl.legend(loc='upper left')
+    plt.xlabel('size (of each leg)')
+    plt.ylabel('total time [s]')
+    plt.loglog()
+    plt.legend(loc='upper left')
     if fn is None:
-        pl.show()
+        plt.show()
     else:
-        pl.savefig(fn)
-    pl.close()
+        plt.savefig(fn)
+    plt.close()
 
 
 def load(fn):

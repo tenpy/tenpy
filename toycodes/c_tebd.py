@@ -107,15 +107,15 @@ def example_TEBD_lightcone(L, g, tmax, dt):
             print("t = {t:.2f}, chi =".format(t=n * dt), psi.get_chi())
         run_TEBD(psi, U_bonds, 1, chi_max=50, eps=1.e-10)
         S.append(psi.entanglement_entropy())
-    import pylab as pl
-    pl.figure()
-    pl.imshow(S[::-1], vmin=0., aspect='auto', interpolation='nearest',
-              extent=(0, L - 1., -0.5*dt, (Nsteps + 0.5) * dt))  # yapf:disable
-    pl.xlabel('site $i$')
-    pl.ylabel('time $t/J$')
-    pl.ylim(0., tmax)
-    pl.colorbar().set_label('entropy $S$')
-    pl.show()
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.imshow(S[::-1], vmin=0., aspect='auto', interpolation='nearest',
+               extent=(0, L - 1., -0.5*dt, (Nsteps + 0.5) * dt))  # yapf:disable
+    plt.xlabel('site $i$')
+    plt.ylabel('time $t/J$')
+    plt.ylim(0., tmax)
+    plt.colorbar().set_label('entropy $S$')
+    plt.show()
 
 
 if __name__ == "__main__":

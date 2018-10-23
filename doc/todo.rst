@@ -14,8 +14,6 @@ Concrete things to be fixed in different files
 - MPS class: group_sites, split_sites, pad
 - MPS class: probability_per_charge, charge_variance
 - MPS class: string correlation function
-- MPS class: pollmann_turner
-- Sites: Define state labels for *each* state
 
 
 To be done at some point for the next releases
