@@ -292,11 +292,11 @@ class MPS(object):
                 B = B[site.perm, :, :]
             Bs.append(B)
         SVs = [[1.]] * (L + 1)
-        return cls.from_Bflat(sites, Bs, SVs, bc=bc, dtype=dtype, perm=False, form=form, legL=legL)
+        return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, perm=True, form='B',
-                   legL=None):
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, permute=True,
+                   form='B', legL=None):
         """Construct a matrix product state from a given product state.
 
         Parameters
