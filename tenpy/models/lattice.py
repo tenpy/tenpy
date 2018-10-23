@@ -721,7 +721,7 @@ class SimpleLattice(Lattice):
             snake_winding = tuple(snake_winding) + (False, )
             priority = tuple(priority) +  (max(priority) + 1., )
             kwargs['order'] = descr, snake_winding, priority
-        super().__init__(Ls, [site], **kwargs)
+        Lattice.__init__(self, Ls, [site], **kwargs)
 
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
@@ -752,7 +752,7 @@ class Chain(SimpleLattice):
         kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([2,]))])
         kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3,]))])
         # and otherwise default values.
-        super().__init__([L], site, **kwargs)
+        SimpleLattice.__init__(self, [L], site, **kwargs)
 
 
 class Ladder(Lattice):
@@ -784,7 +784,7 @@ class Ladder(Lattice):
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
-        super().__init__([Lx], sites, **kwargs)
+        Lattice.__init__(self, [Lx], sites, **kwargs)
 
 
 class Square(SimpleLattice):
@@ -813,7 +813,7 @@ class Square(SimpleLattice):
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
-        super().__init__([Lx, Ly], site, **kwargs)
+        SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
 
 
 class Honeycomb(Lattice):
@@ -847,7 +847,7 @@ class Honeycomb(Lattice):
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
-        super().__init__([Lx, Ly], sites, **kwargs)
+        Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -924,7 +924,7 @@ class Kagome(Lattice):
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
-        super().__init__([Lx, Ly], sites, **kwargs)
+        Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
 
 def get_order(shape, snake_winding, priority=None):

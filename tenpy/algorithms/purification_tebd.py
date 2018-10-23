@@ -52,7 +52,7 @@ class PurificationTEBD(tebd.Engine):
     """
 
     def __init__(self, psi, model, TEBD_params):
-        super(PurificationTEBD, self).__init__(psi, model, TEBD_params)
+        super().__init__(psi, model, TEBD_params)
         self._disent_iterations = np.zeros(psi.L)
         self._guess_U_disent = None  # will be set in calc_U
         method = get_parameter(self.TEBD_params, 'disentangle', None, 'PurificationTEBD')
@@ -87,7 +87,7 @@ class PurificationTEBD(tebd.Engine):
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
         """see :meth:`~tenpy.algorithms.tebd.eng.calc_U`"""
-        super(PurificationTEBD, self).calc_U(order, delta_t, type_evo, E_offset)
+        super().calc_U(order, delta_t, type_evo, E_offset)
         self._guess_U_disent = [[None] * len(Us) for Us in self._U]
 
     def update_bond(self, i, U_bond):

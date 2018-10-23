@@ -428,7 +428,7 @@ class DoubleSite(Site):
         JW0 = site0.JW
         JW1 = site1.JW
         JW_both = self.kroneckerproduct(JW0, JW1)
-        super(DoubleSite, self).__init__(pipe, states, JW=JW_both)
+        Site.__init__(self, pipe, states, JW=JW_both)
         # add remaining operators
         Id1 = site1.Id
         for opname, op in site0.onsite_ops.items():
@@ -623,7 +623,7 @@ class SpinHalfSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
-        super(SpinHalfSite, self).__init__(leg, ['up', 'down'], **ops)
+        Site.__init__(self, leg, ['up', 'down'], **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
         self.state_labels['0.5'] = self.state_labels['up']
@@ -717,7 +717,7 @@ class SpinSite(Site):
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S, 1.)]
-        super(SpinSite, self).__init__(leg, names, **ops)
+        Site.__init__(self, leg, names, **ops)
         self.state_labels["up"] = self.state_labels[names[0]]
         self.state_labels["up"] = self.state_labels[names[-1]]
 
@@ -792,7 +792,7 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
-        super(FermionSite, self).__init__(leg, ['empty', 'full'], **ops)
+        Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd'])
 
@@ -972,7 +972,7 @@ class SpinHalfFermionSite(Site):
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
         self.filling = filling
-        super(SpinHalfFermionSite, self).__init__(leg, states, **ops)
+        Site.__init__(self, leg, states, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd'])
 
@@ -1066,7 +1066,7 @@ class BosonSite(Site):
         self.Nmax = Nmax
         self.conserve = conserve
         self.filling = filling
-        super(BosonSite, self).__init__(leg, states, **ops)
+        Site.__init__(self, leg, states, **ops)
         self.state_labels['0'] = self.state_labels['vac'] # alias
 
     def __repr__(self):

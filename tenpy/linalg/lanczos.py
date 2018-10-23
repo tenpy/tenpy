@@ -287,7 +287,7 @@ class LanczosEvolution(LanczosGroundState):
     """
 
     def __init__(self, H, psi0, params):
-        super(LanczosEvolution, self).__init__(H, psi0, params)
+        super().__init__(H, psi0, params)
         self.delta = None
         self._result_norm = 1.
 

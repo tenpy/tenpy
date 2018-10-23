@@ -642,10 +642,10 @@ class MPOEnvironment(MPSEnvironment):
         -------
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vR*', 'vR'`` for `bra`, `ket`.
+            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
-        return super(MPOEnvironment, self).get_LP(i, store=True)
+        return super().get_LP(i, store)
 
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
@@ -660,11 +660,11 @@ class MPOEnvironment(MPSEnvironment):
         Returns
         -------
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
-            Contraction of everything left of site `i`,
+            Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
-        return super(MPOEnvironment, self).get_RP(i, store=True)
+        return super().get_RP(i, store)
 
     def full_contraction(self, i0):
         """Calculate the energy by a full contraction of the network.

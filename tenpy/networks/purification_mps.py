@@ -148,7 +148,7 @@ class PurificationMPS(MPS):
         for B in self._B:
             if not set(['vL', 'vR', 'p', 'q']) <= set(B.get_leg_labels()):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
-        super(PurificationMPS, self).test_sanity()
+        super().test_sanity()
 
     def copy(self):
         """Returns a copy of `self`.
