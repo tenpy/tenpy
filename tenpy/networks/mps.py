@@ -501,7 +501,7 @@ class MPS(object):
                 B.iset_leg_labels(['vL', 'p', 'vR'])
             elif len(labels_L) == 0 and len(labels_R) == 0:
                 B = B.add_trivial_leg(0, label='vL', qconj=+1)
-                B = B.add_trivial_leg(2, label='vR', qconj=+1)
+                B = B.add_trivial_leg(2, label='vR', qconj=-1)
                 B.iset_leg_labels(['vL', 'p', 'vR'])
             elif len(labels_L) == 0:
                 B = B.combine_legs([labels_R], new_axes=[1], qconj=[-1])
@@ -510,7 +510,7 @@ class MPS(object):
             else:  # len(labels_R) == 0
                 B = B.combine_legs([labels_L], new_axes=[0], qconj=[+1])
                 B.iset_leg_labels(['vL', 'p'])
-                B = B.add_trivial_leg(2, label='vR', qconj=+1)
+                B = B.add_trivial_leg(2, label='vR', qconj=-1)
             Bs.append(B)
             N = 2**len(labels_R)
             Ss.append(np.ones(N) / (N**0.5))
