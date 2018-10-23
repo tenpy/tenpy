@@ -1015,7 +1015,7 @@ cdef class LegPipe(LegCharge):
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs
-        super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
+        LegCharge.__init__(self, chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
         self.nlegs = len(legs)
@@ -1030,7 +1030,7 @@ cdef class LegPipe(LegCharge):
         cdef int opt_level = optimization._level
         if opt_level >= optimization_compare:
             return
-        super(LegPipe, self).test_sanity()
+        LegCharge.test_sanity(self)
         assert (all([l.chinfo == self.chinfo for l in self.legs]))
         assert (self.subshape == tuple([l.ind_len for l in self.legs]))
         assert (self.subqshape == tuple([l.block_number for l in self.legs]))
@@ -1040,11 +1040,11 @@ cdef class LegPipe(LegCharge):
         Usually not needed, but called by functions, which are not implemented for a LegPipe."""
         return LegCharge(self.chinfo, self.slices, self.charges, self.qconj)
 
-    cpdef LegPipe conj(self):
+    cpdef LegPipe conj(LegPipe self):
         """Return a shallow copy with opposite ``self.qconj``.
 
         Also conjugates each of the incoming legs."""
-        cdef LegPipe res = super(LegPipe, self).conj()  # invert self.qconj
+        cdef LegPipe res = LegCharge.conj(self)  # invert self.qconj
         res.legs = tuple([l.conj() for l in self.legs])
         return res
 
@@ -1219,7 +1219,7 @@ cdef class LegPipe(LegCharge):
         cdef np.ndarray idx
         if bunch:
             # call LegCharge.bunch(), which also calculates new blocksizes
-            idx, bunched = super(LegPipe, self).bunch()
+            idx, bunched = LegCharge.bunch(self)
             self._set_charges(bunched.charges)  # copy information back to self
             self._set_slices(bunched.slices)
             a = 0
@@ -1274,7 +1274,7 @@ cdef class LegPipe(LegCharge):
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        super_state = super(LegPipe, self).__getstate__()
+        super_state = LegCharge.__getstate__(self)
         return (super_state,
                 self.nlegs,
                 self.legs,
@@ -1296,7 +1296,7 @@ cdef class LegPipe(LegCharge):
         self.q_map_slices = q_map_slices
         self._perm = _perm
         self._strides = _strides
-        super(LegPipe, self).__setstate__(super_state)
+        LegCharge.__setstate__(self, super_state)
 
 def _find_row_differences(qflat):
     """Return indices where the rows of the 2D array `qflat` change.

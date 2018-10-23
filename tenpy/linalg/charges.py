@@ -947,7 +947,7 @@ class LegPipe(LegCharge):
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs
-        super(LegPipe, self).__init__(chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
+        LegCharge.__init__(self, chinfo, [0, 1], [[0] * chinfo.qnumber], qconj)
         # additional attributes
         self.legs = legs = tuple(legs)
         self.subshape = tuple([l.ind_len for l in self.legs])
@@ -967,7 +967,7 @@ class LegPipe(LegCharge):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         if optimize(OptimizationFlag.skip_arg_checks):
             return
-        super(LegPipe, self).test_sanity()
+        LegCharge.test_sanity(self)
         if not hasattr(self, "subshape"):
             return  # omit further check during ``super(LegPipe, self).__init__``
         assert (all([l.chinfo == self.chinfo for l in self.legs]))
@@ -983,7 +983,7 @@ class LegPipe(LegCharge):
         """Return a shallow copy with opposite ``self.qconj``.
 
         Also conjugates each of the incoming legs."""
-        res = super(LegPipe, self).conj()  # invert self.qconj
+        res = LegCharge.conj(self)  # invert self.qconj
         res.legs = tuple([l.conj() for l in self.legs])
         return res
 
@@ -1142,7 +1142,7 @@ class LegPipe(LegCharge):
 
         if bunch:
             # call LegCharge.bunch(), which also calculates new blocksizes
-            idx, bunched = super(LegPipe, self).bunch()
+            idx, bunched = LegCharge.bunch(self)
             self.charges = bunched.charges  # copy information back to self
             self.slices = bunched.slices
             # calculate q_map[:, 2], the qindices corresponding to the rows of q_map
@@ -1187,7 +1187,7 @@ class LegPipe(LegCharge):
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        super_state = super(LegPipe, self).__getstate__()
+        super_state = LegCharge.__getstate__(self)
         return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
                 self.q_map_slices, self._perm, self._strides)
 
@@ -1201,7 +1201,7 @@ class LegPipe(LegCharge):
         self.q_map_slices = q_map_slices
         self._perm = _perm
         self._strides = _strides
-        super(LegPipe, self).__setstate__(super_state)
+        LegCharge.__setstate__(self, super_state)
 
 
 def _find_row_differences(qflat):
