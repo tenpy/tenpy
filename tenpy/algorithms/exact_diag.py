@@ -22,7 +22,7 @@ from ..linalg import np_conserved as npc
 from ..networks.mps import MPS
 
 
-class ExactDiag(object):
+class ExactDiag:
     """(Full) exact diagonalization of the Hamiltonian.
 
     Parameters

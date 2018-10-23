@@ -1406,7 +1406,7 @@ class EngineFracture(Engine):
         self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
 
-class Mixer(object):
+class Mixer:
     """Mixer class.
 
     .. todo ::

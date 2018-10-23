@@ -43,7 +43,7 @@ class SimpleHeff(scipy.sparse.linalg.LinearOperator):
         return x
 
 
-class SimpleDMRGEngine(object):
+class SimpleDMRGEngine:
     """DMRG algorithm, implemented as class holding the necessary data.
 
     Parameters

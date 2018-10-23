@@ -85,7 +85,7 @@ from ..algorithms.truncation import TruncationError, svd_theta
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
 
 
-class MPS(object):
+class MPS:
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
     Parameters
@@ -2144,7 +2144,7 @@ class MPS(object):
         return Gl, np.ones(Yr.legs[0].ind_len, np.float)
 
 
-class MPSEnvironment(object):
+class MPSEnvironment:
     """Stores partial contractions of :math:`<bra|Op|ket>` for local operators `Op`.
 
     The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary

@@ -60,7 +60,7 @@ from ..tools.params import get_parameter
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
-class TruncationError(object):
+class TruncationError:
     r"""Class representing a truncation error.
 
     The default initialization represents "no truncation".

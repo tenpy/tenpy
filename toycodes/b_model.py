@@ -4,7 +4,7 @@
 import numpy as np
 
 
-class TFIModel(object):
+class TFIModel:
     """Simple class generating the Hamiltonian of the transverse-field Ising model.
 
     The Hamiltonian reads

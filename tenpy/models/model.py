@@ -39,7 +39,7 @@ from ..networks import mpo  # used to construct the Hamiltonian as MPO
 __all__ = ['CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
 
 
-class CouplingModel(object):
+class CouplingModel:
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
@@ -728,7 +728,7 @@ class MultiCouplingModel(CouplingModel):
         # done
 
 
-class NearestNeighborModel(object):
+class NearestNeighborModel:
     """Base class for a model of nearest neigbor interactions (w.r.t. the MPS index).
 
     Suitable for TEBD.
@@ -788,7 +788,7 @@ class NearestNeighborModel(object):
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
 
 
-class MPOModel(object):
+class MPOModel:
     """Base class for a model with an MPO representation of the Hamiltonian.
 
     Suitable for MPO-based algorithms, e.g. DMRG and MPO time evolution.

@@ -46,7 +46,7 @@ from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter, unused_parameters
 
 
-class Engine(object):
+class Engine:
     """Time Evolving Block Decimation (TEBD) 'engine'.
 
     Parameters

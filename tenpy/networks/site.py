@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-class Site(object):
+class Site:
     """Collects necessary information about a single local site of a lattice.
 
     This class defines what the local basis states are: it provides the :attr:`leg`

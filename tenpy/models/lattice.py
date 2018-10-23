@@ -27,7 +27,7 @@ bc_choices = {'open': True, 'periodic': False}
 """dict: maps possible choices of boundary conditions in a lattice to bool/int."""
 
 
-class Lattice(object):
+class Lattice:
     r"""A general lattice.
 
     The lattice consists of a **unit cell** which is repeated in `dim` different directions.

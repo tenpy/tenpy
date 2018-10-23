@@ -14,7 +14,7 @@ from . import np_conserved as npc
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 
 
-class NpcLinearOperator(object):
+class NpcLinearOperator:
     """Prototype for a Linear Operator acting on :class:`~tenpy.linalg.np_conserved.Array`.
 
     Note that an :class:`~tenpy.linalg.np_conserved.Array` implements a matvec function.

@@ -48,7 +48,7 @@ from .mps import MPSEnvironment
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
 
-class MPO(object):
+class MPO:
     """Matrix product operator, finite (MPO) or infinite (iMPO).
 
     Parameters
@@ -251,7 +251,7 @@ class MPO(object):
                 return [Id] * (L + 1)
 
 
-class MPOGraph(object):
+class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
 
     This representation is used for building H_MPO from the interactions.
