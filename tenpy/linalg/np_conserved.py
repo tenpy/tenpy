@@ -1,6 +1,6 @@
 r"""A module to handle charge conservation in tensor networks.
 
-A detailed introduction to this module (including notations) can be found in :doc:`../intro_npc`.
+A detailed introduction to this module (including notations) can be found in :doc:`/intro_npc`.
 
 This module `np_conserved` implements an class :class:`Array`
 designed to make use of charge conservation in tensor networks.
@@ -75,7 +75,7 @@ class Array(object):
 
     An `Array` represents a multi-dimensional tensor,
     together with the charge structure of its legs (for abelian charges).
-    Further information can be found in :doc:`../intro_npc`.
+    Further information can be found in :doc:`/intro_npc`.
 
     The default :meth:`__init__` (i.e. ``Array(...)``) does not insert any data,
     and thus yields an Array 'full' of zeros, equivalent to :func:`zeros()`.
@@ -494,7 +494,7 @@ class Array(object):
     def iset_leg_labels(self, labels):
         """Set labels for the different axes/legs. In place.
 
-        Introduction to leg labeling can be found in :doc:`../intro_npc`.
+        Introduction to leg labeling can be found in :doc:`/intro_npc`.
 
         Parameters
         ----------

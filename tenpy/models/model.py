@@ -25,7 +25,7 @@ it might be simpler to just specify the MPO explicitly.
 Of course, we also provide ways to transform a :class:`NearestNeighborModel` into a
 :class:`MPOModel` and vice versa, as far as this is possible.
 
-See also the introduction :doc:`../intro_model`.
+See also the introduction :doc:`/intro_model`.
 """
 # Copyright 2018 TeNPy Developers
 

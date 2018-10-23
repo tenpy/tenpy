@@ -119,7 +119,7 @@ class Site:
             The new charges to be used. If ``None``, use trivial charges.
         permute : ndarray | None
             The permuation applied to the physical leg,
-            which gets used to adjust :attr:`state_labels` and :att:`perm`.
+            which gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
@@ -362,7 +362,7 @@ class DoubleSite(Site):
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
-    expected commutation relations. See also :doc:`../intro_JordanWigner`.
+    expected commutation relations. See also :doc:`/intro_JordanWigner`.
 
     Parameters
     ----------
@@ -735,7 +735,7 @@ class FermionSite(Site):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
-        Further details in :doc:`../intro_JordanWigner`.
+        Further details in :doc:`/intro_JordanWigner`.
 
     ==============  ===================================================================
     operator        description

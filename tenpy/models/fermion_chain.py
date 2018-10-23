@@ -26,7 +26,7 @@ class FermionChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`../intro_JordanWigner` for details.
+        See :doc:`/intro_JordanWigner` for details.
 
     Parameters
     ----------
