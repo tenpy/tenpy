@@ -124,8 +124,8 @@ class MPO:
 
         See also
         --------
-        :meth:`grid_insert_ops` : used to convert `entries` of the grid into operators
-        :meth:`~tenpy.linalg.np_conserved.grid_outer` : converts a grid into an Array
+        :func:`grid_insert_ops` : used to plug in `entries` of the grid
+        grid_outer : Used :func:`~tenpy.linalg.np_conserved.grid_outer` for final conversion.
         """
         chinfo = sites[0].leg.chinfo
         L = len(sites)
