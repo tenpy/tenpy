@@ -12,7 +12,7 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
 __all__ = [
-    'Site', 'GroupedSite', 'multi_sites_combine_charges', 'SpinHalfSite',
+    'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
     'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
 ]
 
@@ -481,6 +481,33 @@ class GroupedSite(Site):
         pipe = self.leg
         op = op.combine_legs(combine, qconj=[+1, -1], pipes=[pipe, pipe.conj()])
         return op.iset_leg_labels(['p', 'p*'])
+
+
+def group_sites(sites, n=2, labels=None, charges='same'):
+    """Given a list of sites, group each `n` sites together.
+
+    Parameters
+    ----------
+    sites : list of :class:`Site`
+        The sites to be grouped together.
+    n : int
+        We group each `n` consecutive sites from `sites` together in a :class:`GroupedSite`.
+    labels, charges :
+        See :class:`GroupedSites`.
+
+    Returns
+    -------
+    grouped_sites : list of :class:`GroupedSite`
+        The grouped sites. Has length ``(len(sites)-1)//n + 1``.
+    """
+    grouped_sites = []
+    if labels is None:
+        labels = [str(i) for i in range(n)]
+    for i in range(0, len(sites), n):
+        group = sites[i:i+n]
+        s = GroupedSite(group, labels[:len(group)], charges)
+        grouped_sites.append(s)
+    return grouped_sites
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):
