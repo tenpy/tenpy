@@ -73,13 +73,14 @@ as they return the `B` in the desired form (which can be chosen as an argument).
 
 import numpy as np
 import warnings
+from functools import reduce
 import scipy.sparse.linalg.eigen.arpack
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
+from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
-from functools import reduce
 from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
@@ -125,6 +126,8 @@ class MPS:
     norm : float
         The norm of the state, i.e. ``sqrt(<psi|psi>)``.
         Ignored for (normalized) :meth:`expectation_value`, but important for :meth:`overlap`.
+    grouped : int
+        Number of sites grouped together, see :meth:`group_sites`.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
@@ -166,6 +169,7 @@ class MPS:
         self.form = self._parse_form(form)
         self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
         self.norm = norm
+        self.grouped = 1
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True) for B in Bs]
@@ -547,6 +551,7 @@ class MPS:
         """
         # __init__ makes deep copies of B, S
         cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
+        cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
         return cp
 
@@ -769,6 +774,108 @@ class MPS:
             new_B = self.get_B(i, form=form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=form)
 
+    def group_sites(self, n=2, grouped_sites=None):
+        """Modify `self` inplace to group sites.
+
+        Group each `n` sites together using the :class:`~tenpy.networks.site.GroupedSite`.
+        This might allow to do TEBD with a Trotter decomposition,
+        or help the convergence of DMRG (in case of too long range interactions).
+
+        Parameters
+        ----------
+        n : int
+            Number of sites to be grouped together.
+        grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        See also
+        --------
+        :meth:`group_split` : Reverts the grouping.
+        """
+        self.convert_form('B')
+        if grouped_sites is None:
+            grouped_sites = group_sites(self.sites, n, charges='same')
+        else:
+            assert grouped_sites[0].n_sites == n
+        Bs = []
+        Ss = []
+        i = 0
+        for gs in grouped_sites:
+            new_B = self.get_B(i).itranspose(['vL', 'p', 'vR'])
+            for j in range(1, gs.n_sites):
+                B = self.get_B(i+j).itranspose(['vL', 'p', 'vR'])
+                new_B = npc.tensordot(new_B, B, axes=[-1, 0])
+            new_B = new_B.combine_legs(list(range(1, gs.n_sites+1)), pipes=gs.leg, qconj=+1)
+            Bs.append(new_B.iset_leg_labels(['vL', 'p', 'vR']))
+            Ss.append(self._S[i])
+            i += gs.n_sites
+        Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
+        self._B = Bs
+        self._S = Ss
+        self.sites = grouped_sites
+        self.form = [self._valid_forms['B']] * len(grouped_sites)
+        self.grouped = self.grouped * n
+
+    def group_split(self, trunc_par={}):
+        """Modify `self` inplace to split previously grouped sites.
+
+        Parameters
+        ----------
+        trunc_par : dict
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error introduced by the truncation for the splitting.
+
+        See also
+        --------
+        :meth:`group_sites` : Should have been used before to combine sites.
+        """
+        self.convert_form('B')
+        n = self.sites[0]
+        sites = []
+        Bs = []
+        Ss = []
+        trunc_err = TruncationError()
+        for i, gs in enumerate(self.sites):
+            sites.extend(gs.sites)
+            n = gs.n_sites
+            Ss_new = []
+            Bs_new = []
+            B_gr = self.get_B(i).transpose(['vL', 'p', 'vR'])
+            del B_gr.labels['p']  # avoid warning that we split a label with out '(...)'
+            B_gr = B_gr.split_legs(1)
+            theta = self.get_theta(i, n=1).itranspose(['vL', 'p0', 'vR'])
+            del theta.labels['p0']  # avoid warning
+            theta = theta.split_legs(1)
+            # B_gr and theta have legs vL p0 p1 ... p{n-1} vR
+            combine = [list(range(n)), [-2, -1]]
+            for j in range(n-1, 0, -1):
+                # split off the right-most physical leg and vR from theta
+                # theta: vL p0 ... pj vR
+                theta = theta.combine_legs(combine, qconj=[+1, -1])
+                U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
+                Ss_new.append(S)
+                trunc_err += err
+                theta = U.split_legs(0) # vL p0 ... pj-1 vR
+                combine[0].pop()
+                B = V.split_legs(1).iset_leg_labels(['vL', 'p', 'vR'])
+                B_gr = npc.tensordot(B_gr, B.conj(), axes=[[-2, -1], [1, 2]]) # vL p0 ... pj-1 vR
+                Bs_new.append(B)
+            Bs_new.append(B_gr.iset_leg_labels(['vL', 'p', 'vR']))  # inversion free :)
+            Ss_new.append(self.get_SL(i))
+            Bs.extend(Bs_new[::-1])
+            Ss.extend(Ss_new[::-1])
+        Ss.append(self._S[-1])
+        self.sites = sites
+        self._B = Bs
+        self._S = Ss
+        self.grouped = self.grouped // n
+        self.form = [self._valid_forms['B']] * len(sites)
+        return trunc_err
+
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
@@ -969,7 +1076,7 @@ class MPS:
             sites ``i, j = coords[k]``.
         """
         #  Basically the code of get_rho_segment and entanglement_entropy,
-        #  but optimized to run in O(L^2)
+        #  but optimized to run in O(L*max_range)
         if max_range is None:
             max_range = self.L
         S_i = self.entanglement_entropy_segment(n=n)  # single-site entropy

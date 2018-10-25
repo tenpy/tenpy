@@ -199,6 +199,29 @@ def test_canonical_form():
     yield check_canonical_form, 'infinite'
 
 
+def test_group(L=6):
+    print("test_group")
+    s = site.SpinHalfSite(conserve='parity')
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
+    psi2 = psi1.copy()
+    print("group n=2")
+    psi2.group_sites(n=2)
+    psi2.test_sanity()
+    psi2.group_split()
+    psi2.test_sanity()
+    ov = psi1.overlap(psi2)
+    assert abs(1.-ov) < 1.e-14
+    psi3 = psi1.copy()
+    print("group n=3")
+    psi3.group_sites(n=3)
+    psi3.test_sanity()
+    psi3.group_split()
+    psi3.test_sanity()
+    ov = psi1.overlap(psi3)
+    assert abs(1.-ov) < 1.e-14
+
+
+
 if __name__ == "__main__":
     test_mps()
     test_mps_add()
@@ -208,3 +231,4 @@ if __name__ == "__main__":
     test_compute_K()
     check_canonical_form('finite')
     check_canonical_form('infinite')
+    test_group()
