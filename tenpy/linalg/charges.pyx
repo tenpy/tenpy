@@ -429,7 +429,7 @@ cdef class LegCharge(object):
 
     @classmethod
     def from_add_charge(cls, legs, chargeinfo=None):
-        """Add the (independent) charges of two legs to get larger `qnumber`.
+        """Add the (independent) charges of two or more legs to get larger `qnumber`.
 
         Parameters
         ----------

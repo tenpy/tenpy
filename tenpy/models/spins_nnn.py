@@ -2,7 +2,7 @@
 
 Uniform lattice of spin-S sites, coupled by next-nearest-neighbour interactions.
 We have two variants implementing the same hamiltonian. The first uses the
-:class:`~tenpy.networks.site.DoubleSite` to keep it a
+:class:`~tenpy.networks.site.GroupedSite` to keep it a
 :class:`~tenpy.models.model.NearestNeighborModel` suitable for TEBD,
 while the second one just involves longer-range couplings in the MPO.
 The second one is preferable for pure DMRG calculations.
@@ -12,7 +12,7 @@ The second one is preferable for pure DMRG calculations.
 import numpy as np
 
 from .lattice import Chain
-from ..networks.site import SpinSite, DoubleSite
+from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingModel, NearestNeighborModel, MPOModel
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.misc import any_nonzero
@@ -21,7 +21,7 @@ __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
 
 class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
-    r"""Spin-S sites coupled by (next-)nearest neighbour interactions on a `DoubleSite`.
+    r"""Spin-S sites coupled by (next-)nearest neighbour interactions on a `GroupedSite`.
 
     The Hamiltonian reads:
 
@@ -41,7 +41,7 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
     Parameters
     ----------
     L : int
-        Length of the chain in terms of :class:`~tenpy.networks.site.DoubleSite`,
+        Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
         i.e. we have ``2*L`` spin sites.
     S : {0.5, 1, 1.5, 2, ...}
         The 2S+1 local states range from m = -S, -S+1, ... +S.
@@ -84,7 +84,7 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         unused_parameters(model_param, self.__class__)
         # 1) define Site and lattice
         spinsite = SpinSite(S, conserve)
-        site = DoubleSite(spinsite, spinsite, charges='same')
+        site = GroupedSite([spinsite, spinsite], charges='same')
         bc = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 2) initialize CouplingModel

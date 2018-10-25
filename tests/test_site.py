@@ -70,15 +70,15 @@ def test_site():
 
 
 def test_double_site():
-    ss = site.SpinHalfSite('Sz')
-    for site0, site1 in [[site.SpinHalfSite(None)] * 2, [ss] * 2]:
+    for site0, site1 in [[site.SpinHalfSite(None)] * 2, [site.SpinHalfSite('Sz')] * 2]:
         for charges in ['same', 'drop', 'independent']:
-            ds = site.DoubleSite(site0, site1, charges=charges)
+            ds = site.GroupedSite([site0, site1], charges=charges)
             ds.test_sanity()
     fs = site.FermionSite('N')
-    ds = site.DoubleSite(fs, fs, 'a', 'b', charges='same')
+    ds = site.GroupedSite([fs, fs], ['a', 'b'], charges='same')
     assert ds.need_JW_string == set(
         [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string])
+    ss = site.GroupedSite([fs])
 
 
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):

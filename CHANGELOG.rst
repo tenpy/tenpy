@@ -16,6 +16,10 @@ Backwards incompatible changes
 - Added parameter `permute` (True by default) in :meth:`tenpy.networks.mps.from_product_state` and :meth:`tenpy.networks.mps.from_Bflat`.
   The resulting state will therefore be independent of the "conserve" parameter of the Sites - unlike before, 
   where the meaning of the p_state argument might have changed.
+- Generalize and rename :class:`tenpy.networks.site.DoubleSite` to :class:`tenpy.networks.site.GroupedSite`,
+  to allow for an arbitrary number of sites to be grouped. 
+  Arguments ``site0, site1, label0, label1`` of the __init__ can be replaced with ``[site0, site1], [label0, label1]``
+  and ``op0, op1`` of the `kronecker_product` with ``[op0, op1]``; this will recover the functionality of the `DoubleSite`.
 
 
 Added

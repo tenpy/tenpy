@@ -5,13 +5,15 @@ The :class:`Site` is the prototype, read it's docstring.
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
+import itertools
+import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 
 __all__ = [
-    'Site', 'DoubleSite', 'multi_sites_combine_charges', 'SpinHalfSite', 'SpinSite', 'FermionSite',
-    'SpinHalfFermionSite', 'BosonSite'
+    'Site', 'GroupedSite', 'multi_sites_combine_charges', 'SpinHalfSite',
+    'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
 ]
 
 
@@ -293,6 +295,7 @@ class Site:
         -------
         op : :class:`~tenpy.linalg.np_conserved`
             The operator given by `name`, with labels ``'p', 'p*'``.
+            If name already was an npc Array, it's directly returned.
         """
         names = name.split()
         op = getattr(self, names[0])
@@ -308,9 +311,6 @@ class Site:
         ----------
         name : str
             The name of the operator, as in :meth:`get_op`.
-            In case of multiple operator names separated by whitespace,
-            we multiply them together to a single on-site operator
-            (with the one on the right acting first).
 
         Returns
         -------
@@ -321,7 +321,7 @@ class Site:
         need_JW = bool(names[0] in self.need_JW_string)
         for op in names[1:]:
             if op in self.need_JW_string:
-                need_JW = not need_JW  # == (need_JW xor (op in self.need_JW_string)
+                need_JW = not need_JW  # == need_JW xor (op in self.need_JW_string)
         return need_JW
 
     def valid_opname(self, name):
@@ -348,8 +348,8 @@ class Site:
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
 
 
-class DoubleSite(Site):
-    """Group two :class:`Site` into a larger one.
+class GroupedSite(Site):
+    """Group two or more :class:`Site` into a larger one.
 
     A typical use-case is that you want a NearestNeigborModel for TEBD although you have
     next-nearest neighbor interactions: you just double your local Hilbertspace to consist of
@@ -366,100 +366,120 @@ class DoubleSite(Site):
 
     Parameters
     ----------
-    site0 : :class:`Site`
-        The first site to be included.
-    site1 : :class:`Site`
-        The second site to be included.
-    label0 : str
-        Include the Kronecker product of ``[op, Id]`` as onsite operators with name
-        ``opname+label0`` for each of the operators `op` in `site0` (with name `opname`).
-    label1 : str
-        Include the Kronecker product of ``[Id, op]`` as onsite operators with name
-        ``opname+label1`` for each of the operators `op` in `site1` (with name `opname`).
-    charges : ``'same'`` | ``'independent' | 'drop'``
-        How to handle charges, defaults to 'drop'.
-        ``'same'`` means that `site0` and `site1` have the same `ChargeInfo`, and the total charge
-        is the sum of the charges on `site0` and `site1`.
-        ``'independent'`` means that `site0` and `site1` have possibly different `ChargeInfo`,
-        and the charges are conserved separately, i.e., we have two conserved charges.
+    sites : list of :class:`Site`
+        The individual sites being grouped together. Copied before use if ``charges!='same'``.
+    labels :
+        Include the Kronecker product of the each onsite operator `op` on ``sites[i]`` and
+        identities on other sites with the name ``opname+labels[i]``.
+        Similarly, set state labels for ``' '.join(state[i]+'_'+labels[i])``.
+        Defaults to ``[str(i) for i in range(n_sites)]``, which for example grouping two SpinSites
+        gives operators name like ``"Sz0"`` and sites labels like ``'up_0 down_1'``.
+    charges : ``'same' | 'drop' | 'independent'``
+        How to handle charges, defaults to 'same'.
+        ``'same'`` means that all `sites` have the same `ChargeInfo`, and the total charge
+        is the sum of the charges on the individual `sites`.
+        ``'independent'`` means that the `sites` have possibly different `ChargeInfo`,
+        and the charges are conserved separately, i.e., we have `n_sites` conserved charges.
         For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
 
     Attributes
     ----------
-    site0, site1 : :class:`Site`
-        The sites from which this is build.
-    label0, label1 : str
-        The labels which are added to the single-site operators during construction.
+    n_sites : int
+        The number of sites grouped together, i.e. ``len(sites)``.
+    sites : list of :class:`Site`
+        The sites grouped together into self.
+    labels: list of str
+        The labels using which the single-site operators are added during construction.
     """
 
-    def __init__(self, site0, site1, label0='0', label1='1', charges='drop'):
-        if charges == 'drop':
-            leg0 = npc.LegCharge.from_drop_charge(site0.leg)
-            leg1 = npc.LegCharge.from_drop_charge(site1.leg, chargeinfo=leg0.chinfo)
-            perm_qind0, leg0s = leg0.sort()
-            perm_qind1, leg1s = leg1.sort()
-            site0.change_charge(leg0s, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1.change_charge(leg1s, leg1.perm_flat_from_perm_qind(perm_qind1))
-        elif charges == 'same':
+    def __init__(self, sites, labels=None, charges='same'):
+        self.n_sites = n_sites = len(sites)
+        self.sites = sites
+        self.labels = labels
+        assert n_sites > 0
+        if labels is None:
+            labels = [str(i) for i in range(n_sites)]
+        if charges == 'same':
             pass  # nothing to do
+        elif charges == 'drop':
+            legs = [npc.LegCharge.from_drop_charge(sites[0].leg)]
+            chinfo = legs[0].chinfo
+            for site in sites[1:]:
+                legs.append(npc.LegCharge.from_drop_charge(sites[0].leg, chargeinfo=chinfo))
         elif charges == 'independent':
             # charges are separately conserved
-            leg0_triv1 = npc.LegCharge.from_trivial(site0.dim, site1.leg.chinfo)
-            leg1_triv0 = npc.LegCharge.from_trivial(site1.dim, site0.leg.chinfo)
-            leg0 = npc.LegCharge.from_add_charge([site0.leg, leg0_triv1])
-            leg1 = npc.LegCharge.from_add_charge([leg1_triv0, site1.leg], chargeinfo=leg0.chinfo)
-            perm_qind0, leg0s = leg0.sort()
-            perm_qind1, leg1s = leg1.sort()
-            site0.change_charge(leg0s, leg0.perm_flat_from_perm_qind(perm_qind0))
-            site1.change_charge(leg1s, leg1.perm_flat_from_perm_qind(perm_qind1))
+            legs = []
+            for i in range(n_sites):
+                d = sites[i].dim
+                # trivial charges
+                legs_triv = [npc.LegCharge.from_trivial(d, s.leg.chinfo) for s in sites]
+                legs_triv[i] = sites[i].leg  # except on site i
+                chinfo = None if i == 0 else legs[0].chinfo
+                leg = npc.LegCharge.from_add_charge(legs_triv, chinfo) # combine the charges
+                legs.append(leg)
         else:
             raise ValueError("Unknown option for `charges`: " + repr(charges))
-        assert site0.leg.chinfo == site1.leg.chinfo  # check for compatibility
-        self.site0 = site0
-        self.site1 = site1
-        pipe = npc.LegPipe([site0.leg, site1.leg])
+        if charges != 'same':
+            sites = [copy.copy(s) for s in sites] # avoid modifying the existing sites.
+            # sort legs
+            for i in range(n_sites):
+                perm_qind, leg_s = legs[i].sort()
+                sites[i].change_charge(leg_s, legs[i].perm_flat_from_perm_qind(perm_qind))
+        chinfo = sites[0].leg.chinfo
+        for s in sites[1:]:
+            assert s.leg.chinfo == chinfo  # check for compatibility
+        legs = [s.leg for s in sites]
+        pipe = npc.LegPipe(legs)
         self.leg = pipe  # needed in kroneckerproduct
-        states = [None] * pipe.ind_len
-        for st0 in site0.state_labels:
-            for st1 in site1.state_labels:
-                ind_pipe = pipe.map_incoming_flat(
-                    [site0.state_labels[st0], site1.state_labels[st1]])
-                states[ind_pipe] = ''.join([st0, '_', label0, ' ', st1, '_', label1])
-        JW0 = site0.JW
-        JW1 = site1.JW
-        JW_both = self.kroneckerproduct(JW0, JW1)
-        Site.__init__(self, pipe, states, JW=JW_both)
+        JW_all = self.kroneckerproduct([s.JW for s in sites])
+
+        # initialize Site
+        Site.__init__(self, pipe, None, JW=JW_all)
+
+        # set state labels
+        for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
+            inds = [v for k, v in states_labels] # values of the dictionaries
+            ind_pipe = pipe.map_incoming_flat(inds)
+            label = ' '.join([st + '_' + lbl for (st, idx), lbl in zip(states_labels, labels)])
+            self.state_labels[label] = ind_pipe
         # add remaining operators
-        Id1 = site1.Id
-        for opname, op in site0.onsite_ops.items():
-            if opname != 'Id':
-                need_JW = opname in site0.need_JW_string
-                self.add_op(opname + label0, self.kroneckerproduct(op, Id1), need_JW)
-        Id0 = site0.Id
-        for opname, op in site1.onsite_ops.items():
-            if opname != 'Id':
-                need_JW = opname in site1.need_JW_string
-                op0 = JW0 if need_JW else Id0
-                self.add_op(opname + label1, self.kroneckerproduct(op0, op), need_JW)
+        Ids = [s.Id for s in sites]
+        JW_Ids = Ids[:] # in the following loop equivalent to [JW, JW, ... , Id, Id, ...]
+        for i in range(n_sites):
+            site = sites[i]
+            for opname, op in site.onsite_ops.items():
+                if opname == 'Id':
+                    continue
+                need_JW = opname in site.need_JW_string
+                ops = JW_Ids if need_JW else Ids
+                ops[i] = op
+                self.add_op(opname + labels[i], self.kroneckerproduct(ops), need_JW)
+                Ids[i] = site.Id
+                JW_Ids[i] = site.JW
         # done
 
-    def kroneckerproduct(self, op0, op1):
+    def kroneckerproduct(self, ops):
         r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
 
         Parameters
         ----------
-        op0, op1 : :class:`~tenpy.linalg.np_conserved.Array`
-            Onsite operators on `site0` and `site1`, respectively.
-            Should have labels ``['p', 'p*']``.
+        ops : list of :class:`~tenpy.linalg.np_conserved.Array`
+            One operator (or operator name) on each of the ungrouped sites.
+            Each operator should have labels ``['p', 'p*']``.
 
         Returns
         -------
         prod : :class:`~tenpy.linalg.np_conserved.Array`
-            Kronecker product :math:`op0 \otimes op1`, with labels ``['p', 'p*']``.
+            Kronecker product :math:`ops[0] \otimes ops[1] \otimes \cdots`,
+            with labels ``['p', 'p*']``.
         """
+        sites = self.sites
+        op = ops[0].transpose(['p', 'p*'])
+        for op2 in ops[1:]:
+            op = npc.outer(op, op2.transpose(['p', 'p*']))
+        combine = [list(range(0, 2*self.n_sites-1, 2)), list(range(1, 2*self.n_sites, 2))]
         pipe = self.leg
-        op = npc.outer(op0.transpose(['p', 'p*']), op1.transpose(['p', 'p*']))
-        op = op.combine_legs([[0, 2], [1, 3]], qconj=[+1, -1], pipes=[pipe, pipe.conj()])
+        op = op.combine_legs(combine, qconj=[+1, -1], pipes=[pipe, pipe.conj()])
         return op.iset_leg_labels(['p', 'p*'])
 
 
