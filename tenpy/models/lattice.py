@@ -927,6 +927,29 @@ class Kagome(Lattice):
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
 
+def get_lattice(lattice_name, *args, **kwargs):
+    """Given the name of a :class:`Lattice` class, create an instance of it with gi.
+
+    Parameters
+    ----------
+    lattice_name : str
+        Name of a :class:`Lattice` class defined in the module :mod:`~tenpy.models.lattice`,
+        for example ``"Chain", "Square", "Honeycomb", ...``.
+    *args, **kwargs
+        Arguments and keyword-arguments for the initialization of the specified lattice class.
+
+    Returns
+    -------
+    lat : Lattice instance
+        An instance of the lattice class specified by `name`, initialized with
+        ``LatticeClass(*args, **kwargs)``.
+    """
+    LatticeClass = globals()[lattice_name]
+    lat = LatticeClass(*args, **kwargs)
+    assert isinstance(lat, Lattice)
+    return lat
+
+
 def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
