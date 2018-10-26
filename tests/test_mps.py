@@ -12,6 +12,8 @@ from tenpy.networks import mps, site
 from random_test import rand_permutation, random_MPS
 import tenpy.linalg.np_conserved as npc
 
+from nose.plugins.attrib import attr
+
 spin_half = site.SpinHalfSite(conserve='Sz')
 
 
@@ -194,6 +196,7 @@ def check_canonical_form(bc):
     assert np.max(psi.norm_test()) < 1.e-14
 
 
+@attr('slow')
 def test_canonical_form():
     yield check_canonical_form, 'finite'
     yield check_canonical_form, 'infinite'
@@ -211,13 +214,13 @@ def test_group(L=6):
     psi2.test_sanity()
     ov = psi1.overlap(psi2)
     assert abs(1.-ov) < 1.e-14
-    psi3 = psi1.copy()
-    print("group n=3")
-    psi3.group_sites(n=3)
-    psi3.test_sanity()
-    psi3.group_split()
-    psi3.test_sanity()
-    ov = psi1.overlap(psi3)
+    psi4 = psi1.copy()
+    print("group n=4")
+    psi4.group_sites(n=4)
+    psi4.test_sanity()
+    psi4.group_split()
+    psi4.test_sanity()
+    ov = psi1.overlap(psi4)
     assert abs(1.-ov) < 1.e-14
 
 
