@@ -1,31 +1,32 @@
-"""This module contains some base classes for a model.
+"""This module contains some base classes for models.
 
 A 'model' is supposed to represent a Hamiltonian in a generalized way.
-Beside a :class:`~tenpy.models.lattice.Lattice` specifying the geometry and
-underlying Hilbert space, it thus needs some way to represent the different terms
-of the Hamiltonian.
+The :class:`~tenpy.models.lattice.Lattice` specifies the geometry and
+underlying Hilbert space, and is thus common to all models.
+It is needed to intialize the common base class :class:`Model` of all models.
 
 Different algorithms require different representations of the Hamiltonian.
-For example, if you only want to do DRMG, it is enough to specify the Hamiltonian
-as an MPO with a :class:`MPOModel`.
-On the other hand, TEBD needs the model to be 'nearest neighbor' and thus
-a representation by nearest-neighbor terms.
+For example for DMRG, the Hamiltonian needs to be given as an MPO,
+while TEBD needs the Hamiltonian to be represented by 'nearest neighbor' bond terms.
+This module contains the base classes defining these possible representations,
+namley the :class:`MPOModel` and :class:`NearestNeigborModel`.
+
+A particular model like the :class:`~tenpy.models.models.xxz_chain.XXZ_chain` should then
+yet another class derived from these classes. In it's __init__, it needs to explicitly call
+the ``MPOModel.__init__(self, lattice, H_MPO)``, providing an MPO representation of H,
+and also the ``NearestNeigborModel.__init__(self, lattice, H_bond)``,
+providing a representation of H by bond terms `H_bond`.
 
 The :class:`CouplingModel` is the attempt to generalize the representation of `H`
-by explicitly specifying the couplings of onsite-terms, and providing functionality
-for converting the specified couplings into an MPO or nearest-neighbor bonds.
-This allows to quickly generate new model classes for a broad class of Hamiltonians.
+by explicitly specifying the couplings in a general way, and providing functionality
+for converting them into `H_MPO` and `H_bond`.
+This allows to quickly generate new model classes for a very broad class of Hamiltonians.
+
 For simplicity, the :class:`CouplingModel` is limited to interactions involving only two sites.
-However, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
+Yet, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
 involving couplings between multiple sites.
 
-For other cases (e.g. exponentially decaying long-range interactions in 1D),
-it might be simpler to just specify the MPO explicitly.
-
-Of course, we also provide ways to transform a :class:`NearestNeighborModel` into a
-:class:`MPOModel` and vice versa, as far as this is possible.
-
-See also the introduction :doc:`/intro_model`.
+See also the introduction in :doc:`/intro_model`.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -36,10 +37,39 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
-__all__ = ['CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
+__all__ = ['Model', 'CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
 
 
-class CouplingModel:
+class Model:
+    """Base class for all models.
+
+    The common base to all models is the underlying Hilbert space and geometry, specified by a
+    :class:`~tenpy.model.lattice.Lattice`.
+
+    Parameters
+    ----------
+    lattice : :class:`~tenpy.model.lattice.Lattice`
+        The lattice defining the geometry and the local Hilbert space(s).
+
+    Attributes
+    ----------
+    lat : :class:`~tenpy.model.lattice.Lattice`
+        The lattice defining the geometry and the local Hilbert space(s).
+    """
+    def __init__(self, lattice):
+        # NOTE: every subclass like CouplingModel, MPOModel, NearestNeigborModel calls this
+        # __init__, so it get's called multiple times when a user implements e.g. a
+        # class MyModel(CouplingModel, NearestNeigborModel, MPOModel).
+        if not hasattr(self, 'lat'):
+            # first call: initialize everything
+            self.lat = lattice
+        else:
+            # Model.__init__() got called before
+            if self.lat is not lattice:  # expect the *same instance*!
+                raise ValueError("Model.__init__() called with different lattice instances.")
+
+
+class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
     In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
@@ -62,8 +92,6 @@ class CouplingModel:
 
     Attributes
     ----------
-    lat : :class:`~tenpy.model.lattice.Lattice`
-        The lattice defining the geometry and the local Hilbert space(s).
     onsite_terms : list of dict
         Filled by :meth:`add_onsite`.
         For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
@@ -79,7 +107,7 @@ class CouplingModel:
     """
 
     def __init__(self, lattice, bc_coupling=None):
-        self.lat = lattice
+        Model.__init__(self, lattice)
         if bc_coupling is not None:
             warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
                           FutureWarning)
@@ -728,10 +756,18 @@ class MultiCouplingModel(CouplingModel):
         # done
 
 
-class NearestNeighborModel:
-    """Base class for a model of nearest neigbor interactions (w.r.t. the MPS index).
+class NearestNeighborModel(Model):
+    """Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
 
-    Suitable for TEBD.
+    In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
+    "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
+    where `i` is an integer.
+    Instances of this class are suitable for :mod:`~tenpy.algorithms.tebd`.
+
+    Note that the "nearest-neighbor" in the name referst to the MPS index, not the lattice.
+    In short, this works only for 1-dimensional (1D) nearest-neighbor models:
+    A 2D lattice is internally mapped to a 1D MPS "snake", and even a nearest-neighbor coupling
+    in 2D becomes long-range in the MPS chain.
 
     Parameters
     ----------
@@ -743,18 +779,16 @@ class NearestNeighborModel:
 
     Attributes
     ----------
-    lat : :class:`tenpy.model.lattice.Lattice`
-        The lattice defining the geometry and the local Hilbert space(s).
     H_bond : list of :class:`npc.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
         ``H_bond[i]`` acts on sites ``(i-1, i)``.
     """
 
-    def __init__(self, lat, H_bond):
-        self.lat = lat
+    def __init__(self, lattice, H_bond):
+        Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
         if self.lat.bc_MPS != 'infinite':
-            self.H_bond[0] = None
+            assert self.H_bond[0] is None
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -788,32 +822,30 @@ class NearestNeighborModel:
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
 
 
-class MPOModel:
+class MPOModel(Model):
     """Base class for a model with an MPO representation of the Hamiltonian.
 
-    Suitable for MPO-based algorithms, e.g. DMRG and MPO time evolution.
+    In this class, the Hamiltonian gets represented by an :class:`~tenpy.networks.mpo.MPO`.
+    Thus, instances of this class are suitable for MPO-based algorithms like DMRG
+    :mod:`~tenpy.algorithms.dmrg` and MPO time evolution.
 
     .. todo ::
-        implement: provide (function to calculate) the MPO for time evolution.
+        implement MPO for time evolution...
         Also, provide function to get H_MPO from H_bond
 
     Parameters
     ----------
-    lattice : :class:`tenpy.model.lattice.Lattice`
-        The lattice defining the geometry and the local Hilbert space(s).
     H_MPO : :class:`~tenpy.networks.mpo.MPO`
         The Hamiltonian rewritten as an MPO.
 
     Attributes
     ----------
-    lat : :class:`tenpy.model.lattice.Lattice`
-        The lattice defining the geometry and the local Hilbert space(s).
-    H_MPO : :class:`tenpy.tn.mpo.MPO`
+    H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian.
     """
 
-    def __init__(self, lat, H_MPO):
-        self.lat = lat
+    def __init__(self, lattice, H_MPO):
+        Model.__init__(self, lattice)
         self.H_MPO = H_MPO
         MPOModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class

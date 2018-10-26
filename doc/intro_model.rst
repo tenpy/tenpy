@@ -22,12 +22,17 @@ Note that a few things are defined more or less implicitly.
 
 Obviously, these things need to be specified in TeNPy in one way or another, if we want to define a model.
 
-Ultimately, our goal is to run some algorithm. Each algorithm requires the model to be specified in a particular form.
+Ultimately, our goal is to run some algorithm. Each algorithm requires the model and Hamiltonian to be specified in a particular form.
+We have one class for each such required form.
 For example :mod:`~tenpy.algorithms.dmrg` requires an :class:`~tenpy.models.model.MPOModel`,
 which contains the Hamiltonian written as an :class:`~tenpy.networks.mpo.MPO`.
 On the other hand, if we want to evolve a state with :mod:`~tenpy.algorithms.tebd` 
 we need a :class:`~tenpy.models.model.NearestNeighborModel`, in which the Hamiltonian is written in terms of
 two-site bond-terms to allow a Suzuki-Trotter decomposition of the time-evolution operator.
+
+Implmenting you own model ultimatley means to get an instance of :class:`~tenpy.models.model.MPOModel` or :class:`~tenpy.models.model.NearestNeighborModel`.
+The predefined classes in the other modules under :mod:`~tenpy.models` are subclasses of at least one of those,
+you will see examples later down below.
 
 The Hilbert space
 -----------------
@@ -35,7 +40,7 @@ The Hilbert space
 The **local Hilbert** space is represented by a :class:`~tenpy.networks.site.Site` (read its doc-string!).
 In particular, the `Site` contains the local :class:`~tenpy.linalg.charges.LegCharge` and hence the meaning of each
 basis state needs to be defined.
-Beside that, the site contains the local operators, which in some sense just defines the meaning of the local basis.
+Beside that, the site contains the local operators - those give the real meaning to the local basis.
 Having the local operators in the site is very convenient, because it makes them available by name for example when you want to calculate expectation values.
 The most common sites (e.g. for spins, spin-less or spin-full fermions, or bosons) are predefined 
 in the module :mod:`tenpy.networks.site`, but if necessary you can easily extend them 
@@ -49,10 +54,18 @@ The full Hilbert space is a tensor product of the local Hilbert space on each si
     :class:`~tenpy.linalg.np_conserved.ChargeInfo` in order to allow the contraction of tensors acting on the various sites.
     This can be ensured with the function :func:`~tenpy.networks.site.multi_sites_combine_charges`.
 
-(If you are not familiar with the charges, read the :doc:`intro_npc`)
+
 An example where :func:`~tenpy.networks.site.multi_sites_combine_charges` is needed would be a coupling of different
 types of sites, e.g., when a tight binding chain of fermions is coupled to some local spin degrees of freedom.
 Another use case of this function would be a model with a $U(1)$ symmetry involving only half the sites, say :math:`\sum_{i=0}^{L/2} n_{2i}`.
+
+.. note ::
+
+    If you don't know about the charges and `np_conserved` yet, but want to get started with models right away,
+    you can set ``conserve=None`` in the existing sites or use 
+    ``leg = tenpy.linalg.np_conserved.LegCharge.from_trivial(d)`` for an implementation of your custom site,
+    where `d` is the dimension of the local Hilbert space.
+    Alternatively, you can find some introduction to the charges in the :doc:`/intro_npc`.
 
 
 The geometry : lattices
@@ -122,25 +135,79 @@ Performing this mapping of the Hamiltonain from a 2D lattice to a 1D chain by ha
 Therefore, we have automated this mapping in TeNPy as explained in the next section.
 (Nevertheless it's a good exercise you should do at least once in your life to understand how it works!)
 
+Implementing you own model
+--------------------------
+When you want to simulate a model not provided in :mod:`~tenpy.models`, you need to implement your own model class,
+lets call it ``MyNewModel``.
+The idea is that you define a new subclass of one or multiple of the model base classes.
+For example, when you plan to do DMRG, you have to provide an MPO in a :class:`~tenpy.models.MPOModel`, 
+so your model class should look like this::
+
+    class MyNewModel(MPOModel):
+        """General strucutre for a model suitable for DMRG.
+
+        Here is a good place to document the represented Hamiltonian and parameters.
+
+        In the models of TeNPy, we usually take a single dictionary `model_params`
+        containing all parameters, and read values out with ``tenpy.tools.params.get_parameter(...)``, 
+        The model needs to provide default values if the parameters was not specified.
+        """
+        def __init__(self, model_params):
+            # some code here to read out model parameters and generate H_MPO
+            lattice = somehow_generate_lattice(model_params)
+            H_MPO = somehow_generate_MPO(lattice, model_params)
+            # initialize MPOModel
+            MPOModel.__init__(self, lattice, H_MPO)
+
+TEBD requires another representation of H in terms of bond terms `H_bond` given to a
+:class:`~tenpy.models.NearestNeighborModel`, so in this case it would look so like this instead::
+
+    class MyNewModel2(NearestNeighborModel):
+        """General strucutre for a model suitable for TEBD."""
+        def __init__(self, model_params):
+            # some code here to read out model parameters and generate H_bond
+            lattice = somehow_generate_lattice(model_params)
+            H_bond = somehow_generate_H_bond(lattice, model_params)
+            # initialize MPOModel
+            NearestNeighborModel.__init__(self, lattice, H_bond)
+
+.. note :
+
+    The :class:`~tenpy.models.model.NearestNeighborModel` is only suitable for models which are "nearest-neighbor" 
+    in the sense of the 1D MPS "snake", not in the sense of the lattice, 
+    i.e., it only works for nearest-neigbor models on a 1D chain.
+
+Of course, the difficult part in these examples is to generate the ``H_MPO`` and ``H_bond``.
+Moreover, it's quite annoying to write every model multiple times, 
+just because we need different representations of the same Hamiltonian.
+Luckily, there is a way out in TeNPy: the CouplingModel!
 
 The easy way to new models: the (Multi)CouplingModel
 ----------------------------------------------------
 
-The :class:`~tenpy.models.model.CouplingModel` provides a general, more abstract way to specify a Hamiltonian 
+The :class:`~tenpy.models.model.CouplingModel` provides a general, quite abstract way to specify a Hamiltonian 
 of two-site couplings on a given lattice.
-Once initialized with the lattice, its methods :meth:`~tenpy.models.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling` allow to add onsite and coupling terms repeated over the different 
+Once initialized, its methods :meth:`~tenpy.models.CouplingModel.add_onsite` and 
+:meth:`~tenpy.models.model.CouplingModel.add_coupling` allow to add onsite and coupling terms repeated over the different 
 unit cells of the lattice.
-In that way, it basically allows a straight-forward translation of the Hamiltonian into a new model. 
-The basic idea is to define a new class, which is a subclass of the :class:`~tenpy.models.model.CouplingModel` 
-and the model of the desired representations (:class:`~tenpy.models.model.MPOModel` and :class:`~tenpy.models.model.NearestNeighborModel`).
+In that way, it basically allows a straight-forward translation of the Hamiltonian given as a math forumla
+:math:`H = \sum_{i} A_i B_{i+dx} + ...` with onsite operators `A`, `B`,... into a model class.
+
+To use this model, you 
+            
 In the initialization method ``__init__(self, ...)`` of this class you can then follow these basic steps:
 
-0. Read out the parameters
+0. Read out the parameters.
 1. Given the parameters, determine the charges to be conserved.
    Initialize the :class:`~tenpy.linalg.charges.LegCharge` of the local sites accordingly.
 2. Define (additional) local operators needed.
 3. Initialize the needed :class:`~tenpy.networks.site.Site`.
-   Using pre-defined sites can replace steps 1-3.
+
+   .. note ::
+
+      Using pre-defined sites like the :class:`~tenpy.networks.site.SpinHalfSite` is recommended and
+      can replace steps 1-3.
+
 4. Initialize the lattice (or if you got the lattice as a parameter, set the sites in the unit cell).
 5. Initialize the :class:`~tenpy.models.model.CouplingModel` with ``CouplingModel.__init__(self, lat)``.
 6. Use :meth:`~tenpy.models.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`
@@ -156,7 +223,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
       The method :meth:`~tenpy.models.model.CouplingModel.add_coupling` adds the coupling only in one direction, i.e.
       not switching `i` and `j` in a :math:`\sum_{\langle i, j\rangle}`.
       If you have terms like :math:`c^\dagger_i c_j` in your Hamiltonian, you *need* to add it in both directions to get
-      a hermitian hamiltonian! Simply add another line ``self.add_coupling(J, u1, 'Sz', u2, 'Sz', -dx)``.
+      a hermitian Hamiltonian! Simply add another line ``self.add_coupling(J, u1, 'Sz', u2, 'Sz', -dx)``.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.
    If you need to add or multipliy some parameters of the model for the `strength` of certain terms, 
@@ -167,12 +234,14 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
 8. Similarly, if you derived from the :class:`~tenpy.models.model.NearestNeighborModel`, you can call
    :meth:`~tenpy.models.model.CouplingModel.calc_H_MPO` to initialze it 
    as ``NearestNeighborModel.__init__(self, lat, self.calc_H_bond())``.
-   Obviously, this will fail for models which are not nearest-neighbors (with respect to the MPS ordering), 
+   Calling ``self.calc_H_bond()`` will fail for models which are not nearest-neighbors (with respect to the MPS ordering), 
    so you should only subclass the :class:`~tenpy.models.model.NearestNeighborModel` if the lattice is a simple 
    :class:`~tenpy.models.lattice.Chain`.
 
-The generalization :class:`~tenpy.models.model.MultiCouplingModel` of the CouplingModel can be used for Hamlitonians with 
-coupling terms acting on more than 2 sites at once. A prototypical example for such a model is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
+The :class:`~tenpy.models.model.CouplingModel` works for Hamiltonians which are a sum of terms involving at most two sites.
+The generalization :class:`~tenpy.models.model.MultiCouplingModel` can be used for Hamlitonians with 
+coupling terms acting on more than 2 sites at once. 
+A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
 
 
 Some final remarks
@@ -183,11 +252,12 @@ Some final remarks
 - Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`. 
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
 
-- If the model you're interested in contains Fermions, you should read the user-guide to :doc:`intro_JordanWigner`.
+- If the model you're interested in contains Fermions, you should read the :doc:`/intro_JordanWigner`.
 
 - We suggest writing the model to take a single parameter dicitionary for the initialization, which is to be read out 
   inside the class with :func:`~tenpy.tools.params.get_parameter`.
   Read the doc-string of this function for more details on why this is a good idea.
+  Calling :func:`~tenpy.tools.params.unused_parameters` is usefull to avoid typos in the specified parameters.
 
 - When you write a model and want to include a test that it can be at least constructed, 
   take a look at ``tests/test_model.py``.
