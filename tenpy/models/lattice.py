@@ -165,6 +165,7 @@ class Lattice:
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
+        assert self.dim == len(self.Ls)
         assert self.shape == self.Ls + (len(self.unit_cell), )
         assert self.N_cells == np.prod(self.Ls)
         assert self.N_sites == np.prod(self.shape)
@@ -746,6 +747,7 @@ class Chain(SimpleLattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
+    dim = 1
 
     def __init__(self, L, site, **kwargs):
         kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([1,]))])
@@ -771,8 +773,9 @@ class Ladder(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
+    dim = 1
 
-    def __init__(self, Lx, sites, **kwargs):
+    def __init__(self, L, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.array([[1., 0.]])
         pos = np.array([[0., 0.], [0., 1.]])
@@ -805,6 +808,7 @@ class Square(SimpleLattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
+    dim = 2
 
     def __init__(self, Lx, Ly, site, **kwargs):
         NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
@@ -832,6 +836,7 @@ class Honeycomb(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
+    dim = 2
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
@@ -890,6 +895,7 @@ class Kagome(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
+    dim = 2
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 3)
         #     2
@@ -927,7 +933,7 @@ class Kagome(Lattice):
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
 
-def get_lattice(lattice_name, *args, **kwargs):
+def get_lattice(lattice_name):
     """Given the name of a :class:`Lattice` class, create an instance of it with gi.
 
     Parameters
@@ -940,14 +946,12 @@ def get_lattice(lattice_name, *args, **kwargs):
 
     Returns
     -------
-    lat : Lattice instance
-        An instance of the lattice class specified by `name`, initialized with
-        ``LatticeClass(*args, **kwargs)``.
+    LatticeClass : (subclass of) :class:`Lattice`
+        An instance of the lattice class specified by `lattice_name`.
     """
     LatticeClass = globals()[lattice_name]
-    lat = LatticeClass(*args, **kwargs)
-    assert isinstance(lat, Lattice)
-    return lat
+    assert issubclass(LatticeClass, Lattice)
+    return LatticeClass
 
 
 def get_order(shape, snake_winding, priority=None):
