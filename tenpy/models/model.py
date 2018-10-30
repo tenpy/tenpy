@@ -39,9 +39,8 @@ from ..tools.misc import to_array
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
-__all__ = ['Model', 'CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel',
+__all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
            'CouplingMPOModel']
-# TODO: move MPOModel and NearestNeighborModel before CouplingModel
 
 
 class Model:
@@ -71,6 +70,105 @@ class Model:
             # Model.__init__() got called before
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
+
+
+class NearestNeighborModel(Model):
+    """Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
+
+    In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
+    "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
+    where `i` is an integer.
+    Instances of this class are suitable for :mod:`~tenpy.algorithms.tebd`.
+
+    Note that the "nearest-neighbor" in the name referst to the MPS index, not the lattice.
+    In short, this works only for 1-dimensional (1D) nearest-neighbor models:
+    A 2D lattice is internally mapped to a 1D MPS "snake", and even a nearest-neighbor coupling
+    in 2D becomes long-range in the MPS chain.
+
+    Parameters
+    ----------
+    lattice : :class:`tenpy.model.lattice.Lattice`
+        The lattice defining the geometry and the local Hilbert space(s).
+    H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+        ``H_bond[i]`` acts on sites ``(i-1, i)``; we require ``len(H_bond) == lat.N_sites``.
+
+    Attributes
+    ----------
+    H_bond : list of :class:`npc.Array`
+        The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+        ``H_bond[i]`` acts on sites ``(i-1, i)``.
+    """
+
+    def __init__(self, lattice, H_bond):
+        Model.__init__(self, lattice)
+        self.H_bond = list(H_bond)
+        if self.lat.bc_MPS != 'infinite':
+            assert self.H_bond[0] is None
+        NearestNeighborModel.test_sanity(self)
+        # like self.test_sanity(), but use the version defined below even for derived class
+
+    def test_sanity(self):
+        if len(self.H_bond) != self.lat.N_sites:
+            raise ValueError("wrong len of H_bond")
+
+    def trivial_like_NNModel(self):
+        """Return a NearestNeighborModel with same lattice, but trivial (H=0) bonds."""
+        triv_H = [H.zeros_like() if H is not None else None for H in self.H_bond]
+        return NearestNeighborModel(self.lat, triv_H)
+
+    def bond_energies(self, psi):
+        """Calculate bond energies <psi|H_bond|psi>.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS for which the bond energies should be calculated.
+
+        Returns
+        -------
+        E_bond : 1D ndarray
+            List of bond energies: for finite bc, ``E_Bond[i]`` is the energy of bond ``i, i+1``.
+            (i.e. we omit bond 0 between sites L-1 and 0);
+            for infinite bc ``E_bond[i]`` is the energy of bond ``i-1, i``.
+        """
+        if self.lat.bc_MPS == 'infinite':
+            return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
+        # else
+        return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+
+
+class MPOModel(Model):
+    """Base class for a model with an MPO representation of the Hamiltonian.
+
+    In this class, the Hamiltonian gets represented by an :class:`~tenpy.networks.mpo.MPO`.
+    Thus, instances of this class are suitable for MPO-based algorithms like DMRG
+    :mod:`~tenpy.algorithms.dmrg` and MPO time evolution.
+
+    .. todo ::
+        implement MPO for time evolution...
+        Also, provide function to get H_MPO from H_bond
+
+    Parameters
+    ----------
+    H_MPO : :class:`~tenpy.networks.mpo.MPO`
+        The Hamiltonian rewritten as an MPO.
+
+    Attributes
+    ----------
+    H_MPO : :class:`tenpy.networks.mpo.MPO`
+        MPO representation of the Hamiltonian.
+    """
+
+    def __init__(self, lattice, H_MPO):
+        Model.__init__(self, lattice)
+        self.H_MPO = H_MPO
+        MPOModel.test_sanity(self)
+        # like self.test_sanity(), but use the version defined below even for derived class
+
+    def test_sanity(self):
+        if self.H_MPO.sites != self.lat.mps_sites():
+            raise ValueError("lattice incompatible with H_MPO.sites")
 
 
 class CouplingModel(Model):
@@ -758,105 +856,6 @@ class MultiCouplingModel(CouplingModel):
                     op_i, strength = key, d2
                     graph.add(i, label_left, 'IdR', op_i, strength)
         # done
-
-
-class NearestNeighborModel(Model):
-    """Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
-
-    In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
-    "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
-    where `i` is an integer.
-    Instances of this class are suitable for :mod:`~tenpy.algorithms.tebd`.
-
-    Note that the "nearest-neighbor" in the name referst to the MPS index, not the lattice.
-    In short, this works only for 1-dimensional (1D) nearest-neighbor models:
-    A 2D lattice is internally mapped to a 1D MPS "snake", and even a nearest-neighbor coupling
-    in 2D becomes long-range in the MPS chain.
-
-    Parameters
-    ----------
-    lattice : :class:`tenpy.model.lattice.Lattice`
-        The lattice defining the geometry and the local Hilbert space(s).
-    H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
-        ``H_bond[i]`` acts on sites ``(i-1, i)``; we require ``len(H_bond) == lat.N_sites``.
-
-    Attributes
-    ----------
-    H_bond : list of :class:`npc.Array`
-        The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
-        ``H_bond[i]`` acts on sites ``(i-1, i)``.
-    """
-
-    def __init__(self, lattice, H_bond):
-        Model.__init__(self, lattice)
-        self.H_bond = list(H_bond)
-        if self.lat.bc_MPS != 'infinite':
-            assert self.H_bond[0] is None
-        NearestNeighborModel.test_sanity(self)
-        # like self.test_sanity(), but use the version defined below even for derived class
-
-    def test_sanity(self):
-        if len(self.H_bond) != self.lat.N_sites:
-            raise ValueError("wrong len of H_bond")
-
-    def trivial_like_NNModel(self):
-        """Return a NearestNeighborModel with same lattice, but trivial (H=0) bonds."""
-        triv_H = [H.zeros_like() if H is not None else None for H in self.H_bond]
-        return NearestNeighborModel(self.lat, triv_H)
-
-    def bond_energies(self, psi):
-        """Calculate bond energies <psi|H_bond|psi>.
-
-        Parameters
-        ----------
-        psi : :class:`~tenpy.networks.mps.MPS`
-            The MPS for which the bond energies should be calculated.
-
-        Returns
-        -------
-        E_bond : 1D ndarray
-            List of bond energies: for finite bc, ``E_Bond[i]`` is the energy of bond ``i, i+1``.
-            (i.e. we omit bond 0 between sites L-1 and 0);
-            for infinite bc ``E_bond[i]`` is the energy of bond ``i-1, i``.
-        """
-        if self.lat.bc_MPS == 'infinite':
-            return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
-        # else
-        return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
-
-
-class MPOModel(Model):
-    """Base class for a model with an MPO representation of the Hamiltonian.
-
-    In this class, the Hamiltonian gets represented by an :class:`~tenpy.networks.mpo.MPO`.
-    Thus, instances of this class are suitable for MPO-based algorithms like DMRG
-    :mod:`~tenpy.algorithms.dmrg` and MPO time evolution.
-
-    .. todo ::
-        implement MPO for time evolution...
-        Also, provide function to get H_MPO from H_bond
-
-    Parameters
-    ----------
-    H_MPO : :class:`~tenpy.networks.mpo.MPO`
-        The Hamiltonian rewritten as an MPO.
-
-    Attributes
-    ----------
-    H_MPO : :class:`tenpy.networks.mpo.MPO`
-        MPO representation of the Hamiltonian.
-    """
-
-    def __init__(self, lattice, H_MPO):
-        Model.__init__(self, lattice)
-        self.H_MPO = H_MPO
-        MPOModel.test_sanity(self)
-        # like self.test_sanity(), but use the version defined below even for derived class
-
-    def test_sanity(self):
-        if self.H_MPO.sites != self.lat.mps_sites():
-            raise ValueError("lattice incompatible with H_MPO.sites")
 
 
 class CouplingMPOModel(CouplingModel,MPOModel):
