@@ -5,11 +5,12 @@ See the doc-string of :func:`get_parameter` for details.
 # Copyright 2018 TeNPy Developers
 
 import warnings
+import numpy as np
 
 __all__ = ["get_parameter", "unused_parameters"]
 
 
-def get_parameter(par_dict, key, default, descr):
+def get_parameter(par_dict, key, default, descr, asarray=False):
     """Read out a parameter from the dictionary and/or provide default values.
 
     This function provides a similar functionality as ``par_dict.get(key, default)``.
@@ -40,11 +41,14 @@ def get_parameter(par_dict, key, default, descr):
         The default value for the parameter.
     descr : str
         A short description for verbose output, like 'TEBD', 'XXZ_model', 'truncation'.
+    asarray : bool
+        If True, convert the result to a numpy array with ``np.asarray(...)`` before returning.
 
     Returns
     -------
     value :
         ``par_dict[key]`` if the key is in par_dict, otherwise `default`.
+        Converted to a numpy array, if `asarray`.
 
     Examples
     --------
@@ -80,8 +84,9 @@ def get_parameter(par_dict, key, default, descr):
     if verbose >= 100 or (key not in used and verbose > 0):
         print("parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
             descr=descr, key=key, val=val, defaultstring=defaultstring))
-    if key not in used:
-        used.add(key)
+    used.add(key)  # (does nothing if already present)
+    if asarray:
+        val = np.asarray(val)
     return val
 
 
