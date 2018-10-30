@@ -1,18 +1,17 @@
 """Prototypical example of a 1D quantum model: the spin-1/2 XXZ chain.
 
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`;
-the idea of this class is more to serve as a pedagogical example for a 'model'.
+the idea of this module is more to serve as a pedagogical example for a model.
 """
 # Copyright 2018 TeNPy Developers
 
-import numpy as np
-
 from .lattice import Site, Chain
-from .model import CouplingModel, NearestNeighborModel, MPOModel
+from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
 from ..tools.params import get_parameter, unused_parameters
+from ..networks.site import SpinHalfSite  # if you want to use the predefined site
 
-__all__ = ['XXZChain']
+__all__ = ['XXZChain', 'XXZChain2']
 
 
 class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
@@ -40,26 +39,29 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
 
     def __init__(self, model_param):
         # 0) read out/set default parameters
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        Jxx = get_parameter(model_param, 'Jxx', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
-        hz = get_parameter(model_param, 'hz', 0., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
-
-        # 1) charges of the physical leg. The only time that we actually define charges!
-        leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
-        # 2) onsite operators
-        Sp = [[0., 1.], [0., 0.]]
-        Sm = [[0., 0.], [1., 0.]]
-        Sz = [[0.5, 0.], [0., -0.5]]
-        # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
-        # 3) local physical site
-        site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
-        # NOTE: the most common sites are pre-defined in tenpy.networks.site.
-        # you could (and should) replace steps 1)-3) by::
-        #     from tenpy.networks.site import SpinHalfSite
-        #     site = SpinHalfSite(conserve='Sz')
+        name = "XXZChain"
+        L = get_parameter(model_param, 'L', 2, name)
+        Jxx = get_parameter(model_param, 'Jxx', 1., name, asarray=True)
+        Jz = get_parameter(model_param, 'Jz', 1., name, True)
+        hz = get_parameter(model_param, 'hz', 0., name, True)
+        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', name)
+        unused_parameters(model_param, name)  # checks for mistyped parameters
+        # 1-3):
+        USE_PREDEFINED_SITE = False
+        if not USE_PREDEFINED_SITE:
+            # 1) charges of the physical leg. The only time that we actually define charges!
+            leg = npc.LegCharge.from_qflat(npc.ChargeInfo([1], ['2*Sz']), [1, -1])
+            # 2) onsite operators
+            Sp = [[0., 1.], [0., 0.]]
+            Sm = [[0., 0.], [1., 0.]]
+            Sz = [[0.5, 0.], [0., -0.5]]
+            # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
+            # 3) local physical site
+            site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
+        else:
+            # there is a site for spin-1/2 defined in TeNPy, so just we can just use it
+            # replacing steps 1-3)
+            site = SpinHalfSite(conserve='Sz')
         # 4) lattice
         bc = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
@@ -67,12 +69,38 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(-np.asarray(hz), 0, 'Sz')
-        Jxx_half = np.asarray(Jxx) * 0.5  # convert to array: allow `array_like` Jxx
-        self.add_coupling(Jxx_half, 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling(Jxx_half, 0, 'Sm', 0, 'Sp', 1)
+        self.add_onsite(-hz, 0, 'Sz')
+        self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1)
+        self.add_coupling(Jxx * 0.5, 0, 'Sm', 0, 'Sp', 1)
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
-        # 7) initialize MPO
+        # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 8) initialize bonds (the order of 7/8 doesn't matter)
+        # 8) initialize H_bond (the order of 7/8 doesn't matter)
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+
+
+class XXZChain2(CouplingMPOModel,NearestNeighborModel):
+    """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
+
+    This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
+    based on the :class:`~tenpy.models.model.CouplingMPOModel`.
+    """
+    def __init__(self, model_param):
+        model_param.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_param)
+
+    def init_sites(self, model_param):
+        return SpinHalfSite(conserve='Sz')  # use predefined Site
+
+    def init_terms(self, model_param):
+        # read out parameters
+        Jxx = get_parameter(model_param, 'Jxx', 1., self.name, True)
+        Jz = get_parameter(model_param, 'Jz', 1., self.name, True)
+        hz = get_parameter(model_param, 'hz', 0., self.name, True)
+        # add terms
+        for u in range(len(self.lat.unit_cell)):
+            self.add_onsite(-hz, u, 'Sz')
+        for u1, u2, dx in self.lat.nearest_neighbors:
+            self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx)
+            self.add_coupling(Jxx * 0.5, u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)

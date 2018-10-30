@@ -6,7 +6,7 @@ import numpy.testing as npt
 import pprint
 
 import tenpy.linalg.np_conserved as npc
-from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.xxz_chain import XXZChain, XXZChain2
 from test_model import check_general_model
 
 
@@ -50,8 +50,16 @@ def test_XXZChain():
     chain.test_sanity()
 
 
-def test_XXZChain_general():
+def test_XXZChain_general(tol=1.e-14):
     check_general_model(XXZChain, dict(L=4, Jxx=1., hz=0., bc_MPS='finite'), {
         'Jz': [0., 1., 2.],
         'hz': [0., 0.2]
     })
+    model_param = dict(L=3, Jxx=1., Jz=1.5, hz=0.25, bc_MPS='finite')
+    m1 = XXZChain(model_param)
+    m2 = XXZChain2(model_param)
+    for Hb1, Hb2 in zip(m1.H_bond, m2.H_bond):
+        if Hb1 is None:
+            assert Hb2 is None
+            continue
+        assert npc.norm(Hb1-Hb2) < tol

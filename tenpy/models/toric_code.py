@@ -2,6 +2,9 @@
 
 As we put the model on a cylinder, the name "toric code" is a bit misleading,
 but it is the established name for this model...
+
+.. todo ::
+    switch to using the CouplingMPOModel
 """
 # Copyright 2018 TeNPy Developers
 

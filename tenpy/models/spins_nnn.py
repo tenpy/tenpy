@@ -13,14 +13,14 @@ import numpy as np
 
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
-from .model import CouplingModel, NearestNeighborModel, MPOModel
+from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.misc import any_nonzero
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
 
-class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
+class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     r"""Spin-S sites coupled by (next-)nearest neighbour interactions on a `GroupedSite`.
 
     The Hamiltonian reads:
@@ -52,54 +52,46 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
-
     def __init__(self, model_param):
-        # 0) read out/set default parameters
-        verbose = get_parameter(model_param, 'verbose', 1, self.__class__)
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
-        Jxp = get_parameter(model_param, 'Jxp', 1., self.__class__)
-        Jyp = get_parameter(model_param, 'Jyp', 1., self.__class__)
-        Jzp = get_parameter(model_param, 'Jzp', 1., self.__class__)
-        hx = get_parameter(model_param, 'hx', 0., self.__class__)
-        hy = get_parameter(model_param, 'hy', 0., self.__class__)
-        hz = get_parameter(model_param, 'hz', 0., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        S = get_parameter(model_param, 'S', 0.5, self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'best', self.__class__)
-        # check what we can conserve
+        model_param.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_param)
+
+    def init_sites(self, model_param):
+        S = get_parameter(model_param, 'S', 0.5, self.name)
+        conserve = get_parameter(model_param, 'conserve', 'best', self.name)
         if conserve == 'best':
-            # check how much we can conserve:
-            if not any_nonzero(model_param, [('Jx', 'Jy'),
-                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
+            # check how much we can conserve
+            if not any_nonzero(model_param, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
+                               "check Sz conservation"):
                 conserve = 'Sz'
             elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
-            if verbose >= 1:
-                print(str(self.__class__) + ": set conserve to ", conserve)
-        unused_parameters(model_param, self.__class__)
-        # 1) define Site and lattice
+            if self.verbose >= 1.:
+                print(self.name + ": set conserve to", conserve)
         spinsite = SpinSite(S, conserve)
         site = GroupedSite([spinsite, spinsite], charges='same')
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 2) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 3) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        hx, hy, hz = np.asarray(hx), np.asarray(hy), np.asarray(hz)
+        return site
+
+    def init_terms(self, model_param):
+        Jx = get_parameter(model_param, 'Jx', 1., self.name, True)
+        Jy = get_parameter(model_param, 'Jy', 1., self.name, True)
+        Jz = get_parameter(model_param, 'Jz', 1., self.name, True)
+        Jxp = get_parameter(model_param, 'Jxp', 1., self.name, True)
+        Jyp = get_parameter(model_param, 'Jyp', 1., self.name, True)
+        Jzp = get_parameter(model_param, 'Jzp', 1., self.name, True)
+        hx = get_parameter(model_param, 'hx', 0., self.name, True)
+        hy = get_parameter(model_param, 'hy', 0., self.name, True)
+        hz = get_parameter(model_param, 'hz', 0., self.name, True)
+
+        # Only valid for self.lat being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
         self.add_onsite(-hy, 0, 'Sy0')
         self.add_onsite(-hz, 0, 'Sz0')
         self.add_onsite(-hx, 0, 'Sx1')
         self.add_onsite(-hy, 0, 'Sy1')
         self.add_onsite(-hz, 0, 'Sz1')
-        Jx = np.asarray(Jx)
-        Jy = np.asarray(Jy)
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
@@ -113,9 +105,6 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_coupling((Jx - Jy) / 4., 0, 'Sp1', 0, 'Sp0', 1)
         self.add_coupling((Jx - Jy) / 4., 0, 'Sm1', 0, 'Sm0', 1)
         self.add_coupling(Jz, 0, 'Sz1', 0, 'Sz0', 1)
-        # next-nearest neighbor couplings
-        Jxp = np.asarray(Jxp)
-        Jyp = np.asarray(Jyp)
         self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp0', 0, 'Sm0', 1)
         self.add_coupling((Jxp + Jyp) / 4., 0, 'Sm0', 0, 'Sp0', 1)
         self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp0', 0, 'Sp0', 1)
@@ -126,13 +115,9 @@ class SpinChainNNN(CouplingModel, MPOModel, NearestNeighborModel):
         self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp1', 0, 'Sp1', 1)
         self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm1', 0, 'Sm1', 1)
         self.add_coupling(Jzp, 0, 'Sz1', 0, 'Sz1', 1)
-        # 4) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 5) initialize H_bond
-        NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
 
 
-class SpinChainNNN2(CouplingModel, MPOModel):
+class SpinChainNNN2(CouplingMPOModel):
     r"""Spin-S sites coupled by next-nearest neighbour interactions.
 
     The Hamiltonian reads:
@@ -152,76 +137,84 @@ class SpinChainNNN2(CouplingModel, MPOModel):
 
     Parameters
     ----------
-    L : int
-        Length of the chain
     S : {0.5, 1, 1.5, 2, ...}
         The 2S+1 local states range from m = -S, -S+1, ... +S.
     conserve : 'best' | 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        For ``'best'``, we check the parameters what can be preserved.
     Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
         Couplings as defined for the Hamiltonian above.
+    lattice : str | :class:`~tenpy.models.lattice.Lattice`
+        Instance of a lattice class for the underlaying geometry.
+        Alternatively a string being the name of one of the Lattices defined in
+        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
     bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        MPS boundary conditions along the x-direction.
+        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+        Coupling boundary conditions in x-direction are chosen accordingly.
+        Only used if `lattice` is a string.
+    order : string
+        Ordering of the sites in the MPS, e.g. 'default', 'snake';
+        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+        Only used if `lattice` is a string.
+    L : int
+        Lenght of the lattice.
+        Only used if `lattice` is the name of a 1D Lattice.
+    Lx, Ly : int
+        Length of the lattice in x- and y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
+    bc_y : 'ladder' | 'cylinder'
+        Boundary conditions in y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_param):
-        # 0) read out/set default parameters
-        verbose = get_parameter(model_param, 'verbose', 1, self.__class__)
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
-        Jxp = get_parameter(model_param, 'Jxp', 1., self.__class__)
-        Jyp = get_parameter(model_param, 'Jyp', 1., self.__class__)
-        Jzp = get_parameter(model_param, 'Jzp', 1., self.__class__)
-        hx = get_parameter(model_param, 'hx', 0., self.__class__)
-        hy = get_parameter(model_param, 'hy', 0., self.__class__)
-        hz = get_parameter(model_param, 'hz', 0., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        S = get_parameter(model_param, 'S', 0.5, self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'best', self.__class__)
-        # check what we can conserve
+        CouplingMPOModel.__init__(self, model_param)
+
+    def init_sites(self, model_param):
+        S = get_parameter(model_param, 'S', 0.5, self.name)
+        conserve = get_parameter(model_param, 'conserve', 'best', self.name)
         if conserve == 'best':
-            # check how much we can conserve:
-            if not any_nonzero(model_param, [('Jx', 'Jy'),
-                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
+            # check how much we can conserve
+            if not any_nonzero(model_param, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
+                               "check Sz conservation"):
                 conserve = 'Sz'
             elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
-            if verbose >= 1:
-                print(str(self.__class__) + ": set conserve to ", conserve)
-        unused_parameters(model_param, self.__class__)
-        # 1) define Site and lattice
+            if self.verbose >= 1.:
+                print(self.name + ": set conserve to", conserve)
         site = SpinSite(S, conserve)
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 2) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 3) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        hx, hy, hz = np.asarray(hx), np.asarray(hy), np.asarray(hz)
-        self.add_onsite(-hx, 0, 'Sx')
-        self.add_onsite(-hy, 0, 'Sy')
-        self.add_onsite(-hz, 0, 'Sz')
-        Jx = np.asarray(Jx)
-        Jy = np.asarray(Jy)
+        return site
+
+    def init_terms(self, model_param):
+        # 0) read out/set default parameters
+        Jx = get_parameter(model_param, 'Jx', 1., self.name, True)
+        Jy = get_parameter(model_param, 'Jy', 1., self.name, True)
+        Jz = get_parameter(model_param, 'Jz', 1., self.name, True)
+        Jxp = get_parameter(model_param, 'Jxp', 1., self.name, True)
+        Jyp = get_parameter(model_param, 'Jyp', 1., self.name, True)
+        Jzp = get_parameter(model_param, 'Jzp', 1., self.name, True)
+        hx = get_parameter(model_param, 'hx', 0., self.name, True)
+        hy = get_parameter(model_param, 'hy', 0., self.name, True)
+        hz = get_parameter(model_param, 'hz', 0., self.name, True)
+
+        for u in range(len(self.lat.unit_cell)):
+            self.add_onsite(-hx, u, 'Sx')
+            self.add_onsite(-hy, u, 'Sy')
+            self.add_onsite(-hz, u, 'Sz')
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sm', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sp', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sm', 0, 'Sm', 1)
-        self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
-        # next-nearest neighbor couplings
-        Jxp = np.asarray(Jxp)
-        Jyp = np.asarray(Jyp)
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp', 0, 'Sm', 2)
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sm', 0, 'Sp', 2)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp', 0, 'Sp', 2)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm', 0, 'Sm', 2)
-        self.add_coupling(Jzp, 0, 'Sz', 0, 'Sz', 2)
-        # 4) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        for u1, u2, dx in self.lat.nearest_neighbors:
+            self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
+            self.add_coupling((Jx + Jy) / 4., u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
+            self.add_coupling((Jx - Jy) / 4., u1, 'Sm', u2, 'Sm', dx)
+            self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
+        for u1, u2, dx in self.lat.next_nearest_neighbors:
+            self.add_coupling((Jxp + Jyp) / 4., u1, 'Sp', u2, 'Sm', dx)
+            self.add_coupling((Jxp + Jyp) / 4., u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling((Jxp - Jyp) / 4., u1, 'Sp', u2, 'Sp', dx)
+            self.add_coupling((Jxp - Jyp) / 4., u1, 'Sm', u2, 'Sm', dx)
+            self.add_coupling(Jzp, u1, 'Sz', u2, 'Sz', dx)

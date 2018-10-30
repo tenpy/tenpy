@@ -4,18 +4,15 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 """
 # Copyright 2018 TeNPy Developers
 
-import numpy as np
-
-from .lattice import Chain
 from ..networks.site import SpinSite
-from .model import CouplingModel, NearestNeighborModel, MPOModel
-from ..tools.params import get_parameter, unused_parameters
+from .model import CouplingMPOModel, NearestNeighborModel
+from ..tools.params import get_parameter
 from ..tools.misc import any_nonzero
 
-__all__ = ['SpinChain']
+__all__ = ['SpinModel', 'SpinChain']
 
 
-class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
+class SpinModel(CouplingMPOModel):
     r"""Spin-S sites coupled by nearest neighbour interactions.
 
     The Hamiltonian reads:
@@ -33,37 +30,45 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
 
     Parameters
     ----------
-    L : int
-        Length of the chain
     S : {0.5, 1, 1.5, 2, ...}
         The 2S+1 local states range from m = -S, -S+1, ... +S.
     conserve : 'best' | 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        For ``'best'``, we check the parameters what can be preserved.
     Jx, Jy, Jz, hx, hy, hz, muJ, D, E: float | array
         Couplings as defined for the Hamiltonian above.
+    lattice : str | :class:`~tenpy.models.lattice.Lattice`
+        Instance of a lattice class for the underlaying geometry.
+        Alternatively a string being the name of one of the Lattices defined in
+        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
     bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        MPS boundary conditions along the x-direction.
+        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+        Coupling boundary conditions in x-direction are chosen accordingly.
+        Only used if `lattice` is a string.
+    order : string
+        Ordering of the sites in the MPS, e.g. 'default', 'snake';
+        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+        Only used if `lattice` is a string.
+    L : int
+        Lenght of the lattice.
+        Only used if `lattice` is the name of a 1D Lattice.
+    Lx, Ly : int
+        Length of the lattice in x- and y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
+    bc_y : 'ladder' | 'cylinder'
+        Boundary conditions in y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
     """
 
     def __init__(self, model_param):
-        # 0) read out/set default parameters
-        verbose = get_parameter(model_param, 'verbose', 1, self.__class__)
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jz', 1., self.__class__)
-        hx = get_parameter(model_param, 'hx', 0., self.__class__)
-        hy = get_parameter(model_param, 'hy', 0., self.__class__)
-        hz = get_parameter(model_param, 'hz', 0., self.__class__)
-        D = get_parameter(model_param, 'D', 0., self.__class__)
-        E = get_parameter(model_param, 'E', 0., self.__class__)
-        muJ = get_parameter(model_param, 'muJ', 0., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        S = get_parameter(model_param, 'S', 0.5, self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'best', self.__class__)
-        # check what we can conserve
+        CouplingMPOModel.__init__(self, model_param)
+
+    def init_sites(self, model_param):
+        S = get_parameter(model_param, 'S', 0.5, self.name)
+        conserve = get_parameter(model_param, 'conserve', 'best', self.name)
         if conserve == 'best':
-            # check how much we can conserve:
+            # check how much we can conserve
             if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
                                "check Sz conservation"):
                 conserve = 'Sz'
@@ -71,37 +76,49 @@ class SpinChain(CouplingModel, MPOModel, NearestNeighborModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if verbose >= 1:
-                print(str(self.__class__) + ": set conserve to ", conserve)
-        unused_parameters(model_param, self.__class__)
-        # 1) define Site and lattice
+            if self.verbose >= 1.:
+                print(self.name + ": set conserve to", conserve)
         site = SpinSite(S, conserve)
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 2) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 3) add terms of the Hamiltonian
+        return site
+
+    def init_terms(self, model_param):
+        Jx = get_parameter(model_param, 'Jx', 1., self.name, True)
+        Jy = get_parameter(model_param, 'Jy', 1., self.name, True)
+        Jz = get_parameter(model_param, 'Jz', 1., self.name, True)
+        hx = get_parameter(model_param, 'hx', 0., self.name, True)
+        hy = get_parameter(model_param, 'hy', 0., self.name, True)
+        hz = get_parameter(model_param, 'hz', 0., self.name, True)
+        D = get_parameter(model_param, 'D', 0., self.name, True)
+        E = get_parameter(model_param, 'E', 0., self.name, True)
+        muJ = get_parameter(model_param, 'muJ', 0., self.name, True)
+
         # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(-np.asarray(hx), 0, 'Sx')
-        self.add_onsite(-np.asarray(hy), 0, 'Sy')
-        self.add_onsite(-np.asarray(hz), 0, 'Sz')
-        self.add_onsite(np.asarray(D), 0, 'Sz Sz')
-        self.add_onsite(np.asarray(E) * 0.5, 0, 'Sp Sp')
-        self.add_onsite(np.asarray(E) * 0.5, 0, 'Sm Sm')
-        Jx = np.asarray(Jx)
-        Jy = np.asarray(Jy)
-        muJ = np.asarray(muJ)
+        for u in range(len(self.lat.unit_cell)):
+            self.add_onsite(-hx, u, 'Sx')
+            self.add_onsite(-hy, u, 'Sy')
+            self.add_onsite(-hz, u, 'Sz')
+            self.add_onsite(D, u, 'Sz Sz')
+            self.add_onsite(E * 0.5, u, 'Sp Sp')
+            self.add_onsite(E * 0.5, u, 'Sm Sm')
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sm', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sp', 0, 'Sp', 1)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sm', 0, 'Sm', 1)
-        self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
-        self.add_coupling(muJ * 0.5j, 0, 'Sm', 0, 'Sp', 1)
-        self.add_coupling(muJ * -0.5j, 0, 'Sp', 0, 'Sm', 1)
-        # 4) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 5) initialize H_bond
-        NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
+        for u1, u2, dx in self.lat.nearest_neighbors:
+            self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
+            self.add_coupling((Jx + Jy) / 4., u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
+            self.add_coupling((Jx - Jy) / 4., u1, 'Sm', u2, 'Sm', dx)
+            self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
+            self.add_coupling(muJ * 0.5j, u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling(muJ * -0.5j, u1, 'Sp', u2, 'Sm', dx)
+        # done
+
+
+class SpinChain(SpinModel,NearestNeighborModel):
+    """The :class:`SpinModel` on a Chain, suitable for TEBD.
+
+    See the :class:`SpinModel` for the documentation of parameters.
+    """
+    def __init__(self, model_param):
+        model_param.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_param)

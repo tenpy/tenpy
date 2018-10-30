@@ -1,8 +1,12 @@
 # Copyright 2018 TeNPy Developers
 import numpy as np
-from tenpy.models.fermion_chain import FermionChain
+from tenpy.models.fermion_chain import FermionChain, FermionModel
 from test_model import check_general_model
 from tenpy.models.spins import SpinChain
+
+
+def test_FermionModel():
+    check_general_model(FermionModel, {'lattice': "Square"}, {})
 
 
 def test_FermionChain():

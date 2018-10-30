@@ -12,77 +12,15 @@ As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.L
 """
 # Copyright 2018 TeNPy Developers
 
-import numpy as np
-
-from .lattice import Chain, Square
-from . import lattice
-from .model import CouplingModel, NearestNeighborModel, MPOModel
-from ..tools.params import get_parameter, unused_parameters
+from .model import CouplingMPOModel, NearestNeighborModel
+from ..tools.params import get_parameter
 from ..networks.site import SpinHalfSite
 
-__all__ = ['TFIChain', 'TFIModel2D']
+__all__ = ['TFIModel', 'TFIChain']
 
 
-class TFIChain(CouplingModel, NearestNeighborModel, MPOModel):
-    r"""Transverse field Ising chain.
-
-    The Hamiltonian reads:
-
-    .. math ::
-        H = - \sum_{i} \mathtt{J} \sigma^x_i \sigma^x_{i+1}
-            - \sum_{i} \mathtt{g} \sigma^z_i
-
-    All parameters are collected in a single dictionary `model_param` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
-
-    Parameters
-    ----------
-    L : int
-        Length of the chain
-    J, g : float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-    conserve : 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-    """
-
-    def __init__(self, model_param):
-        # 0) read out/set default parameters
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        J = get_parameter(model_param, 'J', 1., self.__class__)
-        g = get_parameter(model_param, 'g', 1., self.__class__)  # critical!
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'parity', self.__class__)
-        assert conserve != 'Sz'
-        unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
-        # 1-3)
-        site = SpinHalfSite(conserve=conserve)
-        # 4) lattice
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 6) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
-        J = np.asarray(J)
-        if conserve is None:
-            self.add_coupling(-J, 0, 'Sigmax', 0, 'Sigmax', 1)
-        else:
-            # individual 'Sigmax' does not conserve parity; rewrite in terms of Sp and Sm
-            self.add_coupling(-J, 0, 'Sp', 0, 'Sp', 1)
-            self.add_coupling(-J, 0, 'Sp', 0, 'Sm', 1)
-            self.add_coupling(-J, 0, 'Sm', 0, 'Sp', 1)
-            self.add_coupling(-J, 0, 'Sm', 0, 'Sm', 1)
-        # 7) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # 8) initialize bonds (the order of 7/8 doesn't matter)
-        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
-
-
-class TFIModel2D(CouplingModel, MPOModel):
-    r"""Transverse field Ising model on a square lattice.
+class TFIModel(CouplingMPOModel):
+    r"""Transverse field Ising model on a general lattice.
 
     The Hamiltonian reads:
 
@@ -97,61 +35,61 @@ class TFIModel2D(CouplingModel, MPOModel):
 
     Parameters
     ----------
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        The lattice class for the underlaying geometry. A string should be one of the lattices
-        defined in th :mod:`~tenpy.models.lattice`.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
+    conserve : None | 'parity'
+        What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     J, g : float | array
         Couplings as defined for the Hamiltonian above.
+    lattice : str | :class:`~tenpy.models.lattice.Lattice`
+        Instance of a lattice class for the underlaying geometry.
+        Alternatively a string being the name of one of the Lattices defined in
+        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-    conserve : None | 'parity'
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        Only used if `lattice` is a string.
     order : string
         Ordering of the sites in the MPS, e.g. 'default', 'snake';
         see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+        Only used if `lattice` is a string.
+    L : int
+        Lenght of the lattice.
+        Only used if `lattice` is the name of a 1D Lattice.
+    Lx, Ly : int
+        Length of the lattice in x- and y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
+    bc_y : 'ladder' | 'cylinder'
+        Boundary conditions in y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_param):
-        # 0) read out/set default parameters
-        lat = get_parameter(model_param, 'lattice', "Square", self.__class__)
-        Lx = get_parameter(model_param, 'Lx', 1, self.__class__)
-        Ly = get_parameter(model_param, 'Ly', 4, self.__class__)
-        J = get_parameter(model_param, 'J', 1., self.__class__)
-        g = get_parameter(model_param, 'g', 1., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
-        bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
-        order = get_parameter(model_param, 'order', 'default', self.__class__)
-        conserve = get_parameter(model_param, 'conserve', None, self.__class__)
-        assert conserve != 'Sz'  # invalid!
-        assert bc_y in ['cylinder', 'ladder']
-        unused_parameters(model_param, self.__class__)  # checks for mistyped parameters
-        # 1-3)
+        CouplingMPOModel.__init__(self, model_param)
+
+    def init_sites(self, model_param):
+        conserve = get_parameter(model_param, 'conserve', 'parity', self.name)
+        assert conserve != 'Sz'
+        if conserve == 'best':
+            conserve = 'parity'
+            if self.verbose >= 1.:
+                print(self.name + ": set conserve to", conserve)
         site = SpinHalfSite(conserve=conserve)
-        # 4) lattice
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
-        if isinstance(lat, str):
-            lat = lattice.__dict__.get(lat)  # the corresponding class
-            lat = lat(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)  # instance of the class
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
-        # 6) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        self.add_onsite(-np.asarray(g), 0, 'Sigmaz')
-        J = np.asarray(J)
-        if conserve is None:
-            for u1, u2, dx in self.lat.nearest_neighbors:
-                self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
-        else:
-            for op1, op2 in [('Sp', 'Sp'), ('Sp', 'Sm'), ('Sm', 'Sp'), ('Sm', 'Sm')]:
-                for u1, u2, dx in self.lat.nearest_neighbors:
-                    self.add_coupling(-J, u1, op1, u2, op2, dx)
-        # 7) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        # skip 8): not a NearestNeighborModel...
+        return site
+
+    def init_terms(self, model_param):
+        J = get_parameter(model_param, 'J', 1., self.name, True)
+        g = get_parameter(model_param, 'g', 1., self.name, True)
+        for u in range(len(self.lat.unit_cell)):
+            self.add_onsite(-g, u, 'Sigmaz')
+        for u1, u2, dx in self.lat.nearest_neighbors:
+            self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
+        # done
+
+
+class TFIChain(TFIModel, NearestNeighborModel):
+    """The :class:`TFIModel` on a Chain, suitable for TEBD.
+
+    See the :class:`TFIModel` for the documentation of parameters.
+    """
+    def __init__(self, model_param):
+        model_param.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_param)

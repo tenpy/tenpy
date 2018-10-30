@@ -1,8 +1,11 @@
 """Cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 
-.. todo :
+.. todo ::
     WARNING: These models are still under development and not yet tested for correctness.
     Use at your own risk!
+
+.. todo ::
+    switch to using the CouplingMPOModel
 """
 # Copyright 2018 TeNPy Developers
 

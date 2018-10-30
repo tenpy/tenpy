@@ -1,6 +1,6 @@
 # Copyright 2018 TeNPy Developers
 
-from tenpy.models.tf_ising import TFIChain, TFIModel2D
+from tenpy.models.tf_ising import TFIModel, TFIChain
 from test_model import check_general_model
 from nose.plugins.attrib import attr
 
@@ -14,7 +14,7 @@ def test_TFIChain_general():
 
 @attr('slow')
 def test_TFIModel2D_general():
-    check_general_model(TFIModel2D, dict(Lx=2, J=1., g=0.1), {
+    check_general_model(TFIModel, dict(Lx=2, J=1., g=0.1), {
         'Ly': [2, 3],
         'bc_MPS': ['finite', 'infinite'],
         'bc_y': ['ladder', 'cylinder'],

@@ -1,78 +1,104 @@
 """Fermionic Hubbard model: (spin-full fermions with interactions).
 
 .. todo ::
-    Work in checks for common errors and raise some exceptions?
+    Should we redefine the hopping to have a negative prefactor by default if t = 1?
+    How to notify users of the class???
 """
 # Copyright 2018 TeNPy Developers
 
-from .lattice import Chain
-from .model import CouplingModel, NearestNeighborModel, MPOModel
-from ..tools.params import get_parameter, unused_parameters
-from tenpy.networks.site import SpinHalfFermionSite
+from .model import CouplingMPOModel, NearestNeighborModel
+from ..tools.params import get_parameter
+from ..networks.site import SpinHalfFermionSite
 
 
-class FermionicHubbardChain(CouplingModel, NearestNeighborModel, MPOModel):
+class FermionicHubbardModel(CouplingMPOModel):
     r"""Spin-1/2 fermionic Hubbard model in 1D.
 
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{\langle i, j \rangle, \sigma} t (c^{\dagger}_{\sigma, i} c_{\sigma j} + h.c.)
+        H = \sum_{\langle i, j \rangle, i < j, \sigma} t (c^{\dagger}_{\sigma, i} c_{\sigma j} + h.c.)
             + \sum_i U n_{\uparrow, i} n_{\downarrow, i}
             + \sum_i \mu ( n_{\uparrow, i} + n_{\downarrow, i} )
-            +  \sum_{\langle i, j \rangle, \sigma} V
+            +  \sum_{\langle i, j \rangle, i< j, \sigma} V
                        (n_{\uparrow,i} + n_{\downarrow,i})(n_{\uparrow,j} + n_{\downarrow,j})
 
 
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_param` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
+        See :doc:`/intro_JordanWigner` for details.
+
     Parameters
     ----------
-    L : int
-        Length of the chain
-    t, U, mu : float | array
-        Parameters as defined for the Hamiltonian above
     cons_N : {'N' | 'parity' | None}
         Whether particle number is conserved,
         see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
     cons_Sz : {'Sz' | 'parity' | None}
         Whether spin is conserved,
         see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+    t, U, mu : float | array
+        Parameters as defined for the Hamiltonian above
+    lattice : str | :class:`~tenpy.models.lattice.Lattice`
+        Instance of a lattice class for the underlaying geometry.
+        Alternatively a string being the name of one of the Lattices defined in
+        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
     bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        MPS boundary conditions along the x-direction.
+        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+        Coupling boundary conditions in x-direction are chosen accordingly.
+        Only used if `lattice` is a string.
+    order : string
+        Ordering of the sites in the MPS, e.g. 'default', 'snake';
+        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+        Only used if `lattice` is a string.
+    L : int
+        Lenght of the lattice.
+        Only used if `lattice` is the name of a 1D Lattice.
+    Lx, Ly : int
+        Length of the lattice in x- and y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
+    bc_y : 'ladder' | 'cylinder'
+        Boundary conditions in y-direction.
+        Only used if `lattice` is the name of a 2D Lattice.
     """
 
     def __init__(self, model_param):
-        # 0) Read out/set default parameters.
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        t = get_parameter(model_param, 't', 1., self.__class__)
-        U = get_parameter(model_param, 'U', 0, self.__class__)
-        V = get_parameter(model_param, 'V', 0, self.__class__)
-        mu = get_parameter(model_param, 'mu', 0., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.__class__)
-        cons_N = get_parameter(model_param, 'cons_N', 'N', self.__class__)
-        cons_Sz = get_parameter(model_param, 'cons_Sz', 'Sz', self.__class__)
-        unused_parameters(model_param, self.__class__)
+        CouplingMPOModel.__init__(self, model_param)
 
-        # 1) Define the site and the lattice.
+    def init_sites(self, model_param):
+        cons_N = get_parameter(model_param, 'cons_N', 'N', self.name)
+        cons_Sz = get_parameter(model_param, 'cons_Sz', 'Sz', self.name)
         site = SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-        lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        # 2) Initialize CouplingModel
-        CouplingModel.__init__(self, lat)
+        return site
 
-        # 3) Add terms of the hamiltonian.
-        # 3a) On-site terms
-        self.add_onsite(mu, 0, 'Ntot')
-        self.add_onsite(U, 0, 'NuNd')
+    def init_terms(self, model_param):
+        # 0) Read out/set default parameters.
+        L = get_parameter(model_param, 'L', 2, self.name)
+        t = get_parameter(model_param, 't', 1., self.name)
+        U = get_parameter(model_param, 'U', 0, self.name)
+        V = get_parameter(model_param, 'V', 0, self.name)
+        mu = get_parameter(model_param, 'mu', 0., self.name)
 
-        # 3b) Coupling terms
-        self.add_coupling(t, 0, 'Cdu', 0, 'Cu', 1, 'JW', True)
-        self.add_coupling(t, 0, 'Cdu', 0, 'Cu', -1, 'JW', True)
-        self.add_coupling(t, 0, 'Cdd', 0, 'Cd', 1, 'JW', True)
-        self.add_coupling(t, 0, 'Cdd', 0, 'Cd', -1, 'JW', True)
-        self.add_coupling(V, 0, 'Ntot', 0, 'Ntot', 1)
-        # 4) Initialize MPO and bonds (order does not matter).
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
-        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        for u in range(len(self.lat.unit_cell)):
+            self.add_onsite(mu, 0, 'Ntot')
+            self.add_onsite(U, 0, 'NuNd')
+        for u1, u2, dx in self.lat.nearest_neighbors:
+            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx, 'JW', True)
+            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', -dx, 'JW', True)  # h.c.
+            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', dx, 'JW', True)
+            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', -dx, 'JW', True)  # h.c.
+            self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
+
+
+class FermionicHubbardChain(FermionicHubbardModel,NearestNeighborModel):
+    """The :class:`FermionicHubbardModel` on a Chain, suitable for TEBD.
+
+    See the :class:`FermionicHubbardModel` for the documentation of parameters.
+    """
+    def __init__(self, model_param):
+        model_param.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_param)
