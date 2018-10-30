@@ -38,6 +38,7 @@ Added
 - :class:`tenpy.models.model.MultiCouplingModel` for couplings involving more than 2 sites.
 - request #8: Allow shift in boundary conditions of :class:`~tenpy.models.model.CouplingModel`.
 - Allow to use state labels in :meth:`tenpy.networks.mps.from_product_state`.
+- :class:`tenpy.models.model.CouplingMPOModel` structuring the default initialization of most models.
 
 Changed
 ^^^^^^^

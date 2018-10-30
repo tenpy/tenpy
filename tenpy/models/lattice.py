@@ -787,7 +787,7 @@ class Ladder(Lattice):
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
-        Lattice.__init__(self, [Lx], sites, **kwargs)
+        Lattice.__init__(self, [L], sites, **kwargs)
 
 
 class Square(SimpleLattice):

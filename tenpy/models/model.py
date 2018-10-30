@@ -33,11 +33,15 @@ See also the introduction in :doc:`/intro_model`.
 import numpy as np
 import warnings
 
+from .lattice import get_lattice, Lattice
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
+from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 
-__all__ = ['Model', 'CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel']
+__all__ = ['Model', 'CouplingModel', 'MultiCouplingModel', 'NearestNeighborModel', 'MPOModel',
+           'CouplingMPOModel']
+# TODO: move MPOModel and NearestNeighborModel before CouplingModel
 
 
 class Model:
@@ -853,6 +857,175 @@ class MPOModel(Model):
     def test_sanity(self):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
+
+
+class CouplingMPOModel(CouplingModel,MPOModel):
+    """Combination of the CouplingModel and MPOModel.
+
+    This class provides the interface for most of the model classes in `tenpy`.
+    Examples based on this class are given in :mod:`~tenpy.models.xxz_chain`
+    and :mod:`~tenpy.models.tf_ising`.
+
+    The ``__init__`` of this function performs the standard initialization explained
+    in :doc:`/intro_model`, by calling the methods :meth:`init_lattice` (step 1-4)
+    to initialize a lattice (which in turn calls :meth:`init_sites`) and
+    :meth:`init_terms`. The latter should be overwritten by subclasses to add the
+    desired terms.
+
+    As shown in :mod:`~tenpy.models.tf_ising`, you can get a 1D version suitable
+    for TEBD from a general-lattice model by subclassing it once more, only
+    redefining the ``__init__`` as follows::
+
+        def __init__(self, model_params):
+            CouplingMPOModel.__init__(self, model_params)
+
+
+    Parameters
+    ----------
+    model_param : dict
+        A dictionary with all the model parameters.
+        These parameters are given to the different ``init_...()`` methods, and
+        should be read out using :func:`~tenpy.tools.params.get_parameter`.
+        This may happen in any of the ``init_...()`` methods.
+        The parameter ``'verbose'`` is read out in the `__init__` of this function
+        and specifies how much status information should be printed during initialization.
+
+    Attributes
+    ----------
+    name : str
+        The name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
+    verbose : int
+        Level of verbosity (i.e. how much status information to print); higher=more output.
+    """
+    def __init__(self, model_param):
+        if getattr(self, "_called_CouplingMPOModel_init", False):
+            # If we ignore this, the same terms get added to self multiple times.
+            # In the best case, this would just rescale the energy;
+            # in the worst case we get the wrong Hamiltonian.
+            raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
+            # To fix this problem, follow the instructions for subclassing in :doc:`/intro_model`.
+        self._called_CouplingMPOModel_init = True
+        self.name = self.__class__.__name__
+        self.verbose = get_parameter(model_param, 'verbose', 1, self.name)
+        # 1-4) iniitalize lattice
+        lat = self.init_lattice(model_param)
+        # 5) initialize CouplingModel
+        CouplingModel.__init__(self, lat)
+        # 6) add terms of the Hamiltonian
+        self.init_terms(model_param)
+        # 7) initialize H_MPO
+        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        if isinstance(self, NearestNeighborModel):
+            # 8) initialize H_bonds
+            NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        # checks for misspelled parameters
+        unused_parameters(model_param, self.name)
+
+    def init_lattice(self, model_param):
+        """Initialize a lattice for the given model parameters.
+
+        This function reads out the model parameter `lattice`.
+        This can be a full :class:`~tenpy.models.lattice.Lattice` instance,
+        in which case it is just returned without further action.
+        Alternatively, the `lattice` parameter can be a string giving the name
+        of one of the predefined lattices, which then gets initialized.
+        Depending on the dimensionality of the lattice, this requires different model parameters.
+
+        The following model parameters get read out.
+
+        ============== ========= ===============================================================
+        key            type      description
+        ============== ========= ===============================================================
+        lattice        str |     The name of a lattice pre-defined in TeNPy to be initialized.
+                       Lattice   Alternatively, a (possibly self-defined) Lattice instance.
+                                 In the latter case, no further parameters are read out.
+        -------------- --------- ---------------------------------------------------------------
+        bc_MPS         str       Boundary conditions for the MPS
+        -------------- --------- ---------------------------------------------------------------
+        order          str       The order of sites within the lattice for non-trivial lattices.
+        -------------- --------- ---------------------------------------------------------------
+        L              int       The length in x-direction (or lenght of the unit cell for
+                                 infinite systems).
+                                 Only read out for 1D lattices.
+        -------------- --------- ---------------------------------------------------------------
+        Lx, Ly         int       The length in x- and y-direction.
+                                 For ``"infinite"`` `bc_MPS`, the system is infinite in
+                                 x-direction and `Lx` is the number of "rings" in the infinite
+                                 MPS unit cell, while `Ly` gives the circumference around the
+                                 cylinder or width of th the rung for a ladder (depending on
+                                 `bc_y`.
+                                 Only read out for 2D lattices.
+        -------------- --------- ---------------------------------------------------------------
+        bc_y           str       ``"cylinder" | "ladder"``.
+                                 The boundary conditions in y-direction.
+                                 Only read out for 2D lattices.
+        ============== ========= ===============================================================
+
+        Parameters
+        ----------
+        model_param : dict
+            The model parameters given to ``__init__``.
+
+        Returns
+        -------
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            An initialized lattice.
+        """
+        lat = get_parameter(model_param, 'lattice', "Chain", self.name)
+        if isinstance(lat, str):
+            LatticeClass = get_lattice(lattice_name=lat)
+            bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.name)
+            order = get_parameter(model_param, 'order', 'default', self.name)
+            sites = self.init_sites(model_param)
+            if LatticeClass.dim == 1:  # 1D lattice
+                L = get_parameter(model_param, 'L', 2, self.name)
+                # 4) lattice
+                bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+                lat = LatticeClass(L, sites, bc=bc, bc_MPS=bc_MPS)
+            elif LatticeClass.dim == 2:   # 2D lattice
+                Lx = get_parameter(model_param, 'Lx', 1, self.name)
+                Ly = get_parameter(model_param, 'Ly', 4, self.name)
+                bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.name)
+                assert bc_y in ['cylinder', 'ladder']
+                bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+                bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+                lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
+            else:
+                raise ValueError("Can't auto-determine parameters for the lattice. "
+                                 "Overwrite the `init_lattice` in your model!")
+            # now, `lat` is an instance of the LatticeClass called `lattice_name`.
+        # else: a lattice was already provided
+        assert isinstance(lat, Lattice)
+        return lat
+
+    def init_sites(self, model_param):
+        """Define the local Hilbert space and operators; needs to be implemented in subclasses.
+
+        This function gets called by :meth:`init_lattice` to get the
+        :class:`~tenpy.networks.site.Site` for the lattice unit cell.
+
+        .. note ::
+            Initializing the sites requires to define the conserved quantum numbers.
+            All pre-defined sites accept ``conserve=None`` to disable using quantum numbers.
+            Many models in TeNPy read out the `conserve` model parameter, which can be set
+            to ``"best"`` to indicate the optimal parameters.
+
+        Parameters
+        ----------
+        model_param : dict
+            The model parameters given to ``__init__``.
+
+        Returns
+        -------
+        sites : (tuple of) :class:`~tenpy.networks.site.Site.
+            The local sites of the lattice, defining the local basis states and operators.
+        """
+        raise NotImplementedError("Subclasses should implement `init_sites`")
+        # or at least redefine the lattice
+
+    def init_terms(self, model_param):
+        """Add the onsite and coupling terms to the model; subclasses should implement this."""
+        pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
 
 
 def _multi_coupling_group_handle_JW(ijkl, ops, ops_need_JW, op_string, N_sites):
