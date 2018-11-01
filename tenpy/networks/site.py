@@ -765,8 +765,8 @@ class SpinSite(Site):
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S, 1.)]
         Site.__init__(self, leg, names, **ops)
-        self.state_labels["up"] = self.state_labels[names[0]]
-        self.state_labels["up"] = self.state_labels[names[-1]]
+        self.state_labels['down'] = self.state_labels[names[0]]
+        self.state_labels['up'] = self.state_labels[names[-1]]
 
 
     def __repr__(self):
