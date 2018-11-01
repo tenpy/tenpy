@@ -70,7 +70,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # Define the sites and the lattice, which in this case is a simple uniform chain
         # of spin 1/2 sites
         site = SpinHalfSite(conserve=conserve)
-        lat = Chain(L, site, 'infinite')
+        lat = Chain(L, site, bc_MPS='infinite')
 
         # The operators that appear in the Hamiltonian. Standard spin operators are
         # already defined for the spin 1/2 site, but it is also possible to add new
@@ -114,7 +114,7 @@ def example_run_dmrg():
     """Use iDMRG to extract information about the ground state of the system."""
     model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8, verbose=1)
     model = ExponentiallyDecayingHeisenberg(model_params)
-    psi = MPS.from_product_state(model.lat.mps_sites(), [0, 1], bc='infinite')
+    psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite')
     dmrg_params = {'mixer': True,
                    'chi_list': {0: 100},
                    'trunc_params': {'svd_min': 1.e-10},

@@ -1,7 +1,9 @@
-"""Calculate the correleation legnth of the Transferse field Ising model for various h_z.
+"""Calculate the correleation legnth of the transferse field Ising model for various h_z.
 
-.. todo :
-    simplify, document
+This example uses DMRG to find the ground state of the transverse field Ising model
+when tuning through the phase transition by changing the field `hz`.
+It uses :meth:`~tenpy.networks.mps.MPS.correlation_length` to extract the
+correlation length of the ground state, and plots it vs. hz in the end.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -15,8 +17,7 @@ import matplotlib.pyplot as plt
 
 def run(Jzs):
     L = 2
-    bc = 'infinite'
-    model_params = dict(L=L, Jx=1., Jy=1., Jz=1., bc_MPS=bc, conserve='Sz', verbose=0)
+    model_params = dict(L=L, Jx=1., Jy=1., Jz=1., bc_MPS='infinite', conserve='Sz', verbose=0)
     chi = 300
     dmrg_params = dict(
         trunc_params={
@@ -29,13 +30,10 @@ def run(Jzs):
         max_E_err=0.0001,
         max_S_err=0.0001,
         verbose=1,
-        mixer=True)  # TODO: mixer?
+        mixer=True)
 
     M = SpinChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), [1, 0] * (L // 2), bc)
-    #  B = np.zeros([2, 2, 2])
-    #  B[0, 0, 0] = B[1, 1, 1] = 1.
-    #  psi = MPS.from_Bflat(M.lat.mps_sites(), [B]*L, bc=bc)
+    psi = MPS.from_product_state(M.lat.mps_sites(), ["up"] * M.lat.N_sites, M.lat.bc_MPS)
 
     np.set_printoptions(linewidth=120)
     corr_length = []
@@ -45,27 +43,10 @@ def run(Jzs):
         print("-" * 80)
         model_params['Jz'] = Jz
         M = SpinChain(model_params)
-        #  #  psi = MPS.from_product_state(M.lat.mps_sites(), [1, 1]*(L//2), bc)
-        #  B = np.zeros([2, 2, 2])
-        #  B[0, 0, 0] = B[1, 1, 1] = 1.
-        #  psi = MPS.from_Bflat(M.lat.mps_sites(), [B]*L, bc=bc)
         run_DMRG(psi, M, dmrg_params)
-        if bc == 'infinite':
-            #  T = TransferMatrix(psi, psi, charge_sector=None)
-            #  E, V = T.eigenvectors(4, which='LM')
-            #  chi = psi.chi[0]
-            #  print(V[0].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5)
-            #  if len(V) > 1:
-            #      print(V[1].to_ndarray().reshape([chi, chi])[:5, :5] * chi**0.5)
-            #  print("chi:", psi.chi)
-            #  print("eigenvalues transfermatrix:", E)
-            #  print("norm_test:", psi.norm_test())
-            corr_length.append(psi.correlation_length(charge_sector=0, tol_ev0=1.e-3))
-            print("corr. length", corr_length[-1])
-            print("corr. fct.", psi.correlation_function('Sz', 'Sz', sites1=[0], sites2=6))
-            print("<Sz>", psi.expectation_value('Sz'))
-        else:
-            print(psi.correlation_function('Sz', 'Sz'))
+        corr_length.append(psi.correlation_length(tol_ev0=1.e-3))
+        print("corr. length", corr_length[-1])
+        print("<Sz>", psi.expectation_value('Sz'))
     corr_length = np.array(corr_length)
     results = {
         'model_params': model_params,
@@ -88,11 +69,7 @@ def plot(results, filename):
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        filename = sys.argv[1]
-    else:
-        filename = 'xxz_corrlength.pkl'
+    filename = 'xxz_corrlength.pkl'
     import pickle
     import os.path
     if not os.path.exists(filename):
