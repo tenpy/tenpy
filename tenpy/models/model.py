@@ -26,6 +26,9 @@ For simplicity, the :class:`CouplingModel` is limited to interactions involving 
 Yet, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
 involving couplings between multiple sites.
 
+The :class:`CouplingMPOModel` aims at structuring the initialization for most models is used
+as base class in (most of) the predefined models in TeNPy.
+
 See also the introduction in :doc:`/intro_model`.
 """
 # Copyright 2018 TeNPy Developers
