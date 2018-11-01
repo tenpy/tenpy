@@ -24,7 +24,7 @@ class FermionModel(CouplingMPOModel):
               \mathtt{mu} n_{i}
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. warning ::
@@ -63,11 +63,11 @@ class FermionModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
 
-    def __init__(self, model_param):
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        CouplingMPOModel.__init__(self, model_params)
 
-    def init_sites(self, model_param):
-        conserve = get_parameter(model_param, 'conserve', 'N', self.name)
+    def init_sites(self, model_params):
+        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
         if conserve == 'best':
             conserve = 'N'
             if self.verbose >= 1.:
@@ -75,10 +75,10 @@ class FermionModel(CouplingMPOModel):
         site = FermionSite(conserve=conserve)
         return site
 
-    def init_terms(self, model_param):
-        J = get_parameter(model_param, 'J', 1., self.name, True)
-        V = get_parameter(model_param, 'V', 1., self.name, True)
-        mu = get_parameter(model_param, 'mu', 0., self.name, True)
+    def init_terms(self, model_params):
+        J = get_parameter(model_params, 'J', 1., self.name, True)
+        V = get_parameter(model_params, 'V', 1., self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.nearest_neighbors:
@@ -93,6 +93,6 @@ class FermionChain(FermionModel,NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
-    def __init__(self, model_param):
-        model_param.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        model_params.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_params)

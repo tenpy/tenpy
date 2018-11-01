@@ -29,7 +29,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
             - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi} x} c^\dagger_{x,y} c_{x,y+1} + h.c.)
 
 
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. todo :
@@ -58,19 +58,19 @@ class HofstadterFermions(CouplingModel, MPOModel):
         see :meth:`~tenpy.models.lattice.Lattice.ordering`.
     """
 
-    def __init__(self, model_param):
+    def __init__(self, model_params):
         # 0) read out/set default parameters
-        Lx = get_parameter(model_param, 'Lx', 4, self.__class__)
-        Ly = get_parameter(model_param, 'Ly', 2, self.__class__)
-        filling = get_parameter(model_param, 'filling', 0.125, self.__class__)
-        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_param, 'phi', 2. * np.pi / Lx, self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
-        bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
-        order = get_parameter(model_param, 'order', 'default', self.__class__)
-        unused_parameters(model_param, self.__class__)
+        Lx = get_parameter(model_params, 'Lx', 4, self.__class__)
+        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
+        filling = get_parameter(model_params, 'filling', 0.125, self.__class__)
+        Jx = get_parameter(model_params, 'Jx', 1., self.__class__)
+        Jy = get_parameter(model_params, 'Jy', 1., self.__class__)
+        phi = get_parameter(model_params, 'phi', 2. * np.pi / Lx, self.__class__)
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
+        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.__class__)
+        conserve = get_parameter(model_params, 'conserve', 'N', self.__class__)
+        order = get_parameter(model_params, 'order', 'default', self.__class__)
+        unused_parameters(model_params, self.__class__)
 
         assert bc_y in ['cylinder', 'ladder']
 
@@ -114,7 +114,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
             + \sum_{x, y} \frac{\mathtt{U}}{2} n_{x,y} (n_{x,y} - 1) - \mathtt{mu} n_{x,y}
 
 
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. todo :
@@ -145,22 +145,22 @@ class HofstadterBosons(CouplingModel, MPOModel):
         see :meth:`~tenpy.models.lattice.Lattice.ordering`.
     """
 
-    def __init__(self, model_param):
+    def __init__(self, model_params):
         # 0) read out/set default parameters
-        Lx = get_parameter(model_param, 'Lx', 4, self.__class__)
-        Ly = get_parameter(model_param, 'Ly', 2, self.__class__)
-        N_max = get_parameter(model_param, 'N_max', 3, self.__class__)
-        filling = get_parameter(model_param, 'filling', 0.125, self.__class__)
-        Jx = get_parameter(model_param, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_param, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_param, 'phi', 2. * np.pi / Lx, self.__class__)
-        mu = get_parameter(model_param, 'mu', 0, self.__class__)
-        U = get_parameter(model_param, 'U', 0, self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
-        bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'N', self.__class__)
-        order = get_parameter(model_param, 'order', 'default', self.__class__)
-        unused_parameters(model_param, self.__class__)
+        Lx = get_parameter(model_params, 'Lx', 4, self.__class__)
+        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
+        N_max = get_parameter(model_params, 'N_max', 3, self.__class__)
+        filling = get_parameter(model_params, 'filling', 0.125, self.__class__)
+        Jx = get_parameter(model_params, 'Jx', 1., self.__class__)
+        Jy = get_parameter(model_params, 'Jy', 1., self.__class__)
+        phi = get_parameter(model_params, 'phi', 2. * np.pi / Lx, self.__class__)
+        mu = get_parameter(model_params, 'mu', 0, self.__class__)
+        U = get_parameter(model_params, 'U', 0, self.__class__)
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
+        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.__class__)
+        conserve = get_parameter(model_params, 'conserve', 'N', self.__class__)
+        order = get_parameter(model_params, 'order', 'default', self.__class__)
+        unused_parameters(model_params, self.__class__)
 
         assert bc_y in ['cylinder', 'ladder']
 

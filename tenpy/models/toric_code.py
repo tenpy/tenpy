@@ -64,7 +64,7 @@ class ToricCode(MultiCouplingModel, MPOModel):
             - \mathtt{Jp} \sum_{plaquettes p} \prod_{i \in p} \sigma^z_i
 
     (Note that this are Pauli matrices, not spin-1/2 operators.)
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
@@ -81,17 +81,17 @@ class ToricCode(MultiCouplingModel, MPOModel):
         The order of the lattice sites in the lattice, see :class:`DualSquare`.
     """
 
-    def __init__(self, model_param):
+    def __init__(self, model_params):
         # 0) read out/set default parameters
-        verbose = get_parameter(model_param, 'verbose', 1, self.__class__)
-        Lx = get_parameter(model_param, 'Lx', 2, self.__class__)
-        Ly = get_parameter(model_param, 'Ly', 2, self.__class__)
-        Jv = get_parameter(model_param, 'Jv', 1., self.__class__)
-        Jp = get_parameter(model_param, 'Jp', 1., self.__class__)
-        bc_MPS = get_parameter(model_param, 'bc_MPS', 'infinite', self.__class__)
-        order = get_parameter(model_param, 'order', 'default', self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'parity', self.__class__)
-        unused_parameters(model_param, self.__class__)
+        verbose = get_parameter(model_params, 'verbose', 1, self.__class__)
+        Lx = get_parameter(model_params, 'Lx', 2, self.__class__)
+        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
+        Jv = get_parameter(model_params, 'Jv', 1., self.__class__)
+        Jp = get_parameter(model_params, 'Jp', 1., self.__class__)
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
+        order = get_parameter(model_params, 'order', 'default', self.__class__)
+        conserve = get_parameter(model_params, 'conserve', 'parity', self.__class__)
+        unused_parameters(model_params, self.__class__)
         # 1) define Site and lattice
         site = SpinHalfSite(conserve)
         bc = [None, 'periodic']

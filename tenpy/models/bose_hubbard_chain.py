@@ -26,7 +26,7 @@ class BoseHubbardModel(CouplingMPOModel):
     Note that the signs of all parameters as defined in the Hamiltonian are positive.
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
 
@@ -64,13 +64,13 @@ class BoseHubbardModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
 
-    def __init__(self, model_param):
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        CouplingMPOModel.__init__(self, model_params)
 
-    def init_sites(self, model_param):
-        n_max = get_parameter(model_param, 'n_max', 3, self.__class__)
-        filling = get_parameter(model_param, 'filling', 0.5, self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'N', self.name)
+    def init_sites(self, model_params):
+        n_max = get_parameter(model_params, 'n_max', 3, self.__class__)
+        filling = get_parameter(model_params, 'filling', 0.5, self.__class__)
+        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
         if conserve == 'best':
             conserve = 'N'
             if self.verbose >= 1.:
@@ -78,11 +78,11 @@ class BoseHubbardModel(CouplingMPOModel):
         site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
         return site
 
-    def init_terms(self, model_param):
+    def init_terms(self, model_params):
         # 0) Read and set parameters.
-        t = get_parameter(model_param, 't', 1., self.name, True)
-        U = get_parameter(model_param, 'U', 0, self.name, True)
-        mu = get_parameter(model_param, 'mu', 0, self.name, True)
+        t = get_parameter(model_params, 't', 1., self.name, True)
+        U = get_parameter(model_params, 'U', 0, self.name, True)
+        mu = get_parameter(model_params, 'mu', 0, self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(mu, u, 'N')
             self.add_onsite(U, u, 'NN')
@@ -96,6 +96,6 @@ class BoseHubbardChain(BoseHubbardModel,NearestNeighborModel):
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
-    def __init__(self, model_param):
-        model_param.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        model_params.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_params)

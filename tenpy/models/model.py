@@ -884,7 +884,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
 
     Parameters
     ----------
-    model_param : dict
+    model_params : dict
         A dictionary with all the model parameters.
         These parameters are given to the different ``init_...()`` methods, and
         should be read out using :func:`~tenpy.tools.params.get_parameter`.
@@ -899,7 +899,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
-    def __init__(self, model_param):
+    def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
             # In the best case, this would just rescale the energy;
@@ -908,22 +908,22 @@ class CouplingMPOModel(CouplingModel,MPOModel):
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro_model`.
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
-        self.verbose = get_parameter(model_param, 'verbose', 1, self.name)
+        self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
         # 1-4) iniitalize lattice
-        lat = self.init_lattice(model_param)
+        lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat)
         # 6) add terms of the Hamiltonian
-        self.init_terms(model_param)
+        self.init_terms(model_params)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
         if isinstance(self, NearestNeighborModel):
             # 8) initialize H_bonds
             NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
         # checks for misspelled parameters
-        unused_parameters(model_param, self.name)
+        unused_parameters(model_params, self.name)
 
-    def init_lattice(self, model_param):
+    def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
 
         This function reads out the model parameter `lattice`.
@@ -965,7 +965,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
 
         Parameters
         ----------
-        model_param : dict
+        model_params : dict
             The model parameters given to ``__init__``.
 
         Returns
@@ -973,21 +973,21 @@ class CouplingMPOModel(CouplingModel,MPOModel):
         lat : :class:`~tenpy.models.lattice.Lattice`
             An initialized lattice.
         """
-        lat = get_parameter(model_param, 'lattice', "Chain", self.name)
+        lat = get_parameter(model_params, 'lattice', "Chain", self.name)
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
-            bc_MPS = get_parameter(model_param, 'bc_MPS', 'finite', self.name)
-            order = get_parameter(model_param, 'order', 'default', self.name)
-            sites = self.init_sites(model_param)
+            bc_MPS = get_parameter(model_params, 'bc_MPS', 'finite', self.name)
+            order = get_parameter(model_params, 'order', 'default', self.name)
+            sites = self.init_sites(model_params)
             if LatticeClass.dim == 1:  # 1D lattice
-                L = get_parameter(model_param, 'L', 2, self.name)
+                L = get_parameter(model_params, 'L', 2, self.name)
                 # 4) lattice
                 bc = 'periodic' if bc_MPS == 'infinite' else 'open'
                 lat = LatticeClass(L, sites, bc=bc, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:   # 2D lattice
-                Lx = get_parameter(model_param, 'Lx', 1, self.name)
-                Ly = get_parameter(model_param, 'Ly', 4, self.name)
-                bc_y = get_parameter(model_param, 'bc_y', 'cylinder', self.name)
+                Lx = get_parameter(model_params, 'Lx', 1, self.name)
+                Ly = get_parameter(model_params, 'Ly', 4, self.name)
+                bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
                 assert bc_y in ['cylinder', 'ladder']
                 bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
                 bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
@@ -1000,7 +1000,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
         assert isinstance(lat, Lattice)
         return lat
 
-    def init_sites(self, model_param):
+    def init_sites(self, model_params):
         """Define the local Hilbert space and operators; needs to be implemented in subclasses.
 
         This function gets called by :meth:`init_lattice` to get the
@@ -1014,7 +1014,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
 
         Parameters
         ----------
-        model_param : dict
+        model_params : dict
             The model parameters given to ``__init__``.
 
         Returns
@@ -1025,7 +1025,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
         raise NotImplementedError("Subclasses should implement `init_sites`")
         # or at least redefine the lattice
 
-    def init_terms(self, model_param):
+    def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
 

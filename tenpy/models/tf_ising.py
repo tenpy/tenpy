@@ -30,7 +30,7 @@ class TFIModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
@@ -62,11 +62,11 @@ class TFIModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_param):
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        CouplingMPOModel.__init__(self, model_params)
 
-    def init_sites(self, model_param):
-        conserve = get_parameter(model_param, 'conserve', 'parity', self.name)
+    def init_sites(self, model_params):
+        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
@@ -75,9 +75,9 @@ class TFIModel(CouplingMPOModel):
         site = SpinHalfSite(conserve=conserve)
         return site
 
-    def init_terms(self, model_param):
-        J = get_parameter(model_param, 'J', 1., self.name, True)
-        g = get_parameter(model_param, 'g', 1., self.name, True)
+    def init_terms(self, model_params):
+        J = get_parameter(model_params, 'J', 1., self.name, True)
+        g = get_parameter(model_params, 'g', 1., self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
         for u1, u2, dx in self.lat.nearest_neighbors:
@@ -90,6 +90,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
 
     See the :class:`TFIModel` for the documentation of parameters.
     """
-    def __init__(self, model_param):
-        model_param.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        model_params.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_params)

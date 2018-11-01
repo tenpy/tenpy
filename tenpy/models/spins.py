@@ -25,7 +25,7 @@ class SpinModel(CouplingMPOModel):
             + \sum_i (\mathtt{D} (S^z_i)^2 + \mathtt{E} ((S^x_i)^2 - (S^y_i)^2))
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_param` and read out with
+    All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
     Parameters
@@ -61,18 +61,18 @@ class SpinModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
 
-    def __init__(self, model_param):
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        CouplingMPOModel.__init__(self, model_params)
 
-    def init_sites(self, model_param):
-        S = get_parameter(model_param, 'S', 0.5, self.name)
-        conserve = get_parameter(model_param, 'conserve', 'best', self.name)
+    def init_sites(self, model_params):
+        S = get_parameter(model_params, 'S', 0.5, self.name)
+        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_param, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
+            if not any_nonzero(model_params, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
                                "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_param, ['hx', 'hy'], "check parity conservation"):
+            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
@@ -81,16 +81,16 @@ class SpinModel(CouplingMPOModel):
         site = SpinSite(S, conserve)
         return site
 
-    def init_terms(self, model_param):
-        Jx = get_parameter(model_param, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_param, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_param, 'Jz', 1., self.name, True)
-        hx = get_parameter(model_param, 'hx', 0., self.name, True)
-        hy = get_parameter(model_param, 'hy', 0., self.name, True)
-        hz = get_parameter(model_param, 'hz', 0., self.name, True)
-        D = get_parameter(model_param, 'D', 0., self.name, True)
-        E = get_parameter(model_param, 'E', 0., self.name, True)
-        muJ = get_parameter(model_param, 'muJ', 0., self.name, True)
+    def init_terms(self, model_params):
+        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
+        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
+        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
+        hx = get_parameter(model_params, 'hx', 0., self.name, True)
+        hy = get_parameter(model_params, 'hy', 0., self.name, True)
+        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        D = get_parameter(model_params, 'D', 0., self.name, True)
+        E = get_parameter(model_params, 'E', 0., self.name, True)
+        muJ = get_parameter(model_params, 'muJ', 0., self.name, True)
 
         # (u is always 0 as we have only one site in the unit cell)
         for u in range(len(self.lat.unit_cell)):
@@ -119,6 +119,6 @@ class SpinChain(SpinModel,NearestNeighborModel):
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
-    def __init__(self, model_param):
-        model_param.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_param)
+    def __init__(self, model_params):
+        model_params.setdefault('lattice', "Chain")
+        CouplingMPOModel.__init__(self, model_params)
