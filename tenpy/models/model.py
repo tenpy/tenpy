@@ -1019,7 +1019,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
 
         Returns
         -------
-        sites : (tuple of) :class:`~tenpy.networks.site.Site.
+        sites : (tuple of) :class:`~tenpy.networks.site.Site`
             The local sites of the lattice, defining the local basis states and operators.
         """
         raise NotImplementedError("Subclasses should implement `init_sites`")

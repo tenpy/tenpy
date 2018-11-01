@@ -116,6 +116,12 @@ pygments_style = 'sphinx'
 # If true, keep warnings as "system message" paragraphs in the built documents.
 #keep_warnings = False
 
+# default options for autodoc
+autodoc_default_options = {
+    'member-order': 'bysource',
+    #  'special-members': '__init__',
+}
+
 # Avoid a bunch of warnings when using properties with doc strings in classes.
 # see https://github.com/phn/pytpm/issues/3#issuecomment-12133978
 numpydoc_show_class_members = True
