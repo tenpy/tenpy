@@ -55,8 +55,13 @@ def test_MPO():
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 2:3, :, :]
             H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
+            H.test_sanity()
             print(H.dim)
             print(H.chi)
+        if L == 4:
+            H2 = H.group_sites(n=2)
+            H2.test_sanity()
+            assert H2.L == 2
 
 
 def test_MPOGraph():

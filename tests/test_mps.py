@@ -209,6 +209,7 @@ def test_group(L=6):
     psi2 = psi1.copy()
     print("group n=2")
     psi2.group_sites(n=2)
+    assert psi2.L == psi1.L//2
     psi2.test_sanity()
     psi2.group_split()
     psi2.test_sanity()
