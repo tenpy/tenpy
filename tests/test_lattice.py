@@ -53,6 +53,13 @@ def test_lattice():
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
             npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
 
+def test_TrivialLattice():
+    s1 = site.SpinHalfSite('Sz')
+    s2 = site.SpinSite(0.5, 'Sz')
+    s3 = site.SpinSite(1.0, 'Sz')
+    lat = lattice.TrivialLattice([s1, s2, s3, s2, s1])
+    lat.test_sanity()
+
 
 def test_number_nn():
     s = site.SpinHalfSite('Sz')

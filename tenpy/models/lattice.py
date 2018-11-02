@@ -28,7 +28,7 @@ bc_choices = {'open': True, 'periodic': False}
 
 
 class Lattice:
-    r"""A general lattice.
+    r"""A general, regular lattice.
 
     The lattice consists of a **unit cell** which is repeated in `dim` different directions.
     A site of the lattice is thus identified by **lattice indices** ``(x_0, ..., x_{dim-1}, u)``,
@@ -684,6 +684,48 @@ class Lattice:
             if not np.any(self.bc_shift != 0):
                 self.bc_shift = None
         self.bc = np.array(bc)
+
+
+class TrivialLattice(Lattice):
+    """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
+
+    This is usefull if you need a valid :class:`Lattice` given just the :meth:`mps_sites`.
+
+    Parameters
+    ----------
+    mps_sites : list of :class:`~tenpy.networks.Site`
+        The sites making up a unit cell of the lattice.
+    **kwargs :
+        Further keyword arguments given to :class:`Lattice`.
+    """
+    def __init__(self, mps_sites, **kwargs):
+        Lattice.__init__(self, [1], mps_sites, **kwargs)
+
+
+class IrregularLattice(Lattice):
+    """A variant of a regular lattice, where we might have extra sites or sites missing."""
+    def __init__(self, mps_sites, based_on, order=None):
+        self.based_on = based_on
+        self._mps_sites = mps_sites
+        Lattice.__init__(self, based_on.Ls, based_on.unit_cell, order='default',
+                         bc=based_on.bc, bc_MPS=based_on.bc_MPS)
+        # don't copy nearest_neighbors, basis, positions etc: no longer valid
+        self.N_sites = len(mps_sites)
+        self._order = order
+
+
+    @classmethod
+    def from_mps_sites(cls, mps_sites, based_on=None):
+        if based_on is None:
+            based_on = k
+        return cls(mps_sites, based_on)
+
+    @classmethod
+    def from_add_sites(self, M):
+        raise NotImplementedError()
+
+    def mps_sites(self):
+        return self._mps_sites
 
 
 class SimpleLattice(Lattice):
