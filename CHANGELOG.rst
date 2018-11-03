@@ -76,6 +76,8 @@ Fixed
 - issue #4: incompatible data types.
 - issue #6: the CouplingModel generated wrong Couplings in some cases
 - more reasonable traceback in case of wrong labels
+- wrong dtype of npc.Array when adding/subtracting/... arrays of different data types
+- could get wrong H_bond for completely decoupled chains.
 
 Removed
 ^^^^^^^

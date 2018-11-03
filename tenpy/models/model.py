@@ -491,18 +491,24 @@ class CouplingModel(Model):
             self.H_onsite = self.calc_H_onsite(tol_zero)
         finite = (self.lat.bc_MPS != 'infinite')
         N_sites = self.lat.N_sites
-        res = [None] * self.lat.N_sites
-        for i, d1 in self.coupling_terms.items():
-            j = (i + 1) % self.lat.N_sites
-            d1 = self.coupling_terms[i]
+        res = [None] * N_sites
+        for i in range(N_sites):
+            j = (i + 1) % N_sites
             site_i = self.lat.site(i)
             site_j = self.lat.site(j)
             strength_i = 1. if finite and i == 0 else 0.5
-            strength_j = 1. if finite and j == self.lat.N_sites - 1 else 0.5
+            strength_j = 1. if finite and j == N_sites - 1 else 0.5
             if finite and j == 0:  # over the boundary
                 strength_i, strength_j = 0., 0.  # just to make the assert below happy
             H = npc.outer(strength_i * self.H_onsite[i], site_j.Id)
             H = H + npc.outer(site_i.Id, strength_j * self.H_onsite[j])
+            res[j] = H
+        for i, d1 in self.coupling_terms.items():
+            j = (i + 1) % N_sites
+            d1 = self.coupling_terms[i]
+            site_i = self.lat.site(i)
+            site_j = self.lat.site(j)
+            H = res[j]
             for (op1, op_str), d2 in d1.items():
                 for j2, d3 in d2.items():
                     if isinstance(j2, tuple):
@@ -514,9 +520,10 @@ class CouplingModel(Model):
                         raise ValueError(msg.format(i=i, j=j2))
                     for op2, strength in d3.items():
                         H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-            H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             res[j] = H
-        if finite and 0 in res:
+        for H in res:
+            H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+        if finite:
             assert (res[0].norm(np.inf) <= tol_zero)
             res[0] = None
         return res
