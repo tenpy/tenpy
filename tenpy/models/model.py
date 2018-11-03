@@ -36,11 +36,12 @@ See also the introduction in :doc:`/intro_model`.
 import numpy as np
 import warnings
 
-from .lattice import get_lattice, Lattice
+from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..tools.misc import to_array
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
+from ..networks.site import group_sites
 
 __all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
            'CouplingMPOModel']
@@ -73,6 +74,34 @@ class Model:
             # Model.__init__() got called before
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
+
+    def group_sites(self, n=2, grouped_sites=None):
+        """Modify `self` in place to group sites.
+
+        Group each `n` sites together using the :class:`~tenpy.networks.site.GroupedSite`.
+        This might allow to do TEBD with a Trotter decomposition,
+        or help the convergence of DMRG (in case of too long range interactions).
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        n : int
+            Number of sites to be grouped together.
+        grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        Returns
+        -------
+        grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+        """
+        if grouped_sites is None:
+            grouped_sites = group_sites(self.lat.mps_sites(), n, charges='same')
+        else:
+            assert grouped_sites[0].n_sites == n
+        self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
+        return grouped_sites
 
 
 class NearestNeighborModel(Model):
@@ -140,6 +169,109 @@ class NearestNeighborModel(Model):
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
 
+    def group_sites(self, n=2, grouped_sites=None):
+        """Modify `self` in place to group sites.
+
+        Group each `n` sites together using the :class:`~tenpy.networks.site.GroupedSite`.
+        This might allow to do TEBD with a Trotter decomposition,
+        or help the convergence of DMRG (in case of too long range interactions).
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        n : int
+            Number of sites to be grouped together.
+        grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        Returns
+        -------
+        grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+        """
+        grouped_sites = super().group_sites(n, grouped_sites)
+        old_L = len(self.H_bond)
+        new_L = len(grouped_sites)
+        finite = self.H_bond[0] is None
+        H_bond = [None]*(new_L + 1)
+        i = 0  # old index
+        for k, gs in enumerate(grouped_sites):
+            # calculate new_Hb on bond (k, k+1)
+            next_gs = grouped_sites[(k + 1) % new_L]
+            new_H_onsite = None  # collect old H_bond terms inside `gs`
+            if gs.n_sites > 1:
+                for j in range(1, gs.n_sites):
+                    old_Hb = self.H_bond[(i+j) % old_L]
+                    add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
+                    if new_H_onsite is None:
+                        new_H_onsite = add_H_onsite
+                    else:
+                        new_H_onsite = new_H_onsite + add_H_onsite
+            old_Hb = self.H_bond[(i+gs.n_sites) % old_L]
+            new_Hb = self._group_sites_Hb_to_bond(gs, next_gs, old_Hb)
+            if new_H_onsite is not None:
+                if k + 1 != new_L or not finite:
+                    # infinite or in the bulk: add new_H_onsite to new_Hb
+                    add_Hb = npc.outer(new_H_onsite, next_gs.Id.transpose(['p', 'p*']))
+                    if new_Hb is None:
+                        new_Hb = add_Hb
+                    else:
+                        new_Hb = new_Hb + add_Hb
+                else: # finite and k = new_L - 1
+                    # the new_H_onsite needs to be added to the right-most Hb
+                    add_Hb = npc.outer(prev_gs.Id.transpose(['p', 'p*']), new_H_onsite)
+                    if H_bond[-1] is None:
+                        H_bond[-1] = add_Hb
+                    else:
+                        H_bond[-1] = new_Hb + add_Hb
+            k2 = (k + 1) % new_L
+            if H_bond[k2] is None:
+                H_bond[k2] = new_Hb
+            else:
+                H_bond[k2] = H_bond[k2] + new_Hb
+            i += gs.n_sites
+        for Hb in H_bond:
+            if Hb is None:
+                continue
+            Hb.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*']).itranspose(['p0', 'p1', 'p0*', 'p1*'])
+        self.H_bond = H_bond
+        return grouped_sites
+
+    def _group_sites_Hb_to_onsite(self, gr_site, j, old_Hb):
+        """kroneckerproduct for H_bond term within a GroupedSite.
+
+        `old_Hb` acts on sites (j-1, j) of `gr_sites`."""
+        if old_Hb is None:
+            return None
+        old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
+        ops = [s.Id for s in gr_site.sites[:j-1]] + [old_Hb] + [s.Id for s in gr_site.sites[j+1:]]
+        Hb = ops[0]
+        for op in ops[1:]:
+            Hb = npc.outer(Hb, op)
+        combine = [list(range(0, 2*gr_site.n_sites, 2)), list(range(1, 2*gr_site.n_sites, 2))]
+        pipe = gr_site.leg
+        Hb = Hb.combine_legs(combine, pipes=[pipe, pipe.conj()])
+        return Hb  # labels would be 'p', 'p*' w.r.t. gr_site.
+
+    def _group_sites_Hb_to_bond(self, gr_site_L, gr_site_R, old_Hb):
+        """Kroneckerproduct for H_bond term acting on two GroupedSites.
+
+        `old_Hb` acts on the right-most site of `gr_site_L` and left-most site of `gr_site_R`."""
+        if old_Hb is None:
+            return None
+        old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
+        ops = [s.Id for s in gr_site_L.sites[:-1]] + [old_Hb] + [s.Id for s in gr_site_R.sites[1:]]
+        Hb = ops[0]
+        for op in ops[1:]:
+            Hb = npc.outer(Hb, op)
+        NL, NR = gr_site_L.n_sites, gr_site_R.n_sites
+        pipeL, pipeR = gr_site_L.leg, gr_site_R.leg
+        combine = [list(range(0, 2*NL, 2)), list(range(1, 2*NL, 2)),
+                   list(range(2*NL, 2*(NL+NR), 2)), list(range(2*NL+1, 2*(NL+NR), 2))]
+        Hb = Hb.combine_legs(combine, pipes=[pipeL, pipeL.conj(), pipeR, pipeR.conj()])
+        return Hb  # labels would be 'p0', 'p0*', 'p1', 'p1*' w.r.t. gr_site_{L,R}
+
 
 class MPOModel(Model):
     """Base class for a model with an MPO representation of the Hamiltonian.
@@ -173,6 +305,31 @@ class MPOModel(Model):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
 
+    def group_sites(self, n=2, grouped_sites=None):
+        """Modify `self` in place to group sites.
+
+        Group each `n` sites together using the :class:`~tenpy.networks.site.GroupedSite`.
+        This might allow to do TEBD with a Trotter decomposition,
+        or help the convergence of DMRG (in case of too long range interactions).
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        n : int
+            Number of sites to be grouped together.
+        grouped_sites : None | list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        Returns
+        -------
+        grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+        """
+        grouped_sites = super().group_sites(n, grouped_sites)
+        self.H_MPO.group_sites(n, grouped_sites)
+        return grouped_sites
+
 
 class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
@@ -181,8 +338,8 @@ class CouplingModel(Model):
     terms.
 
     .. deprecated:: 0.4.0
-        `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice, it
-        is the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
+        `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
+        use the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
 
     Parameters
     ----------

@@ -336,7 +336,7 @@ def test_npc_grid_outer():
     ci = chinfo3
     p_leg = gen_random_legcharge(ci, 4)
     legs_op = [p_leg, p_leg.conj()]
-    op_0 = npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
+    op_0 = 1.j*npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
     op_pl = npc.Array.from_func(np.random.random, legs_op, qtotal=[1], shape_kw='size')
     op_min = npc.Array.from_func(np.random.random, legs_op, qtotal=[-1], shape_kw='size')
     op_id = npc.eye_like(op_0)
@@ -352,7 +352,7 @@ def test_npc_grid_outer():
 
     W = npc.grid_outer(grid, [leg_WL, leg_WR])
     W.test_sanity()
-    Wflat = np.zeros([5, 5, 4, 4])
+    Wflat = np.zeros([5, 5, 4, 4], dtype=W.dtype)
     for idx, op in [[(0, 0), op_id], [(0, 1), op_pl], [(0, 2), op_min], [(0, 3), op_0],
                     [(1, 4), op_min], [(2, 4), op_pl], [(3, 4), op_0], [(4, 4), op_id]]:
         Wflat[idx] = op.to_ndarray()

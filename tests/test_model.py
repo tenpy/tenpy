@@ -7,8 +7,11 @@ import itertools
 from tenpy.models import model, lattice
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
+from tenpy.tools.params import get_parameter
+from tenpy.algorithms.exact_diag import ExactDiag
 import test_mpo
 import nose
+import numpy as np
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
 
@@ -76,6 +79,7 @@ def test_CouplingModel():
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
             M.calc_H_bond()
+
 
 def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     bc = ['periodic', shift]
@@ -199,5 +203,45 @@ def test_MultiCouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
+def test_CouplingMPOModel_group():
+    class MyMod(model.CouplingMPOModel,model.NearestNeighborModel):
+        def __init__(self, model_params):
+            model.CouplingMPOModel.__init__(self, model_params)
+
+        def init_sites(self, model_params):
+            return tenpy.networks.site.SpinHalfSite('parity')
+
+        def init_terms(self, model_params):
+            x = get_parameter(model_params, 'x', 1., self.name)
+            self.add_onsite_term(0.25, 0, 'Sz')
+            self.add_onsite_term(0.25, 4, 'Sz')
+            self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
+            self.add_coupling_term(2.*x, 1, 2, 'Sy', 'Sy')
+            self.add_coupling_term(3.*x, 3, 4, 'Sy', 'Sy')
+
+    m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    m.test_sanity()
+    for Hb in m.H_bond:
+        if Hb is not None:
+            Hb.test_sanity()
+    # test grouping sites
+    ED = ExactDiag(m)
+    #  ED.build_full_H_from_mpo()
+    ED.build_full_H_from_bonds()
+    m.group_sites(n=2)
+    ED_gr = ExactDiag(m)
+    ED_gr.build_full_H_from_mpo()
+    H = ED.full_H.split_legs().to_ndarray()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.labels.clear()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H-Hgr) == 0
+    ED_gr.full_H = None
+    ED_gr.build_full_H_from_bonds()
+    Hgr = ED_gr.full_H.split_legs()
+    Hgr.labels.clear()
+    Hgr = Hgr.split_legs().to_ndarray()
+    assert np.linalg.norm(H-Hgr) == 0
+
 if __name__ == "__main__":
-    test_MultiCouplingModel_explicit()
+    test_CouplingMPOModel()

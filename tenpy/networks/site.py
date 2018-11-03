@@ -479,7 +479,7 @@ class GroupedSite(Site):
             op = npc.outer(op, op2.transpose(['p', 'p*']))
         combine = [list(range(0, 2*self.n_sites-1, 2)), list(range(1, 2*self.n_sites, 2))]
         pipe = self.leg
-        op = op.combine_legs(combine, qconj=[+1, -1], pipes=[pipe, pipe.conj()])
+        op = op.combine_legs(combine, pipes=[pipe, pipe.conj()])
         return op.iset_leg_labels(['p', 'p*'])
 
 
