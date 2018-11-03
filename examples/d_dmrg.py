@@ -29,7 +29,8 @@ def example_DMRG_finite(L, g):
         'verbose': 1
     }
     info = dmrg.run(psi, M, dmrg_params)
-    print("E = {E:.13f}".format(info['E']))
+    E = info['E']
+    print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     if L < 20:  # compare to exact result
         E_exact = tfi_exact.finite_gs_energy(L, 1., g)
@@ -53,8 +54,8 @@ def example_DMRG_infinite(g):
         'max_E_err': 1.e-10,
         'verbose': 1
     }
-    dmrg.run(psi, M, dmrg_params)
-    E = np.mean(psi.expectation_value(M.H_bond))
+    info = dmrg.run(psi, M, dmrg_params)
+    E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     print("correlation length:", psi.correlation_length())
