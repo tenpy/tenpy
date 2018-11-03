@@ -1402,7 +1402,7 @@ cdef class Array(object):
         cdef Array cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
         cp._qdata = cp._qdata.copy()
         if dtype is None:
-            dtype = np.common_dtype(*self._data)
+            dtype = np.find_common_type([d.dtype for d in self._data], [])
         cp.dtype = np.dtype(dtype)
         cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
         return cp
@@ -1822,7 +1822,8 @@ cdef class Array(object):
             self._qdata = np.array(qdata, dtype=np.intp).reshape((len(data), self.rank))
             # ``self._qdata_sorted = True`` was set by self.isort_qdata
         if len(self._data) > 0:
-            self.dtype = self._data[0].dtype
+            self.dtype = np.find_common_type([d.dtype for d in self._data], [])
+            self._data = [np.asarray(a, dtype=self.dtype) for a in self._data]
         return self
 
     def binary_blockwise(self, func, other, *args, **kwargs):
