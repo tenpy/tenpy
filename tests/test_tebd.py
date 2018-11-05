@@ -37,9 +37,9 @@ def check_tebd(bc_MPS='finite', g=0.5):
     tebd_param = {
         'verbose': 2,
         'dt': 0.01,
-        'order': 4,
-        'delta_tau_list': [0.1, 1.e-4, 1.e-8, 1.e-10],
-        'max_error_E': 1.e-10,
+        'order': 2,
+        'delta_tau_list': [0.1, 1.e-4, 1.e-8],
+        'max_error_E': 1.e-9,
         'trunc_params': {
             'chi_max': 50,
             'trunc_cut': 1.e-13
@@ -58,10 +58,10 @@ def check_tebd(bc_MPS='finite', g=0.5):
         Etebd = np.sum(M.bond_energies(psi))
         Eexact = np.min(ED.E)
         print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
-        assert (abs((Etebd - Eexact) / Eexact) < 1.e-8)
+        assert (abs((Etebd - Eexact) / Eexact) < 1.e-7)
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
         print("compare with ED: overlap = ", abs(ov)**2)
-        assert (abs(abs(ov) - 1.) < 1.e-8)
+        assert (abs(abs(ov) - 1.) < 1.e-7)
 
         # Test real time TEBD: should change on an eigenstate
         Sold = np.average(psi.entanglement_entropy())
@@ -70,7 +70,7 @@ def check_tebd(bc_MPS='finite', g=0.5):
         Enew = np.sum(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
         assert (abs(Enew - Etebd) < 1.e-8)
-        assert (abs(Sold - Snew) < 1.e-6)  # somehow we need larger tolerance here....
+        assert (abs(Sold - Snew) < 1.e-5)  # somehow we need larger tolerance here....
 
     if bc_MPS == 'infinite':
         Etebd = np.average(M.bond_energies(psi))
@@ -82,8 +82,8 @@ def check_tebd(bc_MPS='finite', g=0.5):
             engine.run()
         Enew = np.average(M.bond_energies(psi))
         Snew = np.average(psi.entanglement_entropy())
-        assert (abs(Etebd - Enew) < 1.e-10)
-        assert (abs(Sold - Snew) < 1.e-6)  # somehow we need larger tolerance here....
+        assert (abs(Etebd - Enew) < 1.e-7)
+        assert (abs(Sold - Snew) < 1.e-5)  # somehow we need larger tolerance here....
 
 
 @attr('slow')

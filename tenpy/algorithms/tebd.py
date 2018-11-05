@@ -188,10 +188,17 @@ class Engine:
             ============== ====== =============================================
             key            type   description
             ============== ====== =============================================
-            delta_tau_list list   A list of floats describing
+            delta_tau_list list   A list of floats: the timesteps to be used.
+                                  Choosing a large timestep `delta_tau`
+                                  introduces large (Trotter) erros, but a too
+                                  small time step requires a lot of steps to
+                                  reach  ``exp(-tau H) --> |psi0><psi0|``.
+                                  Therefore, we start with fairly large time
+                                  steps for a quick time evolution until
+                                  convergence, and the gradually decrease the
+                                  time step.
             -------------- ------ ---------------------------------------------
-            order          int    Order of the algorithm.
-                                  The total error scales as O(t, dt^order).
+            order          int    Order of the Suzuki-Trotter decomposition.
             -------------- ------ ---------------------------------------------
             N_steps        int    Number of steps before measurement can be
                                   performed
@@ -224,7 +231,10 @@ class Engine:
             DeltaS = 2 * max_error_E
             step = 0
             while (DeltaE > max_error_E):
-                self.update(N_steps)
+                if self.psi.finite and TrotterOrder == 2:
+                    self.update_imag(N_steps)
+                else:
+                    self.update(N_steps)
                 step += N_steps
                 E = np.average(self.model.bond_energies(self.psi))
                 DeltaE = np.abs(Eold - E)
@@ -512,17 +522,29 @@ class Engine:
         return trunc_err
 
     def update_imag(self, N_steps):
-        """perform an update suitable for imaginary time evolution.
+        """Perform an update suitable for imaginary time evolution.
 
         Instead of the even/odd brick structure used for ordinary TEBD,
         we 'sweep' from left to right and right to left, similar as DMRG.
         Thanks to that, we are actually able to preserve the canonical form.
+
+        Parameters
+        ----------
+        N_steps : int
+            The number of steps for which the whole lattice should be updated.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation during
+            this sequence of update steps.
         """
         trunc_err = TruncationError()
         order = self._U_param['order']
         # allow only second order evolution
         if order != 2 or not self.psi.finite:
-            raise NotImplementedError()  # Would lead to loss of canonical form. What about DMRG?
+            # Would lead to loss of canonical form. What about DMRG?
+            raise NotImplementedError("Use DMRG instead...")
         U_idx_dt = 0  # always with dt=0.5
         assert (self.suzuki_trotter_time_steps(order)[U_idx_dt] == 0.5)
         assert (self.psi.finite)  # finite or segment bc
@@ -602,7 +624,6 @@ class Engine:
         self._bond_eig_vals = []
         self._bond_eig_vecs = []
         for h in self.model.H_bond:
-            # TODO: Check if hermitian?!
             if h is None:
                 w = v = None
             else:
