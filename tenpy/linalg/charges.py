@@ -22,7 +22,7 @@ from ..tools.misc import lexsort, inverse_permutation
 from ..tools.string import vert_join
 from ..tools.optimization import optimize, OptimizationFlag
 
-__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
+__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
 QTYPE = np.int_  # numpy dtype for the charges
 """Numpy data type for the charges."""

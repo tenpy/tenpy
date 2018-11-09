@@ -27,7 +27,7 @@ from ..tools import optimization
 
 cdef int optimization_compare = optimization.OptimizationFlag.skip_arg_checks
 
-__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe']
+__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
 np.import_array()
 

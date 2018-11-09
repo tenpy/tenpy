@@ -38,7 +38,8 @@ import warnings
 
 from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
-from ..tools.misc import to_array
+from ..linalg.charges import QTYPE, LegCharge
+from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.site import group_sites
@@ -124,12 +125,14 @@ class NearestNeighborModel(Model):
     H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
         ``H_bond[i]`` acts on sites ``(i-1, i)``; we require ``len(H_bond) == lat.N_sites``.
+        Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
 
     Attributes
     ----------
     H_bond : list of :class:`npc.Array`
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
         ``H_bond[i]`` acts on sites ``(i-1, i)``.
+        Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
     """
 
     def __init__(self, lattice, H_bond):
@@ -272,6 +275,92 @@ class NearestNeighborModel(Model):
         Hb = Hb.combine_legs(combine, pipes=[pipeL, pipeL.conj(), pipeR, pipeR.conj()])
         return Hb  # labels would be 'p0', 'p0*', 'p1', 'p1*' w.r.t. gr_site_{L,R}
 
+    def calc_H_MPO_from_bond(self, tol_zero=1.e-15):
+        """Calculate the MPO Hamiltonian from the bond Hamiltonian.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Arrays with norm < `tol_zero` are considered to be zero.
+
+        Returns
+        -------
+        H_MPO : :class:`~tenpy.networks.mpo.MPO`
+            MPO representation of the Hamiltonian.
+        """
+        H_bond = self.H_bond  # entry i acts on sites (i-1,i)
+        dtype = np.find_common_type([Hb.dtype for Hb in H_bond if Hb is not None], [])
+        bc = self.lat.bc_MPS
+        sites = self.lat.mps_sites()
+        L = len(sites)
+        onsite_terms = [None]*L  # onsite terms on each site `i`
+        bond_XYZ = [None]*L  # svd of couplings on each bond (i-1, i)
+        chis = [2]*(L+1)
+        assert len(self.H_bond) == L
+        for i, Hb in enumerate(H_bond):
+            if Hb is None:
+                continue
+            j = (i-1) % L
+            Hb = Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
+            d_L, d_R = sites[j].dim, sites[i].dim  # dimension of local hilbert space:
+            Id_L, Id_R = sites[i].Id, sites[j].Id
+            # project on onsite-terms by contracting with identities; Tr(Id_{L/R}) = d_{L/R}
+            onsite_L = npc.tensordot(Hb, Id_R, axes=(['p1', 'p1*'], ['p*', 'p'])) / d_R
+            if npc.norm(onsite_L) > tol_zero:
+                Hb -= npc.outer(onsite_L, Id_R)
+                onsite_terms[j] = add_with_None_0(onsite_terms[j], onsite_L)
+            onsite_R = npc.tensordot(Id_L, Hb, axes=(['p*', 'p'], ['p0', 'p0*'])) / d_L
+            if npc.norm(onsite_R) > tol_zero:
+                Hb -= npc.outer(Id_L, onsite_R)
+                onsite_terms[i] = add_with_None_0(onsite_terms[i], onsite_R)
+            if npc.norm(Hb) < tol_zero:
+                continue
+            Hb = Hb.combine_legs([['p0', 'p0*'], ['p1', 'p1*']])
+            chinfo = Hb.chinfo
+            qtotal = [chinfo.make_valid(), chinfo.make_valid()]  # zero charge
+            X, Y, Z = npc.svd(Hb, cutoff=tol_zero, inner_labels=['wR', 'wL'], qtotal_LR=qtotal)
+            assert len(Y) > 0
+            chis[i] = len(Y) + 2
+            X = X.split_legs([0])
+            YZ = Z.iscale_axis(Y, axis=0).split_legs([1])
+            bond_XYZ[i] = (X, YZ)
+            chinfo = Hb.chinfo
+        # construct the legs
+        legs = [None] * (L + 1)  # legs[i] is leg 'wL' left of site i with qconj=+1
+        for i in range(L + 1):
+            if i == L and bc == 'infinite':
+                legs[i] = legs[0]
+                break
+            chi = chis[i]
+            qflat = np.zeros((chi, chinfo.qnumber), dtype=QTYPE)
+            if chi > 2:
+                YZ = bond_XYZ[i][1]
+                qflat[1:-1, :] = Z.legs[0].to_qflat()
+            leg = LegCharge.from_qflat(chinfo, qflat, qconj=+1)
+            legs[i] = leg
+        # now construct the W tensors
+        Ws = [None] * L
+        for i in range(L):
+            wL, wR = legs[i], legs[i+1].conj()
+            p = sites[i].leg
+            W = npc.zeros([wL, wR, p, p.conj()], dtype)
+            W[0, 0, :, :] = sites[i].Id
+            W[-1, -1, :, :] = sites[i].Id
+            onsite = onsite_terms[i]
+            if onsite is not None:
+                W[0, -1, :, :] = onsite
+            if bond_XYZ[i] is not None:
+                _, YZ = bond_XYZ[i]
+                W[1:-1, -1, :, :] = YZ.itranspose(['wL', 'p1', 'p1*'])
+            j = (i + 1) % L
+            if bond_XYZ[j] is not None:
+                X, _ = bond_XYZ[j]
+                W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
+            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            Ws[i] = W
+        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1)
+        return H_MPO
+
 
 class MPOModel(Model):
     """Base class for a model with an MPO representation of the Hamiltonian.
@@ -282,7 +371,6 @@ class MPOModel(Model):
 
     .. todo ::
         implement MPO for time evolution...
-        Also, provide function to get H_MPO from H_bond
 
     Parameters
     ----------
@@ -694,7 +782,7 @@ class CouplingModel(Model):
         Parameters
         ----------
         tol_zero : float
-            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
+            Prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
 
         Returns
         -------

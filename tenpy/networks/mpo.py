@@ -179,9 +179,6 @@ class MPO:
             if self.bc == 'infinite' or i + 1 < self.L:
                 W2 = self.get_W(i + 1)
                 W.get_leg('wR').test_contractible(W2.get_leg('wL'))
-        if self.bc == 'finite':
-            assert (self._W[0].get_leg('wL').ind_len == 1)
-            assert (self._W[-1].get_leg('wR').ind_len == 1)
         if not (len(self.IdL) == len(self.IdR) == self.L + 1):
             raise ValueError("wrong len of `IdL`/`IdR`")
 

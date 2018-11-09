@@ -5,6 +5,7 @@
 import itertools
 
 from tenpy.models import model, lattice
+from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import get_parameter
@@ -243,5 +244,21 @@ def test_CouplingMPOModel_group():
     Hgr = Hgr.split_legs().to_ndarray()
     assert np.linalg.norm(H-Hgr) == 0
 
+def test_model_H_conversion(L=6):
+    bc='finite'
+    model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
+    m = XXZChain(model_params)
+    m.H_MPO = m.calc_H_MPO_from_bond()
+    # compare Hamiltonians
+    ED = ExactDiag(m)
+    ED.build_full_H_from_bonds()
+    H1 = ED.full_H
+    ED.full_H = None
+    ED.build_full_H_from_mpo()
+    H2 = ED.full_H
+    print(npc.norm(H1 - H2))
+    assert npc.norm(H1 - H2) < 1.e-14  # round off errors on order of 1.e-15
+
+
 if __name__ == "__main__":
-    test_CouplingMPOModel()
+    test_model_H_conversion()
