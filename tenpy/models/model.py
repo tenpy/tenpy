@@ -418,6 +418,83 @@ class MPOModel(Model):
         self.H_MPO.group_sites(n, grouped_sites)
         return grouped_sites
 
+    def calc_H_bond_from_MPO(self, tol_zero=1.e-15):
+        """Calculate the bond Hamiltonian from the MPO Hamiltonian.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Arrays with norm < `tol_zero` are considered to be zero.
+
+        Returns
+        -------
+        H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Bond terms as required by the constructor of :class:`NearestNeighborModel`.
+            Legs are ``['p0', 'p0*', 'p1', 'p1*']``
+
+        Raises
+        ------
+        ValueError : if the Hamiltonian contains longer-range terms.
+        """
+        H_MPO = self.H_MPO
+        sites = H_MPO.sites
+        finite = H_MPO.finite
+        L = H_MPO.L
+        Ws = [H_MPO.get_W(i, copy=True) for i in range(L)]
+        # Copy of Ws: we set everything to zero, which we take out and add to H_bond, such that
+        # we can check that Ws is zero in the end to ensure that H didn't have long range couplings
+        H_onsite = [None] * L
+        H_bond = [None] * L
+        # first take out onsite terms and identities
+        for i, W in enumerate(Ws):
+            # bond `a` is left of site i, bond `b` is right
+            IdL_a = H_MPO.IdL[i]
+            IdR_a = H_MPO.IdR[i]
+            IdL_b = H_MPO.IdL[i+1]
+            IdR_b = H_MPO.IdR[i+1]
+            W.itranspose(['wL', 'wR', 'p', 'p*'])
+            H_onsite[i] = W[IdL_a, IdR_b, :, :]
+            W[IdL_a, IdR_b, :, :] *= 0
+            # remove Identities
+            if IdR_a is not None:
+                W[IdR_a, IdR_b, :, :] *= 0.
+            if IdL_b is not None:
+                W[IdL_a, IdL_b, :, :] *= 0.
+        # now multiply together the bonds
+        for j, Wj in enumerate(Ws):
+            # for bond (i, j) == (j-1, j) == (i, i+1)
+            if finite and j == 0:
+                continue
+            i = (j-1) % L
+            Wi = Ws[i]
+            IdL_a = H_MPO.IdL[i]
+            IdR_c = H_MPO.IdR[j+1]
+            Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
+            Wi[IdL_a, :, :, :] *= 0.
+            Wj[:, IdR_c, :, :] *= 0.
+            # Hb has legs p0, p0*, p1, p1*
+            H_bond[j] = Hb
+        # check that nothing is left
+        for W in Ws:
+            if npc.norm(W) > tol_zero:
+                raise ValueError("Bond couplings didn't capture everything. "
+                                 "Either H is long range or IdL/IdR is wrong!")
+        # now merge the onsite terms to H_bond
+        for j in range(L):
+            if finite and j == 0:
+                continue
+            i = (j - 1) % L
+            strength_i = 1. if finite and i == 0 else 0.5
+            strength_j = 1. if finite and j == L - 1 else 0.5
+            Hb = (npc.outer(sites[i].Id, strength_j * self.H_onsite[j]) +
+                  npc.outer(strength_i * self.H_onsite[i], sites[j].Id))
+            Hb = add_with_None_0(H_bond[j], Hb)
+            Hb.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+            H_bond[j] = Hb
+        if finite:
+            assert H_bond[0] is None
+        return H_bond
+
 
 class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
