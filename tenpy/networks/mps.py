@@ -1232,6 +1232,148 @@ class MPS:
             E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()] * 2, do_conj=True))
         return np.real_if_close(np.array(E))
 
+    def expectation_value_term(self, term, autoJW=True):
+        r"""Expectation value  ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``.
+
+        Calculates the expectation value of a tensor product of single-site operators
+        acting on different sites `i0`, `i1`, ... (not necessarily next to each other).
+        In other words, evaluate the expectation value of a term ``op0_i0 op1_i1 op2_i2 ...``.
+
+        For example the contraction of three one-site operators on sites `i0`,
+        `i1=i0+1`, `i2=i0+3` would look like::
+
+            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+1]--.
+            |          |     |       |        |        |        |
+            |          |    op1     op2       |       op3       |
+            |          |     |       |        |        |        |
+            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+1]-.
+
+        Parameters
+        ----------
+        term : list of (str, int)
+            List of tuples ``op, i`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+            The order inside `term` determines the order in which they act
+            (in the mathematical convention: the last operator in `term` is right-most,
+            so it acts first on a Ket).
+        autoJW : bool
+            If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value of the tensorproduct of the given onsite operators,
+            ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``,
+            where ``|psi>`` is the represented MPS.
+
+        Examples
+        --------
+        >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
+        >>> b = psi.expectation_value_term([('Sz', 4), ('Sx', 2)])
+        >>> c = psi.expectation_value_multi_sites(['Sz', 'Id', 'Sz'], i0=2)
+        >>> assert a == b == c
+        """
+        # strategy: translate term into a list "ops" to be used for `expectation_value_multi_sites`
+        term = list(term)
+        i_min = min([t[1] for t in term])
+        i_max = max([t[1] for t in term])
+        ops = [None] * (i_max - i_min + 1)
+        count_JW = 0
+        for op, i in term:
+            j = i - i_min # index in ops
+            if ops[j] is not None:
+                ops[j] = ops[j] + " " + op
+            else:
+                ops[j] = op
+            if autoJW and self.sites[self._to_valid_index(i)].op_needs_JW(op):
+                count_JW += 1
+                for k in range(j):
+                    if ops[k] is not None:
+                        ops[k] = ops[k] + ' JW'
+                        if ops[k].endswith(' JW JW'):
+                            ops[k] = ops[k][:-len(' JW JW')]
+                    else:
+                        ops[k] = 'JW'
+        for i in range(len(ops)):
+            if ops[i] is None:
+                ops[i] = 'Id'
+        if count_JW % 2 == 1:
+            raise ValueError("Odd number of operators which need a Jordan Wigner string")
+        return self.expectation_value_multi_sites(ops, i_min)
+
+    def expectation_value_multi_sites(self, operators, i0):
+        r"""Expectation value  ``<psi|op0_i0 op1_{i0+1} ... opN_{i0+N} |psi>/<psi|psi>``.
+
+        Calculates the expectation value of a tensor product of single-site operators
+        acting on different sites next to each other.
+        In other works, evaluate the expectation value of a term
+        ``op0_i0 op1_{i0+1} op2_{i0+2} ...``.
+
+        Parameters
+        ----------
+        operators : List of { :class:`~tenpy.linalg.np_conserved.Array` | str }
+            List of one-site operators. This method calculates the
+            expectation value of the n-sites operator given by their tensor
+            product.
+        i0 : int
+            The left most index on which an operator acts, i.e.,
+            ``operators[i]`` acts on site ``i + i0``.
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value of the tensorproduct of the given onsite operators,
+            ``<psi|operators[0]_{i0} operators[1]_{i0+1} ... |psi>/<psi|psi>``,
+            where ``|psi>`` is the represented MPS.
+        """
+        op = operators[0]
+        if (isinstance(op, str)):
+            op = self.sites[self._to_valid_index(i0)].get_op(op)
+        theta = self.get_theta(i0, 1)
+        C = npc.tensordot(op, theta, axes=['p*', 'p0'])
+        C = npc.tensordot(theta.conj(), C, axes = [['p0*', 'vL*'],['p', 'vL']])
+        for j in range(1, len(operators)):
+            op = operators[j] # the operator
+            i = i0 + j  # the site it acts on
+            B = self.get_B(i, form='B')
+            C = npc.tensordot(C, B, axes=['vR', 'vL'])
+            if op != 'Id':
+                if (isinstance(op, str)):
+                    op = self.sites[self._to_valid_index(i)].get_op(op)
+                C = npc.tensordot(op, C, axes=['p*', 'p'])
+            C = npc.tensordot(B.conj(), C, axes=[['vL*','p*'],['vR*','p']])
+        exp_val = npc.trace(C, 'vR*', 'vR')
+        return np.real_if_close(exp_val)
+
+    def expectation_value_terms_sum(self, term_list, prefactors):
+        """Calculate expectation values for a bunch of terms and sum them up.
+
+        Parameters
+        ----------
+        term_list : list of terms
+            Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
+        prefactors : list of (complex) floats
+            Prefactors for the ``total_sum`` to be evaluated.
+
+        Returns
+        -------
+        terms_sum : list of (complex) float
+            Equivalent to ``sum([t*f for t, f in zip(terms, prefactors)])``.
+        cache :
+            Intermediate results. Currently the values for each of the term, but this might be
+            changed soon.
+
+        See also
+        --------
+        :meth:`expectation_value_term`: evaluates a single `term`.
+        """
+        # TODO: this is a naive implementation. For efficiency a caching is necessary:
+        # We need to evaluate the expectation values of terms starting with the same operator(s)
+        # from the left at the same time to avoid doing the same work many times.
+        terms = [self.expectation_value_term(term) for term in term_list]
+        terms_sum = sum([t*f for t, f in zip(terms, prefactors)])
+        return terms_sum, terms
+
     def correlation_function(self,
                              ops1,
                              ops2,

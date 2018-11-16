@@ -202,8 +202,7 @@ def test_canonical_form():
     yield check_canonical_form, 'infinite'
 
 
-def test_group(L=6):
-    print("test_group")
+def test_group():
     s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
     psi2 = psi1.copy()
@@ -224,6 +223,38 @@ def test_group(L=6):
     ov = psi1.overlap(psi4)
     assert abs(1.-ov) < 1.e-14
 
+def test_expectation_value_term():
+    s = spin_half
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
+    ev = psi1.expectation_value_term([('Sz', 2), ('Sz', 3)])
+    assert abs(0.-ev) < 1.e-14
+    ev = psi1.expectation_value_term([('Sz', 1), ('Sz', 3)])
+    assert abs(-0.25-ev) < 1.e-14
+    ev = psi1.expectation_value_term([('Sz', 3), ('Sz', 1), ('Sz', 4)])
+    assert abs(-0.25*0.5-ev) < 1.e-14
+    fs = site.SpinHalfFermionSite()
+    # check fermionic signs
+    psi2 = mps.MPS.from_product_state([fs]*4, ['empty', 'up', 'down', 'full'], bc="infinite")
+    ev = psi2.expectation_value_term([('Cu', 2), ('Nu', 1), ('Cdu', 2)])
+    assert 1. == ev
+    ev2 = psi2.expectation_value_term([('Cu', 2), ('Cd', 1), ('Cdd', 1), ('Cdu', 2)])
+    assert ev2 == ev
+    ev3 = psi2.expectation_value_term([('Cd', 1), ('Cu', 2), ('Cdd', 1), ('Cdu', 2)])
+    assert ev3 == -ev2
+    # over the infinite MPS boundary
+    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 4)]) # should be zero
+    assert abs(ev) == 0.
+    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 6)]) # should be zero
+    assert abs(ev) == 1.
+    # terms_sum
+    pref = np.random.random([5])
+    evsum, _ = psi2.expectation_value_terms_sum([[('Nd', 0)],
+                                                 [('Nu', 1), ('Nd', 2)],
+                                                 [('Nd', 2), ('Nu', 5)],
+                                                 [('Nu Nd', 3)],
+                                                 [('Nu', 1), ('Nu', 5)]],
+                                                pref) # should be zero
+    assert abs(evsum) == sum(pref[1:])
 
 
 if __name__ == "__main__":
@@ -236,3 +267,4 @@ if __name__ == "__main__":
     check_canonical_form('finite')
     check_canonical_form('infinite')
     test_group()
+    test_expectation_value_multi()
