@@ -56,9 +56,9 @@ class Engine:
     model : :class:`~tenpy.models.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     TEBD_params : dict
-        Further optional parameters as described in the following table.
+        Further optional parameters as described in the tables in
+        :func:`run` and :func:`run_GS` for more details.
         Use ``verbose=1`` to print the used parameters during runtime.
-        See :func:`run` and :func:`run_GS` for more details.
 
     Attributes
     ----------
@@ -75,7 +75,7 @@ class Engine:
     model : :class:`~tenpy.models.NearestNeigborModel`
         The model defining the Hamiltonian.
     TEBD_params: dict
-        Optional parameters, see above.
+        Optional parameters, see :func:`run` and :func:`run_GS` for more details.
     _bond_eig_vals : list of 1D ndarray
         Eigenvalues for each of `model.H_bond`; necessary to calculate `_U`.
     _bond_eig_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -119,30 +119,25 @@ class Engine:
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     def run(self):
-        """Time evolution with TEBD (time evolving block decimation).
+        """(Real-)time evolution with TEBD (time evolving block decimation).
 
-        Parameters
-        ----------
-        TEBD_params : dict
-            The optional parameters that are used are described in the
-            following table.
-            Use ``verbose=1`` to print the used parameters during runtime.
+        The following (optional) parameters are read out from the :attr:`TEBD_params`.
 
-            ======= ====== ======================================================
-            key     type   description
-            ======= ====== ======================================================
-            dt      float  time step.
-            ------- ------ ------------------------------------------------------
-            order   int    Order of the algorithm.
-                           The total error scales as O(t, dt^order).
-            ------- ------ ------------------------------------------------------
-            N_steps int    Number of steps before measurement can be performed,
-                           number of steps that are interlinked for all
-                           Trotter decompositions of order > 1.
-            ------- ------ ------------------------------------------------------
-            ...     dict   Truncation parameters as described in
-                           :func:`~tenpy.algorithms.truncation.truncate`
-            ======= ====== ======================================================
+        ============== ====== ======================================================
+        key            type   description
+        ============== ====== ======================================================
+        dt             float  time step.
+        -------------- ------ ------------------------------------------------------
+        order          int    Order of the algorithm.
+                                The total error scales as O(t, dt^order).
+        -------------- ------ ------------------------------------------------------
+        N_steps        int    Number of steps before measurement can be performed,
+                        number of steps that are interlinked for all
+                        Trotter decompositions of order > 1.
+        -------------- ------ ------------------------------------------------------
+        trunc_params   dict   Truncation parameters as described in
+                                :func:`~tenpy.algorithms.truncation.truncate`
+        ============== ====== ======================================================
         """
         # initialize parameters
         delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'TEBD')
@@ -172,43 +167,35 @@ class Engine:
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
 
-        An algorithm that finds the ground state and its corresponding energy by
-        imaginary time TEBD.
+        .. note ::
+            It is almost always more efficient (and hence advisable) to use DMRG.
+            This algorithms can nonetheless be used quite well as a benchmark and for comparison.
 
-        Note that it is almost always more efficient (and hence advisable) to use
-        DMRG. It can nonetheless be used quite well as a benchmark!
+        The following (optional) parameters are read out from the :attr:`TEBD_params`.
+        Use ``verbose=1`` to print the used parameters during runtime.
 
-        Parameters
-        ----------
-        TEBD_params : dict
-            The optional parameters that are used are described in the
-            following table.
-            Use ``verbose=1`` to print the used parameters during runtime.
-
-            ============== ====== =============================================
-            key            type   description
-            ============== ====== =============================================
-            delta_tau_list list   A list of floats: the timesteps to be used.
-                                  Choosing a large timestep `delta_tau`
-                                  introduces large (Trotter) erros, but a too
-                                  small time step requires a lot of steps to
-                                  reach  ``exp(-tau H) --> |psi0><psi0|``.
-                                  Therefore, we start with fairly large time
-                                  steps for a quick time evolution until
-                                  convergence, and the gradually decrease the
-                                  time step.
-            -------------- ------ ---------------------------------------------
-            order          int    Order of the Suzuki-Trotter decomposition.
-            -------------- ------ ---------------------------------------------
-            N_steps        int    Number of steps before measurement can be
-                                  performed
-            -------------- ------ ---------------------------------------------
-            ...                   Truncation parameters as described in
-                                  :func:`~tenpy.algorithms.truncation.truncate`
-            ============== ====== =============================================
-
+        ============== ====== =============================================
+        key            type   description
+        ============== ====== =============================================
+        delta_tau_list list   A list of floats: the timesteps to be used.
+                              Choosing a large timestep `delta_tau`
+                              introduces large (Trotter) erros, but a too
+                              small time step requires a lot of steps to
+                              reach  ``exp(-tau H) --> |psi0><psi0|``.
+                              Therefore, we start with fairly large time
+                              steps for a quick time evolution until
+                              convergence, and the gradually decrease the
+                              time step.
+        -------------- ------ ---------------------------------------------
+        order          int    Order of the Suzuki-Trotter decomposition.
+        -------------- ------ ---------------------------------------------
+        N_steps        int    Number of steps before measurement can be
+                              performed
+        -------------- ------ ---------------------------------------------
+        trunc_params   dict   Truncation parameters as described in
+                              :func:`~tenpy.algorithms.truncation.truncate`
+        ============== ====== =============================================
         """
-
         # initialize parameters
         delta_tau_list = get_parameter(
             self.TEBD_params, 'delta_tau_list',
@@ -377,8 +364,7 @@ class Engine:
         if self.verbose >= 1:
             print("Calculate U for ", U_param)
 
-        H_bond = self.model.H_bond
-        L = len(H_bond)
+        L = self.psi.L
         self._U = []
         for dt in self.suzuki_trotter_time_steps(order):
             U_bond = [
