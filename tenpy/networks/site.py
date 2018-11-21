@@ -570,7 +570,6 @@ def multi_sites_combine_charges(sites, same_charges=[]):
         same_charges[j] = same_charges_j
     if len(same_charges_flat) != len(set(same_charges_flat)):
         raise ValueError("Can't have duplicates in same_charges!")
-    print("same_charges", same_charges)
     # find out which charges we keep
     keep_charges = [] # list of (s, i) which appear in the new ChargeInfo
     map_charges = {}  # dict (s, i)->(s,i): those not appearing in keep_charges to the one in it
@@ -583,8 +582,6 @@ def multi_sites_combine_charges(sites, same_charges=[]):
             idx = keep_charges.index((s, i))
             del keep_charges[idx]
             map_charges[(s, i)] = (s0, i0)
-    print("keep", keep_charges)
-    print("map", map_charges)
     # define common ChargeInfo class
     qnumber = len(keep_charges)
     names = [sites[s].leg.chinfo.names[i] for (s, i) in keep_charges]

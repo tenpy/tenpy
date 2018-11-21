@@ -248,8 +248,10 @@ def test_boson_site_ops():
 
 def test_multi_sites_combine_charges():
    spin = site.SpinSite(0.5, 'Sz')
+   spin1 = site.SpinSite(1, 'Sz')
    ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
    spin_ops = {op_name: get_site_op_flat(spin, op_name) for op_name in spin.opnames}
+   spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
    ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
    site.multi_sites_combine_charges([spin, ferm])
    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
@@ -278,3 +280,18 @@ def test_multi_sites_combine_charges():
    # and finally a few more, changing orders as well
    ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
    spin = site.SpinSite(0.5, 'Sz')
+   spin1 = site.SpinSite(1, 'Sz')
+   site.multi_sites_combine_charges([ferm, spin1, spin], same_charges=[[(0, 'Sz'), (2, '2*Sz')]])
+   assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz', '2*Sz')
+   spin.test_sanity()
+   ferm.test_sanity()
+   spin1.test_sanity()
+   for op_name, op_flat in spin_ops.items():
+       op_flat2 = get_site_op_flat(spin, op_name)
+       npt.assert_equal(op_flat, op_flat2)
+   for op_name, op_flat in ferm_ops.items():
+       op_flat2 = get_site_op_flat(ferm, op_name)
+       npt.assert_equal(op_flat, op_flat2)
+   for op_name, op_flat in spin1_ops.items():
+       op_flat2 = get_site_op_flat(spin1, op_name)
+       npt.assert_equal(op_flat, op_flat2)
