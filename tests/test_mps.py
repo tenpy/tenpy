@@ -223,6 +223,7 @@ def test_group():
     ov = psi1.overlap(psi4)
     assert abs(1.-ov) < 1.e-14
 
+
 def test_expectation_value_term():
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
@@ -267,4 +268,4 @@ if __name__ == "__main__":
     check_canonical_form('finite')
     check_canonical_form('infinite')
     test_group()
-    test_expectation_value_multi()
+    test_expectation_value_term()

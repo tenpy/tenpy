@@ -44,6 +44,9 @@ import time
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..tools.params import get_parameter, unused_parameters
+from ..linalg.random_matrix import CUE
+
+__all__ = ['Engine', 'RandomUnitaryEvolution']
 
 
 class Engine:
@@ -642,3 +645,129 @@ class Engine:
         U = npc.tensordot(U, V.conj(), axes=(1, 1))
         assert (tuple(U.get_leg_labels()) == ('(p0.p1)', '(p0*.p1*)'))
         return U.split_legs()
+
+
+class RandomUnitaryEvolution(Engine):
+    """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.
+
+    Instead of using a model Hamiltonian, this TEBD engine evolves with random two-site unitaries.
+    These unitaries are drawn according to the Haar measure on unitaries obeying the conservation
+    laws dictated by the conserved charges. If no charge is preserved, this distribution is called
+    circular unitary ensemble (CUE), see :func:`~tenpy.linalg.random_matrix.CUE`.
+
+    On one hand, such an evolution is of interest in recent research (see eg. arXiv:1710.09827).
+    On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
+    Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networs.mps.MPS`
+        Initial state to be time evolved. Modified in place.
+    TEBD_params : dict
+        Use ``verbose=1`` to print the used parameters during runtime.
+        See :func:`run` and :func:`run_GS` for more details.
+
+    Examples
+    --------
+    One can initialize a "random" state with total Sz = L//2 as follows:
+    >>> L = 8
+    >>> spin_half = SpinHalfSite(conserve='Sz')
+    >>> psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
+    >>> print(psi.chi)
+    [1, 1, 1, 1, 1, 1, 1]
+    >>> TEBD_params = dict(N_steps=2, trunc_params={'chi_max':10})
+    >>> eng = RandomUnitaryEvolution(psi, TEBD_params)
+    >>> eng.run()
+    >>> print(psi.chi)
+    [2, 4, 8, 10, 8, 4, 2]
+
+    The "random" unitaries preserve the specified charges, e.g. here we have Sz-conservation.
+    If you start in a sector of all up spins, the random unitaries can only apply a phase:
+    >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
+    >>> print(psi2.chi)
+    [1, 1, 1, 1, 1, 1, 1]
+    >>> eng2 = RandomUnitaryEvolution(psi2, TEBD_params)
+    >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
+    >>> print(psi2.chi)  # still a product state, not really random!!!
+    [1, 1, 1, 1, 1, 1, 1]
+    """
+    def __init__(self, psi, TEBD_params):
+        Engine.__init__(self, psi, None, TEBD_params)
+
+    def run(self):
+        """Time evolution with TEBD (time evolving block decimation) and random two-site unitaries.
+
+        The following (optional) parameters are read out from the :attr:`TEBD_params`.
+
+        ============== ====== ======================================================
+        key            type   description
+        ============== ====== ======================================================
+        N_steps        int    Number of two-site unitaries to be applied on each
+                              bond.
+        -------------- ------ ------------------------------------------------------
+        trunc_params   dict   Truncation parameters as described in
+                              :func:`~tenpy.algorithms.truncation.truncate`
+        ============== ====== ======================================================
+        """
+        N_steps = get_parameter(self.TEBD_params, 'N_steps', 1, 'TEBD')
+        if self.verbose >= 1:
+            Sold = np.average(self.psi.entanglement_entropy())
+            start_time = time.time()
+        self.update(N_steps)
+        if self.verbose >= 1:
+            S = np.average(self.psi.entanglement_entropy())
+            DeltaS = np.abs(Sold - S)
+            msg = ("--> time={t:3.3f}, max_chi={chi:d}, "
+                   "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
+            print(
+                msg.format(
+                    t=self.evolved_time,
+                    chi=max(self.psi.chi),
+                    dS=DeltaS,
+                    S=S.real,
+                    time=time.time() - start_time,
+                ))
+
+    def calc_U(self):
+        """Draw new random two-site unitaries replacing the usual `U` of TEBD."""
+        sites = self.psi.sites
+        L = len(sites)
+        U_bonds = []
+        for i in range(L):
+            if i == 0 and self.psi.finite:
+                U_bonds.append(None)
+            else:
+                leg_L = sites[i-1].leg
+                leg_R = sites[i].leg
+                pipe = npc.LegPipe([leg_L, leg_R])
+                U = npc.Array.from_func_square(CUE, pipe).split_legs()
+                U.iset_leg_labels(['p0', 'p1', 'p0*', 'p1*'])
+                U_bonds.append(U)
+        self._U = [U_bonds]
+
+    def update(self, N_steps):
+        """Apply ``N_steps`` random two-site unitaries to each bond (in even-odd pattern).
+
+        Parameters
+        ----------
+        N_steps : int
+            The number of steps for which the whole lattice should be updated.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The error of the represented state which is introduced due to the truncation during
+            this sequence of update steps.
+        """
+        trunc_err = TruncationError()
+        for i in range(N_steps):
+            self.calc_U()  # draw new random unitaries
+            for odd in [1, 0]:
+                trunc_err += self.update_step(0, odd)
+        self.evolved_time = self.evolved_time + N_steps
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def _calc_bond_eig(self):
+        pass # do nothing

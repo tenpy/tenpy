@@ -137,7 +137,7 @@ class MPS:
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
         We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
-        take proper care of the boundary conditions.
+        takes proper care of the boundary conditions.
     _valid_forms : dict
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
         ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
