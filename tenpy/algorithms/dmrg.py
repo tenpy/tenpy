@@ -923,7 +923,7 @@ class Engine(NpcLinearOperator):
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""
         Mixer_class = get_parameter(self.DMRG_params, 'mixer', None, 'DMRG')
-        if Mixer_class is not None:
+        if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = Mixer
             if isinstance(Mixer_class, str):
@@ -1210,7 +1210,7 @@ class EngineFracture(Engine):
 
     Due to a different contraction order in :meth:`matvec`, this engine might be faster than
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
-    One :meth:`matvec` is :math:`O(2 \chi^3 d^2 D + 2 \chi^2 d^3 W^2 )`.
+    One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
 
     Attributes
     ----------
@@ -1409,8 +1409,20 @@ class EngineFracture(Engine):
 class Mixer:
     """Mixer class.
 
-    .. todo ::
-        documentation/reference
+    This Mixer is based on the paper [White2005]_.
+
+    Since DMRG performs only local updates of the state, it can get stuck in "local minima",
+    in particular if the Hamiltonain is long-range -- which is the case if one
+    maps a 2D system ("infinite cylinder") to 1D -- or if one wants to do single-site updates
+    (currently not implemented in TeNPy).
+    The mixer perturbs the density matrix with the terms of the Hamiltonian
+    which have contributions in both the "left" and "right" side of the system.
+    In that way, it adds fluctuation of the quantum numbers and non-zero contributions of the
+    long-range terms - leading to a significantly improved convergence of DMRG.
+
+    The strength of the perturbation is given by the `amplitude` of the mixer.
+    A good strategy is to choose an initially significant amplitude and let it decay until
+    the perturbation becomes completely irrelevant and the mixer gets disabled.
 
     Parameters
     ----------

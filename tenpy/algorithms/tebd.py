@@ -2,7 +2,7 @@ r"""Time evolving block decimation (TEBD).
 
 The TEBD algorithm (proposed in [Vidal2004]_) uses a trotter decomposition of the
 Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neigbor hamiltonians
-(in tenpy given by a :class:`~tenpy.models.NearestNeighborModel`),
+(in tenpy given by a :class:`~tenpy.models.model.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
 the terms on even bonds (and similar :math:`H^{odd}` the terms on odd bonds).
 In the simplest case, we apply first :math:`U=\exp(-i*dt*H^{even})`,
@@ -56,7 +56,7 @@ class Engine:
     ----------
     psi : :class:`~tenpy.networs.mps.MPS`
         Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.NearestNeighborModel`
+    model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     TEBD_params : dict
         Further optional parameters as described in the tables in
@@ -129,17 +129,18 @@ class Engine:
         ============== ====== ======================================================
         key            type   description
         ============== ====== ======================================================
-        dt             float  time step.
+        dt             float  Time step.
         -------------- ------ ------------------------------------------------------
         order          int    Order of the algorithm.
                                 The total error scales as O(t, dt^order).
         -------------- ------ ------------------------------------------------------
-        N_steps        int    Number of steps before measurement can be performed,
-                        number of steps that are interlinked for all
-                        Trotter decompositions of order > 1.
+        N_steps        int    Number of time steps `dt` to evolve.
+                              (The Trotter decompositions of order > 1 are slightly
+                              more efficient if more than one step is performed at
+                              once.)
         -------------- ------ ------------------------------------------------------
         trunc_params   dict   Truncation parameters as described in
-                                :func:`~tenpy.algorithms.truncation.truncate`
+                              :func:`~tenpy.algorithms.truncation.truncate`.
         ============== ====== ======================================================
         """
         # initialize parameters
@@ -670,6 +671,7 @@ class RandomUnitaryEvolution(Engine):
     Examples
     --------
     One can initialize a "random" state with total Sz = L//2 as follows:
+
     >>> L = 8
     >>> spin_half = SpinHalfSite(conserve='Sz')
     >>> psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
@@ -683,6 +685,7 @@ class RandomUnitaryEvolution(Engine):
 
     The "random" unitaries preserve the specified charges, e.g. here we have Sz-conservation.
     If you start in a sector of all up spins, the random unitaries can only apply a phase:
+
     >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
     >>> print(psi2.chi)
     [1, 1, 1, 1, 1, 1, 1]
