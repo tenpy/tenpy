@@ -682,6 +682,7 @@ class RandomUnitaryEvolution(Engine):
     >>> eng.run()
     >>> print(psi.chi)
     [2, 4, 8, 10, 8, 4, 2]
+    >>> psi.canonical_form()  # necessary if you need to truncate (strongly) during the evolution
 
     The "random" unitaries preserve the specified charges, e.g. here we have Sz-conservation.
     If you start in a sector of all up spins, the random unitaries can only apply a phase:
