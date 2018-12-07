@@ -240,6 +240,8 @@ class Engine(NpcLinearOperator):
         E_total     The total energy before truncation.
         ----------- -------------------------------------------------------------------
         N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
         =========== ===================================================================
 
     sweep_stats : dict
@@ -256,6 +258,8 @@ class Engine(NpcLinearOperator):
         ------------- -------------------------------------------------------------------
         S             Maximum entanglement entropy.
         ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
         max_trunc_err The maximum truncation error in the last sweep
         ------------- -------------------------------------------------------------------
         max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
@@ -264,6 +268,9 @@ class Engine(NpcLinearOperator):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
+
+    time0 : float
+        Start time of the simulation, set in :meth:`reset_stats`.
     """
 
     def __init__(self, psi, model, DMRG_params):
@@ -284,7 +291,7 @@ class Engine(NpcLinearOperator):
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model)
+        self.init_env(model) # calls reset_stats
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
@@ -348,11 +355,12 @@ class Engine(NpcLinearOperator):
     def reset_stats(self):
         """Reset the statistics. Useful if you want to start a new DMRG run."""
         self.sweeps = get_parameter(self.DMRG_params, 'sweep_0', 0, 'DMRG')
-        self.update_stats = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': []}
+        self.update_stats = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': [], 'time': []}
         self.sweep_stats = {
             'sweep': [],
             'E': [],
             'S': [],
+            'time': [],
             'max_trunc_err': [],
             'max_E_trunc': [],
             'max_chi': [],
@@ -361,6 +369,7 @@ class Engine(NpcLinearOperator):
         self.shelve = False
         chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
         self.trunc_params['chi_max'] = chi_max
+        self.time0 = time.time()
 
     def __del__(self):
         DMRG_params = self.DMRG_params
@@ -382,7 +391,7 @@ class Engine(NpcLinearOperator):
             i.e. just a reference to :attr:`psi`.
         """
         DMRG_params = self.DMRG_params
-        start_time = time.time()
+        start_time = self.time0
         self.shelve = False
         # parameters for lanczos
         p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
@@ -470,6 +479,7 @@ class Engine(NpcLinearOperator):
             self.sweep_stats['sweep'].append(self.sweeps)
             self.sweep_stats['E'].append(E)
             self.sweep_stats['S'].append(S)
+            self.sweep_stats['time'].append(time.time() - start_time)
             self.sweep_stats['max_trunc_err'].append(max_trunc_err)
             self.sweep_stats['max_E_trunc'].append(max_E_trunc)
             self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
@@ -587,6 +597,7 @@ class Engine(NpcLinearOperator):
             self.update_stats['age'].append(age)
             self.update_stats['E_total'].append(E_total)
             self.update_stats['N_lanczos'].append(N_lanczos)
+            self.update_stats['time'].append(time.time() - self.time0)
             E_trunc_list.append(E_trunc)
             trunc_err_list.append(trunc_err.eps)
 
@@ -597,10 +608,9 @@ class Engine(NpcLinearOperator):
                 self.trunc_params['chi_max'] = new_chi_max
                 if self.verbose >= 1:
                     print("Setting chi_max =", new_chi_max)
-
-        # update mixer
-        if self.mixer is not None:
-            self.mixer = self.mixer.update_amplitude(self.sweeps)
+            # update mixer
+            if self.mixer is not None:
+                self.mixer = self.mixer.update_amplitude(self.sweeps)
         if meas_E_trunc:
             return np.max(trunc_err_list), np.max(E_trunc_list)
         else:
@@ -992,6 +1002,57 @@ class Engine(NpcLinearOperator):
             The VH as returned by SVD with combined legs, labels ``'vL', '(vR.p1)'``.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
+
+    def plot_update_stats(self, xaxis='time', E_exact=None, **kwargs):
+        """Plot the update statistics to display the convergence during the sweeps.
+
+        Makes two subplots, showing the energy (left) and number of lanczos iterations (right).
+
+        Parameters
+        ----------
+        xaxis : 'sweep' | 'time' | ...
+            Key of :attr:`update_stats` to be used for the x-axis of the plots.
+            Sweep is just enumerating the number of bond updates
+        E_exact : float
+            Exact energy (for infinite systems: per site)
+        **kwargs :
+            Further keyword arguments given to ``plt.plot(...)``.
+        """
+        import matplotlib.pyplot as plt
+        ax1 = plt.subplot(1, 2, 1)
+        stats = self.update_stats
+        L = self.psi.L
+        kwargs.setdefault('marker', 'o')
+        kwargs.setdefault('linestyle', '')
+
+        E = np.array(stats['E_total'])
+        N = 2*L-2 if self.psi.finite else 2*L # bond updates per sweep
+        if xaxis is None:
+            xaxis = 'index'
+            X = np.arange(len(E))
+        elif xaxis == 'sweep':
+            X = np.arange(1, len(E)+1)/N
+        else:
+            X = np.array(stats[xaxis])
+        N_lanczos = np.array(stats['N_lanczos'])
+
+        if not self.psi.finite and False:
+            # use energy per site instead of total energy
+            age = np.array(stats['age'])
+            d_age = age[N:] - age[:-N]
+            d_E = E[N:] - E[:-N]
+            E = d_E/d_age
+            X = X[N:]
+            N_lanczos = N_lanczos[N:]
+        ax1.plot(X, E, **kwargs)
+        ax1.set_xlabel(xaxis)
+        ax1.set_ylabel("Energy")
+
+        ax2 = plt.subplot(1, 2, 2)
+        ax2.plot(X, N_lanczos, **kwargs)
+        ax2.set_xlabel(xaxis)
+        ax2.set_ylabel(r'$N_{lanczos}$')
+
 
 
 class EngineCombine(Engine):
@@ -1480,7 +1541,7 @@ class Mixer:
             should be disabled.
         """
         self.amplitude /= self.decay
-        if sweeps >= self.disable_after and self.amplitude >= np.finfo('float').eps:
+        if sweeps >= self.disable_after or self.amplitude <= np.finfo('float').eps:
             if self.verbose >= 0.1:  # increased verbosity: the same level as DMRG
                 print("disable mixer")
             return None  # disable mixer
