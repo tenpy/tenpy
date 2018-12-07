@@ -574,16 +574,7 @@ class Engine(NpcLinearOperator):
         """
         E_trunc_list = []
         trunc_err_list = []
-        # get schedule
-        L = self.env.L
-        if self.finite:
-            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
-        else:
-            assert (L >= 2)
-            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
-            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                           [[True, True]] * 2 + [[False, True]] * (L-2)
+        schedule_i0, update_LP_RP = self._get_sweep_schedule()
 
         # the actual sweep
         for i0, upd_env in zip(schedule_i0, update_LP_RP):
@@ -1012,9 +1003,11 @@ class Engine(NpcLinearOperator):
         ----------
         xaxis : 'sweep' | 'time' | ...
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            Sweep is just enumerating the number of bond updates
+            ``'sweep'`` is just enumerating the number of bond updates
+            (including environment sweeps).
         E_exact : float
-            Exact energy (for infinite systems: per site)
+            Exact energy (for infinite systems: per site) for comparison.
+            If given, plot |E-E_exact|/|E_exact| on a log-scale yaxis.
         **kwargs :
             Further keyword arguments given to ``plt.plot(...)``.
         """
@@ -1026,7 +1019,8 @@ class Engine(NpcLinearOperator):
         kwargs.setdefault('linestyle', '')
 
         E = np.array(stats['E_total'])
-        N = 2*L-2 if self.psi.finite else 2*L # bond updates per sweep
+        schedule, _ = self._get_sweep_schedule()
+        N = len(schedule) # bond updates per sweep
         if xaxis is None:
             xaxis = 'index'
             X = np.arange(len(E))
@@ -1036,7 +1030,7 @@ class Engine(NpcLinearOperator):
             X = np.array(stats[xaxis])
         N_lanczos = np.array(stats['N_lanczos'])
 
-        if not self.psi.finite and False:
+        if not self.psi.finite:
             # use energy per site instead of total energy
             age = np.array(stats['age'])
             d_age = age[N:] - age[:-N]
@@ -1044,7 +1038,11 @@ class Engine(NpcLinearOperator):
             E = d_E/d_age
             X = X[N:]
             N_lanczos = N_lanczos[N:]
-        ax1.plot(X, E, **kwargs)
+        if E_exact is None:
+            ax1.plot(X, E, **kwargs)
+        else:
+            ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
+            ax1.set_yscale('log')
         ax1.set_xlabel(xaxis)
         ax1.set_ylabel("Energy")
 
@@ -1053,6 +1051,50 @@ class Engine(NpcLinearOperator):
         ax2.set_xlabel(xaxis)
         ax2.set_ylabel(r'$N_{lanczos}$')
 
+    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', exact_y_value=None, **kwargs):
+        """Plot the sweep statistics to display the convergence with the sweeps.
+
+        Parameters
+        ----------
+        axes : matplotlib.Axes
+            The axes to plot into. Defaults to ``plt.gca()``
+        xaxis, yaxis : 'sweep' | 'time' | ...
+            Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
+        exact_Y_value : float
+            Exact value for the quantity on the y-axis for comparison.
+            If given, plot |y-y_exact|/|y_exact| on a log-scale yaxis.
+        **kwargs :
+            Further keyword arguments given to ``plt.plot(...)``.
+        """
+        if axes is None:
+            import matplotlib.pyplot as plt
+            axes = plt.gca()
+        stats = self.sweep_stats
+        L = self.psi.L
+        kwargs.setdefault('marker', 'o')
+        kwargs.setdefault('linestyle', '')
+
+        x = np.array(stats[xaxis])
+        y = np.array(stats[yaxis])
+        if exact_y_value is None:
+            axes.plot(x, y, **kwargs)
+        else:
+            axes.plot(x, np.abs(y-exact_y_value)/np.abs(exact_y_value), **kwargs)
+            axes.set_yscale('log')
+        axes.set_xlabel(xaxis)
+        axes.set_ylabel(yaxis)
+
+    def _get_sweep_schedule(self):
+        L = self.env.L
+        if self.finite:
+            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
+            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
+        else:
+            assert (L >= 2)
+            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
+            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
+                           [[True, True]] * 2 + [[False, True]] * (L-2)
+        return schedule_i0, update_LP_RP
 
 
 class EngineCombine(Engine):
