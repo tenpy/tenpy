@@ -108,7 +108,7 @@ class LanczosGroundState:
         self._params = params
         self.N_min = get_parameter(params, 'N_min', 2, "Lanczos")
         self.N_max = get_parameter(params, 'N_max', 20, "Lanczos")
-        self.E_tol = get_parameter(params, 'E_tol', 5.e-15, "Lanczos")
+        self.E_tol = get_parameter(params, 'E_tol', np.inf, "Lanczos")
         self.P_tol = get_parameter(params, 'P_tol', 1.e-14, "Lanczos")
         self.N_cache = get_parameter(params, 'N_cache', self.N_max, "Lanczos")
         self.min_gap = get_parameter(params, 'min_gap', 1.e-12, "Lanczos")

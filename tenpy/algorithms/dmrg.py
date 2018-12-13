@@ -144,14 +144,20 @@ def run(psi, model, DMRG_params):
         P_tol_min                truncation error. Therefore, if `P_tol_to_trunc` is not
                                  ``None``, we update `P_tol` of `lanczos_params` to
                                  ``max_trunc_err*P_tol_to_trunc``,
-                                 restricted to the interval [`P_tol_min`, `P_tol_max`].
+                                 restricted to the interval [`P_tol_min`, `P_tol_max`],
+                                 where ``max_trunc_err`` is the maximal truncation error
+                                 (discarded weight of the Schmidt values) due to truncation
+                                 right after each Lanczos optimization during the sweeps.
         -------------- --------- ---------------------------------------------------------------
         E_tol_to_trunc float     It's reasonable to choose the Lanczos convergence criteria
         E_tol_max                ``'E_tol'`` not many magnitudes lower than the current
         E_tol_min                truncation error. Therefore, if `E_tol_to_trunc` is not
                                  ``None``, we update `E_tol` of `lanczos_params` to
                                  ``max_E_trunc*E_tol_to_trunc``,
-                                 restricted to the interval [`E_tol_min`, `E_tol_max`].
+                                 restricted to the interval [`E_tol_min`, `E_tol_max`],
+                                 where ``max_E_trunc`` is the maximal energy difference due to
+                                 truncation right after each Lanczos optimization during the
+                                 sweeps.
         ============== ========= ===============================================================
 
     Returns
