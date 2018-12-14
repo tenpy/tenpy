@@ -2617,7 +2617,8 @@ class MPSEnvironment:
         The full contraction of the environments gives the overlap ``<bra|ket>``,
         taking into account :attr:`MPS.norm` of both `bra` and `ket`.
         For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
+        values inbetween.
 
         Parameters
         ----------

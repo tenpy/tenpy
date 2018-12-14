@@ -666,10 +666,19 @@ class Engine(NpcLinearOperator):
                 o_env.get_RP(i0, store=True)
         E_trunc = None
         if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real
+            E_trunc = self.env.full_contraction(i0).real   # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
             E_trunc = E_trunc - E0
+        # now we can also remove the LP and RP on outer bonds, which we don't need any more
+        if update_RP:  # we move to the left -> delete left LP
+            self.env.del_LP(i0)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0)
+        if update_LP:  # we move to the right -> delete right RP
+            self.env.del_RP(i0+1)
+            for o_env in self.ortho_to_envs:
+                o_env.del_RP(i0+1)
         return E0, E_trunc, err, N, age
 
     def prepare_diag(self, i0, update_LP, update_RP):
@@ -970,6 +979,7 @@ class Engine(NpcLinearOperator):
         self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         self.psi.set_SR(i0, S)
         # the old stored environments are now invalid
+        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
         for o_env in self.ortho_to_envs:
             o_env.del_LP(i0 + 1)
             o_env.del_RP(i0)
