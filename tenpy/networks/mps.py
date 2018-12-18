@@ -919,7 +919,7 @@ class MPS:
             if len(s.shape) > 1:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
-                    s = npc.eigvals(npc.tensordot(s.conj(), s, axes=[0, 0]))
+                    s = npc.eigvalsh(npc.tensordot(s.conj(), s, axes=[0, 0]))
                     res.append(entropy(s, n))
                 else:
                     raise ValueError("entropy with non-diagonal schmidt values")
