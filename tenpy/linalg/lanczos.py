@@ -400,7 +400,7 @@ def plot_stats(ax, Es):
 
     Parameters
     ----------
-    ax : matplotlib.pyplot.Axes
+    ax : :class:`matplotlib.axes.Axes`
         The axes on which we should plot.
     Es : list of ndarray.
         The energies :attr:`Lanczos.Es`.

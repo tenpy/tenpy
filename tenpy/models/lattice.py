@@ -500,7 +500,7 @@ class Lattice:
 
         Parameters
         ----------
-        ax : matplotlib.pyplot.Axes
+        ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         markers : list
             List of values for the keywork `marker` of ``ax.plot()`` to distinguish the different
@@ -526,7 +526,7 @@ class Lattice:
 
         Parameters
         ----------
-        ax : matplotlib.pyplot.Axes
+        ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         order : None | 2D array (self.N_sites, self.dim+1)
             The order as returned by :meth:`ordering`; by default (``None``) use :attr:`order`.
@@ -555,7 +555,7 @@ class Lattice:
 
         Parameters
         ----------
-        ax : matplotlib.pyplot.Axes
+        ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         coupling : list of (u1, u2, dx)
             Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
@@ -601,7 +601,7 @@ class Lattice:
 
         Parameters
         ----------
-        ax : matplotlib.pyplot.Axes
+        ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         **kwargs :
             Keyword arguments specifying the "arrowprops" of ``ax.annotate``.
@@ -622,7 +622,7 @@ class Lattice:
 
         Parameters
         ----------
-        ax : matplotlib.pyplot.Axes
+        ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         direction : int
             The direction of the lattice along which we should mark the idenitified sites.

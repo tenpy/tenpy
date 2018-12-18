@@ -1023,7 +1023,7 @@ class Engine(NpcLinearOperator):
             (including environment sweeps).
         E_exact : float
             Exact energy (for infinite systems: per site) for comparison.
-            If given, plot |E-E_exact|/|E_exact| on a log-scale yaxis.
+            If given, plot ``abs((E-E_exact)/E_exact)`` on a log-scale yaxis.
         **kwargs :
             Further keyword arguments given to ``plt.plot(...)``.
         """
@@ -1072,15 +1072,15 @@ class Engine(NpcLinearOperator):
 
         Parameters
         ----------
-        axes : matplotlib.Axes
+        axes : :class:`matplotlib.axes.Axes`
             The axes to plot into. Defaults to ``plt.gca()``
         xaxis, yaxis : 'sweep' | 'time' | ...
             Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
         exact_Y_value : float
             Exact value for the quantity on the y-axis for comparison.
-            If given, plot |y-y_exact|/|y_exact| on a log-scale yaxis.
+            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
-            Further keyword arguments given to ``plt.plot(...)``.
+            Further keyword arguments given to ``axes.plot(...)``.
         """
         if axes is None:
             import matplotlib.pyplot as plt
