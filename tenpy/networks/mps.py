@@ -876,6 +876,34 @@ class MPS:
         self.form = [self._valid_forms['B']] * len(sites)
         return trunc_err
 
+    def get_bunched_mps(self, blocklen):
+        r"""contract blocklen subsequent tensors into a single one and return result as a new MPS.
+
+        blocklen = number of subsequent sites to be combined.
+
+        Returns
+        -------
+        new MPS object with bunched sites.
+        """
+        newB=[]
+        newL=self.L/blocklen
+        newSV=[]
+        newSites=[]
+        newSV.append(self.SV[0])
+        for s in range(newL):
+            newBi=self.get_B(s*blocklen)
+            for j in range(1,blocklen):
+                #Bj=npc.tensordot(self.SV[s*blocklen+1],self.get_B(s*blocklen+j),axes=[1,vL])   # not sure this is needed, B includes SV?
+                Bj=self.get_B(s*blocklen+j)
+                Bj.iset_leg_labels(['vL','vR','p2'])
+                newBi=npc.tensordot(newBi, Bj)
+                newBi=npc.combine_legs(newBi.itranspose(['vL','vR','p','p2']),['p','p2'])
+                newBi.iset_leg_labels(['vL','vR','p'])
+            newB.append(newBi)
+            newSites.append(Site(newBi.get_leg(2)))
+            newSV.append(self.SV[(s+1)*blocklen])
+        return MPS(newSites, newB, newSV, self.bc, self.form)
+
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
@@ -919,7 +947,7 @@ class MPS:
             if len(s.shape) > 1:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
-                    s = npc.eigvalsh(npc.tensordot(s.conj(), s, axes=[0, 0]))
+                    s = npc.eigvals(npc.tensordot(s.conj(), s, axes=[0, 0]))
                     res.append(entropy(s, n))
                 else:
                     raise ValueError("entropy with non-diagonal schmidt values")
@@ -992,7 +1020,7 @@ class MPS:
         ent_spectrum : list
             For each (non-trivial) bond the entanglement spectrum.
             If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
-            with the convetion :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            with the convention :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
             and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
             If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
             for each possible charge on that bond.
@@ -1011,6 +1039,34 @@ class MPS:
             return res
         else:
             return [np.sort(-2. * np.log(ss)) for ss in self._S[self.nontrivial_bonds]]
+
+    def average_charge(self, bond=0):
+        r"""return the charge carried by the given bond
+
+        Parameters
+        ----------
+        bond : integer
+            Index of the bond to be examined (:math:`0<=bond<= L`)
+
+        Returns
+        -------
+        average_charge : list
+            List of averages of all charges defined by the leg
+        """
+        if (bond < 0 or bond > self.L):
+            print ("Error: bond out of range in average_charge!")
+            return []
+        ss = self._S[bond]
+        if bond < self.L:
+            leg = self._B[bond].get_leg('vL')
+        else:  # bond == L: segment b.c.
+            leg = self._B[bond - 1].get_leg('vR')
+        average = np.zeros(leg.get_charge(0).shape)
+        for qi in range(leg.block_number):
+            q = leg.get_charge(qi)
+            sl = leg.get_slice(qi)
+            average += q*np.dot( ss[sl], ss[sl])
+        return average
 
     def get_rho_segment(self, segment):
         """Return reduced density matrix for a segment.
@@ -2617,8 +2673,7 @@ class MPSEnvironment:
         The full contraction of the environments gives the overlap ``<bra|ket>``,
         taking into account :attr:`MPS.norm` of both `bra` and `ket`.
         For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
-        values inbetween.
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
 
         Parameters
         ----------
