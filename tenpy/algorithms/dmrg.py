@@ -331,7 +331,7 @@ class Engine(NpcLinearOperator):
                 LP = self.env.get_LP(0, False)
                 LP_age = self.env.get_LP_age(0)
                 RP = self.env.get_RP(self.psi.L - 1, False)
-                RP_age = self.env.get_LP_age(self.psi.L - 1)
+                RP_age = self.env.get_RP_age(self.psi.L - 1)
                 self.chi_list = {0: self.trunc_params['chi_max']}  # chi_list makes no sense
             else:
                 LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
