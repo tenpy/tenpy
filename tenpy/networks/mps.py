@@ -947,7 +947,7 @@ class MPS:
             if len(s.shape) > 1:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
-                    s = npc.eigvals(npc.tensordot(s.conj(), s, axes=[0, 0]))
+                    s = npc.eigvalsh(npc.tensordot(s.conj(), s, axes=[0, 0]))
                     res.append(entropy(s, n))
                 else:
                     raise ValueError("entropy with non-diagonal schmidt values")
@@ -2673,7 +2673,8 @@ class MPSEnvironment:
         The full contraction of the environments gives the overlap ``<bra|ket>``,
         taking into account :attr:`MPS.norm` of both `bra` and `ket`.
         For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
+        values in between.
 
         Parameters
         ----------
@@ -2686,7 +2687,7 @@ class MPSEnvironment:
             LP = self.get_LP(i0, store=False)
             LP = self._contract_LP(i0, LP)
         else:
-            LP = self.get_LP(i0 + 1, store=False)
+            LP = self.get_LP(i0 + 1, store=False) 
         # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
         S_bra = self.bra.get_SR(i0).conj()
         LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)

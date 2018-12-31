@@ -269,8 +269,6 @@ class MPO:
         self.sites = grouped_sites
         self.grouped = self.grouped * n
 
-        
-
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
