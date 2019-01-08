@@ -20,6 +20,9 @@ Backwards incompatible changes
   to allow for an arbitrary number of sites to be grouped. 
   Arguments ``site0, site1, label0, label1`` of the __init__ can be replaced with ``[site0, site1], [label0, label1]``
   and ``op0, op1`` of the `kronecker_product` with ``[op0, op1]``; this will recover the functionality of the `DoubleSite`.
+- Restructured callstructure of Mixer in DMRG, allowing an implementation of other mixers.
+  To enable the mixer, set the DMRG parameter ``"mixer"`` to ``True`` or ``'DensityMatrixMixer'``
+  instead of just ``'Mixer'``.
 
 
 Added

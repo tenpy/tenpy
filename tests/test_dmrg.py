@@ -84,7 +84,7 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
 @attr('slow')
 def test_dmrg():
     for bc_MPS, engine, mixer in it.product(['finite', 'infinite'],
-                                            ['EngineCombine', 'EngineFracture'], [None, 'Mixer']):
+                                            ['EngineCombine', 'EngineFracture'], [None, True]):
         L = 4 if bc_MPS == 'finite' else 2
         yield check_dmrg, L, bc_MPS, engine, mixer
 
