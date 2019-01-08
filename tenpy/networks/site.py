@@ -760,11 +760,10 @@ class SpinSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
-        names = [str(i) for i in np.arange(-S, S, 1.)]
+        names = [str(i) for i in np.arange(-S, S+1, 1.)]
         Site.__init__(self, leg, names, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
-
 
     def __repr__(self):
         """Debug representation of self"""
@@ -1075,7 +1074,7 @@ class BosonSite(Site):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
-        states = ['vac'] + [str(n) for n in range(1, dim)]
+        states = [str(n) for n in range(0, dim)]
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
         B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
@@ -1111,7 +1110,7 @@ class BosonSite(Site):
         self.conserve = conserve
         self.filling = filling
         Site.__init__(self, leg, states, **ops)
-        self.state_labels['0'] = self.state_labels['vac'] # alias
+        self.state_labels['vac'] = self.state_labels['0'] # alias
 
     def __repr__(self):
         """Debug representation of self"""
