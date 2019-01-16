@@ -55,6 +55,8 @@ Changed
 - Restructured lanczos into a class, added time evolution calculating exp(A*dt)|psi0>
 - Warning for poorly conditioned Lanczos; to overcome this enable the new parameter "reortho"
 - By default, make deep copies of npc Arrays.
+- Simplified call strucutre of :meth:`~tenpy.linalg.np_conserved.Array.extend`, and
+  :meth:`~tenpy.linalg.charges.LegCharge.extend`.
 - Restructured :mod:`tenpy.algorithms.dmrg`:
 
   - :func:`~tenpy.algorithms.dmrg.run` is now just a wrapper around the new 
@@ -88,6 +90,7 @@ Fixed
 - more reasonable traceback in case of wrong labels
 - wrong dtype of npc.Array when adding/subtracting/... arrays of different data types
 - could get wrong H_bond for completely decoupled chains.
+- SVD could return outer indices with different axes
 
 Removed
 ^^^^^^^
