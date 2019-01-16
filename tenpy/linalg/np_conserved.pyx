@@ -3291,9 +3291,9 @@ def svd(a,
 
     # 'split' pipes introduced to ensure complete blocking
     if 0 in piped_axes:
-        U.split_legs(0)
+        U = U.split_legs(0)
     if 1 in piped_axes:
-        VH.split_legs(1)
+        VH = VH.split_legs(1)
     U.iset_leg_labels([a_labels[0], labL])
     VH.iset_leg_labels([labR, a_labels[1]])
     return U, S, VH
