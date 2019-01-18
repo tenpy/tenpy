@@ -40,7 +40,8 @@ from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
 
-__all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer']
+__all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer',
+           'TwoSiteMixer', 'DensityMatrixMixer']
 
 
 def run(psi, model, DMRG_params):
@@ -1343,6 +1344,123 @@ class Mixer:
         raise NotImplementedError("This function should be implemented in derived classes")
 
 
+class SingleSiteMixer(Mixer):
+    """Mixer for single-site DMRG.
+
+    Perform a subspace expansion following [Hubig2015]_.
+    """
+    def perturb_svd(self, engine, theta, i0, move_right, next_B):
+        """Mix extra terms to theta and perform an SVD.
+
+        We calculate the left and right reduced density using the mixer
+        (which might include applications of `H`).
+        These density matrices are diagonalized and truncated such that we effectively perform
+        a svd for the case ``mixer.amplitude=0``.
+
+        Parameters
+        ----------
+        engine : :class:`Engine`
+            The DMRG engine calling the mixer.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+        i0 : int
+            The site index where `theta` lives.
+        move_right : bool
+            Whether we move to the right (``True``) or left (``False``).
+        next_B : :class:`~tenpy.linalg.np_conserved.Array`
+            The subspace expansion requires to change the tensor on the next site as well.
+            If `move_right`, it should correspond to ``engine.psi.get_B(i0+1, form='B')``.
+            If not `move_right`, it should correspond to ``engine.psi.get_B(i0-1, form='A')``.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `tensordot(theta, next_B)`. Labels ``'(vL.p0)', 'vR'``.
+        S : 1D ndarray
+            (Perturbed) singular values on the new bond (between `theta` and `next_B`).
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `tensordot(theta, next_B)`. Labels ``'vL', '(vR.p1)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        theta, next_B = self.subspace_expand(engine, theta, i0, move_right, next_B)
+        qtotal_LR = [theta.qtotal, None] if move_right else [None, theta.qtotal]
+        U, S, VH, err, _ = svd_theta(theta, engine.trunc_params, qtotal_LR=qtotal_LR,
+                                     inner_labels=['vR', 'vL'])
+        if move_right:
+            VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
+        else:
+            U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
+        return U, S, VH, err
+
+    def subspace_expand(self, engine, theta, i0, move_right, next_B):
+        H = engine.env.H
+        if move_right:
+            # theta has legs (vL.p), vR
+            LHeff = engine.LHeff
+            expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
+            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1) # (vR*.p), (wR.vR)
+            expand *= self.amplitude
+            theta = npc.concatenate([theta, expand], axis=1, copy=False)
+            next_B = next_B.extend('vL', expand.legs[1].conj())
+        else:  # move left
+            RHeff = engine.RHeff
+            # TODO XXX: get_W(i0) vs i0+1 for 1-site vs 2-site
+            # -> need RHeff from engine!!!
+            expand = npc.tensordot(theta, RHeff, axes=[1, 0])
+            expand = expand.combine_legs([0, 'wL'], qconj=+1)
+            expand *= self.amplitude
+            theta = npc.concatenate([theta, expand], axis=0, copy=False)
+            next_B = next_B.extend('vR', expand.legs[0].conj())
+        return theta, next_B
+
+
+class TwoSiteMixer(SingleSiteMixer):
+    """Mixer for two-site DMRG.
+
+    This is the two-site version of the mixer described in [Hubig2015]_.
+    Equivalent to the :class:`DensityMatrixMixer`, but never construct the full density matrix.
+    """
+    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
+        """Mix extra terms to theta and perform an SVD.
+
+        Parameters
+        ----------
+        engine : :class:`Engine`
+            The DMRG engine calling the mixer.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+        i0 : int
+            Site index; `theta` lives on ``i0, i0+1``.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_RP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singluar values of the array; with mixer it might be a general
+            matrix; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(vR.p1)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        # first perform an SVD as if the mixer didn't exist
+        qtotal_i0 = engine.psi.get_B(i0, form=None).qtotal
+        U, S, VH, err, _ = svd_theta(
+            theta, engine.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+        move_right = update_LP # TODO: get argument inferred from schedule?
+        if move_right:  # move to the right
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0, move_right, VH)
+        else: # update_RP is True
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, VH.iscale_axis(S, 0), i0, move_right, U)
+        return U, S, VH, err + err2
+
+
 class DensityMatrixMixer(Mixer):
     """Mixer based on density matrices.
 
@@ -1350,7 +1468,7 @@ class DensityMatrixMixer(Mixer):
     """
 
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
-        """Update the amplitude, possibly disable the mixer.
+        """Mix extra terms to theta and perform an SVD.
 
         We calculate the left and right reduced density using the mixer
         (which might include applications of `H`).

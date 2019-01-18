@@ -17,4 +17,5 @@ also a classic introduction.
 .. [PollmannTurner2012] F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), arXiv:1204.0704
 .. [CincioVidal2013] L. Cincio, G. Vidal, Phys. Rev. Lett. 110, 067208 (2013), arXiv:1208.2623
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), arXiv:1303.3942
+.. [Hubig2015] C. Hubig, I. P. McCulloch, U. Schollwoeck, F. A. Wolf, Phys. Rev. B 91, 155115 (2015), arXiv:1501.05504
 .. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, arXiv:1711.01288
