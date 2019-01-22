@@ -302,14 +302,14 @@ def plot_timing_res(data, fn=None):
 def load(fn):
     import pickle
     print("loading ", fn)
-    with open(fn, 'r') as f:
+    with open(fn, 'rb') as f:
         return pickle.load(f)
 
 
 def save(data, fn):
     import pickle
     print("save to ", fn)
-    with open(fn, 'w') as f:
+    with open(fn, 'wb') as f:
         pickle.dump(data, f)
 
 
