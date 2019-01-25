@@ -33,7 +33,7 @@ def run(Jzs):
         mixer=True)
 
     M = SpinChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), ["up"] * M.lat.N_sites, M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS)
 
     np.set_printoptions(linewidth=120)
     corr_length = []
@@ -74,9 +74,10 @@ if __name__ == "__main__":
     import os.path
     if not os.path.exists(filename):
         results = run(list(np.arange(4.0, 1.5, -0.25)) + list(np.arange(1.5, 0.8, -0.05)))
-        with open(filename, 'w') as f:
+        with open(filename, 'wb') as f:
             pickle.dump(results, f)
     else:
-        with open(filename) as f:
+        print("just load the data")
+        with open(filename, 'rb') as f:
             results = pickle.load(f)
-        plot(results, filename[:-4] + '.pdf')
+    plot(results, filename[:-4] + '.pdf')

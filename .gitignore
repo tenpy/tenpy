@@ -11,3 +11,4 @@ tenpy/linalg/*.c
 tenpy/linalg/*.so
 tenpy/linalg/*.html
 examples/*.pdf
+examples/*.pkl
