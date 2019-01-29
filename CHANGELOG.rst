@@ -23,6 +23,9 @@ Backwards incompatible changes
 - Restructured callstructure of Mixer in DMRG, allowing an implementation of other mixers.
   To enable the mixer, set the DMRG parameter ``"mixer"`` to ``True`` or ``'DensityMatrixMixer'``
   instead of just ``'Mixer'``.
+- The interaction parameter in the :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardModel` (and :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardChain`) 
+  did not correspond to :math:`U/2 N (N-1)` as claimed in the Hamiltonian, but to :math:`U N^2`. The correcting factor 1/2
+  and change in the chemical potential have been fixed.
 
 
 Added

@@ -81,11 +81,13 @@ class BoseHubbardModel(CouplingMPOModel):
     def init_terms(self, model_params):
         # 0) Read and set parameters.
         t = get_parameter(model_params, 't', 1., self.name, True)
-        U = get_parameter(model_params, 'U', 0, self.name, True)
+        U = get_parameter(model_params, 'U', 0., self.name, True)
         mu = get_parameter(model_params, 'mu', 0, self.name, True)
+        U = np.asarray(U)
+        mu = np.asarray(mu)
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, u, 'N')
-            self.add_onsite(U, u, 'NN')
+            self.add_onsite(mu-U/2., u, 'N')
+            self.add_onsite(U/2., u, 'NN')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(t, u1, 'Bd', u2, 'B', dx)
             self.add_coupling(t, u1, 'B', u2, 'Bd', dx)  # h.c.
