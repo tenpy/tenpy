@@ -41,6 +41,8 @@ Eigen systems:
 """
 # Copyright 2018 TeNPy Developers
 
+# TODO: charges._find_row_differences
+
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
@@ -68,6 +70,9 @@ __all__ = [
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
+
+# the type used for charges
+QTYPE = charges.QTYPE
 
 
 class Array(object):
@@ -373,7 +378,7 @@ class Array(object):
         """
         blocked = leg.is_blocked()
         if not blocked:
-            pipe = charges.LegPipe([leg])
+            pipe = LegPipe([leg])
             legs = [pipe, pipe.conj()]
         else:
             legs = [leg, leg.conj()]
@@ -965,7 +970,7 @@ class Array(object):
             else:
                 raise ValueError("no non-zero entry: can't detect qtotal")
         else:
-            qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=charges.QTYPE)))
+            qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=QTYPE)))
         res = Array(legs, self.dtype, qtotal)
         for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
@@ -1083,7 +1088,7 @@ class Array(object):
             if sort[ax] or bunch[ax]:
                 axes.append([ax])
                 leg = self.legs[ax]
-                pipe = charges.LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
+                pipe = LegPipe([leg], sort=sort[ax], bunch=bunch[ax], qconj=leg.qconj)
                 pipes.append(pipe)
             else:
                 perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
@@ -1131,7 +1136,7 @@ class Array(object):
         """
         axes = self.get_leg_indices(axes)
         legs = [self.legs[a] for a in axes]
-        return charges.LegPipe(legs, **kwargs)
+        return LegPipe(legs, **kwargs)
 
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
@@ -1227,7 +1232,7 @@ class Array(object):
 
         # the **main work** of copying the data is sourced out, now that we have the
         # standard form of our arguments
-        res = self._combine_legs_worker(combine_legs, new_axes, pipes)
+        res = _combine_legs_worker(self, combine_legs, new_axes, pipes)
 
         # get new labels
         pipe_labels = [self._combine_leg_labels([labels[c] for c in cl]) for cl in combine_legs]
@@ -1287,7 +1292,7 @@ class Array(object):
         if len(axes) == 0:
             return self.copy(deep=True)
 
-        res = self._split_legs_worker(axes, cutoff)
+        res = _split_legs_worker(self, axes, cutoff)
 
         labels = list(self.get_leg_labels())
         for a in sorted(axes, reverse=True):
@@ -2300,143 +2305,6 @@ class Array(object):
         transp = sum(transp, [])  # flatten: [a] + [b] = [a, b]
         return new_axes, tuple(transp)
 
-    def _combine_legs_worker(self, combine_legs, new_axes, pipes):
-        """The main work of combine_legs: create a copy and reshape the data blocks.
-
-        Assumes standard form of parameters.
-
-        Parameters
-        ----------
-        combine_legs : list(1D np.array)
-            Axes of self which are collected into pipes.
-        new_axes : 1D array
-            The axes of the pipes in the new array. Ascending.
-        pipes : list of :class:`LegPipe`
-            All the correct output pipes, already generated.
-
-        Returns
-        -------
-        res : :class:`Array`
-            Copy of self with combined legs.
-        """
-        all_combine_legs = np.concatenate(combine_legs)
-        # non_combined_legs: axes of self which are not in combine_legs
-        non_combined_legs = np.array(
-            [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
-        legs = [self.legs[i] for i in non_combined_legs]
-        for na, p in zip(new_axes, pipes):  # not reversed
-            legs.insert(na, p)
-        non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
-        non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
-
-        res = self.copy(deep=False)
-        res.legs = legs
-        res._set_shape()
-        res.labels = {}
-        # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
-        qmap_inds = [
-            p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
-        ]
-
-        # get new qdata
-        qdata = np.empty((self.stored_blocks, res.rank), dtype=self._qdata.dtype)
-        qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
-        for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
-            np.take(
-                p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
-                qmap_ind,
-                out=qdata[:, na])  # write the result directly into qdata
-        # now we have probably many duplicate rows in qdata,
-        # since for the pipes many `qmap_ind` map to the same `qindex`
-        # find unique entries by sorting qdata
-        sort = np.lexsort(qdata.T)
-        qdata_s = qdata[sort]
-        old_data = [self._data[s] for s in sort]
-        qmap_inds = [qm[sort] for qm in qmap_inds]
-        # divide into parts, which give a single new block
-        diffs = charges._find_row_differences(qdata_s)  # including the first and last row
-
-        # now the hard part: map data
-        data = []
-        slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
-        # iterate over ranges of equal qindices in qdata_s
-        for beg, end in zip(diffs[:-1], diffs[1:]):
-            qindices = qdata_s[beg]
-            new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
-            data.append(new_block)
-            # copy blocks
-            for old_data_idx in range(beg, end):
-                for na, p, qm_ind in zip(new_axes, pipes, qmap_inds):
-                    slices[na] = slice(*p.q_map[qm_ind[old_data_idx], :2])
-                sl = tuple(slices)
-                new_block_view = new_block[sl]
-                # reshape block while copying
-                new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
-        res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
-        res._qdata_sorted = True
-        res._data = data
-        return res
-
-    def _split_legs_worker(self, split_axes, cutoff):
-        """The main work of split_legs: create a copy and reshape the data blocks.
-
-        Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
-        """
-        # calculate mappings of axes
-        # in self
-        split_axes = np.array(sorted(split_axes), dtype=np.intp)
-        pipes = [self.legs[a] for a in split_axes]
-        nonsplit_axes = np.array(
-            [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
-        # in result
-        new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
-        for a in reversed(split_axes):
-            new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
-        new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
-        new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
-        new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
-
-        res = self.copy(deep=False)
-        for a in reversed(split_axes):
-            res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
-        res._set_shape()
-
-        # get new qdata by stacking columns
-        tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
-        tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
-        tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
-
-        # now split the blocks
-        data = []
-        qdata = []  # rows of the new qdata
-        new_block_shape = np.empty(res.rank, dtype=np.intp)
-        block_slice = [slice(None)] * self.rank
-        for old_block, qdata_row in zip(self._data, tmp_qdata):
-            qmap_slices = [
-                p.q_map_slices[i] for p, i in zip(pipes, qdata_row[new_split_axes_first])
-            ]
-            new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
-            for qmap_rows in itertools.product(*qmap_slices):
-                for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
-                    qdata_row[sl] = block_qind = qm[3:]
-                    new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
-                                           for l, qi in zip(pipe.legs, block_qind)]
-                    block_slice[a] = slice(qm[0], qm[1])
-                new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
-                # all charges are compatible by construction, but some might be zero
-                if not np.any(np.abs(new_block) > cutoff):
-                    continue
-                data.append(new_block.copy())  # copy, not view
-                qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
-        if len(data) > 0:
-            res._qdata = np.array(qdata, dtype=np.intp)
-            res._qdata_sorted = False
-        else:
-            res._qdata = np.empty((0, res.rank), dtype=np.intp)
-            res._qdata_sorted = True
-        res._data = data
-        return res
-
     @staticmethod
     def _combine_leg_labels(labels):
         """Generate label for legs combined in a :class:`LegPipe`.
@@ -2916,7 +2784,7 @@ def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, 
         return legs
     qtotal = chargeinfo.make_valid(qtotal)  # charge 0, if qtotal is not set.
     legs_known = legs[:axis] + legs[axis + 1:]
-    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=charges.QTYPE)
+    qflat = np.empty([axis_len, chargeinfo.qnumber], dtype=QTYPE)
     for i in range(axis_len):
         A_i = np.take(flat_array, i, axis=axis)
         qflat[i] = detect_qtotal(A_i, legs_known, cutoff)
@@ -3114,7 +2982,7 @@ def tensordot(a, b, axes=2):
         axes = int(axes)
         axes_int = True
     if not axes_int:
-        a = a.copy(deep=False)  # shallow copy allows to call _imake_contiguous and itranspose
+        a = a.copy(deep=False)  # shallow copy allows to call itranspose
         b = b.copy(deep=False)  # which would otherwise break views.
         # step 1.) of the implementation notes: bring into standard form by transposing
         axes_a = a.get_leg_indices(to_iterable(axes_a))
@@ -3634,7 +3502,153 @@ def to_iterable_arrays(array_list):
     return array_list
 
 
+# ##################################
 # internal helper functions
+# NB: (some of) the following functions become "monkeypatched"
+# by the corresponding Cython versions from npc_helper.pyx.
+# see the tenpy/linalg/__init__.py
+# ##################################
+
+
+def _combine_legs_worker(self, combine_legs, new_axes, pipes):
+    """The main work of :meth:`Array.combine_legs`: create a copy and reshape the data blocks.
+
+    Assumes standard form of parameters.
+
+    Parameters
+    ----------
+    self : Array
+        The array where legs are being combined.
+    combine_legs : list(1D np.array)
+        Axes of self which are collected into pipes.
+    new_axes : 1D array
+        The axes of the pipes in the new array. Ascending.
+    pipes : list of :class:`LegPipe`
+        All the correct output pipes, already generated.
+
+    Returns
+    -------
+    res : :class:`Array`
+        Copy of self with combined legs.
+    """
+    all_combine_legs = np.concatenate(combine_legs)
+    # non_combined_legs: axes of self which are not in combine_legs
+    non_combined_legs = np.array(
+        [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
+    legs = [self.legs[i] for i in non_combined_legs]
+    for na, p in zip(new_axes, pipes):  # not reversed
+        legs.insert(na, p)
+    non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
+    non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
+
+    res = self.copy(deep=False)
+    res.legs = legs
+    res._set_shape()
+    res.labels = {}
+    # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
+    qmap_inds = [
+        p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
+    ]
+
+    # get new qdata
+    qdata = np.empty((self.stored_blocks, res.rank), dtype=self._qdata.dtype)
+    qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
+    for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
+        np.take(
+            p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
+            qmap_ind,
+            out=qdata[:, na])  # write the result directly into qdata
+    # now we have probably many duplicate rows in qdata,
+    # since for the pipes many `qmap_ind` map to the same `qindex`
+    # find unique entries by sorting qdata
+    sort = np.lexsort(qdata.T)
+    qdata_s = qdata[sort]
+    old_data = [self._data[s] for s in sort]
+    qmap_inds = [qm[sort] for qm in qmap_inds]
+    # divide into parts, which give a single new block
+    diffs = charges._find_row_differences(qdata_s)  # including the first and last row
+
+    # now the hard part: map data
+    data = []
+    slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
+    # iterate over ranges of equal qindices in qdata_s
+    for beg, end in zip(diffs[:-1], diffs[1:]):
+        qindices = qdata_s[beg]
+        new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
+        data.append(new_block)
+        # copy blocks
+        for old_data_idx in range(beg, end):
+            for na, p, qm_ind in zip(new_axes, pipes, qmap_inds):
+                slices[na] = slice(*p.q_map[qm_ind[old_data_idx], :2])
+            sl = tuple(slices)
+            new_block_view = new_block[sl]
+            # reshape block while copying
+            new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
+    res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
+    res._qdata_sorted = True
+    res._data = data
+    return res
+
+
+def _split_legs_worker(self, split_axes, cutoff):
+    """The main work of split_legs: create a copy and reshape the data blocks.
+
+    Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
+    """
+    # calculate mappings of axes
+    # in self
+    split_axes = np.array(sorted(split_axes), dtype=np.intp)
+    pipes = [self.legs[a] for a in split_axes]
+    nonsplit_axes = np.array(
+        [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
+    # in result
+    new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
+    for a in reversed(split_axes):
+        new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
+    new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
+    new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
+    new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
+
+    res = self.copy(deep=False)
+    for a in reversed(split_axes):
+        res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
+    res._set_shape()
+
+    # get new qdata by stacking columns
+    tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
+    tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
+    tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
+
+    # now split the blocks
+    data = []
+    qdata = []  # rows of the new qdata
+    new_block_shape = np.empty(res.rank, dtype=np.intp)
+    block_slice = [slice(None)] * self.rank
+    for old_block, qdata_row in zip(self._data, tmp_qdata):
+        qmap_slices = [
+            p.q_map_slices[i] for p, i in zip(pipes, qdata_row[new_split_axes_first])
+        ]
+        new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
+        for qmap_rows in itertools.product(*qmap_slices):
+            for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
+                qdata_row[sl] = block_qind = qm[3:]
+                new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
+                                        for l, qi in zip(pipe.legs, block_qind)]
+                block_slice[a] = slice(qm[0], qm[1])
+            new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
+            # all charges are compatible by construction, but some might be zero
+            if not np.any(np.abs(new_block) > cutoff):
+                continue
+            data.append(new_block.copy())  # copy, not view
+            qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
+    if len(data) > 0:
+        res._qdata = np.array(qdata, dtype=np.intp)
+        res._qdata_sorted = False
+    else:
+        res._qdata = np.empty((0, res.rank), dtype=np.intp)
+        res._qdata_sorted = True
+    res._data = data
+    return res
 
 
 def _nontrivial_grid_entries(grid):

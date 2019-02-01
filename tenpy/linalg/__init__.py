@@ -12,8 +12,28 @@ so you propably won't need to import `charges` directly.
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
 
-__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
+use_compiled = False
+# Flag that indicates whether we use the optimized (cython) version for np_conserved
 
-np_conserved.ChargeInfo = charges.ChargeInfo
-np_conserved.LegCharge = charges.LegCharge
-np_conserved.LegPipe = charges.LegPipe
+__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust',
+           'use_compiled']
+
+try:
+    # optimization: "monkey patch" with the optimized versions
+    from . import npc_helper
+    charges.ChargeInfo = npc_helper.ChargeInfo
+    charges.LegCharge = npc_helper.LegCharge
+    charges.LegPipe = npc_helper.LegPipe
+    charges.QTYPE = npc_helper.QTYPE
+    np_conserved.ChargeInfo = npc_helper.ChargeInfo
+    np_conserved.LegCharge = npc_helper.LegCharge
+    np_conserved.LegPipe = npc_helper.LegPipe
+    np_conserved.QTYPE = npc_helper.QTYPE
+    np_conserved._tensordot_worker = npc_helper._tensordot_worker
+    np_conserved._combine_legs_worker = npc_helper._combine_legs_worker
+    np_conserved._split_legs_worker = npc_helper._split_legs_worker
+    use_compiled = True
+except ImportError:
+    np_conserved.ChargeInfo = charges.ChargeInfo
+    np_conserved.LegCharge = charges.LegCharge
+    np_conserved.LegPipe = charges.LegPipe

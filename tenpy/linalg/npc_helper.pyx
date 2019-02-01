@@ -1,39 +1,55 @@
-r"""Basic definitions of a charge.
+"""Optimization of charges.py and np_conserved.py
 
-Contains implementation of classes
-:class:`ChargeInfo`,
-:class:`LegCharge` and
-:class:`LegPipe`.
+This module is written in Cython, such that it can be compiled.
+It implements some functions and classes with the same interface as np_conserved.py/charges.py.
 
-.. note ::
-    The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
-    so you usually don't need to import this module in your application.
 
-A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
+``tenpy.linalg.__init__.py`` tries to import the compiled module and uses the
+functions/classes defined here to overwrite those written in pure Python.
+If the file could not be compiled, it just uses the non-compiled Cython version.
 """
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
 cimport numpy as np
 cimport cython
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 import copy
 import bisect
 import warnings
+import time  # TODO
+import itertools
 
-from ..tools.misc import lexsort, inverse_permutation
-from ..tools.string import vert_join
+
+import scipy.linalg
+from scipy.linalg import blas as BLAS  # python interface to BLAS
+from scipy.linalg.cython_blas cimport dgemm, zgemm
+
+from ..tools.misc import lexsort, inverse_permutation  # TODO: get rid of this?
+from ..tools.string import vert_join  # TODO get rid of this?
 from ..tools import optimization
+from . import np_conserved
 
 cdef int optimization_compare = optimization.OptimizationFlag.skip_arg_checks
 
-__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
+__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE', '_tensordot_worker']
 
 np.import_array()
 
-QTYPE = np.int_             # numpy dtype for the charges
-# QTYPE_t is declared in charges.pxd
+cdef inline np.ndarray _np_empty(np.PyArray_Dims dims, int type):
+    return <np.ndarray>np.PyArray_EMPTY(dims.len, dims.ptr, type, 0 )
 
+cdef inline np.ndarray _np_zeros(np.PyArray_Dims dims, int type):
+    return <np.ndarray>np.PyArray_ZEROS(dims.len, dims.ptr, type, 0 )
+
+
+QTYPE = np.int_             # numpy dtype for the charges
+# QTYPE_t define in npc_helper.pxd
+
+# ################################# #
+# replacements for charges.py       #
+# ################################# #
 
 cdef class ChargeInfo(object):
     """Meta-data about the charge of a tensor.
@@ -1309,6 +1325,7 @@ cdef class LegPipe(LegCharge):
         self._strides = _strides
         LegCharge.__setstate__(self, super_state)
 
+
 def _find_row_differences(qflat):
     """Return indices where the rows of the 2D array `qflat` change.
 
@@ -1328,6 +1345,7 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -1384,3 +1402,712 @@ cdef np.ndarray _partial_qtotal(ChargeInfo chinfo,
             for k in range(chinfo.qnumber):
                 res[i, k] += charges[qi, k] * leg.qconj
     return chinfo._make_valid_2D(res)
+
+
+# ############################################### #
+# replacements for np_conserved.Array methods     #
+# ############################################### #
+
+
+def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
+    """The main work of combine_legs: create a copy and reshape the data blocks.
+
+    Assumes standard form of parameters.
+
+    Parameters
+    ----------
+    combine_legs : list(1D np.array)
+        Axes of self which are collected into pipes.
+    new_axes : 1D array
+        The axes of the pipes in the new array. Ascending.
+    pipes : list of :class:`LegPipe`
+        All the correct output pipes, already generated.
+
+    Returns
+    -------
+    res : :class:`Array`
+        Copy of self with combined legs.
+    """
+    all_combine_legs = np.concatenate(combine_legs)
+    # non_combined_legs: axes of self which are not in combine_legs
+    cdef np.ndarray[np.intp_t, ndim=1] non_combined_legs = np.array(
+        [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
+    legs = [self.legs[i] for i in non_combined_legs]
+    for na, p in zip(new_axes, pipes):  # not reversed
+        legs.insert(na, p)
+    res = self.copy(deep=False)
+    res.legs = legs
+    res._set_shape()
+    if self.stored_blocks == 0:
+        res._data = []
+        res._qdata = np.empty((0, res.rank), dtype=np.intp)
+        return res
+    non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
+    cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
+
+    # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
+    qmap_inds = [
+        p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
+    ]
+
+    # get new qdata
+    cdef np.ndarray[np.intp_t, ndim=2] qdata = np.empty((self.stored_blocks, res.rank),
+                                                        dtype=np.intp)
+    qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
+    for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
+        np.take(
+            p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
+            qmap_ind,
+            out=qdata[:, na])  # write the result directly into qdata
+    # now we have probably many duplicate rows in qdata,
+    # since for the pipes many `qmap_ind` map to the same `qindex`
+    # find unique entries by sorting qdata
+    sort = np.lexsort(qdata.T)
+    qdata_s = qdata[sort]
+    old_data = [self._data[s] for s in sort]
+    qmap_inds = [qm[sort] for qm in qmap_inds]
+    # divide into parts, which give a single new block
+    cdef np.ndarray[np.intp_t, ndim=1] diffs = _c_find_row_differences(qdata_s)
+    # including the first and last row
+
+    # now the hard part: map data
+    cdef list data = []
+    cdef list slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
+    # iterate over ranges of equal qindices in qdata_s
+    cdef np.ndarray new_block, old_block #, new_block_view # TODO: shape doesn't work...
+    cdef np.ndarray[np.intp_t, ndim=1] qindices
+    cdef int beg, end, bi, j, old_data_idx, qi
+    cdef np.ndarray[np.intp_t, ndim=2] q_map
+    cdef tuple sl
+    cdef int npipes = len(combine_legs)
+    for bi in range(diffs.shape[0]-1):
+        beg = diffs[bi]
+        end = diffs[bi+1]
+        qindices = qdata_s[beg]
+        new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
+        data.append(new_block)
+        # copy blocks
+        for old_data_idx in range(beg, end):
+            for j in range(npipes):
+                q_map = pipes[j].q_map
+                qi = qmap_inds[j][old_data_idx]
+                slices[new_axes[j]] = slice(q_map[qi, 0], q_map[qi, 1])
+            sl = tuple(slices)
+            # reshape block while copying
+            new_block_view = new_block[sl]
+            old_block = old_data[old_data_idx].reshape(new_block_view.shape)
+            np.copyto(new_block_view, old_block, casting='no')
+    res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
+    res._qdata_sorted = True
+    res._data = data
+    return res
+
+
+def _split_legs_worker(self, list split_axes_, float cutoff):
+    """The main work of split_legs: create a copy and reshape the data blocks.
+
+    Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
+    """
+    # calculate mappings of axes
+    # in self
+    cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.sort(split_axes_)
+    cdef int a, i, j, nsplit=split_axes.shape[0]
+    pipes = [self.legs[a] for a in split_axes]
+    cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
+        [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
+    # in result
+    cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
+    for a in split_axes:
+        new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
+    cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = new_nonsplit_axes[split_axes]
+    #    = the first leg for splitted pipes
+    cdef list new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
+    new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
+
+    res = self.copy(deep=False)
+    for a in reversed(split_axes):
+        res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
+    res._set_shape()
+
+    # get new qdata by stacking columns
+    tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
+    tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
+    tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
+
+    # now split the blocks
+    cdef list data = []
+    cdef list qdata = []  # rows of the new qdata
+    cdef np.ndarray[np.intp_t, ndim=1] new_block_shape = np.empty(res.rank, dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] qdata_row, qm
+    cdef list block_slice = [slice(None)] * self.rank
+    cdef list qmap_slices = [None] * nsplit
+    cdef slice sl
+    cdef LegPipe pipe
+    cdef LegCharge leg
+    cdef np.ndarray old_block, new_block
+
+    for old_block, qdata_row in zip(self._data, tmp_qdata):
+        for j in range(nonsplit_axes.shape[0]):
+            new_block_shape[new_nonsplit_axes[j]] = old_block.shape[nonsplit_axes[j]]
+        for j in range(nsplit):
+            pipe = pipes[j]
+            qmap_slices[j] = pipe.q_map_slices[qdata_row[new_split_axes_first[j]]]
+        for qmap_rows in itertools.product(*qmap_slices):
+            for i in range(nsplit):
+                qm = qmap_rows[i]
+                a = new_split_axes_first[i]
+                pipe = pipes[i]
+                for j in range(pipe.nlegs):
+                    qi = qm[3+j]
+                    qdata_row[a+j] = qi
+                    leg = pipe.legs[j]
+                    new_block_shape[a+j] = leg.slices[qi+1] - leg.slices[qi]
+                block_slice[split_axes[i]] = slice(qm[0], qm[1])
+            new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
+            # all charges are compatible by construction, but some might be zero
+            if np.any(np.abs(new_block) > cutoff):
+                data.append(new_block.copy())  # copy, not view
+                qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
+    if len(data) > 0:
+        res._qdata = np.array(qdata, dtype=np.intp)
+        res._qdata_sorted = False
+    else:
+        res._qdata = np.empty((0, res.rank), dtype=np.intp)
+        res._qdata_sorted = True
+    res._data = data
+    return res
+
+
+# ##################################################### #
+# replacements for global functions in np_conserved.py  #
+# ##################################################### #
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef np.ndarray _iter_common_sorted(
+        np.ndarray[np.intp_t, ndim=1] a, np.ndarray[np.intp_t, ndim=1] b):
+    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
+
+    *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
+    Given that, it is equivalent to (but faster than)::
+
+        for j, i in itertools.product(range(j_start, j_stop), range(i_start, i_stop)):
+            if a[i] == b[j]:
+                yield i, j
+    """
+    cdef int l_a = a.shape[0]
+    cdef int l_b = b.shape[0]
+    cdef int i=0, j=0, lres=0
+    cdef np.PyArray_Dims dim
+    dim.len = 2
+    dim.ptr = [l_a+l_b, 2]
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] res = _np_empty(dim, np.NPY_INTP)
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            i += 1
+        elif b[j] < a[i]:
+            j += 1
+        else:
+            #  yield i, j
+            res[lres, 0] = i
+            res[lres, 1] = j
+            lres += 1
+            i += 1
+            j += 1
+    return res[:lres]
+
+
+
+
+
+cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b, np.dtype calc_dtype):
+    """Pre-calculations before the actual matrix product.
+
+    Called by :func:`_tensordot_worker`.
+    See doc-string of :func:`tensordot` for details on the implementation.
+
+    Parameters
+    ----------
+    a, b : :class:`Array`
+        the arrays to be contracted with tensordot. Should have non-empty ``a._data``
+    cut_a, cut_b : int
+        contract `a.legs[cut_a:]` with `b.legs[:cut_b]`
+    calc_dtype: np.ndtype
+        The data type used for the calculation.
+
+    Returns
+    -------
+    a_data, a_qdata_keep, a_qdata_contr, b_data, b_qdata_keep, b_qdata_contr
+    """
+    cdef list a_data, b_data
+    cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
+    cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
+    # convert qindices over which we sum to a 1D array for faster lookup/iteration
+    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
+    a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
+    # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
+    a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
+    a_qdata_keep = a._qdata[a_sort, :cut_a]
+    a_qdata_contr = a_qdata_contr[a_sort]
+    a_data = a._data
+    a_data = [a_data[i] for i in a_sort]
+    # combine all b_qdata[axes_b] into one column (with the same stride as before)
+    b_qdata_contr = np.sum(b._qdata[:, :cut_b] * stride, axis=1)
+    # lex-sort b_qdata, dominated by the axes summed over, then the axes kept.
+    b_data = b._data
+    if not b._qdata_sorted:
+        b_sort = np.lexsort(np.append(b_qdata_contr[:, np.newaxis], b._qdata[:, cut_b:], axis=1).T)
+        b_qdata_keep = b._qdata[b_sort, cut_b:]
+        b_qdata_contr = b_qdata_contr[b_sort]
+        b_data = [b_data[i] for i in b_sort]
+    else:
+        b_data = list(b_data)  # make a copy: we write into it
+        b_qdata_keep = b._qdata[:, cut_b:]
+    return a_data, a_qdata_keep, a_qdata_contr, b_data, b_qdata_keep, b_qdata_contr
+
+
+@cython.boundscheck(False)
+cdef _tensordot_match_charges(int n_rows_a,
+                              int n_cols_b,
+                              int qnumber,
+                              np.ndarray a_charges_keep,
+                              np.ndarray b_charges_match):
+    """Estimate number of blocks in res and get order for iteration over row_a and col_b
+
+    Parameters
+    ----------
+    a_charges_keep, b_charges_match: 2D ndarray
+        (Unsorted) charges of dimensions (n_rows_a, qnumber) and (n_cols_b, qnumber)
+
+    Returns
+    -------
+    max_n_blocks_res : int
+        Maximum number of block in the result a.dot(b)
+    row_a_sort: np.ndarray[np.intp_t, ndim=1]
+    match_rows: np.ndarray[np.intp_t, ndim=2]
+        For given `col_b`, rows given by `row_a` in
+        ``row_a_sort[match_rows[col_b, 0]:match_rows[col_b,1]]`` fulfill
+        ``a_charges_keep[col_a, :] == b_charges_match[col_b, :]``
+    """
+    # This is effectively a more complicated version of _iter_common_sorted....
+    cdef np.ndarray[np.intp_t, ndim=2] match_rows = np.empty((n_cols_b, 2), np.intp)
+    cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep_C = a_charges_keep
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match_C = b_charges_match
+    if qnumber == 0:  # special case no restrictions due to charge
+        match_rows[:, 0] = 0
+        match_rows[:, 1] = n_rows_a
+        return n_rows_a * n_cols_b, np.arange(n_rows_a), match_rows
+    # general case
+    cdef np.ndarray[np.intp_t, ndim=1] row_a_sort = np.lexsort(a_charges_keep.T)
+    cdef np.ndarray[np.intp_t, ndim=1] col_b_sort = np.lexsort(b_charges_match.T)
+    cdef int res_max_n_blocks = 0
+    cdef int i=0, j=0, i0, j0, ax, j1
+    cdef int i_s, j_s, i0_s, j0_s  # corresponding entries in row_a_sort/col_b_sort
+    cdef int lexcomp
+    while i < n_rows_a and j < n_cols_b: # go through sort_a and sort_b at the same time
+        i_s = row_a_sort[i]
+        j_s = col_b_sort[j]
+        # lexcompare a_charges_keep[i_s, :] and b_charges_match[j_s, :]
+        lexcomp = 0
+        for ax in range(qnumber-1, -1, -1):
+            if a_charges_keep_C[i_s, ax] > b_charges_match_C[j_s, ax]:
+                lexcomp = 1
+                break
+            elif a_charges_keep_C[i_s, ax] < b_charges_match_C[j_s, ax]:
+                lexcomp = -1
+                break
+        if lexcomp > 0:  # a_charges_keep is larger: advance j
+            match_rows[j_s, 0] = 0  # nothing to iterate for this col_b = j_s
+            match_rows[j_s, 1] = 0
+            j += 1
+            continue
+        elif lexcomp < 0: # b_charges_match is larger
+            i += 1
+            continue
+        # else: charges for i_s and j_s and match
+        # which/how many rows_a have the same charge? Increase i until the charges change.
+        i0 = i
+        i0_s = i_s
+        i += 1
+        while i < n_rows_a:
+            i_s = row_a_sort[i]
+            lexcomp = 0
+            for ax in range(qnumber-1, -1, -1):
+                if a_charges_keep_C[i_s, ax] != a_charges_keep_C[i0_s, ax]:
+                    lexcomp = 1
+                    break
+            if lexcomp > 0:  # (sorted -> can only increase)
+                break
+            i += 1
+        # => the rows in row_a_sort[i0:i] have the current charge
+        j0 = j
+        j0_s = j_s
+        j += 1
+        while j < n_cols_b:
+            j_s = col_b_sort[j]
+            lexcomp = 0
+            for ax in range(qnumber-1, -1, -1):
+                if b_charges_match_C[j_s, ax] != b_charges_match_C[j0_s, ax]:
+                    lexcomp = 1
+                    break
+            if lexcomp > 0:  # (sorted -> can only increase)
+                break
+            j += 1
+        # => the colums in col_b_sort[j0:j] have the current charge
+        # save rows for iteration for the given j_s in col_b
+        for j1 in range(j0, j):
+            j_s = col_b_sort[j1]
+            match_rows[j_s, 0] = i0
+            match_rows[j_s, 1] = i
+        res_max_n_blocks += (j-j0) * (i-i0)
+    for j1 in range(j, n_cols_b):
+        j_s = col_b_sort[j1]
+        match_rows[j_s, 0] = 0
+        match_rows[j_s, 1] = 0
+    return res_max_n_blocks, row_a_sort, match_rows
+
+
+def _tensordot_worker(a, b, int axes):
+    """Main work of tensordot, called by :func:`tensordot`.
+
+    Assumes standard form of parameters: axes is integer,
+    sum over the last `axes` legs of `a` and first `axes` legs of `b`.
+
+    Notes
+    -----
+    Looking at the source of numpy's tensordot (which is just 62 lines of python code),
+    you will find that it has the following strategy:
+
+    1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
+    2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
+       such that `a` and `b` are matrices.
+    3. Perform a matrix product with `np.dot`.
+    4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
+
+    The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
+    [This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
+    than the O(N*K*M) needed by a naive implementation looping over the indices.]
+
+    We follow the same overall strategy, viewing the :class:`Array` as a tensor with
+    data block entries.
+    Step 1) is performed directly in :func:`tensordot`.
+
+    The steps 2) and 4) could be implemented with :meth:`Array.combine_legs`
+    and :meth:`Array.split_legs`.
+    However, that would actually be an overkill: we're not interested
+    in the full charge data of the combined legs (which would be generated in the LegPipes).
+    Instead, we just need to track the qindices of the `a._qdata` and `b._qdata` carefully.
+
+    Our step 2) is implemented in :func:`_tensordot_pre_worker`:
+    We split `a._qdata` in `a_qdata_keep` and `a_qdata_sum`, and similar for `b`.
+    Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
+    `i` can be any row of `a_qdata_keep`, `j` can be any row of `b_qdata_keep`.
+    The `k1` and `k2` are rows of `a_qdata_sum` and `b_qdata_sum`, which stem from the same legs
+    (up to a :meth:`LegCharge.conj()`).
+    In our storage scheme, `a._data[s]` then contains the block :math:`A_{i,k1}` for
+    ``j = a_qdata_keep[s]`` and ``k1 = a_qdata_sum[s]``.
+    To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
+    Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
+    equal rows of `i` are contiguous in `#_qdata_keep`.
+    Then, they are identified with :func:`Charges._find_row_differences`.
+
+    Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
+    analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.
+    It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
+    However, this is not as bad as it sounds:
+    First, we loop only over existent ``i`` and ``j``
+    (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
+    Second, if the ``i`` and ``j`` are not compatible with the new total charge,
+    we know that ``C_{i,j}`` will be zero.
+    Third, given ``i`` and ``j``, the sum over ``k`` runs only over
+    ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+
+    How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
+    depends on the sparseness. In the ideal case, if ``k`` (i.e. a LegPipe of the legs summed over)
+    is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
+    """
+    cdef ChargeInfo chinfo = a.chinfo
+    if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
+        return np_conserved.zeros(a.legs[:-axes] + b.legs[axes:],
+                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
+    cdef int cut_a = a.rank - axes
+    cdef int cut_b = axes
+    cdef int b_rank = b.rank
+    cdef int res_rank = cut_a + b_rank - cut_b
+    cdef bint DEBUG_PRINT = 0
+    if DEBUG_PRINT:
+        t0 = time.time()
+    # determine calculation type and result type
+    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
+    # we use 64-bit float calculations....
+    calc_dtype = np.dtype({'s': np.float64,
+                           'd': np.float64,
+                           'c': np.complex128,
+                           'z': np.complex128}[prefix])
+    cdef int CALC_DTYPE_NUM = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef bint USE_NPY_DOT = (CALC_DTYPE_NUM != np.NPY_DOUBLE and
+                             CALC_DTYPE_NUM != np.NPY_CDOUBLE)
+    if DEBUG_PRINT and USE_NPY_DOT:
+        print("warning: unusual types")
+    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = chinfo._make_valid_1D(a.qtotal + b.qtotal)
+    res = np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
+
+    cdef np.ndarray[np.intp_t, ndim=2] a_qdata = a._qdata
+    cdef np.ndarray[np.intp_t, ndim=2] b_qdata = b._qdata
+    cdef bint equal = 1
+    cdef int i, j
+    # special case: only one stored block
+    if a.stored_blocks == 1 and b.stored_blocks == 1:
+        # optimize for special case that a and b have only 1 entry
+        # this is (usually) the case if we have trivial charges
+        for i in range(axes):
+            if a_qdata[0, cut_a + i] != b_qdata[0, i]:
+                equal = 0
+                break
+        if equal:
+            # contract innner
+            res._data = [np.tensordot(a._data[0], b._data[0], axes=axes)]
+            c_qdata = np.zeros([1, res_rank], np.intp)
+            for i in range(cut_a):
+                c_qdata[0, i] = a_qdata[0, i]
+            for i in range(b_rank - cut_b):
+                c_qdata[0, cut_a + i] = b_qdata[0, cut_b + i]
+            res._qdata = c_qdata
+            return res
+        #  else: return zero
+        return res
+
+    cdef list a_data, b_data
+    cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
+    cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr, a_qdata_contr_sl, b_qdata_contr_sl
+    # pre_worker
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("types", t1-t0)
+        t0 = time.time()
+    a_data, a_qdata_keep, a_qdata_contr, b_data, b_qdata_keep, b_qdata_contr = _tensordot_pre_sort(a, b, cut_a, cut_b, calc_dtype)
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("tensordot_pre_sort", t1-t0)
+        t0 = time.time()
+
+    cdef int len_a_data = len(a_data)
+    cdef int len_b_data = len(b_data)
+
+    # find blocks where a_qdata_keep and b_qdata_keep change; use that they are sorted.
+    cdef np.ndarray[np.intp_t, ndim=1] a_slices = _c_find_row_differences(a_qdata_keep)
+    cdef np.ndarray[np.intp_t, ndim=1] b_slices = _c_find_row_differences(b_qdata_keep)
+    # the slices divide a_data and b_data into rows and columns
+    cdef int n_rows_a = a_slices.shape[0] - 1
+    cdef int n_cols_b = b_slices.shape[0] - 1
+    a_qdata_keep = a_qdata_keep[a_slices[:n_rows_a]]  # TODO: might get optimized
+    b_qdata_keep = b_qdata_keep[b_slices[:n_cols_b]]
+
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("find_row_differences", t1-t0)
+        t0 = time.time()
+
+    cdef np.ndarray block
+    cdef int row_a, col_b, k_contr, ax  # indices
+    cdef int m, n, k   # reshaped dimensions: a_block.shape = (m, k), b_block.shape = (k,n)
+    cdef np.ndarray[np.intp_t, ndim=2] a_shape_keep = np.empty((n_rows_a, cut_a), np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] block_dim_a_keep = np.empty(n_rows_a, np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] block_dim_a_contr = np.empty(len_a_data, np.intp)
+    # inline what's  _tensordot_pre_reshape in the python version
+    cdef np.PyArray_Dims shp2  # shape for 2D array
+    shp2.len = 2
+    shp2.ptr = [0, 0]
+    for row_a in range(n_rows_a):
+        i = a_slices[row_a]
+        block = <np.ndarray> a_data[i]
+        n = 1
+        for ax in range(cut_a):
+            a_shape_keep[row_a, ax] = block.shape[ax]
+            n *= block.shape[ax]
+        block_dim_a_keep[row_a] = n
+        shp2.ptr[0] = n
+        for j in range(a_slices[row_a], a_slices[row_a+1]):
+            block = np.PyArray_GETCONTIGUOUS((<np.ndarray> a_data[j]).astype(calc_dtype))
+            m = block.size / n
+            block_dim_a_contr[j] = m  # needed for dgemm
+            if USE_NPY_DOT:
+                # we actually have to reshape a_data
+                shp2.ptr[1] = m
+                a_data[j] = np.PyArray_Newshape(block, &shp2, np.NPY_CORDER)
+            else:  # we need just pointers; no need to reshape
+                a_data[j] = block
+    cdef np.ndarray[np.intp_t, ndim=2] b_shape_keep = np.empty((n_cols_b, b_rank-cut_b), np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] block_dim_b_keep = np.empty(n_cols_b, np.intp)
+    for col_b in range(n_cols_b):
+        i = b_slices[col_b]
+        block = <np.ndarray> b_data[i]
+        n = 1
+        for ax in range(b_rank-cut_b):
+            b_shape_keep[col_b, ax] = block.shape[ax+cut_b]
+            n *= block.shape[ax+cut_b]
+        block_dim_b_keep[col_b] = n
+        shp2.ptr[1] = n
+        for j in range(b_slices[col_b], b_slices[col_b+1]):
+            block = np.PyArray_GETCONTIGUOUS((<np.ndarray> b_data[j]).astype(calc_dtype))
+            m = block.size / n
+            if USE_NPY_DOT:
+                # we actually have to reshape a_data
+                shp2.ptr[0] = m
+                b_data[j] = np.PyArray_Newshape(block, &shp2, np.NPY_CORDER)
+            else:  # we need just pointers; no need to reshape...
+                b_data[j] = block
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("_tensordot_pre_reshape", t1-t0)
+        t0 = time.time()
+
+    # Step 3) loop over column/row of the result
+    # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
+
+    # first find output colum/row indices of the result, which are compatible with the charges
+    cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep = _partial_qtotal(
+        chinfo, a.legs[:cut_a], a_qdata_keep)
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_keep = _partial_qtotal(
+        chinfo, b.legs[cut_b:], b_qdata_keep)
+    # a_charges_match: for each row in a, which charge in b is compatible?
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match = chinfo._make_valid_2D(qtotal - b_charges_keep)
+    cdef np.ndarray[np.intp_t, ndim=1] row_a_sort
+    cdef np.ndarray[np.intp_t, ndim=2] match_rows
+    cdef int res_max_n_blocks, res_n_blocks = 0
+    # the main work for that is in _tensordot_match_charges
+    res_max_n_blocks, row_a_sort, match_rows = _tensordot_match_charges(
+        n_rows_a, n_cols_b, chinfo.qnumber, a_charges_keep, b_charges_match)
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("_match_charges", t1-t0)
+        t0 = time.time()
+
+    cdef list res_data = []
+    cdef np.ndarray[np.intp_t, ndim=2] res_qdata = np.empty((res_max_n_blocks, res_rank), np.intp)
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] inds_contr  # takes the inner indices
+    cdef int match0, match1
+
+    #  cdef vector[int] M, N, K, G
+    #  cdef vector[void*] A, B, C
+    cdef np.ndarray a_block, b_block, c_block
+    cdef np.PyArray_Dims c_block_shape
+    c_block_shape.len = res_rank
+    c_block_shape.ptr = <np.npy_intp*>PyMem_Malloc(res_rank * sizeof(np.npy_intp))
+    if not c_block_shape.ptr:
+        raise MemoryError
+
+    # #### the actual loop executing the summation over blocks
+    for col_b in range(n_cols_b):  # columns of b
+        match0 = match_rows[col_b, 0]
+        match1 = match_rows[col_b, 1]
+        if match1 == match0:
+            continue
+        b_qdata_contr_sl = b_qdata_contr[b_slices[col_b]:b_slices[col_b+1]]
+        for ax in range(b_rank - cut_b):
+            c_block_shape.ptr[cut_a + ax] = b_shape_keep[col_b, ax]
+        n = block_dim_b_keep[col_b]
+        for row_a in row_a_sort[match0:match1]:  # rows of a
+            a_qdata_contr_sl = a_qdata_contr[a_slices[row_a]:a_slices[row_a+1]]
+            # find common inner indices
+            inds_contr = _iter_common_sorted(a_qdata_contr_sl, b_qdata_contr_sl)
+            if inds_contr.shape[0] == 0:
+                continue  # no compatible blocks for given row_a, col_b
+
+            # sum over inner indices
+            for ax in range(cut_a):
+                c_block_shape.ptr[ax] = a_shape_keep[row_a, ax]
+            m = block_dim_a_keep[row_a]
+
+            i = a_slices[row_a] + inds_contr[0, 0]
+            j = b_slices[col_b] + inds_contr[0, 1]
+            k = block_dim_a_contr[i]
+            a_block = <np.ndarray> a_data[i]
+            b_block = <np.ndarray> b_data[j]
+            if USE_NPY_DOT:
+                c_block = np.dot(a_block, b_block)
+            else:
+                c_block = _np_empty(c_block_shape, CALC_DTYPE_NUM)
+                if CALC_DTYPE_NUM == np.NPY_DOUBLE:
+                    _blas_dgemm(m, n, k, np.PyArray_DATA(a_block), np.PyArray_DATA(b_block),
+                                0., np.PyArray_DATA(c_block))
+                else: # if CALC_DTYPE_NUM == np.NPY_CDOUBLE:
+                    _blas_zgemm(m, n, k, np.PyArray_DATA(a_block), np.PyArray_DATA(b_block),
+                                0., np.PyArray_DATA(c_block))
+            for k_contr in range(1, inds_contr.shape[0]):
+                i = a_slices[row_a] + inds_contr[k_contr, 0]
+                j = b_slices[col_b] + inds_contr[k_contr, 1]
+                k = block_dim_a_contr[i]
+                a_block = <np.ndarray> a_data[i]
+                b_block = <np.ndarray> b_data[j]
+                if USE_NPY_DOT:
+                    c_block += np.dot(a_block, b_block)
+                elif CALC_DTYPE_NUM == np.NPY_DOUBLE:
+                    _blas_dgemm(m, n, k, np.PyArray_DATA(a_block), np.PyArray_DATA(b_block),
+                                1., np.PyArray_DATA(c_block))
+                else: # if CALC_DTYPE_NUM == np.NPY_CDOUBLE:
+                    _blas_zgemm(m, n, k, np.PyArray_DATA(a_block), np.PyArray_DATA(b_block),
+                                1., np.PyArray_DATA(c_block))
+            # Step 4) reshape back to tensors
+            if USE_NPY_DOT:
+                c_block = np.PyArray_Newshape(c_block, &c_block_shape, np.NPY_CORDER)
+            # else: c_block already created in the correct shape, which is ignored by BLAS.
+            if res_dtype.num != CALC_DTYPE_NUM:
+                c_block = c_block.astype(res_dtype)
+            for ax in range(cut_a):
+                res_qdata[res_n_blocks, ax] = a_qdata_keep[row_a, ax]
+            for ax in range(b_rank - cut_b):
+                res_qdata[res_n_blocks, cut_a + ax] = b_qdata_keep[col_b, ax]
+            res_data.append(c_block)
+            res_n_blocks += 1
+
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("_inner loop", t1-t0)
+        t0 = time.time()
+
+    PyMem_Free(c_block_shape.ptr)
+    if res_n_blocks != 0:
+        # (at least one entry is non-empty, so res_qdata[keep] is also not empty)
+        if res_n_blocks != res_max_n_blocks:
+            res_qdata = res_qdata[:res_n_blocks, :]
+        res._qdata = res_qdata
+        res._qdata_sorted = True
+        res._data = res_data
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("finalize", t1-t0)
+        t0 = time.time()
+    return res
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* C) nogil:
+    """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
+
+    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
+    """
+    # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
+    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LD= K yields A.T
+    # Thus we can use C-style A, B, C without transposing.
+    cdef char * tr = 'n'
+    cdef double alpha = 1.
+    # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDB, B, LDB, beta, C LDC)
+    # but switch A <-> B and M <-> N to transpose everything
+    dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N, <double*> A, &K, &beta, <double*> C, &N)
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta, void* C) nogil:
+    """use blas to calculate C = A.B + beta C, overwriting to C
+
+    Assumes (!) that A, B, C are contiguous F-style matrices of dimensions MxK, KxN , MxN."""
+    cdef char * tr = 'n'
+    cdef double complex alpha = 1.
+    # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
+    zgemm(tr, tr, &N, &M, &K, &alpha, <double complex*> B, &N, <double complex*> A, &K, &beta,
+          <double complex*> C, &N)
+
+
