@@ -3825,6 +3825,7 @@ cdef _tensordot_pre_sort(Array a, Array b, int cut_a, int cut_b, np.dtype calc_d
     return a_data, a_qdata_keep, a_qdata_contr, b_data, b_qdata_keep, b_qdata_contr
 
 
+@cython.boundscheck(False)
 cdef _tensordot_match_charges(int n_rows_a,
                               int n_cols_b,
                               int qnumber,
@@ -3849,6 +3850,8 @@ cdef _tensordot_match_charges(int n_rows_a,
     """
     # This is effectively a more complicated version of _iter_common_sorted....
     cdef np.ndarray[np.intp_t, ndim=2] match_rows = np.empty((n_cols_b, 2), np.intp)
+    cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep_C = a_charges_keep
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match_C = b_charges_match
     if qnumber == 0:  # special case no restrictions due to charge
         match_rows[:, 0] = 0
         match_rows[:, 1] = n_rows_a
@@ -3866,10 +3869,10 @@ cdef _tensordot_match_charges(int n_rows_a,
         # lexcompare a_charges_keep[i_s, :] and b_charges_match[j_s, :]
         lexcomp = 0
         for ax in range(qnumber-1, -1, -1):
-            if a_charges_keep[i_s, ax] > b_charges_match[j_s, ax]:
+            if a_charges_keep_C[i_s, ax] > b_charges_match_C[j_s, ax]:
                 lexcomp = 1
                 break
-            elif a_charges_keep[i_s, ax] < b_charges_match[j_s, ax]:
+            elif a_charges_keep_C[i_s, ax] < b_charges_match_C[j_s, ax]:
                 lexcomp = -1
                 break
         if lexcomp > 0:  # a_charges_keep is larger: advance j
@@ -3889,7 +3892,7 @@ cdef _tensordot_match_charges(int n_rows_a,
             i_s = row_a_sort[i]
             lexcomp = 0
             for ax in range(qnumber-1, -1, -1):
-                if a_charges_keep[i_s, ax] != a_charges_keep[i0_s, ax]:
+                if a_charges_keep_C[i_s, ax] != a_charges_keep_C[i0_s, ax]:
                     lexcomp = 1
                     break
             if lexcomp > 0:  # (sorted -> can only increase)
@@ -3903,7 +3906,7 @@ cdef _tensordot_match_charges(int n_rows_a,
             j_s = col_b_sort[j]
             lexcomp = 0
             for ax in range(qnumber-1, -1, -1):
-                if b_charges_match[j_s, ax] != b_charges_match[j0_s, ax]:
+                if b_charges_match_C[j_s, ax] != b_charges_match_C[j0_s, ax]:
                     lexcomp = 1
                     break
             if lexcomp > 0:  # (sorted -> can only increase)

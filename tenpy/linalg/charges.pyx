@@ -274,11 +274,11 @@ cdef class ChargeInfo(object):
                 return False
         return True
 
-    def __getstate__(self):
+    cpdef tuple __getstate__(ChargeInfo self):
         """Allow to pickle and copy."""
         return (self.qnumber, self.mod, self.names)
 
-    def __setstate__(self, state):
+    cpdef void __setstate__(ChargeInfo self, tuple state):
         """Allow to pickle and copy."""
         qnumber, mod, names = state
         self.qnumber = qnumber
@@ -345,6 +345,12 @@ cdef class LegCharge(object):
         self.block_number = self.charges.shape[0]
         LegCharge.test_sanity(self)
 
+    cdef LegCharge copy(LegCharge self):
+        """Return a (shallow) copy of self."""
+        cdef LegCharge res = LegCharge.__new__(LegCharge)
+        res.__setstate__(self.__getstate__())
+        return res
+
     @classmethod
     def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
         """Create trivial (qnumber=0) LegCharge for given len of indices `ind_len`."""
@@ -353,7 +359,8 @@ cdef class LegCharge(object):
             charges = [[]]
         else:
             charges = [[0] * chargeinfo.qnumber]
-        return cls(chargeinfo, [0, ind_len], charges, qconj)
+        res = cls(chargeinfo, [0, ind_len], charges, qconj)
+        return res
 
     @classmethod
     def from_qflat(cls, chargeinfo, qflat, qconj=1):
@@ -540,8 +547,8 @@ cdef class LegCharge(object):
 
     cpdef LegCharge conj(LegCharge self):
         """Return a (shallow) copy with opposite ``self.qconj``."""
-        res = copy.copy(self)  # shallow
-        (<LegCharge> res).qconj = - self.qconj
+        res = self.copy()
+        res.qconj = -self.qconj
         return res
 
     def to_qflat(self):
@@ -721,7 +728,7 @@ cdef class LegCharge(object):
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
         perm_qind = lexsort(self.charges.T)
-        cp = copy.copy(self)
+        cp = self.copy()
         cp._set_charges(self.charges[perm_qind, :])
         block_sizes = self._get_block_sizes()
         cp._set_block_sizes(block_sizes[perm_qind])
@@ -750,7 +757,7 @@ cdef class LegCharge(object):
         sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
         if self.bunched:  # nothing to do
             return np.arange(self.block_number + 1, dtype=np.intp), self
-        cp = copy.copy(self)
+        cp = self.copy()
         idx = _c_find_row_differences(self.charges)
         cp._set_charges(cp.charges[idx[:-1]])  # avanced indexing -> copy
         cp._set_slices(cp.slices[idx])
@@ -776,7 +783,7 @@ cdef class LegCharge(object):
             Copy of self with the qind projected by `mask`.
         """
         mask = np.asarray(mask, dtype=np.bool_)
-        cp = copy.copy(self)
+        cp = self.copy()
         block_masks = [mask[b:e] for b, e in self._slice_start_stop()]
         new_block_lens = [np.sum(bm) for bm in block_masks]
         keep = np.nonzero(new_block_lens)[0]
@@ -897,7 +904,7 @@ cdef class LegCharge(object):
             raise ValueError("Permutation mixes qind")
         return perm_qind
 
-    def __getstate__(self):
+    cpdef tuple __getstate__(LegCharge self):
         """Allow to pickle and copy."""
         return (self.ind_len,
                 self.block_number,
@@ -1017,11 +1024,17 @@ cdef class LegPipe(LegCharge):
         # additional attributes
         self.legs = legs = tuple(legs)
         self.nlegs = len(legs)
-        self.subshape = tuple([l.ind_len for l in self.legs])
-        self.subqshape = tuple([l.block_number for l in self.legs])
+        self.subshape = tuple([l.ind_len for l in legs])
+        self.subqshape = tuple([l.block_number for l in legs])
         # the diffuclt part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
         self._init_from_legs(sort, bunch)
         self.test_sanity()
+
+    cdef LegPipe copy(LegPipe self):
+        """Return a (shallow) copy of self."""
+        cdef LegPipe res = LegPipe.__new__(LegPipe)
+        res.__setstate__(self.__getstate__())
+        return res
 
     cpdef void test_sanity(LegPipe self) except *:
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -1270,7 +1283,7 @@ cdef class LegPipe(LegCharge):
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
 
-    def __getstate__(self):
+    cpdef tuple __getstate__(LegPipe self):
         """Allow to pickle and copy."""
         super_state = LegCharge.__getstate__(self)
         return (super_state,
