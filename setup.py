@@ -24,7 +24,9 @@ extensions = [
         "*", ["tenpy/linalg/*.pyx"],
         include_dirs=include_dirs,
         libraries=libs,
-        library_dirs=lib_dirs)
+        library_dirs=lib_dirs,
+        language='c++'
+    )
 ]
 
 comp_direct = {  # compiler_directives

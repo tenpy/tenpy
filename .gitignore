@@ -8,6 +8,7 @@ __pycache__
 playground
 build
 tenpy/linalg/*.c
+tenpy/linalg/*.cpp
 tenpy/linalg/*.so
 tenpy/linalg/*.html
 examples/*.pdf

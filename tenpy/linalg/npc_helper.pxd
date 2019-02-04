@@ -1,6 +1,7 @@
 # Copyright 2018 TeNPy Developers
 cimport numpy as np
-ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
+ctypedef np.int64_t QTYPE_t   # compile time type for QTYPE
+ctypedef np.intp_t intp_t   # compile time type for np.intp
 
 cdef class ChargeInfo(object):
     cdef readonly int qnumber
