@@ -462,6 +462,7 @@ def test_npc_tensordot():
         aflat = a.to_ndarray()
         legs_b = [l.conj() for l in a.legs[::-1]]
         b = npc.Array.from_func(np.random.random, legs_b, qtotal=[1], shape_kw='size')
+        b = b * (1 + 1.j)  # make second array complex: check that different dtypes work
         bflat = b.to_ndarray()
         print("axes = 1")  # start simple: only one axes
         c = npc.tensordot(a, b, axes=1)

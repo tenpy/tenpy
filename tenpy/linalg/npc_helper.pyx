@@ -10,6 +10,8 @@ If the file could not be compiled, it just uses the non-compiled Cython version.
 """
 # Copyright 2018 TeNPy Developers
 
+DEF DEBUG_PRINT = 0  # TODO XXX
+
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -18,7 +20,6 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libcpp.vector cimport vector
 from cython.operator cimport dereference as deref, postincrement as inc  # TODO
 
-import copy
 import bisect
 import warnings
 import time  # TODO
@@ -1339,12 +1340,13 @@ cdef np.ndarray _c_find_row_differences(np.ndarray qflat):
         return np.array([0, qflat.shape[0]], dtype=np.intp)
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
-    cdef np.ndarray res = np.empty(max(L + 1, 2), dtype=np.intp)
+    cdef np.ndarray[QTYPE_t, ndim=2] qflat_c = qflat
+    cdef np.ndarray[np.intp_t, ndim=1] res = np.empty(max(L + 1, 2), dtype=np.intp)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
         for j in range(M):
-            if qflat[i-1, j] != qflat[i, j]:
+            if qflat_c[i-1, j] != qflat_c[i, j]:
                 rows_equal = False
                 break
         if not rows_equal:
@@ -1565,13 +1567,18 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 # replacements for global functions in np_conserved.py  #
 # ##################################################### #
 
+ctypedef struct idx_tuple:
+    Py_ssize_t first
+    Py_ssize_t second
+
+
 @cython.wraparound(False)
 @cython.boundscheck(False)
-cdef Py_ssize_t _iter_common_sorted(
-        np.ndarray[np.intp_t, ndim=1] a, Py_ssize_t i_start, Py_ssize_t i_stop,
-        np.ndarray[np.intp_t, ndim=1] b, Py_ssize_t j_start, Py_ssize_t j_stop,
-        np.ndarray[np.intp_t, ndim=2] out):
-    """Find indices ``i, j`` for which ``a[i] == b[j]``.
+cdef inline Py_ssize_t _iter_common_sorted_push(
+        intp_t[::1] a, Py_ssize_t i_start, Py_ssize_t i_stop,
+        intp_t[::1] b, Py_ssize_t j_start, Py_ssize_t j_stop,
+        vector[idx_tuple]* out) nogil:
+    """Find indices ``i, j`` for which ``a[i] == b[j]`` and pushes these (i,j) into `out`.
 
     *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
     Given that, it is equivalent to (but faster than)::
@@ -1579,11 +1586,12 @@ cdef Py_ssize_t _iter_common_sorted(
         count = 0
         for j, i in itertools.product(range(j_start, j_stop), range(i_start, i_stop)):
             if a[i] == b[j]:
-                out[count] = [i, j]
+                out.push_back([i, j])
                 count += 1
         return count
     """
     cdef Py_ssize_t i=i_start, j=j_start, count=0
+    cdef idx_tuple i_j
     while i < i_stop and j < j_stop:
         if a[i] < b[j]:
             i += 1
@@ -1591,14 +1599,17 @@ cdef Py_ssize_t _iter_common_sorted(
             j += 1
         else:
             #  yield i, j
-            out[count, 0] = i
-            out[count, 1] = j
+            i_j.first = i
+            i_j.second = j
+            out.push_back(i_j) # pointer get's dereferenced automatically
             count += 1
             i += 1
             j += 1
     return count
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     """Pre-calculations before the actual matrix product.
 
@@ -1644,6 +1655,7 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
 
 
 @cython.boundscheck(False)
+@cython.wraparound(False)
 cdef _tensordot_match_charges(int n_rows_a,
                               int n_cols_b,
                               int qnumber,
@@ -1744,7 +1756,10 @@ cdef _tensordot_match_charges(int n_rows_a,
     return res_max_n_blocks, row_a_sort, match_rows
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 @cython.cdivision(True)
+@cython.nonecheck(False)
 def _tensordot_worker(a, b, int axes):
     """Main work of tensordot, called by :func:`tensordot`.
 
@@ -1809,8 +1824,8 @@ def _tensordot_worker(a, b, int axes):
     cdef Py_ssize_t cut_b = axes
     cdef Py_ssize_t b_rank = b.rank
     cdef Py_ssize_t res_rank = cut_a + b_rank - cut_b
-    cdef bint DEBUG_PRINT = 0  # TODO XXX
     if DEBUG_PRINT:
+        print("a.stored_blocks", a.stored_blocks, "b.stored_blocks", b.stored_blocks)
         t0 = time.time()
     # determine calculation type and result type
     dtype = np.find_common_type([a.dtype, b.dtype], [])
@@ -1824,6 +1839,12 @@ def _tensordot_worker(a, b, int axes):
     cdef int CALC_DTYPE_NUM = res_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     cdef np.ndarray[QTYPE_t, ndim=1] qtotal = chinfo._make_valid_1D(a.qtotal + b.qtotal)
     res = np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
+    if a.dtype.num != CALC_DTYPE_NUM:
+        a = a.astype(res_dtype)
+    if b.dtype.num != CALC_DTYPE_NUM:
+        b = b.astype(res_dtype)
+    assert a.dtype == b.dtype == res_dtype
+    # TODO: function for this?
 
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata = a._qdata
     cdef np.ndarray[np.intp_t, ndim=2] b_qdata = b._qdata
@@ -1886,14 +1907,15 @@ def _tensordot_worker(a, b, int axes):
         t0 = time.time()
 
     cdef np.ndarray block
-    cdef vector[void*] a_data_ptr, b_data_ptr
+    cdef vector[void*] a_data_ptr, b_data_ptr, c_data_ptr
+    cdef vector[Py_ssize_t] block_dim_a_contr
     a_data_ptr.resize(len_a_data)
     b_data_ptr.resize(len_b_data)
+    block_dim_a_contr.resize(len_a_data)
     cdef Py_ssize_t row_a, col_b, k_contr, ax  # indices
     cdef Py_ssize_t m, n, k   # reshaped dimensions: a_block.shape = (m, k), b_block.shape = (k,n)
     cdef np.ndarray[np.intp_t, ndim=2] a_shape_keep = np.empty((n_rows_a, cut_a), np.intp)
     cdef np.ndarray[np.intp_t, ndim=1] block_dim_a_keep = np.empty(n_rows_a, np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] block_dim_a_contr = np.empty(len_a_data, np.intp)
     # inline what's  _tensordot_pre_reshape in the python version
     for row_a in range(n_rows_a):
         i = a_slices[row_a]
@@ -1904,9 +1926,8 @@ def _tensordot_worker(a, b, int axes):
             n *= block.shape[ax]
         block_dim_a_keep[row_a] = n
         for j in range(a_slices[row_a], a_slices[row_a+1]):
-            block = np.PyArray_GETCONTIGUOUS(a_data[j].astype(res_dtype))
+            block = np.PyArray_GETCONTIGUOUS(a_data[j])
             m = np.PyArray_SIZE(block) / n
-            assert m*n == block.size  # TODO XXX  DEBUG
             block_dim_a_contr[j] = m  # needed for dgemm
             a_data_ptr[j] = np.PyArray_DATA(block)
             a_data[j] = block  # important to keep the arrays of the pointers alive
@@ -1921,7 +1942,7 @@ def _tensordot_worker(a, b, int axes):
             n *= block.shape[ax+cut_b]
         block_dim_b_keep[col_b] = n
         for j in range(b_slices[col_b], b_slices[col_b+1]):
-            block = np.PyArray_GETCONTIGUOUS((b_data[j].astype(res_dtype)))
+            block = np.PyArray_GETCONTIGUOUS(b_data[j])
             b_data_ptr[j] = np.PyArray_DATA(block)
             b_data[j] = block  # important to keep the arrays of the pointers alive
     if DEBUG_PRINT:
@@ -1952,14 +1973,15 @@ def _tensordot_worker(a, b, int axes):
 
     cdef list res_data = []
     cdef np.ndarray[np.intp_t, ndim=2] res_qdata = np.empty((res_max_n_blocks, res_rank), np.intp)
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] inds_contr  # takes the inner indices
-    inds_contr = np.empty((max(len_a_data, len_b_data), 2), np.intp, 'C')
+    cdef vector[idx_tuple] inds_contr
+    cdef vector[Py_ssize_t] batch_slices
+    cdef vector[idx_tuple] batch_m_n
+    cdef idx_tuple m_n
+    cdef Py_ssize_t contr_count_batch=0, contr_count
     #  (for the size just estimate the maximal number of blocks to be contracted at once)
-    cdef Py_ssize_t inds_contr_count
+    batch_slices.push_back(contr_count_batch)
     cdef intp_t match0, match1
     cdef Py_ssize_t row_a_sort_idx
-
-    #  cdef vector[int] M, N, K, G
     cdef np.ndarray c_block
     cdef np.PyArray_Dims c_block_shape
     c_block_shape.len = res_rank
@@ -1967,7 +1989,7 @@ def _tensordot_worker(a, b, int axes):
     if not c_block_shape.ptr:
         raise MemoryError
 
-    # #### the actual loop executing the summation over blocks
+    # the inner loop finding the blocks to be contracted
     for col_b in range(n_cols_b):  # columns of b
         match0 = match_rows[col_b, 0]
         match1 = match_rows[col_b, 1]
@@ -1975,41 +1997,29 @@ def _tensordot_worker(a, b, int axes):
             continue
         for ax in range(b_rank - cut_b):
             c_block_shape.ptr[cut_a + ax] = b_shape_keep[col_b, ax]
-        n = block_dim_b_keep[col_b]
+        m_n.second = block_dim_b_keep[col_b]
         for row_a_sort_idx in range(match0, match1):  # rows of a
             row_a = row_a_sort[row_a_sort_idx]
             # find common inner indices
-            inds_contr_count = _iter_common_sorted(a_qdata_contr, a_slices[row_a], a_slices[row_a+1],
-                                             b_qdata_contr, b_slices[col_b], b_slices[col_b+1],
-                                             inds_contr)
-            if inds_contr_count == 0:
+            contr_count = _iter_common_sorted_push(a_qdata_contr, a_slices[row_a], a_slices[row_a+1],
+                                                   b_qdata_contr, b_slices[col_b], b_slices[col_b+1],
+                                                   &inds_contr)
+            if contr_count == 0:
                 continue  # no compatible blocks for given row_a, col_b
-
-            # sum over inner indices
+            contr_count_batch += contr_count
+            batch_slices.push_back(contr_count_batch)
+            # we need to sum over inner indices
+            # create output block
             for ax in range(cut_a):
                 c_block_shape.ptr[ax] = a_shape_keep[row_a, ax]
-            m = block_dim_a_keep[row_a]
+            m_n.first = block_dim_a_keep[row_a]
 
-            i = inds_contr[0, 0]
-            j = inds_contr[0, 1]
-            k = block_dim_a_contr[i]
             c_block = _np_empty(c_block_shape, CALC_DTYPE_NUM)
-            if CALC_DTYPE_NUM == np.NPY_DOUBLE:
-                _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            0., np.PyArray_DATA(c_block))
-            else: # if CALC_DTYPE_NUM == np.NPY_CDOUBLE:
-                _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            0., np.PyArray_DATA(c_block))
-            for k_contr in range(1, inds_contr_count):
-                i = inds_contr[k_contr, 0]
-                j = inds_contr[k_contr, 1]
-                k = block_dim_a_contr[i]
-                if CALC_DTYPE_NUM == np.NPY_DOUBLE:
-                    _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                                1., np.PyArray_DATA(c_block))
-                else: # if CALC_DTYPE_NUM == np.NPY_CDOUBLE:
-                    _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                                1., np.PyArray_DATA(c_block))
+            c_data_ptr.push_back(np.PyArray_DATA(c_block))
+            batch_m_n.push_back(m_n)
+
+            # the actual contraction is done below in _batch_accumulate_gemm
+
             # Step 4) reshape back to tensors
             # c_block is already created in the correct shape, which is ignored by BLAS.
             for ax in range(cut_a):
@@ -2018,11 +2028,28 @@ def _tensordot_worker(a, b, int axes):
                 res_qdata[res_n_blocks, cut_a + ax] = b_qdata_keep[col_b, ax]
             res_data.append(c_block)
             res_n_blocks += 1
+
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("pack inner loop gemm", t1-t0)
+        t0 = time.time()
+
+    # Step 3.2) the actual matrix-matrix multiplications
+    with nogil:
+        _batch_accumulate_gemm(batch_slices,
+                               batch_m_n,
+                               inds_contr,
+                               block_dim_a_contr,
+                               a_data_ptr,
+                               b_data_ptr,
+                               c_data_ptr,
+                               CALC_DTYPE_NUM)
     # TODO: type of C???
 
     if DEBUG_PRINT:
         t1 = time.time()
-        print("_inner loop", t1-t0)
+        print("inner loop gemm", t1-t0)
+        print("had ", inds_contr.size(), "contractions into ", res_n_blocks, "new blocks")
         t0 = time.time()
 
     PyMem_Free(c_block_shape.ptr)
@@ -2036,15 +2063,55 @@ def _tensordot_worker(a, b, int axes):
     if DEBUG_PRINT:
         t1 = time.time()
         print("finalize", t1-t0)
+        print("res.stored_blocks", res_n_blocks)
         t0 = time.time()
     return res
 
 
+cdef void _batch_accumulate_gemm(vector[Py_ssize_t] batch_slices,
+                            vector[idx_tuple] batch_m_n,
+                            vector[idx_tuple] inds_contr,
+                            vector[Py_ssize_t] block_dim_a_contr,
+                            vector[void*] a_data_ptr,
+                            vector[void*] b_data_ptr,
+                            vector[void*] c_data_ptr,
+                            int calc_dtype_num
+                            ) nogil:
+    cdef size_t b, batch_count = batch_m_n.size()
+    cdef Py_ssize_t x, batch_beg, batch_end,
+    cdef Py_ssize_t i, j, m, n, k
+    cdef idx_tuple i_j, m_n
+
+    for b in range(batch_count): # TODO parallelize !?
+        m_n = batch_m_n[b]
+        m = m_n.first
+        n = m_n.second
+        batch_beg = batch_slices[b]
+        batch_end = batch_slices[b+1]
+        i_j = inds_contr[batch_beg]
+        i = i_j.first
+        j = i_j.second
+        k = block_dim_a_contr[i]
+        if calc_dtype_num == np.NPY_DOUBLE:
+            _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                        0., c_data_ptr[b])
+        else: # if calc_dtype_num == np.NPY_CDOUBLE:
+            _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                        0., c_data_ptr[b])
+        for x in range(batch_beg + 1, batch_end):
+            i_j = inds_contr[x]
+            i = i_j.first
+            j = i_j.second
+            k = block_dim_a_contr[i]
+            if calc_dtype_num == np.NPY_DOUBLE:
+                _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                            1., c_data_ptr[b])
+            else: # if calc_dtype_num == np.NPY_CDOUBLE:
+                _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                            1., c_data_ptr[b])
 
 
 
-@cython.wraparound(False)
-@cython.boundscheck(False)
 cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* C) nogil:
     """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
 
@@ -2059,13 +2126,10 @@ cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* 
     # but switch A <-> B and M <-> N to transpose everything
     dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N, <double*> A, &K, &beta, <double*> C, &N)
 
-
-@cython.wraparound(False)
-@cython.boundscheck(False)
 cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta, void* C) nogil:
     """use blas to calculate C = A.B + beta C, overwriting to C
 
-    Assumes (!) that A, B, C are contiguous F-style matrices of dimensions MxK, KxN , MxN."""
+    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN."""
     cdef char * tr = 'n'
     cdef double complex alpha = 1.
     # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
@@ -2074,3 +2138,4 @@ cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta
 
 
 # TODO: _inner_worker !?!
+# TODO: _svd_workder !?!

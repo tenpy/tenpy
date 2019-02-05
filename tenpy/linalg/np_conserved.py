@@ -75,7 +75,7 @@ QCUTOFF = np.finfo(np.float64).eps * 10
 QTYPE = charges.QTYPE
 
 
-class Array(object):
+class Array:
     r"""A multidimensional array (=tensor) for using charge conservation.
 
     An `Array` represents a multi-dimensional tensor,
@@ -1388,8 +1388,9 @@ class Array(object):
         cp._qdata = cp._qdata.copy()
         if dtype is None:
             dtype = np.find_common_type([d.dtype for d in self._data], [])
-        cp.dtype = np.dtype(dtype)
-        cp._data = [d.astype(self.dtype, copy=True) for d in self._data]
+        cp.dtype = dtype = np.dtype(dtype)
+        if copy or dtype != self.dtype:
+            cp._data = [d.astype(dtype, copy=copy) for d in self._data]
         return cp
 
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
