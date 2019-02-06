@@ -77,6 +77,17 @@ def test_mkl(n=2):
             print("test_mkl failed to import the shared MKL libaray.")
 
 
+def test_optimization():
+    level_now = tools.optimization.get_level()
+    level_change = "none" if level_now == 1 else "default"
+    level_change = tools.optimization.OptimizationFlag[level_change]
+    assert tools.optimization.get_level() == level_now
+    assert tools.optimization.get_level() != level_change
+    with tools.optimization.temporary_level(level_change):
+        assert tools.optimization.get_level() == level_change
+    assert tools.optimization.get_level() == level_now
+
+
 if __name__ == "__main__":
     test_inverse_permutation()
     test_argsort()

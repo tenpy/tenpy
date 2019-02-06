@@ -33,24 +33,31 @@ from scipy.linalg.cython_blas cimport dgemm, zgemm
 from ..tools.misc import lexsort, inverse_permutation  # TODO: get rid of this?
 from ..tools.string import vert_join  # TODO get rid of this?
 from ..tools import optimization
-from . import np_conserved
 
 cdef int optimization_compare = optimization.OptimizationFlag.skip_arg_checks
 
-__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE', '_tensordot_worker']
+__all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE', '_tensordot_worker', '_combine_legs_worker', '_split_legs_worker']
 
 np.import_array()
 
-cdef inline np.ndarray _np_empty(np.PyArray_Dims dims, int type):
-    return <np.ndarray>np.PyArray_EMPTY(dims.len, dims.ptr, type, 0 )
+cdef inline np.ndarray _np_empty(np.PyArray_Dims dims, int type_):
+    return <np.ndarray>np.PyArray_EMPTY(dims.len, dims.ptr, type_, 0 )
 
-cdef inline np.ndarray _np_zeros(np.PyArray_Dims dims, int type):
-    return <np.ndarray>np.PyArray_ZEROS(dims.len, dims.ptr, type, 0 )
+cdef inline np.ndarray _np_zeros(np.PyArray_Dims dims, int type_):
+    return <np.ndarray>np.PyArray_ZEROS(dims.len, dims.ptr, type_, 0 )
 
 
 QTYPE = np.int64             # numpy dtype for the charges
 # QTYPE_t define in npc_helper.pxd
 # intp_t defined in npc_helper.pxd
+
+# We can not ``from . import np_conserved`` because
+# importing np_conserved requires this cython module to be imported.
+# requiring these modules requires python anyways, so it doesn't hurt to import them later on.
+# Therefore, the following variables are set to the correpsonding modules in
+# tenpy/linalg/__init__.py once the modules have been imported in the correct order.
+_np_conserved = None  # tenpy.linalg.np_conserved
+_charges = None       # tenpy.linalg.charges
 
 # ################################# #
 # replacements for charges.py       #
@@ -1395,12 +1402,14 @@ cdef np.ndarray _partial_qtotal(ChargeInfo chinfo,
 
 
 def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
-    """The main work of combine_legs: create a copy and reshape the data blocks.
+    """The main work of :meth:`Array.combine_legs`: create a copy and reshape the data blocks.
 
     Assumes standard form of parameters.
 
     Parameters
     ----------
+    self : Array
+        The array where legs are being combined.
     combine_legs : list(1D np.array)
         Axes of self which are collected into pipes.
     new_axes : 1D array
@@ -1631,7 +1640,7 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
     cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
-    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
+    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:a.rank-1]])
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
@@ -1838,7 +1847,7 @@ def _tensordot_worker(a, b, int axes):
     # TODO: handle special dtypes?
     cdef int CALC_DTYPE_NUM = res_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     cdef np.ndarray[QTYPE_t, ndim=1] qtotal = chinfo._make_valid_1D(a.qtotal + b.qtotal)
-    res = np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
+    res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if a.dtype.num != CALC_DTYPE_NUM:
         a = a.astype(res_dtype)
     if b.dtype.num != CALC_DTYPE_NUM:
@@ -1855,7 +1864,7 @@ def _tensordot_worker(a, b, int axes):
     cdef int i, j
     # special case: a or b is zero
     if len_a_data == 0 or len_b_data == 0:  # special case: `a` or `b` is 0
-        return np_conserved.zeros(a.legs[:-axes] + b.legs[axes:],
+        return _np_conserved.zeros(a.legs[:-axes] + b.legs[axes:],
                      np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
     # special case: only one stored block
     if len_a_data == 1 and len_b_data == 1:

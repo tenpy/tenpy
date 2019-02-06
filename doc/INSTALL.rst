@@ -155,6 +155,8 @@ If you have the python package manager ``pip``, all of these can be installed wi
     sudo pip install --upgrade numpy scipy      # the required libraries
     sudo pip install --upgrade matplotlib       # for plotting
     sudo pip install --upgrade bottleneck       # some optimization of numpy bottlenecks
+
+    # the following are only required for developers
     sudo pip install --upgrade nose             # nosetest: automated teseting to check if everything works as it should
     sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
     sudo pip install --upgrade yapf             # python formater to unify the code style

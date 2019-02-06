@@ -12,7 +12,7 @@ if not sys.version_info >= (3, 0):
 
 # options
 # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
-TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 0))
+TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
 
 # setup
 include_dirs = [numpy.get_include()]
@@ -33,10 +33,10 @@ comp_direct = {  # compiler_directives
     'language_level': 3,  # use python 3
     'embedsignature': True,  # write function signature in doc-strings
 }
-if TENPY_OPTIMIZE > 0:
+if TENPY_OPTIMIZE > 1:
     comp_direct['initializedcheck'] = False
     comp_direct['boundscheck'] = False
-if TENPY_OPTIMIZE < 0:
+if TENPY_OPTIMIZE < 1:
     comp_direct['profile'] = True
     comp_direct['linetrace'] = True
 

@@ -59,7 +59,7 @@ from .svd_robust import svd as svd_flat
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
 from ..tools.string import vert_join, is_non_string_iterable
-from ..tools.optimization import optimize, OptimizationFlag
+from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
@@ -3511,6 +3511,7 @@ def to_iterable_arrays(array_list):
 # ##################################
 
 
+@use_cython
 def _combine_legs_worker(self, combine_legs, new_axes, pipes):
     """The main work of :meth:`Array.combine_legs`: create a copy and reshape the data blocks.
 
@@ -3591,6 +3592,7 @@ def _combine_legs_worker(self, combine_legs, new_axes, pipes):
     return res
 
 
+@use_cython
 def _split_legs_worker(self, split_axes, cutoff):
     """The main work of split_legs: create a copy and reshape the data blocks.
 
@@ -3876,6 +3878,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     return a_pre_result, b_pre_result, fast_dot_sum, res_dtype
 
 
+@use_cython
 def _tensordot_worker(a, b, axes):
     """Main work of tensordot, called by :func:`tensordot`.
 

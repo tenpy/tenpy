@@ -12,11 +12,7 @@ so you propably won't need to import `charges` directly.
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
 
-use_compiled = False
-# Flag that indicates whether we use the optimized (cython) version for np_conserved
-
-__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust',
-           'use_compiled']
+__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
 
 try:
     # optimization: "monkey patch" with the optimized versions
@@ -29,10 +25,8 @@ try:
     np_conserved.LegCharge = npc_helper.LegCharge
     np_conserved.LegPipe = npc_helper.LegPipe
     np_conserved.QTYPE = npc_helper.QTYPE
-    np_conserved._tensordot_worker = npc_helper._tensordot_worker
-    np_conserved._combine_legs_worker = npc_helper._combine_legs_worker
-    np_conserved._split_legs_worker = npc_helper._split_legs_worker
-    use_compiled = True
+    npc_helper._charges = charges
+    npc_helper._np_conserved = np_conserved
 except ImportError:
     np_conserved.ChargeInfo = charges.ChargeInfo
     np_conserved.LegCharge = charges.LegCharge
