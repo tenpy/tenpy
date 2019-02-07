@@ -255,6 +255,12 @@ def use_cython(func=None, replacement=None, check_doc=True):
         If the cython code can not be loaded, this is just `func`,
         otherwise it's the cython version specified by `replacement`.
     """
+    if func is None:
+        # someone used ``@use_cython(replacement=...)``
+        # so we need to return another decorator function
+        def _decorator(func):
+            return use_cython(func, replacement, check_doc)
+        return _decorator
     global _npc_helper_module
     global have_cython_functions
     if have_cython_functions is None:
@@ -273,12 +279,6 @@ def use_cython(func=None, replacement=None, check_doc=True):
     if not have_cython_functions:
         # can't provide a faster version: cython module not available
         return func
-    if func is None:
-        # someone used ``@use_cython(replacement=...)``
-        # so we need to return another decorator function
-        def _decorator(func):
-            return use_cython(func, replacement, check_doc)
-        return _decorator
     if replacement is None:
         replacement = func.__name__
     fast_func = _npc_helper_module.__dict__.get(replacement, None)
@@ -287,10 +287,15 @@ def use_cython(func=None, replacement=None, check_doc=True):
         msg = msg.format(replacement, func.__name__, func.__module__)
         raise ValueError(msg)
     if check_doc:
+        import inspect
+        clean_fdoc = inspect.getdoc(func)
+        clean_cdoc = inspect.getdoc(fast_func)
         cdoc = fast_func.__doc__
-        fdoc = func.__doc__
-        if fdoc != cdoc and fdoc != cdoc[cdoc.find("\n")+1:]:
-            msg = "cython version of {0!s} has different doc-string".format(__func__.name__)
+        # if the cython compiler directive 'embedsignature' is used, the first line contains the
+        # function signature, so the doc string starts only with the second line
+        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n")+1:])
+        if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
+            msg = "cython version of {0!s} has different doc-string".format(func.__name__)
             raise ValueError(msg)
     return fast_func
 
