@@ -753,6 +753,30 @@ def test_drop_add_change_charge():
         assert A41_new.chinfo is chinfo41
 
 
+def test_pickle():
+    import pickle
+    a = npc.Array.from_ndarray(arr, [lc, lc_add.conj()])
+    b = random_Array((20, 15, 10), chinfo2, sort=False)
+    a.test_sanity()
+    b.test_sanity()
+    aflat = a.to_ndarray()
+    bflat = b.to_ndarray()
+    data = {'a': a, 'b': b}
+    stream = pickle.dumps(data)
+    data2 = pickle.loads(stream)
+    a2 = data2['a']
+    b2 = data2['b']
+    a.test_sanity()
+    b.test_sanity()
+    a2.test_sanity()
+    b2.test_sanity()
+    a2flat = a2.to_ndarray()
+    b2flat = b2.to_ndarray()
+    npt.assert_array_equal(aflat, a2flat)
+    npt.assert_array_equal(bflat, b2flat)
+
+
+
 if __name__ == "__main__":
     test_npc_Array_conversion()
     test_npc_Array_sort()
