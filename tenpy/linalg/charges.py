@@ -1,15 +1,12 @@
-r"""Basic definitions of a charge.
+"""Cython implementations of varios tenpy functions/methods for speedup.
 
-Contains implementation of classes
-:class:`ChargeInfo`,
-:class:`LegCharge` and
-:class:`LegPipe`.
+This module contains Cython implementations of some functions/methods from
+``tenpy/linalg/charges.py`` and ``tenpy/linalg/np_conserved.py``.
+In these modules, some functions have the python decorator ``@use_cython``.
+These functions are replaced by the ones defined here, if the compiled cython code is available
+and could be imported in python.
+For further details, see also the definition of :func:`~tenpy.tools.optimization.use_cython`.
 
-.. note ::
-    The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
-    so you usually don't need to import this module in your application.
-
-A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -52,13 +49,15 @@ class ChargeInfo:
         The number of charges.
     mod :  ndarray[QTYPE,ndim=1]
         Modulo how much each of the charges is taken.
-        1 for a U(1) charge, i.e., mod 1 -> mod infinity.
+        1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
     _mask_mod1 : 1D array bool
-        mask ``(mod == 1)``, to speed up `make_valid`
+        mask ``(mod == 1)``, to speed up `make_valid` in pure python.
     _mod_masked : 1D array QTYPE
         Equivalent to ``self.mod[self._maks_mod1]``
+    _qnumber, _mod :
+        Storage of `qnumber` and `mod`.
 
     Notes
     -----
@@ -67,13 +66,11 @@ class ChargeInfo:
 
     def __init__(self, mod=[], names=None):
         mod = np.array(mod, dtype=QTYPE)
-        self.qnumber = len(mod)
-        self.mod = mod
-        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
-        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
+        assert mod.ndim == 1
         if names is None:
-            names = [''] * self.qnumber
-        self.names = [str(n) for n in names]
+            names = [''] * len(mod)
+        names = [str(n) for n in names]
+        self.__setstate__((len(mod), mod, names))
         self.test_sanity()  # checks for invalid arguments
 
     @classmethod
@@ -156,6 +153,19 @@ class ChargeInfo:
         if np.any(self.mod < 0):
             raise ValueError("mod with negative entries???")
 
+    @property
+    def qnumber(self):
+        """The number of charges."""
+        return self._qnumber
+
+    @property
+    def mod(self):
+        """Modulo how much each of the charges is taken.
+        1 for a U(1) charge, i.e., mod 1 -> mod infinity.
+        """
+        return self._mod
+
+    @use_cython(replacement='ChargeInfo_make_valid')
     def make_valid(self, charges=None):
         """Take charges modulo self.mod.
 
@@ -163,7 +173,7 @@ class ChargeInfo:
         ----------
         charges : array_like or None
             1D or 2D array of charges, last dimension `self.qnumber`
-            None defaults to np.zeros(qnumber).
+            None defaults to trivial charges ``np.zeros(qnumber, dtype=QTYPE)``.
 
         Returns
         -------
@@ -175,7 +185,6 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)
         charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
         return charges
-
 
     @use_cython
     def check_valid(self, charges):
@@ -215,19 +224,20 @@ class ChargeInfo:
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        return (self.mod, self.names)
+        return (self._qnumber, self._mod, self.names)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
-        mod, names = state
-        self.mod = mod
-        self.qnumber = mod.shape[0]
+        qnumber, mod, names = state
+        self._mod = mod
+        self._qnumber = mod.shape[0]
+        assert qnumber == self._qnumber
         self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
         self._mod_masked = mod[self._mask].copy()  # only where mod != 1
         self.names = names
 
 
-class LegCharge(object):
+class LegCharge:
     r"""Save the charge data associated to a leg of a tensor.
 
     This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
