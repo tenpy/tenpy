@@ -186,7 +186,7 @@ class ChargeInfo:
         charges[..., self._mask] = np.mod(charges[..., self._mask], self._mod_masked)
         return charges
 
-    @use_cython
+    @use_cython(replacement='ChargeInfo_check_valid')
     def check_valid(self, charges):
         r"""Check, if `charges` has all entries as expected from self.mod.
 
@@ -527,7 +527,7 @@ class LegCharge:
 
     def is_sorted(self):
         """Returns whether `self.charges` is sorted lexiographically."""
-        if self.chinfo.qnumber == 0:
+        if self.chinfo._qnumber == 0:
             return True
         res = lexsort(self.charges.T)
         return np.all(res == np.arange(len(res)))
@@ -782,7 +782,7 @@ class LegCharge:
 
         Returns
         -------
-        charges : 2D array
+        charges : array[QTYPE, ndim=2]
             Rows are the rows of self.charges lexsorted and without duplicates.
         """
         charges = self.charges.copy()
@@ -901,7 +901,7 @@ class LegPipe(LegCharge):
         A flag telling whether the charge of the *resulting* pipe points inwards
         (+1, default) or outwards (-1).
     sort : bool
-        Whether the outgoing pipe should be sorted. Defaults ``True``; recommended.
+        Whether the outgoing pipe should be sorted. Default ``True``; recommended.
         Note: calling :meth:`sort` after initialization converts to a LegCharge.
     bunch : bool
         Whether the outgoing pipe should be bunched. Default ``True``; recommended.
@@ -917,7 +917,7 @@ class LegPipe(LegCharge):
         `ind_len` for each of the incoming legs.
     subqshape : tuple of int
         `block_number` for each of the incoming legs.
-    q_map:  2D array
+    q_map:  array[np.intp, ndim=2]
         Shape (`block_number`, 3 + `nlegs`). Rows: ``[ b_j, b_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         See Notes below for details.
     q_map_slices : list of views onto q_map
