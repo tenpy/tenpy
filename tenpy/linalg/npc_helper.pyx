@@ -103,6 +103,76 @@ cdef np.ndarray make_stride(tuple shape, bint cstyle=1):
     return res
 
 
+cdef void _batch_accumulate_gemm(vector[intp_t] batch_slices,
+                            vector[idx_tuple] batch_m_n,
+                            vector[idx_tuple] inds_contr,
+                            vector[intp_t] block_dim_a_contr,
+                            vector[void*] a_data_ptr,
+                            vector[void*] b_data_ptr,
+                            vector[void*] c_data_ptr,
+                            int calc_dtype_num
+                            ) nogil:
+    cdef size_t b, batch_count = batch_m_n.size()
+    cdef intp_t x, batch_beg, batch_end,
+    cdef intp_t i, j, m, n, k
+    cdef idx_tuple i_j, m_n
+
+    for b in range(batch_count): # TODO parallelize !?
+        m_n = batch_m_n[b]
+        m = m_n.first
+        n = m_n.second
+        batch_beg = batch_slices[b]
+        batch_end = batch_slices[b+1]
+        i_j = inds_contr[batch_beg]
+        i = i_j.first
+        j = i_j.second
+        k = block_dim_a_contr[i]
+        if calc_dtype_num == np.NPY_DOUBLE:
+            _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                        0., c_data_ptr[b])
+        else: # if calc_dtype_num == np.NPY_CDOUBLE:
+            _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                        0., c_data_ptr[b])
+        for x in range(batch_beg + 1, batch_end):
+            i_j = inds_contr[x]
+            i = i_j.first
+            j = i_j.second
+            k = block_dim_a_contr[i]
+            if calc_dtype_num == np.NPY_DOUBLE:
+                _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                            1., c_data_ptr[b])
+            else: # if calc_dtype_num == np.NPY_CDOUBLE:
+                _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
+                            1., c_data_ptr[b])
+
+
+cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* C) nogil:
+    """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
+
+    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
+    """
+    # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
+    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LD= K yields A.T
+    # Thus we can use C-style A, B, C without transposing.
+    cdef char * tr = 'n'
+    cdef double alpha = 1.
+    # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDB, B, LDB, beta, C LDC)
+    # but switch A <-> B and M <-> N to transpose everything
+    dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N, <double*> A, &K, &beta, <double*> C, &N)
+
+
+cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta, void* C) nogil:
+    """use blas to calculate C = A.B + beta C, overwriting to C
+
+    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN."""
+    cdef char * tr = 'n'
+    cdef double complex alpha = 1.
+    # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
+    zgemm(tr, tr, &N, &M, &K, &alpha, <double complex*> B, &N, <double complex*> A, &K, &beta,
+          <double complex*> C, &N)
+
+
+
 # ################################# #
 # replacements for charges.py       #
 # ################################# #
@@ -400,6 +470,9 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     res : :class:`Array`
         Copy of self with combined legs.
     """
+    if DEBUG_PRINT:
+        print("_combine_legs_worker")
+        t0 = time.time()
     all_combine_legs = np.concatenate(combine_legs)
     # non_combined_legs: axes of self which are not in combine_legs
     cdef np.ndarray[np.intp_t, ndim=1] non_combined_legs = np.array(
@@ -416,6 +489,10 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
         return res
     non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
     cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("init", t1-t0)
+        t0 = time.time()
 
     # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
     qmap_inds = [
@@ -441,6 +518,10 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     # divide into parts, which give a single new block
     cdef np.ndarray[np.intp_t, ndim=1] diffs = _find_row_differences(qdata_s)
     # including the first and last row
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("get new qdata", t1-t0)
+        t0 = time.time()
 
     # now the hard part: map data
     cdef list data = []
@@ -472,6 +553,10 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
     res._qdata_sorted = True
     res._data = data
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("reshape loop", t1-t0)
+        t0 = time.time()
     return res
 
 
@@ -1059,76 +1144,5 @@ def _tensordot_worker(a, b, int axes):
         print("res.stored_blocks", res_n_blocks)
         t0 = time.time()
     return res
-
-
-cdef void _batch_accumulate_gemm(vector[intp_t] batch_slices,
-                            vector[idx_tuple] batch_m_n,
-                            vector[idx_tuple] inds_contr,
-                            vector[intp_t] block_dim_a_contr,
-                            vector[void*] a_data_ptr,
-                            vector[void*] b_data_ptr,
-                            vector[void*] c_data_ptr,
-                            int calc_dtype_num
-                            ) nogil:
-    cdef size_t b, batch_count = batch_m_n.size()
-    cdef intp_t x, batch_beg, batch_end,
-    cdef intp_t i, j, m, n, k
-    cdef idx_tuple i_j, m_n
-
-    for b in range(batch_count): # TODO parallelize !?
-        m_n = batch_m_n[b]
-        m = m_n.first
-        n = m_n.second
-        batch_beg = batch_slices[b]
-        batch_end = batch_slices[b+1]
-        i_j = inds_contr[batch_beg]
-        i = i_j.first
-        j = i_j.second
-        k = block_dim_a_contr[i]
-        if calc_dtype_num == np.NPY_DOUBLE:
-            _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                        0., c_data_ptr[b])
-        else: # if calc_dtype_num == np.NPY_CDOUBLE:
-            _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                        0., c_data_ptr[b])
-        for x in range(batch_beg + 1, batch_end):
-            i_j = inds_contr[x]
-            i = i_j.first
-            j = i_j.second
-            k = block_dim_a_contr[i]
-            if calc_dtype_num == np.NPY_DOUBLE:
-                _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            1., c_data_ptr[b])
-            else: # if calc_dtype_num == np.NPY_CDOUBLE:
-                _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            1., c_data_ptr[b])
-
-
-cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* C) nogil:
-    """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
-
-    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
-    """
-    # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
-    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LD= K yields A.T
-    # Thus we can use C-style A, B, C without transposing.
-    cdef char * tr = 'n'
-    cdef double alpha = 1.
-    # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDB, B, LDB, beta, C LDC)
-    # but switch A <-> B and M <-> N to transpose everything
-    dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N, <double*> A, &K, &beta, <double*> C, &N)
-
-
-cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta, void* C) nogil:
-    """use blas to calculate C = A.B + beta C, overwriting to C
-
-    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN."""
-    cdef char * tr = 'n'
-    cdef double complex alpha = 1.
-    # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
-    zgemm(tr, tr, &N, &M, &K, &alpha, <double complex*> B, &N, <double complex*> A, &K, &beta,
-          <double complex*> C, &N)
-
-
 # TODO: _inner_worker !?!
 # TODO: _svd_workder !?!

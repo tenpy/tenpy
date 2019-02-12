@@ -41,7 +41,6 @@ Eigen systems:
 """
 # Copyright 2018 TeNPy Developers
 
-# TODO: charges._find_row_differences
 
 import numpy as np
 import scipy.linalg
