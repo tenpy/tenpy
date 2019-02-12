@@ -13,8 +13,10 @@ If the file could not be compiled, it just uses the non-compiled Cython version.
 
 DEF DEBUG_PRINT = 0  # TODO XXX
 
-# TODO memory leak if using the np.ndarray[type, ndim=2]` variables with zero second dimension!!!
-# TODO: this code has memory leaks in certain cases! Switch to using memory views!
+# TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
+# the same memory leak appears for memory views `type[:, :]`
+# see https://github.com/cython/cython/issues/2828
+# TODO: check if this code has memory leaks.
 
 import numpy as np
 cimport numpy as np
@@ -77,6 +79,30 @@ cdef inline np.ndarray _np_zeros_2D(intp_t dim1, intp_t dim2, int type_):
     return <np.ndarray>np.PyArray_ZEROS(2, [dim1, dim2], type_, 0)
 
 
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef np.ndarray make_stride(tuple shape, bint cstyle=1):
+    """Create the strides for C-style arrays with a given shape.
+
+    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+    """
+    cdef intp_t a, d, L = len(shape), stride = 1
+    cdef np.ndarray[intp_t, ndim=1] res = _np_empty_1D(L, intp_num)
+    if cstyle:
+        res[L-1] = 1
+        for a in range(L-1, 0, -1):
+            d = shape[a]
+            stride *= d
+            res[a-1] = stride
+    else:
+        res[0] = 1
+        for a in range(0, L-1):
+            d = shape[a]
+            stride *= d
+            res[a+1] = stride
+    return res
+
+
 # ################################# #
 # replacements for charges.py       #
 # ################################# #
@@ -84,48 +110,38 @@ cdef inline np.ndarray _np_zeros_2D(intp_t dim1, intp_t dim2, int type_):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef np.ndarray[QTYPE_t, ndim=1] _make_valid_charges_1D(QTYPE_t[::1] chinfo_mod,
-                                                        np.ndarray[QTYPE_t, ndim=1] charges):
-    """same as ChargeInfo.make_valid for 1D charges"""
+cdef void _make_valid_charges_1D(QTYPE_t[::1] chinfo_mod, QTYPE_t[::1] charges) nogil:
+    """same as ChargeInfo.make_valid for 1D charges, but works in place"""
     cdef intp_t qnumber = chinfo_mod.shape[0]
-    cdef np.ndarray[QTYPE_t, ndim=1, mode="c"] res = _np_empty_1D(qnumber, QTYPE_num)
     cdef int j
     cdef QTYPE_t qm, q
     for j in range(qnumber):
         qm = chinfo_mod[j]
-        if qm == 1:
-            res[j] = charges[j]
-        else:
+        if qm != 1:
             q = charges[j] % qm
             if q < 0:  # correct for C-modulo opposed to python modulo
                 q += qm
-            res[j] = q
-    return res
+            charges[j] = q
+    # done
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef np.ndarray[QTYPE_t, ndim=2] _make_valid_charges_2D(QTYPE_t[::1] chinfo_mod,
-                                                        np.ndarray[QTYPE_t, ndim=2] charges):
-    """same as ChargeInfo.make_valid for 2D charges"""
+cdef void _make_valid_charges_2D(QTYPE_t[::1] chinfo_mod, QTYPE_t[:, ::1] charges) nogil:
+    """same as ChargeInfo.make_valid for 2D charges, but works in place"""
     cdef intp_t qnumber = chinfo_mod.shape[0]
-    assert qnumber != 0  # TODO: otherwise memory leak!
     cdef intp_t L = charges.shape[0]
-    cdef np.ndarray[QTYPE_t, ndim=2, mode="c"] res = _np_empty_2D(L, qnumber, QTYPE_num)
     cdef intp_t i, j
     cdef QTYPE_t qm, q
     for j in range(qnumber):
         qm = chinfo_mod[j]
-        if qm == 1:
-            for i in range(L):
-                res[i, j] = charges[i, j]
-        else:
+        if qm != 1:
             for i in range(L):
                 q = charges[i, j] % qm
                 if q < 0:
                     q += qm
-                res[i, j] = q
-    return res
+                charges[i, j] = q
+    # done
 
 
 @cython.binding(True)
@@ -146,22 +162,24 @@ def ChargeInfo_make_valid(self, charges=None):
     cdef intp_t qnumber = self._qnumber
     if charges is None:
         return _np_zeros_1D(qnumber, QTYPE_num)
-    cdef np.ndarray charges_ = np.asarray(charges, dtype=QTYPE)
+    cdef np.ndarray charges_ = np.array(charges, dtype=QTYPE, copy=True, order="C")
     if charges_.ndim == 1:
         assert (charges_.shape[0] == qnumber)
         if qnumber == 0:
             return _np_zeros_1D(qnumber, QTYPE_num)
-        return _make_valid_charges_1D(self._mod, charges_)
+        _make_valid_charges_1D(self._mod, charges_)
+        return charges_
     elif charges_.ndim == 2:
         assert (charges_.shape[1] == qnumber)
         if qnumber == 0:
             return _np_zeros_2D(charges_.shape[0], qnumber, QTYPE_num)
-        return _make_valid_charges_2D(self._mod, charges_)
+        _make_valid_charges_2D(self._mod, charges_)
+        return charges_
     raise ValueError("wrong dimension of charges " + str(charges))
 
 
 @cython.binding(True)
-def ChargeInfo_check_valid(self, np.ndarray charges):
+def ChargeInfo_check_valid(self, charges):
     r"""Check, if `charges` has all entries as expected from self.mod.
 
     Parameters
@@ -178,14 +196,14 @@ def ChargeInfo_check_valid(self, np.ndarray charges):
     cdef intp_t i, j, L = charges.shape[0], qnumber = self._qnumber
     if qnumber == 0:
         return True
-    cdef np.ndarray[QTYPE_t, ndim=2] charges_c = charges
+    cdef QTYPE_t[:, :] charges_ = charges
     cdef QTYPE_t q, x
     for j in range(qnumber):
         q = chinfo_mod[j]
         if q == 1:
             continue
         for i in range(L):
-            x = charges_c[i, j]
+            x = charges_[i, j]
             if x < 0 or x >= q:
                 return False
     return True
@@ -193,7 +211,6 @@ def ChargeInfo_check_valid(self, np.ndarray charges):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-@cython.cdivision(True)
 @cython.binding(True)
 def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     """Calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
@@ -202,27 +219,22 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     """
     # this function heavily uses numpys advanced indexing, for details see
     # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
-    # and the documentation of np.mgrid
     cdef intp_t nlegs = self.nlegs
     cdef QTYPE_t[::1] chinfo_mod = self.chinfo._mod
     cdef intp_t qnumber = chinfo_mod.shape[0]
-    cdef np.ndarray qshape = np.array(self.subqshape, dtype=np.intp)
     cdef intp_t i, j
     cdef QTYPE_t sign
     cdef intp_t a
+    self._strides = make_stride(self.subqshape, 1)  # save for :meth:`_map_incoming_qind`
 
     # create a grid to select the multi-index sector
-    grid = np.mgrid[[slice(0, l) for l in qshape]]
+    grid = np.indices(self.subqshape, np.intp)
     # grid is an array with shape ``(nlegs,) + qshape``,
     # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
-    cdef np.ndarray strides =  \
-        np.array(grid.strides, np.intp)[1:] // grid.itemsize
-    self._strides = strides  # save for :meth:`_map_incoming_qind`
     # collapse the different directions into one.
-    cdef np.ndarray[intp_t, ndim=2] grid2 = grid.reshape(nlegs, -1)
+    cdef intp_t[:, ::1] grid2 = grid.reshape(nlegs, -1)
         # *this* is the actual `reshaping`
     # *columns* of grid are now all possible cominations of qindices.
-
     cdef intp_t nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
     cdef np.ndarray[intp_t, ndim=2, mode="c"] q_map = _np_empty_2D(nblocks, 3 + nlegs, intp_num)
     # determine q_map -- it's essentially the grid.
@@ -230,30 +242,16 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     # q_map[:, :3] is initialized after sort/bunch.
 
     # determine block sizes
-    cdef np.ndarray blocksizes = np.ones((nblocks,), dtype=np.intp)
-    cdef np.ndarray leg_bs
+    cdef np.ndarray[intp_t, ndim=1] blocksizes = np.ones((nblocks,), dtype=np.intp)
+    cdef intp_t[::1] leg_bs
     for i in range(nlegs):
         leg_bs = self.legs[i]._get_block_sizes()
         for j in range(nblocks):
             blocksizes[j] *= leg_bs[grid2[i, j]]
 
     # calculate total charges
-    cdef np.ndarray[QTYPE_t, ndim=2, mode="c"] charges = np.zeros((nblocks, qnumber), dtype=QTYPE)
-    cdef np.ndarray[QTYPE_t, ndim=2] legcharges
-    if qnumber > 0:
-        for i in range(nlegs):
-            legcharges = self.legs[i].charges
-            sign = self.qconj * self.legs[i].qconj
-            for j in range(nblocks):
-                for k in range(qnumber):
-                    charges[j, k] += sign * legcharges[grid2[i, j], k]
-        # now, we have what we need according to the charge **fusion rule**
-        # namely for qi=`leg qindices` and li=`legs`:
-        # charges[(q1, q2,...)] == self.qconj * (l1.qind[q1]*l1.qconj +
-        #                                        l2.qind[q2]*l2.qconj + ...)
-        charges = _make_valid_charges_2D(chinfo_mod, charges)  # modulo qmod
-
-    if sort:
+    cdef np.ndarray charges = _partial_qtotal(chinfo_mod, self.legs, grid2.T, self.qconj)
+    if sort and qnumber > 0:
         # sort by charge. Similar code as in :meth:`LegCharge.sort`,
         # but don't want to create a copy, nor is qind[:, 0] initialized yet.
         perm_qind = lexsort(charges.T)
@@ -264,14 +262,14 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     else:
         self._perm = None
     self._set_charges(charges)
-    self.sorted = sort
+    self.sorted = sort or (qnumber == 0)
     self._set_block_sizes(blocksizes)  # sets self.slices
-    cdef np.ndarray slices = self.slices
+    cdef intp_t[::1] slices = self.slices
     for j in range(nblocks):
         q_map[j, 0] = slices[j]
         q_map[j, 1] = slices[j+1]
 
-    cdef np.ndarray idx
+    cdef intp_t[::1] idx
     if bunch:
         # call LegCharge.bunch(), which also calculates new blocksizes
         idx, bunched = _charges.LegCharge.bunch(self)
@@ -305,7 +303,6 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-@cython.cdivision(True)
 cpdef np.ndarray _find_row_differences(np.ndarray qflat):
     """Return indices where the rows of the 2D array `qflat` change.
 
@@ -325,7 +322,7 @@ cpdef np.ndarray _find_row_differences(np.ndarray qflat):
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
     cdef np.ndarray[QTYPE_t, ndim=2] qflat_c = qflat
-    cdef np.ndarray[np.intp_t, ndim=1] res = np.empty(max(L + 1, 2), dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] res = _np_empty_1D(max(L + 1, 2), intp_num)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
@@ -340,42 +337,41 @@ cpdef np.ndarray _find_row_differences(np.ndarray qflat):
     return res[:n+1]
 
 
-cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, list legs, np.ndarray qdata):
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdata, QTYPE_t qconj,
+                                QTYPE_t[::1] add_qtotal=None):
     """Calculate qtotal of a part of the legs of a npc.Array.
 
-    Parameters
-    ----------
-    chinfo_mod :
-        Common ChargeInfo.mod of the legs.
-    legs : list of LegCharge
-        The legs over which wich we sum
-    qdata : 2D array
-        Rows of qindices for the specified legs.
-
-    Returns
-    -------
-    partial_qtotal : 2D ndarray
-        Valid 2D version of
-        ``chinfo.make_valid(np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0))``.
+    Equivalent to:
+        charges = np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0)
+        return chinfo.make_valid(charges * qconj + add_qtotal)
     """
     cdef intp_t nlegs = qdata.shape[1]
     cdef intp_t qnumber = chinfo_mod.shape[0]
-    if qnumber == 0:  # TODO: memory leak!
+    if qnumber == 0:
         return _np_zeros_2D(qdata.shape[0], qnumber, QTYPE_num)
     cdef np.ndarray[QTYPE_t, ndim=2] res = _np_zeros_2D(qdata.shape[0], qnumber, QTYPE_num)
     cdef intp_t a, k, qi
     #  cdef LegCharge leg
     cdef np.ndarray[QTYPE_t, ndim=2] charges
-    cdef QTYPE_t qconj
+    cdef QTYPE_t sign, q
     for a in range(nlegs):
         leg = legs[a]
-        qconj = leg.qconj
+        sign = leg.qconj
+        sign = sign * qconj
         charges = leg.charges
         for i in range(qdata.shape[0]):
             qi = qdata[i, a]
             for k in range(qnumber):
-                res[i, k] += charges[qi, k] * qconj
-    return _make_valid_charges_2D(chinfo_mod, res)
+                res[i, k] += charges[qi, k] * sign
+    if add_qtotal is not None:
+        for k in range(qnumber):
+            q = add_qtotal[k]
+            for i in range(res.shape[0]):
+                res[i, k] += q
+    _make_valid_charges_2D(chinfo_mod, res)
+    return res
 
 
 # ############################################### #
@@ -416,7 +412,7 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     res._set_shape()
     if self.stored_blocks == 0:
         res._data = []
-        res._qdata = np.empty((0, res.rank), dtype=np.intp)
+        res._qdata = _np_empty_2D(0, res.rank, intp_num)
         return res
     non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
     cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
@@ -487,7 +483,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     # calculate mappings of axes
     # in self
     cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.sort(split_axes_)
-    cdef int a, i, j, nsplit=split_axes.shape[0]
+    cdef int a, i, j, nsplit = split_axes.shape[0]
     pipes = [self.legs[a] for a in split_axes]
     cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
         [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
@@ -593,7 +589,7 @@ cdef inline intp_t _iter_common_sorted_push(
             #  yield i, j
             i_j.first = i
             i_j.second = j
-            out.push_back(i_j) # pointer get's dereferenced automatically
+            out.push_back(i_j) # (equivalent to C's out->push_back)
             count += 1
             i += 1
             j += 1
@@ -623,7 +619,7 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
     cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
-    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:a.rank-1]])
+    stride = make_stride(tuple([l.block_number for l in a.legs[cut_a:a.rank]]), 0)  # TODO: can use c-style!?!
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
@@ -670,10 +666,11 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
     -------
     max_n_blocks_res : int
         Maximum number of block in the result a.dot(b)
-    row_a_sort: np.ndarray[np.intp_t, ndim=1]
-    match_rows: np.ndarray[np.intp_t, ndim=2]
+    row_a_sort: intp_t[:]
+    match_rows: intp_t[:, ::1]
         For given `col_b`, rows given by `row_a` in
         ``row_a_sort[match_rows[col_b, 0]:match_rows[col_b,1]]`` fulfill
+        the charge rule, i.e.
         ``a_charges_keep[col_a, :] == b_charges_match[col_b, :]``
     """
     cdef intp_t qnumber = chinfo_mod.shape[0]
@@ -685,15 +682,12 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
         return n_rows_a * n_cols_b, np.arange(n_rows_a), match_rows
     # general case
     cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep = _partial_qtotal(
-        chinfo_mod, a.legs[:cut_a], a_qdata_keep)
-    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_keep = _partial_qtotal(
-        chinfo_mod, b.legs[cut_b:], b_qdata_keep)
-    # a_charges_match: for each row in a, which charge in b is compatible?
-    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match = _make_valid_charges_2D(chinfo_mod, qtotal - b_charges_keep)
-    cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep_C = a_charges_keep
-    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match_C = b_charges_match
-    cdef np.ndarray[np.intp_t, ndim=1] row_a_sort = np.lexsort(a_charges_keep.T)
-    cdef np.ndarray[np.intp_t, ndim=1] col_b_sort = np.lexsort(b_charges_match.T)
+        chinfo_mod, a.legs[:cut_a], a_qdata_keep, 1)
+    cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match = _partial_qtotal(
+        chinfo_mod, b.legs[cut_b:], b_qdata_keep, -1, add_qtotal=qtotal)
+    _make_valid_charges_2D(chinfo_mod, b_charges_match)
+    cdef intp_t[::1] row_a_sort = np.lexsort(a_charges_keep.T)
+    cdef intp_t[::1] col_b_sort = np.lexsort(b_charges_match.T)
     cdef int res_max_n_blocks = 0
     cdef int i=0, j=0, i0, j0, ax, j1
     cdef int i_s, j_s, i0_s, j0_s  # corresponding entries in row_a_sort/col_b_sort
@@ -704,10 +698,10 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
         # lexcompare a_charges_keep[i_s, :] and b_charges_match[j_s, :]
         lexcomp = 0
         for ax in range(qnumber-1, -1, -1):
-            if a_charges_keep_C[i_s, ax] > b_charges_match_C[j_s, ax]:
+            if a_charges_keep[i_s, ax] > b_charges_match[j_s, ax]:
                 lexcomp = 1
                 break
-            elif a_charges_keep_C[i_s, ax] < b_charges_match_C[j_s, ax]:
+            elif a_charges_keep[i_s, ax] < b_charges_match[j_s, ax]:
                 lexcomp = -1
                 break
         if lexcomp > 0:  # a_charges_keep is larger: advance j
@@ -727,7 +721,7 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
             i_s = row_a_sort[i]
             lexcomp = 0
             for ax in range(qnumber-1, -1, -1):
-                if a_charges_keep_C[i_s, ax] != a_charges_keep_C[i0_s, ax]:
+                if a_charges_keep[i_s, ax] != a_charges_keep[i0_s, ax]:
                     lexcomp = 1
                     break
             if lexcomp > 0:  # (sorted -> can only increase)
@@ -741,7 +735,7 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
             j_s = col_b_sort[j]
             lexcomp = 0
             for ax in range(qnumber-1, -1, -1):
-                if b_charges_match_C[j_s, ax] != b_charges_match_C[j0_s, ax]:
+                if b_charges_match[j_s, ax] != b_charges_match[j0_s, ax]:
                     lexcomp = 1
                     break
             if lexcomp > 0:  # (sorted -> can only increase)
@@ -835,22 +829,20 @@ def _tensordot_worker(a, b, int axes):
         print("a.stored_blocks", a.stored_blocks, "b.stored_blocks", b.stored_blocks)
         t0 = time.time()
     # determine calculation type and result type
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
-    prefix, _, _ = BLAS.find_best_blas_type(dtype=dtype)
+    res_dtype = np.find_common_type([a.dtype, b.dtype], [])
+    prefix, _, _ = BLAS.find_best_blas_type(dtype=res_dtype)
     # we always use 64-bit float calculations....
-    res_dtype = np.dtype({'s': np.float64,
-                          'd': np.float64,
-                          'c': np.complex128,
-                          'z': np.complex128}[prefix])
+    calc_dtype = np.dtype({'s': np.float64, 'd': np.float64,
+                           'c': np.complex128, 'z': np.complex128}[prefix])
     # TODO: handle special dtypes?
-    cdef int CALC_DTYPE_NUM = res_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
-    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = _make_valid_charges_1D(chinfo_mod, a.qtotal + b.qtotal)
+    cdef int CALC_DTYPE_NUM = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
+    _make_valid_charges_1D(chinfo_mod, qtotal)
     res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if a.dtype.num != CALC_DTYPE_NUM:
-        a = a.astype(res_dtype)
+        a = a.astype(calc_dtype)
     if b.dtype.num != CALC_DTYPE_NUM:
-        b = b.astype(res_dtype)
-    assert a.dtype == b.dtype == res_dtype
+        b = b.astype(calc_dtype)
 
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata = a._qdata
     cdef np.ndarray[np.intp_t, ndim=2] b_qdata = b._qdata
@@ -861,8 +853,7 @@ def _tensordot_worker(a, b, int axes):
     cdef intp_t i, j
     # special case: a or b is zero
     if len_a_data == 0 or len_b_data == 0:  # special case: `a` or `b` is 0
-        return _np_conserved.zeros(a.legs[:-axes] + b.legs[axes:],
-                     np.find_common_type([a.dtype, b.dtype], []), a.qtotal + b.qtotal)
+        return res
     # special case: only one stored block
     if len_a_data == 1 and len_b_data == 1:
         # optimize for special case that a and b have only 1 entry
@@ -873,15 +864,15 @@ def _tensordot_worker(a, b, int axes):
                 break
         if equal:
             # contract innner
-            res._data = [np.tensordot(a._data[0], b._data[0], axes=axes)]
+            res._data = [np.asarray(np.tensordot(a._data[0], b._data[0], axes=axes),
+                                    dtype=res_dtype)]
             c_qdata = np.zeros([1, res_rank], np.intp)
             for i in range(cut_a):
                 c_qdata[0, i] = a_qdata[0, i]
             for i in range(b_rank - cut_b):
                 c_qdata[0, cut_a + i] = b_qdata[0, cut_b + i]
             res._qdata = c_qdata
-            return res
-        #  else: return zero
+        #  else: zero
         return res
 
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
@@ -920,8 +911,8 @@ def _tensordot_worker(a, b, int axes):
     block_dim_a_contr.resize(len_a_data)
     cdef intp_t row_a, col_b, k_contr, ax  # indices
     cdef intp_t m, n, k   # reshaped dimensions: a_block.shape = (m, k), b_block.shape = (k,n)
-    cdef np.ndarray[np.intp_t, ndim=2] a_shape_keep = np.empty((n_rows_a, cut_a), np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] block_dim_a_keep = np.empty(n_rows_a, np.intp)
+    cdef intp_t[:, ::1] a_shape_keep = _np_empty_2D(n_rows_a, cut_a, intp_num)
+    cdef intp_t[::1] block_dim_a_keep = _np_empty_1D(n_rows_a, intp_num)
     # inline what's  _tensordot_pre_reshape in the python version
     for row_a in range(n_rows_a):
         i = a_slices[row_a]
@@ -937,8 +928,8 @@ def _tensordot_worker(a, b, int axes):
             block_dim_a_contr[j] = m  # needed for dgemm
             a_data_ptr[j] = np.PyArray_DATA(block)
             a_data[j] = block  # important to keep the arrays of the pointers alive
-    cdef np.ndarray[np.intp_t, ndim=2] b_shape_keep = np.empty((n_cols_b, b_rank-cut_b), np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] block_dim_b_keep = np.empty(n_cols_b, np.intp)
+    cdef intp_t[:, ::1] b_shape_keep = _np_empty_2D(n_cols_b, b_rank-cut_b, intp_num)
+    cdef intp_t[::1] block_dim_b_keep = _np_empty_1D(n_cols_b, intp_num)
     for col_b in range(n_cols_b):
         i = b_slices[col_b]
         block = <np.ndarray> b_data[i]
@@ -960,8 +951,8 @@ def _tensordot_worker(a, b, int axes):
     # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
 
     # first find output colum/row indices of the result, which are compatible with the charges
-    cdef np.ndarray[np.intp_t, ndim=1] row_a_sort
-    cdef np.ndarray[np.intp_t, ndim=2] match_rows
+    cdef intp_t[::1] row_a_sort
+    cdef intp_t[:, ::1] match_rows
     cdef intp_t res_max_n_blocks, res_n_blocks = 0
     # the main work for that is in _tensordot_match_charges
     res_max_n_blocks, row_a_sort, match_rows = _tensordot_match_charges(
@@ -1059,8 +1050,9 @@ def _tensordot_worker(a, b, int axes):
         res._qdata = res_qdata
         res._qdata_sorted = True
         res._data = res_data
-        if dtype.num != CALC_DTYPE_NUM:
-            res = res.astype(dtype)
+        if res_dtype.num != CALC_DTYPE_NUM:
+            res.dtype = calc_dtype
+            res = res.astype(res_dtype)
     if DEBUG_PRINT:
         t1 = time.time()
         print("finalize", t1-t0)

@@ -740,9 +740,9 @@ class LegCharge:
         keep = np.nonzero(new_block_lens)[0]
         block_masks = [block_masks[i] for i in keep]
         cp._set_charges(cp.charges[keep])
-        map_qind = -np.ones(self.block_number, np.int_)
+        map_qind = -np.ones(self.block_number, np.intp)
         map_qind[keep] = np.arange(len(keep))
-        cp._set_block_sizes(np.array(new_block_lens)[keep])
+        cp._set_block_sizes(np.array(new_block_lens, dtype=np.intp)[keep])
         cp.bunched = self.is_blocked()  # no, it's not `is_bunched`
         return map_qind, block_masks, cp
 
@@ -1108,13 +1108,12 @@ class LegPipe(LegCharge):
         """
         # this function heavily uses numpys advanced indexing, for details see
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
-        # and the documentation of np.mgrid
         nlegs = self.nlegs
         qnumber = self.chinfo.qnumber
         qshape = self.subqshape
 
         # create a grid to select the multi-index sector
-        grid = np.mgrid[[slice(0, l) for l in qshape]]
+        grid = np.indices(qshape, np.intp)
         # grid is an array with shape ``(nlegs,) + qshape``,
         # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
         # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
