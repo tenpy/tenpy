@@ -24,6 +24,7 @@ def overlap(mps1, mps2):
     X=np.ones((1,1))
     L=len(mps1)
     for i in range(0, L):
+        print(X.shape,np.conj(mps1[i]).shape,'axes=[[0],[1]]')
         tmp = np.tensordot(X, np.conj(mps1[i]), axes=[[0],[1]])
         X = np.tensordot(tmp, mps2[i], axes=[[0,1],[1,0]])
     overlap=X.reshape(())
@@ -262,28 +263,18 @@ if __name__ == "__main__":
 
 
     psi=random_prod_state_tenpy(heisenberg.lat.N_sites,heisenberg)
-    psi.canonical_form()
-    chi=30
-    for i in range(heisenberg.lat.N_sites):
-        d=2
-        B_new=psi.get_B(i)
-        D1 = np.min([d**np.min([i,L-i]),chi])
-        D2 = np.min([d**np.min([i+1,L-i-1]),chi])
-        B_new=psi.get_B(i).extend('vL',D1-1)
-        B_new=B_new.extend('vR',D2-1)
-        psi.set_B(i,B_new,form='B')
-
+    
     tebd_params = {
           'order': 2,
           'dt': delta_t,
-          'N_steps': 1,
+          'N_steps': 10,
           'trunc_params': {
               'chi_max': 50,
               'svd_min': 1.e-10,
               'trunc_cut':None 
           }
       }
-    """
+    
     print("psi before TEBD")
     print(psi.chi)
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
@@ -291,7 +282,7 @@ if __name__ == "__main__":
     #psi=engine.psi
     print("psi after TEBD")
     print(psi.chi)
-    """
+   
     # test that the initial conditions are the same
      
     psit_compare=[]
@@ -307,20 +298,16 @@ if __name__ == "__main__":
         'dt':1j*delta_t,
         'N_steps':1
     }
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params)
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,check_error=True)
     for t in range(10):
         #psi0,environment,theta_test=tdvp.tdvp(psi0,H_MPO,-0.5*1j*delta_t,chinfo)
-        psi,environment,spect = tdvp_engine.run() 
-        #psit_compare,Rp_list,spectrum=tdvp_fast.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)
+        #psi,environment,spect = tdvp_engine.run() 
         tdvp_engine.run()
-        print(psi.get_B(10).shape)
-        sys.exit()
+        psit_compare,Rp_list,spectrum=tdvp_fast.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)
         psit_=[]
     for i in range(L):
         B=psi.get_B(i).transpose(['p','vL','vR']).to_ndarray()
         B=B[::-1,:,:]
-        print("B.shape")
-        print(B.shape)
         psit_.append(B)
     if np.abs(np.abs(overlap(psit_,psit_compare))-1.0)<1e-13:
         print("test passed")

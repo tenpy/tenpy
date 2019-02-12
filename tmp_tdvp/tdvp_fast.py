@@ -28,9 +28,13 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5,O=None):
                         theta = evolve_lanczos(H, theta.reshape(d*chia*chib), -dt, np.min([d*chia*chib-1,k]))
                         #theta = expm_multiply(H, theta.reshape(d*chia*chib), -dt, np.min([d*chia*chib-1,k]))
                         theta = theta.reshape(d*chia,chib)/np.linalg.norm(theta)
-
+                        print("theta.shape")
+                        print(theta.shape)
                         # SVD and update environment
                         U,s,V = np.linalg.svd(theta,full_matrices=0)
+                        print("V.shape")
+                        print(V.shape)
+                        sys.exit()
                         spectrum.append(s/np.linalg.norm(s))
                         U = U.reshape(d,chia,chib)
                         s = np.diag(s)
@@ -71,6 +75,7 @@ def tdvp(Psi, W, dt, Rp_list=None, k=5,O=None):
         
         Lp_list = [np.zeros([1,1,D])]; Lp_list[0][0,0,0] = 1
         Psi, Rp_list, spectrum = sweep(Psi, W, dt, Lp_list,Rp_list)
+        sys.exit()
         Lp_mid = Rp_list[int(L/2)]
         Psi = mps_invert(Psi)
         W = mpo_invert(W)
