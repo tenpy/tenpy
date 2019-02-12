@@ -3626,9 +3626,10 @@ def _split_legs_worker(self, split_axes, cutoff):
     qdata = []  # rows of the new qdata
     new_block_shape = np.empty(res.rank, dtype=np.intp)
     block_slice = [slice(None)] * self.rank
+    sliced_q_maps = [[p.q_map[i:j] for i, j in zip(p.q_map_slices[:-1], p.q_map_slices[1:])] for p in pipes]
     for old_block, qdata_row in zip(self._data, tmp_qdata):
         qmap_slices = [
-            p.q_map_slices[i] for p, i in zip(pipes, qdata_row[new_split_axes_first])
+            sl_q_map[i] for sl_q_map, i in zip(sliced_q_maps, qdata_row[new_split_axes_first])
         ]
         new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
         for qmap_rows in itertools.product(*qmap_slices):

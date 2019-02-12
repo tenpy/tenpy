@@ -366,9 +366,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
         q_map[j, 1] -= a
 
     self.q_map = q_map  # finished
-    # finally calculate q_map_slices
-    self.q_map_slices = [q_map[idx[i]:idx[i+1]] for i in range(len(idx)-1)]
-    # q_map_slices contains only views!
+    self.q_map_slices = np.asarray(idx, dtype=np.intp)
 
 
 @cython.wraparound(False)
@@ -483,10 +481,13 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     res = self.copy(deep=False)
     res.legs = legs
     res._set_shape()
-    if self.stored_blocks == 0:
+    cdef intp_t res_rank = res.rank
+    cdef intp_t self_stored_blocks = self.stored_blocks
+    if self_stored_blocks == 0:
         res._data = []
         res._qdata = _np_empty_2D(0, res.rank, intp_num)
         return res
+    # TODO: handle self_stored_blocks == 1 separately for optimization
     non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
     cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
     if DEBUG_PRINT:
@@ -500,8 +501,7 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     ]
 
     # get new qdata
-    cdef np.ndarray[np.intp_t, ndim=2] qdata = np.empty((self.stored_blocks, res.rank),
-                                                        dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=2, mode="c"] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
     for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
         np.take(
@@ -512,11 +512,11 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     # since for the pipes many `qmap_ind` map to the same `qindex`
     # find unique entries by sorting qdata
     sort = np.lexsort(qdata.T)
-    qdata_s = qdata[sort]
+    qdata = qdata[sort]
     old_data = [self._data[s] for s in sort]
     qmap_inds = [qm[sort] for qm in qmap_inds]
     # divide into parts, which give a single new block
-    cdef np.ndarray[np.intp_t, ndim=1] diffs = _find_row_differences(qdata_s)
+    cdef np.ndarray[np.intp_t, ndim=1] diffs = _find_row_differences(qdata)
     # including the first and last row
     if DEBUG_PRINT:
         t1 = time.time()
@@ -526,17 +526,17 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     # now the hard part: map data
     cdef list data = []
     cdef list slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
-    # iterate over ranges of equal qindices in qdata_s
-    cdef np.ndarray new_block, old_block #, new_block_view # TODO: shape doesn't work...
+    # iterate over ranges of equal qindices in qdata
+    cdef np.ndarray new_block, old_block
     cdef np.ndarray[np.intp_t, ndim=1] qindices
-    cdef int beg, end, bi, j, old_data_idx, qi
+    cdef intp_t beg, end, bi, j, old_data_idx, qi
     cdef np.ndarray[np.intp_t, ndim=2] q_map
     cdef tuple sl
     cdef int npipes = len(combine_legs)
     for bi in range(diffs.shape[0]-1):
         beg = diffs[bi]
         end = diffs[bi+1]
-        qindices = qdata_s[beg]
+        qindices = qdata[beg]
         new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
         data.append(new_block)
         # copy blocks
@@ -550,7 +550,7 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
             new_block_view = new_block[sl]
             old_block = old_data[old_data_idx].reshape(new_block_view.shape)
             np.copyto(new_block_view, old_block, casting='no')
-    res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
+    res._qdata = qdata[diffs[:-1]]  # (keeps the dimensions)
     res._qdata_sorted = True
     res._data = data
     if DEBUG_PRINT:
@@ -598,6 +598,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     cdef np.ndarray[np.intp_t, ndim=1] qdata_row, qm
     cdef list block_slice = [slice(None)] * self.rank
     cdef list qmap_slices = [None] * nsplit
+    cdef intp_t r
     cdef slice sl
     # TODO
     #  cdef LegPipe pipe
@@ -609,7 +610,8 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
             new_block_shape[new_nonsplit_axes[j]] = old_block.shape[nonsplit_axes[j]]
         for j in range(nsplit):
             pipe = pipes[j]
-            qmap_slices[j] = pipe.q_map_slices[qdata_row[new_split_axes_first[j]]]
+            r = qdata_row[new_split_axes_first[j]]
+            qmap_slices[j] = pipe.q_map[pipe.q_map_slices[r]:pipe.q_map_slices[r+1]]
         for qmap_rows in itertools.product(*qmap_slices):
             for i in range(nsplit):
                 qm = qmap_rows[i]

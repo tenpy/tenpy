@@ -920,8 +920,9 @@ class LegPipe(LegCharge):
     q_map:  array[np.intp, ndim=2]
         Shape (`block_number`, 3 + `nlegs`). Rows: ``[ b_j, b_{j+1}, I_s, i_1, ..., i_{nlegs}]``,
         See Notes below for details.
-    q_map_slices : list of views onto q_map
-        Defined such that ``q_map_slices[I_s] == q_map[(q_map[:, 2] == I_s)]``.
+    q_map_slices : array[np.intp, ndim=1]
+        Defined such that the row indices of in
+        ``range(q_map_slices[I_s], q_map_slices[I_s+1])`` have ``q_map[:, 2] == I_s`.
     _perm : 1D array
         A permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array
@@ -979,7 +980,7 @@ class LegPipe(LegCharge):
         self.subqshape = tuple([l.block_number for l in legs])
         self.q_map = None  # overwritten in _init_from_legs, but necessary for copies
         self.q_map_slices = None  # overwritten in _init_from_legs, but necessary for copies
-        # the diffuclt part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
+        # the difficult part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
         self._init_from_legs(sort, bunch)
         self.test_sanity()
 
@@ -1180,7 +1181,7 @@ class LegPipe(LegCharge):
         self.q_map = q_map  # finished
 
         # finally calculate q_map_slices
-        self.q_map_slices = [q_map[i:j] for i, j in zip(idx[:-1], idx[1:])]
+        self.q_map_slices = idx
         # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):
