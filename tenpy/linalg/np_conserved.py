@@ -3504,9 +3504,6 @@ def to_iterable_arrays(array_list):
 
 # ##################################
 # internal helper functions
-# NB: (some of) the following functions become "monkeypatched"
-# by the corresponding Cython versions from npc_helper.pyx.
-# see the tenpy/linalg/__init__.py
 # ##################################
 
 

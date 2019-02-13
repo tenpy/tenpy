@@ -25,6 +25,7 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 from libcpp.vector cimport vector
 from cython.operator cimport dereference as deref, postincrement as inc  # TODO
+from libc.string cimport memcpy
 
 import bisect
 import warnings
@@ -53,7 +54,7 @@ assert intp_num == np.dtype(np.intp).num
 
 # We can not ``from . import np_conserved`` because
 # importing np_conserved requires this cython module to be imported.
-# requiring these modules requires python anyways, so it doesn't hurt to import them later on.
+# These modules require python anyways, so it doesn't hurt to import them later on.
 # Therefore, the following variables are set to the correpsonding modules in
 # tenpy/linalg/__init__.py once the modules have been imported in the correct order.
 _np_conserved = None  # tenpy.linalg.np_conserved
@@ -62,6 +63,7 @@ _charges = None       # tenpy.linalg.charges
 # ################################# #
 # helper functions                  #
 # ################################# #
+
 
 cdef inline np.ndarray _np_empty(np.PyArray_Dims dims, int type_):
     return <np.ndarray>np.PyArray_EMPTY(dims.len, dims.ptr, type_, 0 )
@@ -170,6 +172,52 @@ cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta
     # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
     zgemm(tr, tr, &N, &M, &K, &alpha, <double complex*> B, &N, <double complex*> A, &K, &beta,
           <double complex*> C, &N)
+
+
+
+cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
+                          char* src_data, intp_t* src_strides,
+                          intp_t* slice_shape, intp_t ndim) nogil:
+    """Implementation of :func:`sliced_copy`.
+
+    `src_beg` and `dest_beg` are [0, 0, ...] and the arrays are given by pointers & strides"""
+    cdef intp_t width, i, j, k, d0, d1, d2, s0, s1, s2, l0, l1, l2
+    if ndim < 1:
+        return
+    # explicitly unravel for up to 3 dimensions
+    d0 = dest_strides[0]
+    s0 = src_strides[0]
+    l0 = slice_shape[0]
+    if ndim == 1:
+        width = l0 * s0
+        memcpy(dest_data, src_data, width)
+        return
+    d1 = dest_strides[1]
+    s1 = src_strides[1]
+    l1 = slice_shape[1]
+    if ndim == 2:
+        width = l1 * s1
+        for i in range(l0):
+            memcpy(&dest_data[i*d0] , &src_data[i*s0], width)
+        return
+    d2 = dest_strides[2]
+    s2 = src_strides[2]
+    l2 = slice_shape[2]
+    if ndim == 3:
+        width = l2 * s2
+        for i in range(l0):
+            for j in range(l1):
+                memcpy(&dest_data[i*d0 + j*d1] , &src_data[i*s0 + j*s1], width)
+        return
+    # ndim >= 4: from here on recursively
+    # go down by 3 dimensions at once
+    for i in range(l0):
+        for j in range(l1):
+            for k in range(l2):
+                _sliced_strided_copy(&dest_data[i*d0 + j*d1 + k*d2], &dest_strides[3],
+                                     &src_data[i*s0 + j*s1 + k*s2], &src_strides[3],
+                                     &slice_shape[3], ndim-3)
+
 
 
 
@@ -441,6 +489,62 @@ cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdat
     _make_valid_charges_2D(chinfo_mod, res)
     return res
 
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, intp_t[::1] src_beg,
+                       intp_t[::1] slice_shape) except *:
+    """Copy slices from `src` into slices of `dest`.
+
+
+    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays.
+
+    Equivalent to ::
+
+        assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
+        dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
+        src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+        dest[dst_sl] = src[src_sl]
+
+    For example ``dest[0:4, 2:5] = src[1:5, 0:3]`` is equivalent to
+    ``sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
+
+    Parameters
+    ----------
+    dest : array
+        The array to copy into.
+        Assumed to be C-contiguous.
+    dest_beg : intp[ndim]
+        Entries are start of the slices used for `dest`
+    src : array
+        The array to copy from.
+        Assumed to be C-contiguous and of same dtype and dimension as `dest`.
+    src_beg : intp[ndim]
+        Entries are start of the slices used for `src`
+    slice_shape : intp[ndim]
+        The lenght of the slices.
+    """
+    cdef char *dest_data = np.PyArray_BYTES(dest)
+    cdef char *src_data = np.PyArray_BYTES(src)
+    cdef intp_t *dest_strides = np.PyArray_STRIDES(dest),
+    cdef intp_t *src_strides = np.PyArray_STRIDES(src)
+    cdef intp_t ndim = np.PyArray_NDIM(dest)
+    if not (dest_beg.shape[0] == ndim == np.PyArray_NDIM(src)
+            == src_beg.shape[0] == slice_shape.shape[0]):
+        raise ValueError("wrong dimensions")
+    if not (dest_strides[ndim-1] == np.PyArray_ITEMSIZE(dest)
+            == np.PyArray_ITEMSIZE(src) == src_strides[ndim-1]):
+        raise ValueError("different data types or not C-contiguous")
+    #  add offset of *_beg to *_data.
+    cdef intp_t i, j = 0
+    for i in range(ndim):
+        j += dest_beg[i] * dest_strides[i]
+    dest_data = &dest_data[j]
+    j = 0
+    for i in range(ndim):
+        j += src_beg[i] * src_strides[i]
+    src_data = &src_data[j]
+    _sliced_strided_copy(dest_data, dest_strides, src_data, src_strides, &slice_shape[0], ndim)
 
 # ############################################### #
 # replacements for np_conserved.Array methods     #

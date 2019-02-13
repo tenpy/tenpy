@@ -1256,3 +1256,40 @@ def _find_row_differences(qflat):
     diff = np.ones(qflat.shape[0] + 1, dtype=np.bool_)
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
+@use_cython
+def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
+    """Copy slices from `src` into slices of `dest`.
+
+
+    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays.
+
+    Equivalent to ::
+
+        assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
+        dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
+        src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+        dest[dst_sl] = src[src_sl]
+
+    For example ``dest[0:4, 2:5] = src[1:5, 0:3]`` is equivalent to
+    ``sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
+
+    Parameters
+    ----------
+    dest : array
+        The array to copy into.
+        Assumed to be C-contiguous.
+    dest_beg : intp[ndim]
+        Entries are start of the slices used for `dest`
+    src : array
+        The array to copy from.
+        Assumed to be C-contiguous and of same dtype and dimension as `dest`.
+    src_beg : intp[ndim]
+        Entries are start of the slices used for `src`
+    slice_shape : intp[ndim]
+        The lenght of the slices.
+    """
+    assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
+    dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
+    src_sl =  tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+    dest[dst_sl] = src[src_sl]
