@@ -52,8 +52,8 @@ class Engine(object):
         self._update_index = None
         self.environment=None
         self.spectrum=None
-        self.Psi=psi
-        self.L=self.Psi.L
+        self.psi=psi
+        self.L=self.psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')
         self.trunc_params=trunc_params
         self.error=check_error
@@ -62,23 +62,22 @@ class Engine(object):
 
     def del_correct(self,i):
         #LP
-        self.environment.del_LP(i+1)
+        self.environment.del_LP(i)
 
         #Rp
-        if i<self.L-2:
-            self.environment.del_RP(i-1)
+        self.environment.del_RP(i)
 
     def sweep_left_right(self):
         """Performs the sweep left->right of the second order TDVP scheme. Evolve from 0.5*dt"""
         spectrum = []        
         spectrum.append(np.array([1]))
         for j in range(self.L):
-            B=self.Psi.get_B(j)
+            B=self.psi.get_B(j)
             # Get theta
             if j==0:
                 theta=B
             else:
-                theta=npc.tensordot(s,B,axes=('vR','vL'))   #theta[vL,p,vR]=s[vL,vR]*self.Psi[p,vL,vR]
+                theta=npc.tensordot(s,B,axes=('vR','vL'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
             theta=theta.transpose(['p','vL','vR'])
             #d,chiA,chiB = theta.to_ndarray().shape
             Lp=self.environment.get_LP(j)
@@ -89,13 +88,13 @@ class Engine(object):
             # SVD and update environment
             U,s,V=self.theta_svd_left_right(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
-            self.Psi.set_B(j,U,form='A')
+            self.psi.set_B(j,U,form='A')
             if j < self.L-1 :
                 # Apply expm (-dt H) for 0-site
                 
-                B=self.Psi.get_B(j+1)
+                B=self.psi.get_B(j+1)
                 B_jp1=npc.tensordot(V, B, axes=['vR', 'vL'])
-                self.Psi.set_B(j+1, B_jp1,form='B')
+                self.psi.set_B(j+1, B_jp1,form='B')
                 Lpp=self.environment.get_LP(j+1)
                 Rp=npc.tensordot(Rp,V,axes=['vL','vR'])
                 Rp=npc.tensordot(Rp,V.conj(),axes=['vL*','vR*'])
@@ -104,17 +103,17 @@ class Engine(object):
                 s=self.update_s_h0(s,H,0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
                 
-        #return self.Psi, self.environment, spectrum
+        #return self.psi, self.environment, spectrum
 
     def sweep_left_right_two(self):
         """Performs the sweep left->right of the second order TDVP scheme. Evolve from 0.5*dt"""
         spectrum = []        
         spectrum.append(np.array([1]))
-        theta_old=self.Psi.get_theta(0,1)
+        theta_old=self.psi.get_theta(0,1)
         for j in range(self.L-1):
             
-            #theta=self.Psi.get_theta(j,2)
-            theta=npc.tensordot(theta_old,self.Psi.get_B(j+1),('vR','vL'))
+            #theta=self.psi.get_theta(j,2)
+            theta=npc.tensordot(theta_old,self.psi.get_B(j+1),('vR','vL'))
             theta.ireplace_label('p','p1')
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
@@ -130,21 +129,21 @@ class Engine(object):
             U.ireplace_label('p0','p')
             V=V.split_legs('(vR.p1)')
             V.ireplace_label('p1','p')
-            self.Psi.set_B(j,U,form='A')
-            self.Psi.set_SR(j,s)
-            #self.del_correct(j)
-            self.Psi.set_B(j+1,V,form='B')
-            #self.del_correct(j+1)
+            self.psi.set_B(j,U,form='A')
+            self.del_correct(j)
+            self.psi.set_SR(j,s)
+            self.psi.set_B(j+1,V,form='B')
+            self.del_correct(j+1)
             if j<self.L-2: 
                 # Apply expm (-dt H) for 1-site
-                theta=self.Psi.get_theta(j+1,1)
+                theta=self.psi.get_theta(j+1,1)
                 theta.ireplace_label('p0','p')
                 Lp=self.environment.get_LP(j+1)
                 Rp=self.environment.get_RP(j+1)
                 theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j+1), 0.5*self.dt)
                 theta_old=theta
                 theta_old.ireplace_label('p','p0')
-                #self.Psi.set_B(j+1,theta,form='A') 
+                #self.psi.set_B(j+1,theta,form='A') 
                 #self.del_correct(j+1)
 
 
@@ -155,12 +154,12 @@ class Engine(object):
         spectrum.append(np.array([1]))
         expectation_O = []
         for j in range(self.L-1,-1,-1):
-            B=self.Psi.get_B(j,form='A')
+            B=self.psi.get_B(j,form='A')
             # Get theta
             if j==self.L-1:
                 theta=B
             else:
-                theta=npc.tensordot(s,B,axes=('vL','vR'))   #theta[vL,p,vR]=s[vL,vR]*self.Psi[p,vL,vR]
+                theta=npc.tensordot(s,B,axes=('vL','vR'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
             theta=theta.transpose(['p','vL','vR',])
             
             # Apply expm (-dt H) for 1-site
@@ -171,13 +170,13 @@ class Engine(object):
             # SVD and update environment
             U,s,V=self.theta_svd_right_left(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
-            self.Psi.set_B(j,U,form='B')
+            self.psi.set_B(j,U,form='B')
             if j > 0:
                 # Apply expm (-dt H) for 0-site
                 
-                B=self.Psi.get_B(j-1,form='A')
+                B=self.psi.get_B(j-1,form='A')
                 B_jm1=npc.tensordot(V, B, axes=['vL', 'vR'])
-                self.Psi.set_B(j-1, B_jm1,form='A')
+                self.psi.set_B(j-1, B_jm1,form='A')
                 Lp=npc.tensordot(Lp,V,axes=['vR','vL'])
                 Lp=npc.tensordot(Lp,V.conj(),axes=['vR*','vL*'])
                 H = H0_mixed_charge(Lp,self.environment.get_RP(j-1))
@@ -186,18 +185,18 @@ class Engine(object):
                 s=self.update_s_h0(s,H,0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
     
-        #return self.Psi, self.environment, spectrum
+        #return self.psi, self.environment, spectrum
 
     def sweep_right_left_two(self):
         """Performs the sweep left->right of the second order TDVP scheme. Evolve from 0.5*dt"""
         spectrum = []        
         spectrum.append(np.array([1]))
-        theta_old=self.Psi.get_theta(self.L-1,1)
+        theta_old=self.psi.get_theta(self.L-1,1)
         for j in range(self.L-2,-1,-1):
-            theta=npc.tensordot(theta_old,self.Psi.get_B(j,form='A'),('vL','vR'))
+            theta=npc.tensordot(theta_old,self.psi.get_B(j,form='A'),('vL','vR'))
             theta.ireplace_label('p0','p1')
             theta.ireplace_label('p','p0')
-            #theta=self.Psi.get_theta(j,2)
+            #theta=self.psi.get_theta(j,2)
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
             theta=self.update_theta_h1_two(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
@@ -211,22 +210,18 @@ class Engine(object):
             U.ireplace_label('p0','p')
             V=V.split_legs('(vR.p1)')
             V.ireplace_label('p1','p')
-            self.Psi.set_B(j,U,form='A')
-            self.Psi.set_SR(j,s)
-            #self.del_correct(j)
-            self.Psi.set_B(j+1,V,form='B')
-            #self.del_correct(j+1)
+            self.psi.set_B(j,U,form='A')
+            self.psi.set_SR(j,s)
+            self.psi.set_B(j+1,V,form='B')
             if j>0: 
                 # Apply expm (-dt H) for 1-site
-                theta=self.Psi.get_theta(j,1)
+                theta=self.psi.get_theta(j,1)
                 theta.ireplace_label('p0','p')
                 Lp=self.environment.get_LP(j)
                 Rp=self.environment.get_RP(j)
                 theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), 0.5*self.dt)
                 theta_old=theta
                 theta.ireplace_label('p','p0')
-                #self.Psi.set_B(j,theta,form='A') 
-                #self.del_correct(j)
 
     def update_theta_h1(self,Lp, Rp, theta, W, dt):
         """Update with the one site Hamiltonian """
@@ -317,7 +312,7 @@ class Engine(object):
         Lp=self.environment.get_LP(i)
         Rp=self.environment.get_RP(i)
         W=self.W.get_W(i)
-        B=self.Psi.get_B(i)
+        B=self.psi.get_B(i)
         p_h_phi=npc.tensordot(Lp,W,axes=['wR','wL'])
         p_h_phi=npc.tensordot(p_h_phi,Rp,axes=['wR','wL'])
         p_h_phi=npc.tensordot(p_h_phi,B,axes=[('p*','vR','vL'),('p','vL','vR')])
@@ -331,30 +326,30 @@ class Engine(object):
         N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         if self.environment==None:
-            self.environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+            self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right()
-            environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
             self.environment=environment
             self.sweep_right_left()
-            environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
             self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
-            #return self.Psi, self.environment, self.spectrum 
+            #return self.psi, self.environment, self.spectrum 
     
     def run_two(self):
         """ run the TDVP algorithm"""
         N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         #if self.environment==None:
-        self.environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+        self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right_two()
-            environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
             self.environment=environment
             self.sweep_right_left_two()
-            environment=mpo.MPOEnvironment(self.Psi,self.W,self.Psi)
+            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
             self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
