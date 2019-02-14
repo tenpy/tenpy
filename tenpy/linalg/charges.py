@@ -926,7 +926,7 @@ class LegPipe(LegCharge):
     _perm : 1D array
         A permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array
-        Strides for mapping incoming qindices `i_l` to the index of of ``q_map[_perm, :]``.
+        Strides for mapping incoming qindices `i_l` to the index of ``q_map[_perm, :]``.
 
     Notes
     -----
@@ -1111,19 +1111,18 @@ class LegPipe(LegCharge):
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
         nlegs = self.nlegs
         qnumber = self.chinfo.qnumber
-        qshape = self.subqshape
 
         # create a grid to select the multi-index sector
-        grid = np.indices(qshape, np.intp)
-        # grid is an array with shape ``(nlegs,) + qshape``,
-        # with grid[li, ...] = {np.arange(qshape[li]) increasing in the li-th direcion}
+        grid = np.indices(self.subqshape, np.intp)
+        # grid is an array with shape ``(nlegs,) + subqshape``,
+        # with grid[li, ...] = {np.arange(subqshape[li]) increasing in the li-th direcion}
         # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
         self._strides = np.array(grid.strides, np.intp)[1:] // grid.itemsize
         # collapse the different directions into one.
         grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
-        nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(qshape)
+        nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(self.subqshape)
         # determine q_map -- it's essentially the grid.
         q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
@@ -1148,7 +1147,7 @@ class LegPipe(LegCharge):
             #                                        l2.qind[q2]*l2.qconj + ...)
             charges = self.chinfo.make_valid(charges)  # modulo qmod
 
-        if sort:
+        if sort and qnumber > 0:
             # sort by charge. Similar code as in :meth:`LegCharge.sort`,
             # but don't want to create a copy, nor is qind[:, 0] initialized yet.
             perm_qind = lexsort(charges.T)
@@ -1159,7 +1158,7 @@ class LegPipe(LegCharge):
         else:
             self._perm = None
         self._set_charges(charges)
-        self.sorted = sort
+        self.sorted = sort or (qnumber == 0)
         self._set_block_sizes(blocksizes)  # sets self.slices
         q_map[:, 0] = self.slices[:-1]
         q_map[:, 1] = self.slices[1:]
@@ -1179,10 +1178,7 @@ class LegPipe(LegCharge):
         # calculate the slices within blocks: subtract the start of each block
         q_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
         self.q_map = q_map  # finished
-
-        # finally calculate q_map_slices
         self.q_map_slices = idx
-        # q_map_slices contains only views!
 
     def _map_incoming_qind(self, qind_incoming):
         """Map incoming qindices to indices of q_map.
@@ -1257,22 +1253,21 @@ def _find_row_differences(qflat):
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
 
+
 @use_cython
 def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
     """Copy slices from `src` into slices of `dest`.
 
-
-    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays.
+    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays of same data type and ndim.
 
     Equivalent to ::
 
-        assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
         dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
         src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
         dest[dst_sl] = src[src_sl]
 
     For example ``dest[0:4, 2:5] = src[1:5, 0:3]`` is equivalent to
-    ``sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
+    ``_sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
 
     Parameters
     ----------
@@ -1289,7 +1284,11 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
     slice_shape : intp[ndim]
         The lenght of the slices.
     """
+    if dest_beg is None:
+        dest_beg = [0]*dest.ndim
+    if src_beg is None:
+        src_beg = [0]*dest.ndim
     assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
     dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
-    src_sl =  tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+    src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
     dest[dst_sl] = src[src_sl]

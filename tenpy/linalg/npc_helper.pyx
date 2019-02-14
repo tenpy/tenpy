@@ -11,7 +11,7 @@ If the file could not be compiled, it just uses the non-compiled Cython version.
 """
 # Copyright 2018 TeNPy Developers
 
-DEF DEBUG_PRINT = 0  # TODO XXX
+DEF DEBUG_PRINT = 0  # turn th
 
 # TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
 # the same memory leak appears for memory views `type[:, :]`
@@ -22,16 +22,14 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
-
 from libcpp.vector cimport vector
-from cython.operator cimport dereference as deref, postincrement as inc  # TODO
 from libc.string cimport memcpy
 
 import bisect
 import warnings
-import time  # TODO
 import itertools
-
+IF DEBUG_PRINT:
+    import time
 
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
@@ -49,8 +47,11 @@ cdef int QTYPE_num = np.NPY_LONG # == np.dtype(QTYPE).num
 ctypedef np.intp_t intp_t   # compile time type for np.intp
 cdef int intp_num = np.NPY_INTP
 
+# check that types are as expected
 assert QTYPE_num == np.dtype(QTYPE).num
 assert intp_num == np.dtype(np.intp).num
+assert sizeof(intp_t) == sizeof(np.npy_intp)  # shouldn't even compile otherwise...
+
 
 # We can not ``from . import np_conserved`` because
 # importing np_conserved requires this cython module to be imported.
@@ -59,6 +60,10 @@ assert intp_num == np.dtype(np.intp).num
 # tenpy/linalg/__init__.py once the modules have been imported in the correct order.
 _np_conserved = None  # tenpy.linalg.np_conserved
 _charges = None       # tenpy.linalg.charges
+
+ctypedef struct idx_tuple:
+    intp_t first
+    intp_t second
 
 # ################################# #
 # helper functions                  #
@@ -177,11 +182,12 @@ cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta
 
 cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
                           char* src_data, intp_t* src_strides,
-                          intp_t* slice_shape, intp_t ndim) nogil:
-    """Implementation of :func:`sliced_copy`.
+                          intp_t* slice_shape, intp_t ndim, intp_t width) nogil:
+    """Implementation of :func:`_sliced_copy`.
 
-    `src_beg` and `dest_beg` are [0, 0, ...] and the arrays are given by pointers & strides"""
-    cdef intp_t width, i, j, k, d0, d1, d2, s0, s1, s2, l0, l1, l2
+    `src_beg` and `dest_beg` are [0, 0, ...] and the arrays are given by pointers & strides.
+    width is itemsize of dest_data in bytes."""
+    cdef intp_t i, j, k, d0, d1, d2, s0, s1, s2, l0, l1, l2
     if ndim < 1:
         return
     # explicitly unravel for up to 3 dimensions
@@ -189,25 +195,22 @@ cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
     s0 = src_strides[0]
     l0 = slice_shape[0]
     if ndim == 1:
-        width = l0 * s0
-        memcpy(dest_data, src_data, width)
+        memcpy(dest_data, src_data, l0*width)
         return
     d1 = dest_strides[1]
     s1 = src_strides[1]
     l1 = slice_shape[1]
     if ndim == 2:
-        width = l1 * s1
         for i in range(l0):
-            memcpy(&dest_data[i*d0] , &src_data[i*s0], width)
+            memcpy(&dest_data[i*d0] , &src_data[i*s0], l1*width)
         return
     d2 = dest_strides[2]
     s2 = src_strides[2]
     l2 = slice_shape[2]
     if ndim == 3:
-        width = l2 * s2
         for i in range(l0):
             for j in range(l1):
-                memcpy(&dest_data[i*d0 + j*d1] , &src_data[i*s0 + j*s1], width)
+                memcpy(&dest_data[i*d0 + j*d1] , &src_data[i*s0 + j*s1], l2*width)
         return
     # ndim >= 4: from here on recursively
     # go down by 3 dimensions at once
@@ -216,7 +219,7 @@ cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
             for k in range(l2):
                 _sliced_strided_copy(&dest_data[i*d0 + j*d1 + k*d2], &dest_strides[3],
                                      &src_data[i*s0 + j*s1 + k*s2], &src_strides[3],
-                                     &slice_shape[3], ndim-3)
+                                     &slice_shape[3], ndim-3, width)
 
 
 
@@ -493,21 +496,19 @@ cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdat
 @cython.wraparound(False)
 @cython.boundscheck(False)
 cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, intp_t[::1] src_beg,
-                       intp_t[::1] slice_shape) except *:
+                       intp_t[::1] slice_shape):
     """Copy slices from `src` into slices of `dest`.
 
-
-    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays.
+    *Assumes* that `src` and `dest` are C-contiguous (strided) Arrays of same data type and ndim.
 
     Equivalent to ::
 
-        assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
         dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
         src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
         dest[dst_sl] = src[src_sl]
 
     For example ``dest[0:4, 2:5] = src[1:5, 0:3]`` is equivalent to
-    ``sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
+    ``_sliced_copy(dest, [0, 2], src, [1, 0], [4, 3])``
 
     Parameters
     ----------
@@ -529,29 +530,48 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
     cdef intp_t *dest_strides = np.PyArray_STRIDES(dest),
     cdef intp_t *src_strides = np.PyArray_STRIDES(src)
     cdef intp_t ndim = np.PyArray_NDIM(dest)
-    if not (dest_beg.shape[0] == ndim == np.PyArray_NDIM(src)
-            == src_beg.shape[0] == slice_shape.shape[0]):
-        raise ValueError("wrong dimensions")
-    if not (dest_strides[ndim-1] == np.PyArray_ITEMSIZE(dest)
-            == np.PyArray_ITEMSIZE(src) == src_strides[ndim-1]):
-        raise ValueError("different data types or not C-contiguous")
-    #  add offset of *_beg to *_data.
+    cdef intp_t width = np.PyArray_ITEMSIZE(dest)
+    # NB: width can be different from strides[ndim-1] if the array has shape[ndim-1] == 1,
+    # even if C-contiguous!
+    # add offset of *_beg to *_data.
     cdef intp_t i, j = 0
-    for i in range(ndim):
-        j += dest_beg[i] * dest_strides[i]
-    dest_data = &dest_data[j]
-    j = 0
-    for i in range(ndim):
-        j += src_beg[i] * src_strides[i]
-    src_data = &src_data[j]
-    _sliced_strided_copy(dest_data, dest_strides, src_data, src_strides, &slice_shape[0], ndim)
+    if dest_beg is not None:
+        for i in range(ndim):
+            j += dest_beg[i] * dest_strides[i]
+        dest_data = &dest_data[j]
+    if src_beg is not None:
+        j = 0
+        for i in range(ndim):
+            j += src_beg[i] * src_strides[i]
+        src_data = &src_data[j]
+    _sliced_strided_copy(dest_data, dest_strides, src_data, src_strides, &slice_shape[0], ndim,
+                         width)
+
 
 # ############################################### #
 # replacements for np_conserved.Array methods     #
 # ############################################### #
 
+@cython.binding(True)
+def Array__imake_contiguous(self):
+    """Make each of the blocks c-style contigous in memory.
 
-def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
+    Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
+    (No need to call it manually: it's called from tensordot & co anyways!)"""
+    cdef np.ndarray t
+    self._data = [np.PyArray_GETCONTIGUOUS(t) for t in self._data]
+    return self
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+def _combine_legs_worker(self,
+                         res,
+                         list combine_legs,
+                         np.ndarray non_combined_legs,
+                         np.ndarray new_axes,
+                         np.ndarray non_new_axes,
+                         list pipes):
     """The main work of :meth:`Array.combine_legs`: create a copy and reshape the data blocks.
 
     Assumes standard form of parameters.
@@ -559,69 +579,77 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
     Parameters
     ----------
     self : Array
-        The array where legs are being combined.
+        The array from where legs are being combined.
+    res : Array
+        The array to be returned, already filled with correct legs (pipes);
+        needs `_data` and `_qdata` to be filled.
+        Labels are set outside.
     combine_legs : list(1D np.array)
         Axes of self which are collected into pipes.
+    non_combined_legs : 1D array
+        ``[i for i in range(self.rank) if i not in flatten(combine_legs)]``
     new_axes : 1D array
         The axes of the pipes in the new array. Ascending.
+    non_new_axes 1D array
+        ``[i for i in range(res.rank) if i not in new_axes]``
     pipes : list of :class:`LegPipe`
         All the correct output pipes, already generated.
-
-    Returns
-    -------
-    res : :class:`Array`
-        Copy of self with combined legs.
     """
     if DEBUG_PRINT:
-        print("_combine_legs_worker")
+        print("_combine_legs_worker: ", self.stored_blocks)
         t0 = time.time()
-    all_combine_legs = np.concatenate(combine_legs)
-    # non_combined_legs: axes of self which are not in combine_legs
-    cdef np.ndarray[np.intp_t, ndim=1] non_combined_legs = np.array(
-        [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
-    legs = [self.legs[i] for i in non_combined_legs]
-    for na, p in zip(new_axes, pipes):  # not reversed
-        legs.insert(na, p)
-    res = self.copy(deep=False)
-    res.legs = legs
-    res._set_shape()
-    cdef intp_t res_rank = res.rank
+    cdef int npipes = len(combine_legs)
+    cdef intp_t res_rank = res.rank, self_rank = self.rank
     cdef intp_t self_stored_blocks = self.stored_blocks
-    if self_stored_blocks == 0:
-        res._data = []
-        res._qdata = _np_empty_2D(0, res.rank, intp_num)
-        return res
-    # TODO: handle self_stored_blocks == 1 separately for optimization
-    non_new_axes_ = [i for i in range(res.rank) if i not in new_axes]
-    cdef np.ndarray[np.intp_t, ndim=1] non_new_axes = np.array(non_new_axes_, dtype=np.intp)
-    if DEBUG_PRINT:
-        t1 = time.time()
-        print("init", t1-t0)
-        t0 = time.time()
-
+    cdef intp_t ax, ax2, i, j, beg, end
     # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
-    qmap_inds = [
+    cdef list q_map_inds = [
         p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
     ]
-
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("q_map_inds", t1-t0)
+        t0 = time.time()
+    self._imake_contiguous() # TODO: needed/useful?
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("imake_contiguous", t1-t0)
+        t0 = time.time()
     # get new qdata
     cdef np.ndarray[np.intp_t, ndim=2, mode="c"] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
-    for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
-        np.take(
-            p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
-            qmap_ind,
-            out=qdata[:, na])  # write the result directly into qdata
+    for j in range(npipes):
+        ax = new_axes[j]
+        qdata[:, ax] = pipes[j].q_map[q_map_inds[j], 2]
     # now we have probably many duplicate rows in qdata,
-    # since for the pipes many `qmap_ind` map to the same `qindex`
+    # since for the pipes many `q_map_ind` map to the same `qindex`
     # find unique entries by sorting qdata
     sort = np.lexsort(qdata.T)
     qdata = qdata[sort]
     old_data = [self._data[s] for s in sort]
-    qmap_inds = [qm[sort] for qm in qmap_inds]
-    # divide into parts, which give a single new block
-    cdef np.ndarray[np.intp_t, ndim=1] diffs = _find_row_differences(qdata)
-    # including the first and last row
+    q_map_inds = [qm[sort] for qm in q_map_inds]
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] block_start = _np_zeros_2D(self_stored_blocks, res_rank, intp_num)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] block_shape = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
+    cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    for j in range(non_new_axes.shape[0]):
+        ax = non_new_axes[j]
+        block_shape[:, ax] = block_sizes[ax][qdata[:, ax]]
+    for j in range(npipes):
+        ax = new_axes[j]
+        sizes = pipes[j].q_map[q_map_inds[j], :2]
+        block_start[:, ax] = sizes[:, 0]
+        block_shape[:, ax] = sizes[:, 1] - sizes[:, 0] # TODO size directly in pipe!?
+
+    # divide qdata into parts, which give a single new block
+    cdef np.ndarray[np.intp_t, ndim=1, mode='c'] diffs = _find_row_differences(qdata)
+    cdef intp_t res_stored_blocks = diffs.shape[0] - 1
+    qdata = qdata[diffs[:res_stored_blocks], :]  # (keeps the dimensions)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] res_blockshapes = _np_empty_2D(res_stored_blocks, res_rank, intp_num)
+    for ax in range(res_rank):
+        res_blockshapes[:, ax] = block_sizes[ax][qdata[:, ax]]
+    cdef intp_t[:, ::1] block_start_ = block_start
+    cdef intp_t[:, ::1] block_shape_ = block_shape # faster
+
     if DEBUG_PRINT:
         t1 = time.time()
         print("get new qdata", t1-t0)
@@ -629,39 +657,32 @@ def _combine_legs_worker(self, list combine_legs, list new_axes, list pipes):
 
     # now the hard part: map data
     cdef list data = []
-    cdef list slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
+    #  cdef list slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
     # iterate over ranges of equal qindices in qdata
     cdef np.ndarray new_block, old_block
-    cdef np.ndarray[np.intp_t, ndim=1] qindices
-    cdef intp_t beg, end, bi, j, old_data_idx, qi
-    cdef np.ndarray[np.intp_t, ndim=2] q_map
-    cdef tuple sl
-    cdef int npipes = len(combine_legs)
-    for bi in range(diffs.shape[0]-1):
-        beg = diffs[bi]
-        end = diffs[bi+1]
-        qindices = qdata[beg]
-        new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
+    cdef intp_t old_row, res_row
+    cdef int res_type_num = res.dtype.num
+    cdef np.PyArray_Dims shape
+    shape.len = res_rank
+    for res_row in range(res_stored_blocks):
+        beg = diffs[res_row]
+        end = diffs[res_row + 1]
+        new_block = <np.ndarray>np.PyArray_ZEROS(shape.len, &res_blockshapes[res_row, 0],
+                                                 res_type_num, 0)
         data.append(new_block)
         # copy blocks
-        for old_data_idx in range(beg, end):
-            for j in range(npipes):
-                q_map = pipes[j].q_map
-                qi = qmap_inds[j][old_data_idx]
-                slices[new_axes[j]] = slice(q_map[qi, 0], q_map[qi, 1])
-            sl = tuple(slices)
-            # reshape block while copying
-            new_block_view = new_block[sl]
-            old_block = old_data[old_data_idx].reshape(new_block_view.shape)
-            np.copyto(new_block_view, old_block, casting='no')
-    res._qdata = qdata[diffs[:-1]]  # (keeps the dimensions)
-    res._qdata_sorted = True
+        for old_row in range(beg, end):
+            shape.ptr = &block_shape_[old_row, 0]
+            old_block = <np.ndarray>old_data[old_row]
+            old_block = <np.ndarray>np.PyArray_Newshape(old_block, &shape, np.NPY_CORDER)
+            _sliced_copy(new_block, block_start_[old_row, :], old_block, None, block_shape_[old_row, :])
     res._data = data
+    res._qdata = qdata
+    res._qdata_sorted = True
     if DEBUG_PRINT:
         t1 = time.time()
         print("reshape loop", t1-t0)
         t0 = time.time()
-    return res
 
 
 def _split_legs_worker(self, list split_axes_, float cutoff):
@@ -745,11 +766,6 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 # ##################################################### #
 # replacements for global functions in np_conserved.py  #
 # ##################################################### #
-
-ctypedef struct idx_tuple:
-    intp_t first
-    intp_t second
-
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -1025,7 +1041,6 @@ def _tensordot_worker(a, b, int axes):
     # we always use 64-bit float calculations....
     calc_dtype = np.dtype({'s': np.float64, 'd': np.float64,
                            'c': np.complex128, 'z': np.complex128}[prefix])
-    # TODO: handle special dtypes?
     cdef int CALC_DTYPE_NUM = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
     _make_valid_charges_1D(chinfo_mod, qtotal)

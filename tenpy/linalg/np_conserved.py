@@ -51,7 +51,7 @@ import itertools
 import numbers
 
 # import public API from charges
-from .charges import (ChargeInfo, LegCharge, LegPipe)
+from .charges import ChargeInfo, LegCharge, LegPipe
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
@@ -1218,7 +1218,6 @@ class Array:
         # labels: replace non-set labels with '?#' (*before* transpose
         labels = [(l if l is not None else '?' + str(i))
                   for i, l in enumerate(self.get_leg_labels())]
-
         # transpose if necessary
         if transp != tuple(range(self.rank)):
             res = self.copy(deep=False)
@@ -1228,16 +1227,51 @@ class Array:
             tr_combine_legs = [[inv_transp[a] for a in cl] for cl in combine_legs]
             return res.combine_legs(tr_combine_legs, new_axes=new_axes, pipes=pipes)
         # if we come here, combine_legs has the form of `tr_combine_legs`.
+        # HERE we have the standard form of arguments
 
-        # the **main work** of copying the data is sourced out, now that we have the
-        # standard form of our arguments
-        res = _combine_legs_worker(self, combine_legs, new_axes, pipes)
-
+        # obtain the new legs
+        # non_combined_legs: axes of self which are not in combine_legs
+        non_combined_legs = np.array([a for a in range(self.rank) if a not in all_combine_legs],
+                                     dtype=np.intp)
+        legs = [self.legs[ax] for ax in non_combined_legs]
+        for na, p in zip(new_axes, pipes):  # not reversed
+            legs.insert(na, p)
+        non_new_axes = np.array([i for i in range(len(legs)) if i not in new_axes],
+                                dtype=np.intp)  # convert to array for index tricks
         # get new labels
         pipe_labels = [self._combine_leg_labels([labels[c] for c in cl]) for cl in combine_legs]
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
             labels[na:na + p.nlegs] = [plab]
+
+        res = Array(legs, self.dtype, self.qtotal)
+        res.legs = legs
+        res._set_shape()
         res.iset_leg_labels(labels)
+
+        # the **main work** of copying & reshaping the data
+        if self.stored_blocks == 1:
+            # handle self_stored_blocks == 1 separately for optimization
+            qmap_inds = [
+                p._map_incoming_qind(self._qdata[:, cl])[0] for p, cl in zip(pipes, combine_legs)
+            ]
+            res_qdata = np.empty((1, res.rank), np.intp)
+            res_qdata[0, non_new_axes] = self._qdata[0, non_combined_legs]
+            slices = [slice(None)]*res.rank
+            for na, p, qi in zip(new_axes, pipes, qmap_inds):
+                q_map_row = p.q_map[qi, :]
+                res_qdata[0, na] = q_map_row[2]
+                slices[na] = slice(*q_map_row[:2])
+            res_block = np.zeros(res._get_block_shape(res_qdata[0, :]), dtype=res.dtype)
+            res._data = [res_block]
+            res._qdata = res_qdata
+            res._qdata_sorted = True
+            res_block_view = res_block[tuple(slices)]
+            res_block_view[:] = self._data[0].reshape(res_block_view.shape)
+        elif self.stored_blocks > 1:
+            # sourced out for optimization
+            new_axes = np.array(new_axes, np.intp)
+            _combine_legs_worker(self, res, combine_legs, non_combined_legs,
+                                 new_axes, non_new_axes, pipes)
         return res
 
     def split_legs(self, axes=None, cutoff=0.):
@@ -2380,17 +2414,13 @@ class Array:
         # remove '**' entries
         return label.replace('**', '')
 
-    def _imake_contiguous(self, order='C'):
-        """Make each of the blocks contigous in memory.
+    @use_cython(replacement="Array__imake_contiguous")
+    def _imake_contiguous(self):
+        """Make each of the blocks c-style contigous in memory.
 
         Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
-        (No need to call it manually: it's called from tensordot anyways!)"""
-        if order == 'C':
-            self._data = [np.ascontiguousarray(t) for t in self._data]
-        elif order == 'F':
-            self._data = [np.asfortranarray(t) for t in self._data]
-        else:
-            raise ValueError("unknown order")
+        (No need to call it manually: it's called from tensordot & co anyways!)"""
+        self._data = [np.ascontiguousarray(t) for t in self._data]
         return self
 
 
@@ -3508,7 +3538,8 @@ def to_iterable_arrays(array_list):
 
 
 @use_cython
-def _combine_legs_worker(self, combine_legs, new_axes, pipes):
+def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, non_new_axes,
+                         pipes):
     """The main work of :meth:`Array.combine_legs`: create a copy and reshape the data blocks.
 
     Assumes standard form of parameters.
@@ -3516,76 +3547,75 @@ def _combine_legs_worker(self, combine_legs, new_axes, pipes):
     Parameters
     ----------
     self : Array
-        The array where legs are being combined.
+        The array from where legs are being combined.
+    res : Array
+        The array to be returned, already filled with correct legs (pipes);
+        needs `_data` and `_qdata` to be filled.
+        Labels are set outside.
     combine_legs : list(1D np.array)
         Axes of self which are collected into pipes.
+    non_combined_legs : 1D array
+        ``[i for i in range(self.rank) if i not in flatten(combine_legs)]``
     new_axes : 1D array
         The axes of the pipes in the new array. Ascending.
+    non_new_axes 1D array
+        ``[i for i in range(res.rank) if i not in new_axes]``
     pipes : list of :class:`LegPipe`
         All the correct output pipes, already generated.
-
-    Returns
-    -------
-    res : :class:`Array`
-        Copy of self with combined legs.
     """
-    all_combine_legs = np.concatenate(combine_legs)
     # non_combined_legs: axes of self which are not in combine_legs
-    non_combined_legs = np.array(
-        [a for a in range(self.rank) if a not in all_combine_legs], dtype=np.intp)
-    legs = [self.legs[i] for i in non_combined_legs]
-    for na, p in zip(new_axes, pipes):  # not reversed
-        legs.insert(na, p)
-    non_new_axes = [i for i in range(len(legs)) if i not in new_axes]
-    non_new_axes = np.array(non_new_axes, dtype=np.intp)  # for index tricks
-
-    res = self.copy(deep=False)
-    res.legs = legs
-    res._set_shape()
-    res.labels = {}
     # map `self._qdata[:, combine_leg]` to `pipe.q_map` indices for each new pipe
-    qmap_inds = [
+    q_map_inds = [
         p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
     ]
-
+    self._imake_contiguous() # TODO: not needed except for _copy_sliced?
     # get new qdata
-    qdata = np.empty((self.stored_blocks, res.rank), dtype=self._qdata.dtype)
+    qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
-    for na, p, qmap_ind in zip(new_axes, pipes, qmap_inds):
-        np.take(
-            p.q_map[:, 2],  # column 2 of q_map maps to qindex of the pipe
-            qmap_ind,
-            out=qdata[:, na])  # write the result directly into qdata
+    for j in range(len(pipes)):
+        ax = new_axes[j]
+        qdata[:, ax] = pipes[j].q_map[q_map_inds[j], 2]
     # now we have probably many duplicate rows in qdata,
-    # since for the pipes many `qmap_ind` map to the same `qindex`
+    # since for the pipes many `q_map_ind` map to the same `qindex`
     # find unique entries by sorting qdata
     sort = np.lexsort(qdata.T)
-    qdata_s = qdata[sort]
+    qdata = qdata[sort]
     old_data = [self._data[s] for s in sort]
-    qmap_inds = [qm[sort] for qm in qmap_inds]
-    # divide into parts, which give a single new block
-    diffs = charges._find_row_differences(qdata_s)  # including the first and last row
+    q_map_inds = [qm[sort] for qm in q_map_inds]
+    block_start = np.zeros((self.stored_blocks, res.rank), np.intp)
+    block_shape = np.empty((self.stored_blocks, res.rank), np.intp)
+    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    for ax in non_new_axes:
+        block_shape[:, ax] = block_sizes[ax][qdata[:, ax]]
+    for j in range(len(pipes)):
+        ax = new_axes[j]
+        sizes = pipes[j].q_map[q_map_inds[j], :2]
+        block_start[:, ax] = sizes[:, 0]
+        block_shape[:, ax] = sizes[:, 1] - sizes[:, 0] # TODO size directly in pipe!?
+
+    # divide qdata into parts, which give a single new block
+    diffs = charges._find_row_differences(qdata)  # including the first and last row
+    res_stored_blocks = len(diffs) - 1
+    qdata = qdata[diffs[:res_stored_blocks], :]  # (keeps the dimensions)
+    res_blockshapes = np.empty((res_stored_blocks, res.rank), np.intp)
+    for ax in range(res.rank):
+        res_blockshapes[:, ax] = block_sizes[ax][qdata[:, ax]]
 
     # now the hard part: map data
     data = []
-    slices = [slice(None)] * res.rank  # for selecting the slices in the new blocks
-    # iterate over ranges of equal qindices in qdata_s
-    for beg, end in zip(diffs[:-1], diffs[1:]):
-        qindices = qdata_s[beg]
-        new_block = np.zeros(res._get_block_shape(qindices), dtype=res.dtype)
+    # iterate over ranges of equal qindices in qdata
+    for res_blockshape, beg, end in zip(res_blockshapes, diffs[:-1], diffs[1:]):
+        new_block = np.zeros(res_blockshape, dtype=res.dtype)
         data.append(new_block)
         # copy blocks
-        for old_data_idx in range(beg, end):
-            for na, p, qm_ind in zip(new_axes, pipes, qmap_inds):
-                slices[na] = slice(*p.q_map[qm_ind[old_data_idx], :2])
-            sl = tuple(slices)
-            new_block_view = new_block[sl]
-            # reshape block while copying
-            new_block_view[:] = old_data[old_data_idx].reshape(new_block_view.shape)
-    res._qdata = qdata_s[diffs[:-1]]  # (keeps the dimensions)
-    res._qdata_sorted = True
+        for old_row in range(beg, end):
+            shape = block_shape[old_row]
+            old_block = old_data[old_row].reshape(shape)
+            charges._sliced_copy(new_block, block_start[old_row], old_block, None, shape)
     res._data = data
-    return res
+    res._qdata = qdata
+    res._qdata_sorted = True
+    # done
 
 
 @use_cython
