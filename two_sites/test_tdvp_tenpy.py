@@ -262,12 +262,13 @@ if __name__ == "__main__":
         return psi
 
 
+    np.random.seed(0)
     psi=random_prod_state_tenpy(heisenberg.lat.N_sites,heisenberg)
-    
+    N_steps=10 
     tebd_params = {
           'order': 2,
           'dt': delta_t,
-          'N_steps': 10,
+          'N_steps': N_steps,
           'trunc_params': {
               'chi_max': 50,
               'svd_min': 1.e-10,
@@ -275,11 +276,29 @@ if __name__ == "__main__":
           }
       }
     
+    tdvp_params = {
+        'start_time': 0,
+        'dt':1j*delta_t,
+        'N_steps':N_steps
+    }
+    trunc_params= {
+        'chi_max': 50,
+        'svd_min': 1.e-10,
+        'trunc_cut':None 
+    }
+    
     print("psi before TEBD")
     print(psi.chi)
+    psi_tdvp2=copy.deepcopy(psi)
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
-    #engine.run()
-    #psi=engine.psi
+    tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,check_error=True,trunc_params=trunc_params)
+    engine.run()
+    tdvp_engine.run_two()
+    overlap=psi.overlap(psi_tdvp2)
+    psi=engine.psi
+    print("overlap")
+    print(overlap)
+    sys.exit()
     print("psi after TEBD")
     print(psi.chi)
    
@@ -298,11 +317,15 @@ if __name__ == "__main__":
         'dt':1j*delta_t,
         'N_steps':1
     }
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,check_error=True)
+    trunc_params= {
+        'chi_max': 50,
+        'svd_min': 1.e-10,
+        'trunc_cut':None 
+    }
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,check_error=True,trunc_params=trunc_params)
     for t in range(10):
-        #psi0,environment,theta_test=tdvp.tdvp(psi0,H_MPO,-0.5*1j*delta_t,chinfo)
-        #psi,environment,spect = tdvp_engine.run() 
-        tdvp_engine.run()
+        tdvp_engine.run() 
+        tdvp_engine.run_two()
         psit_compare,Rp_list,spectrum=tdvp_fast.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)
         psit_=[]
     for i in range(L):
