@@ -683,6 +683,16 @@ class MPOEnvironment(MPSEnvironment):
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+        LP_i= .------>-M[0]--> ... -->M[i-2]-->M[i-1]-->
+              |        |                |        | 
+              |        ^                ^        ^
+              |        |                |        |
+              LP[0] ->-W[0]--> ... -->W[i-2]-->W[i-1]-->
+              |        |                |        | 
+              |        ^                ^        ^
+              |        |                |        |
+              .------>-N[0]*-> ... -->N[i-2]*-->N[i-1]*-->
+        where the M's and the N's are in the 'A' form
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_LP(i, store)
@@ -702,6 +712,21 @@ class MPOEnvironment(MPSEnvironment):
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+             
+
+       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.    
+                      |                     |      |    
+                      ^                     ^      |    
+                      |                     |      |            
+                 -->W[i+1]--->  ...  --->W[i-2]-->RP[-1]
+                      |                     |      |    
+                      ^                     ^      |    
+                      |                     |      |                
+                 -->N[i+1]*-->  ... -->N[i-2]*-->.                   
+
+
+        where the M's and the N's are in the 'B' form
+                    
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_RP(i, store)
