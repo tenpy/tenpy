@@ -2968,10 +2968,11 @@ def inner(a, b, axes=None, do_conj=False):
     if do_conj:
         a = a.iconj()
     # check charge compatibility
-    if a.chinfo != b.chinfo:
-        raise ValueError("different ChargeInfo")
-    for lega, legb in zip(a.legs, b.legs):
-        lega.test_contractible(legb)
+    if not optimize(OptimizationFlag.skip_arg_checks):
+        if a.chinfo != b.chinfo:
+            raise ValueError("different ChargeInfo")
+        for lega, legb in zip(a.legs, b.legs):
+            lega.test_contractible(legb)
     return _inner_worker(a, b)
 
 
@@ -3025,18 +3026,37 @@ def tensordot(a, b, axes=2):
         b.itranspose(axes_b + not_axes_b)
         axes = len(axes_a)
     # now `axes` is integer
-    # check for special cases
+    # check for contraction compatibility
+    if not optimize(OptimizationFlag.skip_arg_checks):
+        for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
+            lega.test_contractible(legb)
+
+    # optimize/check for special cases
     if axes == 0:
         return outer(a, b)  # no sum necessary
     if axes == a.rank and axes == b.rank:
         return inner(a, b)  # full contraction
-
-    # check for contraction compatibility
-    for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
-        lega.test_contractible(legb)
-
-    # the main work is out-sourced
-    res = _tensordot_worker(a, b, axes)
+    no_block = (a.stored_blocks == 0 or b.stored_blocks == 0)  # result is zero
+    one_block = (a.stored_blocks == 1 and b.stored_blocks == 1)
+    if no_block or one_block:
+        cut_a = a.rank - axes
+        res = Array(a.legs[:cut_a] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
+                    a.chinfo.make_valid(a.qtotal + b.qtotal))
+        if one_block:
+            # optimize for special case that a and b have only 1 entry
+            # this is (usually) the case if we have trivial charges
+            if np.all(a._qdata[0, cut_a:] == b._qdata[0, :axes]):  # blocks fit together
+                # contract innner axes
+                res._data = [np.tensordot(a._data[0], b._data[0], axes=axes)]
+                c_qdata = np.empty([1, res.rank], np.intp)
+                c_qdata[0, :cut_a] = a._qdata[0, :cut_a]
+                c_qdata[0, cut_a:] = b._qdata[0, axes:]
+                res._qdata = c_qdata
+                res._qdata_sorted = True
+            # else: zero
+    else:
+        # #### the main work
+        res = _tensordot_worker(a, b, axes)
 
     # labels
     res.iset_leg_labels(list(a.get_leg_labels()[:-axes]) + [None] * (b.rank - axes))
@@ -3536,7 +3556,6 @@ def to_iterable_arrays(array_list):
 # internal helper functions
 # ##################################
 
-
 @use_cython
 def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, non_new_axes,
                          pipes):
@@ -3702,11 +3721,8 @@ def _iter_common_sorted(a, b):
     """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
     *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
-    Given that, it is equivalent to (but faster than)::
-
-        for j, i in itertools.product(range(j_start, j_stop), range(i_start, i_stop)):
-            if a[i] == b[j]:
-                yield i, j
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(a)), range(len(b)) if a[i] == b[j]]``
     """
     l_a = len(a)
     l_b = len(b)
@@ -3719,13 +3735,12 @@ def _iter_common_sorted(a, b):
             j += 1
         else:
             res.append((i, j))
-            # yield i, j
             i += 1
             j += 1
     return res
-    # raise StopIteration  # finished
 
 
+# @use_cython # TODO
 def _inner_worker(a, b):
     """Full contraction of `a` and `b` with axes in matching order."""
     dtype = np.find_common_type([a.dtype, b.dtype], [])
@@ -3736,7 +3751,8 @@ def _inner_worker(a, b):
         return res  # also trivial
     # need to find common blocks in a and b, i.e. equal leg charges.
     # for faster comparison, generate 1D arrays with a combined index
-    stride = np.cumprod([1] + [l.block_number for l in a.legs[:-1]])
+    # F-style strides to preserve sorting!
+    stride = charges._make_stride(tuple([l.block_number for l in a.legs]), False)
     a_qdata = np.sum(a._qdata * stride, axis=1)
     a_data = a._data
     if not a._qdata_sorted:
@@ -3811,7 +3827,8 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
         (The `dtype` of the ``s`` above might differ from `res_dtype`!).
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
-    stride = np.cumprod([1] + [l.block_number for l in a.legs[cut_a:-1]])
+    # F-style strides to preserve sorting
+    stride = charges._make_stride(tuple([l.block_number for l in a.legs[cut_a:]]), False)
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)

@@ -88,7 +88,7 @@ cdef inline np.ndarray _np_zeros_2D(intp_t dim1, intp_t dim2, int type_):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-cdef np.ndarray make_stride(tuple shape, bint cstyle=1):
+cpdef np.ndarray _make_stride(tuple shape, bint cstyle=1):
     """Create the strides for C-style arrays with a given shape.
 
     Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
@@ -346,7 +346,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     cdef intp_t i, j
     cdef QTYPE_t sign
     cdef intp_t a
-    self._strides = make_stride(self.subqshape, 1)  # save for :meth:`_map_incoming_qind`
+    self._strides = _make_stride(self.subqshape, 1)  # save for :meth:`_map_incoming_qind`
 
     # create a grid to select the multi-index sector
     grid = np.indices(self.subqshape, np.intp)
@@ -375,7 +375,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     if sort and qnumber > 0:
         # sort by charge. Similar code as in :meth:`LegCharge.sort`,
         # but don't want to create a copy, nor is qind[:, 0] initialized yet.
-        perm_qind = lexsort(charges.T)
+        perm_qind = np.lexsort(charges.T)
         q_map = q_map[perm_qind]
         charges = charges[perm_qind]
         blocksizes = blocksizes[perm_qind]
@@ -826,7 +826,8 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
     cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
-    stride = make_stride(tuple([l.block_number for l in a.legs[cut_a:a.rank]]), 0)  # TODO: can use c-style!?!
+    # F-style strides to preserve sorting
+    stride = _make_stride(tuple([l.block_number for l in a.legs[cut_a:a.rank]]), 0)
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
@@ -964,8 +965,8 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-@cython.cdivision(True)
 @cython.nonecheck(False)
+@cython.cdivision(True)
 def _tensordot_worker(a, b, int axes):
     """Main work of tensordot, called by :func:`tensordot`.
 
@@ -1057,29 +1058,10 @@ def _tensordot_worker(a, b, int axes):
     cdef intp_t len_b_data = len(b_data)
     cdef bint equal = 1
     cdef intp_t i, j
-    # special case: a or b is zero
-    if len_a_data == 0 or len_b_data == 0:  # special case: `a` or `b` is 0
-        return res
-    # special case: only one stored block
-    if len_a_data == 1 and len_b_data == 1:
-        # optimize for special case that a and b have only 1 entry
-        # this is (usually) the case if we have trivial charges
-        for i in range(axes):
-            if a_qdata[0, cut_a + i] != b_qdata[0, i]:
-                equal = 0
-                break
-        if equal:
-            # contract innner
-            res._data = [np.asarray(np.tensordot(a._data[0], b._data[0], axes=axes),
-                                    dtype=res_dtype)]
-            c_qdata = np.zeros([1, res_rank], np.intp)
-            for i in range(cut_a):
-                c_qdata[0, i] = a_qdata[0, i]
-            for i in range(b_rank - cut_b):
-                c_qdata[0, cut_a + i] = b_qdata[0, cut_b + i]
-            res._qdata = c_qdata
-        #  else: zero
-        return res
+    # special cases of one or zero blocks are handles in np_conserved.py
+    if len_a_data == 0 or len_b_data == 0 or (len_a_data == 1 and len_b_data == 1):
+        raise ValueError("single blocks: this should be handled outside of _tensordot_worker")
+        # They should work here as well, but might give a memory leak (2D array with shape [*,0])
 
     cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
     cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
@@ -1101,7 +1083,7 @@ def _tensordot_worker(a, b, int axes):
     # the slices divide a_data and b_data into rows and columns
     cdef intp_t n_rows_a = a_slices.shape[0] - 1
     cdef intp_t n_cols_b = b_slices.shape[0] - 1
-    a_qdata_keep = a_qdata_keep[a_slices[:n_rows_a]]  # TODO: might get optimized
+    a_qdata_keep = a_qdata_keep[a_slices[:n_rows_a]]
     b_qdata_keep = b_qdata_keep[b_slices[:n_cols_b]]
 
     if DEBUG_PRINT:
@@ -1265,5 +1247,8 @@ def _tensordot_worker(a, b, int axes):
         print("res.stored_blocks", res_n_blocks)
         t0 = time.time()
     return res
-# TODO: _inner_worker !?!
-# TODO: _svd_workder !?!
+
+
+# TODO _inner_worker
+
+# TODO: _svd_worker !?!

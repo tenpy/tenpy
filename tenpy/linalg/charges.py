@@ -1111,13 +1111,13 @@ class LegPipe(LegCharge):
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
         nlegs = self.nlegs
         qnumber = self.chinfo.qnumber
+        self._strides = _make_stride(self.subqshape, True)  # save for :meth:`_map_incoming_qind`
 
         # create a grid to select the multi-index sector
         grid = np.indices(self.subqshape, np.intp)
         # grid is an array with shape ``(nlegs,) + subqshape``,
         # with grid[li, ...] = {np.arange(subqshape[li]) increasing in the li-th direcion}
         # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
-        self._strides = np.array(grid.strides, np.intp)[1:] // grid.itemsize
         # collapse the different directions into one.
         grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
@@ -1292,3 +1292,26 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
     dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
     src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
     dest[dst_sl] = src[src_sl]
+
+@use_cython
+def _make_stride(shape, cstyle=True):
+    """Create the strides for C-style arrays with a given shape.
+
+    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+    """
+    L = len(shape)
+    stride = 1
+    res = np.empty([len(shape)], np.intp)
+    if cstyle:
+        res[L-1] = 1
+        for a in range(L-1, 0, -1):
+            d = shape[a]
+            stride *= d
+            res[a-1] = stride
+    else:
+        res[0] = 1
+        for a in range(0, L-1):
+            d = shape[a]
+            stride *= d
+            res[a+1] = stride
+    return res
