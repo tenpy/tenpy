@@ -31,7 +31,7 @@ IF DEBUG_PRINT:
 
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-from scipy.linalg.cython_blas cimport dgemm, zgemm
+from scipy.linalg.cython_blas cimport dgemm, zgemm, dgemv, zgemv
 
 from ..tools.misc import inverse_permutation
 from ..tools import optimization
@@ -148,20 +148,37 @@ cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C
     Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
     """
     # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
-    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LD= K yields A.T
+    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LDA=K yields A.T
     # Thus we can use C-style A, B, C without transposing.
-    cdef char * tr = 'n'
+    cdef char *no_tr = 'n'
+    cdef char *tr = 't'
     cdef double alpha = 1.
     cdef double complex alpha_complex = 1.
     cdef double complex beta_complex = beta
-    # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDB, B, LDB, beta, C LDC)
-    # but switch A <-> B and M <-> N to transpose everything
-    if dtype_num == np.NPY_DOUBLE:
-        dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N,
-              <double*> A, &K, &beta, <double*> C, &N)
-    else: # dtype_num == np.NPY_CDOUBLE
-        zgemm(tr, tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
-              <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
+    if M == 1:
+        # matrix-vector
+        if dtype_num == np.NPY_DOUBLE:
+            dgemv(no_tr, &N, &K, &alpha, <double*> B, &N,
+                <double*> A, &M, &beta, <double*> C, &M)
+        else: # dtype_num == np.NPY_CDOUBLE
+            zgemv(no_tr, &N, &K, &alpha_complex, <double complex*> B, &N,
+                <double complex*> A, &M, &beta_complex, <double complex*> C, &M)
+    elif N == 1:
+        if dtype_num == np.NPY_DOUBLE:
+            dgemv(tr, &K, &M, &alpha, <double*> A, &K,
+                <double*> B, &N, &beta, <double*> C, &N)
+        else: # dtype_num == np.NPY_CDOUBLE
+            zgemv(tr, &K, &M, &alpha_complex, <double complex*> A, &K,
+                <double complex*> B, &N, &beta_complex, <double complex*> C, &N)
+    else:
+        # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDA, B, LDB, beta, C LDC)
+        # but switch A <-> B and M <-> N to transpose everything
+        if dtype_num == np.NPY_DOUBLE:
+            dgemm(no_tr, no_tr, &N, &M, &K, &alpha, <double*> B, &N,
+                <double*> A, &K, &beta, <double*> C, &N)
+        else: # dtype_num == np.NPY_CDOUBLE
+            zgemm(no_tr, no_tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
+                <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
 
 
 
