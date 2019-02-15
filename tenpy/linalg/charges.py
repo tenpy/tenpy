@@ -1231,6 +1231,28 @@ class LegPipe(LegCharge):
         self._strides = _strides
         LegCharge.__setstate__(self, super_state)
 
+# (in cython, but with sligthly different arguments)
+def _partial_qtotal(chinfo, legs, qdata, qconj, add_qtotal):
+    """Calculate qtotal of a part of the legs of a npc.Array.
+
+    Equivalent to:
+        charges = np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0)
+        return chinfo.make_valid(charges * qconj + add_qtotal)
+    """
+    if chinfo.qnumber == 0:
+        return np.zeros([qdata.shape[0], 0], QTYPE)
+    if len(legs) == 0:
+        if add_qtotal is not None:
+            return np.ones([qdata.shape[0], chinfo.qnumber], QTYPE) * add_qtotal[np.newaxis, :]
+        else:
+            return np.zeros([qdata.shape[0], chinfo.qnumber], QTYPE)
+    charges_ = np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0)
+    if qconj != 1:
+        charges_ *= qconj
+    if add_qtotal is not None:
+        charges_ += add_qtotal[np.newaxis, :]
+    return chinfo.make_valid(charges_)
+
 
 @use_cython
 def _find_row_differences(qflat):
@@ -1301,17 +1323,15 @@ def _make_stride(shape, cstyle=True):
     """
     L = len(shape)
     stride = 1
-    res = np.empty([len(shape)], np.intp)
+    res = np.empty([L], np.intp)
     if cstyle:
         res[L-1] = 1
         for a in range(L-1, 0, -1):
-            d = shape[a]
-            stride *= d
+            stride *= shape[a]
             res[a-1] = stride
     else:
         res[0] = 1
         for a in range(0, L-1):
-            d = shape[a]
-            stride *= d
+            stride *= shape[a]
             res[a+1] = stride
     return res

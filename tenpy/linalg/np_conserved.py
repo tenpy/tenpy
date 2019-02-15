@@ -3740,9 +3740,11 @@ def _iter_common_sorted(a, b):
     return res
 
 
-# @use_cython # TODO
+#  @use_cython # TODO implement this in npc_helper
 def _inner_worker(a, b):
     """Full contraction of `a` and `b` with axes in matching order."""
+    # TODO function for finding the common data type, use in tensordot as well
+    # TODO use blas functions ddot() or zdotu()
     dtype = np.find_common_type([a.dtype, b.dtype], [])
     res = dtype.type(0)
     if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
@@ -3808,12 +3810,10 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     Returns
     -------
     a_pre_result, b_pre_result : tuple
-        In the following order, it
-        contains for `a`, and `b` respectively, in the following order:
+        In the following order, it contains for `a`, and `b` respectively:
         a_data : list of reshaped tensors
         a_qdata_contr : 2D array with qindices of `a` which we need to sum over
         a_qdata_keep : 2D array of the qindices of `a` which will appear in the final result
-        a_charges_keep : 2D array of charges for a_shape_keep,
         a_slices : partition to map the indices of a_*_keep to a_data
     f_dot_sum : function
         a wrapper around a suitable BLAS function for perfoming the matrix product
@@ -3859,19 +3859,9 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     b_qdata_keep = b_qdata_keep[b_slices[:-1]]
     a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
     b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
-    a_charges_keep = a.chinfo.make_valid(
-        np.sum([l.get_charge(qi)
-                for l, qi in zip(a.legs[:cut_a], a_qdata_keep.T)], axis=0) if cut_a > 0 else None)
-    if a_charges_keep.ndim < 2:
-        a_charges_keep = a_charges_keep.reshape((-1, a.chinfo.qnumber))
-    b_charges_keep = a.chinfo.make_valid(
-        np.sum([l.get_charge(qi) for l, qi in zip(b.legs[cut_b:], b_qdata_keep.T)], axis=0)
-        if cut_b < b.rank else None)
-    if b_charges_keep.ndim < 2:
-        b_charges_keep = b_charges_keep.reshape((-1, a.chinfo.qnumber))
     # determine calculation type and result type
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
-    prefix, res_dtype, _ = BLAS.find_best_blas_type(dtype=dtype)
+    res_dtype = np.find_common_type([a.dtype, b.dtype], [])
+    prefix, dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
     calc_dtype = {'s': np.float32, 'd': np.float64, 'c': np.complex64, 'z': np.complex128}[prefix]
     # reshape a_data and b_data to matrix/vector in fortran order
     a_data = _tensordot_pre_reshape(a_data, cut_a, calc_dtype, same_shape_before_cut=True)
@@ -3917,8 +3907,8 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
             return sum
 
     # collect and return the results
-    a_pre_result = a_data, a_qdata_contr, a_qdata_keep, a_charges_keep, a_shape_keep
-    b_pre_result = b_data, b_qdata_contr, b_qdata_keep, b_charges_keep, b_shape_keep
+    a_pre_result = a_data, a_qdata_contr, a_qdata_keep, a_shape_keep
+    b_pre_result = b_data, b_qdata_contr, b_qdata_keep, b_shape_keep
     return a_pre_result, b_pre_result, fast_dot_sum, res_dtype
 
 
@@ -3989,17 +3979,18 @@ def _tensordot_worker(a, b, axes):
     cut_a = a.rank - axes
     cut_b = axes
     a_pre_result, b_pre_result, fast_dot_sum, res_dtype = _tensordot_pre_worker(a, b, cut_a, cut_b)
-    a_data, a_qdata_contr, a_qdata_keep, a_charges_keep, a_shape_keep = a_pre_result
-    b_data, b_qdata_contr, b_qdata_keep, b_charges_keep, b_shape_keep = b_pre_result
+    a_data, a_qdata_contr, a_qdata_keep, a_shape_keep = a_pre_result
+    b_data, b_qdata_contr, b_qdata_keep, b_shape_keep = b_pre_result
 
     # Step 3) loop over column/row of the result
 
     # first find output colum/row indices of the result, which are compatible with the charges
     qtotal = chinfo.make_valid(a.qtotal + b.qtotal)
-    # fast way to match the find the compatible indices
+    a_charges_keep = charges._partial_qtotal(a.chinfo, a.legs[:cut_a], a_qdata_keep, +1, None)
+    # fast way to matb_charges_keep, ch the find the compatible indices
     a_lookup_charges = list_to_dict_list(a_charges_keep)  # lookup table ``charge -> [row_a]``
-    # a_charges_match: for each row in a, which charge in b is compatible?
-    b_charges_match = chinfo.make_valid(qtotal - b_charges_keep)
+    # b_charges_match: for each row in a, which charge in b is compatible?
+    b_charges_match = charges._partial_qtotal(a.chinfo, b.legs[cut_b:], b_qdata_keep, -1, qtotal)
 
     # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
     # determine output qdata

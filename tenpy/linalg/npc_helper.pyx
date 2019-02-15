@@ -4,14 +4,14 @@ This module is written in Cython, such that it can be compiled.
 It implements some functions and classes with the same interface as np_conserved.py/charges.py.
 
 
-``tenpy.linalg.__init__.py`` tries to import the compiled module and uses the
-functions/classes defined here to overwrite those written in pure Python.
-If the file could not be compiled, it just uses the non-compiled Cython version.
-
+:func:`tenpy.tools.optimization.use_cython` tries to import the compiled cython module and uses the
+functions/classes defined here to overwrite those written in pure Python whenever the
+decorator ``@use_cython`` is used in other python files of tenpy.
+If this module was not compiled and could not be imported, a warning is issued.
 """
 # Copyright 2018 TeNPy Developers
 
-DEF DEBUG_PRINT = 0  # turn th
+DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
 
 # TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
 # the same memory leak appears for memory views `type[:, :]`
@@ -35,7 +35,7 @@ import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
 from scipy.linalg.cython_blas cimport dgemm, zgemm
 
-from ..tools.misc import lexsort, inverse_permutation  # TODO: get rid of this?
+from ..tools.misc import inverse_permutation
 from ..tools import optimization
 
 np.import_array()

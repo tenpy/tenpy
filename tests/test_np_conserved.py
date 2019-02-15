@@ -506,6 +506,29 @@ def test_npc_tensordot():
     bflat = np.tensordot(aflat, aflat, axes=1)
     npt.assert_array_almost_equal_nulp(b.to_ndarray(), bflat, sum(a.shape))
 
+def test_npc_tensordot_extra():
+    # check that the sorting of charges is fine with special test matrices
+    # which gave me some headaches at some point :/
+    chinfo = npc.ChargeInfo([1], ['Sz'])
+    leg = npc.LegCharge.from_qflat(chinfo, [-1, 1])
+    legs = [leg, leg, leg.conj(), leg.conj()]
+    idx = [(0, 0, 0, 0), (0, 1, 0, 1), (0, 1, 1, 0), (1, 0, 0, 1), (1, 0, 1, 0), (1, 1, 1, 1)]
+    Uflat = np.eye(4).reshape([2, 2, 2, 2])  # up to numerical rubbish the identity
+    Uflat[0, 1, 1, 0] = Uflat[1, 0, 0, 1] = 1.e-20
+    U = npc.Array.from_ndarray(Uflat, legs, cutoff=0.)
+    theta_flat = np.zeros([2, 2, 2, 2])
+    vals = np.random.random(len(idx))
+    vals /= np.linalg.norm(vals)
+    for i, val in zip(idx, vals):
+        theta_flat[i] = val
+    theta = npc.Array.from_ndarray(theta_flat, [leg, leg, leg.conj(), leg.conj()], cutoff=0.)
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(theta) ) < 1.e-14
+    Utheta_flat = np.tensordot(Uflat, theta_flat, axes=2)
+    Utheta = npc.tensordot(U, theta, axes=2)
+    npt.assert_array_almost_equal_nulp(Utheta.to_ndarray(), Utheta_flat, 10)
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta) ) < 1.e-10
+
+
 
 def test_npc_inner():
     for sort in [True, False]:
