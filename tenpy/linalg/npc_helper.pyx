@@ -16,12 +16,10 @@ DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings wi
 # TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
 # the same memory leak appears for memory views `type[:, :]`
 # see https://github.com/cython/cython/issues/2828
-# TODO: check if this code has memory leaks.
 
 import numpy as np
 cimport numpy as np
 cimport cython
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libcpp.vector cimport vector
 from libc.string cimport memcpy
 
@@ -70,8 +68,8 @@ ctypedef struct idx_tuple:
 # ################################# #
 
 
-cdef inline np.ndarray _np_empty(np.PyArray_Dims dims, int type_):
-    return <np.ndarray>np.PyArray_EMPTY(dims.len, dims.ptr, type_, 0 )
+cdef inline np.ndarray _np_empty_ND(intp_t N, intp_t *dims, int type_):
+    return <np.ndarray>np.PyArray_EMPTY(N, dims, type_, 0 )
 
 cdef inline np.ndarray _np_empty_1D(intp_t dim, int type_):
     return <np.ndarray>np.PyArray_SimpleNew(1, [dim], type_)
@@ -117,7 +115,7 @@ cdef void _batch_accumulate_gemm(vector[intp_t] batch_slices,
                             vector[void*] a_data_ptr,
                             vector[void*] b_data_ptr,
                             vector[void*] c_data_ptr,
-                            int calc_dtype_num
+                            int dtype_num
                             ) nogil:
     cdef size_t b, batch_count = batch_m_n.size()
     cdef intp_t x, batch_beg, batch_end,
@@ -134,26 +132,17 @@ cdef void _batch_accumulate_gemm(vector[intp_t] batch_slices,
         i = i_j.first
         j = i_j.second
         k = block_dim_a_contr[i]
-        if calc_dtype_num == np.NPY_DOUBLE:
-            _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                        0., c_data_ptr[b])
-        else: # if calc_dtype_num == np.NPY_CDOUBLE:
-            _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                        0., c_data_ptr[b])
+        _blas_gemm(m, n, k, a_data_ptr[i], b_data_ptr[j], 0., c_data_ptr[b], dtype_num)
         for x in range(batch_beg + 1, batch_end):
             i_j = inds_contr[x]
             i = i_j.first
             j = i_j.second
             k = block_dim_a_contr[i]
-            if calc_dtype_num == np.NPY_DOUBLE:
-                _blas_dgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            1., c_data_ptr[b])
-            else: # if calc_dtype_num == np.NPY_CDOUBLE:
-                _blas_zgemm(m, n, k, a_data_ptr[i], b_data_ptr[j],
-                            1., c_data_ptr[b])
+            _blas_gemm(m, n, k, a_data_ptr[i], b_data_ptr[j], 1., c_data_ptr[b], dtype_num)
 
 
-cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* C) nogil:
+cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C,
+                     int dtype_num) nogil:
     """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
 
     Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
@@ -163,20 +152,16 @@ cdef void _blas_dgemm(int M, int N, int K, void* A, void* B, double beta, void* 
     # Thus we can use C-style A, B, C without transposing.
     cdef char * tr = 'n'
     cdef double alpha = 1.
+    cdef double complex alpha_complex = 1.
+    cdef double complex beta_complex = beta
     # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDB, B, LDB, beta, C LDC)
     # but switch A <-> B and M <-> N to transpose everything
-    dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N, <double*> A, &K, &beta, <double*> C, &N)
-
-
-cdef void _blas_zgemm(int M, int N, int K, void* A, void* B, double complex beta, void* C) nogil:
-    """use blas to calculate C = A.B + beta C, overwriting to C
-
-    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN."""
-    cdef char * tr = 'n'
-    cdef double complex alpha = 1.
-    # switch A <-> B and M <-> N to transpose everything: c.f. _blas_dgemm
-    zgemm(tr, tr, &N, &M, &K, &alpha, <double complex*> B, &N, <double complex*> A, &K, &beta,
-          <double complex*> C, &N)
+    if dtype_num == np.NPY_DOUBLE:
+        dgemm(tr, tr, &N, &M, &K, &alpha, <double*> B, &N,
+              <double*> A, &K, &beta, <double*> C, &N)
+    else: # dtype_num == np.NPY_CDOUBLE
+        zgemm(tr, tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
+              <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
 
 
 
@@ -222,6 +207,21 @@ cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
                                      &slice_shape[3], ndim-3, width)
 
 
+def _find_calc_dtype(a_dtype, b_dtype):
+    """return calc_dtype, res_dtype suitable for BLAS calculations."""
+    res_dtype = np.find_common_type([a_dtype, b_dtype], [])
+    prefix, _, _ = BLAS.find_best_blas_type(dtype=res_dtype)
+    # always use 64-bit precision floating points
+    if prefix == 's' or prefix == 'd':
+        calc_dtype = np.dtype(np.float64)
+    elif prefix == 'c' or prefix == 'z':
+        calc_dtype = np.dtype(np.complex128)
+    else:
+        raise ValueError("can't handle the data type prefix " + str(prefix))
+    cdef int calc_dtype_num = calc_dtype.num
+    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+        raise ValueError("calc_dtype != double, complex double") # should never happen...
+    return calc_dtype, res_dtype
 
 
 # ################################# #
@@ -465,6 +465,7 @@ cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdat
     Equivalent to:
         charges = np.sum([l.get_charge(qi) for l, qi in zip(legs, qdata.T)], axis=0)
         return chinfo.make_valid(charges * qconj + add_qtotal)
+    Result has shape [qdata.shape[0], qnumber]
     """
     cdef intp_t nlegs = qdata.shape[1]
     cdef intp_t qnumber = chinfo_mod.shape[0]
@@ -472,7 +473,6 @@ cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdat
         return _np_zeros_2D(qdata.shape[0], qnumber, QTYPE_num)
     cdef np.ndarray[QTYPE_t, ndim=2] res = _np_zeros_2D(qdata.shape[0], qnumber, QTYPE_num)
     cdef intp_t a, k, qi
-    #  cdef LegCharge leg
     cdef np.ndarray[QTYPE_t, ndim=2] charges
     cdef QTYPE_t sign, q
     for a in range(nlegs):
@@ -725,9 +725,6 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     cdef list qmap_slices = [None] * nsplit
     cdef intp_t r
     cdef slice sl
-    # TODO
-    #  cdef LegPipe pipe
-    #  cdef LegCharge leg
     cdef np.ndarray old_block, new_block
 
     for old_block, qdata_row in zip(self._data, tmp_qdata):
@@ -823,8 +820,6 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     a_data, a_qdata_keep, a_qdata_contr, b_data, b_qdata_keep, b_qdata_contr
     """
     cdef list a_data, b_data
-    cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
-    cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     # F-style strides to preserve sorting
     stride = _make_stride(tuple([l.block_number for l in a.legs[cut_a:a.rank]]), 0)
@@ -889,18 +884,19 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
         match_rows[:, 1] = n_rows_a
         return n_rows_a * n_cols_b, np.arange(n_rows_a), match_rows
     # general case
+    # note: a_charges_keep has shape (n_rows_a, qnumber)
+    # b_charges_match has shape (n_cols_b, qnumber)
     cdef np.ndarray[QTYPE_t, ndim=2] a_charges_keep = _partial_qtotal(
         chinfo_mod, a.legs[:cut_a], a_qdata_keep, 1)
     cdef np.ndarray[QTYPE_t, ndim=2] b_charges_match = _partial_qtotal(
         chinfo_mod, b.legs[cut_b:], b_qdata_keep, -1, add_qtotal=qtotal)
-    _make_valid_charges_2D(chinfo_mod, b_charges_match)
     cdef intp_t[::1] row_a_sort = np.lexsort(a_charges_keep.T)
     cdef intp_t[::1] col_b_sort = np.lexsort(b_charges_match.T)
     cdef int res_max_n_blocks = 0
     cdef int i=0, j=0, i0, j0, ax, j1
     cdef int i_s, j_s, i0_s, j0_s  # corresponding entries in row_a_sort/col_b_sort
     cdef int lexcomp
-    while i < n_rows_a and j < n_cols_b: # go through sort_a and sort_b at the same time
+    while i < n_rows_a and j < n_cols_b: # go through row_a_sort and col_b_sort at the same time
         i_s = row_a_sort[i]
         j_s = col_b_sort[j]
         # lexcompare a_charges_keep[i_s, :] and b_charges_match[j_s, :]
@@ -1037,22 +1033,16 @@ def _tensordot_worker(a, b, int axes):
         print("a.stored_blocks", a.stored_blocks, "b.stored_blocks", b.stored_blocks)
         t0 = time.time()
     # determine calculation type and result type
-    res_dtype = np.find_common_type([a.dtype, b.dtype], [])
-    prefix, _, _ = BLAS.find_best_blas_type(dtype=res_dtype)
-    # we always use 64-bit float calculations....
-    calc_dtype = np.dtype({'s': np.float64, 'd': np.float64,
-                           'c': np.complex128, 'z': np.complex128}[prefix])
-    cdef int CALC_DTYPE_NUM = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
     _make_valid_charges_1D(chinfo_mod, qtotal)
     res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
-    if a.dtype.num != CALC_DTYPE_NUM:
+    if a.dtype.num != calc_dtype_num:
         a = a.astype(calc_dtype)
-    if b.dtype.num != CALC_DTYPE_NUM:
+    if b.dtype.num != calc_dtype_num:
         b = b.astype(calc_dtype)
 
-    cdef np.ndarray[np.intp_t, ndim=2] a_qdata = a._qdata
-    cdef np.ndarray[np.intp_t, ndim=2] b_qdata = b._qdata
     cdef list a_data = a._data, b_data = b._data
     cdef intp_t len_a_data = len(a_data)
     cdef intp_t len_b_data = len(b_data)
@@ -1063,7 +1053,7 @@ def _tensordot_worker(a, b, int axes):
         raise ValueError("single blocks: this should be handled outside of _tensordot_worker")
         # They should work here as well, but might give a memory leak (2D array with shape [*,0])
 
-    cdef np.ndarray[np.intp_t, ndim=2] a_qdata_keep, b_qdata_keep
+    cdef np.ndarray a_qdata_keep, b_qdata_keep
     cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # pre_worker
     if DEBUG_PRINT:
@@ -1085,7 +1075,6 @@ def _tensordot_worker(a, b, int axes):
     cdef intp_t n_cols_b = b_slices.shape[0] - 1
     a_qdata_keep = a_qdata_keep[a_slices[:n_rows_a]]
     b_qdata_keep = b_qdata_keep[b_slices[:n_cols_b]]
-
     if DEBUG_PRINT:
         t1 = time.time()
         print("find_row_differences", t1-t0)
@@ -1099,7 +1088,9 @@ def _tensordot_worker(a, b, int axes):
     block_dim_a_contr.resize(len_a_data)
     cdef intp_t row_a, col_b, k_contr, ax  # indices
     cdef intp_t m, n, k   # reshaped dimensions: a_block.shape = (m, k), b_block.shape = (k,n)
-    cdef intp_t[:, ::1] a_shape_keep = _np_empty_2D(n_rows_a, cut_a, intp_num)
+    # NB: increase a_shape_keep.shape[1] artificially by one to avoid the memory leak
+    # the last column is never used
+    cdef intp_t[:, ::1] a_shape_keep = _np_empty_2D(n_rows_a, cut_a+1, intp_num)
     cdef intp_t[::1] block_dim_a_keep = _np_empty_1D(n_rows_a, intp_num)
     # inline what's  _tensordot_pre_reshape in the python version
     for row_a in range(n_rows_a):
@@ -1116,7 +1107,9 @@ def _tensordot_worker(a, b, int axes):
             block_dim_a_contr[j] = m  # needed for dgemm
             a_data_ptr[j] = np.PyArray_DATA(block)
             a_data[j] = block  # important to keep the arrays of the pointers alive
-    cdef intp_t[:, ::1] b_shape_keep = _np_empty_2D(n_cols_b, b_rank-cut_b, intp_num)
+    # NB: increase b_shape_keep.shape[1] artificially by one to avoid the memory leak
+    # in case the last column is never used
+    cdef intp_t[:, ::1] b_shape_keep = _np_empty_2D(n_cols_b, b_rank-cut_b+1, intp_num)
     cdef intp_t[::1] block_dim_b_keep = _np_empty_1D(n_cols_b, intp_num)
     for col_b in range(n_cols_b):
         i = b_slices[col_b]
@@ -1162,11 +1155,18 @@ def _tensordot_worker(a, b, int axes):
     cdef intp_t match0, match1
     cdef intp_t row_a_sort_idx
     cdef np.ndarray c_block
-    cdef np.PyArray_Dims c_block_shape
-    c_block_shape.len = res_rank
-    c_block_shape.ptr = <np.npy_intp*>PyMem_Malloc(res_rank * sizeof(np.npy_intp))
-    if not c_block_shape.ptr:
-        raise MemoryError
+    cdef intp_t[::1] c_block_shape = _np_empty_1D(res_rank, intp_num)
+    cdef intp_t[:, ::1] a_qdata_keep_  # need them typed for fast copy in loop
+    cdef intp_t[:, ::1] b_qdata_keep_
+    # but have to avoid the memory leak in case one of them is fully contracted
+    if a_qdata_keep.shape[1] == 0:
+        a_qdata_keep_ = _np_zeros_2D(n_rows_a, 1, intp_num)
+    else:
+        a_qdata_keep_ = a_qdata_keep
+    if b_qdata_keep.shape[1] == 0:
+        b_qdata_keep_ = _np_zeros_2D(n_cols_b, 1, intp_num)
+    else:
+        b_qdata_keep_ = b_qdata_keep
 
     # the inner loop finding the blocks to be contracted
     for col_b in range(n_cols_b):  # columns of b
@@ -1175,7 +1175,7 @@ def _tensordot_worker(a, b, int axes):
         if match1 == match0:
             continue
         for ax in range(b_rank - cut_b):
-            c_block_shape.ptr[cut_a + ax] = b_shape_keep[col_b, ax]
+            c_block_shape[cut_a + ax] = b_shape_keep[col_b, ax]
         m_n.second = block_dim_b_keep[col_b]
         for row_a_sort_idx in range(match0, match1):  # rows of a
             row_a = row_a_sort[row_a_sort_idx]
@@ -1190,10 +1190,10 @@ def _tensordot_worker(a, b, int axes):
             # we need to sum over inner indices
             # create output block
             for ax in range(cut_a):
-                c_block_shape.ptr[ax] = a_shape_keep[row_a, ax]
+                c_block_shape[ax] = a_shape_keep[row_a, ax]
             m_n.first = block_dim_a_keep[row_a]
 
-            c_block = _np_empty(c_block_shape, CALC_DTYPE_NUM)
+            c_block = _np_empty_ND(res_rank, &c_block_shape[0], calc_dtype_num)
             c_data_ptr.push_back(np.PyArray_DATA(c_block))
             batch_m_n.push_back(m_n)
 
@@ -1202,9 +1202,9 @@ def _tensordot_worker(a, b, int axes):
             # Step 4) reshape back to tensors
             # c_block is already created in the correct shape, which is ignored by BLAS.
             for ax in range(cut_a):
-                res_qdata[res_n_blocks, ax] = a_qdata_keep[row_a, ax]
+                res_qdata[res_n_blocks, ax] = a_qdata_keep_[row_a, ax]
             for ax in range(b_rank - cut_b):
-                res_qdata[res_n_blocks, cut_a + ax] = b_qdata_keep[col_b, ax]
+                res_qdata[res_n_blocks, cut_a + ax] = b_qdata_keep_[col_b, ax]
             res_data.append(c_block)
             res_n_blocks += 1
 
@@ -1222,7 +1222,7 @@ def _tensordot_worker(a, b, int axes):
                                a_data_ptr,
                                b_data_ptr,
                                c_data_ptr,
-                               CALC_DTYPE_NUM)
+                               calc_dtype_num)
 
     if DEBUG_PRINT:
         t1 = time.time()
@@ -1230,7 +1230,6 @@ def _tensordot_worker(a, b, int axes):
         print("had ", inds_contr.size(), "contractions into ", res_n_blocks, "new blocks")
         t0 = time.time()
 
-    PyMem_Free(c_block_shape.ptr)
     if res_n_blocks != 0:
         # (at least one entry is non-empty, so res_qdata[keep] is also not empty)
         if res_n_blocks != res_max_n_blocks:
@@ -1238,8 +1237,7 @@ def _tensordot_worker(a, b, int axes):
         res._qdata = res_qdata
         res._qdata_sorted = True
         res._data = res_data
-        if res_dtype.num != CALC_DTYPE_NUM:
-            res.dtype = calc_dtype
+        if res_dtype.num != calc_dtype_num:
             res = res.astype(res_dtype)
     if DEBUG_PRINT:
         t1 = time.time()

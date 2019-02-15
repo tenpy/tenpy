@@ -73,6 +73,10 @@ QCUTOFF = np.finfo(np.float64).eps * 10
 # the type used for charges
 QTYPE = charges.QTYPE
 
+# ##################################
+# Array class
+# ##################################
+
 
 class Array:
     r"""A multidimensional array (=tensor) for using charge conservation.
@@ -2424,7 +2428,9 @@ class Array:
         return self
 
 
-# functions ====================================================================
+# ##################################
+# global functions
+# ##################################
 
 
 def zeros(legcharges, dtype=np.float64, qtotal=None):
@@ -3025,6 +3031,7 @@ def tensordot(a, b, axes=2):
         a.itranspose(not_axes_a + axes_a)
         b.itranspose(axes_b + not_axes_b)
         axes = len(axes_a)
+
     # now `axes` is integer
     # check for contraction compatibility
     if not optimize(OptimizationFlag.skip_arg_checks):
@@ -3032,13 +3039,11 @@ def tensordot(a, b, axes=2):
             lega.test_contractible(legb)
 
     # optimize/check for special cases
-    if axes == 0:
-        return outer(a, b)  # no sum necessary
-    if axes == a.rank and axes == b.rank:
-        return inner(a, b)  # full contraction
     no_block = (a.stored_blocks == 0 or b.stored_blocks == 0)  # result is zero
     one_block = (a.stored_blocks == 1 and b.stored_blocks == 1)
-    if no_block or one_block:
+    if axes == a.rank and axes == b.rank:
+        return _inner_worker(a, b)  # full contraction yields a single number
+    elif no_block or one_block:
         cut_a = a.rank - axes
         res = Array(a.legs[:cut_a] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
                     a.chinfo.make_valid(a.qtotal + b.qtotal))
@@ -3054,6 +3059,8 @@ def tensordot(a, b, axes=2):
                 res._qdata = c_qdata
                 res._qdata_sorted = True
             # else: zero
+    elif axes == 0:
+        return outer(a, b)  # no sum necessary
     else:
         # #### the main work
         res = _tensordot_worker(a, b, axes)
@@ -3556,6 +3563,13 @@ def to_iterable_arrays(array_list):
 # internal helper functions
 # ##################################
 
+def _find_calc_dtype(a_dtype, b_dtype):
+    """return (calc_dtype, res_dtype) suitable for BLAS calculations."""
+    res_dtype = np.find_common_type([a_dtype, b_dtype], [])
+    _, calc_dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
+    return calc_dtype, res_dtype
+
+
 @use_cython
 def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, non_new_axes,
                          pipes):
@@ -3743,14 +3757,16 @@ def _iter_common_sorted(a, b):
 #  @use_cython # TODO implement this in npc_helper
 def _inner_worker(a, b):
     """Full contraction of `a` and `b` with axes in matching order."""
-    # TODO function for finding the common data type, use in tensordot as well
-    # TODO use blas functions ddot() or zdotu()
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
-    res = dtype.type(0)
+    calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
+    res = res_dtype.type(0)
     if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
         return res  # can't have blocks to be contracted
     if a.stored_blocks == 0 or b.stored_blocks == 0:
         return res  # also trivial
+    a = a.astype(calc_dtype, False)
+    b = b.astype(calc_dtype, False)
+    blas_dotu = BLAS.get_blas_funcs('dotu', dtype=calc_dtype)
+
     # need to find common blocks in a and b, i.e. equal leg charges.
     # for faster comparison, generate 1D arrays with a combined index
     # F-style strides to preserve sorting!
@@ -3768,7 +3784,8 @@ def _inner_worker(a, b):
         b_qdata = b_qdata[perm]
         b_data = [b_data[i] for i in perm]
     for i, j in _iter_common_sorted(a_qdata, b_qdata):
-        res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
+        res += blas_dotu(a_data[i], b_data[j])
+        #  np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
     return res
 
 
@@ -3860,15 +3877,13 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
     b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
     # determine calculation type and result type
-    res_dtype = np.find_common_type([a.dtype, b.dtype], [])
-    prefix, dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
-    calc_dtype = {'s': np.float32, 'd': np.float64, 'c': np.complex64, 'z': np.complex128}[prefix]
+    calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     # reshape a_data and b_data to matrix/vector in fortran order
     a_data = _tensordot_pre_reshape(a_data, cut_a, calc_dtype, same_shape_before_cut=True)
     b_data = _tensordot_pre_reshape(b_data, cut_b, calc_dtype, same_shape_before_cut=False)
     # determine blas function
     f_name = 'gemv' if (cut_a == 0 or cut_b == b.rank) else 'gemm'
-    blas_dot = BLAS.get_blas_funcs(f_name, (a_data[0][0], b_data[0][0]))
+    blas_dot = BLAS.get_blas_funcs(f_name, dtype=calc_dtype)
     kw_overwrite = 'overwrite_c' if f_name == 'gemm' else 'overwrite_y'
     kw_overwrite = {kw_overwrite: True}
     if cut_a > 0:
@@ -3886,10 +3901,10 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
             if len(ks) == 0:
                 return None
             k1, k2 = ks[0]
-            sum = blas_dot(1., a[k1], b[k2])
+            sum_ = blas_dot(1., a[k1], b[k2])
             for k1, k2 in ks[1:]:
-                sum = blas_dot(1., a[k1], b[k2], 1., sum, **kw_overwrite)
-            return sum
+                sum_ = blas_dot(1., a[k1], b[k2], 1., sum_, **kw_overwrite)
+            return sum_
     else:
         # special case: `a` contains 1D vectors, so we need blas_dot(b, a, trans=True)
         kw_no_overwrite = {'trans': True}
@@ -3901,10 +3916,10 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
             if len(ks) == 0:
                 return None
             k1, k2 = ks[0]
-            sum = blas_dot(1., b[k2], a[k1], **kw_no_overwrite)
+            sum_ = blas_dot(1., b[k2], a[k1], **kw_no_overwrite)
             for k1, k2 in ks[1:]:
-                sum = blas_dot(1., b[k2], a[k1], 1., sum, **kw_overwrite)
-            return sum
+                sum_ = blas_dot(1., b[k2], a[k1], 1., sum_, **kw_overwrite)
+            return sum_
 
     # collect and return the results
     a_pre_result = a_data, a_qdata_contr, a_qdata_keep, a_shape_keep
