@@ -3,9 +3,7 @@ from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np
 import pylab as pl
-from misc import *
 from scipy.sparse.linalg import onenormest
-#import tebd
                 
 def tdvp(Psi, W, dt, Rp_list=None, k=5,O=None):
         """
@@ -321,3 +319,12 @@ def middle_site_hamiltonian(Jx,Jz,hx,hz,L):
                 else:
                         W.append(M0)
         return(W)
+
+def mps_invert(Psi):
+	np = Psi[0].ndim - 2
+	return [ b.transpose(list(range(np)) + [-1, -2]) for b in Psi[::-1] ]
+
+def mpo_invert(Psi):
+	np = Psi[0].ndim
+	return [ b.transpose([1,0] + list(range(2,np))) for b in Psi[::-1] ]
+

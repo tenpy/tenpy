@@ -1,3 +1,14 @@
+"""
+Time Dependant Variational Principle (TDVP) with MPS (finite version only).
+The TDVP MPS algorithm was first proposed by Jutho Haegeman (https://arxiv.org/abs/1103.0936). However
+the stability of the algorithm was later improved in another article (https://arxiv.org/abs/1408.5056), that we are following in this implementation. 
+The general idea of the algorithm is to project the quantum time evolution in the manyfold of MPS with a given bond dimension.
+The algorithm has several advantage (among others: conervation of the unitarity of the time evolution and conservation of energy), and is suitable for time evolution
+of Hamiltonian with arbitrary long range.
+We have implemented the on site formulation which DOES NOT allow for growth of the bond dimension and the two site algorithm
+which allow the bond dimension (but requires truncation as in the TEBD case).
+"""
+
 import sys
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
@@ -21,7 +32,7 @@ number_test=0
 class Engine(object):
     """
     Time dependant variational principle 'engine'
-
+        
     Parameters
     ----------
     psi : :class:`~tenpy.networs.mps.MPS`
@@ -31,19 +42,23 @@ class Engine(object):
     TEBD_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
-
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        start_time     float     Initial time
-        -------------- --------- ---------------------------------------------------------------
-        dt             float     time step used for the time evolution
-        -------------- --------- ---------------------------------------------------------------
+     
+        ============== =================================  ===============================================================
+        key            type                               description
+        ==============  ================================  ===============================================================
+        psi            :class:`~tenpy.networks.mps.MPS`                                wave function to evolve 
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        model          :class:`~tenpy.models.MPOModel`
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        TDVP_params    dict of parameters                 verbose, start_time,dt (time step of the Trotter error)
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        trunc_params   dict                               Truncation parameters as described in
+                                                          :func:`~tenpy.algorithms.truncation.truncate`.
+        ============== =================================  ===============================================================
       
-        ============== ========= ===============================================================
-
     """
-    def __init__(self, psi, model, TDVP_params,check_error=False,trunc_params=None):
+
+    def __init__(self, psi, model, TDVP_params,trunc_params=None):
         self.verbose = get_parameter(TDVP_params, 'verbose', 2, 'TDVP')
         self.TDVP_params = TDVP_params
         self.model = model
@@ -56,7 +71,6 @@ class Engine(object):
         self.L=self.psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')
         self.trunc_params=trunc_params
-        self.error=check_error
         #Since we have a second order TDVP, we evolve from 0.5dt during left_right sweep and of 0.5dt again
         #during the right_left sweep
 
@@ -82,8 +96,6 @@ class Engine(object):
             #d,chiA,chiB = theta.to_ndarray().shape
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j)
-            if self.error==True:
-                self.calculate_error_left_right(j)
             theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), -0.5*self.dt)
             # SVD and update environment
             U,s,V=self.theta_svd_left_right(theta)
@@ -98,7 +110,7 @@ class Engine(object):
                 Lpp=self.environment.get_LP(j+1)
                 Rp=npc.tensordot(Rp,V,axes=['vL','vR'])
                 Rp=npc.tensordot(Rp,V.conj(),axes=['vL*','vR*'])
-                H = H0_mixed_charge(Lpp,Rp)
+                H = H0_mixed(Lpp,Rp)
                 
                 s=self.update_s_h0(s,H,0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
@@ -111,18 +123,17 @@ class Engine(object):
         spectrum.append(np.array([1]))
         theta_old=self.psi.get_theta(0,1)
         for j in range(self.L-1):
-            
+               
             #theta=self.psi.get_theta(j,2)
             theta=npc.tensordot(theta_old,self.psi.get_B(j+1),('vR','vL'))
             theta.ireplace_label('p','p1')
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
-            theta=self.update_theta_h1_two(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
+            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
             theta.itranspose(['(vL.p0)','(vR.p1)'])
             # SVD and update environment
-            #U,s,V=self.theta_svd_left_right(theta)
             U,s,V,err,renorm=svd_theta(theta,self.trunc_params)
             s=s/npc.norm(s)
             U=U.split_legs('(vL.p0)')
@@ -130,10 +141,10 @@ class Engine(object):
             V=V.split_legs('(vR.p1)')
             V.ireplace_label('p1','p')
             self.psi.set_B(j,U,form='A')
-            self.del_correct(j)
+            #self.del_correct(j)
             self.psi.set_SR(j,s)
             self.psi.set_B(j+1,V,form='B')
-            self.del_correct(j+1)
+            #self.del_correct(j+1)
             if j<self.L-2: 
                 # Apply expm (-dt H) for 1-site
                 theta=self.psi.get_theta(j+1,1)
@@ -143,8 +154,6 @@ class Engine(object):
                 theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j+1), 0.5*self.dt)
                 theta_old=theta
                 theta_old.ireplace_label('p','p0')
-                #self.psi.set_B(j+1,theta,form='A') 
-                #self.del_correct(j+1)
 
 
 
@@ -179,7 +188,7 @@ class Engine(object):
                 self.psi.set_B(j-1, B_jm1,form='A')
                 Lp=npc.tensordot(Lp,V,axes=['vR','vL'])
                 Lp=npc.tensordot(Lp,V.conj(),axes=['vR*','vL*'])
-                H = H0_mixed_charge(Lp,self.environment.get_RP(j-1))
+                H = H0_mixed(Lp,self.environment.get_RP(j-1))
                 
 
                 s=self.update_s_h0(s,H,0.5*self.dt)
@@ -199,7 +208,7 @@ class Engine(object):
             #theta=self.psi.get_theta(j,2)
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
-            theta=self.update_theta_h1_two(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
+            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
             theta.itranspose(['(vL.p0)','(vR.p1)'])
@@ -225,7 +234,7 @@ class Engine(object):
 
     def update_theta_h1(self,Lp, Rp, theta, W, dt):
         """Update with the one site Hamiltonian """
-        H = H1_mixed_charge(Lp,Rp,W)
+        H = H1_mixed(Lp,Rp,W)
         theta=theta.transpose(['p','vR','vL'])
         theta=theta.combine_legs(['p','vR','vL'])
         #Initialize Lanczos
@@ -238,9 +247,9 @@ class Engine(object):
         theta=theta.split_legs(['(p.vR.vL)'])
         return theta
     
-    def update_theta_h1_two(self,Lp, Rp, theta, W0,W1, dt):
+    def update_theta_h2(self,Lp, Rp, theta, W0,W1, dt):
         """Update with the one site Hamiltonian with the two site implementation """
-        H = H1_mixed_two(Lp,Rp,W0,W1)
+        H = H2_mixed(Lp,Rp,W0,W1)
         theta=theta.combine_legs(['p0','p1','vR','vL'])
         #Initialize Lanczos
         parameters_lanczos_h1= {
@@ -353,7 +362,7 @@ class Engine(object):
             self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
-class H0_mixed_charge(object):
+class H0_mixed(object):
     """Class defining the zero site Hamiltonian for Lanczos"""
     def __init__(self,Lp,Rp,dtype=float):
         self.Lp = Lp 
@@ -373,7 +382,7 @@ class H0_mixed_charge(object):
         return(x)
 
 
-class H1_mixed_charge(object):
+class H1_mixed(object):
     """Class defining the one site Hamiltonian for Lanczos"""
 
     def __init__(self,Lp,Rp,M,dtype=float):
@@ -399,7 +408,7 @@ class H1_mixed_charge(object):
         h=x.combine_legs(['p','vR','vL'])
         return h
 
-class H1_mixed_two(object):
+class H2_mixed(object):
     """Class defining the one site Hamiltonian for Lanczos for the two sites algorithm"""
 
     def __init__(self,Lp,Rp,W0,W1,dtype=float):

@@ -1,3 +1,14 @@
+"""
+Time Dependant Variational Principle (TDVP) with MPS (finite version only).
+The TDVP MPS algorithm was first proposed by Jutho Haegeman (https://arxiv.org/abs/1103.0936). However
+the stability of the algorithm was later improved in another article (https://arxiv.org/abs/1408.5056), that we are following in this implementation. 
+The general idea of the algorithm is to project the quantum time evolution in the manyfold of MPS with a given bond dimension.
+The algorithm has several advantage (among others: conervation of the unitarity of the time evolution and conservation of energy), and is suitable for time evolution
+of Hamiltonian with arbitrary long range.
+We have implemented the on site formulation which DOES NOT allow for growth of the bond dimension and the two site algorithm
+which allow the bond dimension (but requires truncation as in the TEBD case).
+"""
+
 import sys
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
@@ -31,18 +42,22 @@ class Engine(object):
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
 
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        start_time     float     Initial time
-        -------------- --------- ---------------------------------------------------------------
-        dt             float     time step used for the time evolution
-        -------------- --------- ---------------------------------------------------------------
-      
-        ============== ========= ===============================================================
+        ============== =================================  ===============================================================
+        key            type                               description
+        ==============  ================================  ===============================================================
+        start_time     float                              Initial time
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        dt             float                              time step used for the time evolution
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        psi            :class:`~tenpy.networks.mps.MPS`                                wave function to evolve 
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        model          :class:`~tenpy.models.MPOModel`
+        -------------- ---------------------------------  ---------------------------------------------------------------
+        TDVP_params    dict of parameters
+        ============== =================================  ===============================================================
 
     """
-    def __init__(self, psi, model, TDVP_params,check_error=False):
+    def __init__(self, psi, model, TDVP_params):
         self.verbose = get_parameter(TDVP_params, 'verbose', 2, 'TDVP')
         self.TDVP_params = TDVP_params
         self.model = model
@@ -50,7 +65,6 @@ class Engine(object):
         self.W =model.H_MPO
         self._update_index = None
         self.environment=None
-        self.spectrum=None
         self.Psi=psi
         self.L=self.Psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')

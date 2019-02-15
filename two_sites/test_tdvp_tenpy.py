@@ -291,19 +291,21 @@ if __name__ == "__main__":
     print(psi.chi)
     psi_tdvp2=copy.deepcopy(psi)
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
-    tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,check_error=True,trunc_params=trunc_params)
+    tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     engine.run()
     #tdvp_engine.run_two()
-    ov=psi.overlap(psi_tdvp2)
-    psi=engine.psi
-    print("overlap")
-    print(ov)
-    print("psi after TEBD")
-    print(psi.chi)
+    #ov=psi.overlap(psi_tdvp2)
+    #psi=engine.psi
+    #print("overlap")
+    #print(ov)
+    #if np.abs(1-np.abs(ov))>1e-10:
+    #    print(np.abs(1-np.abs(ov)))
+    #    print("error two sites TDVP")
+    #    sys.exit()
    
     # test that the initial conditions are the same
      
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,check_error=True,trunc_params=trunc_params)
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     psit_compare=[]
     for i in range(L):
         B_tmp=psi.get_B(i).transpose(['p','vL','vR']).to_ndarray()
@@ -322,7 +324,7 @@ if __name__ == "__main__":
         'svd_min': 1.e-10,
         'trunc_cut':None 
     }
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,check_error=True,trunc_params=trunc_params)
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     for t in range(10):
         tdvp_engine.run() 
         psit_compare,Rp_list,spectrum=tdvp_fast.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)

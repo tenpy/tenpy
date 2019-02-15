@@ -2588,7 +2588,6 @@ class MPSEnvironment:
         where the M's and the N's are in the 'B' form
                     
         """
-        """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
             RP = self._RP[self._to_valid_index(i0)]
