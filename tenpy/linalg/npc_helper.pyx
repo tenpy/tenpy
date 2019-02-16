@@ -571,6 +571,40 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
 # ############################################### #
 
 @cython.binding(True)
+def Array_itranspose(self, axes=None):
+    """Transpose axes like `np.transpose`. In place.
+
+    Parameters
+    ----------
+    axes: iterable (int|string), len ``rank`` | None
+        The new order of the axes. By default (None), reverse axes.
+    """
+    if axes is None:
+        axes = tuple(reversed(range(self.rank)))
+    else:
+        axes = tuple(self.get_leg_indices(axes))
+        if len(axes) != self.rank or len(set(axes)) != self.rank:
+            raise ValueError("axes has wrong length: " + str(axes))
+        if axes == tuple(range(self.rank)):
+            return self  # nothing to do
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] axes_arr = np.array(axes, dtype=np.intp, order='C')
+    self.legs = [self.legs[a] for a in axes]
+    self._set_shape()
+    labs = self.get_leg_labels()
+    self.iset_leg_labels([labs[a] for a in axes])
+    self._qdata = self._qdata[:, axes_arr]
+    self._qdata_sorted = False
+    # changed mostly the following part
+    cdef list data = self._data
+    cdef np.ndarray block
+    cdef intp_t i
+    cdef np.PyArray_Dims permute
+    permute.len = axes_arr.shape[0]
+    permute.ptr = &axes_arr[0]
+    self._data = [np.PyArray_Transpose(block, &permute) for block in data]
+    return self
+
+@cython.binding(True)
 def Array__imake_contiguous(self):
     """Make each of the blocks c-style contigous in memory.
 

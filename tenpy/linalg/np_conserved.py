@@ -1592,6 +1592,7 @@ class Array:
             res_qdata[i] = qindices
         return res
 
+    @use_cython(replacement='Array_itranspose')
     def itranspose(self, axes=None):
         """Transpose axes like `np.transpose`. In place.
 
