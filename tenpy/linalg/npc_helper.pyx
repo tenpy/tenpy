@@ -22,6 +22,7 @@ cimport numpy as np
 cimport cython
 from libcpp.vector cimport vector
 from libc.string cimport memcpy
+from cython.operator cimport dereference as deref, postincrement as inc
 
 import bisect
 import warnings
@@ -31,7 +32,7 @@ IF DEBUG_PRINT:
 
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-from scipy.linalg.cython_blas cimport dgemm, zgemm, dgemv, zgemv
+from scipy.linalg.cython_blas cimport dgemm, zgemm, dgemv, zgemv, ddot, zdotc, zdotu
 
 from ..tools.misc import inverse_permutation
 from ..tools import optimization
@@ -86,7 +87,7 @@ cdef inline np.ndarray _np_zeros_2D(intp_t dim1, intp_t dim2, int type_):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-cpdef np.ndarray _make_stride(tuple shape, bint cstyle=1):
+cpdef np.ndarray _make_stride(shape, bint cstyle=1):
     """Create the strides for C-style arrays with a given shape.
 
     Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
@@ -789,6 +790,8 @@ cdef inline intp_t _iter_common_sorted_push(
         vector[idx_tuple]* out) nogil:
     """Find indices ``i, j`` for which ``a[i] == b[j]`` and pushes these (i,j) into `out`.
 
+    Replacement of `_iter_common_sorted`.
+
     *Assumes* that ``a[i_start:i_stop]`` and ``b[j_start:j_stop]`` are strictly ascending.
     Given that, it is equivalent to (but faster than)::
 
@@ -839,7 +842,7 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     cdef list a_data, b_data
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     # F-style strides to preserve sorting
-    stride = _make_stride(tuple([l.block_number for l in a.legs[cut_a:a.rank]]), 0)
+    stride = _make_stride([l.block_number for l in a.legs[cut_a:a.rank]], 0)
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
@@ -1052,18 +1055,18 @@ def _tensordot_worker(a, b, int axes):
     # determine calculation type and result type
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
-    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
-    _make_valid_charges_1D(chinfo_mod, qtotal)
-    res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
     if a.dtype.num != calc_dtype_num:
         a = a.astype(calc_dtype)
     if b.dtype.num != calc_dtype_num:
         b = b.astype(calc_dtype)
 
+    cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
+    _make_valid_charges_1D(chinfo_mod, qtotal)
+    res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
+
     cdef list a_data = a._data, b_data = b._data
     cdef intp_t len_a_data = len(a_data)
     cdef intp_t len_b_data = len(b_data)
-    cdef bint equal = 1
     cdef intp_t i, j
     # special cases of one or zero blocks are handles in np_conserved.py
     if len_a_data == 0 or len_b_data == 0 or (len_a_data == 1 and len_b_data == 1):
@@ -1264,6 +1267,73 @@ def _tensordot_worker(a, b, int axes):
     return res
 
 
-# TODO _inner_worker
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def _inner_worker(a, b, bint do_conj):
+    """Full contraction of `a` and `b` with axes in matching order."""
+    calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
+    res = res_dtype.type(0)
+    if np.any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
+        return res  # can't have blocks to be contracted
+    if a.stored_blocks == 0 or b.stored_blocks == 0:
+        return res  # also trivial
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    if a.dtype != calc_dtype:
+        a = a.astype(calc_dtype)
+    if b.dtype != calc_dtype:
+        b = b.astype(calc_dtype)
+
+    # need to find common blocks in a and b, i.e. equal leg charges.
+    # for faster comparison, generate 1D arrays with a combined index
+    # F-style strides to preserve sorting!
+    stride = _make_stride([l.block_number for l in a.legs], 0)
+    cdef np.ndarray a_qdata = np.sum(a._qdata * stride, axis=1)
+    cdef intp_t i, j
+    cdef list a_data = a._data
+    if not a._qdata_sorted:
+        perm = np.argsort(a_qdata)
+        a_qdata = a_qdata[perm]
+        a_data = [a_data[i] for i in perm]
+    cdef np.ndarray b_qdata = np.sum(b._qdata * stride, axis=1)
+    cdef list b_data = b._data
+    if not b._qdata_sorted:
+        perm = np.argsort(b_qdata)
+        b_qdata = b_qdata[perm]
+        b_data = [b_data[i] for i in perm]
+    # now the equivalent of
+    #  for i, j in _iter_common_sorted():
+    #      res +=  np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
+    cdef vector[idx_tuple] inds_contr
+    cdef idx_tuple i_j
+    cdef intp_t match, count
+    count = _iter_common_sorted_push(a_qdata, 0, a_qdata.shape[0], b_qdata, 0, b_qdata.shape[0],
+                                     &inds_contr)
+    cdef int one = 1, size
+    cdef np.ndarray a_block, b_bock
+    cdef void *a_ptr
+    cdef void *b_ptr
+    cdef double sum_real = 0.
+    cdef double complex sum_complex = 0.
+    for match in range(count):
+        i_j = inds_contr[match]
+        i = i_j.first
+        j = i_j.second
+        a_block = np.PyArray_GETCONTIGUOUS(a_data[i])
+        b_block = np.PyArray_GETCONTIGUOUS(b_data[j])
+        size = np.PyArray_SIZE(a_block)
+        a_ptr = np.PyArray_DATA(a_block)
+        b_ptr = np.PyArray_DATA(b_block)
+        if calc_dtype_num == np.NPY_DOUBLE:
+            sum_real += ddot(&size, <double*> a_ptr, &one, <double*> b_ptr, &one)
+            #  res += calc_real
+        else: # dtype_num == np.NPY_CDOUBLE
+            if do_conj:
+                sum_complex += zdotc(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
+            else:
+                sum_complex += zdotu(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
+    if calc_dtype_num == np.NPY_DOUBLE:
+        return res_dtype.type(sum_real)
+    #  else: # dtype_num == np.NPY_CDOUBLE
+    return res_dtype.type(sum_complex)
 
 # TODO: _svd_worker !?!

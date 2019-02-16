@@ -2967,19 +2967,19 @@ def inner(a, b, axes=None, do_conj=False):
         transp = (tuple(axes_a) != tuple(range(a.rank)))
     else:
         transp = False
-    if transp or do_conj:
-        a = a.copy(deep=False)
     if transp:
+        a = a.copy(deep=False)
         a.itranspose(axes_a)
-    if do_conj:
-        a = a.iconj()
     # check charge compatibility
     if not optimize(OptimizationFlag.skip_arg_checks):
         if a.chinfo != b.chinfo:
             raise ValueError("different ChargeInfo")
         for lega, legb in zip(a.legs, b.legs):
-            lega.test_contractible(legb)
-    return _inner_worker(a, b)
+            if do_conj:
+                lega.test_equal(legb)
+            else:
+                lega.test_contractible(legb)
+    return _inner_worker(a, b, do_conj)
 
 
 def tensordot(a, b, axes=2):
@@ -3042,7 +3042,7 @@ def tensordot(a, b, axes=2):
     no_block = (a.stored_blocks == 0 or b.stored_blocks == 0)  # result is zero
     one_block = (a.stored_blocks == 1 and b.stored_blocks == 1)
     if axes == a.rank and axes == b.rank:
-        return _inner_worker(a, b)  # full contraction yields a single number
+        return _inner_worker(a, b, False)  # full contraction yields a single number
     elif no_block or one_block:
         cut_a = a.rank - axes
         res = Array(a.legs[:cut_a] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
@@ -3731,6 +3731,7 @@ def _nontrivial_grid_entries(grid):
     return grid.shape, entries
 
 
+# (in cython, but with different arguments)
 def _iter_common_sorted(a, b):
     """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
@@ -3754,8 +3755,8 @@ def _iter_common_sorted(a, b):
     return res
 
 
-#  @use_cython # TODO implement this in npc_helper
-def _inner_worker(a, b):
+@use_cython
+def _inner_worker(a, b, do_conj):
     """Full contraction of `a` and `b` with axes in matching order."""
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     res = res_dtype.type(0)
@@ -3765,12 +3766,13 @@ def _inner_worker(a, b):
         return res  # also trivial
     a = a.astype(calc_dtype, False)
     b = b.astype(calc_dtype, False)
-    blas_dotu = BLAS.get_blas_funcs('dotu', dtype=calc_dtype)
+    func_name = 'dotc' if do_conj else 'dotu'
+    blas_dot = BLAS.get_blas_funcs(func_name, dtype=calc_dtype)
 
     # need to find common blocks in a and b, i.e. equal leg charges.
     # for faster comparison, generate 1D arrays with a combined index
     # F-style strides to preserve sorting!
-    stride = charges._make_stride(tuple([l.block_number for l in a.legs]), False)
+    stride = charges._make_stride([l.block_number for l in a.legs], False)
     a_qdata = np.sum(a._qdata * stride, axis=1)
     a_data = a._data
     if not a._qdata_sorted:
@@ -3784,8 +3786,8 @@ def _inner_worker(a, b):
         b_qdata = b_qdata[perm]
         b_data = [b_data[i] for i in perm]
     for i, j in _iter_common_sorted(a_qdata, b_qdata):
-        res += blas_dotu(a_data[i], b_data[j])
-        #  np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
+        res += blas_dot(a_data[i], b_data[j])
+        # same as res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
     return res
 
 
@@ -3845,7 +3847,7 @@ def _tensordot_pre_worker(a, b, cut_a, cut_b):
     """
     # convert qindices over which we sum to a 1D array for faster lookup/iteration
     # F-style strides to preserve sorting
-    stride = charges._make_stride(tuple([l.block_number for l in a.legs[cut_a:]]), False)
+    stride = charges._make_stride([l.block_number for l in a.legs[cut_a:]], False)
     a_qdata_contr = np.sum(a._qdata[:, cut_a:] * stride, axis=1)
     # lex-sort a_qdata, dominated by the axes kept, then the axes summed over.
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)

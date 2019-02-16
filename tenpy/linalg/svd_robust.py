@@ -103,8 +103,6 @@ def svd(a,
     U, S, Vh : ndarray
         As described in doc-string of `scipy.linalg.svd`
     """
-    if lapack_driver not in ['gesdd', 'gesvd']:
-        raise ValueError("invalid `lapack_driver`: " + str(lapack_driver))
     if lapack_driver == 'gesdd':
         try:
             return scipy.linalg.svd(a, full_matrices, compute_uv, False, check_finite)
@@ -113,6 +111,8 @@ def svd(a,
             if warn:
                 warnings.warn("SVD with lapack_driver 'gesdd' failed. Use backup 'gesvd'")
             pass
+    if lapack_driver not in ['gesdd', 'gesvd']:
+        raise ValueError("invalid `lapack_driver`: " + str(lapack_driver))
     # 'gesvd' lapack driver
     if not _old_scipy:
         # use LAPACK wrapper included in scipy version >= 0.18.0
