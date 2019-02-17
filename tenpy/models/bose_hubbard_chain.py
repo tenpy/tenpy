@@ -1,103 +1,18 @@
-"""Simple Bose-Hubbard chain model.
+"""The contents of this module have been moved to :mod:`tenpy.models.bose_hubbard`.
 
-.. todo ::
-    Work in checks for common errors and raise some exceptions?
-    Run some tests, and perhaps benchmarks comparing to old TenPy?
-    Write example simulation code?
-"""
+This module is just around for backwards compatibility."""
 # Copyright 2018 TeNPy Developers
 
-from ..networks.site import BosonSite
-from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from .bose_hubbard import BoseHubbardModel, BoseHubbardChain
 
-__all__ = ["BoseHubbardModel", "BoseHubbardChain"]
+import warnings
 
-
-class BoseHubbardModel(CouplingMPOModel):
-    r"""Spinless Bose-Hubbard model on a chain.
-
-    The Hamiltonian is:
-
-    .. math ::
-        H = t \sum_{\langle i, j \rangle, i < j} (b_i^{\dagger} b_j + b_j^{\dagger} b_i)
-            + \frac{U}{2} \sum_i n_i (n_i - 1) + \mu \sum_i n_i
-
-    Note that the signs of all parameters as defined in the Hamiltonian are positive.
-
-    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
-
-
-    Parameters
-    ----------
-    n_max : int
-        Maximum number of bosons per site.
-    filling : float
-        Average filling.
-    conserve: {'best' | 'N' | 'parity' | None}
-        What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
-    t, U, mu : float | array
-        Couplings as defined in the Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
-
-    def init_sites(self, model_params):
-        n_max = get_parameter(model_params, 'n_max', 3, self.__class__)
-        filling = get_parameter(model_params, 'filling', 0.5, self.__class__)
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        if conserve == 'best':
-            conserve = 'N'
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
-        site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
-        return site
-
-    def init_terms(self, model_params):
-        # 0) Read and set parameters.
-        t = get_parameter(model_params, 't', 1., self.name, True)
-        U = get_parameter(model_params, 'U', 0., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0, self.name, True)
-        U = np.asarray(U)
-        mu = np.asarray(mu)
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu-U/2., u, 'N')
-            self.add_onsite(U/2., u, 'NN')
-        for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(t, u1, 'Bd', u2, 'B', dx)
-            self.add_coupling(t, u1, 'B', u2, 'Bd', dx)  # h.c.
-
-
-class BoseHubbardChain(BoseHubbardModel,NearestNeighborModel):
-    """The :class:`BoseHubbardModel` on a Chain, suitable for TEBD.
-
-    See the :class:`BoseHubbardModel` for the documentation of parameters.
-    """
-    def __init__(self, model_params):
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+msg = """BUGFIX
+***********
+* WARNING for a bugfix:
+* The Hamiltonian of the `BoseHubbardModel` was previously implemented with $ U n_i^2 $ as interaction term,
+* but documented as $ U n_i (n_i-1)$. Now it is implemented as the latter as well.
+***********
+To avoid this warning, simply import the model class from `tenpy.models.bose_hubbard` instead of `tenpy.models.bose_hubbard_chain`.
+The module `tenpy.models.bose_hubbard_chain` is deprecated now."""
+warnings.warn(msg)
