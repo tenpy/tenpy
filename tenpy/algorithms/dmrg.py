@@ -1318,7 +1318,7 @@ class Mixer:
 
         Parameters
         ----------
-        engine : :calss:`Engine`
+        engine : :class:`Engine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.
