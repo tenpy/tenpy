@@ -1106,7 +1106,7 @@ class MPS:
         return np.array(coord), np.array(mutinf)
 
     def overlap(self, other, charge_sector=0, ignore_form=False, **kwargs):
-        """Compute overlap :math:`<self|other>`.
+        """Compute overlap ``<self|other>``.
 
         .. todo :
             For finite MPS with form=False, different charge sectors don't work:
@@ -1233,7 +1233,7 @@ class MPS:
         return np.real_if_close(np.array(E))
 
     def expectation_value_term(self, term, autoJW=True):
-        r"""Expectation value  ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``.
+        r"""Expectation value  ``<psi|op_{i0}op_{i1}...op_{iN}|psi>/<psi|psi>``.
 
         Calculates the expectation value of a tensor product of single-site operators
         acting on different sites `i0`, `i1`, ... (not necessarily next to each other).
@@ -1302,7 +1302,7 @@ class MPS:
         return self.expectation_value_multi_sites(ops, i_min)
 
     def expectation_value_multi_sites(self, operators, i0):
-        r"""Expectation value  ``<psi|op0_i0 op1_{i0+1} ... opN_{i0+N} |psi>/<psi|psi>``.
+        r"""Expectation value  ``<psi|op0_{i0}op1_{i0+1}...opN_{i0+N}|psi>/<psi|psi>``.
 
         Calculates the expectation value of a tensor product of single-site operators
         acting on different sites next to each other.
