@@ -170,17 +170,34 @@ class Array:
         >>> a *= 2  # has no effect on `b`
         >>> b.iconj()  # nor does this change `a`
         """
+        cp = Array.__new__(Array)
+        cp.__setstate__(self.__getstate__())
+        cp.legs = list(self.legs) # same instances, different list but same instances
+        cp._set_shape()
+        cp.labels = self.labels.copy()
         if deep:
-            cp = copy_.deepcopy(self)
+            cp._data = [b.copy() for b in self._data]
+            cp._qdata = self._qdata.copy()
+            cp.qtotal = self.qtotal.copy()
+            # even deep copies share legs & chinfo (!)
         else:
-            cp = copy_.copy(self)
-            # some things should be copied even for shallow copies
-            cp.qtotal = cp.qtotal.copy()
-            cp.labels = cp.labels.copy()
-        # even deep copies can share chinfo and legs
-        cp.chinfo = self.chinfo  # same instance
-        cp.legs = self.legs[:]  # copied list with same instances of legs
+            cp._data = list(self._data)
         return cp
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        return self.__dict__
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        # order is important for import of old version!
+        if isinstance(state, dict):  # allow to import from the non-compiled version
+            self.__dict__.update(state)
+        elif isinstance(state, tuple):  # allow to import from the compiled versions of TenPy 0.3.0
+            self._data, self._qdata, self._qdata_sorted, self.chinfo, self.dtype, self.labels, \
+                self.legs, self.qtotal, _, self.shape = state
+        else:
+            raise ValueError("setstate with incompatible type of state")
 
     @classmethod
     def from_ndarray_trivial(cls, data_flat, dtype=np.float64):
@@ -1391,6 +1408,7 @@ class Array:
         # adjust qtotal
         res.legs = [self.legs[a] for a in keep]
         res._set_shape()
+        res.qtotal = self.qtotal.copy()  # modified!
         for a in axes:
             res.qtotal -= self.legs[a].get_charge(0)
         res.qtotal = self.chinfo.make_valid(res.qtotal)
@@ -1754,7 +1772,7 @@ class Array:
                 res = self
             else:
                 res = self.copy(deep=True)
-        res.qtotal = -res.qtotal
+        res.qtotal = self.chinfo.make_valid(-res.qtotal)
         res.legs = [l.conj() for l in res.legs]
         labels = {}
         for lab, ax in res.labels.items():
@@ -4184,3 +4202,11 @@ def _eigvals_worker(hermitian, a, sort, UPLO='L'):
         qi = qindices[0]  # both `a` and `resv` are sorted and share the same qindices
         resw[a.legs[0].get_slice(qi)] = rw  # replace eigenvalues
     return resw
+
+
+def __pyx_unpickle_Array(type_, checksum, state):
+    """Allow to unpickle Arrays created with Cython-compiled TenPy version 0.3.0"""
+    res = Array.__new__(Array)
+    if state is not None: # doesn't happen on my computer...
+        res.__setstate__(state)
+    return res

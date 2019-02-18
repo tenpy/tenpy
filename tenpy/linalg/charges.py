@@ -1231,6 +1231,7 @@ class LegPipe(LegCharge):
         self._strides = _strides
         LegCharge.__setstate__(self, super_state)
 
+
 # (in cython, but with different arguments)
 def _partial_qtotal(chinfo, legs, qdata, qconj, add_qtotal):
     """Calculate qtotal of a part of the legs of a npc.Array.
