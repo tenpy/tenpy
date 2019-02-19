@@ -1,8 +1,6 @@
 #!/usr/bin/python2
 import numpy as np
-import misc
 import copy
-#import h5py
 import pickle
 import tenpy.linalg.np_conserved as npc
 import tenpy.models.spins
@@ -16,7 +14,6 @@ import tdvp_fast
 import tenpy.networks.mpo
 import tenpy.models.model as model
 import tenpy.models.lattice  
-import tebd as tebd_frank
 from tenpy.networks.mps import MPS
 from tenpy.tools.misc import inverse_permutation
 def overlap(mps1, mps2):
@@ -37,16 +34,6 @@ if __name__ == "__main__":
     chi=20
     delta_t=0.01
     chinfo = npc.ChargeInfo([])  # the second argument is just a descriptive name
-    # create LegCharges on physical leg and even/odd bonds
-    p_leg = npc.LegCharge.from_trivial(2)  # charges for up, down
-    #v_leg_even = npc.LegCharge.from_qflat(chinfo, [[]])
-    #v_leg_odd = npc.LegCharge.from_qflat(chinfo, [[]])
-    #create site and list of sites
-    a_site=site.Site(p_leg, ['up', 'down'])
-    lattice=[]
-    for i_site in range(0,L):
-        lattice.append(a_site)
-    lat=tenpy.models.lattice.Lattice(Ls=[L], unit_cell=[a_site], order='default', bc_MPS='finite')   
     parameters= {
         'L':L,
         'S':0.5,
@@ -59,8 +46,8 @@ if __name__ == "__main__":
         'hz':0.0,
         'muJ':0.0,
         'bc_MPS':'finite',
-        # 'lattice':lat
     }
+
     heisenberg=tenpy.models.spins.SpinChain(parameters)
     H_MPO=heisenberg.H_MPO
     h_test=[]
@@ -120,17 +107,14 @@ if __name__ == "__main__":
         'trunc_cut':None 
     }
     
-    print("psi before TEBD")
-    print(psi.chi)
     psi_tdvp2=copy.deepcopy(psi)
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
     tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     engine.run()
     tdvp_engine.run_two()
     ov=psi.overlap(psi_tdvp2)
+    print("overlap TDVP and TEBD")
     psi=engine.psi
-    print("overlap")
-    print(ov)
     if np.abs(1-np.abs(ov))>1e-11:
         print(np.abs(1-np.abs(ov)))
         print("error two sites TDVP")

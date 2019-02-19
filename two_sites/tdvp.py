@@ -14,7 +14,7 @@ from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np
 import pylab as pl
-from misc import *
+#from misc import *
 from scipy.sparse.linalg import onenormest
 import tenpy.networks.mpo as mpo        
 import tenpy.linalg.np_conserved as npc
@@ -347,9 +347,6 @@ class Engine(object):
         for i in range(N_steps):
             self.sweep_left_right()
             self.sweep_right_left()
-            self.evolved_time=self.evolved_time+self.dt
-
-            #return self.psi, self.environment, self.spectrum 
     
     def run_two(self):
         """ run the TDVP algorithm"""
