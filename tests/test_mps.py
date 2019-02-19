@@ -115,6 +115,34 @@ def test_singlet_mps():
     #  ov = psi.overlap(psi2)
 
 
+def test_charge_fluctuations():
+    L = 6
+    pairs = [(0, 3), (2, 4)]
+    lonely = [1, 5]
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, lonely_state='up',
+                                bc='segment')
+    # mps not yet gauged to zero qtotal!
+    average_charge = np.array([psi.average_charge(b) for b in range(psi.L+1)]).T
+    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L+1)]).T
+    print(average_charge)
+    print(charge_variance)
+    npt.assert_array_almost_equal(average_charge, [[0., 0., 0., 0., 0., 0., 0.]], decimal=14)
+    npt.assert_array_almost_equal(charge_variance, [[ 0.,  1.,  1.,  2.,  1.,  0.,  0.]],
+                                  decimal=14)
+
+    # now gauge to zero qtotal
+    psi.gauge_total_charge()
+    average_charge = np.array([psi.average_charge(b) for b in range(psi.L+1)]).T
+    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L+1)]).T
+    print(average_charge)
+    print(charge_variance)
+    npt.assert_array_almost_equal(average_charge, [[0., 0., 1., 1., 1., 1., 2.]], decimal=14)
+    npt.assert_array_almost_equal(charge_variance, [[ 0.,  1.,  1.,  2.,  1.,  0.,  0.]],
+                                  decimal=14)
+
+
+
+
 def test_mps_swap():
     L = 6
     pairs = [(0, 3), (1, 5), (2, 4)]
@@ -259,6 +287,7 @@ def test_expectation_value_term():
 
 
 if __name__ == "__main__":
+    test_charge_fluctuations()
     test_mps()
     test_mps_add()
     test_MPSEnvironment()
