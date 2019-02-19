@@ -475,6 +475,7 @@ class MPS:
         # generate building block tensors
         up = site.state_index(up)
         down = site.state_index(down)
+        lonely_state = site.state_index(lonely_state)
         mask = np.zeros(site.dim, dtype=np.bool_)
         mask[up] = mask[down] = True
         Open = npc.diag(1., site.leg)[:, mask]
@@ -875,6 +876,52 @@ class MPS:
         self.grouped = self.grouped // n
         self.form = [self._valid_forms['B']] * len(sites)
         return trunc_err
+
+    def get_total_charge(self):
+        """Calculate and return the `qtotal` of the whole MPS (when contracted).
+
+        Returns
+        -------
+        qtotal : charges
+            The sum of the `qtotal` of the individual `B` tensors.
+        """
+        qtotal = np.sum([B.qtotal for B in self._B], axis=0)
+        return self.chinfo.make_valid(qtotal)
+
+    def gauge_total_charge(self, qtotal=None):
+        """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
+
+        Parameters
+        ----------
+        qtotal : (list of) charges
+            If a single `qtotal` is given, it is the desired total charge of the MPS
+            (which :meth:`get_total_charge` will return afterwards).
+            Alternatively, the desired `qtotal` for each of the individual `B` tensors can be
+            specified.
+        """
+        if self.chinfo.qnumber == 0:
+            return
+        qtotal = self.chinfo.make_valid(qtotal)
+        if qtotal.ndim == 1:
+            qtotal_factor = np.array([0]*(self.L-1) + [1], npc.QTYPE)
+            qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
+        if qtotal.shape != (self.L, self.chinfo.qnumber):
+            raise ValueError("wrong shape of `qtotal`")
+        if self.bc == "infinite" and not np.all(self.chinfo.make_valid(np.sum(qtotal, 0))
+                                                == self.get_total_charge()):
+            raise ValueError("Can't change total charge of infinite MPS")
+        for i in range(self.L):
+            B = self._B[i]
+            desired_qtotal = qtotal[i]
+            chdiff = B.qtotal - desired_qtotal
+            if np.any(chdiff != 0):
+                self._B[i] = B.gauge_total_charge('vR', desired_qtotal)
+                if i + 1 != self.L:  # this 'vR' is contracted with the 'vL' of the next B
+                    # so we need to adjust the next B as well
+                    nextB = self._B[i + 1]
+                    self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
+                    self._B[i].get_leg('vR').test_contractible(self._B[i+1].get_leg('vL'))
+        # done
 
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
