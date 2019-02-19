@@ -76,10 +76,14 @@ class Engine(object):
 
     def del_correct(self,i):
         #LP
-        self.environment.del_LP(i)
+        if i+1<self.psi.L:
+            self.environment.del_LP(i+1)
+
 
         #Rp
-        self.environment.del_RP(i)
+        if i-1>-1:
+            self.environment.del_RP(i-1)
+
 
     def sweep_left_right(self):
         """Performs the sweep left->right of the second order TDVP scheme. Evolve from 0.5*dt"""
@@ -101,6 +105,7 @@ class Engine(object):
             U,s,V=self.theta_svd_left_right(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
             self.psi.set_B(j,U,form='A')
+            self.del_correct(j)
             if j < self.L-1 :
                 # Apply expm (-dt H) for 0-site
                 
@@ -141,10 +146,10 @@ class Engine(object):
             V=V.split_legs('(vR.p1)')
             V.ireplace_label('p1','p')
             self.psi.set_B(j,U,form='A')
-            #self.del_correct(j)
+            self.del_correct(j)
             self.psi.set_SR(j,s)
             self.psi.set_B(j+1,V,form='B')
-            #self.del_correct(j+1)
+            self.del_correct(j+1)
             if j<self.L-2: 
                 # Apply expm (-dt H) for 1-site
                 theta=self.psi.get_theta(j+1,1)
@@ -180,6 +185,7 @@ class Engine(object):
             U,s,V=self.theta_svd_right_left(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
             self.psi.set_B(j,U,form='B')
+            self.del_correct(j)
             if j > 0:
                 # Apply expm (-dt H) for 0-site
                 
@@ -220,8 +226,10 @@ class Engine(object):
             V=V.split_legs('(vR.p1)')
             V.ireplace_label('p1','p')
             self.psi.set_B(j,U,form='A')
+            self.del_correct(j)
             self.psi.set_SR(j,s)
             self.psi.set_B(j+1,V,form='B')
+            self.del_correct(j+1)
             if j>0: 
                 # Apply expm (-dt H) for 1-site
                 theta=self.psi.get_theta(j,1)
@@ -338,11 +346,7 @@ class Engine(object):
             self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right()
-            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            self.environment=environment
             self.sweep_right_left()
-            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
             #return self.psi, self.environment, self.spectrum 
@@ -355,11 +359,11 @@ class Engine(object):
         self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right_two()
-            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            self.environment=environment
+            #environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
+            #self.environment=environment
             self.sweep_right_left_two()
-            environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            self.environment=environment
+            #environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
+            #self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
 class H0_mixed(object):

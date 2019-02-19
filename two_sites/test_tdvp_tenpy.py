@@ -31,183 +31,16 @@ def overlap(mps1, mps2):
     return overlap
 
 
-
-def random_product_state(L,chi):
-    d=2
-    sz= 2.*np.random.randint(0,2,size=L)-1.0
-    mps=[]
-    for i in range(L):
-        D1 = np.min([d**np.min([i,L-i]),chi])
-        D2 = np.min([d**np.min([i+1,L-i-1]),chi])
-
-        mps.append(np.zeros((2,D1,D2)))
-        if sz[i]>0:
-            mps[-1][0,0,0]=1.
-        else:
-            mps[-1][1,0,0]=1.
-    return mps,sz
-
-def fixed_product_state(L,chi,seed):
-    np.random.seed(seed)
-    mps,sz=random_product_state(L,chi)
-    return mps,sz
-#########################################################
-#fixed_product_state with charge conservation
-
-
-def random_product_state_charge_shalf2(L,chi):
-    d=2
-    np.random.seed(1)
-    sz= 2.*np.random.randint(0,2,size=L)-1.0
-    print("sz")
-    print(sz)
-    return_mps=[]
-    chinfo = npc.ChargeInfo([])  # the second argument is just a descriptive name
-    p_leg = npc.LegCharge.from_trivial(2)  # charges for up, down
-    v_left_old=npc.LegCharge.from_qflat(chinfo,[[]])#arbitrary, set to zero
-    if sz[0]>0:
-        v_right_old=npc.LegCharge.from_qflat(chinfo,[[]])
-        B=npc.zeros([v_left_old,v_right_old.conj(),p_leg])
-        B[0,0,1]=1.0 #up
-        print(0,"up")
-    else:
-        v_right_old=npc.LegCharge.from_qflat(chinfo,[[]])
-        B=npc.zeros([v_left_old,v_right_old.conj(),p_leg])
-        B[0,0,0]=1.0 #down
-        print(0,"down")
-    B.iset_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
-    return_mps.append(B)
-    for i in range(1,L):
-        if sz[i]>0:
-            v_left_new=v_right_old
-            new_charge=0
-            v_right_new=npc.LegCharge.from_qflat(chinfo,[[]])
-            B=npc.zeros([v_left_new,v_right_new.conj(),p_leg])
-            B[0,0,1]=1.0 #up
-            print(i,"up")
-        else:
-            v_left_new=v_right_old
-            new_charge=0
-            v_right_new=npc.LegCharge.from_qflat(chinfo,[[]])
-            B=npc.zeros([v_left_new,v_right_new.conj(),p_leg])
-            B[0,0,0]=1.0 #down
-            print(i,"down")
-        B.iset_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
-        return_mps.append(B)
-        #prepare the next iteration
-        v_left_old=v_left_new
-        v_right_old=v_right_new
-    #define singular values
-    legs=B.get_leg_labels()
-    Ss = [np.ones(1)]*L
-    Sx =  0.5*np.array([[0,1],[1,0]])
-    Sz =  0.5*np.array([[1,0],[0,-1]]) 
-    one_site=site.Site(p_leg, ['up', 'down'],Sz=Sz)
-    lattice=[]
-    for i_site in range(0,L):
-        lattice.append(one_site)
-
-    full_mps=mps.MPS(lattice,return_mps,Ss,'finite','B')
-
-
-    return full_mps,sz
-
-def mpo_charge(lattice,hx,hz):
-    chinfo = npc.ChargeInfo([1], ['2*Sz'])  # the second argument is just a descriptive name
-    p_leg = npc.LegCharge.from_qflat(chinfo, [[1], [-1]])  # charges for up, down
-    Sx = 0.5*npc.Array.from_ndarray( [[0., 1.], [1., 0.]],[p_leg, p_leg.conj()])
-    Sz = 0.5*npc.Array.from_ndarray([[1., 0.], [0., -1.]],[p_leg, p_leg.conj()])
-    Id = npc.eye_like(Sz)  # identity
-    for op in [Sz,Sx, Id]:
-        op.iset_leg_labels(['p', 'p*'])  # physical in, physical out
-    
-    mpo_leg = npc.LegCharge.from_qflat(chinfo, [[0], [1], [-1], [0]])
-    W_grid=[[Id,None,None,None],
-       [Sz,None,None,None],
-       [Sx,None,None,None],
-       [hz*Sz + hx*Sx,Jz*Sz,Id]]
-    W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()])
-    W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])  # wL/wR = virtual left/right of the MPO
-    Ws = [W] * L
-    H_MPO=tenpy.networks.mpo.MPO(lattice,Ws)
-    
-    return H_MPO
-
-
-def convertMps(mps):
-    wftensor=mps[0]
-
-    for i in range(1,len(mps)):
-
-        wftensor = np.tensordot(wftensor, mps[i], axes=[[-1],[1]])
-    return wftensor.reshape(mps[0].shape[0]**len(mps))
-
-def exact_heisenberg(L):
-    d=2
-    sx_list=[]
-    sy_list=[]
-    sz_list = []
-
-    Id=np.eye(2,2)
-    sx=np.array([[0.,1.],[1.,0.]])
-    sy=np.array([[0.,-1j],[1j,0.]])
-    sz=np.array([[1.,0.],[0.,-1.]])
-
-    def OpAverage(B,s,Op,i):
-        L=len(B)-1
-        lambdaSquare=np.dot(np.conj(np.diag(s[i-1])),np.diag(s[i-1]))
-        Bdag=np.conj(np.transpose(B[i],(0,2,1)))
-        C=np.tensordot(lambdaSquare,B[i],(1,1))
-        C=np.transpose(C,(1,0,2))
-        C=np.tensordot(Bdag,C,(2,1))
-        C=np.tensordot(Op,C,([0,1],[0,2]))
-        return np.trace(C)
-
-
-    def Entropy(s):
-        x=s[s>10**-20]**2
-        return -np.inner(np.log(x),x)
-
-    for i_site in range(L):
-        if i_site==0:
-            X=sx
-            Y=sy
-            Z=sz
-        else:
-            X= np.eye(d)
-            Y= np.eye(d)
-            Z= np.eye(d)
-
-        for j_site in range(1,L):
-            if j_site==i_site:
-                X=np.kron(X,sx)
-                Y=np.kron(Y,sy)
-                Z=np.kron(Z,sz)
-            else:
-                X=np.kron(X,np.eye(d))
-                Y=np.kron(Y,np.eye(d))
-                Z=np.kron(Z,np.eye(d))
-
-        sx_list.append(X)
-        sy_list.append(Y)
-        sz_list.append(Z)
-
-    H=np.zeros((2**L,2**L))
-    for i in range(L-1):
-        H=H+np.dot(sz_list[i],sz_list[i+1])+np.dot(sx_list[i],sx_list[i+1])+np.dot(sy_list[i],sy_list[i+1])
-    return H
-
-
 if __name__ == "__main__":
-    L=50
+    L=10
     J=1
     chi=20
     delta_t=0.01
     chinfo = npc.ChargeInfo([])  # the second argument is just a descriptive name
     # create LegCharges on physical leg and even/odd bonds
     p_leg = npc.LegCharge.from_trivial(2)  # charges for up, down
-    v_leg_even = npc.LegCharge.from_qflat(chinfo, [[]])
-    v_leg_odd = npc.LegCharge.from_qflat(chinfo, [[]])
+    #v_leg_even = npc.LegCharge.from_qflat(chinfo, [[]])
+    #v_leg_odd = npc.LegCharge.from_qflat(chinfo, [[]])
     #create site and list of sites
     a_site=site.Site(p_leg, ['up', 'down'])
     lattice=[]
@@ -293,15 +126,15 @@ if __name__ == "__main__":
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
     tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     engine.run()
-    #tdvp_engine.run_two()
-    #ov=psi.overlap(psi_tdvp2)
-    #psi=engine.psi
-    #print("overlap")
-    #print(ov)
-    #if np.abs(1-np.abs(ov))>1e-10:
-    #    print(np.abs(1-np.abs(ov)))
-    #    print("error two sites TDVP")
-    #    sys.exit()
+    tdvp_engine.run_two()
+    ov=psi.overlap(psi_tdvp2)
+    psi=engine.psi
+    print("overlap")
+    print(ov)
+    if np.abs(1-np.abs(ov))>1e-11:
+        print(np.abs(1-np.abs(ov)))
+        print("error two sites TDVP")
+        sys.exit()
    
     # test that the initial conditions are the same
      
