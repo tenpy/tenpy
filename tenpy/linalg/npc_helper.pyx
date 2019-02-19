@@ -742,11 +742,15 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 
     Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
     """
+    # TODO: clean up
+    if DEBUG_PRINT:
+        print("_split_legs_worker: ", self.stored_blocks)
+        t0 = time.time()
     # calculate mappings of axes
     # in self
-    cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.sort(split_axes_)
-    cdef int a, i, j, nsplit = split_axes.shape[0]
-    pipes = [self.legs[a] for a in split_axes]
+    cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.array(split_axes_, dtype=np.intp)
+    cdef intp_t a, i, j, nsplit = split_axes.shape[0]
+    cdef list pipes = [self.legs[a] for a in split_axes]
     cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
         [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
     # in result
@@ -754,7 +758,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     for a in split_axes:
         new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
     cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = new_nonsplit_axes[split_axes]
-    #    = the first leg for splitted pipes
+    #  = the first leg for splitted pipes
     cdef list new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
     new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
 
@@ -763,52 +767,89 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
     res._set_shape()
 
-    # get new qdata by stacking columns
-    tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
-    tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
-    tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("setup", t1-t0)
+        t0 = time.time()
+    self._imake_contiguous() # TODO: needed/useful?
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("imake_contiguous", t1-t0)
+        t0 = time.time()
+
+
 
     # now split the blocks
-    cdef list data = []
-    cdef list qdata = []  # rows of the new qdata
-    cdef np.ndarray[np.intp_t, ndim=1] new_block_shape = np.empty(res.rank, dtype=np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] qdata_row, qm
-    cdef list block_slice = [slice(None)] * self.rank
-    cdef list qmap_slices = [None] * nsplit
-    cdef intp_t r
-    cdef slice sl
     cdef np.ndarray old_block, new_block
 
-    for old_block, qdata_row in zip(self._data, tmp_qdata):
-        for j in range(nonsplit_axes.shape[0]):
-            new_block_shape[new_nonsplit_axes[j]] = old_block.shape[nonsplit_axes[j]]
-        for j in range(nsplit):
-            pipe = pipes[j]
-            r = qdata_row[new_split_axes_first[j]]
-            qmap_slices[j] = pipe.q_map[pipe.q_map_slices[r]:pipe.q_map_slices[r+1]]
-        for qmap_rows in itertools.product(*qmap_slices):
-            for i in range(nsplit):
-                qm = qmap_rows[i]
-                a = new_split_axes_first[i]
-                pipe = pipes[i]
-                for j in range(pipe.nlegs):
-                    qi = qm[3+j]
-                    qdata_row[a+j] = qi
-                    leg = pipe.legs[j]
-                    new_block_shape[a+j] = leg.slices[qi+1] - leg.slices[qi]
-                block_slice[split_axes[i]] = slice(qm[0], qm[1])
-            new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
-            # all charges are compatible by construction, but some might be zero
-            if np.any(np.abs(new_block) > cutoff):
-                data.append(new_block.copy())  # copy, not view
-                qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
-    if len(data) > 0:
-        res._qdata = np.array(qdata, dtype=np.intp)
-        res._qdata_sorted = False
-    else:
-        res._qdata = np.empty((0, res.rank), dtype=np.intp)
-        res._qdata_sorted = True
-    res._data = data
+    # get new qdata
+    cdef intp_t self_stored_blocks = self.stored_blocks
+    assert self_stored_blocks  != 0
+    cdef np.ndarray[intp_t, ndim=2] q_map_slices_beg = np.zeros((self_stored_blocks, nsplit), np.intp)
+    cdef np.ndarray[intp_t, ndim=2] q_map_slices_shape = np.zeros((self_stored_blocks, nsplit), np.intp)
+    cdef np.ndarray[intp_t, ndim=2] old_qdata = self._qdata
+    for j in range(nsplit):
+        pipe = pipes[j]
+        q_map_slices = pipe.q_map_slices
+        qinds = old_qdata[:, split_axes[j]]
+        q_map_slices_beg[:, j] = q_map_slices[qinds]
+        q_map_slices_shape[:, j] = q_map_slices[qinds + 1] # - q_map_slices[qinds] # one line below # TODO: in pipe
+    q_map_slices_shape -= q_map_slices_beg
+    new_data_blocks_per_old_block = np.prod(q_map_slices_shape, axis=1)
+    old_block_inds = _charges._map_blocks(new_data_blocks_per_old_block)
+    res_stored_blocks = old_block_inds.shape[0]
+
+    q_map_rows = []
+    for beg, shape in zip(q_map_slices_beg, q_map_slices_shape):
+        q_map_rows.append(np.indices(shape, np.intp).reshape(nsplit, -1).T + beg[np.newaxis, :])
+    q_map_rows = np.concatenate(q_map_rows, axis=0)  # shape (res_stored_blocks, nsplit)
+
+    new_qdata = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]  # TODO faster to implement by hand?
+    old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
+    old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
+    for j in range(nsplit):
+        pipe = pipes[j]
+        a = new_split_axes_first[j]
+        a2 = a + pipe.nlegs
+        q_map = pipe.q_map[q_map_rows[:, j], :]
+        new_qdata[:, a:a2] = q_map[:, 3:]
+        old_block_beg[:, split_axes[j]] = q_map[:, 0]
+        old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
+
+    new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    for ax in range(res.rank):
+        new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
+    old_block_shapes[:, nonsplit_axes] =  new_block_shapes[:, new_nonsplit_axes]
+    dtype = self.dtype
+    cdef list new_data = []
+    cdef list old_data = self._data
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("get shapes and new qdata", t1-t0)
+        t0 = time.time()
+
+    # the actual loop to split the blocks
+    for i in range(res_stored_blocks):
+        old_block = old_data[old_block_inds[i]]
+        new_block = np.empty(old_block_shapes[i], dtype)
+        _sliced_copy(new_block, None, old_block, old_block_beg[i], old_block_shapes[i])
+        new_data.append(new_block.reshape(new_block_shapes[i]))
+
+
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("split loop", t1-t0)
+        t0 = time.time()
+    res._qdata = new_qdata
+    res._qdata_sorted = False
+    res._data = new_data
+    # TODO: could remove blocks which are zeros? _ipurge_zeros()
+    if DEBUG_PRINT:
+        t1 = time.time()
+        print("finalize", t1-t0)
+        t0 = time.time()
     return res
 
 

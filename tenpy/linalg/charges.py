@@ -1276,6 +1276,13 @@ def _find_row_differences(qflat):
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
 
+def _map_blocks(blocksizes):
+    """Create an index array mapping 1D blocks of given sizes to a new array.
+
+    Equivalent to ``np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])``."""
+    if len(blocksizes) == 0:
+        return np.zeros((0,), np.intp)
+    return np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])
 
 @use_cython
 def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
@@ -1315,6 +1322,7 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
     dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
     src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
     dest[dst_sl] = src[src_sl]
+
 
 @use_cython
 def _make_stride(shape, cstyle=True):

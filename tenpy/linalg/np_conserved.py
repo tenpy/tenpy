@@ -45,7 +45,6 @@ Eigen systems:
 import numpy as np
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-import copy as copy_
 import warnings
 import itertools
 import numbers
@@ -172,7 +171,7 @@ class Array:
         """
         cp = Array.__new__(Array)
         cp.__setstate__(self.__getstate__())
-        cp.legs = list(self.legs) # same instances, different list but same instances
+        cp.legs = list(self.legs) # different list but same instances
         cp._set_shape()
         cp.labels = self.labels.copy()
         if deep:
@@ -1337,7 +1336,7 @@ class Array:
         if axes is None:
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
         else:
-            axes = self.get_leg_indices(to_iterable(axes))
+            axes = sorted(self.get_leg_indices(to_iterable(axes)))
             if len(set(axes)) != len(axes):
                 raise ValueError("can't split a leg multiple times!")
         for ax in axes:
@@ -1345,8 +1344,25 @@ class Array:
                 raise ValueError("can't split leg {ax:d} which is not a LegPipe".format(ax=ax))
         if len(axes) == 0:
             return self.copy(deep=True)
-
-        res = _split_legs_worker(self, axes, cutoff)
+        elif self.stored_blocks == 0:
+            res = self.copy(deep=True)
+            for ax in reversed(axes):
+                res.legs[ax:ax + 1] =  self.legs[ax].legs
+            res._set_shape()
+        elif self.stored_blocks == 1 and all([(self.legs[ax].q_map.shape[0] == 1) for ax in axes]):
+            # optimize: just a single block in each pipe
+            res = self.copy(deep=True)
+            qdata = [[qi] for qi in self._qdata[0, :]]
+            for ax in reversed(axes):
+                pipe = self.legs[ax]
+                res.legs[ax:ax + 1] = pipe.legs
+                qdata[ax] = pipe.q_map[0, 3:]
+            res._set_shape()
+            res._qdata = np.concatenate(qdata).reshape((1, res.rank))
+            new_block_shape = res._get_block_shape(res._qdata[0, :])
+            res._data = [res._data[0].reshape(new_block_shape)]
+        else:
+            res = _split_legs_worker(self, axes, cutoff)
 
         labels = list(self.get_leg_labels())
         for a in sorted(axes, reverse=True):
@@ -3678,7 +3694,7 @@ def _split_legs_worker(self, split_axes, cutoff):
     """
     # calculate mappings of axes
     # in self
-    split_axes = np.array(sorted(split_axes), dtype=np.intp)
+    split_axes = np.array(split_axes, dtype=np.intp)
     pipes = [self.legs[a] for a in split_axes]
     nonsplit_axes = np.array(
         [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
