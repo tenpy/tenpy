@@ -13,3 +13,4 @@ tenpy/linalg/*.so
 tenpy/linalg/*.html
 examples/*.pdf
 examples/*.pkl
+tests/export_import/data/*

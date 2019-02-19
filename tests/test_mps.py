@@ -102,7 +102,7 @@ def test_singlet_mps():
     for (i, j) in pairs:
         k = coord.index((i, j))
         mutinf[k] -= 2.  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
-    npt.assert_array_almost_equal_nulp(mutinf, 0., 10)
+    npt.assert_array_almost_equal(mutinf, 0., decimal=14)
     # TODO: calculating overlap with product state
     # TODO: doesn't work yet: different qtotal.
     #  product_state = [None]*L
