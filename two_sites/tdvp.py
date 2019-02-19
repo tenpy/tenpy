@@ -14,7 +14,6 @@ from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np
 import pylab as pl
-#from misc import *
 from scipy.sparse.linalg import onenormest
 import tenpy.networks.mpo as mpo        
 import tenpy.linalg.np_conserved as npc
@@ -43,22 +42,25 @@ class Engine(object):
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
      
-        ============== =================================  ===============================================================
-        key            type                               description
-        ==============  ================================  ===============================================================
-        psi            :class:`~tenpy.networks.mps.MPS`                                wave function to evolve 
-        -------------- ---------------------------------  ---------------------------------------------------------------
+        ============== =================================     ===============================================================
+        key            type                                  description
+        ==============  ================================     ===============================================================
+        psi            :class:`~tenpy.networks.mps.MPS`                                   wave function to evolve 
+        -------------- ---------------------------------     ---------------------------------------------------------------
         model          :class:`~tenpy.models.MPOModel`
-        -------------- ---------------------------------  ---------------------------------------------------------------
-        TDVP_params    dict of parameters                 verbose, start_time,dt (time step of the Trotter error)
-        -------------- ---------------------------------  ---------------------------------------------------------------
-        trunc_params   dict                               Truncation parameters as described in
-                                                          :func:`~tenpy.algorithms.truncation.truncate`.
-        ============== =================================  ===============================================================
+        -------------- ---------------------------------     ---------------------------------------------------------------
+        TDVP_params    dict of parameters                    verbose, start_time,dt (time step of the Trotter error)
+        -------------- ---------------------------------     ---------------------------------------------------------------
+        trunc_params   dict                                  Truncation parameters as described in
+                                                             :func:`~tenpy.algorithms.truncation.truncate`.
+        -------------- ---------------------------------     --------------------------------------------------------------
+        environment    :class:                               initial environment. None by default, will be calculated at the
+                       '~tenpy.networks.mpo.MPOEnvironment'  beginning of the algorithm if not provided.
+        ============== =================================     ===============================================================
       
     """
 
-    def __init__(self, psi, model, TDVP_params,trunc_params=None):
+    def __init__(self, psi, model, TDVP_params,trunc_params=None,environment=None):
         self.verbose = get_parameter(TDVP_params, 'verbose', 2, 'TDVP')
         self.TDVP_params = TDVP_params
         self.model = model
@@ -100,7 +102,7 @@ class Engine(object):
             #d,chiA,chiB = theta.to_ndarray().shape
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j)
-            theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), -0.5*self.dt)
+            theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), -1j*0.5*self.dt)
             # SVD and update environment
             U,s,V=self.theta_svd_left_right(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
@@ -117,7 +119,7 @@ class Engine(object):
                 Rp=npc.tensordot(Rp,V.conj(),axes=['vL*','vR*'])
                 H = H0_mixed(Lpp,Rp)
                 
-                s=self.update_s_h0(s,H,0.5*self.dt)
+                s=self.update_s_h0(s,H,1j*0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
                 
         #return self.psi, self.environment, spectrum
@@ -134,7 +136,7 @@ class Engine(object):
             theta.ireplace_label('p','p1')
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
-            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
+            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*1j*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
             theta.itranspose(['(vL.p0)','(vR.p1)'])
@@ -156,7 +158,7 @@ class Engine(object):
                 theta.ireplace_label('p0','p')
                 Lp=self.environment.get_LP(j+1)
                 Rp=self.environment.get_RP(j+1)
-                theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j+1), 0.5*self.dt)
+                theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j+1), 1j*0.5*self.dt)
                 theta_old=theta
                 theta_old.ireplace_label('p','p0')
 
@@ -180,7 +182,7 @@ class Engine(object):
             chiB,chiA,d = theta.to_ndarray().shape
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j)
-            theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), -0.5*self.dt)
+            theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), -1j*0.5*self.dt)
             # SVD and update environment
             U,s,V=self.theta_svd_right_left(theta)
             spectrum.append(s/np.linalg.norm(s.to_ndarray()))
@@ -197,7 +199,7 @@ class Engine(object):
                 H = H0_mixed(Lp,self.environment.get_RP(j-1))
                 
 
-                s=self.update_s_h0(s,H,0.5*self.dt)
+                s=self.update_s_h0(s,H,1j*0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
     
         #return self.psi, self.environment, spectrum
@@ -214,7 +216,7 @@ class Engine(object):
             #theta=self.psi.get_theta(j,2)
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j+1)
-            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -0.5*self.dt)
+            theta=self.update_theta_h2(Lp, Rp, theta, self.W.get_W(j),self.W.get_W(j+1), -1j*0.5*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
             theta.itranspose(['(vL.p0)','(vR.p1)'])
@@ -236,7 +238,7 @@ class Engine(object):
                 theta.ireplace_label('p0','p')
                 Lp=self.environment.get_LP(j)
                 Rp=self.environment.get_RP(j)
-                theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), 0.5*self.dt)
+                theta=self.update_theta_h1(Lp, Rp, theta, self.W.get_W(j), 1j*0.5*self.dt)
                 theta_old=theta
                 theta.ireplace_label('p','p0')
 
@@ -251,7 +253,6 @@ class Engine(object):
         }
         lanczos_h1=tenpy.linalg.lanczos.LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
         theta,N_h1=lanczos_h1.run(dt)
-        ##theta = lanczos(H,theta, dt,{'N_max':np.min([d*chiA*chiB,6])})
         theta=theta.split_legs(['(p.vR.vL)'])
         return theta
     
@@ -265,7 +266,6 @@ class Engine(object):
         }
         lanczos_h1=tenpy.linalg.lanczos.LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
         theta,N_h1=lanczos_h1.run(dt)
-        ##theta = lanczos(H,theta, dt,{'N_max':np.min([d*chiA*chiB,6])})
         theta=theta.split_legs(['(p0.p1.vR.vL)'])
         return theta
     
@@ -274,9 +274,7 @@ class Engine(object):
         theta=theta.transpose(['p','vL','vR'])
         theta=theta.combine_legs(['p','vL'])
         theta=theta.transpose(['(p.vL)','vR'])
-        #U,s,V = svd(theta,full_matrices=0, inner_labels=["vR", "vL"])
         U,s,V = svd(theta,full_matrices=0)
-        #s = npc.diag(s, V.get_leg("vL"))
         U=U.split_legs(['(p.vL)'])
         U=self.set_anonymous_svd(U,'vR')
         V=self.set_anonymous_svd(V,'vL')
@@ -338,8 +336,13 @@ class Engine(object):
                 
 
         # Actual calculation
-    def run(self):
-        """ run the TDVP algorithm"""
+    def run_one_site(self,N_steps):
+        """
+        Run the TDVP algorithm with the one site algorithm. Be aware that the bond dimension will not increase
+        Parameters
+        ----------
+        N_steps : integer. Number of steps
+        """
         N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         if self.environment==None:
@@ -348,19 +351,21 @@ class Engine(object):
             self.sweep_left_right()
             self.sweep_right_left()
     
-    def run_two(self):
-        """ run the TDVP algorithm"""
+    def run_two_sites(self,N_steps):
+        """ 
+        Run the TDVP algorithm with two sites update. The bond dimension will increase. Truncation happens at every step of the
+        sweep, according to the parameters set in trunc_params.
+        Parameters
+        ----------
+        N_steps : integer. Number of steps
+        """
         N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         #if self.environment==None:
         self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right_two()
-            #environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            #self.environment=environment
             self.sweep_right_left_two()
-            #environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
-            #self.environment=environment
             self.evolved_time=self.evolved_time+self.dt
 
 class H0_mixed(object):

@@ -98,7 +98,7 @@ if __name__ == "__main__":
     
     tdvp_params = {
         'start_time': 0,
-        'dt':1j*delta_t,
+        'dt':delta_t,
         'N_steps':N_steps
     }
     trunc_params= {
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
     tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     engine.run()
-    tdvp_engine.run_two()
+    tdvp_engine.run_two_sites(N_steps)
     ov=psi.overlap(psi_tdvp2)
     print("overlap TDVP and TEBD")
     psi=engine.psi
@@ -133,7 +133,7 @@ if __name__ == "__main__":
 #Initialize TDVP
     tdvp_params = {
         'start_time': 0,
-        'dt':1j*delta_t,
+        'dt':delta_t,
         'N_steps':1
     }
     trunc_params= {
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     }
     tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
     for t in range(10):
-        tdvp_engine.run() 
+        tdvp_engine.run_one_site(N_steps=1) 
         psit_compare,Rp_list,spectrum=tdvp_fast.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)
         psit_=[]
     for i in range(L):
