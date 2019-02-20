@@ -67,6 +67,8 @@ class Engine(object):
         self.evolved_time = get_parameter(TDVP_params, 'start_time', 0., 'TDVP')
         self.W =model.H_MPO
         self.environment=environment
+        if psi.bc=="infinite":
+            raise ValueError("TDVP is only implemented for finite boundary conditions")
         self.psi=psi
         self.L=self.psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')
@@ -76,8 +78,6 @@ class Engine(object):
         #LP
         if i+1<self.psi.L:
             self.environment.del_LP(i+1)
-
-
         #Rp
         if i-1>-1:
             self.environment.del_RP(i-1)
