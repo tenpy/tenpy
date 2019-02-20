@@ -4103,20 +4103,19 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
     S = []
     if compute_uv:
         U_data = []
-        U_qdata = []
         VH_data = []
-        VH_qdata = []
     new_leg_slices = []
-    new_leg_charges = []
-    if full_matrices:
-        new_leg_slices_full = []
-        at_full = 0
+    new_leg_slices_full = []
+    at_full = 0
+    blocks_kept = []
 
     # main loop
-    for a_qdata_row, block in zip(a._qdata, a._data):
+    for i in range(len(a._data)):
+        block = a._data[i]
         if compute_uv:
             U_b, S_b, VH_b = svd_flat(block, full_matrices, True, overwrite_a, check_finite=True)
             if anynan(U_b) or anynan(VH_b) or anynan(S_b):
+                warnings.warn("Svd (gesdd) gave NaNs. Try again with gesvd")
                 # give it another try with the other (more stable) svd driver
                 U_b, S_b, VH_b = svd_flat(
                     block,
@@ -4125,14 +4124,13 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
                     overwrite_a,
                     check_finite=True,
                     lapack_driver='gesvd')
-            if anynan(U_b) or anynan(VH_b) or anynan(S_b):
-                raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
-                    np.sum(np.isnan(U_b)), np.sum(np.isnan(VH_b))))
+                if anynan(U_b) or anynan(VH_b) or anynan(S_b):
+                    raise ValueError("NaN in U_b {0:d} and/or VH_b: {1:d}".format(
+                        np.sum(np.isnan(U_b)), np.sum(np.isnan(VH_b))))
         else:
             S_b = svd_flat(block, False, False, overwrite_a, check_finite=True)
         if anynan(S_b):
             raise ValueError("NaN in S: " + str(np.sum(np.isnan(S_b))))
-
         if cutoff is not None:
             keep = (S_b > cutoff)  # bool array
             S_b = S_b[keep]
@@ -4143,35 +4141,34 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         if num > 0:  # have new singular values
             S.append(S_b)
             if compute_uv:
-                qi_L, qi_R = a_qdata_row
-                qi_C = len(new_leg_slices)
-                # qind_row for the new leg at the *right*, `VH.legs[0]`.
+                blocks_kept.append(i)
                 new_leg_slices.append(at)
-                charges_row = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
-                new_leg_charges.append(charges_row)
+                new_leg_slices_full.append(at_full)
+                at_full += max(block.shape)
+                at += num
                 U_data.append(U_b.astype(a.dtype, copy=False))
                 VH_data.append(VH_b.astype(a.dtype, copy=False))
-                U_qdata.append(np.array([qi_L, qi_C], dtype=np.intp))
-                VH_qdata.append(np.array([qi_C, qi_R], dtype=np.intp))
-        if full_matrices:
-            # num will be min(block.shape) > 0 and compute_uv=True
-            # Thus we inserted U_b and V_H already to U_data and VH_data!
-            # just need to take care of the second LegCharge required...
-            new_leg_slices_full.append(at_full)
-            at_full += max(block.shape)
-        at += num
-    if at == 0:
+    if len(S) == 0:
         raise RuntimeError("SVD found no singluar values")  # (at least none > cutoff)
     S = np.concatenate(S)
     if not compute_uv:
         return (None, S, None)
     # else: compute_uv is True
-    new_leg_slices = np.append(new_leg_slices, [at])
+    blocks_kept = np.array(blocks_kept, np.intp)
+    nblocks = blocks_kept.shape[0]
+    qi_L, qi_R = a._qdata[blocks_kept, :].T
+    qi_C = np.arange(nblocks, dtype=np.intp)
+    U_qdata = np.stack([qi_L, qi_C], axis=1)
+    VH_qdata = np.stack([qi_C, qi_R], axis=1)
+    new_leg_slices.append(at)
+    new_leg_slices = np.array(new_leg_slices, np.intp)
+    new_leg_charges = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
     new_leg_charges = chinfo.make_valid(new_leg_charges)
     new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
     new_leg_L = new_leg_R.conj()
     if full_matrices:
-        new_leg_slices_full = np.append(new_leg_slices_full, [at_full])
+        new_leg_slices_full.append(at_full)
+        new_leg_slices_full = np.array(new_leg_slices_full, np.intp)
         new_leg_full = LegCharge.from_qind(chinfo, new_leg_slices_full, new_leg_charges,
                                            inner_qconj)
         if a.shape[0] >= a.shape[1]:  # new_leg_R is fine

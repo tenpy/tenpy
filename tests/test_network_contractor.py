@@ -146,7 +146,7 @@ def contract_to_tensor():
     expected_result[:, :, 0, 1] = [[1j, +.35j], [.65j, 0]]
     expected_result[:, :, 1, 1] = [[-.65j, 0], [1j, -.35j]]
 
-    assert np.linalg.norm(res - expected_result) < 1.e-10
+    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
 
 
 def outer_product():
@@ -163,7 +163,7 @@ def outer_product():
     expected_result = expected_result.reshape([2, 2, 2, 2])
     expected_result = expected_result.transpose([1, 3, 0, 2])
 
-    assert np.linalg.norm(res - expected_result) < 1.e-10
+    assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
 
 
 @attr('slow')
