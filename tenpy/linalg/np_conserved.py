@@ -1778,7 +1778,7 @@ class Array:
         inplace : bool
             Whether to apply changes to `self`, or to return a *deep* copy.
         """
-        if self.dtype.kind == 'c' and complex_conj:
+        if complex_conj and self.dtype.kind == 'c':
             if inplace:
                 res = self.iunary_blockwise(np.conj)
             else:
@@ -1902,47 +1902,25 @@ class Array:
         """Return ``self + other``."""
         if isinstance(other, Array):
             return self.binary_blockwise(np.add, other)
-        elif np.isscalar(other):
-            warnings.warn("block-wise add ignores zero blocks!")
-            return self.unary_blockwise(np.add, other)
-        elif isinstance(other, np.ndarray):
-            return self.to_ndarray().__add__(other)
-        raise NotImplemented  # unknown type of other
-
-    def __radd__(self, other):
-        """Return ``other + self``."""
-        return self.__add__(other)  # (assume commutativity of self.dtype)
+        return NotImplemented  # unknown type of other
 
     def __iadd__(self, other):
         """``self += other``."""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.add, other)
-        elif np.isscalar(other):
-            warnings.warn("block-wise add ignores zero blocks!")
-            return self.iunary_blockwise(np.add, other)
-        # can't convert to numpy array in place, thus no ``self += ndarray``
-        raise NotImplemented  # unknown type of other
+        return NotImplemented  # unknown type of other
 
     def __sub__(self, other):
         """Return ``self - other``."""
         if isinstance(other, Array):
             return self.binary_blockwise(np.subtract, other)
-        elif np.isscalar(other):
-            warnings.warn("block-wise subtract ignores zero blocks!")
-            return self.unary_blockwise(np.subtract, other)
-        elif isinstance(other, np.ndarray):
-            return self.to_ndarray().__sub__(other)
-        raise NotImplemented  # unknown type of other
+        return NotImplemented  # unknown type of other
 
     def __isub__(self, other):
         """``self -= other``."""
         if isinstance(other, Array):
             return self.ibinary_blockwise(np.subtract, other)
-        elif np.isscalar(other):
-            warnings.warn("block-wise subtract ignores zero blocks!")
-            return self.iunary_blockwise(np.subtract, other)
-        # can't convert to numpy array in place, thus no ``self -= ndarray``
-        raise NotImplementedError()
+        return NotImplemented
 
     def __mul__(self, other):
         """Return ``self * other`` for scalar ``other``.
@@ -1955,8 +1933,12 @@ class Array:
         raise NotImplemented
 
     def __rmul__(self, other):
-        """Return ``other * self`` for scalar `other`."""
-        return self * other  # (assumes commutativity of self.dtype)
+        """Return ``other * self`` for scalar ``other``."""
+        if np.isscalar(other):
+            if other == 0.:
+                return self.zeros_like()
+            return self.unary_blockwise(np.multiply, other)
+        raise NotImplemented
 
     def __imul__(self, other):
         """``self *= other`` for scalar `other`."""
@@ -1975,8 +1957,8 @@ class Array:
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.__mul__(1. / other)
-        raise NotImplemented
+            return self.unary_blockwise(np.multiply, 1. / other)
+        return NotImplemented
 
     def __itruediv__(self, other):
         """``self /= other`` for scalar `other`."""
@@ -1984,7 +1966,7 @@ class Array:
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.__imul__(1. / other)
+            return self.iunary_blockwise(np.multiply, 1. / other)
         raise NotImplemented
 
 

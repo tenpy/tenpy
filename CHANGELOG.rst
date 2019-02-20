@@ -51,6 +51,8 @@ Added
   :meth:`tenpy.models.model.MPOModel.calc_H_bond_from_MPO` for conversion of H_bond into H_MPO and vice
   versa.
 - :class:`tenpy.algorithms.tebd.RandomUnitaryEvolution` for random unitary circuits
+- :class:`~tenpy.linalg.np_conserved.Array` now rejects addition/subtraction with other types
+- :class:`~tenpy.linalg.np_conserved.Array` now rejects multiplication/division  with non-scalar types
 
 Changed
 ^^^^^^^
