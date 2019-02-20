@@ -66,15 +66,11 @@ class Engine(object):
         self.model = model
         self.evolved_time = get_parameter(TDVP_params, 'start_time', 0., 'TDVP')
         self.W =model.H_MPO
-        self._update_index = None
-        self.environment=None
-        self.spectrum=None
+        self.environment=environment
         self.psi=psi
         self.L=self.psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')
         self.trunc_params=trunc_params
-        #Since we have a second order TDVP, we evolve from 0.5dt during left_right sweep and of 0.5dt again
-        #during the right_left sweep
 
     def del_correct(self,i):
         #LP
@@ -86,6 +82,17 @@ class Engine(object):
         if i-1>-1:
             self.environment.del_RP(i-1)
 
+    def get_evolved_time(self):
+        return self.evolved_time
+
+    def get_environment(self):
+        return self.environment
+
+    def set_dt(self,dt):
+        self.dt=dt
+
+    def set_trunc_params(self,trunc_params):
+        self.trunc_params=trunc_params
 
     def sweep_left_right(self):
         """Performs the sweep left->right of the second order TDVP scheme with one site update. Evolve from 0.5*dt"""
@@ -343,13 +350,13 @@ class Engine(object):
         ----------
         N_steps : integer. Number of steps
         """
-        N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         if self.environment==None:
             self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
         for i in range(N_steps):
             self.sweep_left_right()
             self.sweep_right_left()
+            self.evolved_time=self.evolved_time+self.dt
     
     def run_two_sites(self,N_steps):
         """ 
@@ -359,7 +366,6 @@ class Engine(object):
         ----------
         N_steps : integer. Number of steps
         """
-        N_steps = get_parameter(self.TDVP_params, 'N_steps', 10, 'TDVP')
         D = self.W._W[0].shape[0]
         #if self.environment==None:
         self.environment=mpo.MPOEnvironment(self.psi,self.W,self.psi)
