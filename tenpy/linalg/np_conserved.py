@@ -1270,7 +1270,7 @@ class Array:
 
         # the **main work** of copying & reshaping the data
         if self.stored_blocks == 1:
-            # handle self_stored_blocks == 1 separately for optimization
+            # handle self.stored_blocks == 1 separately for optimization
             qmap_inds = [
                 p._map_incoming_qind(self._qdata[:, cl])[0] for p, cl in zip(pipes, combine_legs)
             ]
@@ -3693,59 +3693,84 @@ def _split_legs_worker(self, split_axes, cutoff):
     Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
     """
     # calculate mappings of axes
-    # in self
+    new_split_axes_first = []
+    nonsplit_axes = []
+    new_nonsplit_axes = []
+    pipes = []
+    res_legs = self.legs[:]
+    new_axis = 0
+    for axis in range(self.rank):
+        if axis in split_axes:
+            pipe = self.legs[axis]
+            pipes.append(pipe)
+            res_legs[new_axis:new_axis+1] = pipe.legs
+            new_split_axes_first.append(new_axis)
+            new_axis += pipe.nlegs
+        else:
+            nonsplit_axes.append(axis)
+            new_nonsplit_axes.append(new_axis)
+            new_axis += 1
     split_axes = np.array(split_axes, dtype=np.intp)
-    pipes = [self.legs[a] for a in split_axes]
-    nonsplit_axes = np.array(
-        [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
-    # in result
-    new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
-    for a in reversed(split_axes):
-        new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
-    new_split_axes_first = new_nonsplit_axes[split_axes]  # = the first leg for splitted pipes
-    new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
-    new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
+    N_split = split_axes.shape[0]
+    new_split_axes_first = np.array(new_split_axes_first, np.intp)
+    nonsplit_axes = np.array(nonsplit_axes, np.intp)
+    new_nonsplit_axes = np.array(new_nonsplit_axes, np.intp)
 
     res = self.copy(deep=False)
-    for a in reversed(split_axes):
-        res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
+    res.legs = res_legs
     res._set_shape()
+    if self.stored_blocks == 0:
+        return res
 
-    # get new qdata by stacking columns
-    tmp_qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
-    tmp_qdata[:, new_nonsplit_axes] = self._qdata[:, nonsplit_axes]
-    tmp_qdata[:, new_split_axes_first] = self._qdata[:, split_axes]
+    # get new qdata
+    q_map_slices_beg = np.zeros((self.stored_blocks, N_split), np.intp)
+    q_map_slices_shape = np.zeros((self.stored_blocks, N_split), np.intp)
+    for j in range(N_split):
+        pipe = pipes[j]
+        q_map_slices = pipe.q_map_slices
+        qinds = self._qdata[:, split_axes[j]]
+        q_map_slices_beg[:, j] = q_map_slices[qinds]
+        q_map_slices_shape[:, j] = q_map_slices[qinds + 1] # - q_map_slices[qinds] # one line below # TODO: in pipe
+    q_map_slices_shape -= q_map_slices_beg
+    new_data_blocks_per_old_block = np.prod(q_map_slices_shape, axis=1)
+    old_block_inds = charges._map_blocks(new_data_blocks_per_old_block)
+    res_stored_blocks = old_block_inds.shape[0]
+    q_map_rows = []
+    for beg, shape in zip(q_map_slices_beg, q_map_slices_shape):
+        q_map_rows.append(np.indices(shape, np.intp).reshape(N_split, -1).T + beg[np.newaxis, :])
+    q_map_rows = np.concatenate(q_map_rows, axis=0)  # shape (res_stored_blocks, N_split)
 
-    # now split the blocks
-    data = []
-    qdata = []  # rows of the new qdata
-    new_block_shape = np.empty(res.rank, dtype=np.intp)
-    block_slice = [slice(None)] * self.rank
-    sliced_q_maps = [[p.q_map[i:j] for i, j in zip(p.q_map_slices[:-1], p.q_map_slices[1:])] for p in pipes]
-    for old_block, qdata_row in zip(self._data, tmp_qdata):
-        qmap_slices = [
-            sl_q_map[i] for sl_q_map, i in zip(sliced_q_maps, qdata_row[new_split_axes_first])
-        ]
-        new_block_shape[new_nonsplit_axes] = np.array(old_block.shape)[nonsplit_axes]
-        for qmap_rows in itertools.product(*qmap_slices):
-            for a, sl, qm, pipe in zip(split_axes, new_split_slices, qmap_rows, pipes):
-                qdata_row[sl] = block_qind = qm[3:]
-                new_block_shape[sl] = [(l.slices[qi + 1] - l.slices[qi])
-                                        for l, qi in zip(pipe.legs, block_qind)]
-                block_slice[a] = slice(qm[0], qm[1])
-            new_block = old_block[tuple(block_slice)].reshape(new_block_shape)
-            # all charges are compatible by construction, but some might be zero
-            if not np.any(np.abs(new_block) > cutoff):
-                continue
-            data.append(new_block.copy())  # copy, not view
-            qdata.append(qdata_row.copy())  # copy! qdata_row is changed afterwards...
-    if len(data) > 0:
-        res._qdata = np.array(qdata, dtype=np.intp)
-        res._qdata_sorted = False
-    else:
-        res._qdata = np.empty((0, res.rank), dtype=np.intp)
-        res._qdata_sorted = True
-    res._data = data
+    new_qdata = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]  # TODO faster to implement by hand?
+    old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
+    old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
+    for j in range(N_split):
+        pipe = pipes[j]
+        a = new_split_axes_first[j]
+        a2 = a + pipe.nlegs
+        q_map = pipe.q_map[q_map_rows[:, j], :]
+        new_qdata[:, a:a2] = q_map[:, 3:]
+        old_block_beg[:, split_axes[j]] = q_map[:, 0]
+        old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
+    new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    for ax in range(res.rank):
+        new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
+    old_block_shapes[:, nonsplit_axes] =  new_block_shapes[:, new_nonsplit_axes]
+    dtype = self.dtype
+    new_data = []
+    old_data = self._data
+
+    # the actual loop to split the blocks
+    for i in range(res_stored_blocks):
+        old_block = old_data[old_block_inds[i]]
+        new_block = np.empty(old_block_shapes[i], dtype)
+        charges._sliced_copy(new_block, None, old_block, old_block_beg[i], old_block_shapes[i])
+        new_data.append(new_block.reshape(new_block_shapes[i]))
+
+    res._qdata = new_qdata
+    res._qdata_sorted = False
+    res._data = new_data
     return res
 
 

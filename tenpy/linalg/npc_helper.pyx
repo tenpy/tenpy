@@ -662,7 +662,7 @@ def _combine_legs_worker(self,
         t1 = time.time()
         print("q_map_inds", t1-t0)
         t0 = time.time()
-    self._imake_contiguous() # TODO: needed/useful?
+    self._imake_contiguous() # TODO: needed/useful? Always keep tensors contiguous?
     if DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
@@ -737,78 +737,81 @@ def _combine_legs_worker(self,
         t0 = time.time()
 
 
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.nonecheck(False)
 def _split_legs_worker(self, list split_axes_, float cutoff):
     """The main work of split_legs: create a copy and reshape the data blocks.
 
     Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
     """
-    # TODO: clean up
     if DEBUG_PRINT:
         print("_split_legs_worker: ", self.stored_blocks)
         t0 = time.time()
     # calculate mappings of axes
-    # in self
+    cdef list new_split_axes_first_ = []
+    cdef list nonsplit_axes_ = []
+    cdef list new_nonsplit_axes_ = []
+    cdef list pipes = []
+    cdef list res_legs = self.legs[:]
+    new_axis = 0
+    for axis in range(self.rank):
+        if axis in split_axes_:
+            pipe = self.legs[axis]
+            pipes.append(pipe)
+            res_legs[new_axis:new_axis+1] = pipe.legs
+            new_split_axes_first_.append(new_axis)
+            new_axis += pipe.nlegs
+        else:
+            nonsplit_axes_.append(axis)
+            new_nonsplit_axes_.append(new_axis)
+            new_axis += 1
     cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.array(split_axes_, dtype=np.intp)
-    cdef intp_t a, i, j, nsplit = split_axes.shape[0]
-    cdef list pipes = [self.legs[a] for a in split_axes]
-    cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(
-        [i for i in range(self.rank) if i not in split_axes], dtype=np.intp)
-    # in result
-    cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.arange(self.rank, dtype=np.intp)
-    for a in split_axes:
-        new_nonsplit_axes[a + 1:] += self.legs[a].nlegs - 1
-    cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = new_nonsplit_axes[split_axes]
-    #  = the first leg for splitted pipes
-    cdef list new_split_slices = [slice(a, a + p.nlegs) for a, p in zip(new_split_axes_first, pipes)]
-    new_nonsplit_axes = new_nonsplit_axes[nonsplit_axes]
+    cdef intp_t a, i, j, N_split = split_axes.shape[0]
+    cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = np.array(new_split_axes_first_, np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(nonsplit_axes_, np.intp)
+    cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.array(new_nonsplit_axes_, np.intp)
 
     res = self.copy(deep=False)
-    for a in reversed(split_axes):
-        res.legs[a:a + 1] = res.legs[a].legs  # replace pipes with saved original legs
+    res.legs = res_legs
     res._set_shape()
+    cdef intp_t self_stored_blocks = self.stored_blocks
+    if self_stored_blocks == 0:
+        return res
 
     if DEBUG_PRINT:
         t1 = time.time()
         print("setup", t1-t0)
         t0 = time.time()
-    self._imake_contiguous() # TODO: needed/useful?
+    self._imake_contiguous()
     if DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
         t0 = time.time()
 
-
-
-    # now split the blocks
-    cdef np.ndarray old_block, new_block
-
     # get new qdata
-    cdef intp_t self_stored_blocks = self.stored_blocks
-    assert self_stored_blocks  != 0
-    cdef np.ndarray[intp_t, ndim=2] q_map_slices_beg = np.zeros((self_stored_blocks, nsplit), np.intp)
-    cdef np.ndarray[intp_t, ndim=2] q_map_slices_shape = np.zeros((self_stored_blocks, nsplit), np.intp)
-    cdef np.ndarray[intp_t, ndim=2] old_qdata = self._qdata
-    for j in range(nsplit):
+    q_map_slices_beg = np.zeros((self_stored_blocks, N_split), np.intp)
+    q_map_slices_shape = np.zeros((self_stored_blocks, N_split), np.intp)
+    for j in range(N_split):
         pipe = pipes[j]
         q_map_slices = pipe.q_map_slices
-        qinds = old_qdata[:, split_axes[j]]
+        qinds = self._qdata[:, split_axes[j]]
         q_map_slices_beg[:, j] = q_map_slices[qinds]
         q_map_slices_shape[:, j] = q_map_slices[qinds + 1] # - q_map_slices[qinds] # one line below # TODO: in pipe
     q_map_slices_shape -= q_map_slices_beg
     new_data_blocks_per_old_block = np.prod(q_map_slices_shape, axis=1)
-    old_block_inds = _charges._map_blocks(new_data_blocks_per_old_block)
-    res_stored_blocks = old_block_inds.shape[0]
-
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] old_block_inds = _charges._map_blocks(new_data_blocks_per_old_block)
+    cdef intp_t res_stored_blocks = old_block_inds.shape[0]
     q_map_rows = []
     for beg, shape in zip(q_map_slices_beg, q_map_slices_shape):
-        q_map_rows.append(np.indices(shape, np.intp).reshape(nsplit, -1).T + beg[np.newaxis, :])
-    q_map_rows = np.concatenate(q_map_rows, axis=0)  # shape (res_stored_blocks, nsplit)
+        q_map_rows.append(np.indices(shape, np.intp).reshape(N_split, -1).T + beg[np.newaxis, :])
+    q_map_rows = np.concatenate(q_map_rows, axis=0)  # shape (res_stored_blocks, N_split)
 
     new_qdata = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
     new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]  # TODO faster to implement by hand?
-    old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
-    old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
-    for j in range(nsplit):
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
+    for j in range(N_split):
         pipe = pipes[j]
         a = new_split_axes_first[j]
         a2 = a + pipe.nlegs
@@ -816,27 +819,32 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         new_qdata[:, a:a2] = q_map[:, 3:]
         old_block_beg[:, split_axes[j]] = q_map[:, 0]
         old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
-
-    new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
     cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
     old_block_shapes[:, nonsplit_axes] =  new_block_shapes[:, new_nonsplit_axes]
-    dtype = self.dtype
-    cdef list new_data = []
-    cdef list old_data = self._data
     if DEBUG_PRINT:
         t1 = time.time()
         print("get shapes and new qdata", t1-t0)
         t0 = time.time()
 
+    cdef intp_t[:, ::1] old_block_shapes_ = old_block_shapes
+    cdef intp_t[:, ::1] old_block_beg_ = old_block_beg
+    cdef list new_data = []
+    cdef list old_data = self._data
+    cdef int dtype_num = self.dtype.num
+    cdef intp_t old_rank = self.rank
     # the actual loop to split the blocks
+    cdef np.ndarray old_block, new_block
+    cdef np.PyArray_Dims new_shape
+    new_shape.len = new_block_shapes.shape[1]
     for i in range(res_stored_blocks):
         old_block = old_data[old_block_inds[i]]
-        new_block = np.empty(old_block_shapes[i], dtype)
-        _sliced_copy(new_block, None, old_block, old_block_beg[i], old_block_shapes[i])
-        new_data.append(new_block.reshape(new_block_shapes[i]))
-
+        new_block = _np_empty_ND(old_rank, &old_block_shapes_[i, 0], dtype_num)
+        _sliced_copy(new_block, None, old_block, old_block_beg_[i, :], old_block_shapes_[i, :])
+        new_shape.ptr = &new_block_shapes[i, 0]
+        new_data.append(np.PyArray_Newshape(new_block, &new_shape, np.NPY_CORDER))
 
     if DEBUG_PRINT:
         t1 = time.time()
@@ -845,7 +853,6 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     res._qdata = new_qdata
     res._qdata_sorted = False
     res._data = new_data
-    # TODO: could remove blocks which are zeros? _ipurge_zeros()
     if DEBUG_PRINT:
         t1 = time.time()
         print("finalize", t1-t0)
