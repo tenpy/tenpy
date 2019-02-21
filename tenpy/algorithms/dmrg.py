@@ -470,11 +470,9 @@ class Engine(NpcLinearOperator):
             if not self.finite:  # iDMRG: need energy density
                 Es = self.update_stats['E_total']
                 age = self.update_stats['age']
-                if N_sweeps_check > 1:
-                    growth = (age[-1] - age[-1 - 2 * self.env.L])
-                    E = (Es[-1] - Es[-1 - 2 * self.env.L]) / growth
-                else:
-                    E = (Es[-1] - Es[0]) / (age[-1] - age[0])
+                delta = min(1 + 2 * self.env.L, len(age))
+                growth = (age[-1] - age[-delta])
+                E = (Es[-1] - Es[-delta]) / growth
             else:
                 E = self.update_stats['E_total'][-1]
             Delta_E = (E - E_old) / N_sweeps_check
