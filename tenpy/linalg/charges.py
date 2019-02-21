@@ -290,12 +290,16 @@ class LegCharge:
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=np.intp)
-        self.charges = np.array(charges, dtype=QTYPE)
-        self.qconj = int(qconj)
-        self.sorted = False
-        self.bunched = False
         self.ind_len = self.slices[-1]
+        self.charges = np.array(charges, dtype=QTYPE)
         self.block_number = self.charges.shape[0]
+        self.qconj = int(qconj)
+        if self.block_number > 2:
+            self.sorted = False
+            self.bunched = False
+        else:  # just one block: trivially sorted
+            self.sorted = True
+            self.bunched = True
         LegCharge.test_sanity(self)
 
     def copy(self):
@@ -489,7 +493,7 @@ class LegCharge:
             raise ValueError("wrong len of `slices`")
         if sl[0] != 0:
             raise ValueError("slices does not start with 0")
-        if ch.shape[1] != self.chinfo.qnumber:
+        if ch.ndim != 2 or ch.shape[1] != self.chinfo.qnumber:
             raise ValueError("shape of `charges` incompatible with qnumber")
         if not self.chinfo.check_valid(ch):
             raise ValueError("charges invalid for " + str(self.chinfo) + "\n" + str(self))
@@ -981,7 +985,21 @@ class LegPipe(LegCharge):
         self.q_map = None  # overwritten in _init_from_legs, but necessary for copies
         self.q_map_slices = None  # overwritten in _init_from_legs, but necessary for copies
         # the difficult part: calculate self.slices, self.charges, self.q_map and self.q_map_slices
-        self._init_from_legs(sort, bunch)
+        if self.subqshape == (1, ) * len(legs):
+            # special case: only legs with each a single block, usually the case if qnumber=0
+            self.ind_len = ind_len = np.prod(self.subshape)
+            self.slices = np.array([0, ind_len], np.intp)
+            z = [0] * len(legs)
+            self.charges = _partial_qtotal(chinfo, legs, np.array([z], np.intp), qconj, None)
+            self.q_map = np.array([[0, ind_len, 0] + z], np.intp)
+            self.q_map_slices = self.slices.copy()
+            self._strides = np.array(z, np.intp)
+            self._perm = None
+        else:
+            # sourced out and optimized
+            self.sorted = False
+            self.bunched = False
+            self._init_from_legs(sort, bunch)
         self.test_sanity()
 
     def copy(self):
@@ -1001,7 +1019,9 @@ class LegPipe(LegCharge):
     def to_LegCharge(self):
         """Convert self to a LegCharge, discarding the information how to split the legs.
         Usually not needed, but called by functions, which are not implemented for a LegPipe."""
-        return LegCharge(self.chinfo, self.slices, self.charges, self.qconj)
+        res = LegCharge.__new__(LegCharge)
+        res.__setstate__(LegCharge.__getstate__(self))
+        return res
 
     def conj(self):
         """Return a shallow copy with opposite ``self.qconj``.
