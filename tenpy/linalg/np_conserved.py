@@ -1747,7 +1747,10 @@ class Array:
         >>> a.iunaray_blockwise(np.real)  # get real part
         >>> a.iunaray_blockwise(np.conj)  # same data as a.iconj(), but doesn't charge conjugate.
         """
-        self._data = [func(t, *args, **kwargs) for t in self._data]
+        if len(args) == 0 == len(kwargs):
+            self._data = [func(t) for t in self._data]
+        else:
+            self._data = [func(t, *args, **kwargs) for t in self._data]
         if len(self._data) > 0:
             self.dtype = self._data[0].dtype
         return self
@@ -1837,6 +1840,10 @@ class Array:
         >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
         >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
         """
+        if len(args) > 0 or len(kwargs) > 0:
+            return self.ibinary_blockwise(lambda a, b: func(a, b, *args, **kwargs), other)
+        if self.rank != other.rank:
+            raise ValueError("different rank!")
         for self_leg, other_leg in zip(self.legs, other.legs):
             self_leg.test_equal(other_leg)
         if np.any(self.qtotal != other.qtotal):
@@ -1851,24 +1858,28 @@ class Array:
         Na, Nb = len(aq), len(bq)
 
         # If the q_dat structure is identical, we can immediately run through the data.
-        if Na == Nb and np.array_equiv(aq, bq):
-            self._data = [func(at, bt, *args, **kwargs) for at, bt in zip(adata, bdata)]
+        if Na == Nb and np.all(aq == bq):
+            self._data = [func(at, bt) for at, bt in zip(adata, bdata)]
         else:  # otherwise we have to step through comparing left and right qdata
+            # F-style strides to preserve sorting!
+            stride = charges._make_stride([l.block_number for l in self.legs], False)
+            aq_ = np.sum(aq * stride, axis=1)
+            bq_ = np.sum(bq * stride, axis=1)
             i, j = 0, 0
             qdata = []
             data = []
             while i < Na or j < Nb:
-                if i < Na and j < Nb and tuple(aq[i]) == tuple(bq[j]):  # a and b are non-zero
-                    data.append(func(adata[i], bdata[j], *args, **kwargs))
+                if i < Na and j < Nb and aq_[i] == bq_[j]:  # a and b are non-zero
+                    data.append(func(adata[i], bdata[j]))
                     qdata.append(aq[i])
                     i += 1
                     j += 1
-                elif i >= Na or j < Nb and (tuple(aq[i, ::-1]) > tuple(bq[j, ::-1])):  # a is 0
-                    data.append(func(np.zeros_like(bdata[j]), bdata[j], *args, **kwargs))
+                elif i >= Na or j < Nb and aq_[i] > bq_[j]:  # a is 0
+                    data.append(func(np.zeros_like(bdata[j]), bdata[j]))
                     qdata.append(bq[j])
                     j += 1
-                elif j >= Nb or (tuple(aq[i, ::-1]) < tuple(bq[j, ::-1])):  # b is 0
-                    data.append(func(adata[i], np.zeros_like(adata[i]), *args, **kwargs))
+                elif j >= Nb or aq_[i] < bq_[j]:  # b is 0
+                    data.append(func(adata[i], np.zeros_like(adata[i])))
                     qdata.append(aq[i])
                     i += 1
                 else:  # tested a == b or a < b or a > b, so this should never happen
@@ -1897,6 +1908,11 @@ class Array:
         for a rank-2 matrix ``self`` and a rank-1 vector `other`.
         """
         return tensordot(self, other, axes=1)
+
+    def iadd_prefactor_other(self, prefactor, other):
+        """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`."""
+        self += other * alpha
+        return self
 
     def __add__(self, other):
         """Return ``self + other``."""
@@ -1930,7 +1946,7 @@ class Array:
             if other == 0.:
                 return self.zeros_like()
             return self.unary_blockwise(np.multiply, other)
-        raise NotImplemented
+        return NotImplemented
 
     def __rmul__(self, other):
         """Return ``other * self`` for scalar ``other``."""
@@ -1938,7 +1954,7 @@ class Array:
             if other == 0.:
                 return self.zeros_like()
             return self.unary_blockwise(np.multiply, other)
-        raise NotImplemented
+        return NotImplemented
 
     def __imul__(self, other):
         """``self *= other`` for scalar `other`."""
@@ -1949,7 +1965,7 @@ class Array:
                 self._qdata_sorted = True
                 return self
             return self.iunary_blockwise(np.multiply, other)
-        raise NotImplemented
+        return NotImplemented
 
     def __truediv__(self, other):
         """Return ``self / other`` for scalar `other`."""
@@ -1967,7 +1983,7 @@ class Array:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
             return self.iunary_blockwise(np.multiply, 1. / other)
-        raise NotImplemented
+        return NotImplemented
 
 
     # private functions =======================================================

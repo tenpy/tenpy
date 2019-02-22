@@ -1417,5 +1417,3 @@ def _inner_worker(a, b, bint do_conj):
         return res_dtype.type(sum_real)
     #  else: # dtype_num == np.NPY_CDOUBLE
     return res_dtype.type(sum_complex)
-
-# TODO: _svd_worker !?!
