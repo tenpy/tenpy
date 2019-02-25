@@ -421,6 +421,7 @@ def test_npc_Array_ops():
         print(op.__name__)
         a2 = op(a, b)
         a.test_sanity()
+        b.test_sanity()
         a2.test_sanity()
         aflat2 = op(aflat, bflat)
         npt.assert_equal(a.to_ndarray(), aflat)
@@ -431,6 +432,7 @@ def test_npc_Array_ops():
         print(op.__name__)
         a2 = op(a, s)
         a.test_sanity()
+        b.test_sanity()
         a2.test_sanity()
         aflat2 = op(aflat, s)
         npt.assert_equal(a.to_ndarray(), aflat)
@@ -506,6 +508,7 @@ def test_npc_tensordot():
     bflat = np.tensordot(aflat, aflat, axes=1)
     npt.assert_array_almost_equal_nulp(b.to_ndarray(), bflat, sum(a.shape))
 
+
 def test_npc_tensordot_extra():
     # check that the sorting of charges is fine with special test matrices
     # which gave me some headaches at some point :/
@@ -527,7 +530,6 @@ def test_npc_tensordot_extra():
     Utheta = npc.tensordot(U, theta, axes=2)
     npt.assert_array_almost_equal_nulp(Utheta.to_ndarray(), Utheta_flat, 10)
     assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta) ) < 1.e-10
-
 
 
 def test_npc_inner():

@@ -3,7 +3,6 @@
 This module is written in Cython, such that it can be compiled.
 It implements some functions and classes with the same interface as np_conserved.py/charges.py.
 
-
 :func:`tenpy.tools.optimization.use_cython` tries to import the compiled cython module and uses the
 functions/classes defined here to overwrite those written in pure Python whenever the
 decorator ``@use_cython`` is used in other python files of tenpy.
@@ -32,10 +31,13 @@ IF DEBUG_PRINT:
 
 import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
-from scipy.linalg.cython_blas cimport dgemm, zgemm, dgemv, zgemv, ddot, zdotc, zdotu
+from scipy.linalg.cython_blas cimport (dgemm, zgemm, dgemv, zgemv,
+                                       ddot, zdotc, zdotu,
+                                       daxpy, zaxpy,
+                                       dscal, zscal, zdscal)
 
 from ..tools.misc import inverse_permutation
-from ..tools import optimization
+from ..tools.optimization import optimize, OptimizationFlag
 
 np.import_array()
 
@@ -147,6 +149,7 @@ cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C
     """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
 
     Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
+    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
     """
     # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
     # reading a C-style matrix A of dimensions MxK as F-style Matrix with LDA=K yields A.T
@@ -180,6 +183,39 @@ cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C
         else: # dtype_num == np.NPY_CDOUBLE
             zgemm(no_tr, no_tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
                 <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
+
+
+cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int dtype_num) nogil:
+    """Use blas for ``A += prefactor * B``.
+
+    Assumes (!) that A, B are contiguous C-style matrices of dimensions MxK, KxN , MxN.
+    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
+    For real numbers, only the real part of `prefactor` is used.
+    """
+    cdef double real_prefactor = prefactor.real
+    cdef int one = 1
+    if dtype_num == np.NPY_DOUBLE:
+        daxpy(&N, &real_prefactor, <double*> B, &one, <double*> A, &one)
+    else: # dtype_num == np.NPY_CDOUBLE
+        zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
+
+
+cdef void _blas_inpl_scale(int N, void* A, double complex prefactor, int dtype_num) nogil:
+    """Use blas for ``A *= prefactor``.
+
+    Assumes (!) that A is contiguous C-style matrices of dimensions N.
+    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
+    For real numbers, only the real part of `prefactor` is used.
+    """
+    cdef double real_prefactor = prefactor.real
+    cdef int one = 1
+    if dtype_num == np.NPY_DOUBLE:
+        dscal(&N, &real_prefactor, <double*> A, &one)
+    else: # dtype_num == np.NPY_CDOUBLE
+        if prefactor.imag == 0.:
+            zdscal(&N, &real_prefactor, <double complex*> A, &one)
+        else:
+            zscal(&N, &prefactor, <double complex*> A, &one)
 
 
 
@@ -604,6 +640,229 @@ def Array_itranspose(self, axes=None):
     self._data = [np.PyArray_Transpose(block, &permute) for block in data]
     return self
 
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.binding(True)
+def Array_ibinary_blockwise(self, func, other, *args, **kwargs):
+    """Roughly ``self = func(self, other)``, block-wise. In place.
+
+    Applies a binary function 'block-wise' to the non-zero blocks of
+    ``self._data`` and ``other._data``, storing result in place.
+    Assumes that `other` is an :class:`Array` as well, with the same shape
+    and compatible legs.
+
+    .. note ::
+        Assumes implicitly that
+        ``func(np.zeros(...), np.zeros(...), *args, **kwargs)`` gives 0,
+        since we don't let `func` act on zero blocks!
+
+    Examples
+    --------
+    >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
+    >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
+    """
+    if len(args) > 0 or len(kwargs) > 0:
+        return self.ibinary_blockwise(lambda a, b: func(a, b, *args, **kwargs), other)
+    if self.rank != other.rank:
+        raise ValueError("different rank!")
+    for self_leg, other_leg in zip(self.legs, other.legs):
+        self_leg.test_equal(other_leg)
+    if np.any(self.qtotal != other.qtotal):
+        raise ValueError("Arrays can't have different `qtotal`!")
+    self.isort_qdata()
+    other.isort_qdata()
+
+    cdef list adata = self._data
+    cdef list bdata = other._data
+    cdef np.ndarray[intp_t, ndim=2, mode="c"] aq = self._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode="c"] bq = other._qdata
+    cdef intp_t Na = aq.shape[0], Nb = bq.shape[0]
+    cdef intp_t rank = aq.shape[1]
+    cdef intp_t[:] aq_, bq_
+    cdef intp_t i = 0, j = 0, k, new_row = 0
+    cdef list new_data = []
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] new_qdata = _np_empty_2D(Na+Nb, rank, intp_num)
+
+    if Na == Nb and np.all(aq == bq):
+        # If the _qdata structure is identical, we can immediately run through the data.
+        self._data = [func(adata[i], bdata[i]) for i in range(Na)]
+    else:  # otherwise we have to step through comparing left and right qdata
+        stride = _make_stride([l.block_number for l in self.legs], 0)
+        aq_ = np.sum(aq * stride, axis=1)
+        bq_ = np.sum(bq * stride, axis=1)
+        # F-style strides to preserve sorting!
+        while i < Na or j < Nb:
+            if i < Na and j < Nb and aq_[i] == bq_[j]:  # a and b are non-zero
+                new_data.append(func(adata[i], bdata[j]))
+                for k in range(rank):
+                    new_qdata[new_row, k] = aq[i, k]
+                new_row += 1
+                i += 1
+                j += 1
+            elif i >= Na or j < Nb and aq_[i] > bq_[j]:  # a is 0
+                new_data.append(func(np.zeros_like(bdata[j]), bdata[j]))
+                for k in range(rank):
+                    new_qdata[new_row, k] = bq[j, k]
+                new_row += 1
+                j += 1
+            elif j >= Nb or aq_[i] < bq_[j]:  # b is 0
+                new_data.append(func(adata[i], np.zeros_like(adata[i])))
+                for k in range(rank):
+                    new_qdata[new_row, k] = aq[i, k]
+                new_row += 1
+                i += 1
+            else:  # tested a == b or a < b or a > b, so this should never happen
+                assert False
+            # if both are zero, we assume f(0, 0) = 0
+        self._data = new_data
+        self._qdata = new_qdata[:new_row, :]
+        # ``self._qdata_sorted = True`` was set by self.isort_qdata
+    if len(self._data) > 0:
+        self.dtype = np.find_common_type([d.dtype for d in self._data], [])
+        self._data = [np.asarray(a, dtype=self.dtype) for a in self._data]
+    return self
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.binding(True)
+def Array_iadd_prefactor_other(self, prefactor, other):
+    """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
+
+    Note that we allow the type of `self` to change if necessary.
+    """
+    if not optimize(OptimizationFlag.skip_arg_checks):
+        if self.rank != other.rank:
+            raise ValueError("different rank!")
+        for self_leg, other_leg in zip(self.legs, other.legs):
+            self_leg.test_equal(other_leg)
+        if np.any(self.qtotal != other.qtotal):
+            raise ValueError("Arrays can't have different `qtotal`!")
+    if prefactor == 0.:
+        return self # nothing to do
+    self.isort_qdata()
+    other.isort_qdata()
+    # convert to equal types
+    calc_dtype = np.find_common_type([self.dtype, other.dtype], [type(prefactor)])
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    if self.dtype.num != calc_dtype_num:
+        self.dtype = calc_dtype
+        self._data = [d.astype(calc_dtype) for d in self._data]
+    if other.dtype.num != calc_dtype_num:
+        other = other.astype(calc_dtype)
+    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+        calc_dtype_num = -1 # don't use BLAS
+    self._imake_contiguous()
+    other._imake_contiguous()
+
+    cdef list adata = self._data
+    cdef list bdata = other._data
+    cdef np.ndarray[intp_t, ndim=2, mode="c"] aq = self._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode="c"] bq = other._qdata
+    cdef intp_t Na = aq.shape[0], Nb = bq.shape[0]
+    cdef intp_t rank = aq.shape[1]
+    cdef intp_t[:] aq_, bq_
+    cdef intp_t i = 0, j = 0, k, new_row = 0
+    cdef list new_data = []
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] new_qdata = _np_empty_2D(Na+Nb, rank, intp_num)
+    cdef np.ndarray ta, tb
+
+    if Na == Nb and np.all(aq == bq):
+        # If the _qdata structure is identical, we can immediately run through the data.
+        for i in range(Na):
+            ta = adata[i]
+            tb = bdata[i]
+            if calc_dtype_num == -1:
+                ta += tb * prefactor
+            else:
+                _blas_inpl_add(np.PyArray_SIZE(ta), np.PyArray_DATA(ta), np.PyArray_DATA(tb),
+                               cplx_prefactor, calc_dtype_num)
+    else:
+        # otherwise we have to step through comparing left and right qdata
+        stride = _make_stride([l.block_number for l in self.legs], 0)
+        aq_ = np.sum(aq * stride, axis=1)
+        bq_ = np.sum(bq * stride, axis=1)
+        # F-style strides to preserve sorting!
+        while i < Na or j < Nb:
+            if i < Na and j < Nb and aq_[i] == bq_[j]:  # a and b are non-zero
+                ta = adata[i]
+                tb = bdata[j]
+                if calc_dtype_num == -1:
+                    ta += tb * prefactor
+                else:
+                    _blas_inpl_add(np.PyArray_SIZE(ta), np.PyArray_DATA(ta), np.PyArray_DATA(tb),
+                                   cplx_prefactor, calc_dtype_num)
+                new_data.append(ta)
+                for k in range(rank):
+                    new_qdata[new_row, k] = aq[i, k]
+                new_row += 1
+                i += 1
+                j += 1
+            elif i >= Na or j < Nb and aq_[i] > bq_[j]:  # a is 0
+                tb = bdata[j]
+                ta = tb.copy()
+                if calc_dtype_num == -1:
+                    ta *= prefactor
+                else:
+                    _blas_inpl_scale(np.PyArray_SIZE(ta), np.PyArray_DATA(ta),
+                                     cplx_prefactor, calc_dtype_num)
+                new_data.append(ta)
+                for k in range(rank):
+                    new_qdata[new_row, k] = bq[j, k]
+                new_row += 1
+                j += 1
+            elif j >= Nb or aq_[i] < bq_[j]:  # b is 0
+                new_data.append(adata[i])
+                for k in range(rank):
+                    new_qdata[new_row, k] = aq[i, k]
+                new_row += 1
+                i += 1
+            else:  # tested a == b or a < b or a > b, so this should never happen
+                assert False
+        self._qdata = new_qdata[:new_row, :].copy()
+        self._data = new_data
+    # ``self._qdata_sorted = True`` was set by self.isort_qdata
+    return self
+
+
+@cython.binding(True)
+def Array_iscale_prefactor(self, prefactor):
+    """``self *= prefactor`` for scalar `prefactor`.
+
+    Note that we allow the type of `self` to change if necessary.
+    """
+    if not np.isscalar(prefactor):
+        raise ValueError("prefactor is not scalar: {0!r}".format(type(prefactor)))
+    if prefactor == 0.:
+        self._data = []
+        self._qdata = np.empty((0, self.rank), np.intp)
+        self._qdata_sorted = True
+        return self
+    calc_dtype = np.find_common_type([self.dtype], [type(prefactor)])
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    if self.dtype.num != calc_dtype_num:
+        self.dtype = calc_dtype
+        self._data = [d.astype(calc_dtype) for d in self._data]
+    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+        calc_dtype_num = -1 # don't use BLAS
+    self._imake_contiguous()
+
+    cdef list adata = self._data
+    cdef intp_t i, N = len(adata)
+    cdef np.ndarray ta
+    for i in range(N):
+        ta = adata[i]
+        if calc_dtype_num == -1:
+            ta *= prefactor
+        else:
+            _blas_inpl_scale(np.PyArray_SIZE(ta), np.PyArray_DATA(ta), cplx_prefactor,
+                             calc_dtype_num)
+    return self
+
+
 @cython.binding(True)
 def Array__imake_contiguous(self):
     """Make each of the blocks c-style contigous in memory.
@@ -808,7 +1067,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     q_map_rows = np.concatenate(q_map_rows, axis=0)  # shape (res_stored_blocks, N_split)
 
     new_qdata = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
-    new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]  # TODO faster to implement by hand?
+    new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]
     cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
     cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
     for j in range(N_split):

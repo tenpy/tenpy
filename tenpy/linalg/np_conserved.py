@@ -1822,6 +1822,7 @@ class Array:
         """return ``-self``"""
         return self.unary_blockwise(np.negative)
 
+    @use_cython(replacement="Array_ibinary_blockwise")
     def ibinary_blockwise(self, func, other, *args, **kwargs):
         """Roughly ``self = func(self, other)``, block-wise. In place.
 
@@ -1842,12 +1843,13 @@ class Array:
         """
         if len(args) > 0 or len(kwargs) > 0:
             return self.ibinary_blockwise(lambda a, b: func(a, b, *args, **kwargs), other)
-        if self.rank != other.rank:
-            raise ValueError("different rank!")
-        for self_leg, other_leg in zip(self.legs, other.legs):
-            self_leg.test_equal(other_leg)
-        if np.any(self.qtotal != other.qtotal):
-            raise ValueError("Arrays can't have different `qtotal`!")
+        if not optimize(OptimizationFlag.skip_arg_checks):
+            if self.rank != other.rank:
+                raise ValueError("different rank!")
+            for self_leg, other_leg in zip(self.legs, other.legs):
+                self_leg.test_equal(other_leg)
+            if np.any(self.qtotal != other.qtotal):
+                raise ValueError("Arrays can't have different `qtotal`!")
         self.isort_qdata()
         other.isort_qdata()
 
@@ -1857,8 +1859,8 @@ class Array:
         bq = other._qdata
         Na, Nb = len(aq), len(bq)
 
-        # If the q_dat structure is identical, we can immediately run through the data.
         if Na == Nb and np.all(aq == bq):
+            # If the qdata structure is identical, we can immediately run through the data.
             self._data = [func(at, bt) for at, bt in zip(adata, bdata)]
         else:  # otherwise we have to step through comparing left and right qdata
             # F-style strides to preserve sorting!
@@ -1886,7 +1888,7 @@ class Array:
                     assert False
                 # if both are zero, we assume f(0, 0) = 0
             self._data = data
-            self._qdata = np.array(qdata, dtype=np.intp).reshape((len(data), self.rank))
+            self._qdata = np.array(qdata, dtype=np.intp)
             # ``self._qdata_sorted = True`` was set by self.isort_qdata
         if len(self._data) > 0:
             self.dtype = np.find_common_type([d.dtype for d in self._data], [])
@@ -1909,33 +1911,57 @@ class Array:
         """
         return tensordot(self, other, axes=1)
 
+    @use_cython(replacement="Array_iadd_prefactor_other")
     def iadd_prefactor_other(self, prefactor, other):
-        """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`."""
-        self += other * alpha
+        """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
+
+        Note that we allow the type of `self` to change if necessary.
+        """
+        if not isinstance(other, Array) or not np.isscalar(prefactor):
+            raise ValueError("wrong argument types: {0!r}, {1!r}".format(type(prefactor),
+                                                                         type(other)))
+        self.ibinary_blockwise(np.add, other.__mul__(prefactor))
         return self
+
+    @use_cython(replacement="Array_iscale_prefactor")
+    def iscale_prefactor(self, prefactor):
+        """``self *= prefactor`` for scalar `prefactor`.
+
+        Note that we allow the type of `self` to change if necessary.
+        """
+        if not np.isscalar(prefactor):
+            raise ValueError("prefactor is not scalar: {0!r}".format(type(prefactor)))
+        if prefactor == 0.:
+            self._data = []
+            self._qdata = np.empty((0, self.rank), np.intp)
+            self._qdata_sorted = True
+            return self
+        return self.iunary_blockwise(np.multiply, prefactor)
 
     def __add__(self, other):
         """Return ``self + other``."""
         if isinstance(other, Array):
-            return self.binary_blockwise(np.add, other)
+            res = self.copy(deep=True)
+            return res.iadd_prefactor_other(1., other)
         return NotImplemented  # unknown type of other
 
     def __iadd__(self, other):
         """``self += other``."""
         if isinstance(other, Array):
-            return self.ibinary_blockwise(np.add, other)
+            return self.iadd_prefactor_other(1., other)
         return NotImplemented  # unknown type of other
 
     def __sub__(self, other):
         """Return ``self - other``."""
         if isinstance(other, Array):
-            return self.binary_blockwise(np.subtract, other)
+            res = self.copy(deep=True)
+            return res.iadd_prefactor_other(-1., other)
         return NotImplemented  # unknown type of other
 
     def __isub__(self, other):
         """``self -= other``."""
         if isinstance(other, Array):
-            return self.ibinary_blockwise(np.subtract, other)
+            return self.iadd_prefactor_other(-1., other)
         return NotImplemented
 
     def __mul__(self, other):
@@ -1943,28 +1969,21 @@ class Array:
 
         Use explicit functions for matrix multiplication etc."""
         if np.isscalar(other):
-            if other == 0.:
-                return self.zeros_like()
-            return self.unary_blockwise(np.multiply, other)
+            res = self.copy(deep=True)
+            return res.iscale_prefactor(other)
         return NotImplemented
 
     def __rmul__(self, other):
         """Return ``other * self`` for scalar ``other``."""
         if np.isscalar(other):
-            if other == 0.:
-                return self.zeros_like()
-            return self.unary_blockwise(np.multiply, other)
+            res = self.copy(deep=True)
+            return res.iscale_prefactor(other)
         return NotImplemented
 
     def __imul__(self, other):
         """``self *= other`` for scalar `other`."""
         if np.isscalar(other):
-            if other == 0.:
-                self._data = []
-                self._qdata = np.empty((0, self.rank), np.intp)
-                self._qdata_sorted = True
-                return self
-            return self.iunary_blockwise(np.multiply, other)
+            return self.iscale_prefactor(other)
         return NotImplemented
 
     def __truediv__(self, other):
@@ -1973,7 +1992,8 @@ class Array:
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.unary_blockwise(np.multiply, 1. / other)
+            res = self.copy(deep=True)
+            return res.iscale_prefactor(1. / other)
         return NotImplemented
 
     def __itruediv__(self, other):
@@ -1982,7 +2002,7 @@ class Array:
             if other == 0.:
                 raise ZeroDivisionError("a/b for b=0. Types: {0!s}, {1!s}".format(
                     type(self), type(other)))
-            return self.iunary_blockwise(np.multiply, 1. / other)
+            return self.iscale_prefactor(1. / other)
         return NotImplemented
 
 

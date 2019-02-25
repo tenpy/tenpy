@@ -1131,7 +1131,8 @@ class LegPipe(LegCharge):
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
         nlegs = self.nlegs
         qnumber = self.chinfo.qnumber
-        self._strides = _make_stride(self.subqshape, True)  # save for :meth:`_map_incoming_qind`
+        self._strides = _make_stride(self.subqshape, True)
+        # (save strides for :meth:`_map_incoming_qind`)
 
         # create a grid to select the multi-index sector
         grid = np.indices(self.subqshape, np.intp)
