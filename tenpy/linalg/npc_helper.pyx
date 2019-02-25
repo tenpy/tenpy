@@ -411,7 +411,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
         # *this* is the actual `reshaping`
     # *columns* of grid are now all possible cominations of qindices.
     cdef intp_t nblocks = grid2.shape[1]  # number of blocks in the pipe = np.product(qshape)
-    cdef np.ndarray[intp_t, ndim=2, mode="c"] q_map = _np_empty_2D(nblocks, 3 + nlegs, intp_num)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] q_map = _np_empty_2D(nblocks, 3 + nlegs, intp_num)
     # determine q_map -- it's essentially the grid.
     q_map[:, 3:] = grid2.T  # transpose -> rows are possible combinations.
     # q_map[:, :3] is initialized after sort/bunch.
@@ -628,7 +628,7 @@ def Array_itranspose(self, axes=None):
     self._set_shape()
     labs = self.get_leg_labels()
     self.iset_leg_labels([labs[a] for a in axes])
-    self._qdata = self._qdata[:, axes_arr]
+    self._qdata = np.array(self._qdata[:, axes_arr], copy=False, order='C')
     self._qdata_sorted = False
     # changed mostly the following part
     cdef list data = self._data
@@ -675,8 +675,8 @@ def Array_ibinary_blockwise(self, func, other, *args, **kwargs):
 
     cdef list adata = self._data
     cdef list bdata = other._data
-    cdef np.ndarray[intp_t, ndim=2, mode="c"] aq = self._qdata
-    cdef np.ndarray[intp_t, ndim=2, mode="c"] bq = other._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] aq = self._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] bq = other._qdata
     cdef intp_t Na = aq.shape[0], Nb = bq.shape[0]
     cdef intp_t rank = aq.shape[1]
     cdef intp_t[:] aq_, bq_
@@ -759,8 +759,8 @@ def Array_iadd_prefactor_other(self, prefactor, other):
 
     cdef list adata = self._data
     cdef list bdata = other._data
-    cdef np.ndarray[intp_t, ndim=2, mode="c"] aq = self._qdata
-    cdef np.ndarray[intp_t, ndim=2, mode="c"] bq = other._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] aq = self._qdata
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] bq = other._qdata
     cdef intp_t Na = aq.shape[0], Nb = bq.shape[0]
     cdef intp_t rank = aq.shape[1]
     cdef intp_t[:] aq_, bq_
@@ -927,7 +927,7 @@ def _combine_legs_worker(self,
         print("imake_contiguous", t1-t0)
         t0 = time.time()
     # get new qdata
-    cdef np.ndarray[np.intp_t, ndim=2, mode="c"] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
+    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
     for j in range(npipes):
         ax = new_axes[j]

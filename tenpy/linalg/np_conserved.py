@@ -139,7 +139,7 @@ class Array:
         self.qtotal = self.chinfo.make_valid(qtotal)
         self.labels = {}
         self._data = []
-        self._qdata = np.empty((0, self.rank), dtype=np.intp)
+        self._qdata = np.empty((0, self.rank), dtype=np.intp, order='C')
         self._qdata_sorted = True
         self.test_sanity()
 
@@ -176,7 +176,7 @@ class Array:
         cp.labels = self.labels.copy()
         if deep:
             cp._data = [b.copy() for b in self._data]
-            cp._qdata = self._qdata.copy()
+            cp._qdata = self._qdata.copy('C')
             cp.qtotal = self.qtotal.copy()
             # even deep copies share legs & chinfo (!)
         else:
@@ -274,7 +274,7 @@ class Array:
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge")
         res._data = data
-        res._qdata = np.array(qdata, dtype=np.intp).reshape((len(qdata), res.rank))
+        res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True
         res.test_sanity()
         return res
@@ -353,7 +353,7 @@ class Array:
             data.append(block)
             qdata.append(qindices)
         res._data = data
-        res._qdata = np.array(qdata, dtype=np.intp).reshape((len(qdata), res.rank))
+        res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True  # _iter_all_blocks is in lexiographic order
         res.test_sanity()
         return res
@@ -438,6 +438,8 @@ class Array:
             raise ValueError("wront dtype of _qdata")
         if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
             raise ValueError("invalid qind in _qdata")
+        if not self._qdata.flags['C_CONTIGUOUS']:
+            raise ValueError("qdata is not C-contiguous")
         if self._qdata_sorted:
             perm = np.lexsort(self._qdata.T)
             if np.any(perm != np.arange(len(perm))):
@@ -790,7 +792,7 @@ class Array:
         axes = np.array(axes, dtype=np.intp)
         keep_axes = np.array(keep_axes, dtype=np.intp)
         keep_blocks = np.all(self._qdata[:, axes] == pos[:, 0], axis=1)
-        res._qdata = self._qdata[np.ix_(keep_blocks, keep_axes)]
+        res._qdata = np.array(self._qdata[np.ix_(keep_blocks, keep_axes)], copy=False, order='C')
         # res._qdata_sorted is not changed
         # determine the slices to take on _data
         sl = [slice(None)] * self.rank
@@ -827,9 +829,9 @@ class Array:
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
             res._data[j] = T.reshape(T.shape[:axis] + (1, ) + T.shape[axis:])
-        res._qdata = np.hstack(
+        res._qdata = np.array(np.hstack(
             [res._qdata[:, :axis],
-             np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]])
+             np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]]), copy=False, order='C')
         if label is not None:
             labs = list(self.get_leg_labels())
             labs.insert(axis, label)
@@ -1358,7 +1360,7 @@ class Array:
                 res.legs[ax:ax + 1] = pipe.legs
                 qdata[ax] = pipe.q_map[0, 3:]
             res._set_shape()
-            res._qdata = np.concatenate(qdata).reshape((1, res.rank))
+            res._qdata = np.ascontiguousarray(np.concatenate(qdata)).reshape((1, res.rank))
             new_block_shape = res._get_block_shape(res._qdata[0, :])
             res._data = [res._data[0].reshape(new_block_shape)]
         else:
@@ -1433,7 +1435,7 @@ class Array:
         res.iset_leg_labels([labels[a] for a in keep])
 
         res._data = [np.squeeze(t, axis=axes).copy() for t in self._data]
-        res._qdata = self._qdata[:, np.array(keep)]
+        res._qdata = np.array(self._qdata[:, np.array(keep)], copy=False, order='C')
         # res._qdata_sorted doesn't change
         return res
 
@@ -1648,7 +1650,7 @@ class Array:
         self._set_shape()
         labs = self.get_leg_labels()
         self.iset_leg_labels([labs[a] for a in axes])
-        self._qdata = self._qdata[:, axes_arr]
+        self._qdata = np.array(self._qdata[:, axes_arr], order='C')
         self._qdata_sorted = False
         self._data = [np.transpose(block, axes) for block in self._data]
         return self
