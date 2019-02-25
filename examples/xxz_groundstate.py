@@ -24,7 +24,7 @@ def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init
     result['sites'] = np.arange(L)
     result['bonds'] = np.arange(L - 1) + 0.5
 
-    psi = MPS.from_product_state(M.lat.mps_sites(), ([0, 1] * L)[:L])
+    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L])
     dmrg_params = {
         'trunc_params': {
             'chi_max': chi_max,
@@ -56,9 +56,9 @@ def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init
     for key in ['E', 'S', 'max_trunc_err', 'max_E_trunc', 'max_chi']:
         result_key = 'sweep_' + key
         result[result_key] = np.array(info['sweep_statistics'][key])
-    # done
+    return result
 
 
 if __name__ == "__main__":
     data = run_groundstate_xxz()
-    # TODO: do what you need to do with the data.
+    # here you can do what you need to do with the data - save it, plot it, ...

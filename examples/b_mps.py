@@ -37,7 +37,7 @@ p_leg = site.leg
 chinfo = p_leg.chinfo
 # make lattice from unit cell and create product state MPS
 lat = Chain(L, site, bc_MPS='finite')
-state = [0, 1] * (L // 2) + [0] * (L % 2)  # (right-canonical)
+state = ["up", "down"] * (L // 2) + ["up"] * (L % 2)  # (right-canonical)
 print("state = ", state)
 psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS)
 

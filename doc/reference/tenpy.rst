@@ -1,5 +1,5 @@
-tenpy package
-=============
+Reference
+=========
 
 Subpackages
 -----------

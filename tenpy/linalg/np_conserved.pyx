@@ -871,18 +871,17 @@ cdef class Array(object):
             extended.iset_leg_labels(labs)
         return extended
 
-    def extend(self, axis, new_ind_len, extend_charges=None):
+    def extend(self, axis, extra):
         """Increase the dimension of a given axis, filling the values with zeros.
 
         Parameters
         ----------
         axis : int | str
             The axis (or axis-label) to be extended.
-        new_ind_len : int
-            The new size of the specified leg.
-        charges_extend : charges | None
-            The charge values to be used for the new charge block.
-            `None` defaults to trivial charges (i.e. 0 values).
+        extra : :class:`LegCharge` | int
+            By what to extend, i.e. the charges to be appended to the leg of `axis`.
+            An int stands for extending the length of the array by a single new block of that size
+            with zero charges.
 
         Returns
         -------
@@ -891,7 +890,7 @@ cdef class Array(object):
         """
         extended = self.copy(deep=True)
         ax = self.get_leg_index(axis)
-        extended.legs[ax] = extended.legs[ax].extend(new_ind_len, extend_charges)
+        extended.legs[ax] = extended.legs[ax].extend(extra)
         extended._set_shape()
         return extended
 
@@ -3291,9 +3290,9 @@ def svd(a,
 
     # 'split' pipes introduced to ensure complete blocking
     if 0 in piped_axes:
-        U.split_legs(0)
+        U = U.split_legs(0)
     if 1 in piped_axes:
-        VH.split_legs(1)
+        VH = VH.split_legs(1)
     U.iset_leg_labels([a_labels[0], labL])
     VH.iset_leg_labels([labR, a_labels[1]])
     return U, S, VH

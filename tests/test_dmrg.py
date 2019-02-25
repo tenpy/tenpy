@@ -34,8 +34,8 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         'engine': engine,
         'mixer': mixer,
         'chi_list': {
-            0: 20,
-            5: 40
+            0: 10,
+            5: 30
         },
         'max_E_err': 1.e-12,
         'max_S_err': 1.e-8,
@@ -84,9 +84,11 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
 @attr('slow')
 def test_dmrg():
     for bc_MPS, engine, mixer in it.product(['finite', 'infinite'],
-                                            ['EngineCombine', 'EngineFracture'], [None, 'Mixer']):
+                                            ['EngineCombine', 'EngineFracture'], [None, True]):
         L = 4 if bc_MPS == 'finite' else 2
         yield check_dmrg, L, bc_MPS, engine, mixer
+    for mixer in ['TwoSiteMixer', 'DensityMatrixMixer']:
+        yield check_dmrg, 2, 'infinite', 'EngineCombine', mixer
 
 
 def test_dmrg_rerun(L=2):
@@ -109,7 +111,7 @@ def test_dmrg_rerun(L=2):
 def test_dmrg_excited(eps=1.e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
     # (without truncation)
-    L, g = 8, 1.1
+    L, g = 8, 1.3
     bc = 'finite'
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity', verbose=0)
     M = TFIChain(model_params)
@@ -121,7 +123,7 @@ def test_dmrg_excited(eps=1.e-12):
     print("Exact diag: E[:5] = ", ED.E[:5])
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
-    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': True}}
+    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}}
     eng0 = dmrg.EngineCombine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0])/ED.E[0]) < eps

@@ -26,6 +26,7 @@ def import_file(filename, dir):
     Since the examples are not protected  by ``if __name__ == "__main__": ...``,
     they run immediately at import. Thus an ``import filename`` (where filename is the actual name,
     not a string) executes the example.
+
     Paramters
     ---------
     filename : str

@@ -6,9 +6,11 @@ Submodules
 
 .. toctree::
 
+   tenpy.models.bose_hubbard
    tenpy.models.bose_hubbard_chain
    tenpy.models.fermion_chain
    tenpy.models.fermions_hubbard
+   tenpy.models.fermions_spinless
    tenpy.models.hofstadter
    tenpy.models.lattice
    tenpy.models.model

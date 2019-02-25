@@ -20,10 +20,11 @@ import sys
 import subprocess
 import os
 
-__all__ = ["version", "git_version", "full_version"]
+__all__ = ["version", "short_version", "git_version", "full_version"]
 
 # hard-coded version for people without git...
 version = (0, 3, 0)
+short_version = 'v' + '.'.join(map(str, version))
 
 
 def _get_git_version(file=__file__):
@@ -34,7 +35,7 @@ def _get_git_version(file=__file__):
                                        cwd=lib_dir, stderr=subprocess.STDOUT).decode().strip()
     except:
         pass
-    return 'v' + '.'.join(map(str, version)) + ' git unknown'
+    return short_version + ' (git unknown)'
 
 
 # git descritpion of the version

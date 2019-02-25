@@ -1290,6 +1290,17 @@ class CouplingMPOModel(CouplingModel,MPOModel):
         bc_y           str       ``"cylinder" | "ladder"``.
                                  The boundary conditions in y-direction.
                                  Only read out for 2D lattices.
+        -------------- --------- ---------------------------------------------------------------
+        bc_x           str       ``"open" | "periodic"``.
+                                 Can be used to force "periodic" boundaries for the lattice,
+                                 i.e., for the couplings in the Hamiltonian,
+                                 even if the MPS is finite.
+                                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
+                                 ``"periodic"`` for ``bc_MPS="infinite``.
+                                 If you are not aware of the consequences, you should probably
+                                 *not* use "periodic" boundary conditions.
+                                 (The MPS is still "open", so this will introduce long-range
+                                 couplings between the first and last sites of the MPS!)
         ============== ========= ===============================================================
 
         Parameters
@@ -1308,17 +1319,19 @@ class CouplingMPOModel(CouplingModel,MPOModel):
             bc_MPS = get_parameter(model_params, 'bc_MPS', 'finite', self.name)
             order = get_parameter(model_params, 'order', 'default', self.name)
             sites = self.init_sites(model_params)
+            bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+            bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
+            if bc_MPS == 'infinite' and bc_x == 'open':
+                raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
             if LatticeClass.dim == 1:  # 1D lattice
                 L = get_parameter(model_params, 'L', 2, self.name)
                 # 4) lattice
-                bc = 'periodic' if bc_MPS == 'infinite' else 'open'
-                lat = LatticeClass(L, sites, bc=bc, bc_MPS=bc_MPS)
+                lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:   # 2D lattice
                 Lx = get_parameter(model_params, 'Lx', 1, self.name)
                 Ly = get_parameter(model_params, 'Ly', 4, self.name)
                 bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
                 assert bc_y in ['cylinder', 'ladder']
-                bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
                 bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
             else:
