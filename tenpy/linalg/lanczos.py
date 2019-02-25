@@ -161,18 +161,18 @@ class LanczosGroundState:
         w = self.psi0  # initialize
         beta = npc.norm(w)
         for k in range(self.N_max):
-            w /= beta
+            w.iscale_prefactor(1./beta)
             self._to_cache(w)
             w = self._apply_H(w)
             alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
-            w -= self._cache[-1] * alpha
+            w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w -= c * npc.inner(c, w, do_conj=True)
+                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
             elif k > 0:
-                w -= self._cache[-2] * beta
+                w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = npc.norm(w)
             T[k, k + 1] = T[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -191,7 +191,7 @@ class LanczosGroundState:
         len_cache = len(self._cache)
         # and the last len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
-            psif += self._cache[-k] * vf[N - k]
+            psif.iadd_prefactor_other(vf[N - k], self._cache[-k])
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
 
@@ -201,15 +201,15 @@ class LanczosGroundState:
             self._to_cache(w)
             w = self._apply_H(w)
             alpha = T[k, k]
-            w -= self._cache[-1] * alpha
+            w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w -= c * npc.inner(c, w, do_conj=True)
+                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
             elif k > 0:
-                w -= self._cache[-2] * beta
+                w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = T[k, k + 1]  # = norm(w)
-            w /= beta
-            psif += w * vf[k + 1]
+            w.iscale_prefactor(1. / beta)
+            psif.iadd_prefactor_other(vf[k + 1], w)
         psif_norm = npc.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
             warnings.warn("Poorly conditioned Lanczos!")
@@ -219,7 +219,8 @@ class LanczosGroundState:
             # `reortho`=True and `N_cache` >= `N_max`
             if self.verbose > 1:
                 print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))
-        return psif / psif_norm
+        psif.iscale_prefactor(1./psif_norm)
+        return psif
 
     def _to_cache(self, psi):
         """add psi to cache, keep at most N_cache."""
@@ -234,10 +235,10 @@ class LanczosGroundState:
         if len(self.orthogonal_to) > 0:
             w = w.copy()
             for o in self.orthogonal_to:  # Project out
-                w -= o * npc.inner(o, w, do_conj=True)
+                w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
         w = self.H.matvec(w)
         for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w -= o * npc.inner(o, w, do_conj=True)
+            w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
         return w
 
     def _calc_result_krylov(self, k):
@@ -376,10 +377,10 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     for j in range(k):
         n = ov[j, j] = npc.norm(vecs[j])
         if n > rcond:
-            vecs[j] *= 1. / n
+            vecs[j].iscale_prefactor(1. / n)
             for i in range(j + 1, k):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
-                vecs[i] -= ov_ji * vecs[j]
+                vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
         else:
             if verbose >= 1:
                 print("GramSchmidt: Rank defficient", n)
