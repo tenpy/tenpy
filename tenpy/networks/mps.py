@@ -877,6 +877,19 @@ class MPS:
         self.form = [self._valid_forms['B']] * len(sites)
         return trunc_err
 
+    def get_grouped_mps(self, blocklen):
+        r"""contract blocklen subsequent tensors into a single one and return result as a new MPS.
+
+        blocklen = number of subsequent sites to be combined.
+
+        Returns
+        -------
+        new MPS object with bunched sites.
+        """
+        groupedMPS=copy.deepcopy(self)
+        groupedMPS.group_sites(n=blocklen)
+        return (groupedMPS)
+
     def get_total_charge(self):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
 
@@ -1039,7 +1052,7 @@ class MPS:
         ent_spectrum : list
             For each (non-trivial) bond the entanglement spectrum.
             If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
-            with the convetion :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            with the convention :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
             and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
             If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
             for each possible charge on that bond.
@@ -2749,7 +2762,7 @@ class MPSEnvironment:
         taking into account :attr:`MPS.norm` of both `bra` and `ket`.
         For this purpose, this function contracts
         ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
-        values inbetween.
+        values in between.
 
         Parameters
         ----------
@@ -2762,7 +2775,7 @@ class MPSEnvironment:
             LP = self.get_LP(i0, store=False)
             LP = self._contract_LP(i0, LP)
         else:
-            LP = self.get_LP(i0 + 1, store=False)
+            LP = self.get_LP(i0 + 1, store=False) 
         # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
         S_bra = self.bra.get_SR(i0).conj()
         LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)

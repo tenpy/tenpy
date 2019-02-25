@@ -39,7 +39,7 @@ i.e. between sites ``i-1`` and ``i``.
 
 import numpy as np
 from ..linalg import np_conserved as npc
-from .site import group_sites
+from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
@@ -209,7 +209,7 @@ class MPO:
         if copy:
             return self._W[i].copy()
         return self._W[i]
-
+    
     def set_W(self, i, W):
         """Set `W` at site `i`."""
         i = self._to_valid_index(i)
@@ -217,7 +217,7 @@ class MPO:
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
-
+    
         May be ``None``."""
         i = self._to_valid_index(i)
         return self.IdL[i]
@@ -290,6 +290,20 @@ class MPO:
             except TypeError:
                 return [Id] * (L + 1)
 
+    def get_grouped_mpo(self, blocklen):
+        """contract blocklen subsequent tensors into a single one and return result as a new MPO object"""
+        groupedMPO=copy.deepcopy(self)
+        groupedMPO.group_sites(n=blocklen)
+        return (groupedMPO)
+
+    def get_full_hamiltonian(self, maxsize=1e6):
+        """extract the full Hamiltonian as a d**L x d**L matrix"""
+        if (self.dim[0]**(2*self.L)>maxsize):
+            print ('Matrix dimension exceeds maxsize')
+            return np.zeros(1)
+        singlesitempo=self.get_grouped_mpo(self.L)
+        return npc.trace(singlesitempo.get_W(0),axes=[['wL'],['wR']])
+    
 
 class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
@@ -605,7 +619,7 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
         Should have 'IdL' and 'IdR' set on the first and last bond.
-    ket : :class:`~tenpy.networks.mpo.MPO`
+    ket : :class:`~tenpy.networks.mpo.MPS`
         The MPS on which `H` acts. May be identical with `bra`.
     firstLP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very left part. If ``None``, build trivial one.
