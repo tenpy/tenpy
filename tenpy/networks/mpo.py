@@ -209,7 +209,7 @@ class MPO:
         if copy:
             return self._W[i].copy()
         return self._W[i]
-
+    
     def set_W(self, i, W):
         """Set `W` at site `i`."""
         i = self._to_valid_index(i)
@@ -217,7 +217,7 @@ class MPO:
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
-
+    
         May be ``None``."""
         i = self._to_valid_index(i)
         return self.IdL[i]
@@ -290,141 +290,20 @@ class MPO:
             except TypeError:
                 return [Id] * (L + 1)
 
-    def get_bunched_mpo(self, blocklen):
+    def get_grouped_mpo(self, blocklen):
         """contract blocklen subsequent tensors into a single one and return result as a new MPO object"""
-        newW=[]
-        newL=(int)(self.L/blocklen)
-        newSites=[]
-        for s in range(newL):
-            newWi=self.get_W(s*blocklen)
-            for j in range(1,blocklen):
-                Wj=self.get_W(s*blocklen+j)
-                Wj.iset_leg_labels(['wL','wR','p2','p2*'])
-                newWi=npc.tensordot(newWi, Wj, axes=[['wR'],['wL']])
-                newWi=(newWi.itranspose(['wL','wR','p','p2','p*','p2*'])).combine_legs(['p','p2'])
-                newWi=newWi.combine_legs(['p*','p2*'])
-                newWi.iset_leg_labels(['wL','wR','p','p*'])
-            newW.append(newWi)
-            newSites.append(Site(newWi.get_leg('p')))
-            print ('newW[-1].shape=',newW[-1].shape)
-            print ('newW[-1].shape=',newSites[-1].shape)
-        return MPO(newSites, newW, self.bc, self.IdL, self.IdR)
+        groupedMPO=copy.deepcopy(self)
+        groupedMPO.group_sites(n=blocklen)
+        return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a d**L x d**L matrix"""
         if (self.dim[0]**(2*self.L)>maxsize):
             print ('Matrix dimension exceeds maxsize')
             return np.zeros(1)
-        singlesitempo=self.get_bunched_mpo(self.L)
+        singlesitempo=self.get_grouped_mpo(self.L)
         return npc.trace(singlesitempo.get_W(0),axes=[['wL'],['wR']])
-
-    def full_contraction(self, mps1, mps2, print_flag=False, nonzero_index=None, MPO_indices=None):
-        """Contract self with two (not necessarily equal) MPS's.
-
-        This method works by performing a full contraction of an mps-mpo-mps network. The contraction
-        is done left-to-right as is optimal. Because the top and bottom mps have indices with the
-        same names (that might carry over into the full_product tensor), indices are often renamed.
-        This could probably be improved but isn't very costly and I can't be bothered.
-
-        While the overall contraction is fairly straightforward, the last step is somewhat tricky.
-        This is due to there being 'leftover' horizontal indices after all tensors are contracted,
-        like so (all lines denoting bonds):
-
-            OBC (finite MPS):
-                                  B - B - ... - B - B
-                                  |   |         |   |
-                                - W - W - ... - W - W -
-                                  |   |         |   |
-                                  B - B - ... - B - B
-
-            PBC (iMPS):
-                                - B - B - ... - B - B -
-                                  |   |         |   |
-                                - W - W - ... - W - W -
-                                  |   |         |   |
-                                - B - B - ... - B - B -
-
-        The open MPS indices are contracted by using a 'trace', essentially connecting the left and
-        right indices.
-        The open MPO indices pose a problem. In the language of FSMs: a trace won't work as it only
-        'connects' the states on the left bond with the same states on the right bond (i.e., connects
-        'R' to 'R', 'F' to 'F', etc), while we want to connect speciffically 'R' to 'F'. There are
-
-        currently two ways offered to overcome this problem:
-                    - The user can specify their own 'nonzero_index' values: then these indices will be used to
-                      locate the  correct matrix element. Requires intricate knowledge of the MPO structure.
-                      Overrides the MPO_indices option.
-                    - The user can supply the MPO_indices object from models.model.build_H_mpo_from_MPOgraph().
-                      This is only available when the model was built from an FSM.
-
-        Args:
-            mps1 (MPS) : state 1. Both states are presumed kets
-            mps2 (MPS) : state 2. Both states are presumed kets
-            print_flag (bool, optional): verbosity selector, no longer used but kept to not have to refactor old code
-            nonzero_index (optional): Indices for the nonzero values in the fully contracted network
-            MPO_indices (optional): Assumed to be a model attribute. It is created by
-                build_H_mpo_from_MPOgraph() in model.py (thus only works if model is FSM-based).
-                MPO_indices contains dicts (one for each site) mapping FSM state labels onto matrix
-                indices.
-
-        Returns:
-           full_product (int | float | complex): Value for the contracted network
-
-        Raises:
-           NotImplementedError: Description
-           ValueError: Description
-
-        No Longer Raises:
-            RuntimeError: Description
-        """
-        if MPO_indices == None and nonzero_index == None:
-            raise ValueError("Need to supply either nonzero_index or MPO_indices.")
-        assert mps1.L == mps2.L
-        assert mps1.L == self.L
-        assert mps1.bc == mps2.bc
-        assert mps1.bc == self.bc
-        L = mps1.L
-
-        # Set up first contraction
-        # First, get B tensor and rename its indices (for 'top' mps)
-        B = mps1.getB(0)
-        B.rename_index('b', 'bt')
-        B.rename_index('b*', 'b*t')
-
-        # Then, perform the contractions
-        npc.tensordot_compat(self.getW(0), B, ['p*','p'])
-        full_product = npc.tensordot(self.getW(0), B, ['p*','p'])
-        npc.tensordot_compat(full_product, mps2.getB(0).conj(), ['p', 'p*'])
-        full_product = npc.tensordot(full_product, mps2.getB(0).conj(), ['p', 'p*'])
-
-        # Rename some labels to prevent later duplicates
-        full_product.rename_index('b*', 'a*')
-        full_product.rename_index('bt', 'at')
-
-        for i_site in range(1, L):
-            # First, get B tensor and rename its indices
-            B = mps1.getB(i_site)
-            B.rename_index('b', 'bt')
-            B.rename_index('b*', 'b*t')
-
-            # Then, perform the contractions
-            npc.tensordot_compat(full_product, B, ['b*t', 'bt'])
-            full_product = npc.tensordot(full_product, B, ['b*t', 'bt'])
-            npc.tensordot_compat(full_product, self.getW(i_site), [['w*', 'p'], ['w', 'p*']])
-            full_product = npc.tensordot(full_product, self.getW(i_site), [['w*', 'p'], ['w', 'p*']])
-            npc.tensordot_compat(full_product, mps2.getB(i_site).conj(), [['p', 'b'], ['p*', 'b*']])
-            full_product = npc.tensordot(full_product, mps2.getB(i_site).conj(), [['p', 'b'], ['p*', 'b*']])
-
-        full_product = npc.trace(full_product, 'at', 'b*t')  # Get rid of MPS dimensions by tracing
-        full_product = npc.trace(full_product, 'a*', 'b')
-
-        # To get the correct element, we need to connect the 'R' to the 'F' state.
-        if nonzero_index == None:
-            return full_product[MPO_indices[0]['R'], MPO_indices[-1]['F']]
-        else:
-            print("Warning! Make sure to set nonzero_index correctly.")
-            return full_product[nonzero_index[0], nonzero_index[1]]
-
+    
 
 class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
