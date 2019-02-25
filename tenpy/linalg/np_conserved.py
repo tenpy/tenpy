@@ -1824,7 +1824,6 @@ class Array:
         """return ``-self``"""
         return self.unary_blockwise(np.negative)
 
-    @use_cython(replacement="Array_ibinary_blockwise")
     def ibinary_blockwise(self, func, other, *args, **kwargs):
         """Roughly ``self = func(self, other)``, block-wise. In place.
 
