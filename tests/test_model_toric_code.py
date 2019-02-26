@@ -9,8 +9,9 @@ import numpy as np
 import warnings
 
 
+@attr('slow')
 def test_ToricCode_general():
-    check_general_model(ToricCode, dict(Lx=2, Ly=4, bc_MPS='infinite'), {
+    check_general_model(ToricCode, dict(Lx=2, Ly=3, bc_MPS='infinite'), {
         'conserve': [None, 'parity'],
     })
 

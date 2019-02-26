@@ -4,7 +4,7 @@ from test_model import check_general_model
 
 
 def test_SpinModel():
-    check_general_model(spins.SpinModel, {'lattice': "Square"}, {})
+    check_general_model(spins.SpinModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
 
 
 def test_SpinChain():
@@ -21,3 +21,6 @@ def test_SpinChain():
         'conserve': [None, 'parity'],
         'bc_MPS': ['finite', 'infinite']
     })
+
+if __name__ == "__main__":
+    test_SpinModel()
