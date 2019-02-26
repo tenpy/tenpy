@@ -152,7 +152,7 @@ class Lattice:
         self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
-        # from order, calc necessary stuff for mps2lat and lat2mps
+        # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
         # calculate _strides
         strides = [1]
         for L in self.Ls:
@@ -204,27 +204,28 @@ class Lattice:
     @property
     def order(self):
         """Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
+
         This order defines how an MPS/MPO winds through the lattice.
         """
         return self._order
 
     @order.setter
-    def order(self, value):
+    def order(self, order_):
         # update the value itself
-        self._order = value
+        self._order = order_
         # and the other stuff which is cached
-        self._perm = np.lexsort(value.T)
+        self._perm = np.lexsort(order_.T)
         # use advanced numpy indexing...
         self._mps2lat_vals_idx = np.empty(self.shape, np.intp)
-        self._mps2lat_vals_idx[tuple(value.T)] = np.arange(self.N_sites)
+        self._mps2lat_vals_idx[tuple(order_.T)] = np.arange(self.N_sites)
         # versions for fixed u
         self._mps_fix_u = []
         self._mps2lat_vals_idx_fix_u = []
         for u in range(len(self.unit_cell)):
-            mps_fix_u = np.nonzero(value[:, -1] == u)[0]
+            mps_fix_u = np.nonzero(order_[:, -1] == u)[0]
             self._mps_fix_u.append(mps_fix_u)
             mps2lat_vals_idx = np.empty(self.Ls, np.intp)
-            mps2lat_vals_idx[tuple(value[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
+            mps2lat_vals_idx[tuple(order_[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
             self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
         self._mps_fix_u = tuple(self._mps_fix_u)
 
@@ -345,11 +346,11 @@ class Lattice:
         Returns
         -------
         mps_idx : array
-            MPS indices for which ``self.site(i) is self.unit_cell[u]``.
+            MPS indices for which ``self.site(i) is self.unit_cell[u]``. Ordered ascending.
         """
         if u is not None:
             return self._mps_fix_u[u]
-        return np.arange(self.N_sites, dtype=np.intp)
+        return self._perm
 
     def mps_lat_idx_fix_u(self, u=None):
         """Similar as :meth:`mps_idx_fix_u`, but return also the corresponding lattice indices.
@@ -434,7 +435,7 @@ class Lattice:
             for ax in reversed(sorted(axes)):  # need to start with largest axis!
                 A = self.mps2lat_values(A, ax, u)  # recursion with single axis
             return A
-        # choose the appropriate index arrays calcuated in __init__
+        # choose the appropriate index arrays
         if u is None:
             idx = self._mps2lat_vals_idx
         else:
@@ -560,7 +561,7 @@ class Lattice:
         coupling : list of (u1, u2, dx)
             Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
-            ``(i0+dx[0], i1+dx[1], ..., u1)``.
+            ``(i0+dx[0], i1+dx[1], ..., u2)``.
             By default (``None``), use :attr:``nearest_neighbors``.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
@@ -570,16 +571,17 @@ class Lattice:
         kwargs.setdefault('color', 'k')
         Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
-            dx = np.r_[np.array(dx), 0]  # append a 0 to dx
+            dx = np.r_[np.array(dx), u2-u1]  # append the difference in u to dx
+            # TODO: separate function, same as in CouplingModel.add_coupling()!!!
             lat_idx_1 = self.order[self._mps_fix_u[u1], :]
-            lat_idx_2 = self.order[self._mps_fix_u[u2], :] + dx[np.newaxis, :]
+            lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
             lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
             # handle boundary conditions
             if self.bc_shift is not None:
                 shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
                                axis=1)
-                lat_idx_2_mod[:, 0] -= shift
-                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2_mod[:, 0], self.Ls[0])
+                lat_idx_2[:, 0] -= shift
+                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2[:, 0], self.Ls[0])
             keep = np.all(
                 np.logical_or(
                     lat_idx_2_mod == lat_idx_2[:, :-1],  # not accross the boundary
@@ -703,7 +705,11 @@ class TrivialLattice(Lattice):
 
 
 class IrregularLattice(Lattice):
-    """A variant of a regular lattice, where we might have extra sites or sites missing."""
+    """A variant of a regular lattice, where we might have extra sites or sites missing.
+
+    .. todo :
+        this doesn't fully work yet...
+    """
     def __init__(self, mps_sites, based_on, order=None):
         self.based_on = based_on
         self._mps_sites = mps_sites
@@ -712,7 +718,6 @@ class IrregularLattice(Lattice):
         # don't copy nearest_neighbors, basis, positions etc: no longer valid
         self.N_sites = len(mps_sites)
         self._order = order
-
 
     @classmethod
     def from_mps_sites(cls, mps_sites, based_on=None):
