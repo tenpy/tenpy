@@ -631,14 +631,13 @@ def Array_itranspose(self, axes=None):
     self._qdata = np.array(self._qdata[:, axes_arr], copy=False, order='C')
     self._qdata_sorted = False
     # changed mostly the following part
-    cdef list data = self._Array__data
+    cdef list data = self._data
     cdef np.ndarray block
     cdef intp_t i
     cdef np.PyArray_Dims permute
     permute.len = axes_arr.shape[0]
     permute.ptr = &axes_arr[0]
-    self._Array__data = [np.PyArray_GETCONTIGUOUS(np.PyArray_Transpose(block, &permute))
-                         for block in data]
+    self._data = [np.PyArray_Transpose(block, &permute) for block in data]
     return self
 
 
@@ -666,17 +665,17 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
-        self._Array__data = [d.astype(calc_dtype, order='C') for d in self._Array__data]
+        self._data = [d.astype(calc_dtype) for d in self._data]
     if other.dtype.num != calc_dtype_num:
         other = other.astype(calc_dtype)
     cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
         calc_dtype_num = -1 # don't use BLAS
-    #  self._imake_contiguous() # TODO
-    #  other._imake_contiguous()
+    self._imake_contiguous()
+    other._imake_contiguous()
 
-    cdef list adata = self._Array__data
-    cdef list bdata = other._Array__data
+    cdef list adata = self._data
+    cdef list bdata = other._data
     cdef np.ndarray[intp_t, ndim=2, mode='c'] aq = self._qdata
     cdef np.ndarray[intp_t, ndim=2, mode='c'] bq = other._qdata
     cdef intp_t Na = aq.shape[0], Nb = bq.shape[0]
@@ -690,8 +689,8 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     if Na == Nb and np.all(aq == bq):
         # If the _qdata structure is identical, we can immediately run through the data.
         for i in range(Na):
-            ta = <np.ndarray> adata[i]
-            tb = <np.ndarray> bdata[i]
+            ta = adata[i]
+            tb = bdata[i]
             if calc_dtype_num == -1:
                 ta += tb * prefactor
             else:
@@ -705,8 +704,8 @@ def Array_iadd_prefactor_other(self, prefactor, other):
         # F-style strides to preserve sorting!
         while i < Na or j < Nb:
             if i < Na and j < Nb and aq_[i] == bq_[j]:  # a and b are non-zero
-                ta = <np.ndarray> adata[i]
-                tb = <np.ndarray> bdata[j]
+                ta = adata[i]
+                tb = bdata[j]
                 if calc_dtype_num == -1:
                     ta += tb * prefactor
                 else:
@@ -720,7 +719,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
                 j += 1
             elif i >= Na or j < Nb and aq_[i] > bq_[j]:  # a is 0
                 tb = bdata[j]
-                ta = tb.copy('C')
+                ta = tb.copy()
                 if calc_dtype_num == -1:
                     ta *= prefactor
                 else:
@@ -740,7 +739,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
             else:  # tested a == b or a < b or a > b, so this should never happen
                 assert False
         self._qdata = new_qdata[:new_row, :].copy()
-        self._Array__data = new_data  # everything is contiguous
+        self._data = new_data
     # ``self._qdata_sorted = True`` was set by self.isort_qdata
     return self
 
@@ -754,7 +753,7 @@ def Array_iscale_prefactor(self, prefactor):
     if not np.isscalar(prefactor):
         raise ValueError("prefactor is not scalar: {0!r}".format(type(prefactor)))
     if prefactor == 0.:
-        self._Array__data = []
+        self._data = []
         self._qdata = np.empty((0, self.rank), np.intp)
         self._qdata_sorted = True
         return self
@@ -762,13 +761,13 @@ def Array_iscale_prefactor(self, prefactor):
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
-        self._Array__data = [d.astype(calc_dtype, order='C') for d in self._Array__data]
+        self._data = [d.astype(calc_dtype) for d in self._data]
     cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
         calc_dtype_num = -1 # don't use BLAS
-    #  self._imake_contiguous()
+    self._imake_contiguous()
 
-    cdef list adata = self._Array__data
+    cdef list adata = self._data
     cdef intp_t i, N = len(adata)
     cdef np.ndarray ta
     for i in range(N):
@@ -788,7 +787,7 @@ def Array__imake_contiguous(self):
     Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
     (No need to call it manually: it's called from tensordot & co anyways!)"""
     cdef np.ndarray t
-    self._Array__data = [np.PyArray_GETCONTIGUOUS(t) for t in self._Array__data]
+    self._data = [np.PyArray_GETCONTIGUOUS(t) for t in self._data]
     return self
 
 
@@ -839,7 +838,7 @@ def _combine_legs_worker(self,
         t1 = time.time()
         print("q_map_inds", t1-t0)
         t0 = time.time()
-    #  self._imake_contiguous() # TODO: needed/useful? Always keep tensors contiguous?
+    self._imake_contiguous() # TODO: needed/useful? Always keep tensors contiguous?
     if DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
@@ -855,8 +854,7 @@ def _combine_legs_worker(self,
     # find unique entries by sorting qdata
     sort = np.lexsort(qdata.T)
     qdata = qdata[sort]
-    old_data = self._Array__data
-    old_data = [old_data[s] for s in sort]
+    old_data = [self._data[s] for s in sort]
     q_map_inds = [qm[sort] for qm in q_map_inds]
     cdef np.ndarray[intp_t, ndim=2, mode='c'] block_start = _np_zeros_2D(self_stored_blocks, res_rank, intp_num)
     cdef np.ndarray[intp_t, ndim=2, mode='c'] block_shape = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
@@ -906,7 +904,7 @@ def _combine_legs_worker(self,
             old_block = <np.ndarray>old_data[old_row]
             old_block = <np.ndarray>np.PyArray_Newshape(old_block, &shape, np.NPY_CORDER)
             _sliced_copy(new_block, block_start_[old_row, :], old_block, None, block_shape_[old_row, :])
-    res._Array__data = data
+    res._data = data
     res._qdata = qdata
     res._qdata_sorted = True
     if DEBUG_PRINT:
@@ -961,8 +959,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         t1 = time.time()
         print("setup", t1-t0)
         t0 = time.time()
-    #  self._imake_contiguous() # TODO
-
+    self._imake_contiguous()
     if DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
@@ -1011,7 +1008,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     cdef intp_t[:, ::1] old_block_shapes_ = old_block_shapes
     cdef intp_t[:, ::1] old_block_beg_ = old_block_beg
     cdef list new_data = []
-    cdef list old_data = self._Array__data
+    cdef list old_data = self._data
     cdef int dtype_num = self.dtype.num
     cdef intp_t old_rank = self.rank
     # the actual loop to split the blocks
@@ -1031,7 +1028,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         t0 = time.time()
     res._qdata = new_qdata
     res._qdata_sorted = False
-    res._Array__data = new_data
+    res._data = new_data
     if DEBUG_PRINT:
         t1 = time.time()
         print("finalize", t1-t0)
@@ -1109,12 +1106,12 @@ cdef _tensordot_pre_sort(a, b, int cut_a, int cut_b):
     a_sort = np.lexsort(np.append(a_qdata_contr[:, np.newaxis], a._qdata[:, :cut_a], axis=1).T)
     a_qdata_keep = a._qdata[a_sort, :cut_a]
     a_qdata_contr = a_qdata_contr[a_sort]
-    a_data = a._Array__data
+    a_data = a._data
     a_data = [a_data[i] for i in a_sort]
     # combine all b_qdata[axes_b] into one column (with the same stride as before)
     b_qdata_contr = np.sum(b._qdata[:, :cut_b] * stride, axis=1)
     # lex-sort b_qdata, dominated by the axes summed over, then the axes kept.
-    b_data = b._Array__data
+    b_data = b._data
     if not b._qdata_sorted:
         b_sort = np.lexsort(np.append(b_qdata_contr[:, np.newaxis], b._qdata[:, cut_b:], axis=1).T)
         b_qdata_keep = b._qdata[b_sort, cut_b:]
@@ -1325,7 +1322,7 @@ def _tensordot_worker(a, b, int axes):
     _make_valid_charges_1D(chinfo_mod, qtotal)
     res = _np_conserved.Array(a.legs[:cut_a] + b.legs[cut_b:], res_dtype, qtotal)
 
-    cdef list a_data = a._Array__data, b_data = b._Array__data
+    cdef list a_data = a._data, b_data = b._data
     cdef intp_t len_a_data = len(a_data)
     cdef intp_t len_b_data = len(b_data)
     cdef intp_t i, j
@@ -1383,7 +1380,7 @@ def _tensordot_worker(a, b, int axes):
             n *= block.shape[ax]
         block_dim_a_keep[row_a] = n
         for j in range(a_slices[row_a], a_slices[row_a+1]):
-            block = <np.ndarray> a_data[j]
+            block = np.PyArray_GETCONTIGUOUS(a_data[j])
             m = np.PyArray_SIZE(block) / n
             block_dim_a_contr[j] = m  # needed for dgemm
             a_data_ptr[j] = np.PyArray_DATA(block)
@@ -1401,7 +1398,7 @@ def _tensordot_worker(a, b, int axes):
             n *= block.shape[ax+cut_b]
         block_dim_b_keep[col_b] = n
         for j in range(b_slices[col_b], b_slices[col_b+1]):
-            block = <np.ndarray> b_data[j]
+            block = np.PyArray_GETCONTIGUOUS(b_data[j])
             b_data_ptr[j] = np.PyArray_DATA(block)
             b_data[j] = block  # important to keep the arrays of the pointers alive
     if DEBUG_PRINT:
@@ -1517,7 +1514,7 @@ def _tensordot_worker(a, b, int axes):
             res_qdata = res_qdata[:res_n_blocks, :]
         res._qdata = res_qdata
         res._qdata_sorted = True
-        res._Array__data = res_data
+        res._data = res_data
         if res_dtype.num != calc_dtype_num:
             res = res.astype(res_dtype)
     if DEBUG_PRINT:
@@ -1550,13 +1547,13 @@ def _inner_worker(a, b, bint do_conj):
     stride = _make_stride([l.block_number for l in a.legs], 0)
     cdef np.ndarray a_qdata = np.sum(a._qdata * stride, axis=1)
     cdef intp_t i, j
-    cdef list a_data = a._Array__data
-    if not a._qdata_sorted: # TODO: a.isort_qdata()
+    cdef list a_data = a._data
+    if not a._qdata_sorted:
         perm = np.argsort(a_qdata)
         a_qdata = a_qdata[perm]
         a_data = [a_data[i] for i in perm]
     cdef np.ndarray b_qdata = np.sum(b._qdata * stride, axis=1)
-    cdef list b_data = b._Array__data
+    cdef list b_data = b._data
     if not b._qdata_sorted:
         perm = np.argsort(b_qdata)
         b_qdata = b_qdata[perm]
@@ -1579,8 +1576,8 @@ def _inner_worker(a, b, bint do_conj):
         i_j = inds_contr[match]
         i = i_j.first
         j = i_j.second
-        a_block = <np.ndarray> a_data[i]
-        b_block = <np.ndarray> b_data[j]
+        a_block = np.PyArray_GETCONTIGUOUS(a_data[i])
+        b_block = np.PyArray_GETCONTIGUOUS(b_data[j])
         size = np.PyArray_SIZE(a_block)
         a_ptr = np.PyArray_DATA(a_block)
         b_ptr = np.PyArray_DATA(b_block)
