@@ -630,15 +630,15 @@ def Array_itranspose(self, axes=None):
 cdef void Array_itranspose_fast(self, np.ndarray[intp_t, ndim=1, mode='c'] axes) except *:
     """Same as Array_itranspose, but only for an npdarray `axes` without error checking."""
     cdef list new_legs = [], old_legs = self.legs
+    cdef list new_labels = [], old_labels = self._labels
     cdef intp_t i, a
     for i in range(axes.shape[0]):
         a = axes[i]
         new_legs.append(old_legs[a])
+        new_labels.append(old_labels[a])
     self.legs = new_legs
     self._set_shape()
-    cdef dict labels = self.labels
-    order = np.argsort(axes)
-    self.labels = { k : order[ labels[k] ] for k in labels.keys() }
+    self._labels = new_labels
     self._qdata = np.PyArray_GETCONTIGUOUS(self._qdata[:, axes])
     self._qdata_sorted = False
     # changed mostly the following part

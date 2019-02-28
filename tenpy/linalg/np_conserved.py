@@ -47,7 +47,7 @@ import scipy.linalg
 from scipy.linalg import blas as BLAS  # python interface to BLAS
 import warnings
 import itertools
-import numbers
+from numbers import Integral
 
 # import public API from charges
 from .charges import ChargeInfo, LegCharge, LegPipe
@@ -138,7 +138,7 @@ class Array:
         self._set_shape()
         self.dtype = np.dtype(dtype)
         self.qtotal = self.chinfo.make_valid(qtotal)
-        self.labels = {}
+        self._labels = []
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp, order='C')
         self._qdata_sorted = True
@@ -174,14 +174,14 @@ class Array:
         cp.__setstate__(self.__getstate__())
         cp.legs = list(self.legs) # different list but same instances
         cp._set_shape()
-        cp.labels = self.labels.copy()
+        cp._lables = cp._labels[:] # list copy
         if deep:
             cp._data = [b.copy() for b in self._data]
             cp._qdata = self._qdata.copy('C')
             cp.qtotal = self.qtotal.copy()
             # even deep copies share legs & chinfo (!)
         else:
-            cp._data = list(self._data)
+            cp._data = self._data[:]
         return cp
 
     def __getstate__(self):
@@ -450,6 +450,7 @@ class Array:
         block_q = self.chinfo.make_valid(block_q)
         if np.any(block_q != self.qtotal):
             raise ValueError("some row of _qdata is incompatible with total charge")
+        # TODO: check labels?
 
     # properties ==============================================================
 
@@ -462,6 +463,23 @@ class Array:
     def stored_blocks(self):
         """The number of (non-zero) blocks stored in :attr:`_data`."""
         return len(self._data)
+
+    @property
+    def labels(self):
+        dict_lab = {}
+        for i, l in enumerate(self._labels):
+            if l is not None:
+                dict_lab[l] = i
+        return dict_lab
+
+    @labels.setter
+    def labels(self, dict_lab):
+        list_lab = [None] * self.rank
+        for k, v in dict_lab.items():
+            if list_lab[v] is not None:
+                raise ValueError("Two labels point to the same index " + repr(dict_lab))
+            list_lab[v] = str(k)
+        self._labels = list_lab
 
     # labels ==================================================================
 
@@ -483,15 +501,18 @@ class Array:
         get_leg_indices : calls get_leg_index for a list of labels.
         iset_leg_labels : set the labels of different legs.
         """
-        res = self.labels.get(label, label)
-        if not isinstance(res, numbers.Integral):
-            raise KeyError("label not found: " + repr(label) + ", current labels" +
-                           repr(self.get_leg_labels()))
-        if res < 0:
-            res += self.rank
-        if res > self.rank or res < 0:
-            raise ValueError("axis {0:d} out of rank {1:d}".format(res, self.rank))
-        return res
+        if not isinstance(label, Integral):
+            try:
+                label = self._labels.index(label)
+            except ValueError: # not in List
+                msg = "Label not found: {0!r}, current labels: {1!r}".format(label, self._labels)
+                raise KeyError(msg) from None
+        else:
+            if label < 0:
+                label += self.rank
+            if label > self.rank or label < 0:
+                raise ValueError("axis {0:d} out of rank {1:d}".format(label, self.rank))
+        return label
 
     def get_leg_indices(self, labels):
         """Translate a list of leg-indices or leg-labels to leg indices.
@@ -527,24 +548,20 @@ class Array:
         See also
         --------
         get_leg: translate the labels to indices.
-        get_legs: calls get_legs for an iterable of labels.
         """
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs.")
-        self.labels = {}
         for i, l in enumerate(labels):
             if l == '':
                 raise ValueError("use `None` for empty labels")
-            if l is not None:
-                self.labels[l] = i
+            if l in labels[i+1:]:
+                raise ValueError("Duplicate label entry in " + repr(labels))
+        self._labels = list(labels)
         return self
 
     def get_leg_labels(self):
-        """Return tuple of the leg labels, with `None` for anonymous legs."""
-        lb = [None] * self.rank
-        for k, v in self.labels.items():
-            lb[v] = k
-        return tuple(lb)
+        """Return list of the leg labels, with `None` for anonymous legs."""
+        return self._labels[:]
 
     def get_leg(self, label):
         """Return self.legs[self.get_leg_index(label)].
@@ -554,12 +571,13 @@ class Array:
 
     def ireplace_label(self, old_label, new_label):
         """Replace the leg label `old_label` with `new_label`. In place."""
-        if isinstance(old_label, int):
-            old_label = self.get_leg_labels()[old_label]
-        old_label, new_label = str(old_label), str(new_label)
-        self.labels[new_label] = self.labels[old_label]
-        if new_label != old_label:
-            del self.labels[old_label]
+        old_index = self.get_leg_index(old_label)
+        self._labels[old_index] = None
+        new_label = str(new_label)
+        if new_label in self._labels:
+            msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, self.labels)
+            raise ValueError(msg)
+        self._labels[old_index] = new_label
         return self
 
     def replace_label(self, old_label, new_label):
@@ -568,20 +586,21 @@ class Array:
 
     def ireplace_labels(self, old_labels, new_labels):
         """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
-        # can't just iterate with `ireplace_label` in case of duplicates:
-        # ireplace_labels(['a', 'b'], ['b', 'a']) has to work as well!
-        labels = self.labels
-        axes = self.get_leg_indices(old_labels)
-        for old_lbl in old_labels:
-            del labels[old_lbl]
-        for new_lbl, ax in zip(new_labels, axes):
-            labels[new_lbl] = ax
+        old_inds = self.get_leg_indices(old_labels)
+        labels = self._labels
+        for i in old_inds:
+            labels[i] = None
+        for i, new_label in zip(old_inds, new_labels):
+            new_label = str(new_label)
+            if new_label in labels:
+                msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, labels)
+                raise ValueError(msg)
+            labels[i] = new_label
         return self
 
     def replace_labels(self, old_labels, new_labels):
         """Return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
-        res = self.copy(deep=False)
-        return res.ireplace_labels(old_labels, new_labels)
+        return self.copy(deep=False).ireplace_labels(old_labels, new_labels)
 
     # string output ===========================================================
 
@@ -778,8 +797,8 @@ class Array:
         keep_axes = [a for a in range(self.rank) if a not in axes]
         res.legs = [self.legs[a] for a in keep_axes]
         res._set_shape()
-        labels = self.get_leg_labels()
-        res.iset_leg_labels([labels[a] for a in keep_axes])
+        labels = self._labels
+        res._labels = [labels[a] for a in keep_axes]
         # calculate new total charge
         for a, (qi, _) in zip(axes, pos):
             res.qtotal -= self.legs[a].get_charge(qi)
@@ -821,6 +840,9 @@ class Array:
         res = self.copy(deep=False)
         leg = LegCharge.from_qflat(self.chinfo, [self.chinfo.make_valid(None)], qconj=qconj)
         res.legs.insert(axis, leg)
+        if label is not None and label in self._labels:
+            raise ValueError("label already exists")
+        res._labels.insert(axis, label)
         res._set_shape()
         res._data = res._data[:]  # make a copy
         for j, T in enumerate(res._data):
@@ -828,10 +850,6 @@ class Array:
         res._qdata = np.array(np.hstack(
             [res._qdata[:, :axis],
              np.zeros([len(res._data), 1], np.intp), res._qdata[:, axis:]]), copy=False, order='C')
-        if label is not None:
-            labs = list(self.get_leg_labels())
-            labs.insert(axis, label)
-            res.iset_leg_labels(labs)
         return res
 
     def add_leg(self, leg, i, axis=0, label=None):
@@ -863,15 +881,16 @@ class Array:
         legs = list(self.legs)
         legs.insert(axis, leg)
         qi, _ = leg.get_qindex(i)
+        labels = self._labels[:]
+        if label is not None and label in labels:
+            raise ValueError("label already exists")
+        labels.insert(axis, label)
         qtotal = self.chinfo.make_valid(self.qtotal + leg.get_charge(qi))
         extended = Array(legs, self.dtype, qtotal)
+        extended._labels = labels
         slices = [slice(None, None)] * self.rank
         slices[axis] = i
         extended[tuple(slices)] = self  # use existing implementation
-        if label is not None:
-            labs = list(self.get_leg_labels())
-            labs.insert(axis, label)
-            extended.iset_leg_labels(labs)
         return extended
 
     def extend(self, axis, extra):
@@ -1235,7 +1254,7 @@ class Array:
 
         # labels: replace non-set labels with '?#' (*before* transpose
         labels = [(l if l is not None else '?' + str(i))
-                  for i, l in enumerate(self.get_leg_labels())]
+                  for i, l in enumerate(self._labels)]
         # transpose if necessary
         if transp != tuple(range(self.rank)):
             res = self.copy(deep=False)
@@ -1362,7 +1381,7 @@ class Array:
         else:
             res = _split_legs_worker(self, axes, cutoff)
 
-        labels = list(self.get_leg_labels())
+        labels = self.get_leg_labels()
         for a in sorted(axes, reverse=True):
             labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.iset_leg_labels(labels)
@@ -1667,11 +1686,8 @@ class Array:
         swap[axis1], swap[axis2] = axis2, axis1
         legs = self.legs
         legs[axis1], legs[axis2] = legs[axis2], legs[axis1]
-        for k, v in self.labels.items():
-            if v == axis1:
-                self.labels[k] = axis2
-            if v == axis2:
-                self.labels[k] = axis1
+        labels = self._labels
+        labels[axis1], labels[axis2] = labels[axis2], labels[axis1]
         self._set_shape()
         self._qdata = self._qdata[:, swap]
         self._qdata_sorted = False
@@ -1791,10 +1807,9 @@ class Array:
                 res = self.copy(deep=True)
         res.qtotal = self.chinfo.make_valid(-res.qtotal)
         res.legs = [l.conj() for l in res.legs]
-        labels = {}
-        for lab, ax in res.labels.items():
-            labels[self._conj_leg_label(lab)] = ax
-        res.labels = labels
+        labels = res._labels
+        for i, lbl in enumerate(labels):
+            labels[i] = se.f_conj_leg_labels(lbl)
         return res
 
     def complex_conj(self):
@@ -2563,7 +2578,6 @@ def concatenate(arrays, axis=0, copy=True):
     """
     arrays = list(arrays)
     res = arrays[0].zeros_like()
-    res.labels = arrays[0].labels.copy()
     axis = res.get_leg_index(axis)
     not_axis = list(range(res.rank))
     del not_axis[axis]
@@ -2711,7 +2725,7 @@ def grid_outer(grid, grid_legs, qtotal=None):
     chinfo = entry.chinfo
     dtype = np.find_common_type([e.dtype for _, e in entries], [])
     legs = list(grid_legs) + entry.legs
-    labels = tuple(entry.get_leg_labels())
+    labels = entry._labels[:]
     if qtotal is None:
         # figure out qtotal from first non-zero entry
         grid_charges = [l.get_charge(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
@@ -2722,10 +2736,10 @@ def grid_outer(grid, grid_legs, qtotal=None):
     # main work: iterate over all non-trivial entries to fill `res`.
     for idx, entry in entries:
         res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
-        if labels is not None and tuple(entry.get_leg_labels()) != labels:
+        if labels is not None and entry._labels != labels:
             labels = None
     if labels is not None:
-        res.iset_leg_labels([None] * len(grid_shape) + list(labels))
+        res.iset_leg_labels([None] * len(grid_shape) + labels)
     res.test_sanity()
     return res
 
@@ -2927,8 +2941,8 @@ def trace(a, leg1=0, leg2=1):
             res._qdata = np.array(list(res_data.keys()), np.intp)
             res._qdata_sorted = False
     # labels
-    a_labels = a.get_leg_labels()
-    res.iset_leg_labels([a_labels[ax] for ax in keep])
+    a_labels = a._labels
+    res._labels = [a_labels[ax] for ax in keep]
     return res
 
 
@@ -2973,12 +2987,7 @@ def outer(a, b):
     res._qdata = qdata_res
     res._qdata_sorted = a._qdata_sorted and b._qdata_sorted  # since grid is lex sorted
     # labels
-    res.labels = a.labels.copy()
-    for k in b.labels:
-        if k in res.labels:
-            del res.labels[k]  # drop collision
-        else:
-            res.labels[k] = b.labels[k] + a.rank
+    res._labels = _drop_duplicate_labels(a._labels, b._labels)
     return res
 
 
@@ -3090,15 +3099,8 @@ def tensordot(a, b, axes=2):
     else:
         # #### the main work
         res = _tensordot_worker(a, b, axes)
-
     # labels
-    res.iset_leg_labels(list(a.get_leg_labels()[:-axes]) + [None] * (b.rank - axes))
-    for k in b.labels:
-        if b.labels[k] >= axes:  # not contracted
-            if k in res.labels:
-                del res.labels[k]  # drop collision
-            else:
-                res.labels[k] = b.labels[k] + a.rank - 2 * axes
+    res._labels = _drop_duplicate_labels(a._labels[:-axes], b._labels[axes:])
     return res
 
 
@@ -3163,7 +3165,7 @@ def svd(a,
     if full_matrices and ((not compute_uv) or cutoff is not None):
         raise ValueError("What do you want? Check your goals!")
     labL, labR = inner_labels
-    a_labels = a.get_leg_labels()
+    a_labels = a._labels
     # ensure complete blocking
     piped_axes, a = a.as_completely_blocked()
 
@@ -3303,7 +3305,7 @@ def eigh(a, UPLO='L', sort=None):
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
     w, v = _eig_worker(True, a, sort, UPLO)  # hermitian
-    v.iset_leg_labels([a.get_leg_labels()[0], 'eig'])
+    v.iset_leg_labels([a._labels[0], 'eig'])
     return w, v
 
 
@@ -3337,7 +3339,7 @@ def eig(a, sort=None):
     :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
     """
     w, v = _eig_worker(False, a, sort)  # non-hermitian
-    v.iset_leg_labels([a.get_leg_labels()[0], 'eig'])
+    v.iset_leg_labels([a._labels[0], 'eig'])
     return w, v
 
 
@@ -3491,7 +3493,7 @@ def expm(a):
 
     res_dtype = np.find_common_type([a.dtype], [np.float64])
     res = diag(1., a.legs[0], dtype=res_dtype)
-    res.labels = a.labels.copy()
+    res._labels = a._labels[:]
     for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         exp_block = np.asarray(scipy.linalg.expm(block), dtype=res_dtype, order='C')  # main work
         qi = qindices[0]  # `res` has all diagonal blocks,
@@ -3530,7 +3532,7 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     """
     if a.rank != 2:
         raise ValueError("expect a matrix!")
-    a_labels = a.get_leg_labels()
+    a_labels = a._labels
     label_Q, label_R = inner_labels
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
     q_data = []
@@ -3841,6 +3843,20 @@ def _inner_worker(a, b, do_conj):
         res += blas_dot(a_data[i], b_data[j])
         # same as res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
     return res
+
+
+def _drop_duplicate_labels(a_labels, b_labels):
+    """Combine lists `a_labels` and `b_labels` into a new list, dropping any duplicates."""
+    a_labels = list(a_labels)
+    b_labels = list(b_labels)
+    for i, lbl in enumerate(a_labels):
+        if lbl in b_labels:
+            # collision: drop labels
+            j = b_labels.index(lbl)
+            a_labels[i] = None
+            b_labels[j] = None
+    a_labels.extend(b_labels)
+    return a_labels
 
 
 @use_cython
