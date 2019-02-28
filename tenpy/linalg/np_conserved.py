@@ -3061,33 +3061,8 @@ def tensordot(a, b, axes=2):
         The tensorproduct of `a` and `b`, summed over the specified axes.
         Returns a scalar in case of a full contraction.
     """
-    if a.chinfo != b.chinfo:
-        raise ValueError("Different ChargeInfo")
-    try:
-        axes_a, axes_b = axes
-        axes_int = False
-    except TypeError:
-        axes = int(axes)
-        axes_int = True
-    if not axes_int:
-        a = a.copy(deep=False)  # shallow copy allows to call itranspose
-        b = b.copy(deep=False)  # which would otherwise break views.
-        # step 1.) of the implementation notes: bring into standard form by transposing
-        axes_a = a.get_leg_indices(to_iterable(axes_a))
-        axes_b = b.get_leg_indices(to_iterable(axes_b))
-        if len(axes_a) != len(axes_b):
-            raise ValueError("different lens of axes for a, b: " + repr(axes))
-        not_axes_a = [i for i in range(a.rank) if i not in axes_a]
-        not_axes_b = [i for i in range(b.rank) if i not in axes_b]
-        a.itranspose(not_axes_a + axes_a)
-        b.itranspose(axes_b + not_axes_b)
-        axes = len(axes_a)
-
-    # now `axes` is integer
-    # check for contraction compatibility
-    if not optimize(OptimizationFlag.skip_arg_checks):
-        for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
-            lega.test_contractible(legb)
+    # for details on the implementation, see _tensordot_worker.
+    a, b, axes = _tensordot_transpose_axes(a, b, axes)
 
     # optimize/check for special cases
     no_block = (a.stored_blocks == 0 or b.stored_blocks == 0)  # result is zero
@@ -3866,6 +3841,41 @@ def _inner_worker(a, b, do_conj):
         res += blas_dot(a_data[i], b_data[j])
         # same as res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
     return res
+
+
+@use_cython
+def _tensordot_transpose_axes(a, b, axes):
+    """Step 1: Transpose a,b if necessary."""
+    if a.chinfo != b.chinfo:
+        raise ValueError("Different ChargeInfo")
+    try:
+        axes_a, axes_b = axes
+        axes_int = False
+    except TypeError:
+        axes = int(axes)
+        axes_int = True
+    if not axes_int:
+        a = a.copy(deep=False)  # shallow copy allows to call itranspose
+        b = b.copy(deep=False)  # which would otherwise break views.
+        # step 1.) of the implementation notes: bring into standard form by transposing
+        axes_a = a.get_leg_indices(to_iterable(axes_a))
+        axes_b = b.get_leg_indices(to_iterable(axes_b))
+        if len(axes_a) != len(axes_b):
+            raise ValueError("different lens of axes for a, b: " + repr(axes))
+        not_axes_a = [i for i in range(a.rank) if i not in axes_a]
+        not_axes_b = [i for i in range(b.rank) if i not in axes_b]
+        a.itranspose(not_axes_a + axes_a)
+        b.itranspose(axes_b + not_axes_b)
+        axes = len(axes_a)
+
+    # now `axes` is integer
+    # check for contraction compatibility
+    if not optimize(OptimizationFlag.skip_arg_checks):
+        for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
+            lega.test_contractible(legb)
+    elif a.shape[-axes:] != b.shape[:axes]: # check at least the shape
+        raise ValueError("Shape mismatch for tensordot")
+    return a, b, axes
 
 
 def _tensordot_pre_reshape(data, cut, dtype, same_shape_before_cut=True):

@@ -36,7 +36,7 @@ from scipy.linalg.cython_blas cimport (dgemm, zgemm, dgemv, zgemv,
                                        daxpy, zaxpy,
                                        dscal, zscal, zdscal)
 
-from ..tools.misc import inverse_permutation
+from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.optimization import optimize, OptimizationFlag
 
 np.import_array()
@@ -616,29 +616,38 @@ def Array_itranspose(self, axes=None):
         The new order of the axes. By default (None), reverse axes.
     """
     if axes is None:
-        axes = tuple(reversed(range(self.rank)))
+        axes = np.arange(self.rank-1, -1, -1, np.intp) # == reversed(range(self.rank))
     else:
-        axes = tuple(self.get_leg_indices(axes))
+        axes =self.get_leg_indices(axes)
         if len(axes) != self.rank or len(set(axes)) != self.rank:
             raise ValueError("axes has wrong length: " + str(axes))
-        if axes == tuple(range(self.rank)):
+        if axes == range(self.rank):
             return self  # nothing to do
-    cdef np.ndarray[intp_t, ndim=1, mode='c'] axes_arr = np.array(axes, dtype=np.intp, order='C')
-    self.legs = [self.legs[a] for a in axes]
+        axes = np.array(axes, dtype=np.intp)
+    Array_itranspose_fast(self, axes)
+    return self
+
+cdef void Array_itranspose_fast(self, np.ndarray[intp_t, ndim=1, mode='c'] axes) except *:
+    """Same as Array_itranspose, but only for an npdarray `axes` without error checking."""
+    cdef list new_legs = [], old_legs = self.legs
+    cdef intp_t i, a
+    for i in range(axes.shape[0]):
+        a = axes[i]
+        new_legs.append(old_legs[a])
+    self.legs = new_legs
     self._set_shape()
-    labs = self.get_leg_labels()
-    self.iset_leg_labels([labs[a] for a in axes])
-    self._qdata = np.array(self._qdata[:, axes_arr], copy=False, order='C')
+    cdef dict labels = self.labels
+    order = np.argsort(axes)
+    self.labels = { k : order[ labels[k] ] for k in labels.keys() }
+    self._qdata = np.PyArray_GETCONTIGUOUS(self._qdata[:, axes])
     self._qdata_sorted = False
     # changed mostly the following part
     cdef list data = self._data
     cdef np.ndarray block
-    cdef intp_t i
     cdef np.PyArray_Dims permute
-    permute.len = axes_arr.shape[0]
-    permute.ptr = &axes_arr[0]
+    permute.len = axes.shape[0]
+    permute.ptr = &axes[0]
     self._data = [np.PyArray_Transpose(block, &permute) for block in data]
-    return self
 
 
 @cython.wraparound(False)
@@ -838,7 +847,7 @@ def _combine_legs_worker(self,
         t1 = time.time()
         print("q_map_inds", t1-t0)
         t0 = time.time()
-    self._imake_contiguous() # TODO: needed/useful? Always keep tensors contiguous?
+    self._imake_contiguous()
     if DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
@@ -1039,6 +1048,43 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 # ##################################################### #
 # replacements for global functions in np_conserved.py  #
 # ##################################################### #
+
+def _tensordot_transpose_axes(a, b, axes):
+    """Step 1: Transpose a,b if necessary."""
+    a_rank = a.rank
+    b_rank = b.rank
+    if a.chinfo != b.chinfo:
+        raise ValueError("Different ChargeInfo")
+    try:
+        axes_a, axes_b = axes
+        axes_int = False
+    except TypeError:
+        axes = int(axes)
+        axes_int = True
+    if not axes_int:
+        a = a.copy(deep=False)  # shallow copy allows to call itranspose
+        b = b.copy(deep=False)  # which would otherwise break views.
+        # step 1.) of the implementation notes: bring into standard form by transposing
+        axes_a = a.get_leg_indices(to_iterable(axes_a))
+        axes_b = b.get_leg_indices(to_iterable(axes_b))
+        if len(axes_a) != len(axes_b):
+            raise ValueError("different lens of axes for a, b: " + repr(axes))
+        not_axes_a = [i for i in range(a_rank) if i not in axes_a]
+        not_axes_b = [i for i in range(b_rank) if i not in axes_b]
+        if axes_a != range(a_rank - len(not_axes_a), a_rank):
+            Array_itranspose_fast(a, np.array(not_axes_a + axes_a, dtype=np.intp))
+        if axes_b != range(len(axes_b)):
+            Array_itranspose_fast(b, np.array(axes_b + not_axes_b, dtype=np.intp))
+        axes = len(axes_a)
+
+    # now `axes` is integer
+    # check for contraction compatibility
+    if not optimize(OptimizationFlag.skip_arg_checks):
+        for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
+            lega.test_contractible(legb)
+    elif a.shape[-axes:] != b.shape[:axes]: # check at least the shape
+        raise ValueError("Shape mismatch for tensordot")
+    return a, b, axes
 
 @cython.wraparound(False)
 @cython.boundscheck(False)

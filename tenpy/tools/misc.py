@@ -344,6 +344,7 @@ def any_nonzero(params, keys, verbose_msg=None):
                 return True
     return False
 
+
 def add_with_None_0(a, b):
     """Return ``a + b``, treating `None` as zero.
 
