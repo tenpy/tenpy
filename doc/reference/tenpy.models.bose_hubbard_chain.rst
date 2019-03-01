@@ -1,5 +1,5 @@
-tenpy\.models\.bose\_hubbard\_chain module
-==========================================
+tenpy.models.bose\_hubbard\_chain module
+========================================
 
 .. automodule:: tenpy.models.bose_hubbard_chain
     :members:

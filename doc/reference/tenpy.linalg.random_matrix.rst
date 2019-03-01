@@ -1,5 +1,5 @@
-tenpy\.linalg\.random\_matrix module
-====================================
+tenpy.linalg.random\_matrix module
+==================================
 
 .. automodule:: tenpy.linalg.random_matrix
     :members:

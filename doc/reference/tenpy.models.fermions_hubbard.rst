@@ -1,5 +1,5 @@
-tenpy\.models\.fermions\_hubbard module
-=======================================
+tenpy.models.fermions\_hubbard module
+=====================================
 
 .. automodule:: tenpy.models.fermions_hubbard
     :members:

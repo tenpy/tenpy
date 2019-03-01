@@ -1,5 +1,5 @@
-tenpy\.tools package
-====================
+tenpy.tools package
+===================
 
 Submodules
 ----------

@@ -1,5 +1,5 @@
-tenpy\.linalg\.svd\_robust module
-=================================
+tenpy.linalg.svd\_robust module
+===============================
 
 .. automodule:: tenpy.linalg.svd_robust
     :members:

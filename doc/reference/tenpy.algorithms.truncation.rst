@@ -1,5 +1,5 @@
-tenpy\.algorithms\.truncation module
-====================================
+tenpy.algorithms.truncation module
+==================================
 
 .. automodule:: tenpy.algorithms.truncation
     :members:

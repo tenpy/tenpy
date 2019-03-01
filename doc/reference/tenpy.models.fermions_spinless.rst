@@ -1,5 +1,5 @@
-tenpy\.models\.fermions\_spinless module
-========================================
+tenpy.models.fermions\_spinless module
+======================================
 
 .. automodule:: tenpy.models.fermions_spinless
     :members:

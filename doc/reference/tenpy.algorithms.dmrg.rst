@@ -1,5 +1,5 @@
-tenpy\.algorithms\.dmrg module
-==============================
+tenpy.algorithms.dmrg module
+============================
 
 .. automodule:: tenpy.algorithms.dmrg
     :members:

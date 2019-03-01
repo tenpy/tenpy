@@ -1,5 +1,5 @@
-tenpy\.algorithms package
-=========================
+tenpy.algorithms package
+========================
 
 Submodules
 ----------

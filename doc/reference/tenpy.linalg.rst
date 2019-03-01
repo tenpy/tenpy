@@ -1,5 +1,5 @@
-tenpy\.linalg package
-=====================
+tenpy.linalg package
+====================
 
 Submodules
 ----------

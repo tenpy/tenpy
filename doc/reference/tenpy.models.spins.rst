@@ -1,5 +1,5 @@
-tenpy\.models\.spins module
-===========================
+tenpy.models.spins module
+=========================
 
 .. automodule:: tenpy.models.spins
     :members:

@@ -1,5 +1,5 @@
-tenpy\.networks\.mps module
-===========================
+tenpy.networks.mps module
+=========================
 
 .. automodule:: tenpy.networks.mps
     :members:

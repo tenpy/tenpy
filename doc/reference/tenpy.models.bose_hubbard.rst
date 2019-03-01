@@ -1,5 +1,5 @@
-tenpy\.models\.bose\_hubbard module
-===================================
+tenpy.models.bose\_hubbard module
+=================================
 
 .. automodule:: tenpy.models.bose_hubbard
     :members:
