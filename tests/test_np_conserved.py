@@ -116,7 +116,7 @@ def test_npc_Array_sort():
 
 def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
-    for t in [('x', None), (None, 'y'), ('x', 'y')]:
+    for t in [['x', None], [None, 'y'], ['x', 'y']]:
         a.iset_leg_labels(t)
         nst.eq_(a.get_leg_labels(), t)
         axes = (0, 1, 1, 0, 1, 0)

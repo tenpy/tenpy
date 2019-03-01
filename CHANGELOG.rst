@@ -83,6 +83,8 @@ Changed
 - Renamed the `SquareLattice` class to :class:`tenpy.models.lattice.Square` for better consistency.
 - auto-determine whether Jordan-Wigner strings are necessary in
   :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
+- The way the labels of npc Arrays are stored internally changed to a simple list with None entries.
+  There is a deprecated propery setter yielding a dictionary with the labels.
 
 Fixed
 ^^^^^

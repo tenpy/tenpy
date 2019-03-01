@@ -2,6 +2,7 @@
 
 # clean up
 find tenpy/linalg -name "*.c" -delete
+find tenpy/linalg -name "*.cpp" -delete
 find tenpy/linalg -name "*.so" -delete
 
 # re-compile

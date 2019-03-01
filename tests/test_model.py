@@ -234,13 +234,13 @@ def test_CouplingMPOModel_group():
     ED_gr.build_full_H_from_mpo()
     H = ED.full_H.split_legs().to_ndarray()
     Hgr = ED_gr.full_H.split_legs()
-    Hgr.labels.clear()
+    Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
     assert np.linalg.norm(H-Hgr) == 0
     ED_gr.full_H = None
     ED_gr.build_full_H_from_bonds()
     Hgr = ED_gr.full_H.split_legs()
-    Hgr.labels.clear()
+    Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
     assert np.linalg.norm(H-Hgr) == 0
 

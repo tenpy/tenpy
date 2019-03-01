@@ -845,10 +845,10 @@ class MPS:
             Ss_new = []
             Bs_new = []
             B_gr = self.get_B(i).transpose(['vL', 'p', 'vR'])
-            del B_gr.labels['p']  # avoid warning that we split a label with out '(...)'
+            B_gr.idrop_labels(['p'])  # avoid warning that we split a label with out '(...)'
             B_gr = B_gr.split_legs(1)
             theta = self.get_theta(i, n=1).itranspose(['vL', 'p0', 'vR'])
-            del theta.labels['p0']  # avoid warning
+            theta.idrop_labels(['p0'])  # avoid warning
             theta = theta.split_legs(1)
             # B_gr and theta have legs vL p0 p1 ... p{n-1} vR
             combine = [list(range(n)), [-2, -1]]

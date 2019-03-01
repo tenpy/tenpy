@@ -138,7 +138,7 @@ class Array:
         self._set_shape()
         self.dtype = np.dtype(dtype)
         self.qtotal = self.chinfo.make_valid(qtotal)
-        self._labels = []
+        self._labels = [None] * len(self.legs)
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp, order='C')
         self._qdata_sorted = True
@@ -174,7 +174,7 @@ class Array:
         cp.__setstate__(self.__getstate__())
         cp.legs = list(self.legs) # different list but same instances
         cp._set_shape()
-        cp._lables = cp._labels[:] # list copy
+        cp._labels = cp._labels[:] # list copy
         if deep:
             cp._data = [b.copy() for b in self._data]
             cp._qdata = self._qdata.copy('C')
@@ -466,6 +466,7 @@ class Array:
 
     @property
     def labels(self):
+        warnings.warn("Deprecated access of Array.labels as dictionary.", stacklevel=2)
         dict_lab = {}
         for i, l in enumerate(self._labels):
             if l is not None:
@@ -474,6 +475,7 @@ class Array:
 
     @labels.setter
     def labels(self, dict_lab):
+        warnings.warn("Deprecated setting of Array.labels with dictionary.", stacklevel=2)
         list_lab = [None] * self.rank
         for k, v in dict_lab.items():
             if list_lab[v] is not None:
@@ -552,6 +554,8 @@ class Array:
         if len(labels) != self.rank:
             raise ValueError("Need one leg label for each of the legs.")
         for i, l in enumerate(labels):
+            if l is None:
+                continue
             if l == '':
                 raise ValueError("use `None` for empty labels")
             if l in labels[i+1:]:
@@ -564,7 +568,7 @@ class Array:
         return self._labels[:]
 
     def get_leg(self, label):
-        """Return self.legs[self.get_leg_index(label)].
+        """Return ``self.legs[self.get_leg_index(label)]``.
 
         Convenient function returning the leg corresponding to a leg label/index."""
         return self.legs[self.get_leg_index(label)]
@@ -572,12 +576,14 @@ class Array:
     def ireplace_label(self, old_label, new_label):
         """Replace the leg label `old_label` with `new_label`. In place."""
         old_index = self.get_leg_index(old_label)
-        self._labels[old_index] = None
+        labels = self._labels[:]
+        labels[old_index] = None
         new_label = str(new_label)
-        if new_label in self._labels:
-            msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, self.labels)
+        if new_label in labels:
+            msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, labels)
             raise ValueError(msg)
-        self._labels[old_index] = new_label
+        labels[old_index] = new_label
+        self._labels = labels
         return self
 
     def replace_label(self, old_label, new_label):
@@ -587,7 +593,7 @@ class Array:
     def ireplace_labels(self, old_labels, new_labels):
         """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
         old_inds = self.get_leg_indices(old_labels)
-        labels = self._labels
+        labels = self._labels[:]
         for i in old_inds:
             labels[i] = None
         for i, new_label in zip(old_inds, new_labels):
@@ -596,11 +602,32 @@ class Array:
                 msg = "Duplicate label: trying to set {0!r} in {1!r}".format(new_label, labels)
                 raise ValueError(msg)
             labels[i] = new_label
+        self._labels = labels
         return self
 
     def replace_labels(self, old_labels, new_labels):
         """Return a shallow copy with ``old_labels[i]`` replaced by ``new_labels[i]``."""
         return self.copy(deep=False).ireplace_labels(old_labels, new_labels)
+
+    def idrop_labels(self, old_labels=None):
+        """Remove leg labels from self. In place.
+
+        Parameters
+        ----------
+        old_labels : list of str|int
+            The leg labels/indices for which the label should be removed.
+            By default (None), remove all labels.
+        """
+        if old_labels is None:
+            self._labels = [None]*self.rank
+            return self
+        old_inds = self.get_leg_indices(old_labels)
+        labels = self._labels[:]
+        for i in old_inds:
+            labels[i] = None
+        self._labels = labels
+        return self
+
 
     # string output ===========================================================
 
@@ -1381,7 +1408,8 @@ class Array:
         else:
             res = _split_legs_worker(self, axes, cutoff)
 
-        labels = self.get_leg_labels()
+        labels = self._labels[:]
+        print(labels)
         for a in sorted(axes, reverse=True):
             labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.iset_leg_labels(labels)
@@ -1807,9 +1835,11 @@ class Array:
                 res = self.copy(deep=True)
         res.qtotal = self.chinfo.make_valid(-res.qtotal)
         res.legs = [l.conj() for l in res.legs]
-        labels = res._labels
+        labels = res._labels[:]
         for i, lbl in enumerate(labels):
-            labels[i] = se.f_conj_leg_labels(lbl)
+            if lbl is not None:
+                labels[i] = self._conj_leg_label(lbl)
+        res._labels = labels
         return res
 
     def complex_conj(self):
@@ -2435,7 +2465,7 @@ class Array:
         if label is None:
             return [None] * count
         if label[0] != '(' or label[-1] != ')':
-            warnings.warn("split leg with label not in Form '(...)': " + label)
+            warnings.warn("split leg with label not in Form '(...)': " + repr(label), stacklevel=3)
             return [None] * count
         beg = 1
         depth = 0  # number of non-closed '(' to the left
@@ -2832,7 +2862,8 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
         sl = test_array._get_block_slices(qindices)
         if np.any(np.abs(flat_array[sl]) > cutoff):
             return test_array._get_block_charge(qindices)
-    warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.")
+    warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.",
+                  stacklevel=2)
     return chinfo.make_valid()
 
 
