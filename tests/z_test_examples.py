@@ -27,8 +27,8 @@ def import_file(filename, dir):
     they run immediately at import. Thus an ``import filename`` (where filename is the actual name,
     not a string) executes the example.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     filename : str
         the name of the file (without the '.py' ending) to import.
     """

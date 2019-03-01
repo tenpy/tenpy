@@ -218,7 +218,7 @@ class MPS:
                            sites,
                            p_state,
                            bc='finite',
-                           dtype=np.float,
+                           dtype=np.float64,
                            permute=True,
                            form='B',
                            chargeL=None):
@@ -299,9 +299,9 @@ class MPS:
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, permute=True,
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=None, permute=True,
                    form='B', legL=None):
-        """Construct a matrix product state from a given product state.
+        """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
         ----------
@@ -317,7 +317,7 @@ class MPS:
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
-            The data type of the array entries.
+            The data type of the array entries. Defaults to the common dtype of `Bflat`.
         permute : bool
             The :class:`~tenpy.networks.Site` might permute the local basis states if charge
             conservation gets enabled.
@@ -349,6 +349,8 @@ class MPS:
             SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
             SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
         Bs = []
+        if dtype is None:
+            dtype = np.dtype(np.common_type(*Bflat))
         for i, site in enumerate(sites):
             B = np.array(Bflat[i], dtype)
             if permute:
@@ -2775,7 +2777,7 @@ class MPSEnvironment:
             LP = self.get_LP(i0, store=False)
             LP = self._contract_LP(i0, LP)
         else:
-            LP = self.get_LP(i0 + 1, store=False) 
+            LP = self.get_LP(i0 + 1, store=False)
         # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
         S_bra = self.bra.get_SR(i0).conj()
         LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)

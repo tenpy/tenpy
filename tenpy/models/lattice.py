@@ -504,8 +504,8 @@ class Lattice:
         For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
         ``0 <= x_a+dx[a] < lat.Ls[a]``.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         u1, u2 : int
             Indices within the unit cell; the `u1` and `u2` of
             :meth:`~tenpy.models.model.CouplingModel.add_coupling`
@@ -589,7 +589,6 @@ class Lattice:
             mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
         return mps_ijkl, lat_indices, coupling_shape
-
 
     def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):
         """Plot the sites of the lattice with markers.
