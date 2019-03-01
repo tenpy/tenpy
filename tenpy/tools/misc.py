@@ -7,7 +7,6 @@ import random
 import os
 import itertools
 import argparse
-import matplotlib as mpl
 
 all = [
     'to_iterable', 'to_array', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
@@ -560,7 +559,8 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         #omp.set_num_threads(args.ncores)
         if not args.dir == None:
                 os.chdir(args.dir)
-        mpl.rcParams["savefig.directory"] = os.chdir(os.getcwd())
+        import matplotlib
+        matplotlib.rcParams["savefig.directory"] = os.chdir(os.getcwd())
 
         # Build the identifier based on model-defined and general parameters
         identifier = "chi_{}_seed_{}_".format(args.chi, args.seed)  # Only use seed if supplied?
