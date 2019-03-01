@@ -1409,7 +1409,6 @@ class Array:
             res = _split_legs_worker(self, axes, cutoff)
 
         labels = self._labels[:]
-        print(labels)
         for a in sorted(axes, reverse=True):
             labels[a:a + 1] = self._split_leg_label(labels[a], self.legs[a].nlegs)
         res.iset_leg_labels(labels)
