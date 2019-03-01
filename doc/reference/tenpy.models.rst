@@ -1,5 +1,5 @@
-tenpy\.models package
-=====================
+tenpy.models package
+====================
 
 Submodules
 ----------

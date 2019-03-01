@@ -1,5 +1,5 @@
-tenpy\.linalg\.np\_conserved module
-===================================
+tenpy.linalg.np\_conserved module
+=================================
 
 .. automodule:: tenpy.linalg.np_conserved
     :members:

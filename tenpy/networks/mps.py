@@ -218,7 +218,7 @@ class MPS:
                            sites,
                            p_state,
                            bc='finite',
-                           dtype=np.float,
+                           dtype=np.float64,
                            permute=True,
                            form='B',
                            chargeL=None):
@@ -299,9 +299,9 @@ class MPS:
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=np.float, permute=True,
+    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=None, permute=True,
                    form='B', legL=None):
-        """Construct a matrix product state from a given product state.
+        """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
         ----------
@@ -317,7 +317,7 @@ class MPS:
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
-            The data type of the array entries.
+            The data type of the array entries. Defaults to the common dtype of `Bflat`.
         permute : bool
             The :class:`~tenpy.networks.Site` might permute the local basis states if charge
             conservation gets enabled.
@@ -349,6 +349,8 @@ class MPS:
             SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
             SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
         Bs = []
+        if dtype is None:
+            dtype = np.dtype(np.common_type(*Bflat))
         for i, site in enumerate(sites):
             B = np.array(Bflat[i], dtype)
             if permute:
@@ -877,6 +879,19 @@ class MPS:
         self.form = [self._valid_forms['B']] * len(sites)
         return trunc_err
 
+    def get_grouped_mps(self, blocklen):
+        r"""contract blocklen subsequent tensors into a single one and return result as a new MPS.
+
+        blocklen = number of subsequent sites to be combined.
+
+        Returns
+        -------
+        new MPS object with bunched sites.
+        """
+        groupedMPS=copy.deepcopy(self)
+        groupedMPS.group_sites(n=blocklen)
+        return (groupedMPS)
+
     def get_total_charge(self):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
 
@@ -1039,7 +1054,7 @@ class MPS:
         ent_spectrum : list
             For each (non-trivial) bond the entanglement spectrum.
             If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
-            with the convetion :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
+            with the convention :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
             and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
             If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
             for each possible charge on that bond.
@@ -2749,7 +2764,7 @@ class MPSEnvironment:
         taking into account :attr:`MPS.norm` of both `bra` and `ket`.
         For this purpose, this function contracts
         ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
-        values inbetween.
+        values in between.
 
         Parameters
         ----------

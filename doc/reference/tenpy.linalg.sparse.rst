@@ -1,5 +1,5 @@
-tenpy\.linalg\.sparse module
-============================
+tenpy.linalg.sparse module
+==========================
 
 .. automodule:: tenpy.linalg.sparse
     :members:

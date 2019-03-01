@@ -94,6 +94,7 @@ Fixed
 - issue #2: memory leak in cython parts when using intelpython/anaconda
 - issue #4: incompatible data types.
 - issue #6: the CouplingModel generated wrong Couplings in some cases
+- issue #19: Convergence of energy was slow for infinite systems with N_sweeps_check=1
 - more reasonable traceback in case of wrong labels
 - wrong dtype of npc.Array when adding/subtracting/... arrays of different data types
 - could get wrong H_bond for completely decoupled chains.

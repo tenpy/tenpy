@@ -1,5 +1,5 @@
-tenpy\.models\.model module
-===========================
+tenpy.models.model module
+=========================
 
 .. automodule:: tenpy.models.model
     :members:

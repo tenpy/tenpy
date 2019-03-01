@@ -1,5 +1,5 @@
-tenpy\.tools\.math module
-=========================
+tenpy.tools.math module
+=======================
 
 .. automodule:: tenpy.tools.math
     :members:

@@ -1,5 +1,5 @@
-tenpy\.tools\.optimization module
-=================================
+tenpy.tools.optimization module
+===============================
 
 .. automodule:: tenpy.tools.optimization
     :members:

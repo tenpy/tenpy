@@ -1,5 +1,5 @@
-tenpy\.models\.hofstadter module
-================================
+tenpy.models.hofstadter module
+==============================
 
 .. automodule:: tenpy.models.hofstadter
     :members:

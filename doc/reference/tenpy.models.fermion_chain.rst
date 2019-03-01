@@ -1,5 +1,5 @@
-tenpy\.models\.fermion\_chain module
-====================================
+tenpy.models.fermion\_chain module
+==================================
 
 .. automodule:: tenpy.models.fermion_chain
     :members:

@@ -1,5 +1,5 @@
-tenpy\.tools\.params module
-===========================
+tenpy.tools.params module
+=========================
 
 .. automodule:: tenpy.tools.params
     :members:

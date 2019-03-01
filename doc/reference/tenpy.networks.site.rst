@@ -1,5 +1,5 @@
-tenpy\.networks\.site module
-============================
+tenpy.networks.site module
+==========================
 
 .. automodule:: tenpy.networks.site
     :members:

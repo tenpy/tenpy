@@ -1,5 +1,5 @@
-tenpy\.models\.toric\_code module
-=================================
+tenpy.models.toric\_code module
+===============================
 
 .. automodule:: tenpy.models.toric_code
     :members:

@@ -619,12 +619,11 @@ class CouplingModel(Model):
         ``OP1 := lat.unit_cell[u1].get_op(op1)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
         and ``OP2 := lat.unit_cell[u2].get_op(op2)`` acts on the site
         ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
-        For periodic boundary conditions (``lat.bc[a] == False``)
-        the index ``x_a`` is taken modulo ``lat.Ls[a]`` and runs through ``range(lat.Ls[a])``.
-        For open boundary conditions, ``x_a`` is limited to ``0 <= x_a < Ls[a]`` and
-        ``0 <= x_a+dx[a] < lat.Ls[a]``.
-        The coupling `strength` may vary spatially, ``loc({x_i})`` indicates the lower left corner
-        of the hypercube containing the involved sites :math:`\vec{x}` and
+        Possible combinations ``x_0, ..., x_{dim-1}`` are determined from the boundary conditions
+        in :meth:`~tenpy.models.lattice.Lattice.possible_couplings`.
+
+        The coupling `strength` may vary spatially, :math:`loc(\vec{x})` indicates the lower
+        left corner of the hypercube containing the involved sites :math:`\vec{x}` and
         :math:`\vec{x}+\vec{dx}`.
 
         The necessary terms are just added to :attr:`coupling_terms`; doesn't rebuild the MPO.
@@ -665,9 +664,7 @@ class CouplingModel(Model):
             (in the sense of the MPS ordering given by the lattice).
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
-        shift_i_lat_strength, coupling_shape = self._coupling_shape(dx)
-        strength = to_array(strength, coupling_shape)  # tile to correct shape
-        if not np.any(strength != 0.):
+        if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
@@ -689,38 +686,12 @@ class CouplingModel(Model):
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
 
-        # prepare: figure out the necessary mps indices
-        Ls = np.array(self.lat.Ls)
-        N_sites = self.lat.N_sites
-        mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u1)
-        lat_j_shifted = lat_i + dx
-        lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
-        if self.lat.bc_shift is not None:
-            shift = np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.lat.bc_shift, axis=1)
-            lat_j_shifted[:, 0] -= shift
-            lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
-        keep = np.all(
-            np.logical_or(
-                lat_j_shifted == lat_j,  # not accross the boundary
-                np.logical_not(self.lat.bc)),  # direction has PBC
-            axis=1)
-        mps_i = mps_i[keep]
-        lat_i = lat_i[keep] + shift_i_lat_strength[np.newaxis, :]
-        lat_j = lat_j[keep]
-        lat_j_shifted = lat_j_shifted[keep]
-        mps_j = self.lat.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
-        if self.lat.bc_MPS == 'infinite':
-            # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * (N_sites // Ls[0])
-            mps_j += mps_j_shift
-            # finally, ensure 0 <= min(i, j) < N_sites.
-            mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
-            mps_i += mps_ij_shift
-            mps_j += mps_ij_shift
+        mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
+        strength = to_array(strength, strength_shape)  # tile to correct shape
 
         # loop to perform the sum over {x_0, x_1, ...}
-        for i, i_lat, j in zip(mps_i, lat_i, mps_j):
-            current_strength = strength[tuple(i_lat)]
+        for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
+            current_strength = strength[tuple(lat_idx)]
             if current_strength == 0.:
                 continue
             o1, o2 = op1, op2
@@ -919,13 +890,6 @@ class CouplingModel(Model):
                     del d1[op_i_op_str]
         # done
 
-    def _coupling_shape(self, dx):
-        """calculate correct shape of the strengths for each coupling."""
-        shape = [La - abs(dxa) * int(bca)
-                 for La, dxa, bca in zip(self.lat.Ls, dx, self.lat.bc)]
-        shift_strength = [min(0, dxa) for dxa in dx]
-        return np.array(shift_strength), tuple(shape)
-
     def _graph_add_coupling_terms(self, graph):
         # structure of coupling terms:
         # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
@@ -1018,8 +982,6 @@ class MultiCouplingModel(CouplingModel):
         all_us = np.array([u0] + [oop[0] for oop in other_ops], np.intp)
         all_ops = [op0] + [oop[1] for oop in other_ops]
         dx = np.array([oop[2] for oop in other_ops], np.intp).reshape([M, self.lat.dim])
-        shift_i_lat_strength, coupling_shape = self._coupling_shape(dx)
-        strength = to_array(strength, coupling_shape)  # tile to correct shape
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
         need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op)
@@ -1042,35 +1004,13 @@ class MultiCouplingModel(CouplingModel):
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
-        Ls = np.array(self.lat.Ls)
-        N_sites = self.lat.N_sites
-        mps_i, lat_i = self.lat.mps_lat_idx_fix_u(u0)
-        lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
-        # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
-        lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
-        if self.lat.bc_shift is not None:
-            shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.lat.bc_shift, axis=2)
-            lat_jkl_shifted[:, :, 0] -= shift
-            lat_jkl[:, :, 0] = np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
-        keep = np.all(
-            np.logical_or(
-                lat_jkl_shifted == lat_jkl,  # not accross the boundary
-                np.logical_not(self.lat.bc)),  # direction has PBC
-            axis=(1, 2))
-        mps_i = mps_i[keep]
-        lat_i = lat_i[keep, :] + shift_i_lat_strength[np.newaxis, :]
-        lat_jkl = lat_jkl[keep, :, :]
-        lat_jkl_shifted = lat_jkl_shifted[keep, :, :]
-        latu_jkl = np.concatenate((lat_jkl, np.array([all_us[1:]]*len(lat_jkl))[:, :, np.newaxis]),
-                                  axis=2)
-        mps_jkl = self.lat.lat2mps_idx(latu_jkl)
-        if self.lat.bc_MPS == 'infinite':
-            # shift by whole MPS unit cells for couplings along the infinite direction
-            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
-        mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
+        mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(
+            u0, all_us[1:], dx)
+        strength = to_array(strength, strength_shape)  # tile to correct shape
 
+        N_sites = self.lat.N_sites
         # loop to perform the sum over {x_0, x_1, ...}
-        for ijkl, i_lat in zip(mps_ijkl, lat_i):
+        for ijkl, i_lat in zip(mps_ijkl, lat_indices):
             current_strength = strength[tuple(i_lat)]
             if current_strength == 0.:
                 continue
@@ -1150,20 +1090,6 @@ class MultiCouplingModel(CouplingModel):
             if len(d1) == 0:
                 del d0[i]
         # done
-
-    def _coupling_shape(self, dx):
-        """calculate correct shape of the strengths for each coupling."""
-        if dx.ndim == 1:
-            return super()._coupling_shape(dx)
-        Ls = self.lat.Ls
-        shape = [None]*len(Ls)
-        shift_strength = [None]*len(Ls)
-        for a in range(len(Ls)):
-            max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
-            box_dx = max(max_dx, 0) - min(min_dx, 0)
-            shape[a] = Ls[a] - box_dx * int(self.lat.bc[a])
-            shift_strength[a] = min(0, min_dx)
-        return np.array(shift_strength), tuple(shape)
 
     def _graph_add_coupling_terms(self, graph, i=None, d1=None, label_left=None):
         # nested structure of coupling_terms:
