@@ -475,6 +475,7 @@ class MPS:
         # generate building block tensors
         up = site.state_index(up)
         down = site.state_index(down)
+        lonely_state = site.state_index(lonely_state)
         mask = np.zeros(site.dim, dtype=np.bool_)
         mask[up] = mask[down] = True
         Open = npc.diag(1., site.leg)[:, mask]
@@ -876,6 +877,52 @@ class MPS:
         self.form = [self._valid_forms['B']] * len(sites)
         return trunc_err
 
+    def get_total_charge(self):
+        """Calculate and return the `qtotal` of the whole MPS (when contracted).
+
+        Returns
+        -------
+        qtotal : charges
+            The sum of the `qtotal` of the individual `B` tensors.
+        """
+        qtotal = np.sum([B.qtotal for B in self._B], axis=0)
+        return self.chinfo.make_valid(qtotal)
+
+    def gauge_total_charge(self, qtotal=None):
+        """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
+
+        Parameters
+        ----------
+        qtotal : (list of) charges
+            If a single `qtotal` is given, it is the desired total charge of the MPS
+            (which :meth:`get_total_charge` will return afterwards).
+            Alternatively, the desired `qtotal` for each of the individual `B` tensors can be
+            specified.
+        """
+        if self.chinfo.qnumber == 0:
+            return
+        qtotal = self.chinfo.make_valid(qtotal)
+        if qtotal.ndim == 1:
+            qtotal_factor = np.array([0]*(self.L-1) + [1], npc.QTYPE)
+            qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
+        if qtotal.shape != (self.L, self.chinfo.qnumber):
+            raise ValueError("wrong shape of `qtotal`")
+        if self.bc == "infinite" and not np.all(self.chinfo.make_valid(np.sum(qtotal, 0))
+                                                == self.get_total_charge()):
+            raise ValueError("Can't change total charge of infinite MPS")
+        for i in range(self.L):
+            B = self._B[i]
+            desired_qtotal = qtotal[i]
+            chdiff = B.qtotal - desired_qtotal
+            if np.any(chdiff != 0):
+                self._B[i] = B.gauge_total_charge('vR', desired_qtotal)
+                if i + 1 != self.L:  # this 'vR' is contracted with the 'vL' of the next B
+                    # so we need to adjust the next B as well
+                    nextB = self._B[i + 1]
+                    self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
+                    self._B[i].get_leg('vR').test_contractible(self._B[i+1].get_leg('vL'))
+        # done
+
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
@@ -1051,6 +1098,90 @@ class MPS:
         rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
         return rho
+
+    def probability_per_charge(self, bond=0):
+        """Return probabilites of charge value on the left of a given bond.
+
+        For example for particle number conservation, define
+        :math:`N_b = sum_{i<b} n_i` for a given bond `b`.
+        This function returns the possible values of `N_b` as rows of `charge_values`,
+        and for each row the probabilty that this combination occurs in the given state.
+
+        Parameters
+        ----------
+        bond : int
+            The bond to be considered. The returned charges are summed on the left of this bond.
+
+        Returns
+        -------
+        charge_values : 2D array
+            Columns correspond to the different charges in `self.chinfo`.
+            Rows are the different charge fluctuations at this bond
+        probabilities : 1D array
+            For each row of `charge_values` the probablity for these values of charge fluctuations.
+        """
+        if self.bc == 'segment' and bond == self.L:
+            S = self.get_SR(self.L-1)**2
+            leg = self.get_B(self.L-1, form=None).get_leg('vR').conj()
+        else:  # usually the case
+            S = self.get_SL(bond)**2
+            leg = self.get_B(bond, form=None).get_leg('vL')
+        assert leg.qconj == +1
+        if not leg.is_blocked():
+            raise ValueError("leg not blocked: can have duplicate entries in charge values")
+        ps = []
+        for qi in range(leg.block_number):
+            sl = leg.get_slice(qi)
+            ps.append(np.sum(S[sl]))
+        ps = np.array(ps)
+        if abs(np.sum(ps) - 1.) > 1.e-10:
+            warnings.warn("Probability_per_charge: Sum of probabilites not 1. Canonical form?")
+        return leg.charges.copy(), ps
+
+    def average_charge(self, bond=0):
+        r"""Return the average charge for the block on the left of a given bond.
+
+        For example for particle number conservation, define
+        :math:`N_b = sum_{i<b} n_i` for a given bond `b`.
+        Then this function returns :math:`<\psi| N_b |\psi>`.
+
+        Parameters
+        ----------
+        bond : int
+            The bond to be considered.
+            The returned charges are summed over the sites left of `bond`.
+
+        Returns
+        -------
+        average_charge : 1D array
+            For each type of charge in :attr:`chinfo`
+            the average value when summing the charge values over sites left of the given bond.
+        """
+        charges, ps = self.probability_per_charge(bond)
+        return np.sum(ps[:, np.newaxis] * charges, axis=0)
+
+    def charge_variance(self, bond=0):
+        r"""Return the charge variance on the left of a given bond.
+
+        For example for particle number conservation, define
+        :math:`N_b = sum_{i<b} n_i` for a given bond `b`.
+        Then this function returns :math:`<\psi| N_b^2 |\psi> - (<\psi| N_b |\psi>)^2`.
+
+        Parameters
+        ----------
+        bond : int
+            The bond to be considered.
+            The returned charges are summed over the sites left of `bond`.
+
+        Returns
+        -------
+        average_charge : 1D array
+            For each type of charge in :attr:`chinfo`
+            the variance of of the charge values left of the given bond.
+        """
+        charges_mean = self.average_charge(bond)
+        charges, ps = self.probability_per_charge(bond)
+        return np.sum(ps[:, np.newaxis] * (charges-charges_mean[:, np.newaxis])**2, axis=0)
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
