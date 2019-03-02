@@ -992,7 +992,7 @@ class LegPipe(LegCharge):
             z = [0] * len(legs)
             self.charges = _partial_qtotal(chinfo, legs, np.array([z], np.intp), qconj, None)
             self.q_map = np.array([[0, ind_len, 0] + z], np.intp)
-            self.q_map_slices = self.slices.copy()
+            self.q_map_slices = np.array([0, 1], np.intp)
             self._strides = np.array(z, np.intp)
             self._perm = None
         else:
