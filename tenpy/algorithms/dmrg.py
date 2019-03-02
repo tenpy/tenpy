@@ -814,9 +814,9 @@ class Engine(NpcLinearOperator):
             Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singluar values of the array; with mixer it might be a general
-            matrix; see comment above.
+            matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(vR.p1)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -871,7 +871,7 @@ class Engine(NpcLinearOperator):
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
         """
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
-        B1 = VH.split_legs(['(vR.p1)']).replace_label('p1', 'p')
+        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
         self.psi.set_B(i0, B0, form='A')  # left-canonical
         self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         self.psi.set_SR(i0, S)
@@ -905,7 +905,7 @@ class Engine(NpcLinearOperator):
         i0 : int
             Site index. We calculate ``self.env.get_RP(i0)``.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The VH as returned by SVD with combined legs, labels ``'vL', '(vR.p1)'``.
+            The VH as returned by SVD with combined legs, labels ``'vL', '(p1.vR)'``.
         """
         # NB: EngineCombine overwrites this function for a faster implementation
         # hence the additional argument `VH`
@@ -1019,7 +1019,7 @@ class EngineCombine(Engine):
 
     This engine combines the virtual and physical leg for the left site and right site into pipes.
     This reduces the overhead of calculating charge combinations in the contractions,
-    but one :meth:`matvec` is more expensive, :math:`O(2 d^3 \chi^3 D)`.
+    but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
 
     Attributes
     ----------
@@ -1043,9 +1043,9 @@ class EngineCombine(Engine):
         -------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
-            Labels ``'(vL.p0)', '(vR.p1)'``.
+            Labels ``'(vL.p0)', '(p1.vR)'``.
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'(vL.p0)', '(vR.p1)'``) to orthogonalize against,
+            States (also with labels ``'(vL.p0)', '(p1.vR)'``) to orthogonalize against,
             c.f. see :meth:`get_theta_ortho`.
         """
         env = self.env
@@ -1060,15 +1060,15 @@ class EngineCombine(Engine):
             [['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, -1])
         # calculate RHeff
         RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
-        pipeR = RHeff.make_pipe(['vL*', 'p1'])
+        pipeR = RHeff.make_pipe(['p1', 'vL*'])
         self.RHeff = RHeff.combine_legs(
-            [['vL*', 'p1'], ['vL', 'p1*']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
+            [['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
-        theta = theta.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
+        theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
         theta_ortho = self.get_theta_ortho(i0)
-        theta_ortho = [th_o.combine_legs([['vL', 'p0'], ['vR', 'p1']], pipes=[pipeL, pipeR])
+        theta_ortho = [th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
                        for th_o in theta_ortho]
         return theta, theta_ortho
 
@@ -1088,8 +1088,8 @@ class EngineCombine(Engine):
         """
         labels = theta.get_leg_labels()
         theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-        theta = npc.tensordot(theta, self.RHeff, axes=[['(vR.p1)', 'wR'], ['(vL.p1*)', 'wL']])
-        theta.ireplace_labels(['(vR*.p0)', '(vL*.p1)'], ['(vL.p0)', '(vR.p1)'])
+        theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
+        theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         theta.itranspose(labels)  # if necessary, transpose
         return theta
 
@@ -1120,11 +1120,11 @@ class EngineCombine(Engine):
         i0 : int
             Site index. We calculate ``self.env.get_RP(i0)``.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+            The VH as returned by SVD with combined legs, labels ``'vL', '(p1.vR)'``.
         """
         # make use of self.RHeff
-        RP = npc.tensordot(self.RHeff, VH, axes=['(vL.p1*)', '(vR.p1)'])
-        RP = npc.tensordot(VH.conj(), RP, axes=['(vR*.p1*)', '(vL*.p1)'])
+        RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+        RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
         self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
 
 
@@ -1172,7 +1172,7 @@ class EngineFracture(Engine):
                                                      ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
+        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
         theta.itranspose(['vL', 'p0', 'vR', 'p1'])
         theta_ortho = self.get_theta_ortho(i0)
         for th_o in theta_ortho:
@@ -1193,9 +1193,9 @@ class EngineFracture(Engine):
         H_theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function to apply the effective Hamiltonian to,  :math:`H |\theta>`
         """
-        labels = theta.get_leg_labels()
+        labels = theta.get_leg_labels()  # 'vL', 'p0', 'vR', 'p1'
         theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-        theta = npc.tensordot(theta, self.H0, axes=[['wR', 'p0'], ['wL', 'p0*']])
+        theta = npc.tensordot(self.H0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
         theta = npc.tensordot(theta, self.H1, axes=[['wR', 'p1'], ['wL', 'p1*']])
         theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
         theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
@@ -1204,7 +1204,7 @@ class EngineFracture(Engine):
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
-        return theta.combine_legs([['vL', 'p0'], ['vR', 'p1']], new_axes=[0, 1])
+        return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
 
     def update_LP(self, i0, U):
         """Update left part of the environment.
@@ -1346,6 +1346,10 @@ class SingleSiteMixer(Mixer):
     """Mixer for single-site DMRG.
 
     Perform a subspace expansion following [Hubig2015]_.
+
+    .. todo :
+        This is still under development.
+        Works only with EngineCombine
     """
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
@@ -1494,7 +1498,7 @@ class DensityMatrixMixer(Mixer):
             Without mixer just the singluar values of the array; with mixer it might be a general
             matrix; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(vR.p1)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -1502,7 +1506,7 @@ class DensityMatrixMixer(Mixer):
         # don't mix left parts, when we're going to the right
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
         rho_R = self.mix_rho_R(engine, theta, i0, update_RP)
-        rho_R.itranspose(['(vR.p1)', '(vR*.p1*)'])  # just to be sure of the order
+        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
 
         # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
         # rho_L ~=  theta theta^H = U S V^H V S U^H = U S S U^H  (for mixer -> 0)
@@ -1520,8 +1524,8 @@ class DensityMatrixMixer(Mixer):
         # Thus, rho_L V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_L
         val_R, Vc = npc.eigh(rho_R)
         Vc.legs[1] = Vc.legs[1].to_LegCharge()
-        Vc.iset_leg_labels(['(vR.p1)', 'vL'])
-        VH = Vc.itranspose(['vL', '(vR.p1)'])
+        Vc.iset_leg_labels(['(p1.vR)', 'vL'])
+        VH = Vc.itranspose(['vL', '(p1.vR)'])
         val_R[val_R < 0.] = 0.  # for stability reasons
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
@@ -1530,7 +1534,7 @@ class DensityMatrixMixer(Mixer):
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
-        theta = npc.tensordot(theta, VH.conj(), axes=['(vR.p1)', '(vR*.p1*)'])  # axes 1, 1
+        theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])  # axes 1, 1
         theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # for left/right
         # normalize `S` (as in svd_theta) to avoid blowing up numbers
         theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
@@ -1571,7 +1575,7 @@ class DensityMatrixMixer(Mixer):
             Mainly the reduced density matrix of the left part, but with some additional mixing.
         """
         if not mix_enabled:
-            return npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
+            return npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         H = engine.env.H
         try:
             LHeff = engine.LHeff
@@ -1582,14 +1586,14 @@ class DensityMatrixMixer(Mixer):
             pipeL = theta.get_leg('(vL.p0)')
             LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()],
                                        new_axes=[0, -1])
-        rho = npc.tensordot(LHeff, theta.split_legs('(vR.p1)'), axes=['(vR.p0*)', '(vL.p0)'])
+        rho = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)']).split_legs('(p1.vR)')
         rho_c = rho.conj()
         H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
         mixer_xR, add_separate_Id = self.get_xR(
             H1.get_leg('wR'), H.get_IdL(i0 + 2), H.get_IdR(i0 + 1))
         H1m = npc.tensordot(H1, mixer_xR, axes=['wR', 'wL'])
         H1m = npc.tensordot(H1m, H1.conj(), axes=[['p1', 'wL*'], ['p1*', 'wR*']])
-        rho = npc.tensordot(rho, H1m, axes=[['p1', 'wR'], ['p1*', 'wL']])
+        rho = npc.tensordot(rho, H1m, axes=[['wR', 'p1'], ['wL', 'p1*']])
         rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
         rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
         if add_separate_Id:
@@ -1627,7 +1631,7 @@ class DensityMatrixMixer(Mixer):
         Returns
         -------
         rho_R : :class:`~tenpy.linalg.np_conserved.Array`
-            A (hermitian) square array with labels ``'(vR.p1)', '(vR*.p1*)'``.
+            A (hermitian) square array with labels ``'(p1.vR)', '(p1*.vR*)'``.
             Mainly the reduced density matrix of the right part, but with some additional mixing.
         """
         if not mix_enabled:
@@ -1640,11 +1644,10 @@ class DensityMatrixMixer(Mixer):
             H1 = H.get_W(i0+1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
             RP = engine.env.get_RP(i0 + 1, store=False)
             RHeff = npc.tensordot(RP, H1, axes=['wL', 'wR'])
-            pipeR = theta.get_leg('(vR.p1)')
-            RHeff = RHeff.combine_legs([['vL*', 'p1'], ['vL', 'p1*']], pipes=[pipeR, pipeR.conj()],
+            pipeR = theta.get_leg('(p1.vR)')
+            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()],
                                        new_axes=[-1, 0])
-
-        rho = npc.tensordot(RHeff, theta.split_legs('(vL.p0)'), axes=['(vL.p1*)', '(vR.p1)'])
+        rho = npc.tensordot(RHeff, theta, axes=['(p1*.vL)', '(p1.vR)']).split_legs('(vL.p0)')
         rho_c = rho.conj()
 
         H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
@@ -1654,7 +1657,7 @@ class DensityMatrixMixer(Mixer):
         H0m = npc.tensordot(H0m, H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
         rho = npc.tensordot(H0m, rho, axes=[['p0*', 'wR'], ['p0', 'wL']])
         rho = npc.tensordot(rho, rho_c, axes=(['p0', 'wR*', 'vL'], ['p0*', 'wL*', 'vL*']))
-        rho.ireplace_labels(['(vL*.p1)', '(vL.p1*)'], ['(vR.p1)', '(vR*.p1*)'])
+        rho.ireplace_labels(['(p1.vL*)', '(p1*.vL)'], ['(p1.vR)', '(p1*.vR*)'])
         if add_separate_Id:
             rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vL.p0)', '(vL*.p0*)'])
         return rho

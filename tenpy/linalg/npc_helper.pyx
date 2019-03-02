@@ -17,7 +17,7 @@ DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings wi
 # see https://github.com/cython/cython/issues/2828
 
 import numpy as np
-cimport numpy as np
+cimport numpy as np  # for clarity: replace with _np or np_ or c_np
 cimport cython
 from libcpp.vector cimport vector
 from libc.string cimport memcpy
@@ -647,7 +647,8 @@ cdef void Array_itranspose_fast(self, np.ndarray[intp_t, ndim=1, mode='c'] axes)
     cdef np.PyArray_Dims permute
     permute.len = axes.shape[0]
     permute.ptr = &axes[0]
-    self._data = [np.PyArray_Transpose(block, &permute) for block in data]
+    self._data = [np.PyArray_GETCONTIGUOUS(np.PyArray_Transpose(block, &permute))
+                  for block in data]
 
 
 @cython.wraparound(False)
