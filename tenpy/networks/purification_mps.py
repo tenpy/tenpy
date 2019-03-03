@@ -139,8 +139,9 @@ class PurificationMPS(MPS):
 
     # `MPS.get_B` & co work, thanks to using labels. `B` just have the additional `q` labels.
     _p_label = ['p', 'q']  # this adjustment makes `get_theta` & friends work
+    _B_labels = ['vL', 'p', 'q', 'vR']
 
-    # thanks to using `self._replace_p_label`
+    # Thanks to using `self._replace_p_label`,
     # correlation_function works as it should, if we adjust _corr_up_diag
 
     def test_sanity(self):
@@ -301,8 +302,8 @@ class PurificationMPS(MPS):
             tr_legs = labels(['p'])
             comb_legs = labels(['q'])
         contr_rho = (
-            ['vR*'] + self._get_p_label(1, False),  # 'vL', 'p1'
-            ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+            ['vR*'] + self._get_p_label('1'),  # 'vL', 'p1'
+            ['vL*'] + self._get_p_label('1*'))  # 'vL*', 'p1*'
         mutinf = []
         coord = []
         for i in range(self.L):
@@ -312,7 +313,7 @@ class PurificationMPS(MPS):
             if self.finite:
                 jmax = min(jmax, self.L)
             for j in range(i + 1, jmax):
-                B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
+                B = self.get_B(j, form='B', label_p='1')  # 'vL', 'vR', 'p1'
                 rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
                 rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
                 for a, b in zip(*tr_legs):
@@ -357,3 +358,18 @@ class PurificationMPS(MPS):
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*', 'q*'], ['vR*', 'p', 'q']])
         return res
+
+    def _replace_p_label(self, A, s):
+        """Return npc Array `A` with replaced label, ``'p' -> 'p'+s, 'q' -> 'q'+s``."""
+        return A.replace_labels(self._p_label, self._get_p_label(s))
+
+    def _get_p_label(self, s, star=False):
+        """return  self._p_label with additional string `s`."""
+        return ['p' + s, 'q' + s]
+
+    def _get_p_labels(self, ks, star=False):
+        """join ``self._get_p_label(str(k) {+'*'} ) for k in range(ks)`` to a single list."""
+        if star:
+            return [lbl + str(k) + '*' for k in range(ks) for lbl in self._p_label]
+        else:
+            return [lbl + str(k) for k in range(ks) for lbl in self._p_label]

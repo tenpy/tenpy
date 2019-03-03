@@ -52,22 +52,26 @@ To take care of the different canonical forms, algorithms should use functions l
 :meth:`~tenpy.networks.mps.MPS.get_theta`, :meth:`~tenpy.networks.mps.MPS.get_B`
 and :meth:`~tenpy.networks.mps.MPS.set_B` instead of accessing them directly,
 as they return the `B` in the desired form (which can be chosen as an argument).
+The values of the tuples for the form correspond to the exponent of the singular values
+on the left and right.
+To keep track of a "mixed" canonical form ``A A A s B B``, we save the tuples for each
+site of the MPS in :attr:`MPS.form`.
 
-======== ========== =======================================================================
+======== ========== ==========================================================================
 `form`   tuple      description
-======== ========== =======================================================================
+======== ========== ==========================================================================
 ``'B'``  (0, 1)     right canonical: ``_B[i] = -- Gamma[i] -- s[i+1]--``
                     The default form, which algorithms asssume.
 ``'C'``  (0.5, 0.5) symmetric form: ``_B[i] = -- s[i]**0.5 -- Gamma[i] -- s[i+1]**0.5--``
 ``'A'``  (1, 0)     left canonical: ``_B[i] = -- s[i] -- Gamma[i] --``.
-                    For stability reasons, we recommend to *not* use this form.
 ``'G'``  (0, 0)     Save only ``_B[i] = -- Gamma[i] --``.
-                    For stability reasons, we recommend to *not* use this form.
+``'Th'`` (1, 1)     Form of a local wave function `theta` with singular value on both sides.
+                    ``psi.get_B(i, 'Th') is equivalent to ``psi.get_theta(i, n=1)``.
 ``None`` ``None``   General non-canoncial form.
                     Valid form for initialization, but you need to call
                     :meth:`~tenpy.networks.mps.MPS.canonical_form` (or similar)
                     before using algorithms.
-======== ========== =======================================================================
+======== ========== ==========================================================================
 """
 # Copyright 2018 TeNPy Developers
 
@@ -100,7 +104,7 @@ class MPS:
         Entries out of :attr:`nontrivial_bonds` are ignored.
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the tabel of the module doc-string.
-    form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+    form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
         The form of the stored 'matrices', see table in module doc-string.
         A single choice holds for all of the entries.
 
@@ -147,7 +151,6 @@ class MPS:
         How many states to keep at least when diagonalizing a :class:`TransferMatrix`.
         Important if the state develops a near-degeneracy.
     """
-
     # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
     # For the canonical forms, ``nu[0] + nu[1] = 1``
     _valid_forms = {
@@ -155,12 +158,17 @@ class MPS:
         'C': (0.5, 0.5),
         'B': (0., 1.),
         'G': (0., 0.),  # like Vidal's `Gamma`.
+        'Th': (1., 1.),
         None: None,  # means 'not in any canonical form'
     }
 
     # valid boundary conditions. Don't overwrite this!
     _valid_bc = ('finite', 'segment', 'infinite')
+    # the "physical" labels for each B
     _p_label = ['p']
+    _p_label_star = ['p*']
+    # All labels of each tensor in _B (order is used!)
+    _B_labels = ['vL', 'p', 'vR']
 
     def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1.):
         self.sites = list(sites)
@@ -172,7 +180,7 @@ class MPS:
         self.grouped = 1
 
         # make copies of Bs and SVs
-        self._B = [B.astype(dtype, copy=True) for B in Bs]
+        self._B = [B.astype(dtype, copy=True).itranspose(self._B_labels) for B in Bs]
         self._S = [None] * (self.L + 1)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
             self._S[i] = np.array(SVs[i], dtype=np.float)
@@ -192,9 +200,9 @@ class MPS:
         if len(self._S) != self.L + 1:
             raise ValueError("wrong len of self._S")
         for i, B in enumerate(self._B):
-            if not set(['vL', 'vR', 'p']) <= set(B.get_leg_labels()):
-                raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
-            B.test_sanity()  # recursive...
+            if B.get_leg_labels() != self._B_labels:
+                raise ValueError("B has wrong labels {0!r}, expected {1!r}".format(
+                    B.get_leg_labels(), self._B_labels))
             if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
                     self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
                 raise ValueError("shape of B incompatible with len of singular values")
@@ -590,37 +598,56 @@ class MPS:
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
-    def get_B(self, i, form='B', copy=False, cutoff=1.e-16):
+    def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None):
         """Return (view of) `B` at site `i` in canonical form.
 
         Parameters
         ----------
         i : int
             Index choosing the site.
-        form : ``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)
+        form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
             The (canonical) form of the returned B.
             For ``None``, return the matrix in whatever form it is.
+            If any of the tuple entry is None, also don't scale on the corresponding axis.
         copy : bool
             Whether to return a copy even if `form` matches the current form.
         cutoff : float
             During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
             This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
             singular values.
+        label_p : None | str
+            Ignored by default (``None``).
+            Otherwise replace the physical label ``'p'`` with ``'p'+label_p'``.
+            (For derived classes with more than one "physical" leg, replace all the physical leg
+            labels accordingly.)
 
         Returns
         -------
         B : :class:`~tenpy.linalg.np_conserved.Array`
-            The MPS 'matrix' `B` at site `i` with leg labels ``vL, vR, p`` (in undefined order).
+            The MPS 'matrix' `B` at site `i` with leg labels ``'vL', 'p', 'vR'``.
             May be a view of the matrix (if ``copy=False``),
-            or a copy (if the form changed or ``copy=True``)
+            or a copy (if the form changed or ``copy=True``).
 
         Raises
         ------
-        ValueError : if self is not in canoncial form and ``form != None``.
+        ValueError : if self is not in canoncial form and `form` is not None.
         """
         i = self._to_valid_index(i)
-        form = self._to_valid_form(form)
-        return self._convert_form_i(self._B[i], i, self.form[i], form, copy, cutoff)
+        new_form = self._to_valid_form(form)
+        old_form = self.form[i]
+        B = self._B[i]
+        if copy:
+            B = B.copy()
+        if new_form is not None and old_form != new_form:
+            if old_form is None:
+                raise ValueError("can't convert form of non-canonical state!")
+            if new_form[0] is not None and new_form[0] - old_form[0] != 0.:
+                B = self._scale_axis_B(B, self.get_SL(i), new_form[0] - old_form[0], 'vL', cutoff)
+            if new_form[1] is not None and new_form[1] - old_form[1] != 0.:
+                B = self._scale_axis_B(B, self.get_SR(i), new_form[1] - old_form[1], 'vR', cutoff)
+        if label_p is not None:
+            B = self._replace_p_label(B, label_p)
+        return B
 
     def set_B(self, i, B, form='B'):
         """Set `B` at site `i`.
@@ -630,15 +657,16 @@ class MPS:
         i : int
             Index choosing the site.
         B : :class:`~tenpy.linalg.np_conserved.Array`
-            The 'matrix' at site `i`. Should have leg labels ``vL, vR, p`` (in any order).
-        form : ``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)
+            The 'matrix' at site `i`. No copy is made!
+            Should have leg labels ``'vL', 'p', 'vR'`` (not necessarily in that order).
+        form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
             The (canonical) form of the `B` to set.
             ``None`` stands for non-canonical form.
         """
         i = self._to_valid_index(i)
         self.form[i] = self._to_valid_form(form)
         self.dtype = np.find_common_type([self.dtype, B.dtype], [])
-        self._B[i] = B
+        self._B[i] = B.itranspose(self._B_labels)
 
     def get_SL(self, i):
         """Return singular values on the left of site `i`"""
@@ -708,55 +736,25 @@ class MPS:
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The n-site wave function with leg labels ``vL, vR, p0, p1, .... p{n-1}``
-            (in undefined order).
+            The n-site wave function with leg labels ``vL, p0, p1, .... p{n-1}, vR``.
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
         i = self._to_valid_index(i)
-        if self.finite:
-            if (i < 0 or i + n > self.L):
-                raise ValueError("i = {0:d} out of bounds".format(i))
-
-        if self.form[i] is None or self.form[(i + n - 1) % self.L] is None:
-            # TODO: raise error if intermediate form is None
-            # we allow intermediate `form`=None except at the very left and right.
-            raise ValueError("can't calculate theta for non-canonical form")
-
-        # the following code is an equivalent to::
-        #
-        #   theta = self.get_B(i, form='B').replace_label('p', 'p0')
-        #   theta.iscale_axis(self.get_SL(i)** formL, 'vL')
-        #   for k in range(1, n):
-        #       j = (i + n) % self.L
-        #       B = self.get_B(j, form='B').replace_label('p', 'p'+str(k))
-        #       theta = npc.tensordot(theta, B, ['vR', 'vL'])
-        #   theta.iscale_axis(self.get_SR(i + n - 1)** (formR-1.), 'vR')
-        #   return theta
-        #
-        # However, the following code is nummerically more stable if ``self.form`` is not `B`
-        # (since it avoids unnecessary `scale_axis`) and works also for intermediate sites with
-        # ``self.form[j] = None``.
-
-        fL, fR = self.form[i]  # left / right form exponent
-        copy = (fL == 0 and fR == 0)  # otherwise, a copy is performed later by `scale_axis`.
-        theta = self.get_B(i, form=None, copy=copy)  # in the current form
-        theta = self._replace_p_label(theta, 0)
-        theta = self._scale_axis_B(theta, self.get_SL(i), formL - fL, 'vL', cutoff)
-        for k in range(1, n):  # nothing if n=1.
-            j = (i + k) % self.L
-            B = self._replace_p_label(self.get_B(j, None, False), k)
-            if self.form[j] is not None:
-                fL_j, fR_j = self.form[j]
-                if fR is not None:
-                    B = self._scale_axis_B(B, self.get_SL(j), 1. - fL_j - fR, 'vL', cutoff)
-                # otherwise we can just hope it's fine.
-                fR = fR_j
-            else:
-                fR = None
-            theta = npc.tensordot(theta, B, axes=('vR', 'vL'))
-        # here, fR = self.form[i+n-1][1]
-        theta = self._scale_axis_B(theta, self.get_SR(i + n - 1), formR - fR, 'vR', cutoff)
+        for j in range(i, i+n):
+            if self.form[j % self.L] is None:
+                raise ValueError("can't calculate theta for non-canonical form")
+        if n == 1:
+            return self.get_B(i, (1., 1.), True, cutoff, '0')
+        # n >= 2: contract some B's
+        theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
+        _, old_fR = self.form[i]
+        for k in range(1, n):  # non-empty range
+            j = self._to_valid_index(i+k)
+            new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
+            B = self.get_B(j, (1.-old_fR, new_fR), False, cutoff, str(k))
+            _, old_fR = self.form[j]
+            theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
 
     def convert_form(self, new_form='B'):
@@ -764,18 +762,18 @@ class MPS:
 
         Parameters
         ----------
-        new_form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+        new_form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
             The form the stored 'matrices'. The table in module doc-string.
             A single choice holds for all of the entries.
 
         Raises
         ------
-        ValueError : if trying to convert from a ``None`` form. Use :meth:`canonicalize` instead!
+        ValueError : if trying to convert from a ``None`` form. Use :meth:`canonical_form` instead!
         """
         new_forms = self._parse_form(new_form)
-        for i, form in enumerate(new_forms):
-            new_B = self.get_B(i, form=form, copy=False)  # calculates the desired form.
-            self.set_B(i, new_B, form=form)
+        for i, new_form in enumerate(new_forms):
+            new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
+            self.set_B(i, new_B, form=new_form)
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
@@ -803,20 +801,23 @@ class MPS:
         Bs = []
         Ss = []
         i = 0
+        B_form = self._valid_forms['B']
         for gs in grouped_sites:
-            new_B = self.get_B(i).itranspose(['vL', 'p', 'vR'])
-            for j in range(1, gs.n_sites):
-                B = self.get_B(i+j).itranspose(['vL', 'p', 'vR'])
-                new_B = npc.tensordot(new_B, B, axes=[-1, 0])
-            new_B = new_B.combine_legs(list(range(1, gs.n_sites+1)), pipes=gs.leg, qconj=+1)
-            Bs.append(new_B.iset_leg_labels(['vL', 'p', 'vR']))
+            n_sites = gs.n_sites
+            new_B = self.get_theta(i, gs.n_sites, formL=B_form[0], formR=B_form[1])
+            comb_legs = [[lbl+str(k) for k in range(n_sites)] for lbl in self._p_label]
+            # comb_legs = [['p0', 'p1', ... ]] for usual MPS
+            axes = list(range(1, 1+len(self._p_label))) # [1]
+            new_B = new_B.combine_legs(comb_legs, new_axes=axes, qconj=[+1]*len(axes))
+            new_B.legs[1].test_equal(gs.leg)  # test legcharge compatibility
+            Bs.append(new_B.iset_leg_labels(self._B_labels)) # ['vL', 'p', 'vR']
             Ss.append(self._S[i])
-            i += gs.n_sites
+            i += n_sites
         Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
         self._B = Bs
         self._S = Ss
         self.sites = grouped_sites
-        self.form = [self._valid_forms['B']] * len(grouped_sites)
+        self.form = [B_form] * len(grouped_sites)
         self.grouped = self.grouped * n
 
     def group_split(self, trunc_par={}):
@@ -837,7 +838,7 @@ class MPS:
         :meth:`group_sites` : Should have been used before to combine sites.
         """
         self.convert_form('B')
-        n = self.sites[0]
+        n0 = self.sites[0].n_sites
         sites = []
         Bs = []
         Ss = []
@@ -847,14 +848,21 @@ class MPS:
             n = gs.n_sites
             Ss_new = []
             Bs_new = []
-            B_gr = self.get_B(i).transpose(['vL', 'p', 'vR'])
-            B_gr.idrop_labels(['p'])  # avoid warning that we split a label with out '(...)'
-            B_gr = B_gr.split_legs(1)
-            theta = self.get_theta(i, n=1).itranspose(['vL', 'p0', 'vR'])
-            theta.idrop_labels(['p0'])  # avoid warning
-            theta = theta.split_legs(1)
-            # B_gr and theta have legs vL p0 p1 ... p{n-1} vR
-            combine = [list(range(n)), [-2, -1]]
+            B_gr = self.get_B(i, form='B').transpose(self._B_labels) # vL, p, vR
+            B_gr.idrop_labels(self._p_label)  # avoid warning: split label not called '(...)'
+            n_p_label = len(self._p_label)
+            split_legs = list(range(1, 1 + n_p_label))
+            transp = [i for k in range(n) for i in range(1+k, 1 + n * n_p_label, n)]
+            transp = ['vL'] + transp + ['vR']
+            B_gr = B_gr.split_legs(split_legs).itranspose(transp)
+            theta = self.get_theta(i, n=1)
+            theta.idrop_labels(self._get_p_label('0'))  # avoid warning
+            theta = theta.split_legs(split_legs).itranspose(transp)
+            # for usual MPS, B_gr and theta have legs vL p0 p1 ... p{n-1} vR
+            # for MPS with legs p, q, they have legs vL p0 q0 p1 q1 ... q{-n-1} vR
+            combine = [list(range(B_gr.rank - n_p_label - 1)), list(range(-n_p_label - 1, 0, +1))]
+            # combine = [[0, 1, .... {n-1}], [-2, -1]] for usual MPS
+            axes_contr = [combine[1], list(range(1, 2+n_p_label))]
             for j in range(n-1, 0, -1):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
@@ -863,11 +871,12 @@ class MPS:
                 Ss_new.append(S)
                 trunc_err += err
                 theta = U.split_legs(0) # vL p0 ... pj-1 vR
-                combine[0].pop()
-                B = V.split_legs(1).iset_leg_labels(['vL', 'p', 'vR'])
-                B_gr = npc.tensordot(B_gr, B.conj(), axes=[[-2, -1], [1, 2]]) # vL p0 ... pj-1 vR
+                for _ in range(n_p_label):
+                    combine[0].pop()
+                B = V.split_legs(1).iset_leg_labels(self._B_labels) # vL p vR
+                B_gr = npc.tensordot(B_gr, B.conj(), axes=axes_contr) # vL p0 ... pj-1 vR
                 Bs_new.append(B)
-            Bs_new.append(B_gr.iset_leg_labels(['vL', 'p', 'vR']))  # inversion free :)
+            Bs_new.append(B_gr.iset_leg_labels(self._B_labels))  # inversion free :)
             Ss_new.append(self.get_SL(i))
             Bs.extend(Bs_new[::-1])
             Ss.extend(Ss_new[::-1])
@@ -875,8 +884,9 @@ class MPS:
         self.sites = sites
         self._B = Bs
         self._S = Ss
-        self.grouped = self.grouped // n
+        self.grouped = self.grouped // n0
         self.form = [self._valid_forms['B']] * len(sites)
+        self.test_sanity()
         return trunc_err
 
     def get_grouped_mps(self, blocklen):
@@ -888,9 +898,9 @@ class MPS:
         -------
         new MPS object with bunched sites.
         """
-        groupedMPS=copy.deepcopy(self)
+        groupedMPS= self.copy()
         groupedMPS.group_sites(n=blocklen)
-        return (groupedMPS)
+        return groupedMPS
 
     def get_total_charge(self):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
@@ -978,15 +988,15 @@ class MPS:
         res = []
         for ib in bonds:
             s = self._S[ib]
-            if len(s.shape) > 1:
+            if len(s.shape) == 1:
+                res.append(entropy(s**2, n))
+            else:
                 if for_matrix_S:
                     # explicitly calculate Schmidt values by diagonalizing (s^dagger s)
                     s = npc.eigvalsh(npc.tensordot(s.conj(), s, axes=[0, 0]))
                     res.append(entropy(s, n))
                 else:
                     raise ValueError("entropy with non-diagonal schmidt values")
-            else:
-                res.append(entropy(s**2, n))
         return np.array(res)
 
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
@@ -1054,8 +1064,8 @@ class MPS:
         ent_spectrum : list
             For each (non-trivial) bond the entanglement spectrum.
             If `by_charge` is ``False``, return (for each bond) a sorted 1D ndarray
-            with the convention :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt value
-            and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
+            with the convention :math:`S_i^2 = e^{-\xi_i}`, where :math:`S_i` labels a Schmidt
+            value and :math:`\xi_i` labels the entanglement 'energy' in the returned spectrum.
             If `by_charge` is True, return a a list of tuples ``(charge, sub_spectrum)``
             for each possible charge on that bond.
         """
@@ -1091,7 +1101,7 @@ class MPS:
             Reduced density matrix of the segment sites.
             Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
         """
-        segment = np.asarray(segment)
+        segment = np.sort(segment)
         if np.all(segment[1:] == segment[:-1] + 1):  # consecutive
             theta = self.get_theta(segment[0], segment[-1] - segment[0] + 1)
             rho = npc.tensordot(theta, theta.conj(), axes=(['vL', 'vR'], ['vL*', 'vR*']))
@@ -1099,16 +1109,17 @@ class MPS:
         rho = self.get_theta(segment[0], 1)
         rho = npc.tensordot(rho, rho.conj(), axes=('vL', 'vL*'))
         k = 1
+        contract_axes = (['vR*'] + self._p_label, ['vL*'] + self._get_p_label('*'))
         for i in range(segment[0] + 1, segment[-1]):
             B = self.get_B(i)
             if i == segment[k]:
-                B = self._replace_p_label(B, k)
+                B = self._replace_p_label(B, str(k))
                 k += 1
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
                 rho = npc.tensordot(rho, B.conj(), axes=('vR*', 'vL*'))
             else:
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
-                rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
+                rho = npc.tensordot(rho, B.conj(), axes=contract_axes)
         B = self.get_B(segment[-1])
         rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
@@ -1229,8 +1240,8 @@ class MPS:
         legs_ij = self._get_p_labels(2, False), self._get_p_labels(2, True)
         # = (['p0', 'p1'], ['p0*', 'p1*'])
         contr_legs = (
-            ['vR*'] + self._get_p_label(1, False),  # 'vL', 'p1'
-            ['vL*'] + self._get_p_label(1, True))  # 'vL*', 'p1*'
+            ['vR*'] + self._get_p_label('1'),  # ['vL', 'p1']
+            ['vL*'] + self._get_p_label('1*'))  # ['vL*', 'p1*']
         mutinf = []
         coord = []
         for i in range(self.L):
@@ -1240,7 +1251,7 @@ class MPS:
             if self.finite:
                 jmax = min(jmax, self.L)
             for j in range(i + 1, jmax):
-                B = self._replace_p_label(self.get_B(j, form='B'), 1)  # 'vL', 'vR', 'p1'
+                B = self._replace_p_label(self.get_B(j, form='B'), '1')  # 'vL', 'vR', 'p1'
                 rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
                 rho_ij = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
                 rho_ij = rho_ij.combine_legs(legs_ij, qconj=[+1, -1])
@@ -1255,7 +1266,7 @@ class MPS:
         """Compute overlap ``<self|other>``.
 
         .. todo :
-            For finite MPS with form=False, different charge sectors don't work:
+            For finite MPS with ignore_form=False, different charge sectors don't work:
             MPSEnvironment assumes same charge in bra and ket.
 
         Parameters
@@ -1452,7 +1463,7 @@ class MPS:
 
         Calculates the expectation value of a tensor product of single-site operators
         acting on different sites next to each other.
-        In other works, evaluate the expectation value of a term
+        In other words, evaluate the expectation value of a term
         ``op0_i0 op1_{i0+1} op2_{i0+2} ...``.
 
         Parameters
@@ -1475,9 +1486,11 @@ class MPS:
         op = operators[0]
         if (isinstance(op, str)):
             op = self.sites[self._to_valid_index(i0)].get_op(op)
-        theta = self.get_theta(i0, 1)
-        C = npc.tensordot(op, theta, axes=['p*', 'p0'])
-        C = npc.tensordot(theta.conj(), C, axes = [['p0*', 'vL*'],['p', 'vL']])
+        theta = self.get_B(i0, 'Th')
+        C = npc.tensordot(op, theta, axes=['p*', 'p'])
+        axes = [['vL*'] + self._get_p_label('*') ,['vL'] + self._p_label]
+        C = npc.tensordot(theta.conj(), C, axes=axes)
+        axes[1][0] = 'vR*'
         for j in range(1, len(operators)):
             op = operators[j] # the operator
             i = i0 + j  # the site it acts on
@@ -1487,7 +1500,7 @@ class MPS:
                 if (isinstance(op, str)):
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
-            C = npc.tensordot(B.conj(), C, axes=[['vL*','p*'],['vR*','p']])
+            C = npc.tensordot(B.conj(), C, axes=axes)
         exp_val = npc.trace(C, 'vR*', 'vR')
         return np.real_if_close(exp_val)
 
@@ -1512,10 +1525,12 @@ class MPS:
         See also
         --------
         :meth:`expectation_value_term`: evaluates a single `term`.
+
+        .. todo :
+            This is a naive implementation. For efficiency a caching is necessary:
+            We need to evaluate the expectation values of terms starting with the same operator(s)
+            from the left at the same time to avoid doing the same work many times.
         """
-        # TODO: this is a naive implementation. For efficiency a caching is necessary:
-        # We need to evaluate the expectation values of terms starting with the same operator(s)
-        # from the left at the same time to avoid doing the same work many times.
         terms = [self.expectation_value_term(term) for term in term_list]
         terms_sum = sum([t*f for t, f in zip(terms, prefactors)])
         return terms_sum, terms
@@ -1659,10 +1674,10 @@ class MPS:
 
         """
         err = np.empty((self.L, 2), dtype=np.float)
-        lbl_R = (self._get_p_label(0, star=False) + ['vR'],
-                 self._get_p_label(0, star=True) + ['vR*'])
-        lbl_L = (self._get_p_label(0, star=False) + ['vL'],
-                 self._get_p_label(0, star=True) + ['vL*'])
+        lbl_R = (self._get_p_label('0') + ['vR'],
+                 self._get_p_label('0*') + ['vR*'])
+        lbl_L = (['vL'] + self._get_p_label('0'),
+                 ['vL*'] + self._get_p_label('0*'))
         for i in range(self.L):
             th = self.get_theta(i, 1)
             rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
@@ -1695,7 +1710,7 @@ class MPS:
         else:
             self.canonical_form_infinite(renormalize)
 
-    def canonical_form_finite(self, renormalize=True):
+    def canonical_form_finite(self, renormalize=True, cutoff=0.):
         """Bring a finite (or segment) MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
@@ -1740,11 +1755,11 @@ class MPS:
         # sweep from left to right to bring it into left canonical form.
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form
-            M = self.get_B(0, None)
+            M = self.get_B(0, form=None)
             form = None
         else:
             # we actually had a canonical form before, so we should *not* ignore the 'S'
-            M = self.get_theta(0, n=1).replace_labels(self._get_p_label(0), self._p_label)
+            M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
         if self.bc == 'segment':
             M.iscale_axis(self.get_SL(0), axis='vL')
@@ -1762,13 +1777,13 @@ class MPS:
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(
-                M.combine_legs(['vL'] + self._p_label), cutoff=0., inner_labels=['vR', 'vL'])
+                M.combine_legs(['vL'] + self._p_label), cutoff=cutoff, inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
         # sweep from right to left, calculating all the singular values
-        U, S, V = npc.svd(
-            M.combine_legs(['vR'] + self._p_label, qconj=-1), cutoff=0., inner_labels=['vR', 'vL'])
+        U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                          cutoff=cutoff, inner_labels=['vR', 'vL'])
         if not renormalize:
             self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
@@ -1819,6 +1834,7 @@ class MPS:
             Raise an error if the correlation length is larger than that
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
         """
+        assert not self.finite
         i1 = np.argmin(self.chi)  # start at this bond
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
@@ -1854,22 +1870,21 @@ class MPS:
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
         for j1 in range(i1 - 1, i1 - L, -1):
-            B1 = self.get_B(j1)
-            Gr = npc.tensordot(
-                B1.scale_axis(Wr, 'vR'), B1.conj(), axes=[['p', 'vR'], ['p*', 'vR*']])
+            B1 = self.get_B(j1, 'B')
+            axes = [self._p_label  + ['vR'], self._get_p_label('*') + ['vR*']]
+            Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
             Wr_list[j1 % L] = Wr = self._canonical_form_correct_right(j1, Gr)
-
-        B1 = self.get_B(i1)
 
         # phase 3: sweep from left to right; find other left eigenvectors,
         # bring each bond into canonical form
         for j1 in range(i1 - L + 1, i1, +1):
             # find Gl on bond j1-1, j1
-            B1 = self.get_B(j1 - 1)
+            B1 = self.get_B(j1 - 1, 'B')
             Gl = npc.tensordot(
                 B1.conj(),  # old B1; now on site j1-1
                 npc.tensordot(Gl, B1, axes=['vR', 'vL']),
-                axes=[['p*', 'vL*'], ['p', 'vR*']])
+                axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']])
+                # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
 
     def correlation_length(self, target=1, tol_ev0=1.e-8):
@@ -1931,7 +1946,7 @@ class MPS:
     def add(self, other, alpha, beta):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
 
-        Works only for 'finite' boundary conditions.
+        Works only for ``'finite'`` boundary conditions.
         Takes into account :attr:`norm`.
 
         Parameters
@@ -1945,7 +1960,7 @@ class MPS:
         Returns
         -------
         sum : :class:`MPS`
-            An MPS representing ``alpha|self> + beta |others>``.
+            An MPS representing ``alpha|self> + beta |other>``.
         """
         L = self.L
         assert (other.L == L and L >= 2)  # (one could generalize this function...)
@@ -2008,8 +2023,7 @@ class MPS:
             op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
             unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < 1.e-14
         opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
-        self._B[i] = opB
-        self.dtype = np.find_common_type([self.dtype, opB.dtype], [])
+        self.set_B(i, opB, self.form[i])
         if not unitary:
             self.canonical_form(renormalize)
 
@@ -2272,30 +2286,6 @@ class MPS:
             return form
         return self._valid_forms[form]
 
-    def _convert_form_i(self, B, i, form, new_form, copy=True, cutoff=1.e-16):
-        """Transform `B[i]` from canonical form `form` into canonical form `new_form`.
-
-        ======== ======== ================================================
-        form     new_form action
-        ======== ======== ================================================
-        *        ``None`` return (copy of) B
-        tuple    tuple    scale the legs 'vL' and 'vR' of B appropriately
-                          with ``self.get_SL(i)`` and ``self.get_SR(i)``.
-        ``None`` tuple    raise ValueError
-        ======== ======== ================================================
-        """
-        if new_form is None or form == new_form:
-            if copy:
-                return B.copy()
-            return B  # nothing to do
-        if form is None:
-            raise ValueError("can't convert form of non-canonical state!")
-        old_L, old_R = form
-        new_L, new_R = new_form
-        B = self._scale_axis_B(B, self.get_SL(i), new_L - old_L, 'vL', cutoff)
-        B = self._scale_axis_B(B, self.get_SR(i), new_R - old_R, 'vR', cutoff)
-        return B
-
     def _scale_axis_B(self, B, S, form_diff, axis_B, cutoff):
         """Scale an axis of B with S to bring it in desired form.
 
@@ -2331,31 +2321,29 @@ class MPS:
                 S = S**form_diff
             return B.scale_axis(S, axis_B)
 
-    def _replace_p_label(self, A, k):
-        """Return npc Array `A` with replaced label, ``'p' -> 'p'+str(k)``.
+    def _replace_p_label(self, A, s):
+        """Return npc Array `A` with replaced label, ``'p' -> 'p'+s``.
 
         This is done for each of the 'physical labels' in :attr:`_p_label`.
         With a clever use of this function, the re-implementation of various functions
         (like get_theta) in derived classes with multiple legs per site can be avoided.
         """
-        return A.replace_labels(self._p_label, self._get_p_label(k, False))
+        return A.replace_label('p', 'p' + s)
+        #  return A.replace_labels(self._p_label, self._get_p_label(s))
 
-    def _get_p_label(self, k, star=False):
-        """return list of physical label(s) with additional str(k) and possibly a '*'."""
-        if star == 'both':
-            return [lbl + str(k) for lbl in self._p_label] + \
-                   [lbl + str(k)+'*' for lbl in self._p_label]
-        elif star:
-            return [lbl + str(k) + '*' for lbl in self._p_label]
-        else:
-            return [lbl + str(k) for lbl in self._p_label]
+    def _get_p_label(self, s):
+        """return  self._p_label with additional string `s`."""
+        return ['p' + s]
+        #  return [lbl + s for lbl in self._p_label]
 
     def _get_p_labels(self, ks, star=False):
-        """join ``self._get_p_label(k, star) for k in range(ks)`` to a single list."""
-        res = []
-        for k in range(ks):
-            res.extend(self._get_p_label(k, star))
-        return res
+        """Join ``self._get_p_label(str(k)) for k in range(ks)`` to a single list."""
+        if star:
+            return ['p' + str(k) + '*' for k in range(ks)]
+            #  return [lbl + str(k) + '*' for k in range(ks) for lbl in self._p_label]
+        else:
+            return ['p' + str(k) for k in range(ks)]
+            #  return [lbl + str(k) for k in range(ks) for lbl in self._p_label]
 
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
@@ -2881,7 +2869,7 @@ class MPSEnvironment:
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('', True) + ['vL*'], self.ket._p_label + ['vR*'])
+        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'vR'
@@ -2889,7 +2877,7 @@ class MPSEnvironment:
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('', True) + ['vR*'], self.ket._p_label + ['vL*'])
+        axes = (self.ket._get_p_label('*') + ['vR*'], self.ket._p_label + ['vL*'])
         # for a ususal MPS, axes = (['p*', 'vR*'], ['p', 'vL*'])
         RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP, axes=axes)
         return RP  # labels 'vL', 'vL*'
@@ -2939,7 +2927,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
         Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
-    form : ``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)
+    form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
 
 
@@ -2990,8 +2978,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
         form = ket._to_valid_form(form)
-        p = ket._get_p_label('', False)  # for ususal MPS just ['p']
-        pstar = ket._get_p_label('', True)
+        p = ket._p_label  # for ususal MPS just ['p']
+        pstar = ket._get_p_label('*') # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']

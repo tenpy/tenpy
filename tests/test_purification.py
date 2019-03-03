@@ -24,17 +24,23 @@ def test_purification_mps():
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.)  # product state has no entanglement.
         N = psi.expectation_value('Id')  # check normalization : <1> =?= 1
-        npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
+        npt.assert_allclose(N, np.ones([L]), atol=1.e-13)
         E = psi.expectation_value('Sz')
-        npt.assert_array_almost_equal_nulp(E, np.zeros([L]), 100)
+        npt.assert_allclose(E, np.zeros([L]), atol=1.e-13)
         C = psi.correlation_function('Sz', 'Sz')
-        npt.assert_array_almost_equal_nulp(C, 0.5 * 0.5 * np.eye(L), 100)
+        npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
         coords, mutinf = psi.mutinf_two_site()
         for (i, j), Iij in zip(coords, mutinf):
             print(repr((i, j)), Iij)
         if L > 1:
             assert np.max(np.abs(mutinf)) < 1.e-14
-
+        if L >= 2:
+            # test that grouping sites works
+            print('group & split sites')
+            psi.group_sites(2)
+            psi.group_split()
+            C = psi.correlation_function('Sz', 'Sz')
+            npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
 @attr('slow')
 def test_purification_TEBD(L=3):
