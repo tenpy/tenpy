@@ -490,8 +490,8 @@ class MPS:
         mask[up] = mask[down] = True
         Open = npc.diag(1., site.leg)[:, mask]
         Close = np.zeros([site.dim, site.dim], dtype=np.float_)
-        Close[up, down] = -1.
-        Close[down, up] = 1.
+        Close[up, down] = 1.
+        Close[down, up] = -1.
         Close = npc.Array.from_ndarray(Close, [site.leg, site.leg])  # no conj() !
         Close = Close[mask, :]
         Id = npc.eye_like(Close, 0)
