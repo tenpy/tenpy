@@ -43,19 +43,28 @@ def test_mps():
 
 def test_mps_add():
     s = site.SpinHalfSite(conserve='Sz')
-    psi1 = mps.MPS.from_product_state([s] * 4, [0, 1, 0, 0], bc='finite')
-    psi2 = mps.MPS.from_product_state([s] * 4, [0, 0, 1, 0], bc='finite')
+    u, d = 'up', 'down'
+    psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite')
+    psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite')
     psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
-    print(psi_sum)
-    print(psi_sum._B[1])
-    print(psi_sum._B[2])
+    npt.assert_almost_equal(psi_sum.norm, 1.)
+    npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
+    npt.assert_almost_equal(psi_sum.overlap(psi2), -0.5**0.5)
     # check overlap with singlet state
-    # TODO: doesn't work due to gauging of charges....
-    psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=0, down=1, bc='finite')
-    print(psi.expectation_value('Sz'))
-    #  ov = psi.overlap(psi_sum)
-    #  print("ov = ", ov)
-    #  assert( abs(1.-ov) < 1.e-14)
+    psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=u, down=d, bc='finite')
+    #  ov = psi.overlap(psi_sum.copy())
+    print("total charge psi1", psi1.get_total_charge())
+    print("total charge psi2", psi2.get_total_charge())
+    print("total charge psi_sum", psi_sum.get_total_charge())
+    print("total charge psi", psi.get_total_charge())
+    npt.assert_almost_equal(psi_sum.overlap(psi), 1.)
+
+    psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite')
+    psi2_prime.apply_local_op(1, 'Sm', False, False)
+    #  # now psi2_prime is psi2 up to gauging of charges.
+    #  # can MPS.add handle this?
+    psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
+    npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
 
 
 def test_MPSEnvironment():
@@ -76,20 +85,22 @@ def test_MPSEnvironment():
 
 
 def test_singlet_mps():
+    u, d = 'up', 'down'
     pairs = [(0, 3), (1, 6), (2, 5)]
     bond_singlets = np.array([1, 2, 3, 2, 2, 1, 0])
     lonely = [4, 7]
     L = 2 * len(pairs) + len(lonely)
     print("singlet pairs: ", pairs)
     print("lonely sites: ", lonely)
-    psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, up=0, down=1, bc='finite')
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, lonely_state=u, bc='finite')
     psi.test_sanity()
     print('chi = ', psi.chi)
     assert (np.all(2**bond_singlets == np.array(psi.chi)))
     ent = psi.entanglement_entropy() / np.log(2)
     npt.assert_array_almost_equal_nulp(ent, bond_singlets, 5)
     psi.entanglement_spectrum(True)  # (just check that the function runs)
-    print(psi.overlap(psi))
+    npt.assert_almost_equal(psi.norm, 1.)
+    npt.assert_almost_equal(psi.overlap(psi), 1.)
     print(psi.expectation_value('Id'))
     ent_segm = psi.entanglement_entropy_segment(list(range(4))) / np.log(2)
     print(ent_segm)
@@ -103,16 +114,14 @@ def test_singlet_mps():
         k = coord.index((i, j))
         mutinf[k] -= 2.  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
     npt.assert_array_almost_equal(mutinf, 0., decimal=14)
-    # TODO: calculating overlap with product state
-    # TODO: doesn't work yet: different qtotal.
-    #  product_state = [None]*L
-    #  for i, j in pairs:
-    #      product_state[i] = 0
-    #      product_state[j] = 1
-    #  for k in lonely:
-    #      product_state[k] = 0
-    #  psi2 = mps.MPS.from_product_state([spin_half]*L, product_state, bc='finite')
-    #  ov = psi.overlap(psi2)
+    product_state = [None]*L
+    for i, j in pairs:
+        product_state[i] = u
+        product_state[j] = d
+    for k in lonely:
+        product_state[k] = u
+    psi2 = mps.MPS.from_product_state([spin_half]*L, product_state, bc='finite')
+    npt.assert_almost_equal(psi.overlap(psi2), 0.5**(0.5*len(pairs)))
 
 
 def test_charge_fluctuations():
@@ -139,8 +148,6 @@ def test_charge_fluctuations():
     npt.assert_array_almost_equal(average_charge, [[0., 0., 1., 1., 1., 1., 2.]], decimal=14)
     npt.assert_array_almost_equal(charge_variance, [[ 0.,  1.,  1.,  2.,  1.,  0.,  0.]],
                                   decimal=14)
-
-
 
 
 def test_mps_swap():

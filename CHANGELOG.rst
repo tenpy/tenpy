@@ -51,12 +51,12 @@ Added
   :meth:`tenpy.models.model.MPOModel.calc_H_bond_from_MPO` for conversion of H_bond into H_MPO and vice
   versa.
 - :class:`tenpy.algorithms.tebd.RandomUnitaryEvolution` for random unitary circuits
-- :class:`~tenpy.linalg.np_conserved.Array` now rejects addition/subtraction with other types
-- :class:`~tenpy.linalg.np_conserved.Array` now rejects multiplication/division  with non-scalar types
 
 Changed
 ^^^^^^^
 - moved toycodes from the folder ``examples/`` to a new folder ``toycodes/`` to separate them clearly.
+- :class:`~tenpy.linalg.np_conserved.Array` now rejects addition/subtraction with other types
+- :class:`~tenpy.linalg.np_conserved.Array` now rejects multiplication/division  with non-scalar types
 - Restructured lanczos into a class, added time evolution calculating exp(A*dt)|psi0>
 - Warning for poorly conditioned Lanczos; to overcome this enable the new parameter "reortho"
 - By default, make deep copies of npc Arrays.
@@ -99,6 +99,7 @@ Fixed
 - wrong dtype of npc.Array when adding/subtracting/... arrays of different data types
 - could get wrong H_bond for completely decoupled chains.
 - SVD could return outer indices with different axes
+- MPS.overlap for mps with different total charge (e.g. after ``psi.apply_local_op(i, 'Sp')``) work now.
 
 Removed
 ^^^^^^^

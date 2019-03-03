@@ -448,7 +448,7 @@ class MPS:
                       up='up',
                       down='down',
                       lonely=[],
-                      lonely_state=0,
+                      lonely_state='up',
                       bc='finite'):
         """Create an MPS of entangled singlets.
 
@@ -557,7 +557,7 @@ class MPS:
     def copy(self):
         """Returns a copy of `self`.
 
-        The copy still shares the sites, chinfo, and LegCharges of the _B,
+        The copy still shares the sites, chinfo, and LegCharges of the B tensors,
         but the values of B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
@@ -913,28 +913,45 @@ class MPS:
         qtotal = np.sum([B.qtotal for B in self._B], axis=0)
         return self.chinfo.make_valid(qtotal)
 
-    def gauge_total_charge(self, qtotal=None):
+    def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
         """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
 
         Parameters
         ----------
         qtotal : (list of) charges
-            If a single `qtotal` is given, it is the desired total charge of the MPS
+            If a single set of charges is given, it is the desired total charge of the MPS
             (which :meth:`get_total_charge` will return afterwards).
-            Alternatively, the desired `qtotal` for each of the individual `B` tensors can be
-            specified.
+            By default (``None``), use 0 charges, unless vL_leg and vR_leg are specified, in which
+            case we adjust the total charge to match these legs.
+        vL_leg : None | LegCharge
+            Desired new virtual leg on the very left. Needs to have the same block strucuture as
+            current leg, but can have shifted charge entries.
+        vR_leg : None | LegCharge
+            Desired new virtual leg on the very rigth. Needs to have the same block strucuture as
+            current leg, but can have shifted charge entries.
+            Should be `vL_leg.conj()` for infinite MPS, if `qtotal` is not given.
         """
         if self.chinfo.qnumber == 0:
             return
+        if vL_leg is not None:
+            vL_chdiff = vL_leg.get_charge(0) - self._B[0].get_leg('vL').get_charge(0)
+        if vR_leg is not None:
+            vR_chdiff = vR_leg.get_charge(0) - self._B[-1].get_leg('vR').get_charge(0)
+        if qtotal is None:
+            if vL_leg is not None and vR_leg is not None:
+                qtotal = self.get_total_charge() + vL_chdiff + vR_chdiff
         qtotal = self.chinfo.make_valid(qtotal)
         if qtotal.ndim == 1:
             qtotal_factor = np.array([0]*(self.L-1) + [1], npc.QTYPE)
             qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
         if qtotal.shape != (self.L, self.chinfo.qnumber):
             raise ValueError("wrong shape of `qtotal`")
-        if self.bc == "infinite" and not np.all(self.chinfo.make_valid(np.sum(qtotal, 0))
-                                                == self.get_total_charge()):
-            raise ValueError("Can't change total charge of infinite MPS")
+        if vL_leg is not None:
+            B = self._B[0]
+            if np.any(vL_chdiff != 0):
+                # adjust left leg
+                self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
+            B.get_leg('vL').test_equal(vL_leg)
         for i in range(self.L):
             B = self._B[i]
             desired_qtotal = qtotal[i]
@@ -946,6 +963,13 @@ class MPS:
                     nextB = self._B[i + 1]
                     self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
                     self._B[i].get_leg('vR').test_contractible(self._B[i+1].get_leg('vL'))
+        # just to check
+        assert np.all(self.get_total_charge() == self.chinfo.make_valid(np.sum(qtotal, 0)))
+        if vR_leg is not None:
+            # check that the charges match
+            self._B[-1].get_leg('vR').test_equal(vR_leg)
+        if self.bc == 'infinite':
+            self._B[0].get_leg('vL').test_contractable(self._B[-1].get_leg('vR'))
         # done
 
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
@@ -1265,10 +1289,6 @@ class MPS:
     def overlap(self, other, charge_sector=0, ignore_form=False, **kwargs):
         """Compute overlap ``<self|other>``.
 
-        .. todo :
-            For finite MPS with ignore_form=False, different charge sectors don't work:
-            MPSEnvironment assumes same charge in bra and ket.
-
         Parameters
         ----------
         other : :class:`MPS`
@@ -1288,7 +1308,7 @@ class MPS:
 
         Returns
         -------
-        overlap : dtype
+        overlap : dtype.type
             The contraction ``<self|other> * self.norm * other.norm``
             (i.e., taking into account the :attr:`norm` of both MPS).
             For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
@@ -1297,13 +1317,10 @@ class MPS:
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
-                # (drawback: makes full copies of the states)
                 TM = TransferMatrix(self, other, charge_sector=charge_sector, form=None)
                 res = TM.matvec(TM.initial_guess(1.))  # apply transfer matrix to identity
                 return npc.trace(res, 0, 1) * self.norm * other.norm
             else:
-                if charge_sector != 0:
-                    raise NotImplementedError("TODO: doesn't work for different charges...")
                 env = MPSEnvironment(self, other)
                 return env.full_contraction(0)
         else:  # infinite
@@ -1722,13 +1739,12 @@ class MPS:
         Performs one sweep left to right doing QR decompositions, and one sweep right to left
         doing SVDs calculating the singular values.
 
-        .. todo ::
-            Should we try to avoid carrying around the total charge of the B matrices?
-
         Parameters
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
+        cutoff : float | None
+            Cutoff of singular values used in the SVDs.
 
         Returns
         -------
@@ -1794,7 +1810,7 @@ class MPS:
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             U, S, V = npc.svd(
                 M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                cutoff=0.,
+                cutoff=cutoff,
                 inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
@@ -1943,10 +1959,13 @@ class MPS:
             return -1. / np.log(abs(E[1] / E[0])) * self.L
         return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
 
-    def add(self, other, alpha, beta):
+    def add(self, other, alpha, beta, cutoff=1.e-15):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
 
-        Works only for ``'finite'`` boundary conditions.
+        Works only for ``'finite', 'segment'`` boundary conditions.
+        For `segment` boundary conditions, the virtual legs on the very left/right are
+        assumed to correspond to each other (i.e. self and other have the same state outside of
+        the considered segment).
         Takes into account :attr:`norm`.
 
         Parameters
@@ -1956,16 +1975,23 @@ class MPS:
         alpha, beta : complex float
             Prefactors for self and other. We calculate
             ``alpha * |self> + beta * |other>``
+        cutoff : float | None
+            Cutoff of singular values used in the SVDs.
 
         Returns
         -------
         sum : :class:`MPS`
             An MPS representing ``alpha|self> + beta |other>``.
+            Has same total charge as `self`.
+        U_L, V_R : :class:`~tenpy.linalg.np_conserved.Array`
+            Only returned for ``'segment'`` boundary conditions.
+            The unitaries defining the new left and right Schmidt states in terms of the old ones,
+            with legs ``'vL', 'vR'``.
         """
         L = self.L
-        assert (other.L == L and L >= 2)  # (one could generalize this function...)
-        assert (self.bc == 'finite')  # not clear for segment: are left states orthogonal?
-        # TODO: should gauge qtotal to zero.
+        assert (other.L == L and L >= 2)  # (if you need this, generalize this function...)
+        assert self.finite
+        self._gauge_compatible_vL_vR(other)
         legs = ['vL', 'vR'] + self._p_label
         # alpha and beta appear only on the first site
         alpha = alpha * self.norm
@@ -1987,10 +2013,14 @@ class MPS:
                 axes=[0, 1]))
 
         Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
-        psi = MPS(self.sites, Bs, Ss, 'finite', None)
+        psi = self.__class__(self.sites, Bs, Ss, 'finite', form=None)  # new class instance
         # bring to canonical form, calculate Ss
-        psi.canonical_form_finite(renormalize=False)
-        return psi
+        if self.bc == 'segment':
+            U_L, V_R = psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
+            return psi, U_L, V_R
+        else:
+            psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
+            return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False):
         """Apply a local operator to `self`.
@@ -2300,7 +2330,13 @@ class MPS:
         Returns scaled B."""
         if form_diff == 0:
             return B  # nothing to do
-        if isinstance(S, npc.Array):
+        if not isinstance(S, npc.Array):
+            # the usual case: S is a 1D array with singular values
+            if form_diff != 1.:
+                S = S**form_diff
+            return B.scale_axis(S, axis_B)
+        else:
+            # e.g. during DMRG with a DensityMatrixMixer
             if S.rank != 2:
                 raise ValueError("Expect 2D npc.Array or 1D numpy ndarray")
             if form_diff == -1:
@@ -2316,10 +2352,6 @@ class MPS:
             else:
                 raise ValueError("This should never happen: unexpected leg for scaling with S")
             return B
-        else:
-            if form_diff != 1.:
-                S = S**form_diff
-            return B.scale_axis(S, axis_B)
 
     def _replace_p_label(self, A, s):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+s``.
@@ -2526,6 +2558,23 @@ class MPS:
         # Gl is diag(S**2) up to numerical errors...
         return Gl, np.ones(Yr.legs[0].ind_len, np.float)
 
+    def _gauge_compatible_vL_vR(self, other):
+        """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
+        if self.chinfo.qnumber == 0:
+            return
+        from tenpy.tools import optimization
+        need_gauge = False
+        with optimization.temporary_level(optimization.OptimizationFlag.default):
+            try:
+                other._B[0].get_leg('vL').test_equal(self._B[0].get_leg('vL'))
+                other._B[-1].get_leg('vR').test_equal(self._B[-1].get_leg('vR'))
+            except ValueError:
+                need_gauge = True
+        if need_gauge:
+            other.gauge_total_charge(None, self._B[0].get_leg('vL'), self._B[-1].get_leg('vR'))
+        if any(self.get_total_charge() != other.get_total_charge()):
+            raise ValueError("self and other have different total charges!")
+
 
 class MPSEnvironment:
     """Stores partial contractions of :math:`<bra|Op|ket>` for local operators `Op`.
@@ -2564,20 +2613,17 @@ class MPSEnvironment:
     and right-canonical `B` to the right parts `RP`.
     Thus, the special case ``ket=bra`` should yield identity matrices for `LP` and `RP`.
 
-    .. todo ::
-        Initial firstLP and first_RP could be calculated with the TransferMatrix. Usefull?
-
-    .. todo ::
-        Doesn't work for different qtotal in ket._B / bra._B -> Need MPS.gauge_qtotal()
-        Or just define firstLP and firstRP to have nonzero qtotal in this case...
-
     Parameters
     ----------
     bra : :class:`~tenpy.networks.mps.MPS`
         The MPS to project on. Should be given in usual 'ket' form;
         we call `conj()` on the matrices directly.
-    ket : :class:`~tenpy.networks.mpo.MPO`
+        Stored in place, without making copies.
+        If necessary to match charges, we call :meth:`~tenpy.networks.mps.MPS.gauge_total_charge`.
+    ket : :class:`~tenpy.networks.mpo.MPO` | None
         The MPS on which the local operator acts.
+        Stored in place, without making copies.
+        If ``None``, use `bra`.
     firstLP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very left part. If ``None``, build trivial one.
     rightRP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
@@ -2591,8 +2637,6 @@ class MPSEnvironment:
     ----------
     L : int
         Number of physical sites. For iMPS the len of the MPS unit cell.
-    dtype : type | string
-        The data type of the Array entries.
     bra, ket : :class:`~tenpy.networks.mps.MPS`
         The two MPS for the contraction.
     _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
@@ -2616,22 +2660,23 @@ class MPSEnvironment:
     def __init__(self, bra, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
+        if ket is not bra:
+            ket._gauge_compatible_vL_vR(bra) # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.L = L = bra.L
         self.finite = bra.finite
-        self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if firstLP is None:
             # Build trivial verly first LP
-            leg_bra = bra.get_B(0).get_leg('vL')
-            leg_ket = ket.get_B(0).get_leg('vL').conj()
+            leg_bra = bra._B[0].get_leg('vL')
+            leg_ket = ket._B[0].get_leg('vL').conj()
             leg_ket.test_contractible(leg_bra)
             # should work for both finite and segment bc
-            firstLP = npc.diag(1., leg_bra, dtype=self.dtype)
+            firstLP = npc.diag(1., leg_bra, dtype=ket.dtype)
             firstLP.iset_leg_labels(['vR*', 'vR'])
         self.set_LP(0, firstLP, age=age_LP)
         if lastRP is None:
@@ -2639,7 +2684,7 @@ class MPSEnvironment:
             leg_bra = bra.get_B(L - 1).get_leg('vR')
             leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
             leg_ket.test_contractible(leg_bra)
-            lastRP = npc.diag(1., leg_bra, dtype=self.dtype)  # (leg_bra, leg_ket)
+            lastRP = npc.diag(1., leg_bra, dtype=ket.dtype)  # (leg_bra, leg_ket)
             lastRP.iset_leg_labels(['vL*', 'vL'])
         self.set_RP(L - 1, lastRP, age=age_RP)
         self.test_sanity()
@@ -2913,7 +2958,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
     Parameters
     ----------
     bra : MPS
-        The MPS which is to be (complex) conjugated
+        The MPS which is to be (complex) conjugated.
     ket : MPS
         The MPS which is not (complex) conjugated.
     shift_bra : int
@@ -2979,6 +3024,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             raise ValueError("incompatible charges")
         form = ket._to_valid_form(form)
         p = ket._p_label  # for ususal MPS just ['p']
+        assert p == bra._p_label
         pstar = ket._get_p_label('*') # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
