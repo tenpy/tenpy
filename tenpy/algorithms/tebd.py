@@ -449,14 +449,12 @@ class Engine:
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
-        bond dimension chi for bond i. This would look something like::
+        bond dimension chi for bond i. The correponding tensor networks look like this::
 
-        |     ... - B1  -  s  -  B2 - ...
-        |           |             |
-        |           |-------------|
-        |           |      U      |
-        |           |-------------|
-        |           |             |
+        |           --S--B1--B2--           --B1--B2--
+        |                |   |                |   |
+        |     theta:     U_bond        C:     U_bond
+        |                |   |                |   |
 
         Parameters
         ----------
@@ -476,33 +474,39 @@ class Engine:
         if self.verbose >= 100:
             print("Update sites ({0:d}, {1:d})".format(i0, i1))
         # Construct the theta matrix
-        theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
-        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
-        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
+        C = self.psi.get_theta(i0, n=2, formL=0.)  # the two B without the S on the left
+        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
+        C.itranspose(['vL', 'p0', 'p1', 'vR'])
+        theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
+        # now theta is the same as if we had done
+        #   theta = self.psi.get_theta(i0, n=2)
+        #   theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
+        # but also have C which is the same except the missing "S" on the left
+        # so we don't have to apply inverses of S (see below)
 
+        theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(
             theta, self.trunc_params, inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
+
         # In general, we want to do the following:
         #     U = U.iscale_axis(S, 'vR')
-        #     B_L = U.split_legs(0).iscale_axis(self.psi.get_SL(i0)**(-1), 'vL')
+        #     B_L = U.split_legs(0).iscale_axis(self.psi.get_SL(i0)**-1, 'vL')
         #     B_L = B_L.ireplace_label('p0', 'p')
-        # i.e. with SL = self.psi.get_SL(i0), we have ``B_L = SL**(-1) U S``
+        # i.e. with SL = self.psi.get_SL(i0), we have ``B_L = SL**-1 U S``
         #
         # However, the inverse of SL is problematic, as it might contain very small singular
-        # values.  Instead, we calculate ``C == SL**-1 theta == SL**-1 U S V``,
+        # values.  Instead, we use ``C == SL**-1 theta == SL**-1 U S V``,
         # such that we obtain ``B_L = SL**-1 U S = SL**-1 U S V V^dagger = C V^dagger``
-        C = self.psi.get_theta(i0, n=2, formL=0.)
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
-        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         B_L = npc.tensordot(
-            C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
+            C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
             V.conj(),
-            axes=['(vR.p1)', '(vR*.p1*)'])
+            axes=['(p1.vR)', '(p1*.vR*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
