@@ -24,7 +24,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
-if not sys.version_info >= (3, 0):
+if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
     sys.exit(1)
 
@@ -46,6 +46,7 @@ except:
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
+    'sphinx.ext.extlinks',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
@@ -229,10 +230,17 @@ texinfo_documents = [
 
 
 
-
-# Example configuration for intersphinx: refer to the Python standard library.
+# cross links to other sphinx documentations
 intersphinx_mapping = {'python': ('https://docs.python.org/3', None),
                        'numpy': ('https://docs.scipy.org/doc/numpy', None),
                        'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
                        'matplotlib': ('https://matplotlib.org', None),
                        }
+
+# extlinks
+extlinks = {'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:'),
+            'doi': ('https://dx.doi.org/%s', 'doi:'),
+            'issue': ('https://github.com/tenpy/tenpy/issues/%s', 'issue #'),
+            'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
+                      'Community forum topic ')
+            }

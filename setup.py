@@ -6,7 +6,7 @@ import numpy
 import sys
 import os
 
-if not sys.version_info >= (3, 0):
+if not sys.version_info >= (3, 5):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
 
