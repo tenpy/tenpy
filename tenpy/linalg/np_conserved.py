@@ -5,7 +5,7 @@ A detailed introduction to this module (including notations) can be found in :do
 This module `np_conserved` implements an class :class:`Array`
 designed to make use of charge conservation in tensor networks.
 The idea is that the `Array` class is used in a fashion very similar to
-the `numpy.ndarray`, e.g you can call the functions :func:`tensordot` or :func:`svd`
+the :class:`numpy.ndarray`, e.g you can call the functions :func:`tensordot` or :func:`svd`
 (of this module) on them.
 The structure of the algorithms (as DMRG) is thus the same as with basic numpy ndarrays.
 
@@ -14,7 +14,8 @@ All possible operations (e.g. tensordot, svd, ...) on such arrays preserve the t
 structure. In addition, these operations make use of the charges to figure out which of the blocks
 it hase to use/combine - this is the basis for the speed-up.
 
-**Overview**
+Overview
+^^^^^^^^
 
 Classes:
 :class:`ChargeInfo`, :class:`LegCharge`, :class:`LegPipe`, :class:`Array`

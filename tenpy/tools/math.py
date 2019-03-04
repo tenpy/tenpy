@@ -99,16 +99,16 @@ def lcm(a, b):
 
 
 def speigs(A, k, *args, **kwargs):
-    """Wrapper around scipy.sparse.linalg.eigs, lifting the restriction ``k < rank(A)-1``.
+    """Wrapper around :func:`scipy.sparse.linalg.eigs`, lifting the restriction ``k < rank(A)-1``.
 
     Parameters
     ----------
-    A : MxM ndarray or like scipy.sparse.linalg.LinearOperator
+    A : MxM ndarray or like :class:`scipy.sparse.linalg.LinearOperator`
         the (square) linear operator for which the eigenvalues should be computed.
     k : int
         the number of eigenvalues to be computed.
     *args, **kwargs :
-        further arguments are directly given to ``scipy.sparse.linalg.eigs``
+        further arguments are directly given to :func:`scipy.sparse.linalg.eigs`
 
     Returns
     -------

@@ -656,7 +656,7 @@ class RandomUnitaryEvolution(Engine):
     laws dictated by the conserved charges. If no charge is preserved, this distribution is called
     circular unitary ensemble (CUE), see :func:`~tenpy.linalg.random_matrix.CUE`.
 
-    On one hand, such an evolution is of interest in recent research (see eg. arXiv:1710.09827).
+    On one hand, such an evolution is of interest in recent research (see eg. :arXiv:`1710.09827`).
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
 

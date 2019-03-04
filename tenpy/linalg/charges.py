@@ -1,12 +1,21 @@
-"""Cython implementations of varios tenpy functions/methods for speedup.
+r"""Basic definitions of a charge.
 
-This module contains Cython implementations of some functions/methods from
-``tenpy/linalg/charges.py`` and ``tenpy/linalg/np_conserved.py``.
-In these modules, some functions have the python decorator ``@use_cython``.
-These functions are replaced by the ones defined here, if the compiled cython code is available
-and could be imported in python.
-For further details, see also the definition of :func:`~tenpy.tools.optimization.use_cython`.
+This module contains implementations for handling the quantum numbers ("charges") of
+the :class:`~tenpy.linalg.np_conserved.Array`.
 
+In particular, the classes :class:`ChargeInfo`, :class:`LegCharge` and :class:`LegPipe` are
+implemented here.
+
+.. note ::
+    The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
+    so you usually don't need to import this module in your application.
+
+A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
+
+In this module, some functions have the python decorator ``@use_cython``.
+Functions with this decoartor are replaced by the ones written in Cython, implemented in
+``tenpy.linalg.npc_helper.pyx``.
+For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -45,7 +54,7 @@ class ChargeInfo:
 
     Attributes
     ----------
-    qnumber :
+    qnumber : int
         The number of charges.
     mod :  ndarray[QTYPE,ndim=1]
         Modulo how much each of the charges is taken.
@@ -926,7 +935,7 @@ class LegPipe(LegCharge):
         See Notes below for details.
     q_map_slices : array[np.intp, ndim=1]
         Defined such that the row indices of in
-        ``range(q_map_slices[I_s], q_map_slices[I_s+1])`` have ``q_map[:, 2] == I_s`.
+        ``range(q_map_slices[I_s], q_map_slices[I_s+1])`` have ``q_map[:, 2] == I_s``.
     _perm : 1D array
         A permutation such that ``q_map[_perm, 3:]`` is sorted by `i_l`.
     _strides : 1D array

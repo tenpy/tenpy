@@ -4,7 +4,7 @@ Network Contractor
 A tool to contract a network of multiple tensors.
 
 This is an implementation of 'NCON: A tensor network contractor for MATLAB'
-by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see arXiv:1402.0939
+by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arXiv:`1402.0939`
 
 .. todo ::
     - implement or wrap netcon.m, a function to find optimal contractionn sequences

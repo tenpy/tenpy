@@ -96,7 +96,7 @@ def argsort(a, sort=None, **kwargs):
         ``None``         numpy default: same as '<'
         ================ ===========================
     **kwargs :
-        further keyword arguments given directly to ``numpy.argsort``.
+        further keyword arguments given directly to :func:`numpy.argsort`.
 
     Returns
     -------

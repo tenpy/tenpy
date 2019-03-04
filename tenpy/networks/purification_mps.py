@@ -103,7 +103,7 @@ see [Hauschild2017]_.
 
 .. todo ::
     One can also look at the canonical ensembles by defining the conserved quantities
-    differently, see Barthel (2016), arXiv:1607.01696 for details.
+    differently, see Barthel (2016), :arXiv:`1607.01696` for details.
     Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
     I think it should suffice to implement another `from_infiniteT`.
 

@@ -3121,7 +3121,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                      which='LM',
                      v0=None,
                      **kwargs):
-        """Find (dominant) eigenvector(s) of self using scipy.sparse.
+        """Find (dominant) eigenvector(s) of self using :mod:`scipy.sparse`.
 
         If no charge_sector was selected, we look in *all* charge sectors.
 

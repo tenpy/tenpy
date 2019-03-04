@@ -900,7 +900,7 @@ class LastDisentangler(Disentangler):
 class DiagonalizeDisentangler(Disentangler):
     """Disentangle by diagonalizing the two-site density matrix in the auxiliar space.
 
-    See Appendix B in arXiv:1704.01974.
+    See :arXiv:`1704.01974`.
     Problem: Sorting by eigenvalues breaks the charge conservation!
     Instead we just sort within the charge blocks.
     For non-trivial charges, this might increase the entropy!

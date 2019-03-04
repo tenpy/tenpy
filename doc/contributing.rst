@@ -9,11 +9,10 @@ If you want to become a member of the developer team, just ask ;-)
 To keep consistency, we ask you to comply with the following guidelines for contributions:
 
 - Use a code style based on :pep:`8`.
-  The git repo includes a config file `.style.yapf` for the python package `yapf <http://github.com/google/yapf>`_.
-  `yapf` is a tool to auto-format code, e.g., by the command ``yapf -i some/file``.
-  We run the following command from time to time to ensure consitency over the whole project::
-
-      yapf -r -i ./
+  The git repo includes a config file ``.style.yapf`` for the python package `yapf <http://github.com/google/yapf>`_.
+  `yapf` is a tool to auto-format code, e.g., by the command ``yapf -i some/file`` (-i for "in place").
+  We run yapf on a regular basis on the github master branch.
+  If your branch diverged, it might help to run yapf before merging.
 
 .. note ::
 
@@ -30,11 +29,18 @@ To keep consistency, we ask you to comply with the following guidelines for cont
         r"""<- this r makes me a raw string, thus '\' has no special meaning.
         Otherwise you would need to escape backslashes, e.g. in math formulas.
 
-        You can include cross references to classes, methods, functions etc, like
-        :class:`~tenpy.linalg.np_conserved.Array`, :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray` or :func:`tenpy.tools.math.toiterable`.
-        Within the python docstrings, documents of the userguides can be references like :doc:`../IntroNpc`.
+        You can include cross references to classes, methods, functions, modules like
+        :class:`~tenpy.linalg.np_conserved.Array`, :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`,
+        :func:`tenpy.tools.math.toiterable`, :mod:`tenpy.linalg.np_conserved`.
+        The ~ in the beginning makes only the last part of the name appear in the generated documentation.
+        Documents of the userguide can be referenced with :doc:`/intro_npc` even from inside the doc-strings.
+        You can also cross-link to other documentations, e.g. :class:`numpy.ndarray`, :func`scipy.linalg.svd` and :mod: will work.
 
-        Write inline formulas as :math:`H |\Psi\rangle = E |\Psi\rangle` or displayed equations as 
+        Moreover, you can link to github issues, arXiv papers, dois, and topics in the community forum with
+        e.g. :issue:`5`, :arxiv:`1805.00055`, :doi:`10.1000/1` and :forum:`3`.
+
+
+        Write inline formulas as :math:`H |\Psi\rangle = E |\Psi\rangle` or displayed equations as
         .. math ::
 
            e^{i\pi} + 1 = 0
@@ -47,14 +53,10 @@ To keep consistency, we ask you to comply with the following guidelines for cont
            This block can describe things which need to be done and is automatically included in a section of :doc:`todo`.
         """
 
-  Instructions for building the documentation are in :doc:`INSTALL`.
-
 - Use relative imports within TeNPy. Example::
 
       from ..linalg import np_conserved as npc
 
-- If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``doc/`` folder
-  to update the documentation index for the reference.
 - Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
   Run it simply with ``nosetest`` in `tests/`.
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
@@ -88,6 +90,8 @@ Open this folder (or to be precise: the file `index.html` in it) in your webbros
 and enjoy this and other documentation beautifully rendered, with cross links, math formulas
 and even a search function.
 Other output formats are available as other make targets, e.g., ``make latexpdf``.
+If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``doc/`` folder
+to update the documentation index for the reference.
 
 .. note ::
 

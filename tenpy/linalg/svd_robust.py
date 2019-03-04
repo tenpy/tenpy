@@ -3,8 +3,8 @@ r"""(More) robust version of singular value decomposition.
 We often need to perform an SVD.
 In general, an SVD is a matrix factorization that is always well defined and should also work
 for ill-conditioned matrices.
-But sadly, both `numpy.linalg.svd` and `scipy.linalg.svd` fail from time to time, raising
-``LinalgError("SVD did not converge")``.
+But sadly, both :func:`numpy.linalg.svd` and :func:`scipy.linalg.svd` fail from time to time,
+raising ``LinalgError("SVD did not converge")``.
 The reason is that both of them call the LAPACK function `#gesdd`
 (where `#` depends on the data type), which (to make it short) fails in some cases.
 However, it is usually much faster than the alternative (and robust) `#gesvd`.
@@ -77,7 +77,7 @@ def svd(a,
         check_finite=True,
         lapack_driver='gesdd',
         warn=True):
-    """Wrapper around `scipy.linalg.svd` with `gesvd` backup plan.
+    """Wrapper around :func:`scipy.linalg.svd` with `gesvd` backup plan.
 
     Tries to avoid raising an LinAlgError by using using the lapack_driver `gesvd`,
     if `gesdd` failed.
@@ -86,7 +86,7 @@ def svd(a,
     ----------
     overwrite_a : bool
         Ignored (i.e. set to ``False``) if ``lapack_driver='gesdd'``.
-        Otherwise described in doc-string of `scipy.linalg.svd`.
+        Otherwise described in :func:`scipy.linalg.svd`.
     lapack_driver : {'gesdd', 'gesvd'}, optional
         Whether to use the more efficient divide-and-conquer approach (``'gesdd'``)
         or general rectangular approach (``'gesvd'``) to compute the SVD.
@@ -96,12 +96,12 @@ def svd(a,
     warn : bool
         whether to create a warning when the SVD failed.
 
-    Other parameters as described in doc-string of `scipy.linalg.svd`
+    Other parameters as described in doc-string of :func:`scipy.linalg.svd`
 
     Returns
     -------
     U, S, Vh : ndarray
-        As described in doc-string of `scipy.linalg.svd`
+        As described in doc-string of :func:`scipy.linalg.svd`
     """
     if lapack_driver == 'gesdd':
         try:
@@ -125,21 +125,21 @@ def svd(a,
 def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
     """svd with LAPACK's '#gesvd' (with # = d/z for float/complex).
 
-    Similar as `numpy.linalg.svd`, but use LAPACK 'gesvd' driver.
+    Similar as :func:`numpy.linalg.svd`, but use LAPACK 'gesvd' driver.
     Works only with 2D arrays.
     Outer part is based on the code of `numpy.linalg.svd`.
 
     Parameters
     ----------
     a, full_matrices, compute_uv :
-        see doc-string of `numpy.linalg.svd` for details.
+        See :func:`numpy.linalg.svd` for details.
     check_finite :
         check whether input arrays contain 'NaN' or 'inf'.
 
     Returns
     -------
     U, S, Vh : ndarray
-        see doc-string of `numpy.linalg.svd` for details.
+        See :func:`numpy.linalg.svd` for details.
     """
     a, wrap = _makearray(a)  # uses order='C'
     _assertNoEmpty2d(a)
