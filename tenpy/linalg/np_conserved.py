@@ -195,8 +195,9 @@ class Array:
         if isinstance(state, dict):  # allow to import from the non-compiled version
             self.__dict__.update(state)
         elif isinstance(state, tuple):  # allow to import from the compiled versions of TenPy 0.3.0
-            self._data, self._qdata, self._qdata_sorted, self.chinfo, self.dtype, self.labels, \
+            self._data, self._qdata, self._qdata_sorted, self.chinfo, self.dtype, labels, \
                 self.legs, self.qtotal, self.rank, self.shape = state
+            self.labels = labels  # property, requires rank to be set already
         else:
             raise ValueError("setstate with incompatible type of state")
 
