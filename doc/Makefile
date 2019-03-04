@@ -17,8 +17,9 @@ src2rst:
 	rm reference/tenpy.*.rst
 	$(SPHINXAPIDOC) -d 3 -e -f -o reference ../tenpy/
 	rm reference/modules.rst  # this file does not contain useful information
-	git checkout reference/tenpy.rst # instaed we changed the title in this file.
-	# thus, I didn't include it to the :toctree:, but it's existence triggers a warning. So we just remove it...
+	# thus, I didn't include it to the :toctree:
+	# but we have to remove it because it's existence triggers a warning.
+	git checkout reference/tenpy.rst # instead we changed the title in this file.
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).

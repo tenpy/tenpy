@@ -1,6 +1,9 @@
 Reference
 =========
 
+This is the "reference" of TeNPy, containing the documentation of all the modules, functions and classes.
+If you are new to TeNPy, you should start reading the :doc:`userguide </userguide>`.
+
 Subpackages
 -----------
 
