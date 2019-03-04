@@ -275,7 +275,8 @@ class Array:
                 data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
                 qdata.append(qindices)
             elif np.any(np.abs(data_flat[sl]) > cutoff):
-                warnings.warn("flat array has non-zero entries in blocks incompatible with charge")
+                warnings.warn("flat array has non-zero entries in blocks incompatible with charge",
+                              stacklevel=2)
         res._data = data
         res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True
@@ -468,7 +469,8 @@ class Array:
 
     @property
     def labels(self):
-        warnings.warn("Deprecated access of Array.labels as dictionary.", stacklevel=2)
+        warnings.warn("Deprecated access of Array.labels as dictionary.",
+                      category=FutureWarning, stacklevel=2)
         dict_lab = {}
         for i, l in enumerate(self._labels):
             if l is not None:
@@ -477,7 +479,8 @@ class Array:
 
     @labels.setter
     def labels(self, dict_lab):
-        warnings.warn("Deprecated setting of Array.labels with dictionary.", stacklevel=2)
+        warnings.warn("Deprecated setting of Array.labels with dictionary.",
+                      category=FutureWarning, stacklevel=2)
         list_lab = [None] * self.rank
         for k, v in dict_lab.items():
             if list_lab[v] is not None:
@@ -3662,7 +3665,7 @@ def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, n
     q_map_inds = [
         p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
     ]
-    self._imake_contiguous() # TODO: not needed except for _copy_sliced?
+    self._imake_contiguous()
     # get new qdata
     qdata = np.empty((self.stored_blocks, res.rank), dtype=np.intp)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]

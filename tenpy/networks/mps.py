@@ -1185,7 +1185,8 @@ class MPS:
             ps.append(np.sum(S[sl]))
         ps = np.array(ps)
         if abs(np.sum(ps) - 1.) > 1.e-10:
-            warnings.warn("Probability_per_charge: Sum of probabilites not 1. Canonical form?")
+            warnings.warn("Probability_per_charge: Sum of probabilites not 1. Canonical form?",
+                          stacklevel=2)
         return leg.charges.copy(), ps
 
     def average_charge(self, bond=0):
@@ -1641,7 +1642,7 @@ class MPS:
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
         if hermitian and sites1 != sites2:
-            warnings.warn("MPS correlation function can't use the hermitian flag")
+            warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
             hermitian = False
         C = np.empty((len(sites1), len(sites2)), dtype=np.complex)
         for x, i in enumerate(sites1):
@@ -1952,7 +1953,7 @@ class MPS:
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
         if abs(E[0] - 1.) > tol_ev0:
             warnings.warn("Correlation length: largest eigenvalue not one. "
-                          "Not in canonical form/normalized?")
+                          "Not in canonical form/normalized?", stacklevel=2)
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -2244,7 +2245,7 @@ class MPS:
         self.convert_form('B')
         norm_err = np.linalg.norm(self.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("self.norm_test() =", norm_err, "==> canonicalize")
+            warnings.warn("self.norm_test() = {0!s} ==> canonicalize".format(self.norm_test()))
             self.canonical_form()
         # get copy of self
         psi_t = self.copy()
@@ -2254,8 +2255,7 @@ class MPS:
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("psi_t.norm_test() =", norm_err, "==> canonicalize")
-            psi_t.canonical_form()
+            warnings.warn("self.norm_test() = {0!s} ==> canonicalize".format(self.norm_test()))
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.
@@ -2500,7 +2500,8 @@ class MPS:
         proj = (W > eps)
         if np.count_nonzero(proj) < len(W):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            warnings.warn("canonical_form_infinite: project to smaller bond dimension")
+            warnings.warn("canonical_form_infinite: project to smaller bond dimension",
+                          stacklevel=3)
             XH.iproject(proj, axes=1)
             W = W[proj]
         norm = len(W) / np.sum(W)
@@ -2541,7 +2542,8 @@ class MPS:
         proj = (S2 > eps)
         if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            warnings.warn("canonical_form_infinite: project to smaller bond dimension")
+            warnings.warn("canonical_form_infinite: project to smaller bond dimension",
+                          stacklevel=2)
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
             s_norm = np.sqrt(np.sum(S2))

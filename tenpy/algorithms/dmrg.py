@@ -838,7 +838,9 @@ class Engine(NpcLinearOperator):
                 Mixer_class = DensityMatrixMixer
             if isinstance(Mixer_class, str):
                 if Mixer_class == "Mixer":
-                    warnings.warn("Depreciation: Use `True` or `'DensityMatrixMixer'` as DMRG parameter")
+                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
+                           'for DMRG parameter "mixer"')
+                    warnings.warn(msg, FutureWarning)
                     Mixer = "DensityMatrixMixer"
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(self.DMRG_params, 'mixer_params', {}, 'DMRG')
@@ -1286,7 +1288,7 @@ class Mixer:
         self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')
         assert self.decay >= 1.
         if self.decay == 1.:
-            warnings.warn("Mixer doesn't decay")
+            warnings.warn("Mixer with decay=1. doesn't decay")
         self.disable_after = get_parameter(mixer_params, 'disable_after', 15, 'Mixer')
         self.verbose = mixer_params.get('verbose', 0)
 

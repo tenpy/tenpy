@@ -7,6 +7,6 @@ from .fermions_spinless import FermionModel, FermionChain
 
 import warnings
 
-msg = """Deprecation:
-The module `tenpy.models.fermion_chain` is deprecated now. Import the model classes from `tenpy.models.fermions_spinless`."""
-warnings.warn(msg)
+msg = """The module `tenpy.models.fermion_chain` is deprecated now.
+Import the model classes from `tenpy.models.fermions_spinless`."""
+warnings.warn(msg, FutureWarning)

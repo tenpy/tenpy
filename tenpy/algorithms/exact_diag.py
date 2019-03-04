@@ -226,7 +226,7 @@ class ExactDiag:
 
     def _set_full_H(self, full_H):
         if self.full_H is not None:
-            warnings.warn("full_H calculated multiple times?")
+            warnings.warn("full_H calculated multiple times!?", stacklevel=2)
         if self.charge_sector is not None:
             full_H.legs = [l.to_LegCharge() for l in full_H.legs]  # avoids warnings of project
             full_H = full_H[self._mask, self._mask]

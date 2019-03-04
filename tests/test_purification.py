@@ -110,7 +110,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     assert (S < S_0)  # this should always be true...
     if S > 100 * eps:
         print("final S =", S)
-        warnings.warn("test of purification failed to find the optimum.")
+        assert(False) # test of purification failed to find the optimum.
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
 

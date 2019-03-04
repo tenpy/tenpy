@@ -6,6 +6,7 @@ import os
 import numpy.testing as npt
 import tenpy
 import tenpy.linalg.np_conserved as npc
+import warnings
 
 datadir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.isdir(datadir):
@@ -13,8 +14,10 @@ if not os.path.isdir(datadir):
 
 def pickle_import_old_version(fn):
     print("import ", fn)
-    with open(os.path.join(datadir, fn), 'rb') as f:
-        data = pickle.load(f)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        with open(os.path.join(datadir, fn), 'rb') as f:
+            data = pickle.load(f)
     assert isinstance(data, dict)
     print(list(data.keys()))
     for k, v in data.items():

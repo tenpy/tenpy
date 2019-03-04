@@ -109,7 +109,8 @@ def svd(a,
         except np.linalg.LinAlgError:
             # 'gesdd' failed to converge, so we continue with the backup plan
             if warn:
-                warnings.warn("SVD with lapack_driver 'gesdd' failed. Use backup 'gesvd'")
+                warnings.warn("SVD with lapack_driver 'gesdd' failed. Use backup 'gesvd'",
+                              stacklevel=2)
             pass
     if lapack_driver not in ['gesdd', 'gesvd']:
         raise ValueError("invalid `lapack_driver`: " + str(lapack_driver))

@@ -1050,14 +1050,14 @@ class LegPipe(LegCharge):
     def sort(self, *args, **kwargs):
         """Convert to LegCharge and call :meth:`LegCharge.sort`."""
         # could be implemented for a LegPipe, but who needs it?
-        warnings.warn("Converting LegPipe to LegCharge for `sort`")
+        warnings.warn("Converting LegPipe to LegCharge for `sort`", stacklevel=2)
         res = self.to_LegCharge()
         return res.sort(*args, **kwargs)
 
     def bunch(self, *args, **kwargs):
         """Convert to LegCharge and call :meth:`LegCharge.bunch`."""
         # could be implemented for a LegPipe, but who needs it?
-        warnings.warn("Converting LegPipe to LegCharge for `bunch`")
+        warnings.warn("Converting LegPipe to LegCharge for `bunch`", stacklevel=2)
         res = self.to_LegCharge()
         return res.bunch(*args, **kwargs)
 
@@ -1076,7 +1076,7 @@ class LegPipe(LegCharge):
            but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
            Finally split the pipe.
         """
-        warnings.warn("Converting LegPipe to LegCharge for `project`")
+        warnings.warn("Converting LegPipe to LegCharge for `project`", stacklevel=2)
         res = self.to_LegCharge()
         return res.project(*args, **kwargs)
 

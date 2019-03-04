@@ -125,7 +125,7 @@ def speigs(A, k, *args, **kwargs):
         return sparse_eigen(A, k, *args, **kwargs)
     else:
         if k > d:
-            warnings.warn("trimming speigs k to smaller d={d:d}".format(k=k, d=d))
+            warnings.warn("trimming speigs k to smaller matrix dimension d", stacklevel=2)
             k = d
         if isinstance(A, np.ndarray):
             Amat = A

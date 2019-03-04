@@ -180,9 +180,9 @@ def truncate(S, trunc_par):
     if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")
     if not np.any(S > 1.e-10):
-        warnings.warn("no Schmidt value above 1.e-10")
+        warnings.warn("no Schmidt value above 1.e-10", stacklevel=2)
     if np.any(S < -1.e-10):
-        warnings.warn("negative Schmidt values!")
+        warnings.warn("negative Schmidt values!", stacklevel=2)
 
     # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
     logS = np.log(np.choose(S <= 0., [S, 1.e-100 * np.ones(len(S))]))
@@ -282,7 +282,7 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         msg += " |U^d U - 1| = {0:f}".format(npc.norm(UHU - npc.eye_like(UHU)))
         VHV = npc.tensordot(VH, VH.conj(), axes=[[1], [1]])
         msg += " |V V - 1| = {0:f}".format(npc.norm(VHV - npc.eye_like(VHV)))
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
     S = S[piv] / new_norm
     renormalization *= new_norm
     U.iproject(piv, axes=1)  # U = U[:, piv]
@@ -296,5 +296,5 @@ def _combine_constraints(good1, good2, warn):
     res = np.logical_and(good1, good2)
     if np.any(res):
         return res
-    warnings.warn("truncation: can't satisfy constraint for " + warn)
+    warnings.warn("truncation: can't satisfy constraint for " + warn, stacklevel=3)
     return good1
