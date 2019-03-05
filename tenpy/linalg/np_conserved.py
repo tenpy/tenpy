@@ -194,6 +194,7 @@ class Array:
         # order is important for import of old version!
         if isinstance(state, dict):  # allow to import from the non-compiled version
             self.__dict__.update(state)
+            self._set_shape()
         elif isinstance(state, tuple):  # allow to import from the compiled versions of TenPy 0.3.0
             self._data, self._qdata, self._qdata_sorted, self.chinfo, self.dtype, labels, \
                 self.legs, self.qtotal, self.rank, self.shape = state
