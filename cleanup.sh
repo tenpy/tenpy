@@ -4,7 +4,7 @@
 
 # remove compiled stuff
 # rm tenpy/linalg/{*.c,*.cpp,*.so,*.html}
-find tenpy/linalg/ -name "*.c" -o -name "*.cpp" -o -name "*.so" -o -name "*.html" -delete
+find tenpy/linalg/ \( -name "*.c" -o -name "*.cpp" -o -name "*.so" -o -name "*.html" \) -delete
 test -d build && rm -r build
 
 # clean-up generated documentation

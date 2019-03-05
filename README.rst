@@ -35,7 +35,25 @@ We also use this forum for official annoucements, for example when we release a 
 Citing TeNPy
 ------------
 When you use TeNPy for a work published in an academic journal, you can cite the [TeNPyNotes]_ to acknowledge the work put into the development of TeNPy.
-Although the license of TeNPy does not require you to cite us, we kindly ask you to do so, as it will support the devolopment of TeNPy.
+(The license of TeNPy does not force you, however.)
+For example, you could add the sentence ``"Calculations were performed using the TeNPy Library (version X.X.X)\cite{tenpy}."`` in the acknowledgements or in the main text.
+
+The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)::
+
+    @Article{tenpy,
+        title={{Efficient numerical simulations with Tensor Networks: Tensor Network  Python (TeNPy)}},
+        author={Johannes Hauschild and Frank Pollmann},
+        journal={SciPost Phys. Lect. Notes},
+        pages={5},
+        year={2018},
+        publisher={SciPost},
+        doi={10.21468/SciPostPhysLectNotes.5},
+        url={https://scipost.org/10.21468/SciPostPhysLectNotes.5},
+        archiveprefix={arXiv},
+        eprint={1805.00055},
+        note={Code available from \url{https://github.com/tenpy/tenpy}},
+    }
+
 
 I found a bug
 -------------

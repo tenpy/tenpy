@@ -48,6 +48,8 @@ Added
 - request #8: Allow shift in boundary conditions of :class:`~tenpy.models.model.CouplingModel`.
 - Allow to use state labels in :meth:`tenpy.networks.mps.MPS.from_product_state`.
 - :class:`tenpy.models.model.CouplingMPOModel` structuring the default initialization of most models.
+- Allow to force periodic boundary conditions for finite MPS in the :class:`~tenpy.modles.model.CouplingMPOModel`.
+  This is not recommended, though.
 - :meth:`tenpy.models.model.NearestNeighborModel.calc_H_MPO_from_bond` and
   :meth:`tenpy.models.model.MPOModel.calc_H_bond_from_MPO` for conversion of H_bond into H_MPO and vice
   versa.
