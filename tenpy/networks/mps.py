@@ -434,7 +434,8 @@ class MPS:
             psi, qtotal_LR=[None, psi.qtotal], inner_labels=['vR', 'vL'], cutoff=cutoff)
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
-        B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
+        phase = psi[0, 0]
+        B_list[0] = phase * B.split_legs(1).replace_label(labels[0], 'p')
         res = cls(sites, B_list, S_list, bc='finite', form='B', norm=norm)
         if form != 'B':
             res.convert_form(form)
