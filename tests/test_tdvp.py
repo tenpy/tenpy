@@ -83,9 +83,9 @@ def test_tdvp():
         return psi
 
 
-    # np.random.seed(0) # TODO: should work for any seed!
+    #np.random.seed(31415) # TODO: should work for any seed!
     psi=random_prod_state_tenpy(heisenberg.lat.N_sites,heisenberg)
-    N_steps=10
+    N_steps=50
     tebd_params = {
           'order': 2,
           'dt': delta_t,
@@ -116,7 +116,9 @@ def test_tdvp():
     ov=psi.overlap(psi_tdvp2)
     print("overlap TDVP and TEBD")
     psi=engine.psi
-    assert np.abs(1-np.abs(ov))<1e-11
+    print("difference")
+    print(np.abs(1-np.abs(ov)))
+    assert np.abs(1-np.abs(ov))<1e-10
     print("two sites tdvp works")
 
     # test that the initial conditions are the same

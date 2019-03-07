@@ -86,8 +86,53 @@ class Engine:
         self.L=self.psi.L
         self.dt=get_parameter(TDVP_params, 'dt', 2, 'TDVP')
         self.trunc_params = get_parameter(TDVP_params, 'trunc_params', {}, 'TDVP')
+        self.N_steps=get_parameter(TDVP_params, 'N_steps',10, 'TDVP')
 
+     # Actual calculation
+    def run_one_site(self,N_steps=None):
+        """
+        Run the TDVP algorithm with the one site algorithm. Be aware that the bond dimension will not increase
+        Parameters
+        ----------
+        N_steps : integer. Number of steps
+        """
+        if N_steps!=None:
+            self.N_steps=N_steps
+        D = self.H_MPO._W[0].shape[0]
+        #Initialize in the correct order
+        for i in range(self.L):
+            self.psi.get_B(i).itranspose(('vL','p','vR'))
+        for i in range(self.N_steps):
+            self.sweep_left_right()
+            self.sweep_right_left()
+            self.evolved_time=self.evolved_time+self.dt
+
+    def run_two_sites(self,N_steps=None):
+        """
+        Run the TDVP algorithm with two sites update. The bond dimension will increase. Truncation happens at every step of the
+        sweep, according to the parameters set in trunc_params.
+        Parameters
+        ----------
+        N_steps : integer. Number of steps
+        """
+        if N_steps!=None:
+            self.N_steps=N_steps
+        D = self.H_MPO._W[0].shape[0]
+        #Initialize in the correct order
+        for i in range(self.L):
+            self.psi.get_B(i).itranspose(('vL','p','vR'))
+        for i in range(self.N_steps):
+            self.sweep_left_right_two()
+            self.sweep_right_left_two()
+            self.evolved_time=self.evolved_time+self.dt
     def _del_correct(self,i):
+        """
+        Delete correctly the environment once the tensor at site i is updated
+        Parameters
+        ----------
+        i: int. Site at which the tensor has been updated
+        """ 
+
         if i+1<self.L:
             self.environment.del_LP(i+1)
         if i-1>-1:
@@ -95,24 +140,19 @@ class Engine:
 
     def sweep_left_right(self):
         """Performs the sweep left->right of the second order TDVP scheme with one site update. Evolve from 0.5*dt"""
-        spectrum = []
-        spectrum.append(np.array([1]))
         for j in range(self.L):
             B=self.psi.get_B(j)
             # Get theta
             if j==0:
                 theta=B
             else:
-                theta=npc.tensordot(s,B,axes=('vR','vL'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
-            theta=theta.transpose(['p','vL','vR'])
-            #d,chiA,chiB = theta.to_ndarray().shape
+                theta=npc.tensordot(B,s,axes=('vL','vR'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
             Lp=self.environment.get_LP(j)
             Rp=self.environment.get_RP(j)
             W1 = self.environment.H.get_W(j)
             theta=self.update_theta_h1(Lp, Rp, theta, W1, -1j*0.5*self.dt)
             # SVD and update environment
             U,s,V=self.theta_svd_left_right(theta)
-            spectrum.append(s/np.linalg.norm(s.to_ndarray()))
             self.psi.set_B(j,U,form='A')
             self._del_correct(j)
             if j < self.L-1 :
@@ -129,16 +169,12 @@ class Engine:
                 s=self.update_s_h0(s,H,1j*0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
 
-        #return self.psi, self.environment, spectrum
 
     def sweep_left_right_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update. Evolve from 0.5*dt"""
-        spectrum = []
-        spectrum.append(np.array([1]))
         theta_old=self.psi.get_theta(0,1)
         for j in range(self.L-1):
 
-            #theta=self.psi.get_theta(j,2)
             theta=npc.tensordot(theta_old,self.psi.get_B(j+1),('vR','vL'))
             theta.ireplace_label('p','p1')
             Lp=self.environment.get_LP(j)
@@ -148,7 +184,6 @@ class Engine:
             theta=self.update_theta_h2(Lp, Rp, theta, W1, W2, -0.5*1j*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
-            theta.itranspose(['(vL.p0)','(vR.p1)'])
             # SVD and update environment
             U,s,V,err,renorm=svd_theta(theta,self.trunc_params)
             s=s/npc.norm(s)
@@ -173,8 +208,6 @@ class Engine:
 
     def sweep_right_left(self):
         """Performs the sweep right->left of the second order TDVP scheme with one site update. Evolve from 0.5*dt"""
-        spectrum = []
-        spectrum.append(np.array([1]))
         expectation_O = []
         for j in range(self.L-1,-1,-1):
             B=self.psi.get_B(j,form='A')
@@ -182,8 +215,7 @@ class Engine:
             if j==self.L-1:
                 theta=B
             else:
-                theta=npc.tensordot(s,B,axes=('vL','vR'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
-            theta=theta.transpose(['p','vL','vR',])
+                theta=npc.tensordot(B,s,axes=('vR','vL'))   #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
 
             # Apply expm (-dt H) for 1-site
             chiB,chiA,d = theta.to_ndarray().shape
@@ -193,7 +225,6 @@ class Engine:
             theta=self.update_theta_h1(Lp, Rp, theta, W1, -1j*0.5*self.dt)
             # SVD and update environment
             U,s,V=self.theta_svd_right_left(theta)
-            spectrum.append(s/np.linalg.norm(s.to_ndarray()))
             self.psi.set_B(j,U,form='B')
             self._del_correct(j)
             if j > 0:
@@ -210,12 +241,9 @@ class Engine:
                 s=self.update_s_h0(s,H,1j*0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
 
-        #return self.psi, self.environment, spectrum
 
     def sweep_right_left_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update. Evolve from 0.5*dt"""
-        spectrum = []
-        spectrum.append(np.array([1]))
         theta_old=self.psi.get_theta(self.L-1,1)
         for j in range(self.L-2,-1,-1):
             theta=npc.tensordot(theta_old,self.psi.get_B(j,form='A'),('vL','vR'))
@@ -229,7 +257,6 @@ class Engine:
             theta=self.update_theta_h2(Lp, Rp, theta, W1, W2, -1j*0.5*self.dt)
             theta=theta.combine_legs(['vR','p1'])
             theta=theta.combine_legs(['vL','p0'])
-            theta.itranspose(['(vL.p0)','(vR.p1)'])
             # SVD and update environment
             U,s,V,err,renorm=svd_theta(theta,self.trunc_params)
             s=s/npc.norm(s)
@@ -253,39 +280,58 @@ class Engine:
                 theta.ireplace_label('p','p0')
 
     def update_theta_h1(self,Lp, Rp, theta, W, dt):
-        """Update with the one site Hamiltonian """
+        """
+        Update with the one site Hamiltonian
+        Parameters
+        ----------
+        Lp: tensor representing the left environment
+        Rp: tensor representing the right environment
+        theta: the theta tensor which needs to be updated
+        W: MPO which is applied to the 'p' leg of theta
+        """
         H = H1_mixed(Lp,Rp,W)
-        theta=theta.transpose(['p','vR','vL'])
-        theta=theta.combine_legs(['p','vR','vL'])
+        theta=theta.combine_legs(['vL','p','vR'])
         #Initialize Lanczos
         parameters_lanczos_h1= {
             'delta':dt
         }
         lanczos_h1=LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
         theta,N_h1=lanczos_h1.run(dt)
-        theta=theta.split_legs(['(p.vR.vL)'])
+        theta=theta.split_legs(['(vL.p.vR)'])
         return theta
 
     def update_theta_h2(self,Lp, Rp, theta, W0,W1, dt):
-        """Update with the two sites Hamiltonian """
+        """
+        Update with the two sites Hamiltonian 
+        Parameters
+        ----------
+        Lp: :class:`tenpy.linalg.np_conserved.Array`, tensor representing the left environment
+        Rp: :class:`tenpy.linalg.np_conserved.Array`, tensor representing the right environment
+        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor which needs to be updated
+        W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+        W1: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p1' leg of theta
+        """
         H = H2_mixed(Lp,Rp,W0,W1)
-        theta=theta.combine_legs(['p0','p1','vR','vL'])
+        theta=theta.combine_legs(['vL','p0','p1','vR'])
         #Initialize Lanczos
         parameters_lanczos_h1= {
             'delta':dt
         }
         lanczos_h1=LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
         theta,N_h1=lanczos_h1.run(dt)
-        theta=theta.split_legs(['(p0.p1.vR.vL)'])
+        theta=theta.split_legs(['(vL.p0.p1.vR)'])
         return theta
 
     def theta_svd_left_right(self,theta):
-        """Performs the SVD from left to right"""
-        theta=theta.transpose(['p','vL','vR'])
-        theta=theta.combine_legs(['p','vL'])
-        theta=theta.transpose(['(p.vL)','vR'])
+        """
+        Performs the SVD from left to right
+        Parameters
+        ----------
+        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor on which the SVD is applied
+        """
+        theta=theta.combine_legs(['vL','p'])
         U,s,V = npc.svd(theta,full_matrices=0)
-        U=U.split_legs(['(p.vL)'])
+        U=U.split_legs(['(vL.p)'])
         U=self.set_anonymous_svd(U,'vR')
         V=self.set_anonymous_svd(V,'vL')
         s_ndarray = np.diag(s)
@@ -296,7 +342,12 @@ class Engine:
         return U,s,V
 
     def set_anonymous_svd(self,U,new_label):
-        """Relabel the svd"""
+        """
+        Relabel the svd
+        Parameters
+        ----------
+        U: :class:`tenpy.linalg.np_conserved.Array`, the tensor which lacks a leg_label  
+        """
         list_labels=list(U.get_leg_labels())
         for i in range(len(list_labels)):
             if list_labels[i]==None:
@@ -306,10 +357,13 @@ class Engine:
         return U
 
     def theta_svd_right_left(self,theta):
-        """Performs the SVD from right to left"""
-        theta=theta.transpose(['vL','p','vR'])
+        """
+        Performs the SVD from right to left
+        Parameters
+        ----------
+        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor on which the SVD is applied
+        """
         theta=theta.combine_legs(['p','vR'])
-        theta=theta.transpose(['vL','(p.vR)'])
         V,s,U = npc.svd(theta,full_matrices=0)
         U=U.split_legs(['(p.vR)'])
         U=self.set_anonymous_svd(U,'vL')
@@ -322,72 +376,50 @@ class Engine:
         return U,s,V
 
     def update_s_h0(self,s,H,dt):
-        """Update with the zero site Hamiltonian (update of the singular value)"""
+        """
+        Update with the zero site Hamiltonian (update of the singular value)
+        Parameters
+        ----------
+        s: :class:`tenpy.linalg.np_conserved.Array`, representing the singular value matrix which is updated
+        H: H0_mixed, zero site Hamiltonian that we need to apply on the singular value matrix
+        dt: complex number, time step of the evolution
+        """
         #Initialize Lanczos
         parameters_lanczos_h1= {
             'delta':dt
         }
         lanczos_h0=LanczosEvolution(H=H, psi0=s.combine_legs(['vL','vR']), params=parameters_lanczos_h1)
         s_new,N_h0=lanczos_h0.run(dt)
-        ##s_new=lanczos(H,s.combine_legs(['vL','vR']),dt,{'N_max':np.min([chiA*chiB,6])})
         s_new=s_new.split_legs(['(vL.vR)'])
         return s_new
 
-    def calculate_error_left_right(self,i):
-        Lp=self.environment.get_LP(i)
-        Rp=self.environment.get_RP(i)
-        W=self.H_MPO.get_W(i)
-        B=self.psi.get_B(i)
-        p_h_phi=npc.tensordot(Lp,W,axes=['wR','wL'])
-        p_h_phi=npc.tensordot(p_h_phi,Rp,axes=['wR','wL'])
-        p_h_phi=npc.tensordot(p_h_phi,B,axes=[('p*','vR','vL'),('p','vL','vR')])
-        npc.norm(p_h_phi)
 
 
 
-        # Actual calculation
-    def run_one_site(self,N_steps):
-        """
-        Run the TDVP algorithm with the one site algorithm. Be aware that the bond dimension will not increase
-        Parameters
-        ----------
-        N_steps : integer. Number of steps
-        """
-        D = self.H_MPO._W[0].shape[0]
-        for i in range(N_steps):
-            self.sweep_left_right()
-            self.sweep_right_left()
-            self.evolved_time=self.evolved_time+self.dt
-
-    def run_two_sites(self,N_steps):
-        """
-        Run the TDVP algorithm with two sites update. The bond dimension will increase. Truncation happens at every step of the
-        sweep, according to the parameters set in trunc_params.
-        Parameters
-        ----------
-        N_steps : integer. Number of steps
-        """
-        D = self.H_MPO._W[0].shape[0]
-        for i in range(N_steps):
-            self.sweep_left_right_two()
-            self.sweep_right_left_two()
-            self.evolved_time=self.evolved_time+self.dt
 
 
 class H0_mixed:
-    """Class defining the zero site Hamiltonian for Lanczos"""
-    def __init__(self,Lp,Rp,dtype=float):
+    """
+    Class defining the zero site Hamiltonian for Lanczos
+    Parameters
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment 
+   
+    Attributes
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment 
+    """
+    def __init__(self,Lp,Rp):
         self.Lp = Lp
         self.Rp = Rp
-        self.chi1 = Lp.to_ndarray().shape[0]
-        self.chi2 = Rp.to_ndarray().shape[0]
-        self.shape = np.array([self.chi1*self.chi2,self.chi1*self.chi2])
-        self.dtype = dtype
 
     def matvec(self,x):
         x=x.split_legs(['(vL.vR)'])
         x=npc.tensordot(self.Lp,x,axes=('vR','vL'))
         x=npc.tensordot(x,self.Rp,axes=(['vR','wR'],['vL','wL']) )
+        #TODO:next line not needed. Since the transpose does not do anything, should not cost anything. Keep for safety ?
         x=x.transpose(['vR*','vL*'])
         x=x.iset_leg_labels(['vL','vR'])
         x=x.combine_legs(['vL','vR'])
@@ -395,40 +427,62 @@ class H0_mixed:
 
 
 class H1_mixed:
-    """Class defining the one site Hamiltonian for Lanczos"""
+    """
+    Class defining the one site Hamiltonian for Lanczos
+    Parameters
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
+    M: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p' leg of theta
+    Attributes
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
+    W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+    """
 
-    def __init__(self,Lp,Rp,M,dtype=float):
+    def __init__(self,Lp,Rp,W):
         self.Lp = Lp # a,ap,m
         self.Rp = Rp # b,bp,n
-        self.M = M # m,n,i,ip
-        self.d = M.shape[3]
-        self.chi1 = Lp.shape[0]
-        self.chi2 = Rp.shape[0]
-        self.shape = np.array([self.d*self.chi1*self.chi2,self.d*self.chi1*self.chi2])
-        self.dtype = dtype
+        self.W = W # m,n,i,ip
 
     def matvec(self,theta):
-        theta=theta.split_legs(['(p.vR.vL)'])
+        theta=theta.split_legs(['(vL.p.vR)'])
         Lp=self.Lp
         Rp=self.Rp
         x=npc.tensordot(Lp,theta,axes=('vR','vL'))
-        x=npc.tensordot(x,self.M,axes=(['p','wR'],['p*','wL']))
+        x=npc.tensordot(x,self.W,axes=(['p','wR'],['p*','wL']))
         x=npc.tensordot(x,Rp,axes=(['vR','wR'],['vL','wL']))
-        x=x.transpose(['p','vR*','vL*'])
-        x=x.iset_leg_labels(['p','vL','vR'])
-        h=x.combine_legs(['p','vR','vL'])
+        #TODO:next line not needed. Since the transpose does not do anything, should not cost anything. Keep for safety ?
+        x=x.transpose(['vR*','p','vL*'])
+        x=x.iset_leg_labels(['vL','p','vR'])
+        h=x.combine_legs(['vL','p','vR'])
         return h
 
 class H2_mixed:
-    """Class defining the two sites Hamiltonian for Lanczos """
+    """
+    Class defining the two sites Hamiltonian for Lanczos
+    
+    Parameters
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
+    W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+    Attributes
+    ----------
+    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
+    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
+    W0: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+    W1: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p1' leg of theta
+    """
 
-    def __init__(self,Lp,Rp,W0,W1,dtype=float):
+    def __init__(self,Lp,Rp,W0,W1):
         self.Lp = Lp # a,ap,m
         self.Rp = Rp # b,bp,n
         self.H_MPO0 = W0 # m,n,i,ip
         self.H_MPO1 = W1
     def matvec(self,theta):
-        theta=theta.split_legs(['(p0.p1.vR.vL)'])
+        theta=theta.split_legs(['(vL.p0.p1.vR)'])
         Lp=self.Lp
         Rp=self.Rp
         x=npc.tensordot(Lp,theta,axes=('vR','vL'))
@@ -439,5 +493,5 @@ class H2_mixed:
         x=npc.tensordot(x,Rp,axes=(['vR','wR'],['vL','wL']))
         x.ireplace_label('vL*','vR')
         x.ireplace_label('vR*','vL')
-        h=x.combine_legs(['p0','p1','vR','vL'])
+        h=x.combine_legs(['vL','p0','p1','vR'])
         return h
