@@ -317,7 +317,7 @@ class Engine:
             b = (1, even)  # t1
             c = (2, odd)  # (t1 + t3) / 2 == (1 - 3 * t1)/2
             d = (3, even)  # t3 = 1 - 4 * t1
-            # From Schollwoeck 2011 (arXiv:1008:3477):
+            # From Schollwoeck 2011 (:arxiv:`1008.3477`):
             # U = U(t1) U(t2) U(t3) U(t2) U(t1)
             # with U(dt) = U(dt/2, odd) U(dt, even) U(dt/2, odd) and t1 == t2
             # Uusing above definitions, we arrive at:
@@ -659,7 +659,7 @@ class RandomUnitaryEvolution(Engine):
     laws dictated by the conserved charges. If no charge is preserved, this distribution is called
     circular unitary ensemble (CUE), see :func:`~tenpy.linalg.random_matrix.CUE`.
 
-    On one hand, such an evolution is of interest in recent research (see eg. :arXiv:`1710.09827`).
+    On one hand, such an evolution is of interest in recent research (see eg. :arxiv:`1710.09827`).
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
 

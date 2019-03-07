@@ -20,4 +20,5 @@ also a classic introduction.
 .. [Karrasch2013] C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), :arxiv:`1303.3942`
 .. [Hubig2015] C. Hubig, I. P. McCulloch, U. Schollwoeck, F. A. Wolf, Phys. Rev. B 91, 155115 (2015), :arxiv:`1501.05504`
 .. [Haegeman2016] J. Haegeman, C. Lubich, I. Oseledets, B. Vandereycken, F. Verstraete, Phys. Rev. B 94, 165116 (2016), :arxiv:`1408.5056`
-.. [Hauschild2017] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, :arxiv:`1711.01288`
+.. [Hauschild2018] J. Hauschild, E. Leviatan, J. H. Bardarson, E. Altman, M. P. Zaletel, F. Pollmann, Phys. Rev. B 98, 235163 (2018), :arxiv:`1711.01288`
+.. [Hubig2019] S. Paeckel, T. Köhler, A. Swoboda, S. R. Manmana, U. Schollwöck, C. Hubig, :arxiv:`1901.05824`

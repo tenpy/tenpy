@@ -536,7 +536,7 @@ class BackwardDisentangler(Disentangler):
 class RenyiDisentangler(Disentangler):
     """Iterative find `U` which minimized the second Renyi entropy.
 
-    See [Hauschild2017]_
+    See [Hauschild2018]_
 
     Reads of the following `TEBD_params` as break criteria for the iteration:
 
@@ -900,7 +900,7 @@ class LastDisentangler(Disentangler):
 class DiagonalizeDisentangler(Disentangler):
     """Disentangle by diagonalizing the two-site density matrix in the auxiliar space.
 
-    See :arXiv:`1704.01974`.
+    See :arxiv:`1704.01974`.
     Problem: Sorting by eigenvalues breaks the charge conservation!
     Instead we just sort within the charge blocks.
     For non-trivial charges, this might increase the entropy!

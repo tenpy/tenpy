@@ -2716,9 +2716,9 @@ class MPSEnvironment:
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'vR'`` for `bra`, `ket`.
         LP_i= .------>-M[0]--> ... -->M[i-2]-->M[i-1]-->
-              |        |                |        | 
+              |        |                |        |
               |        ^                ^        ^
-              |        |                |        | 
+              |        |                |        |
               |        ^                ^        ^
               |        |                |        |
               .------>-N[0]*-> ... -->N[i-2]*-->N[i-1]*-->
@@ -2757,17 +2757,17 @@ class MPSEnvironment:
 
 
 
-       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.    
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |                
-                 -->N[i+1]*-->  ... -->N[i-2]*-->.                   
+       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.
+                      |                     |      |
+                      ^                     ^      |
+                      |                     |      |
+                      ^                     ^      |
+                      |                     |      |
+                 -->N[i+1]*-->  ... -->N[i-2]*-->.
 
 
         where the M's and the N's are in the 'B' form
-                    
+
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):

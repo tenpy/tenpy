@@ -81,7 +81,7 @@ If the state is modified (e.g. by applying `A` or `B` to calculate correlation f
 this is not true any more. However, we still can find unitaries, which are 'optimal' in the sense
 of reducing the entanglement of the MPS/MPO to the minimal value.
 For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.purification_tebd`),
-see [Hauschild2017]_.
+see [Hauschild2018]_.
 
 .. note ::
     The classes :class:`~tenpy.linalg.networks.mps.MPSEnvironment` and
@@ -103,7 +103,7 @@ see [Hauschild2017]_.
 
 .. todo ::
     One can also look at the canonical ensembles by defining the conserved quantities
-    differently, see Barthel (2016), :arXiv:`1607.01696` for details.
+    differently, see Barthel (2016), :arxiv:`1607.01696` for details.
     Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
     I think it should suffice to implement another `from_infiniteT`.
 

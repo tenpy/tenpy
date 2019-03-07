@@ -4,11 +4,11 @@ Network Contractor
 A tool to contract a network of multiple tensors.
 
 This is an implementation of 'NCON: A tensor network contractor for MATLAB'
-by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arXiv:`1402.0939`
+by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxiv:`1402.0939`
 
 .. todo ::
     - implement or wrap netcon.m, a function to find optimal contractionn sequences
-      (arXiv:1304.6112)
+        (:arxiv:`1304.6112`)
     - improve helpfulness of Warnings
     - _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
 
@@ -29,7 +29,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     """
 
     Contract a network of tensors.
-    Based on the MatLab function ncon.m as described in arXiv:1402.0939
+    Based on the MatLab function ncon.m as described in :arxiv:`1402.0939`
 
     Parameters
     ----------
@@ -53,7 +53,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     sequence : list of int
         The order in which the leg_contractions are to be performed.
         An entry of network_contractor.outer_product indicates performing an outer product.
-        This corresponds to the zero-in-sequence convention of arXiv:1304.6112
+        This corresponds to the zero-in-sequence convention of :arxiv:`1304.6112`
 
     Returns
     -------
@@ -128,7 +128,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
 def _ncon(tensor_list, leg_links, sequence):
     """Helper function for contract.
 
-    _ncon is a python implementation of ncon.m (arXiv:1304.6112) for tenpy :class:'Array's
+    _ncon is a python implementation of ncon.m (:arxiv:`1304.6112`) for tenpy :class:'Array's
     ncon is a wrapper that translates from a more python/tenpy input style
 
     Parameters
@@ -146,7 +146,7 @@ def _ncon(tensor_list, leg_links, sequence):
     sequence : list of int
         The order in which the contractions are to be performed.
         An entry of network_contractor.outer_product indicates performing an outer product.
-        This corresponds to the zero-in-sequence convention of arXiv:1304.6112
+        This corresponds to the zero-in-sequence convention of :arxiv:`1304.6112`
 
     Returns
     -------
@@ -379,7 +379,7 @@ def _outer_product(tensor_list, leg_links, sequence):
     This can be caused a value OP in the sequence or if there are more than one tensors
     left but no legs to be contracted
 
-    Details see arXiv:1304.6112
+    Details see :arxiv:`1304.6112`
 
     Parameters
     ----------
@@ -419,7 +419,7 @@ def _outer_product(tensor_list, leg_links, sequence):
 
     # determine tensors on which OPs are to be performed
     # for num_op outer products we need num_op+1 tensors that are all contracted with one extra tensor
-    # see arXiv:1304.6112
+    # see :arxiv:`1304.6112`
     # find the next num_op+2 tensors coming up in sequence
     # failure to find this many implies an invalid sequence.
 
