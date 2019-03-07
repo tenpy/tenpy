@@ -66,16 +66,15 @@ class Engine:
     Attributes
     ----------
     verbose : int
-        Level of verbosity (i.e. how much status information to
-        print); higher=more output.
+        Level of verbosity (i.e. how much status information to print); higher=more output.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
         The error of the represented state which is introduced due to the truncation during
         the sequence of update steps.
     psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS time evolved in-place.
-    model : :class:`~tenpy.models.NearestNeigborModel`
+        The MPS, time evolved in-place.
+    model : :class:`~tenpy.models.model.NearestNeigborModel`
         The model defining the Hamiltonian.
     TEBD_params: dict
         Optional parameters, see :func:`run` and :func:`run_GS` for more details.
