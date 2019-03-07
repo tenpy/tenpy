@@ -14,3 +14,5 @@ tenpy/linalg/*.html
 examples/*.pdf
 examples/*.pkl
 tests/export_import_test/data/*
+tests/benchmark/*.txt
+tests/benchmark/*.png
