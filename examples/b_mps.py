@@ -37,7 +37,7 @@ p_leg = site.leg
 chinfo = p_leg.chinfo
 # make lattice from unit cell and create product state MPS
 lat = Chain(L, site, bc_MPS='finite')
-state = ["up", "down"] * (L // 2) + ["up"] * (L % 2)  # (right-canonical)
+state = ["up", "down"] * (L // 2) + ["up"] * (L % 2) # Neel state
 print("state = ", state)
 psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS)
 
@@ -93,6 +93,10 @@ exp_H2.iset_leg_labels(H2.get_leg_labels())
 exp_H2 = exp_H2.split_legs()  # by default split all legs which are `LegPipe`
 # (this restores the originial labels ['p0', 'p1', 'p0*', 'p1*'] of `H2` in `exp_H2`)
 
+# alternative way: use :func:`~tenpy.linalg.np_conserved.expm`
+exp_H2_alternative = npc.expm(-1.j * dt * H2).split_legs()
+assert (npc.norm(exp_H2_alternative - exp_H2) < 1.e-14)
+
 print("7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd")
 # (this implements one time step of first order TEBD)
 trunc_par = {'svd_min': cutoff, 'trunc_cut': None, 'verbose': 0}
@@ -101,11 +105,12 @@ for even_odd in [0, 1]:
         theta = psi.get_theta(i, 2)  # handles canonical form (i.e. scaling with 'S')
         theta = npc.tensordot(exp_H2, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         # view as matrix for SVD
-        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
+        theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], new_axes=[0, 1], qconj=[+1, -1])
+        # now theta has labels '(vL.p0)', '(p1.vR)'
         U, S, V, err, invsq = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         psi.set_SR(i, S)
-        A_L = U.split_legs(0).ireplace_label('p0', 'p')
-        B_R = V.split_legs(1).ireplace_label('p1', 'p')
-        psi.set_B(i, A_L, form='A')
-        psi.set_B(i + 1, B_R, form='B')
+        A_L = U.split_legs('(vL.p0)').ireplace_label('p0', 'p')
+        B_R = V.split_legs('(p1.vR)').ireplace_label('p1', 'p')
+        psi.set_B(i, A_L, form='A')  # left-canonical form
+        psi.set_B(i + 1, B_R, form='B') # right-canonical form
 print("finished")

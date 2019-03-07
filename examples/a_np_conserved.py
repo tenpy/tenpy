@@ -150,7 +150,8 @@ for even_odd in [0, 1]:
         theta = npc.tensordot(B_L, B_R, axes=('vR', 'vL'))
         theta = npc.tensordot(exp_H2, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         # view as matrix for SVD
-        theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
+        theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], new_axes=[0, 1], qconj=[+1, -1])
+        # now theta has labels '(vL.p0)', '(p1.vR)'
         U, S, V = npc.svd(theta, inner_labels=['vR', 'vL'])
         # truncate
         keep = S > cutoff
@@ -158,6 +159,6 @@ for even_odd in [0, 1]:
         invsq = np.linalg.norm(S)
         Ss[i + 1] = S / invsq
         U = U.iscale_axis(S / invsq, 'vR')
-        Bs[i] = U.split_legs(0).iscale_axis(Ss[i]**(-1), 'vL').ireplace_label('p0', 'p')
-        Bs[i + 1] = V.split_legs(1).ireplace_label('p1', 'p')
+        Bs[i] = U.split_legs('(vL.p0)').iscale_axis(Ss[i]**(-1), 'vL').ireplace_label('p0', 'p')
+        Bs[i + 1] = V.split_legs('(p1.vR)').ireplace_label('p1', 'p')
 print("finished")
