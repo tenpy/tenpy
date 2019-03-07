@@ -149,7 +149,7 @@ cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C
     """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
 
     Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
-    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
+    dtype_num should be the number of the data type, either np.NPY_FLOAT64 or np.NPY_COMPLEX128.
     """
     # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
     # reading a C-style matrix A of dimensions MxK as F-style Matrix with LDA=K yields A.T
@@ -161,26 +161,26 @@ cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C
     cdef double complex beta_complex = beta
     if M == 1:
         # matrix-vector
-        if dtype_num == np.NPY_DOUBLE:
+        if dtype_num == np.NPY_FLOAT64:
             dgemv(no_tr, &N, &K, &alpha, <double*> B, &N,
                 <double*> A, &M, &beta, <double*> C, &M)
-        else: # dtype_num == np.NPY_CDOUBLE
+        else: # dtype_num == np.NPY_COMPLEX128
             zgemv(no_tr, &N, &K, &alpha_complex, <double complex*> B, &N,
                 <double complex*> A, &M, &beta_complex, <double complex*> C, &M)
     elif N == 1:
-        if dtype_num == np.NPY_DOUBLE:
+        if dtype_num == np.NPY_FLOAT64:
             dgemv(tr, &K, &M, &alpha, <double*> A, &K,
                 <double*> B, &N, &beta, <double*> C, &N)
-        else: # dtype_num == np.NPY_CDOUBLE
+        else: # dtype_num == np.NPY_COMPLEX128
             zgemv(tr, &K, &M, &alpha_complex, <double complex*> A, &K,
                 <double complex*> B, &N, &beta_complex, <double complex*> C, &N)
     else:
         # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDA, B, LDB, beta, C LDC)
         # but switch A <-> B and M <-> N to transpose everything
-        if dtype_num == np.NPY_DOUBLE:
+        if dtype_num == np.NPY_FLOAT64:
             dgemm(no_tr, no_tr, &N, &M, &K, &alpha, <double*> B, &N,
                 <double*> A, &K, &beta, <double*> C, &N)
-        else: # dtype_num == np.NPY_CDOUBLE
+        else: # dtype_num == np.NPY_COMPLEX128
             zgemm(no_tr, no_tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
                 <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
 
@@ -189,14 +189,14 @@ cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int 
     """Use blas for ``A += prefactor * B``.
 
     Assumes (!) that A, B are contiguous C-style matrices of dimensions MxK, KxN , MxN.
-    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
+    dtype_num should be the number of the data type, either np.NPY_FLOAT64 or np.NPY_COMPLEX128.
     For real numbers, only the real part of `prefactor` is used.
     """
     cdef double real_prefactor = prefactor.real
     cdef int one = 1
-    if dtype_num == np.NPY_DOUBLE:
+    if dtype_num == np.NPY_FLOAT64:
         daxpy(&N, &real_prefactor, <double*> B, &one, <double*> A, &one)
-    else: # dtype_num == np.NPY_CDOUBLE
+    else: # dtype_num == np.NPY_COMPLEX128
         zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
 
 
@@ -204,14 +204,14 @@ cdef void _blas_inpl_scale(int N, void* A, double complex prefactor, int dtype_n
     """Use blas for ``A *= prefactor``.
 
     Assumes (!) that A is contiguous C-style matrices of dimensions N.
-    dtype_num should be the number of the data type, either np.NPY_DOUBLE or np.NPY_CDOUBLE.
+    dtype_num should be the number of the data type, either np.NPY_FLOAT64 or np.NPY_COMPLEX128.
     For real numbers, only the real part of `prefactor` is used.
     """
     cdef double real_prefactor = prefactor.real
     cdef int one = 1
-    if dtype_num == np.NPY_DOUBLE:
+    if dtype_num == np.NPY_FLOAT64:
         dscal(&N, &real_prefactor, <double*> A, &one)
-    else: # dtype_num == np.NPY_CDOUBLE
+    else: # dtype_num == np.NPY_COMPLEX128
         if prefactor.imag == 0.:
             zdscal(&N, &real_prefactor, <double complex*> A, &one)
         else:
@@ -273,9 +273,18 @@ def _find_calc_dtype(a_dtype, b_dtype):
     else:
         raise ValueError("can't handle the data type prefix " + str(prefix))
     cdef int calc_dtype_num = calc_dtype.num
-    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+    if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         raise ValueError("calc_dtype != double, complex double") # should never happen...
     return calc_dtype, res_dtype
+
+
+def _float_complex_are_64_bit(dtype_float, dtype_complex):
+    """Check whether the provided dtypes are 64-bit real and complex as needed for LAPACK.
+
+    This is used to raise a warning in ``tenpy/linalg/__init__.py`` if the types don't match."""
+    cdef int float_num = np.dtype(dtype_float).num
+    cdef int complex_num = np.dtype(dtype_complex).num
+    return float_num == np.NPY_FLOAT64 , complex_num == np.NPY_COMPLEX128
 
 
 # ################################# #
@@ -495,7 +504,7 @@ cpdef np.ndarray _find_row_differences(np.ndarray qflat):
     cdef int i, j, n=1, L = qflat.shape[0], M = qflat.shape[1]
     cdef bint rows_equal = False
     cdef np.ndarray[QTYPE_t, ndim=2] qflat_c = qflat
-    cdef np.ndarray[np.intp_t, ndim=1] res = _np_empty_1D(max(L + 1, 2), intp_num)
+    cdef np.ndarray[intp_t, ndim=1] res = _np_empty_1D(max(L + 1, 2), intp_num)
     res[0] = 0
     for i in range(1, L):
         rows_equal = True
@@ -672,14 +681,14 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     other.isort_qdata()
     # convert to equal types
     calc_dtype = np.find_common_type([self.dtype, other.dtype], [type(prefactor)])
-    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
         self._data = [d.astype(calc_dtype) for d in self._data]
     if other.dtype.num != calc_dtype_num:
         other = other.astype(calc_dtype)
     cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
-    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+    if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
     other._imake_contiguous()
@@ -693,7 +702,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     cdef intp_t[:] aq_, bq_
     cdef intp_t i = 0, j = 0, k, new_row = 0
     cdef list new_data = []
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] new_qdata = _np_empty_2D(Na+Nb, rank, intp_num)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] new_qdata = _np_empty_2D(Na+Nb, rank, intp_num)
     cdef np.ndarray ta, tb
 
     if Na == Nb and np.all(aq == bq):
@@ -768,12 +777,12 @@ def Array_iscale_prefactor(self, prefactor):
         self._qdata_sorted = True
         return self
     calc_dtype = np.find_common_type([self.dtype], [type(prefactor)])
-    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
         self._data = [d.astype(calc_dtype) for d in self._data]
     cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
-    if calc_dtype_num != np.NPY_DOUBLE and calc_dtype_num != np.NPY_CDOUBLE:
+    if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
 
@@ -854,7 +863,7 @@ def _combine_legs_worker(self,
         print("imake_contiguous", t1-t0)
         t0 = time.time()
     # get new qdata
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] qdata = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
     qdata[:, non_new_axes] = self._qdata[:, non_combined_legs]
     for j in range(npipes):
         ax = new_axes[j]
@@ -879,7 +888,7 @@ def _combine_legs_worker(self,
         block_shape[:, ax] = sizes[:, 1] - sizes[:, 0] # TODO size directly in pipe!?
 
     # divide qdata into parts, which give a single new block
-    cdef np.ndarray[np.intp_t, ndim=1, mode='c'] diffs = _find_row_differences(qdata)
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] diffs = _find_row_differences(qdata)
     cdef intp_t res_stored_blocks = diffs.shape[0] - 1
     qdata = qdata[diffs[:res_stored_blocks], :]  # (keeps the dimensions)
     cdef np.ndarray[intp_t, ndim=2, mode='c'] res_blockshapes = _np_empty_2D(res_stored_blocks, res_rank, intp_num)
@@ -952,11 +961,11 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
             nonsplit_axes_.append(axis)
             new_nonsplit_axes_.append(new_axis)
             new_axis += 1
-    cdef np.ndarray[np.intp_t, ndim=1] split_axes = np.array(split_axes_, dtype=np.intp)
+    cdef np.ndarray[intp_t, ndim=1] split_axes = np.array(split_axes_, dtype=np.intp)
     cdef intp_t a, i, j, N_split = split_axes.shape[0]
-    cdef np.ndarray[np.intp_t, ndim=1] new_split_axes_first = np.array(new_split_axes_first_, np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] nonsplit_axes = np.array(nonsplit_axes_, np.intp)
-    cdef np.ndarray[np.intp_t, ndim=1] new_nonsplit_axes = np.array(new_nonsplit_axes_, np.intp)
+    cdef np.ndarray[intp_t, ndim=1] new_split_axes_first = np.array(new_split_axes_first_, np.intp)
+    cdef np.ndarray[intp_t, ndim=1] nonsplit_axes = np.array(nonsplit_axes_, np.intp)
+    cdef np.ndarray[intp_t, ndim=1] new_nonsplit_axes = np.array(new_nonsplit_axes_, np.intp)
 
     res = self.copy(deep=False)
     res.legs = res_legs
@@ -995,8 +1004,8 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 
     new_qdata = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
     new_qdata[:, new_nonsplit_axes] = self._qdata[np.ix_(old_block_inds, nonsplit_axes)]
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] old_block_beg = np.zeros((res_stored_blocks, self.rank), dtype=np.intp)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] old_block_shapes = np.empty((res_stored_blocks, self.rank), dtype=np.intp)
     for j in range(N_split):
         pipe = pipes[j]
         a = new_split_axes_first[j]
@@ -1005,7 +1014,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         new_qdata[:, a:a2] = q_map[:, 3:]
         old_block_beg[:, split_axes[j]] = q_map[:, 0]
         old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
-    cdef np.ndarray[np.intp_t, ndim=2, mode='c'] new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
+    cdef np.ndarray[intp_t, ndim=2, mode='c'] new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
     cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
@@ -1202,7 +1211,7 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
         ``a_charges_keep[col_a, :] == b_charges_match[col_b, :]``
     """
     cdef intp_t qnumber = chinfo_mod.shape[0]
-    cdef np.ndarray[np.intp_t, ndim=2] match_rows = np.empty((n_cols_b, 2), np.intp)
+    cdef np.ndarray[intp_t, ndim=2] match_rows = np.empty((n_cols_b, 2), np.intp)
     # This is effectively a more complicated version of _iter_common_sorted....
     if qnumber == 0:  # special case no restrictions due to charge
         match_rows[:, 0] = 0
@@ -1359,7 +1368,7 @@ def _tensordot_worker(a, b, int axes):
         t0 = time.time()
     # determine calculation type and result type
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
-    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if a.dtype.num != calc_dtype_num:
         a = a.astype(calc_dtype)
     if b.dtype.num != calc_dtype_num:
@@ -1379,7 +1388,7 @@ def _tensordot_worker(a, b, int axes):
         # They should work here as well, but might give a memory leak (2D array with shape [*,0])
 
     cdef np.ndarray a_qdata_keep, b_qdata_keep
-    cdef np.ndarray[np.intp_t, ndim=1] a_qdata_contr, b_qdata_contr
+    cdef np.ndarray[intp_t, ndim=1] a_qdata_contr, b_qdata_contr
     # pre_worker
     if DEBUG_PRINT:
         t1 = time.time()
@@ -1393,8 +1402,8 @@ def _tensordot_worker(a, b, int axes):
 
 
     # find blocks where a_qdata_keep and b_qdata_keep change; use that they are sorted.
-    cdef np.ndarray[np.intp_t, ndim=1] a_slices = _find_row_differences(a_qdata_keep)
-    cdef np.ndarray[np.intp_t, ndim=1] b_slices = _find_row_differences(b_qdata_keep)
+    cdef np.ndarray[intp_t, ndim=1] a_slices = _find_row_differences(a_qdata_keep)
+    cdef np.ndarray[intp_t, ndim=1] b_slices = _find_row_differences(b_qdata_keep)
     # the slices divide a_data and b_data into rows and columns
     cdef intp_t n_rows_a = a_slices.shape[0] - 1
     cdef intp_t n_cols_b = b_slices.shape[0] - 1
@@ -1469,7 +1478,7 @@ def _tensordot_worker(a, b, int axes):
         t0 = time.time()
 
     cdef list res_data = []
-    cdef np.ndarray[np.intp_t, ndim=2] res_qdata = np.empty((res_max_n_blocks, res_rank), np.intp)
+    cdef np.ndarray[intp_t, ndim=2] res_qdata = np.empty((res_max_n_blocks, res_rank), np.intp)
     cdef vector[idx_tuple] inds_contr
     cdef vector[intp_t] batch_slices
     cdef vector[idx_tuple] batch_m_n
@@ -1582,7 +1591,7 @@ def _inner_worker(a, b, bint do_conj):
         return res  # can't have blocks to be contracted
     if a.stored_blocks == 0 or b.stored_blocks == 0:
         return res  # also trivial
-    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_DOUBLE/NPY_CDOUBLE
+    cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if a.dtype != calc_dtype:
         a = a.astype(calc_dtype)
     if b.dtype != calc_dtype:
@@ -1628,15 +1637,15 @@ def _inner_worker(a, b, bint do_conj):
         size = np.PyArray_SIZE(a_block)
         a_ptr = np.PyArray_DATA(a_block)
         b_ptr = np.PyArray_DATA(b_block)
-        if calc_dtype_num == np.NPY_DOUBLE:
+        if calc_dtype_num == np.NPY_FLOAT64:
             sum_real += ddot(&size, <double*> a_ptr, &one, <double*> b_ptr, &one)
             #  res += calc_real
-        else: # dtype_num == np.NPY_CDOUBLE
+        else: # dtype_num == np.NPY_COMPLEX128
             if do_conj:
                 sum_complex += zdotc(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
             else:
                 sum_complex += zdotu(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
-    if calc_dtype_num == np.NPY_DOUBLE:
+    if calc_dtype_num == np.NPY_FLOAT64:
         return res_dtype.type(sum_real)
-    #  else: # dtype_num == np.NPY_CDOUBLE
+    #  else: # dtype_num == np.NPY_COMPLEX128
     return res_dtype.type(sum_complex)
