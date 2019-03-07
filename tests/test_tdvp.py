@@ -12,9 +12,13 @@ import sys
 import tdvp_numpy
 import tenpy.networks.mpo
 import tenpy.models.model as model
-import tenpy.models.lattice  
+import tenpy.models.lattice
 from tenpy.networks.mps import MPS
 from tenpy.tools.misc import inverse_permutation
+
+# TODO: no need to convert everything to numpy...
+# just compare the np_conserved TEBD with np_conserved TDVP, using mps.overlap()
+# or even better: directly compare to ED for small system
 def overlap(mps1, mps2):
     """ Calculate overlap <self|mps2>. Performs conjugation of self! """
     X=np.ones((1,1))
@@ -26,12 +30,11 @@ def overlap(mps1, mps2):
     return overlap
 
 
-if __name__ == "__main__":
+def test_tdvp():
     L=10
     J=1
     chi=20
     delta_t=0.01
-    chinfo = npc.ChargeInfo([])  # the second argument is just a descriptive name
     parameters= {
         'L':L,
         'S':0.5,
@@ -80,9 +83,9 @@ if __name__ == "__main__":
         return psi
 
 
-    np.random.seed(0)
+    # np.random.seed(0) # TODO: should work for any seed!
     psi=random_prod_state_tenpy(heisenberg.lat.N_sites,heisenberg)
-    N_steps=10 
+    N_steps=10
     tebd_params = {
           'order': 2,
           'dt': delta_t,
@@ -90,24 +93,24 @@ if __name__ == "__main__":
           'trunc_params': {
               'chi_max': 50,
               'svd_min': 1.e-10,
-              'trunc_cut':None 
+              'trunc_cut':None
           }
       }
-    
+
     tdvp_params = {
         'start_time': 0,
         'dt':delta_t,
-        'N_steps':N_steps
+        'N_steps':N_steps,
+        'trunc_params': {
+            'chi_max': 50,
+            'svd_min': 1.e-10,
+            'trunc_cut':None
+        }
     }
-    trunc_params= {
-        'chi_max': 50,
-        'svd_min': 1.e-10,
-        'trunc_cut':None 
-    }
-    
+
     psi_tdvp2=copy.deepcopy(psi)
     engine=tebd.Engine(psi=psi,model=heisenberg,TEBD_params=tebd_params)
-    tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
+    tdvp_engine=tdvp.Engine(psi=psi_tdvp2,model=heisenberg,TDVP_params=tdvp_params)
     engine.run()
     tdvp_engine.run_two_sites(N_steps)
     ov=psi.overlap(psi_tdvp2)
@@ -115,30 +118,30 @@ if __name__ == "__main__":
     psi=engine.psi
     assert np.abs(1-np.abs(ov))<1e-11
     print("two sites tdvp works")
-   
+
     # test that the initial conditions are the same
-     
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
+
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params)
     psit_compare=[]
     for i in range(L):
         B_tmp=psi.get_B(i).transpose(['p','vL','vR']).to_ndarray()
         B=B_tmp[::-1,:,:]
         psit_compare.append(B)
-#**********************************************************************************************************
-#Initialize TDVP
+    #**********************************************************************************************************
+    #Initialize TDVP
     tdvp_params = {
         'start_time': 0,
         'dt':delta_t,
-        'N_steps':1
+        'N_steps':1,
+        'trunc_params': {
+            'chi_max': 50,
+            'svd_min': 1.e-10,
+            'trunc_cut':None
+        }
     }
-    trunc_params= {
-        'chi_max': 50,
-        'svd_min': 1.e-10,
-        'trunc_cut':None 
-    }
-    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params,trunc_params=trunc_params)
+    tdvp_engine=tdvp.Engine(psi=psi,model=heisenberg,TDVP_params=tdvp_params)
     for t in range(10):
-        tdvp_engine.run_one_site(N_steps=1) 
+        tdvp_engine.run_one_site(N_steps=1)
         psit_compare,Rp_list,spectrum=tdvp_numpy.tdvp(psit_compare,h_test,0.5*1j*delta_t, Rp_list=None)
         psit_=[]
     for i in range(L):
@@ -148,7 +151,6 @@ if __name__ == "__main__":
     assert np.abs(np.abs(overlap(psit_,psit_compare))-1.0)<1e-13
     print("one site TDVP works")
 
-                
-        
 
-
+if __name__ == "__main__":
+    test_tdvp()
