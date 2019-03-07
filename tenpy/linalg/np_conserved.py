@@ -2,7 +2,7 @@ r"""A module to handle charge conservation in tensor networks.
 
 A detailed introduction to this module (including notations) can be found in :doc:`/intro_npc`.
 
-This module `np_conserved` implements an class :class:`Array`
+This module `np_conserved` implements a class :class:`Array`
 designed to make use of charge conservation in tensor networks.
 The idea is that the `Array` class is used in a fashion very similar to
 the :class:`numpy.ndarray`, e.g you can call the functions :func:`tensordot` or :func:`svd`
@@ -12,7 +12,7 @@ The structure of the algorithms (as DMRG) is thus the same as with basic numpy n
 Internally, an :class:`Array` saves charge meta data to keep track of blocks which are nonzero.
 All possible operations (e.g. tensordot, svd, ...) on such arrays preserve the total charge
 structure. In addition, these operations make use of the charges to figure out which of the blocks
-it hase to use/combine - this is the basis for the speed-up.
+it has to use/combine - this is the basis for the speed-up.
 
 Overview
 ^^^^^^^^

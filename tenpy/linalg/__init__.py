@@ -18,6 +18,6 @@ from ..tools import optimization
 
 if optimization.have_cython_functions:
     # "monkey patch" some objects to avoid cyclic import structure
-    from . import npc_helper
-    npc_helper._charges = charges
-    npc_helper._np_conserved = np_conserved
+    from . import _npc_helper
+    _npc_helper._charges = charges
+    _npc_helper._np_conserved = np_conserved

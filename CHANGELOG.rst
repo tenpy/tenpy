@@ -61,7 +61,7 @@ Changed
 ^^^^^^^
 - moved toycodes from the folder ``examples/`` to a new folder ``toycodes/`` to separate them clearly.
 - major remodelling of the internals of :class:`tenpy.linalg.np_conserved` and :class:`tenpy.linalg.charges`.
-    - Introduced the new module ``tenpy/linalg/npc_helper.pyx`` which contains all the Cython code, and gets imported by
+    - Introduced the new module ``tenpy/linalg/_npc_helper.pyx`` which contains all the Cython code, and gets imported by
     - :class:`~tenpy.linalg.np_conserved.Array` now rejects addition/subtraction with other types
     - :class:`~tenpy.linalg.np_conserved.Array` now rejects multiplication/division  with non-scalar types
     - By default, make deep copies of npc Arrays.

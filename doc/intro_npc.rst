@@ -582,5 +582,6 @@ See also
 A full example code for spin-1/2
 --------------------------------
 Below follows a full example demonstrating the creation and contraction of Arrays.
+(It's the file `a_np_conserved.py` in the examples folder of the tenpy source.)
 
 .. literalinclude:: ../examples/a_np_conserved.py

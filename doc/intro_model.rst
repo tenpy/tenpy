@@ -308,7 +308,7 @@ first write the model on an arbitrary 2D lattice and then restrict it to a 1D ch
 Let me illustrate this with another standard example model: the transverse field Ising model, imlemented in the module
 :mod:`tenpy.models.tf_ising` included below.
 The :class:`~tenpy.models.tf_ising.TFIsingModel` works for arbitrary 1D or 2D lattices.
-The :class:`~tenpy.models.tf_ising.TFIsingCHain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
+The :class:`~tenpy.models.tf_ising.TFIsingChain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
 which only works for the 1D chain.
 
 .. literalinclude:: ../tenpy/models/tf_ising.py

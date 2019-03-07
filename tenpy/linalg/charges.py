@@ -14,7 +14,7 @@ A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
 
 In this module, some functions have the python decorator ``@use_cython``.
 Functions with this decoartor are replaced by the ones written in Cython, implemented in
-``tenpy.linalg.npc_helper.pyx``.
+the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
 """
 # Copyright 2018 TeNPy Developers

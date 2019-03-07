@@ -31,7 +31,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 3) In case you didn't do that yet: some parts of the library are written in both python and Cython
    with the same interface, so you can simply compile the Cython code, as explained in
    :doc:`../INSTALL`. Then everything should work the same way from a user perspective,
-   while internally the faster, pre-compiled cython code from ``tenpy/linalg/npc_helper.pyx``
+   while internally the faster, pre-compiled cython code from ``tenpy/linalg/_npc_helper.pyx``
    is used. This should also be a safe thing to do.
    The replacement of the optimized functions is done by the decorator :func:`use_cython`.
 4) One of the great things about python is its dynamical nature - anything can be done at runtime.
@@ -78,7 +78,7 @@ try:
 except:
     bottleneck = None
 
-"""bool whether the import of the cython file tenpy/linalg/npc_helper.pyx succeeded"""
+"""bool whether the import of the cython file tenpy/linalg/_npc_helper.pyx succeeded"""
 have_cython_functions = None  # set to True or False in the first call of `use_cython`
 
 
@@ -210,7 +210,7 @@ def optimize(level_compare=OptimizationFlag.default):
 
 
 def use_cython(func=None, replacement=None, check_doc=True):
-    """Decorator to replace a function with a Cython-equivalent from npc_helper.pyx.
+    """Decorator to replace a function with a Cython-equivalent from _npc_helper.pyx.
 
     This is a `decorator <https://docs.python.org/3.7/glossary.html#term-decorator>`_, which is
     supposed to be used in front of function definitions with an ``@`` sign, for example::
@@ -226,7 +226,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
             return result
 
     This decorator indicates that there is a `Cython <https://cython.org>`_ implementation in
-    the file ``tenpy/linalg/npc_helper.pyx``, which should have the same signature (i.e. same
+    the file ``tenpy/linalg/_npc_helper.pyx``, which should have the same signature (i.e. same
     arguments and return values) as the decorated function, and can be used as a replacement for
     the decorated function. However, if the cython code could not be compiled on your system
     (or if the environment variable ``TENPY_OPTIMIZE`` is set to negative values),
@@ -240,9 +240,10 @@ def use_cython(func=None, replacement=None, check_doc=True):
     func : function
         The defined function
     replacement : string | None
-        The name of the function defined in tenpy/linalg/npc_helper.pyx replacing the decorated
-        function. ``None`` defaults to the name of the decorated function,
-        i.e., in the above example `my_slow_function`.
+        The name of the function defined in ``tenpy/linalg/_npc_helper.pyx`` which should
+        replace the decorated function.
+        ``None`` defaults to the name of the decorated function,
+        e.g., in the above example `my_slow_function`.
     check_doc : bool
         If True, we check that the cython version of the function has the exact same doc string
         (up to a possible first line containing the function signature) to exclude typos and
@@ -266,15 +267,15 @@ def use_cython(func=None, replacement=None, check_doc=True):
     if have_cython_functions is None:
         if optimize(OptimizationFlag.default):
             try:
-                from ..linalg import npc_helper
-                _npc_helper_module = npc_helper
+                from ..linalg import _npc_helper
+                _npc_helper_module = _npc_helper
                 have_cython_functions = True
             except ImportError:
                 warnings.warn("Couln't load compiled cython code. Code will run a bit slower.")
                 have_cython_functions = False
         else:
-            print("Don't load compiled cython code due to TENPY_OPTMIZE. "
-                  "Code will run a bit slower.")
+            warnings.warn("Don't load compiled cython code due to TENPY_OPTMIZE. "
+                          "Code will run a bit slower.")
             have_cython_functions = False
     if not have_cython_functions:
         # can't provide a faster version: cython module not available
