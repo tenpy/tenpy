@@ -10,31 +10,34 @@ import numpy as np
 __all__ = ["get_parameter", "unused_parameters"]
 
 
-def get_parameter(par_dict, key, default, descr, asarray=False):
+def get_parameter(params, key, default, descr, asarray=False):
     """Read out a parameter from the dictionary and/or provide default values.
 
-    This function provides a similar functionality as ``par_dict.get(key, default)``.
+    This function provides a similar functionality as ``params.get(key, default)``.
     *Unlike* `dict.get` this function writes the default value into the dictionary
-    (i.e. in other words it's more similar to ``par_dict.setdefault(key, default)``).
+    (i.e. in other words it's more similar to ``params.setdefault(key, default)``).
 
-    However, a special key ``'verbose'`` *in* the `par_dict` with value > 0 triggers this function
-    to additionally print the used value. If verbose >= 10, it is printed every time its used,
+    This allows the user to save the modified dictionary as meta-data, which gives a
+    concrete record of the actually used parameters and simplifies reproducing the results
+    and restarting simulations.
+
+    Moreover, a special entry with the key ``'verbose'`` *in* the `params`
+    can trigger this function to also print the used value.
+    A higer `verbose` level implies more output.
+    If `verbose` >= 100, it is printed every time it's used.
+    If `verbose` >= 2., its printed for the first time time its used.
+    and for `verbose` >= 1, non-default values are printed the first time they are used.
     otherwise only for the first use.
-    (Wheter a parameter was used is saved in the set ``par_dict['_used_param']``.)
 
-    This function should be used in the algorithms to read out parameters.
-    Then, when the algorithms are calleed by tenpy users,
-    simply including ``verbose=1`` into a parameter dictionary will trigger the algorithms to
-    print all the actually used parameters during runtime.
-
-    In addition, the user can save the modified dictionary along with other data, which gives a
-    concrete record of the actually used parameters and simplifies reproducing the results.
+    Internally, whether a parameter was used is saved in the set ``params['_used_param']``.
+    This is used in :func:`unused_parameters` to print a warning if the key wasn't used
+    at the end of the algorithm, to detect mis-spelled parameters.
 
     Parameters
     ----------
-    par_dict : dict
+    params : dict
         A dicionary of the parameters as provided by the user.
-        If `key` is not a valid key, ``par_dict[key]`` is set to `default`.
+        If `key` is not a valid key, ``params[key]`` is set to `default`.
     key : string
         The key for the parameter which should be read out from the dictionary.
     default :
@@ -47,12 +50,13 @@ def get_parameter(par_dict, key, default, descr, asarray=False):
     Returns
     -------
     value :
-        ``par_dict[key]`` if the key is in par_dict, otherwise `default`.
+        ``params[key]`` if the key is in params, otherwise `default`.
         Converted to a numpy array, if `asarray`.
 
     Examples
     --------
-    :func:`~tenpy.algorithms.tebd.time_evolution` gets a dictionary of parameters.
+    In the algorith
+    :class:`~tenpy.algorithms.tebd.Engine` gets a dictionary of parameters.
     Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
     with the dictionary as argument, which looks similar like:
 
@@ -77,11 +81,13 @@ def get_parameter(par_dict, key, default, descr, asarray=False):
 
 
     """
-    defaultstring = "" if key in par_dict else "(default) "
-    val = par_dict.setdefault(key, default)  # get the value; set default if not existent
-    used = par_dict.setdefault('_used_param', set())
-    verbose = par_dict.get('verbose', 0)
-    if verbose >= 100 or (key not in used and verbose > 0):
+    use_default = key not in params
+    val = params.setdefault(key, default)  # get the value; set default if not existent
+    used = params.setdefault('_used_param', set())
+    verbose = params.get('verbose', 0)
+    new_key = key not in used
+    if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
+        defaultstring = "(default) " if use_default else ""
         print("parameter {key!r}={val!r} {defaultstring}for {descr!s}".format(
             descr=descr, key=key, val=val, defaultstring=defaultstring))
     used.add(key)  # (does nothing if already present)
@@ -90,14 +96,14 @@ def get_parameter(par_dict, key, default, descr, asarray=False):
     return val
 
 
-def unused_parameters(par_dict, warn=None):
+def unused_parameters(params, warn=None):
     """Returns a set of the parameters which have not been read out with `get_parameters`.
 
     This function might be useful to check for typos in the parameter keys.
 
     Parameters
     ----------
-    par_dict : dict
+    params : dict
         A dictionary of parameters which was given to (functions using) :meth:`get_parameter`
     warn : None | str
         If given, print a warning "unused parameter for {warn!s}: {unused_keys!s}".
@@ -105,10 +111,10 @@ def unused_parameters(par_dict, warn=None):
     Returns
     -------
     unused_keys : set
-        The set of keys of the par_dict which was not used
+        The set of keys of the params which was not used
     """
-    used = par_dict.get('_used_param', set())
-    unused = set(par_dict.keys()) - used
+    used = params.get('_used_param', set())
+    unused = set(params.keys()) - used
     unused.discard('_used_param')
     unused.discard('verbose')
     if warn is not None:

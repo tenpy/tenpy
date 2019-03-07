@@ -85,7 +85,8 @@ Changed
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
   - don't check the (absolute) energy for convergence in Lanczos 
-
+- Verbosity of :func:`~tenpy.tools.params.get_parameter` reduced: Print parameters only for verbosity >=1.
+  and default values only for verbosity >= 2.
 - Don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
 - Renamed the `SquareLattice` class to :class:`tenpy.models.lattice.Square` for better consistency.
 - auto-determine whether Jordan-Wigner strings are necessary in
