@@ -1262,7 +1262,7 @@ class Mixer:
         ============== ========= ===============================================================
         key            type      description
         ============== ========= ===============================================================
-        amplitude      float     Initial strength of the mixer. (Should be <= 1.)
+        amplitude      float     Initial strength of the mixer. (Should be << 1.)
         -------------- --------- ---------------------------------------------------------------
         decay          float     To slowly turn off the mixer, we divide `amplitude` by `decay`
                                  after each sweep. (Should be >= 1.)
@@ -1283,7 +1283,7 @@ class Mixer:
     """
 
     def __init__(self, mixer_params):
-        self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-2, 'Mixer')
+        self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-5, 'Mixer')
         assert self.amplitude <= 1.
         self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')
         assert self.decay >= 1.
