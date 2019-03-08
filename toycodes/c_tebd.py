@@ -131,7 +131,9 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
     plt.ylabel('time $t/J$')
     plt.ylim(0., tmax)
     plt.colorbar().set_label('entropy $S$')
-    plt.savefig('c_tebd_lightcone.pdf')
+    filename = 'c_tebd_lightcone_{g:.2f}.pdf'.format(g=g)
+    plt.savefig(filename)
+    print("saved " + filename)
 
 
 if __name__ == "__main__":

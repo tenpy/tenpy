@@ -71,7 +71,7 @@ def plot(results, filename):
     plt.xlabel(r'$J_z/J_x$')
     plt.ylabel(r'$t = \exp(-\frac{1}{\xi})$')
     plt.savefig(filename)
-    #  plt.show()
+    print("saved to " + filename)
 
 
 if __name__ == "__main__":

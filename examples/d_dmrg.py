@@ -61,44 +61,12 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
     }
-    info = dmrg.run(psi, M, dmrg_params)
-    E = info['E']
-    print("E = {E:.13f}".format(E=E))
-    print("final bond dimensions: ", psi.chi)
-    mag_x = np.mean(psi.expectation_value("Sigmax"))
-    mag_z = np.mean(psi.expectation_value("Sigmaz"))
-    print("<sigma_x> = {mag_x:.5f}".format(mag_x=mag_x))
-    print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
-    print("correlation length:", psi.correlation_length())
-    # compare to exact result
-    from tfi_exact import infinite_gs_energy
-    E_exact = infinite_gs_energy(1., g)
-    print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
-    print("relative error: ", abs((E - E_exact) / E_exact))
-    return E, psi, M
-
-
-def example_DMRG_tf_ising_infinite_with_engine(g, verbose=True):
-    """The same as `example_DMRG_tf_ising_infinite`, but explicitly initialize an `Engine`."""
-    print("infinite DMRG, transverse field Ising model")
-    print("g={g:.2f}".format(g=g))
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=verbose)
-    M = TFIChain(model_params)
-    product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
-    dmrg_params = {
-        'mixer': True, # setting this to True helps to escape local minima
-        'trunc_params': {
-            'chi_max': 30,
-            'svd_min': 1.e-10
-        },
-        'max_E_err': 1.e-10,
-        'verbose': verbose,
-    }
-    # ---- here is where we changed things compared to example_DMRG_infinite(g)
+    # instead of
+    #  info = dmrg.run(psi, M, dmrg_params)
+    #  E = info['E']
+    # we can also use the a Engine directly:
     eng = dmrg.EngineCombine(psi, M, dmrg_params)
-    E, psi = eng.run()  # the main work, equivalent to dmrg.run() up to the return parameters.
-    # ---- end of changes
+    E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     mag_x = np.mean(psi.expectation_value("Sigmax"))
@@ -153,7 +121,5 @@ if __name__ == "__main__":
     example_DMRG_tf_ising_finite(L=10, g=1.)
     print("-" * 100)
     example_DMRG_tf_ising_infinite(g=1.5)
-    print("-" * 100)
-    example_DMRG_tf_ising_infinite_with_engine(g=1.5)
     print("-" * 100)
     example_DMRG_heisenberg_xxz_infinite(Jz=1.5)
