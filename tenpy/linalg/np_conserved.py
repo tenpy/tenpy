@@ -203,22 +203,25 @@ class Array:
             raise ValueError("setstate with incompatible type of state")
 
     @classmethod
-    def from_ndarray_trivial(cls, data_flat, dtype=np.float64):
+    def from_ndarray_trivial(cls, data_flat, dtype=None):
         """convert a flat numpy ndarray to an Array with trivial charge conservation.
 
         Parameters
         ----------
         data_flat : array_like
             The data to be converted to a Array.
-        dtype : type | string
-            The data type of the array entries. Defaults to ``np.float64``.
+        dtype : ``np.dtype``
+            The data type of the array entries. Defaults to dtype of `data_flat`.
 
         Returns
         -------
         res : :class:`Array`
             An Array with data of data_flat.
         """
-        data_flat = np.array(data_flat, dtype)
+        data_flat = np.asarray(data_flat)  # unspecified dtype
+        if dtype is None:
+            dtype = data_flat.dtype
+        data_flat = data_flat.astype(dtype, copy=False)
         chinfo = ChargeInfo()
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
         res = cls(legs, dtype)
@@ -239,8 +242,8 @@ class Array:
             The shape has to be compatible with legcharges.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
-        dtype : ``np.dtype`` | string
-            The data type of the array entries. Defaults to dtype of data_flat.
+        dtype : ``np.dtype``
+            The data type of the array entries. Defaults to dtype of `data_flat`.
         qtotal : None | charges
             The total charge of the new array.
         cutoff : float
@@ -261,8 +264,8 @@ class Array:
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
             dtype = data_flat.dtype
-        res = cls(legcharges, dtype, qtotal)  # without any data
         data_flat = data_flat.astype(dtype, copy=False)
+        res = cls(legcharges, dtype, qtotal)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
                 res.shape, data_flat.shape))
