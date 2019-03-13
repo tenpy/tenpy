@@ -688,8 +688,8 @@ class CouplingModel(Model):
             return  # nothing to do: can even accept non-defined onsite operators
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
-                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
+                raise ValueError(("unknown onsite operator {0!r} for u={1:d}\n"
+                                  "{2!r}").format(op, u, self.lat.unit_cell[u]))
         if op_string is None:
             need_JW1 = self.lat.unit_cell[u1].op_needs_JW(op1)
             need_JW2 = self.lat.unit_cell[u1].op_needs_JW(op2)
@@ -702,7 +702,7 @@ class CouplingModel(Model):
         for u in range(len(self.lat.unit_cell)):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
+                                 "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
 
@@ -1074,14 +1074,14 @@ class MultiCouplingModel(CouplingModel):
         for u, op, _ in [(u0, op0, None)] + other_ops :
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
+                                 "{2!r}".format(op, u, self.lat.unit_cell[u]))
         if op_string is not None:
             if not np.sum(need_JW) % 2 == 0:
                 raise ValueError("Invalid coupling: would need 'JW' string on the very left")
             for u in range(len(self.lat.unit_cell)):
                 if not self.lat.unit_cell[u].valid_opname(op_string):
                     raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                     "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
+                                     "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and np.all(u0 == all_us):
             # note: we DO allow couplings with some onsite terms, but not all of them
             raise ValueError("Coupling shouldn't be purely onsite!")
