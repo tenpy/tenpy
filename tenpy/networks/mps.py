@@ -475,7 +475,7 @@ class MPS:
         Returns
         -------
         singlet_mps : :class:`MPS`
-            An MPS representing singlets on the specified bonds.
+            An MPS representing singlets on the specified pairs of sites.
         """
         # sort each pair s.t. i < j
         pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
