@@ -24,6 +24,9 @@ and then slowly turned off in the end.
 
 .. todo ::
     Write UserGuide/Example!!!
+
+.. todo ::
+    separate effective Hamiltonian from Engine for better readability?
 """
 # Copyright 2018 TeNPy Developers
 
@@ -381,7 +384,7 @@ class Engine(NpcLinearOperator):
         DMRG_params = self.DMRG_params
         unused_parameters(DMRG_params['lanczos_params'], "DMRG lanczos_params")
         unused_parameters(DMRG_params['trunc_params'], "DMRG trunc_params")
-        if 'mixer_params' in DMRG_params:
+        if 'mixer_params' in DMRG_params and DMRG_params.get('mixer', True):
             unused_parameters(DMRG_params['mixer_params'], "DMRG mixer_params")
         unused_parameters(DMRG_params, "DMRG")
 
@@ -920,9 +923,10 @@ class Engine(NpcLinearOperator):
 
         Parameters
         ----------
-        xaxis : 'sweep' | 'time' | ...
+        xaxis : ``'index'`` | ``'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            ``'sweep'`` is just enumerating the number of bond updates
+            ``'index'`` is just enumerating the number of bond updates,
+            and ``'sweep'`` corresponds to the sweep number
             (including environment sweeps).
         E_exact : float
             Exact energy (for infinite systems: per site) for comparison.
@@ -934,8 +938,8 @@ class Engine(NpcLinearOperator):
         ax1 = plt.subplot(1, 2, 1)
         stats = self.update_stats
         L = self.psi.L
-        kwargs.setdefault('marker', 'o')
-        kwargs.setdefault('linestyle', '')
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
 
         E = np.array(stats['E_total'])
         schedule, _ = self._get_sweep_schedule()
@@ -990,8 +994,8 @@ class Engine(NpcLinearOperator):
             axes = plt.gca()
         stats = self.sweep_stats
         L = self.psi.L
-        kwargs.setdefault('marker', 'o')
-        kwargs.setdefault('linestyle', '')
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
 
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
@@ -1309,7 +1313,8 @@ class Mixer:
         self.amplitude /= self.decay
         if sweeps >= self.disable_after or self.amplitude <= np.finfo('float').eps:
             if self.verbose >= 0.1:  # increased verbosity: the same level as DMRG
-                print("disable mixer after {0:d} sweeps".format(sweeps))
+                print("disable mixer after {0:d} sweeps, final amplitude {1:.2e}".format(
+                    sweeps, self.amplitude))
             return None  # disable mixer
         return self
 
