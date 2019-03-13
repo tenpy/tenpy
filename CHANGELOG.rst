@@ -97,6 +97,8 @@ Changed
 
 Fixed
 ^^^^^
+- :issue:`22`: **Serious bug** in :func:`tenpy.linalg.np_conserved.inner`: if ``do_conj=True`` is used with non-zero
+  ``qtotal``, it returned 0. instead of non-zero values.
 - avoid error in :meth:`tenpy.networks.mps.MPS.apply_local_op`
 - Don't carry around total charge when using DMRG with a mixer
 - Corrected couplings of the FermionicHubbardChain
