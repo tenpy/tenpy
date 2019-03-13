@@ -631,7 +631,7 @@ class CouplingModel(Model):
         Parameters
         ----------
         strength : scalar | array
-            Prefactor of the coupling. May vary spatially (see above). If an arrow of smaller size
+            Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
@@ -662,6 +662,26 @@ class CouplingModel(Model):
         raise_op2_left : bool
             Raise an error when `op2` appears left of `op1`
             (in the sense of the MPS ordering given by the lattice).
+
+        Examples
+        --------
+        When initializing a model, you can add a term :math:` J \sum_{<i,j>} S^z_i S^z_j`
+        on all nearest-neighbor bonds of the lattice like this:
+
+        >>> J = 1.  # the strength
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(J * 0.5, u1, 'Sp', u2, 'Sm', dx)
+        ...     self.add_coupling(J * 0.5, u1, 'Sm', u2, 'Sp', dx)
+        ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
+
+        To add the hermitian conjugate for a hopping term, you can add it in the opposite
+        direction:
+
+        >>> t = 1.  # the strength
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', -dx)
+
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
@@ -851,6 +871,69 @@ class CouplingModel(Model):
         self.H_MPO_graph = graph
         H_MPO = graph.build_MPO()
         return H_MPO
+
+    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+        """Add an external flux to the coupling strength.
+
+        When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
+        through the cylinder. This means that a particle hopping around the cylinder should
+        pick up a phase given by the external flux [Resta1997]_.
+        This is also called "twisted boundary conditions" in literature.
+
+        Parameters
+        ----------
+        strength : scalar | array
+            The strength to be used in :meth:`add_coupling`, when no external flux would be
+            present.
+        dx : iterable of int
+            Translation vector (of the unit cell) between OP1 and OP2 in :meth:`add_coupling`.
+        phase : iterable of float
+            The phase of the external flux for hopping in each direction of the lattice.
+            E.g., if you want flux through the cylinder on which you have an infinite MPS,
+            you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
+            hopping around the cylinder.
+
+        Returns
+        -------
+        strength : complex array
+            The strength array to be used as `strength` in :meth:`add_coupling`
+            with the given `dx`.
+
+        Examples
+        --------
+        Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
+        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
+        The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
+        cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
+        given by the external flux.
+
+        >>> strength = 1. # hopping strength without external flux
+        >>> phi = np.pi/4 # determines the external flux strength
+        >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(strength_with_flux, 'Cd', u1, 'C', u2, dx)
+        ...     self.add_coupling(np.conj(strength_with_flux), 'Cd', u1, 'C', u2, -dx)
+
+        """
+        e_i_phi = np.exp(1.j * np.array(phase))
+        (_, c_shape) = self.lat._coupling_shape(dx)
+        strength = to_array(strength, c_shape) * (1. + 0.j)
+        # make strenght complex
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        strength = np.asarray(strength, complex_dtype)
+        for ax in range(self.lat.dim):
+            if self.lat.bc[ax]:  # open boundary conditions
+                if phase[ax]:
+                    raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
+                continue
+            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+            # around accross the  periodic b.c.
+            if abs(dx[ax]) == 0:
+                continue # nothing to do
+            slices = [slice(None) for ax in range(self.lat.dim)]
+            slices[ax] = slice(-abs(dx[ax]), None)
+            strength[slices] *= e_i_phi[ax]
+        return strength
 
     def _test_coupling_terms(self):
         """Check the format of self.coupling_terms"""

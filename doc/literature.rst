@@ -9,6 +9,7 @@ also a classic introduction.
 
 .. [White1992] S. White, Phys. Rev. Lett. 69, 2863 (1992),
                S. White, Phys. Rev. B 84, 10345 (1992)
+.. [Resta1997] R. Rest, Phys. Rev. Lett. 80, 1800 (1997)
 .. [Vidal2004] G. Vidal, Phys. Rev. Lett. 93, 040502 (2004), :arxiv:`quant-ph/0310089`
 .. [White2005] S. White, Phys. Rev. B 72, 180403(R) (2005), :arxiv:`cond-mat/0508709`
 .. [Singh2009] S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), :arxiv:`0907.2994`

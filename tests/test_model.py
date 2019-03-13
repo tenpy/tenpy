@@ -13,6 +13,7 @@ from tenpy.algorithms.exact_diag import ExactDiag
 import test_mpo
 import nose
 import numpy as np
+import numpy.testing as npt
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
 
@@ -80,6 +81,36 @@ def test_CouplingModel():
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
             M.calc_H_bond()
+
+
+def test_ext_flux():
+    Lx, Ly = 3, 4
+    lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
+    M = model.CouplingModel(lat)
+    strength = 1.23
+    strength_array = np.ones((Lx, Ly))*strength
+    for phi in [0, 2*np.pi]:  # flux shouldn't do anything
+        print("phi = ", phi)
+        for dx in [1, 0], [0, 1], [0, 2], [1, -1], [-2, 2]:
+            print("dx = ", dx)
+            strength_flux = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
+            npt.assert_array_almost_equal_nulp(strength_flux, strength_array, 10)
+    for phi in [np.pi/2, 0.123]:
+        print("phi = ", phi)
+        strength_hop_x = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
+        npt.assert_array_almost_equal_nulp(strength_hop_x, strength_array, 10)
+        expect_y_1 = np.array(strength_array, dtype=np.complex128)
+        expect_y_1[:, -1:] = strength * np.exp(1.j * phi)
+        for dx in [[0, 1], [0, -1], [1, -1], [1, 1]]:
+            print("dx = ", dx)
+            strength_hop_y_1 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+            npt.assert_array_almost_equal_nulp(strength_hop_y_1, expect_y_1, 10)
+        expect_y_2 = np.array(strength_array, dtype=np.complex128)
+        expect_y_2[:, -2:] = strength * np.exp(1.j * phi)
+        for dx in [[0, 2], [0, -2], [1, 2], [3, 2]]:
+            print("dx = ", dx)
+            strength_hop_y_2 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+            npt.assert_array_almost_equal_nulp(strength_hop_y_2, expect_y_2, 10)
 
 
 def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
