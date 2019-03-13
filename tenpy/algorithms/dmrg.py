@@ -1604,7 +1604,7 @@ class DensityMatrixMixer(Mixer):
         rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
         rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
         if add_separate_Id:
-            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
+            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         return rho
 
     def mix_rho_R(self, engine, theta, i0, mix_enabled):
