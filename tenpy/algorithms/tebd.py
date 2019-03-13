@@ -97,7 +97,7 @@ class Engine:
     """
 
     def __init__(self, psi, model, TEBD_params):
-        self.verbose = get_parameter(TEBD_params, 'verbose', 2, 'TEBD')
+        self.verbose = get_parameter(TEBD_params, 'verbose', 1, 'TEBD')
         self.TEBD_params = TEBD_params
         self.trunc_params = get_parameter(TEBD_params, 'trunc_params', {}, 'TEBD')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
