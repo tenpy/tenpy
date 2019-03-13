@@ -3853,8 +3853,9 @@ def _inner_worker(a, b, do_conj):
     """Full contraction of `a` and `b` with axes in matching order."""
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     res = res_dtype.type(0)
-    if any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
-        return res  # can't have blocks to be contracted
+    check_qtotal = b.qtotal - a.qtotal if do_conj else b.qtotal + a.qtotal
+    if np.any(a.chinfo.make_valid(check_qtotal) != 0):
+        return res # can't have blocks to be contracted.
     if a.stored_blocks == 0 or b.stored_blocks == 0:
         return res  # also trivial
     a = a.astype(calc_dtype, False)
@@ -3881,6 +3882,7 @@ def _inner_worker(a, b, do_conj):
     for i, j in _iter_common_sorted(a_qdata, b_qdata):
         res += blas_dot(a_data[i], b_data[j])
         # same as res += np.inner(a_data[i].reshape((-1, )), b_data[j].reshape((-1, )))
+        # (or with complex conj if 'do_conj')
     return res
 
 

@@ -1587,8 +1587,14 @@ def _inner_worker(a, b, bint do_conj):
     """Full contraction of `a` and `b` with axes in matching order."""
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     res = res_dtype.type(0)
-    if np.any(a.chinfo.make_valid(a.qtotal + b.qtotal) != 0):
-        return res  # can't have blocks to be contracted
+    if do_conj:
+        if np.any(a.qtotal != b.qtotal):
+            return res  # can't have blocks to be contracted
+    else:
+        qtotal_diff = b.qtotal + a.qtotal
+        _make_valid_charges_1D(a.chinfo._mod, qtotal_diff)
+        if np.any(qtotal_diff != 0):
+            return res  # can't have blocks to be contracted
     if a.stored_blocks == 0 or b.stored_blocks == 0:
         return res  # also trivial
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
@@ -1596,7 +1602,6 @@ def _inner_worker(a, b, bint do_conj):
         a = a.astype(calc_dtype)
     if b.dtype != calc_dtype:
         b = b.astype(calc_dtype)
-
     # need to find common blocks in a and b, i.e. equal leg charges.
     # for faster comparison, generate 1D arrays with a combined index
     # F-style strides to preserve sorting!
