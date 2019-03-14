@@ -932,7 +932,7 @@ class CouplingModel(Model):
                 continue # nothing to do
             slices = [slice(None) for ax in range(self.lat.dim)]
             slices[ax] = slice(-abs(dx[ax]), None)
-            strength[slices] *= e_i_phi[ax]
+            strength[tuple(slices)] *= e_i_phi[ax]
         return strength
 
     def _test_coupling_terms(self):
