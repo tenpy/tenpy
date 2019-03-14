@@ -77,20 +77,19 @@ class FermionicHubbardModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        L = get_parameter(model_params, 'L', 2, self.name)
-        t = get_parameter(model_params, 't', 1., self.name)
-        U = get_parameter(model_params, 'U', 0, self.name)
-        V = get_parameter(model_params, 'V', 0, self.name)
-        mu = get_parameter(model_params, 'mu', 0., self.name)
+        t = get_parameter(model_params, 't', 1., self.name, True)
+        U = get_parameter(model_params, 'U', 0, self.name, True)
+        V = get_parameter(model_params, 'V', 0, self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(mu, 0, 'Ntot')
             self.add_onsite(U, 0, 'NuNd')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx, 'JW', True)
-            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', -dx, 'JW', True)  # h.c.
+            self.add_coupling(t, u2, 'Cdu', u1, 'Cu', -dx, 'JW', True)  # h.c.
             self.add_coupling(t, u1, 'Cdd', u2, 'Cd', dx, 'JW', True)
-            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', -dx, 'JW', True)  # h.c.
+            self.add_coupling(t, u2, 'Cdd', u1, 'Cd', -dx, 'JW', True)  # h.c.
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 

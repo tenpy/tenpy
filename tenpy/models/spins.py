@@ -105,9 +105,9 @@ class SpinModel(CouplingMPOModel):
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling((Jx + Jy) / 4., u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling((Jx + Jy) / 4., u2, 'Sp', u1, 'Sm', -dx) # h.c.
             self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
-            self.add_coupling((Jx - Jy) / 4., u1, 'Sm', u2, 'Sm', dx)
+            self.add_coupling((Jx - Jy) / 4., u2, 'Sm', u1, 'Sm', -dx) # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
             self.add_coupling(muJ * 0.5j, u1, 'Sm', u2, 'Sp', dx)
             self.add_coupling(muJ * -0.5j, u1, 'Sp', u2, 'Sm', dx)
