@@ -74,7 +74,7 @@ or directly `intelpython <https://software.intel.com/en-us/distribution-for-pyth
 Both are available for Linux, Mac and Windows; note that you don't even need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
 After a successfull installation, if you run ``python`` interactively, the first output line should 
-state the python version and contain ``Anaconda`` or ``intelpython``, respectively.
+state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
 On Linux, make sure that ``$PATH`` contains the ``bin/`` folder of the installation; you might want to adjust your
 ``~/.bashrc`` if necessary.
 
@@ -174,3 +174,36 @@ If you have the python package manager ``pip``, all of these can be installed wi
     It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
     the python distribution of anaconda. 
     If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
+
+
+Updating to a new version
+=========================
+**Before** you update, take a look at the :doc:`/CHANGELOG.rst`, which lists the changes, fixes, and new stuff. 
+Most importantly, it has a section on *backwards incompatible changes* (i.e., changes which may break your
+existing code) along with information how to fix it. Of course, we try to avoid introducing such incompatible changes,
+but sometimes, there's no way around them.
+
+How to update depends a little bit on the way you installed TeNPy. Of course, you have always the option to just remove
+the tenpy files and download the newest version, following the instructions above.
+
+Alternatively, if you used ``git clone ...`` to download the repository, you can update to the newest version using `Git`.
+First, briefly check that you didn't change anything you need to keep with ``git status``.
+Then, do a ``git pull`` to download (and possibly merge) the newest commit from the repository.
+
+.. note ::
+
+    If some Cython file (ending in ``.pyx``) got renamed/removed (e.g., when updating from v0.3.0 to v0.4.0), 
+    you first need to remove the corresponding binary files. 
+    You can do so with the command ``bash cleanup.sh``.
+
+    Furthermore, whenever one of the cython files (ending in ``.pyx``) changed, you need to re-compile it.
+    To do that, simply call the command ``bash ./compile`` again.
+    If you are unsure whether a cython file changed, compiling again doesn't hurt.
+
+To summarize, you need to execute the folllowing bash commands in the repository::
+
+    # 0) make a backup of the whole folder
+    git status   # check the output whether you modified some files
+    git pull 
+    bash ./cleanup.sh  # (confirm with 'y')
+    bash ./compile.sh
