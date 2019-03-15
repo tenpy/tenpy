@@ -916,13 +916,15 @@ class Engine(NpcLinearOperator):
         # hence the additional argument `VH`
         self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
-    def plot_update_stats(self, xaxis='time', E_exact=None, **kwargs):
+    def plot_update_stats(self, ax1, ax2, xaxis='time', E_exact=None, **kwargs):
         """Plot the update statistics to display the convergence during the sweeps.
 
-        Makes two subplots, showing the energy (left) and number of lanczos iterations (right).
+        Makes two subplots, showing the energy (`ax1`) and number of lanczos iterations (`ax2`).
 
         Parameters
         ----------
+        ax1, ax2 : :class:`matplotlib.axes.Axes`
+            The axes to plot into. If ``None``, we skip plotting.
         xaxis : ``'index'`` | ``'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
             ``'index'`` is just enumerating the number of bond updates,
@@ -932,10 +934,8 @@ class Engine(NpcLinearOperator):
             Exact energy (for infinite systems: per site) for comparison.
             If given, plot ``abs((E-E_exact)/E_exact)`` on a log-scale yaxis.
         **kwargs :
-            Further keyword arguments given to ``plt.plot(...)``.
+            Further keyword arguments given to ``ax1.plot(...)`` and ``ax2.plot(...)``.
         """
-        import matplotlib.pyplot as plt
-        ax1 = plt.subplot(1, 2, 1)
         stats = self.update_stats
         L = self.psi.L
         kwargs.setdefault('marker', 'x')
@@ -961,18 +961,19 @@ class Engine(NpcLinearOperator):
             E = d_E/d_age
             X = X[N:]
             N_lanczos = N_lanczos[N:]
-        if E_exact is None:
-            ax1.plot(X, E, **kwargs)
-        else:
-            ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
-            ax1.set_yscale('log')
-        ax1.set_xlabel(xaxis)
-        ax1.set_ylabel("Energy")
+        if ax1 is not None:
+            if E_exact is None:
+                ax1.plot(X, E, **kwargs)
+            else:
+                ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
+                ax1.set_yscale('log')
+            ax1.set_xlabel(xaxis)
+            ax1.set_ylabel("Energy")
 
-        ax2 = plt.subplot(1, 2, 2)
-        ax2.plot(X, N_lanczos, **kwargs)
-        ax2.set_xlabel(xaxis)
-        ax2.set_ylabel(r'$N_{lanczos}$')
+        if ax2 is not None:
+            ax2.plot(X, N_lanczos, **kwargs)
+            ax2.set_xlabel(xaxis)
+            ax2.set_ylabel(r'$N_{lanczos}$')
 
     def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', exact_y_value=None, **kwargs):
         """Plot the sweep statistics to display the convergence with the sweeps.
