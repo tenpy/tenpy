@@ -879,6 +879,12 @@ class CouplingModel(Model):
         through the cylinder. This means that a particle hopping around the cylinder should
         pick up a phase given by the external flux [Resta1997]_.
         This is also called "twisted boundary conditions" in literature.
+        This function adds a complex phase to the `strength` array on some bonds, such that
+        particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
+
+        .. warning ::
+            For the sign of `phase` it is important that you consistently use the creation
+            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling".
 
         Parameters
         ----------
@@ -886,7 +892,7 @@ class CouplingModel(Model):
             The strength to be used in :meth:`add_coupling`, when no external flux would be
             present.
         dx : iterable of int
-            Translation vector (of the unit cell) between OP1 and OP2 in :meth:`add_coupling`.
+            Translation vector (of the unit cell) between `op1` and `op2` in :meth:`add_coupling`.
         phase : iterable of float
             The phase of the external flux for hopping in each direction of the lattice.
             E.g., if you want flux through the cylinder on which you have an infinite MPS,
@@ -915,7 +921,6 @@ class CouplingModel(Model):
         ...     self.add_coupling(np.conj(strength_with_flux), 'Cd', u1, 'C', u2, -dx)
 
         """
-        e_i_phi = np.exp(1.j * np.array(phase))
         (_, c_shape) = self.lat._coupling_shape(dx)
         strength = to_array(strength, c_shape)
         # make strenght complex
@@ -926,13 +931,17 @@ class CouplingModel(Model):
                 if phase[ax]:
                     raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
                 continue
-            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
-            # around accross the  periodic b.c.
             if abs(dx[ax]) == 0:
                 continue # nothing to do
             slices = [slice(None) for ax in range(self.lat.dim)]
             slices[ax] = slice(-abs(dx[ax]), None)
-            strength[tuple(slices)] *= e_i_phi[ax]
+            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+            # accross the periodic b.c.
+            slices = tuple(slices)
+            if dx[ax] > 0:
+                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *negative* y-direction
+            else:
+                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
         return strength
 
     def plot_coupling_terms(self, ax, style_map=None):
