@@ -1101,7 +1101,7 @@ class MPS:
                 if i < self.L:
                     leg = self._B[i].get_leg('vL')
                 else:  # i == L: segment b.c.
-                    leg = self._B[i - 1].get_leg('vR')
+                    leg = self._B[i - 1].get_leg('vR').conj()
                 spectrum = [(leg.get_charge(qi), np.sort(ss[leg.get_slice(qi)]))
                             for qi in range(leg.block_number)]
                 res.append(spectrum)

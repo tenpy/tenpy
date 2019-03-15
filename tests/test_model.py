@@ -39,7 +39,8 @@ def check_model_sanity(M, hermitian=True):
                         raise ValueError("H on bond {i:d} not hermitian".format(i=i))
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
-        test_mpo.check_hermitian(M.H_MPO)
+        if hermitian:
+            test_mpo.check_hermitian(M.H_MPO)
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
