@@ -1531,12 +1531,13 @@ class MPS:
         term_list : list of terms
             Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
         prefactors : list of (complex) floats
-            Prefactors for the ``total_sum`` to be evaluated.
+            Prefactors for the ``term_sum`` to be evaluated.
 
         Returns
         -------
         terms_sum : list of (complex) float
-            Equivalent to ``sum([t*f for t, f in zip(terms, prefactors)])``.
+            Equivalent to the expression
+            ``sum([self.expectation_value_term(t)*f for t, f in zip(terms_list, prefactors)])``.
         cache :
             Intermediate results. Currently the values for each of the term, but this might be
             changed soon.
@@ -2704,6 +2705,15 @@ class MPSEnvironment:
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
 
+        The returned ``LP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'A' form::
+
+            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
+            |     |       |             |
+            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
+            |     |       |             |
+            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+
         Parameters
         ----------
         i : int
@@ -2716,14 +2726,6 @@ class MPSEnvironment:
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'vR'`` for `bra`, `ket`.
-        LP_i= .------>-M[0]--> ... -->M[i-2]-->M[i-1]-->
-              |        |                |        |
-              |        ^                ^        ^
-              |        |                |        |
-              |        ^                ^        ^
-              |        |                |        |
-              .------>-N[0]*-> ... -->N[i-2]*-->N[i-1]*-->
-        where the M's and the N's are in the 'A' form
         """
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
@@ -2743,6 +2745,16 @@ class MPSEnvironment:
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
 
+        The returned ``RP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'B' form::
+
+            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
+            |                |              |         |
+            |                |              |         RP[-1]
+            |                |              |         |
+            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+
+
         Parameters
         ----------
         i : int
@@ -2755,20 +2767,6 @@ class MPSEnvironment:
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vL*', 'vL'`` for `bra`, `ket`.
-
-
-
-       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.
-                      |                     |      |
-                      ^                     ^      |
-                      |                     |      |
-                      ^                     ^      |
-                      |                     |      |
-                 -->N[i+1]*-->  ... -->N[i-2]*-->.
-
-
-        where the M's and the N's are in the 'B' form
-
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):

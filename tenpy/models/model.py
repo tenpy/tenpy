@@ -917,7 +917,7 @@ class CouplingModel(Model):
         """
         e_i_phi = np.exp(1.j * np.array(phase))
         (_, c_shape) = self.lat._coupling_shape(dx)
-        strength = to_array(strength, c_shape) * (1. + 0.j)
+        strength = to_array(strength, c_shape)
         # make strenght complex
         complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
         strength = np.asarray(strength, complex_dtype)

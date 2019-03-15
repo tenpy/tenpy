@@ -209,7 +209,7 @@ class MPO:
         if copy:
             return self._W[i].copy()
         return self._W[i]
-    
+
     def set_W(self, i, W):
         """Set `W` at site `i`."""
         i = self._to_valid_index(i)
@@ -217,7 +217,7 @@ class MPO:
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
-    
+
         May be ``None``."""
         i = self._to_valid_index(i)
         return self.IdL[i]
@@ -303,7 +303,7 @@ class MPO:
             return np.zeros(1)
         singlesitempo=self.get_grouped_mpo(self.L)
         return npc.trace(singlesitempo.get_W(0),axes=[['wL'],['wR']])
-    
+
 
 class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
@@ -588,7 +588,7 @@ class MPOEnvironment(MPSEnvironment):
         |     |        |       |       |                 |
         |     |        ^       ^       ^                 |
         |     |        |       |       |                 |
-        |     .------>-N[0]*->-N[1]*->-N[2]*->- ...  ->--.
+        |     .------<-N[0]*-<-N[1]*-<-N[2]*-<- ...  -<--.
 
     We use the following label convention (where arrows indicate `qconj`)::
 
@@ -685,6 +685,16 @@ class MPOEnvironment(MPSEnvironment):
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
 
+        The returned ``LP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'A' form::
+
+            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
+            |     |       |             |
+            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
+            |     |       |             |
+            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+
+
         Parameters
         ----------
         i : int
@@ -697,22 +707,21 @@ class MPOEnvironment(MPSEnvironment):
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
-        LP_i= .------>-M[0]--> ... -->M[i-2]-->M[i-1]-->
-              |        |                |        | 
-              |        ^                ^        ^
-              |        |                |        |
-              LP[0] ->-W[0]--> ... -->W[i-2]-->W[i-1]-->
-              |        |                |        | 
-              |        ^                ^        ^
-              |        |                |        |
-              .------>-N[0]*-> ... -->N[i-2]*-->N[i-1]*-->
-        where the M's and the N's are in the 'A' form
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_LP(i, store)
 
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
+
+        The returned ``RP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'B' form::
+
+            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
+            |                |              |         |
+            |     'wL'  ->---W[i+1]-- ... --W[L-1]----RP[-1]
+            |                |              |         |
+            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
 
         Parameters
         ----------
@@ -726,21 +735,20 @@ class MPOEnvironment(MPSEnvironment):
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
-             
+            It looks like
 
-       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.    
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |            
+
+       RP_i =     --M[i+1]--  ...  --->M[i-2]-->.
+                      |                     |      |
                  -->W[i+1]--->  ...  --->W[i-2]-->RP[-1]
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |                
-                 -->N[i+1]*-->  ... -->N[i-2]*-->.                   
+                      |                     |      |
+                      ^                     ^      |
+                      |                     |      |
+                 -->N[i+1]*-->  ... -->N[i-2]*-->.
 
 
         where the M's and the N's are in the 'B' form
-                    
+
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_RP(i, store)
