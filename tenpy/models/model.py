@@ -935,6 +935,70 @@ class CouplingModel(Model):
             strength[tuple(slices)] *= e_i_phi[ax]
         return strength
 
+    def plot_coupling_terms(self, ax, style_map=None):
+        """"Plot coupling terms into a given lattice.
+
+        This function plots the :attr:`coupling_terms`
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        style_map : function
+            Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
+            each two-site coupling and should return a keyword-dictionary
+            with the desired plot-style for this combination.
+            By default (``None``), the linecolor depends on the phase of `strength`,
+            the `linewidth` is given by the phase of `strength` (using the `hsv` colormap),
+            and the linestyle depends on the type of operators coupled.
+
+        See also
+        --------
+        :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
+        """
+        lat = self.lat
+        pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
+        N_sites = lat.N_sites
+        x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
+        if style_map is None:
+            linestyles = ['--', '-.', ':', '-']
+            style_cache = {}
+            from matplotlib.cm import hsv
+            def style_map(i, j, op_i, op_string, op_j, strength):
+                """define the plot style for a given coupling"""
+                key = (op_i, op_string, op_j)
+                if key in style_cache:
+                    return style_cache[key]
+                style = {}
+                style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
+                style['color'] = hsv(np.angle(strength))
+                style['linewidth'] = np.abs(strength)
+                style_cache[key] = style.copy()
+                style['label'] = str(key) # when key occurs for the first time, use a label.
+                return style
+
+        for i in sorted(self.coupling_terms.keys()):
+            d1 = self.coupling_terms[i]
+            x_y[0, :] = pos[i]
+            for (op_i, op_string) in sorted(d1.keys()):
+                d2 = d1[(op_i, op_string)]
+                for j in sorted(d2.keys()):
+                    d3 = d2[j]
+                    shift = j - j % N_sites
+                    if shift == 0:
+                        x_y[1, :] = pos[j]
+                    else:
+                        lat_idx_j = np.array(lat.order[j % N_sites])
+                        lat_idx_j[0] += (shift // N_sites) * lat.N_rings
+                        x_y[1, :] = lat.position(lat_idx_j)
+                    for op_j in sorted(d3.keys()):
+                        if isinstance(op_j, tuple):
+                            continue  # multi-site coupling!
+                        strength = d3[op_j]
+                        style = style_map(i, j, op_i, op_string, op_j, strength)
+                        ax.plot(x_y[:, 0], x_y[:, 1], **style)
+        # done
+
     def _test_coupling_terms(self):
         """Check the format of self.coupling_terms"""
         sites = self.lat.mps_sites()

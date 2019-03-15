@@ -60,7 +60,8 @@ Added
 - :class:`tenpy.algorithms.tebd.RandomUnitaryEvolution` for random unitary circuits
 - Allow documentation links to github issues, arXiv, papers by doi and the forum with 
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
-- Added :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
+- :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
+- :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
 
 
 Changed
