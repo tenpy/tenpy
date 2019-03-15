@@ -964,6 +964,8 @@ class CouplingModel(Model):
             linestyles = ['--', '-.', ':', '-']
             style_cache = {}
             from matplotlib.cm import hsv
+            from matplotlib.colors import Normalize
+            norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
             def style_map(i, j, op_i, op_string, op_j, strength):
                 """define the plot style for a given coupling"""
                 key = (op_i, op_string, op_j)
@@ -971,7 +973,7 @@ class CouplingModel(Model):
                     return style_cache[key]
                 style = {}
                 style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
-                style['color'] = hsv(np.angle(strength))
+                style['color'] = hsv(norm_angle(np.angle(strength)))
                 style['linewidth'] = np.abs(strength)
                 style_cache[key] = style.copy()
                 style['label'] = str(key) # when key occurs for the first time, use a label.
