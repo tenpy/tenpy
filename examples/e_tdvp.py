@@ -7,18 +7,6 @@ import tenpy.networks.site as site
 from tenpy.algorithms import tdvp
 from tenpy.networks.mps import MPS
 
-def random_prod_state(L,a_model):
-    product_state=[]
-    #the numpy mps used to compare
-    sz= 2.*np.random.randint(0,2,size=L)-1.0
-    for i in range(L):
-        if sz[i]>0:
-            product_state += ["up"]
-        else:
-            product_state += ["down"]
-    print(product_state)
-    psi = MPS.from_product_state(a_model.lat.mps_sites(), product_state, bc=a_model.lat.bc_MPS,form='B')
-    return psi
 
 def run_out_of_equilibrium():
     L=10
@@ -39,8 +27,8 @@ def run_out_of_equilibrium():
     }
 
     heisenberg=tenpy.models.spins.SpinChain(model_params)
-    np.random.seed(0)  # TODO why? This seed gives a state with just 2 down spins, and almost now entanglement. Artificial!!!
-    psi=random_prod_state(heisenberg.lat.N_sites,heisenberg)
+    product_state=["up"]*int(L/2)+["down"]*(L-int(L/2))#starting from a product state which is not an eigenstate of the Heisenberg model
+    psi = MPS.from_product_state(heisenberg.lat.mps_sites(), product_state, bc=heisenberg.lat.bc_MPS,form='B')
 
     tdvp_params = {
         'start_time': 0,
