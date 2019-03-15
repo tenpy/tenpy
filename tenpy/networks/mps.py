@@ -2382,7 +2382,11 @@ class MPS:
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
         ops = npc.to_iterable_arrays(ops)
-        n = self.get_op(ops, 0).rank // 2  # same as int(rank/2)
+        if any(isinstance(op, str) for op in ops):
+            n = 1
+        else:
+            s = 0 if sites is None else to_iterable(sites)[0]
+            n = ops[s % len(ops)].rank // 2  # same as int(rank/2)
         L = self.L
         if sites is None:
             if self.finite:
