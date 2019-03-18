@@ -182,7 +182,7 @@ class Engine:
         ============== ====== =============================================
         delta_tau_list list   A list of floats: the timesteps to be used.
                               Choosing a large timestep `delta_tau`
-                              introduces large (Trotter) erros, but a too
+                              introduces large (Trotter) errors, but a too
                               small time step requires a lot of steps to
                               reach  ``exp(-tau H) --> |psi0><psi0|``.
                               Therefore, we start with fairly large time

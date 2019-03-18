@@ -1418,11 +1418,11 @@ class MPS:
         For example the contraction of three one-site operators on sites `i0`,
         `i1=i0+1`, `i2=i0+3` would look like::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+1]--.
+            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
             |          |     |       |        |        |        |
             |          |    op1     op2       |       op3       |
             |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+1]-.
+            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
 
         Parameters
         ----------
