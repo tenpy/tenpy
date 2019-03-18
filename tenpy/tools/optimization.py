@@ -271,7 +271,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
                 _npc_helper_module = _npc_helper
                 have_cython_functions = True
             except ImportError:
-                warnings.warn("Couln't load compiled cython code. Code will run a bit slower.")
+                warnings.warn("Couldn't load compiled cython code. Code will run a bit slower.")
                 have_cython_functions = False
         else:
             warnings.warn("Don't load compiled cython code due to TENPY_OPTMIZE. "

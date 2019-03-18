@@ -71,7 +71,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-hz, 0, 'Sz')
         self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling(Jxx * 0.5, 0, 'Sm', 0, 'Sp', 1)
+        self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', -1)  # h.c.
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
@@ -102,5 +102,5 @@ class XXZChain2(CouplingMPOModel,NearestNeighborModel):
             self.add_onsite(-hz, u, 'Sz')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling(Jxx * 0.5, u1, 'Sm', u2, 'Sp', dx)
+            self.add_coupling(Jxx * 0.5, u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)

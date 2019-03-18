@@ -23,10 +23,14 @@ Backwards incompatible changes
 - Restructured callstructure of Mixer in DMRG, allowing an implementation of other mixers.
   To enable the mixer, set the DMRG parameter ``"mixer"`` to ``True`` or ``'DensityMatrixMixer'``
   instead of just ``'Mixer'``.
-- The interaction parameter in the ``tenpy.models.bose_hubbbard_chain.BoseHubbardModel`` 
-  (and ``tenpy.models.bose_hubbbard_chain.BoseHubbardChain``) did not correspond to :math:`U/2 N (N-1)` 
+- The interaction parameter in the :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardModel` 
+  (and :class:`tenpy.models.bose_hubbbard_chain.BoseHubbardChain`) did not correspond to :math:`U/2 N (N-1)` 
   as claimed in the Hamiltonian, but to :math:`U N^2`.
   The correcting factor 1/2 and change in the chemical potential have been fixed.
+- Major restructuring of :mod:`tenpy.linalg.np_conserved` and :mod:`tenpy.linalg.charges`.
+  This should not break backwards-compatibility, but if you compiled the cython files, you **need** to remove the 
+  old binaries in the source directory. Using ``bash cleanup.sh`` might be helpful to do that, but also remove other files within the repository, so be careful and make a backup beforehand to be on the save side.
+  Afterwards recompile with ``bash compile.sh``.
 
 
 Added
@@ -56,6 +60,9 @@ Added
 - :class:`tenpy.algorithms.tebd.RandomUnitaryEvolution` for random unitary circuits
 - Allow documentation links to github issues, arXiv, papers by doi and the forum with 
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
+- :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
+- :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
+
 
 Changed
 ^^^^^^^
@@ -65,8 +72,8 @@ Changed
     - :class:`~tenpy.linalg.np_conserved.Array` now rejects addition/subtraction with other types
     - :class:`~tenpy.linalg.np_conserved.Array` now rejects multiplication/division  with non-scalar types
     - By default, make deep copies of npc Arrays.
-    - Restructured lanczos into a class, added time evolution calculating ``exp(A*dt)|psi0>``
-    - Warning for poorly conditioned Lanczos; to overcome this enable the new parameter "reortho"
+- Restructured lanczos into a class, added time evolution calculating ``exp(A*dt)|psi0>``
+- Warning for poorly conditioned Lanczos; to overcome this enable the new parameter `reortho`.
 - Simplified call strucutre of :meth:`~tenpy.linalg.np_conserved.Array.extend`, and
   :meth:`~tenpy.linalg.charges.LegCharge.extend`.
 - Restructured :mod:`tenpy.algorithms.dmrg`:
@@ -80,7 +87,8 @@ Changed
 
 - Changed **default values** for some parameters:
 
-  - increase ``Lanczos_params['N_cache'] = N_max`` (i.e. keep all states)
+  - reduce to ``mixer_params['amplitude'] = 1.e-5``. A too strong mixer screws DMRG up pretty bad.
+  - increase ``Lanczos_params['N_cache'] = N_max`` (i.e., keep all states)
   - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
@@ -96,6 +104,8 @@ Changed
 
 Fixed
 ^^^^^
+- :issue:`22`: **Serious bug** in :func:`tenpy.linalg.np_conserved.inner`: if ``do_conj=True`` is used with non-zero
+  ``qtotal``, it returned 0. instead of non-zero values.
 - avoid error in :meth:`tenpy.networks.mps.MPS.apply_local_op`
 - Don't carry around total charge when using DMRG with a mixer
 - Corrected couplings of the FermionicHubbardChain

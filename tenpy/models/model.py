@@ -631,7 +631,7 @@ class CouplingModel(Model):
         Parameters
         ----------
         strength : scalar | array
-            Prefactor of the coupling. May vary spatially (see above). If an arrow of smaller size
+            Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
@@ -662,14 +662,34 @@ class CouplingModel(Model):
         raise_op2_left : bool
             Raise an error when `op2` appears left of `op1`
             (in the sense of the MPS ordering given by the lattice).
+
+        Examples
+        --------
+        When initializing a model, you can add a term :math:` J \sum_{<i,j>} S^z_i S^z_j`
+        on all nearest-neighbor bonds of the lattice like this:
+
+        >>> J = 1.  # the strength
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(J * 0.5, u1, 'Sp', u2, 'Sm', dx)
+        ...     self.add_coupling(J * 0.5, u1, 'Sm', u2, 'Sp', dx)
+        ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
+
+        To add the hermitian conjugate for a hopping term, you can add it in the opposite
+        direction:
+
+        >>> t = 1.  # the strength
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', -dx)
+
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
         for op, u in [(op1, u1), (op2, u2)]:
             if not self.lat.unit_cell[u].valid_opname(op):
-                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
+                raise ValueError(("unknown onsite operator {0!r} for u={1:d}\n"
+                                  "{2!r}").format(op, u, self.lat.unit_cell[u]))
         if op_string is None:
             need_JW1 = self.lat.unit_cell[u1].op_needs_JW(op1)
             need_JW2 = self.lat.unit_cell[u1].op_needs_JW(op2)
@@ -682,7 +702,7 @@ class CouplingModel(Model):
         for u in range(len(self.lat.unit_cell)):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
+                                 "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
 
@@ -852,6 +872,144 @@ class CouplingModel(Model):
         H_MPO = graph.build_MPO()
         return H_MPO
 
+    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+        """Add an external flux to the coupling strength.
+
+        When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
+        through the cylinder. This means that a particle hopping around the cylinder should
+        pick up a phase given by the external flux [Resta1997]_.
+        This is also called "twisted boundary conditions" in literature.
+        This function adds a complex phase to the `strength` array on some bonds, such that
+        particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
+
+        .. warning ::
+            For the sign of `phase` it is important that you consistently use the creation
+            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling".
+
+        Parameters
+        ----------
+        strength : scalar | array
+            The strength to be used in :meth:`add_coupling`, when no external flux would be
+            present.
+        dx : iterable of int
+            Translation vector (of the unit cell) between `op1` and `op2` in :meth:`add_coupling`.
+        phase : iterable of float
+            The phase of the external flux for hopping in each direction of the lattice.
+            E.g., if you want flux through the cylinder on which you have an infinite MPS,
+            you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
+            hopping around the cylinder.
+
+        Returns
+        -------
+        strength : complex array
+            The strength array to be used as `strength` in :meth:`add_coupling`
+            with the given `dx`.
+
+        Examples
+        --------
+        Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
+        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
+        The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
+        cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
+        given by the external flux.
+
+        >>> strength = 1. # hopping strength without external flux
+        >>> phi = np.pi/4 # determines the external flux strength
+        >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(strength_with_flux, 'Cd', u1, 'C', u2, dx)
+        ...     self.add_coupling(np.conj(strength_with_flux), 'Cd', u1, 'C', u2, -dx)
+
+        """
+        (_, c_shape) = self.lat._coupling_shape(dx)
+        strength = to_array(strength, c_shape)
+        # make strenght complex
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        strength = np.asarray(strength, complex_dtype)
+        for ax in range(self.lat.dim):
+            if self.lat.bc[ax]:  # open boundary conditions
+                if phase[ax]:
+                    raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
+                continue
+            if abs(dx[ax]) == 0:
+                continue # nothing to do
+            slices = [slice(None) for ax in range(self.lat.dim)]
+            slices[ax] = slice(-abs(dx[ax]), None)
+            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+            # accross the periodic b.c.
+            slices = tuple(slices)
+            if dx[ax] > 0:
+                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *negative* y-direction
+            else:
+                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
+        return strength
+
+    def plot_coupling_terms(self, ax, style_map=None):
+        """"Plot coupling terms into a given lattice.
+
+        This function plots the :attr:`coupling_terms`
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        style_map : function
+            Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
+            each two-site coupling and should return a keyword-dictionary
+            with the desired plot-style for this combination.
+            By default (``None``), the linecolor depends on the phase of `strength`,
+            the `linewidth` is given by the phase of `strength` (using the `hsv` colormap),
+            and the linestyle depends on the type of operators coupled.
+
+        See also
+        --------
+        :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
+        """
+        lat = self.lat
+        pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
+        N_sites = lat.N_sites
+        x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
+        if style_map is None:
+            linestyles = ['--', '-.', ':', '-']
+            style_cache = {}
+            from matplotlib.cm import hsv
+            from matplotlib.colors import Normalize
+            norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
+            def style_map(i, j, op_i, op_string, op_j, strength):
+                """define the plot style for a given coupling"""
+                key = (op_i, op_string, op_j)
+                if key in style_cache:
+                    return style_cache[key]
+                style = {}
+                style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
+                style['color'] = hsv(norm_angle(np.angle(strength)))
+                style['linewidth'] = np.abs(strength)
+                style_cache[key] = style.copy()
+                style['label'] = str(key) # when key occurs for the first time, use a label.
+                return style
+
+        for i in sorted(self.coupling_terms.keys()):
+            d1 = self.coupling_terms[i]
+            x_y[0, :] = pos[i]
+            for (op_i, op_string) in sorted(d1.keys()):
+                d2 = d1[(op_i, op_string)]
+                for j in sorted(d2.keys()):
+                    d3 = d2[j]
+                    shift = j - j % N_sites
+                    if shift == 0:
+                        x_y[1, :] = pos[j]
+                    else:
+                        lat_idx_j = np.array(lat.order[j % N_sites])
+                        lat_idx_j[0] += (shift // N_sites) * lat.N_rings
+                        x_y[1, :] = lat.position(lat_idx_j)
+                    for op_j in sorted(d3.keys()):
+                        if isinstance(op_j, tuple):
+                            continue  # multi-site coupling!
+                        strength = d3[op_j]
+                        style = style_map(i, j, op_i, op_string, op_j, strength)
+                        ax.plot(x_y[:, 0], x_y[:, 1], **style)
+        # done
+
     def _test_coupling_terms(self):
         """Check the format of self.coupling_terms"""
         sites = self.lat.mps_sites()
@@ -991,14 +1149,14 @@ class MultiCouplingModel(CouplingModel):
         for u, op, _ in [(u0, op0, None)] + other_ops :
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2:!r}".format(op, u, self.lat.unit_cell[u]))
+                                 "{2!r}".format(op, u, self.lat.unit_cell[u]))
         if op_string is not None:
             if not np.sum(need_JW) % 2 == 0:
                 raise ValueError("Invalid coupling: would need 'JW' string on the very left")
             for u in range(len(self.lat.unit_cell)):
                 if not self.lat.unit_cell[u].valid_opname(op_string):
                     raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                     "{2:!r}".format(op_string, u, self.lat.unit_cell[u]))
+                                     "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
         if np.all(dx == 0) and np.all(u0 == all_us):
             # note: we DO allow couplings with some onsite terms, but not all of them
             raise ValueError("Coupling shouldn't be purely onsite!")

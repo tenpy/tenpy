@@ -10,6 +10,7 @@ Submodules
    tenpy.algorithms.exact_diag
    tenpy.algorithms.network_contractor
    tenpy.algorithms.purification_tebd
+   tenpy.algorithms.tdvp
    tenpy.algorithms.tebd
    tenpy.algorithms.truncation
 

@@ -434,7 +434,8 @@ class MPS:
             psi, qtotal_LR=[None, psi.qtotal], inner_labels=['vR', 'vL'], cutoff=cutoff)
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
-        B_list[0] = B.split_legs(1).replace_label(labels[0], 'p')
+        phase = psi[0, 0]
+        B_list[0] = phase * B.split_legs(1).replace_label(labels[0], 'p')
         res = cls(sites, B_list, S_list, bc='finite', form='B', norm=norm)
         if form != 'B':
             res.convert_form(form)
@@ -474,7 +475,7 @@ class MPS:
         Returns
         -------
         singlet_mps : :class:`MPS`
-            An MPS representing singlets on the specified bonds.
+            An MPS representing singlets on the specified pairs of sites.
         """
         # sort each pair s.t. i < j
         pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
@@ -1100,7 +1101,7 @@ class MPS:
                 if i < self.L:
                     leg = self._B[i].get_leg('vL')
                 else:  # i == L: segment b.c.
-                    leg = self._B[i - 1].get_leg('vR')
+                    leg = self._B[i - 1].get_leg('vR').conj()
                 spectrum = [(leg.get_charge(qi), np.sort(ss[leg.get_slice(qi)]))
                             for qi in range(leg.block_number)]
                 res.append(spectrum)
@@ -1530,12 +1531,13 @@ class MPS:
         term_list : list of terms
             Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
         prefactors : list of (complex) floats
-            Prefactors for the ``total_sum`` to be evaluated.
+            Prefactors for the ``term_sum`` to be evaluated.
 
         Returns
         -------
         terms_sum : list of (complex) float
-            Equivalent to ``sum([t*f for t, f in zip(terms, prefactors)])``.
+            Equivalent to the expression
+            ``sum([self.expectation_value_term(t)*f for t, f in zip(terms_list, prefactors)])``.
         cache :
             Intermediate results. Currently the values for each of the term, but this might be
             changed soon.
@@ -2380,7 +2382,11 @@ class MPS:
     def _expectation_value_args(self, ops, sites, axes):
         """parse the arguments of self.expectation_value()"""
         ops = npc.to_iterable_arrays(ops)
-        n = self.get_op(ops, 0).rank // 2  # same as int(rank/2)
+        if any(isinstance(op, str) for op in ops):
+            n = 1
+        else:
+            s = 0 if sites is None else to_iterable(sites)[0]
+            n = ops[s % len(ops)].rank // 2  # same as int(rank/2)
         L = self.L
         if sites is None:
             if self.finite:
@@ -2703,6 +2709,15 @@ class MPSEnvironment:
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
 
+        The returned ``LP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'A' form::
+
+            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
+            |     |       |             |
+            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
+            |     |       |             |
+            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+
         Parameters
         ----------
         i : int
@@ -2715,14 +2730,6 @@ class MPSEnvironment:
         LP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vR*', 'vR'`` for `bra`, `ket`.
-        LP_i= .------>-M[0]--> ... -->M[i-2]-->M[i-1]-->
-              |        |                |        | 
-              |        ^                ^        ^
-              |        |                |        | 
-              |        ^                ^        ^
-              |        |                |        |
-              .------>-N[0]*-> ... -->N[i-2]*-->N[i-1]*-->
-        where the M's and the N's are in the 'A' form
         """
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
@@ -2742,6 +2749,16 @@ class MPSEnvironment:
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one (including `i`).
 
+        The returned ``RP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'B' form::
+
+            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
+            |                |              |         |
+            |                |              |         RP[-1]
+            |                |              |         |
+            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+
+
         Parameters
         ----------
         i : int
@@ -2754,20 +2771,6 @@ class MPSEnvironment:
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
             with labels ``'vL*', 'vL'`` for `bra`, `ket`.
-
-
-
-       RP_i=     -->M[i+1]--->  ...  --->M[i-2]-->.    
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |    
-                      ^                     ^      |    
-                      |                     |      |                
-                 -->N[i+1]*-->  ... -->N[i-2]*-->.                   
-
-
-        where the M's and the N's are in the 'B' form
-                    
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):

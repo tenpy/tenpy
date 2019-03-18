@@ -140,8 +140,9 @@ class SimpleDMRGEngine:
         self.LPs[j] = LP  # vR* wR vR (== vL wL* vL* on site i+1)
 
 
-def example_DMRG_finite(L, g):
-    print("finite DMRG, L={L:d}, g={g:.2f}".format(L=L, g=g))
+def example_DMRG_tf_ising_finite(L, g):
+    print("finite DMRG, transverse field Ising")
+    print("L={L:d}, g={g:.2f}".format(L=L, g=g))
     import a_mps
     import b_model
     M = b_model.TFIModel(L=L, J=1., g=g, bc='finite')
@@ -152,6 +153,10 @@ def example_DMRG_finite(L, g):
         E = np.sum(psi.bond_expectation_value(M.H_bonds))
         print("sweep {i:2d}: E = {E:.13f}".format(i=i + 1, E=E))
     print("final bond dimensions: ", psi.get_chi())
+    mag_x = np.sum(psi.site_expectation_value(M.sigmax))
+    mag_z = np.sum(psi.site_expectation_value(M.sigmaz))
+    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
+    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
     if L < 20:  # compare to exact result
         from tfi_exact import finite_gs_energy
         E_exact = finite_gs_energy(L, 1., g)
@@ -160,8 +165,9 @@ def example_DMRG_finite(L, g):
     return E, psi, M
 
 
-def example_DMRG_infinite(g):
-    print("infinite DMRG, g={g:.2f}".format(g=g))
+def example_DMRG_tf_ising_infinite(g):
+    print("infinite DMRG, transverse field Ising")
+    print("g={g:.2f}".format(g=g))
     import a_mps
     import b_model
     M = b_model.TFIModel(L=2, J=1., g=g, bc='infinite')
@@ -170,18 +176,22 @@ def example_DMRG_infinite(g):
     for i in range(20):
         eng.sweep()
         E = np.mean(psi.bond_expectation_value(M.H_bonds))
-        print("sweep {i:2d}: E/L = {E:.13f}".format(i=i + 1, E=E))
+        print("sweep {i:2d}: E (per site) = {E:.13f}".format(i=i + 1, E=E))
     print("final bond dimensions: ", psi.get_chi())
+    mag_x = np.mean(psi.site_expectation_value(M.sigmax))
+    mag_z = np.mean(psi.site_expectation_value(M.sigmaz))
+    print("<sigma_x> = {mag_x:.5f}".format(mag_x=mag_x))
+    print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
     print("correlation length:", psi.correlation_length())
     # compare to exact result
     from tfi_exact import infinite_gs_energy
     E_exact = infinite_gs_energy(1., g)
-    print("Analytic result: E/L = {E:.13f}".format(E=E_exact))
+    print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
     print("relative error: ", abs((E - E_exact) / E_exact))
     return E, psi, M
 
 
 if __name__ == "__main__":
-    example_DMRG_finite(L=10, g=1.)
+    example_DMRG_tf_ising_finite(L=10, g=1.)
     print("-" * 100)
-    example_DMRG_infinite(g=1.5)
+    example_DMRG_tf_ising_infinite(g=1.5)

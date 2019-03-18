@@ -11,6 +11,8 @@ Afterwards, you can print the produced statistics:
 import numpy as np
 import cProfile
 import pstats
+import sys
+import time
 
 fn_template = '{mod_name!s}_profile_S_{size:d}_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.prof'
 
@@ -44,15 +46,29 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
     timing_code = "{mod_name}.benchmark(data)".format(mod_name=mod_name)
     if repeat > 1:
         timing_code = "for _ in range({repeat:d}): ".format(repeat=repeat) + timing_code
-    cProfile.runctx(timing_code, namespace, namespace, filename)
+    if sys.version_info > (3, 3):
+        prof = cProfile.Profile(time.perf_counter)
+    else:
+        prof = cProfile.Profile()
+    prof.runctx(timing_code, namespace, namespace)
+    prof.dump_stats(filename)
+
+    #  cProfile.runctx(timing_code, namespace, namespace, filename)
     print("saved profiling to", filename)
     return filename
 
-def print_profiling(filename, sort=[], limit=[]):
+def print_profiling(filename, sort=[], limit=[], callees=None, callers=None):
     stats = pstats.Stats(filename)
     stats.strip_dirs()
     stats.sort_stats(*sort)
-    stats.print_stats(*limit)
+    if callees is not None:
+        print("callees", callees)
+        stats.print_callees(callees)
+    elif callers is not None:
+        print("callers", callers)
+        stats.print_callers(callers)
+    else:
+        stats.print_stats(*limit)
     return stats
 
 
@@ -111,6 +127,16 @@ if __name__ == "__main__":
         help="Limit for printing the stats. You can enter an in to limit the number of lines or" \
              " a regex to match the function name."
     )
+    parser.add_argument(
+        '--callees',
+        default=None,
+        help="Print the functions called from inside the given function"
+    )
+    parser.add_argument(
+        '--callers',
+        default=None,
+        help="Print the functions calling the given function"
+    )
     args = parser.parse_args()
     kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, size=args.size)
     files = []
@@ -129,6 +155,6 @@ if __name__ == "__main__":
             except:
                 pass
         for fn in files + args.print_stats:
-            print_profiling(fn, args.sort, limits)
+            print_profiling(fn, args.sort, limits, args.callees, args.callers)
     if args.modules is None and args.print_stats is None:
         raise ValueError("Specify -m or -p arguments! (Help: call with -h)")

@@ -9,7 +9,6 @@ Submodules
    tenpy.linalg.charges
    tenpy.linalg.lanczos
    tenpy.linalg.np_conserved
-   tenpy.linalg.npc_helper
    tenpy.linalg.random_matrix
    tenpy.linalg.sparse
    tenpy.linalg.svd_robust

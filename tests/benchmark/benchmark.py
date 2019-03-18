@@ -6,9 +6,9 @@ We benchmark (i.e. measure the execution time of) the latter function.
 Calls to the `benchmark` function are repeated a few times for better statistics.
 The `setup_benchmark` may use `np.random`, which is initialized with different seeds.
 
-Call this file with arguments, e.g:
+Call this file with arguments, e.g,::
     python benchmark.py -m tensordot_npc tensordot_numpy -l 2 -s 20 -q 1 1
-Afterwards, you can plot the produced files:
+Afterwards, you can plot the produced files::
     python benchmark.py -p tensordot_*_benchmark_*.txt
 """
 # Copyright 2018 TeNPy Developers
@@ -22,14 +22,17 @@ import sys
 
 fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.txt'
 
-default_sizes = [1, 2, 3, 5, 7, 10, 12] + list(range(15, 50, 5)) + list(range(50, 200, 25)) + \
-    list(range(200, 500, 100)) + list(range(500, 3001, 250))
+sizes_choices = {
+    'default': [1, 2, 3, 5, 7, 10, 12] + list(range(15, 50, 5)) + list(range(50, 200, 25)) + \
+    list(range(200, 500, 100)) + list(range(500, 3001, 250)),
+    'exp' : [2**L for L in range(12)]  # up to 2048
+}
 
 colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
 linestyles = ['-', '--', ':', '-.']
 
 
-def perform_benchmark(mod_name, sizes=default_sizes, max_time=0.1, seeds=list(range(1)),
+def perform_benchmark(mod_name, sizes=sizes_choices['default'], max_time=0.1, seeds=list(range(1)),
                       repeat_average=1, repeat_bestof=3, **kwargs):
     """Perform a benchmark for a given module and given arguments.
 
@@ -158,6 +161,8 @@ def plot_many_results(filenames, fn_beg_until="_", fn_end_from="_l_", save=True)
         ax.set_title(fn_key)
         ax.set_xscale('log')
         ax.set_yscale('log')
+        ax.set_xlabel("size")
+        ax.set_ylabel("wallclock time (s)")
         # add legend
         patches = []
         labels = []
@@ -211,9 +216,19 @@ if __name__ == "__main__":
     parser.add_argument(
         '-t',
         '--max_time',
-        nargs=1,
+        type=float,
         default=0.1,
         help='Maximum time after which we skip larger sizes.')
+    parser.add_argument(
+        '--sizes',
+        default='default',
+        choices=list(sizes_choices.keys()),
+        help='What sizes to benchmark.')
+    parser.add_argument(
+        '--bestof',
+        type=int,
+        default=3,
+        help='How often to repeat each benchmark to reduce the noice.')
     parser.add_argument(
         '-p',
         '--plot',
@@ -221,17 +236,20 @@ if __name__ == "__main__":
         default=None,
         help='Plot the produced benchmark results (saved in the given files).')
     args = parser.parse_args()
-    kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, max_time=args.max_time)
+    kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, max_time=args.max_time,
+                  sizes=sizes_choices[args.sizes], repeat_bestof=args.bestof)
     kwargs["python_version"] = sys.version
     files = []
     if args.modules is not None:
         for mod_name in args.modules:
             if mod_name.endswith(".py"):
                 mod_name = mod_name[:-3]
-            kwargs['mod_name'] = mod_name
-            sizes, results = perform_benchmark(**kwargs)
+            kwargs2 = kwargs.copy()
+            kwargs2['mod_name'] = mod_name
+            sizes, results = perform_benchmark(**kwargs2)
+            del kwargs2['sizes']
             if len(sizes) > 0:
-                fn = save_results(sizes, results, **kwargs)
+                fn = save_results(sizes, results, **kwargs2)
                 files.append(fn)
     if args.plot is not None:
         plot_many_results(files + args.plot, save=(args.modules is None))

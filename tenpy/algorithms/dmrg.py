@@ -24,6 +24,9 @@ and then slowly turned off in the end.
 
 .. todo ::
     Write UserGuide/Example!!!
+
+.. todo ::
+    separate effective Hamiltonian from Engine for better readability?
 """
 # Copyright 2018 TeNPy Developers
 
@@ -381,7 +384,7 @@ class Engine(NpcLinearOperator):
         DMRG_params = self.DMRG_params
         unused_parameters(DMRG_params['lanczos_params'], "DMRG lanczos_params")
         unused_parameters(DMRG_params['trunc_params'], "DMRG trunc_params")
-        if 'mixer_params' in DMRG_params:
+        if 'mixer_params' in DMRG_params and DMRG_params.get('mixer', True):
             unused_parameters(DMRG_params['mixer_params'], "DMRG mixer_params")
         unused_parameters(DMRG_params, "DMRG")
 
@@ -913,29 +916,30 @@ class Engine(NpcLinearOperator):
         # hence the additional argument `VH`
         self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
-    def plot_update_stats(self, xaxis='time', E_exact=None, **kwargs):
+    def plot_update_stats(self, ax1, ax2, xaxis='time', E_exact=None, **kwargs):
         """Plot the update statistics to display the convergence during the sweeps.
 
-        Makes two subplots, showing the energy (left) and number of lanczos iterations (right).
+        Makes two subplots, showing the energy (`ax1`) and number of lanczos iterations (`ax2`).
 
         Parameters
         ----------
-        xaxis : 'sweep' | 'time' | ...
+        ax1, ax2 : :class:`matplotlib.axes.Axes`
+            The axes to plot into. If ``None``, we skip plotting.
+        xaxis : ``'index'`` | ``'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            ``'sweep'`` is just enumerating the number of bond updates
+            ``'index'`` is just enumerating the number of bond updates,
+            and ``'sweep'`` corresponds to the sweep number
             (including environment sweeps).
         E_exact : float
             Exact energy (for infinite systems: per site) for comparison.
             If given, plot ``abs((E-E_exact)/E_exact)`` on a log-scale yaxis.
         **kwargs :
-            Further keyword arguments given to ``plt.plot(...)``.
+            Further keyword arguments given to ``ax1.plot(...)`` and ``ax2.plot(...)``.
         """
-        import matplotlib.pyplot as plt
-        ax1 = plt.subplot(1, 2, 1)
         stats = self.update_stats
         L = self.psi.L
-        kwargs.setdefault('marker', 'o')
-        kwargs.setdefault('linestyle', '')
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
 
         E = np.array(stats['E_total'])
         schedule, _ = self._get_sweep_schedule()
@@ -957,18 +961,19 @@ class Engine(NpcLinearOperator):
             E = d_E/d_age
             X = X[N:]
             N_lanczos = N_lanczos[N:]
-        if E_exact is None:
-            ax1.plot(X, E, **kwargs)
-        else:
-            ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
-            ax1.set_yscale('log')
-        ax1.set_xlabel(xaxis)
-        ax1.set_ylabel("Energy")
+        if ax1 is not None:
+            if E_exact is None:
+                ax1.plot(X, E, **kwargs)
+            else:
+                ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
+                ax1.set_yscale('log')
+            ax1.set_xlabel(xaxis)
+            ax1.set_ylabel("Energy")
 
-        ax2 = plt.subplot(1, 2, 2)
-        ax2.plot(X, N_lanczos, **kwargs)
-        ax2.set_xlabel(xaxis)
-        ax2.set_ylabel(r'$N_{lanczos}$')
+        if ax2 is not None:
+            ax2.plot(X, N_lanczos, **kwargs)
+            ax2.set_xlabel(xaxis)
+            ax2.set_ylabel(r'$N_{lanczos}$')
 
     def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', exact_y_value=None, **kwargs):
         """Plot the sweep statistics to display the convergence with the sweeps.
@@ -990,8 +995,8 @@ class Engine(NpcLinearOperator):
             axes = plt.gca()
         stats = self.sweep_stats
         L = self.psi.L
-        kwargs.setdefault('marker', 'o')
-        kwargs.setdefault('linestyle', '')
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
 
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
@@ -1262,7 +1267,7 @@ class Mixer:
         ============== ========= ===============================================================
         key            type      description
         ============== ========= ===============================================================
-        amplitude      float     Initial strength of the mixer. (Should be <= 1.)
+        amplitude      float     Initial strength of the mixer. (Should be << 1.)
         -------------- --------- ---------------------------------------------------------------
         decay          float     To slowly turn off the mixer, we divide `amplitude` by `decay`
                                  after each sweep. (Should be >= 1.)
@@ -1283,7 +1288,7 @@ class Mixer:
     """
 
     def __init__(self, mixer_params):
-        self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-2, 'Mixer')
+        self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-5, 'Mixer')
         assert self.amplitude <= 1.
         self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')
         assert self.decay >= 1.
@@ -1309,7 +1314,8 @@ class Mixer:
         self.amplitude /= self.decay
         if sweeps >= self.disable_after or self.amplitude <= np.finfo('float').eps:
             if self.verbose >= 0.1:  # increased verbosity: the same level as DMRG
-                print("disable mixer after {0:d} sweeps".format(sweeps))
+                print("disable mixer after {0:d} sweeps, final amplitude {1:.2e}".format(
+                    sweeps, self.amplitude))
             return None  # disable mixer
         return self
 
@@ -1599,7 +1605,7 @@ class DensityMatrixMixer(Mixer):
         rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
         rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
         if add_separate_Id:
-            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vR.p1)', '(vR*.p1*)'])
+            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         return rho
 
     def mix_rho_R(self, engine, theta, i0, mix_enabled):

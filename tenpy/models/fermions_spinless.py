@@ -84,7 +84,7 @@ class FermionModel(CouplingMPOModel):
         for u1, u2, dx in self.lat.nearest_neighbors:
             # (for a nearest neighbor model, we could leave the `JW` away)
             self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, 'JW', True)
-            self.add_coupling(-J, u1, 'Cd', u2, 'C', -dx, 'JW', True)  # hermitian conjugate
+            self.add_coupling(-J, u2, 'Cd', u1, 'C', -dx, 'JW', True)  # h.c.
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 

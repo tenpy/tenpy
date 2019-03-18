@@ -83,7 +83,6 @@ def test_tdvp():
         return psi
 
 
-    #np.random.seed(31415) # TODO: should work for any seed!
     psi=random_prod_state_tenpy(heisenberg.lat.N_sites,heisenberg)
     N_steps=50
     tebd_params = {

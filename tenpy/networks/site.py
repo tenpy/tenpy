@@ -87,7 +87,7 @@ class Site:
     >>> print(site.get_op('Sminus').to_ndarray())
     array([[ 0.,  0.],
            [ 1.,  0.]])
-    >>> print(site.get_op('Splus Sminus').to_ndarry())
+    >>> print(site.get_op('Splus Sminus').to_ndarray())
     array([[ 1.,  0.],
            [ 0.,  0.]])
     """
