@@ -975,7 +975,7 @@ class Engine(NpcLinearOperator):
             ax2.set_xlabel(xaxis)
             ax2.set_ylabel(r'$N_{lanczos}$')
 
-    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', exact_y_value=None, **kwargs):
+    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', y_exact=None, **kwargs):
         """Plot the sweep statistics to display the convergence with the sweeps.
 
         Parameters
@@ -984,7 +984,7 @@ class Engine(NpcLinearOperator):
             The axes to plot into. Defaults to ``plt.gca()``
         xaxis, yaxis : 'sweep' | 'time' | ...
             Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
-        exact_Y_value : float
+        y_exact : float
             Exact value for the quantity on the y-axis for comparison.
             If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
@@ -1000,10 +1000,10 @@ class Engine(NpcLinearOperator):
 
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
-        if exact_y_value is None:
+        if y_exact is None:
             axes.plot(x, y, **kwargs)
         else:
-            axes.plot(x, np.abs(y-exact_y_value)/np.abs(exact_y_value), **kwargs)
+            axes.plot(x, np.abs(y-y_exact)/np.abs(y_exact), **kwargs)
             axes.set_yscale('log')
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
