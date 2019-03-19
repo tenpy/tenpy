@@ -87,12 +87,15 @@ Changed
 
 - Changed **default values** for some parameters:
 
+  - set ``trunc_params['chi_max'] = 100``. Not setting a `chi_max` at all will lead to memory problems.
+    Disable ``DMRG_params['chi_list'] = None`` by default to avoid conflicting settings.
   - reduce to ``mixer_params['amplitude'] = 1.e-5``. A too strong mixer screws DMRG up pretty bad.
   - increase ``Lanczos_params['N_cache'] = N_max`` (i.e., keep all states)
   - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
-  - don't check the (absolute) energy for convergence in Lanczos 
+  - don't check the (absolute) energy for convergence in Lanczos.
+
 - Verbosity of :func:`~tenpy.tools.params.get_parameter` reduced: Print parameters only for verbosity >=1.
   and default values only for verbosity >= 2.
 - Don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.

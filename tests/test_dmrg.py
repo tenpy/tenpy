@@ -96,14 +96,18 @@ def test_dmrg_rerun(L=2):
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc_MPS)
-    dmrg_pars = {'verbose': 5, 'chi_list': {0: 10, 5: 20}, 'N_sweeps_check': 4}
+    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4}
     eng = dmrg.EngineCombine(psi, M, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
     M = TFIChain(model_params)
+    del eng.DMRG_params['chi_list']
+    new_chi = 15
+    eng.DMRG_params['trunc_params']['chi_max'] = new_chi
     eng.init_env(M)
-    E2, _ = eng.run()
+    E2, psi = eng.run()
+    assert max(psi.chi) == new_chi
     assert abs(E2 - -1.50082324) < 1.e-6
 
 

@@ -95,11 +95,12 @@ def run(psi, model, DMRG_params):
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
         -------------- --------- ---------------------------------------------------------------
-        chi_list       dict      A dictionary to gradually increase the `chi_max` parameter of
-                                 `trunc_params`. The key defines starting from which sweep
+        chi_list       dict |    A dictionary to gradually increase the `chi_max` parameter of
+                       None      `trunc_params`. The key defines starting from which sweep
                                  `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
                                  ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                                 afterwards.
+                                 afterwards. Overwrites `trunc_params['chi_list']``.
+                                 By default (``None``) this feature is disabled.
         -------------- --------- ---------------------------------------------------------------
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
@@ -232,8 +233,8 @@ class Engine(NpcLinearOperator):
         conditions; same as `psi.finite`.
     shelve : bool
         True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
-    chi_list : dict
-        See DMRG_params `chi_list`.
+    chi_list : dict | None
+        See DMRG_params `chi_list`. ``None`` (default) disables this feature.
     update_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
@@ -295,8 +296,6 @@ class Engine(NpcLinearOperator):
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        chi_max_default = self.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
-        self.chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
 
         self.env = None
         self.ortho_to_envs = []
@@ -335,16 +334,13 @@ class Engine(NpcLinearOperator):
                 LP_age = self.env.get_LP_age(0)
                 RP = self.env.get_RP(self.psi.L - 1, False)
                 RP_age = self.env.get_RP_age(self.psi.L - 1)
-                self.chi_list = {0: self.trunc_params['chi_max']}  # chi_list makes no sense
             else:
                 LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
                 RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
                 LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
                 RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-                # reset chi_list
-                self.chi_list = get_parameter(DMRG_params, 'chi_list', self.chi_list, 'DMRG')
-                chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-                self.trunc_params['chi_max'] = chi_max
+            if 'chi_list' in self.DMRG_params:
+                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
 
         # (re)initialize ortho_to_envs
@@ -376,8 +372,12 @@ class Engine(NpcLinearOperator):
             'norm_err': []
         }
         self.shelve = False
-        chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-        self.trunc_params['chi_max'] = chi_max
+        self.chi_list = get_parameter(self.DMRG_params, 'chi_list', None, 'DMRG')
+        if self.chi_list is not None:
+            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+            self.trunc_params['chi_max'] = chi_max
+            if self.verbose >= 1:
+                print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
     def __del__(self):
@@ -601,11 +601,12 @@ class Engine(NpcLinearOperator):
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
-            new_chi_max = self.chi_list.get(self.sweeps, None)
-            if new_chi_max is not None:
-                self.trunc_params['chi_max'] = new_chi_max
-                if self.verbose >= 1:
-                    print("Setting chi_max =", new_chi_max)
+            if self.chi_list is not None:
+                new_chi_max = self.chi_list.get(self.sweeps, None)
+                if new_chi_max is not None:
+                    self.trunc_params['chi_max'] = new_chi_max
+                    if self.verbose >= 1:
+                        print("Setting chi_max =", new_chi_max)
             # update mixer
             if self.mixer is not None:
                 self.mixer = self.mixer.update_amplitude(self.sweeps)
