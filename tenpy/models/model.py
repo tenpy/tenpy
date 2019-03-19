@@ -933,13 +933,13 @@ class CouplingModel(Model):
                 continue
             if abs(dx[ax]) == 0:
                 continue # nothing to do
-            slices = [slice(None) for ax in range(self.lat.dim)]
+            slices = [slice(None) for _ in range(self.lat.dim)]
             slices[ax] = slice(-abs(dx[ax]), None)
             # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
             # accross the periodic b.c.
             slices = tuple(slices)
             if dx[ax] > 0:
-                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *negative* y-direction
+                strength[slices] *= np.exp(-1.j*phase[ax])  # hopping in *negative* y-direction
             else:
                 strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
         return strength

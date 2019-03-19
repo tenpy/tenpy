@@ -105,13 +105,19 @@ def test_ext_flux():
         for dx in [[0, 1], [0, -1], [1, -1], [1, 1]]:
             print("dx = ", dx)
             strength_hop_y_1 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-            npt.assert_array_almost_equal_nulp(strength_hop_y_1, expect_y_1, 10)
+            if dx[1] < 0:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_1, expect_y_1, 10)
+            else:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_1, np.conj(expect_y_1), 10)
         expect_y_2 = np.array(strength_array, dtype=np.complex128)
         expect_y_2[:, -2:] = strength * np.exp(1.j * phi)
         for dx in [[0, 2], [0, -2], [1, 2], [3, 2]]:
             print("dx = ", dx)
             strength_hop_y_2 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-            npt.assert_array_almost_equal_nulp(strength_hop_y_2, expect_y_2, 10)
+            if dx[1] < 0:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_2, expect_y_2, 10)
+            else:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_2, np.conj(expect_y_2), 10)
 
 
 def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
