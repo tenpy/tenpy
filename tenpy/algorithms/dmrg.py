@@ -419,7 +419,7 @@ class Engine(NpcLinearOperator):
         max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-5, 'DMRG')
         max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-3, 'DMRG')
         max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
-        norm_tol = get_parameter(DMRG_params, 'norm_tol', None, 'DMRG')
+        norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-3, 'DMRG')
         if not self.finite:
             update_env = get_parameter(DMRG_params, 'update_env', N_sweeps_check // 2, 'DMRG')
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')

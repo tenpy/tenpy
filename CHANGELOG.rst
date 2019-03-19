@@ -95,6 +95,7 @@ Changed
   - increased (default) DMRG accuracy by setting
     ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
   - don't check the (absolute) energy for convergence in Lanczos.
+  - set ``DMRG_params['norm_tol'] = 1.e-3`` to check whether the final state is in canonical form.
 
 - Verbosity of :func:`~tenpy.tools.params.get_parameter` reduced: Print parameters only for verbosity >=1.
   and default values only for verbosity >= 2.
