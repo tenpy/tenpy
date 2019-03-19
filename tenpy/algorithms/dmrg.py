@@ -923,26 +923,29 @@ class Engine(NpcLinearOperator):
         # hence the additional argument `VH`
         self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
-    def plot_update_stats(self, ax1, ax2, xaxis='time', E_exact=None, **kwargs):
-        """Plot the update statistics to display the convergence during the sweeps.
-
-        Makes two subplots, showing the energy (`ax1`) and number of lanczos iterations (`ax2`).
+    def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
+        """Plot :attr:`update_stats` to display the convergence during the sweeps.
 
         Parameters
         ----------
-        ax1, ax2 : :class:`matplotlib.axes.Axes`
-            The axes to plot into. If ``None``, we skip plotting.
-        xaxis : ``'index'`` | ``'sweep'`` | keys of :attr:`update_stats`
+        axes : :class:`matplotlib.axes.Axes`
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
             ``'index'`` is just enumerating the number of bond updates,
-            and ``'sweep'`` corresponds to the sweep number
-            (including environment sweeps).
-        E_exact : float
-            Exact energy (for infinite systems: per site) for comparison.
-            If given, plot ``abs((E-E_exact)/E_exact)`` on a log-scale yaxis.
+            and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
+        yaxis : ``'E'`` | keys of :attr:`update_stats`
+            Key of :attr:`update_stats` to be used for the y-axisof the plots.
+            For 'E', use the energy (per site for infinite systems).
+        y_exact : float
+            Exact value for the quantity on the y-axis for comparison.
+            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
-            Further keyword arguments given to ``ax1.plot(...)`` and ``ax2.plot(...)``.
+            Further keyword arguments given to ``axes.plot(...)``.
         """
+        if axes is None:
+            import matplotlib.pyplot as plt
+            axes = plt.gca()
         stats = self.update_stats
         L = self.psi.L
         kwargs.setdefault('marker', 'x')
@@ -951,45 +954,40 @@ class Engine(NpcLinearOperator):
         E = np.array(stats['E_total'])
         schedule, _ = self._get_sweep_schedule()
         N = len(schedule) # bond updates per sweep
-        if xaxis is None:
+        if xaxis is None or xaxis == 'index':
             xaxis = 'index'
-            X = np.arange(len(E))
+            x = np.arange(len(E))
         elif xaxis == 'sweep':
-            X = np.arange(1, len(E)+1)/N
+            x = np.arange(1, len(E)+1)/N
         else:
-            X = np.array(stats[xaxis])
-        N_lanczos = np.array(stats['N_lanczos'])
-
-        if not self.psi.finite:
-            # use energy per site instead of total energy
-            age = np.array(stats['age'])
-            d_age = age[N:] - age[:-N]
-            d_E = E[N:] - E[:-N]
-            E = d_E/d_age
-            X = X[N:]
-            N_lanczos = N_lanczos[N:]
-        if ax1 is not None:
-            if E_exact is None:
-                ax1.plot(X, E, **kwargs)
+            x = np.array(stats[xaxis])
+        if yaxis == 'E':
+            if not self.psi.finite:
+                # use energy per site instead of total energy
+                age = np.array(stats['age'])
+                d_age = age[N:] - age[:-N]
+                d_E = E[N:] - E[:-N]
+                y = d_E/d_age
+                x = x[N:]
             else:
-                ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
-                ax1.set_yscale('log')
-            ax1.set_xlabel(xaxis)
-            ax1.set_ylabel("Energy")
-
-        if ax2 is not None:
-            ax2.plot(X, N_lanczos, **kwargs)
-            ax2.set_xlabel(xaxis)
-            ax2.set_ylabel(r'$N_{lanczos}$')
+                y = E
+        else:
+            y = np.array(stats[yaxis])
+        if y_exact is not None:
+            y = np.abs(y-y_exact)/np.abs(y_exact)
+            axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
+        axes.set_xlabel(xaxis)
+        axes.set_ylabel(yaxis)
 
     def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', y_exact=None, **kwargs):
-        """Plot the sweep statistics to display the convergence with the sweeps.
+        """Plot :attr:`sweep_stats` to display the convergence with the sweeps.
 
         Parameters
         ----------
         axes : :class:`matplotlib.axes.Axes`
-            The axes to plot into. Defaults to ``plt.gca()``
-        xaxis, yaxis : 'sweep' | 'time' | ...
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis, yaxis : key of :attr:`sweep_stats`
             Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
         y_exact : float
             Exact value for the quantity on the y-axis for comparison.
@@ -1007,11 +1005,10 @@ class Engine(NpcLinearOperator):
 
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
-        if y_exact is None:
-            axes.plot(x, y, **kwargs)
-        else:
-            axes.plot(x, np.abs(y-y_exact)/np.abs(y_exact), **kwargs)
+        if y_exact is not None:
+            y = np.abs(y-y_exact)/np.abs(y_exact)
             axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
