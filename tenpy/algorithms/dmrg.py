@@ -339,7 +339,7 @@ class Engine(NpcLinearOperator):
                 RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
                 LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
                 RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-            if 'chi_list' in self.DMRG_params:
+            if self.DMRG_params.get('chi_list', None) is not None:
                 warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
 
