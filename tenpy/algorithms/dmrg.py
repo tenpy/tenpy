@@ -519,7 +519,11 @@ class Engine(NpcLinearOperator):
         self.mixer_cleanup()
         # update environment until norm_tol is reached
         if norm_tol is not None and norm_err > norm_tol:
-            warnings.warn("final DMRG state not in canonical form: too much truncation!")
+            msg = "final DMRG state not in canonical form within `norm_tol` = {nt:.2e}"
+            warnings.warn(msg.format(nt=norm_tol))
+            if self.verbose >= 1:
+                print("norm_tol={nt:.2e} not reached, norm_err={ne:.2e}".format(nt=norm_tol,
+                                                                                ne=norm_err))
             if self.finite:
                 self.psi.canonical_form()
             else:
@@ -529,9 +533,11 @@ class Engine(NpcLinearOperator):
                     if norm_err <= norm_tol:
                         break
                 else:
-                    msg = ("DMRG: norm_tol {nt:.1e} not reached by updating the environment."
-                           "Call psi.canonical_form()")
-                    warnings.warn(msg.format(nt=norm_tol))
+                    if self.verbose >= 1:
+                        msg = ("DMRG: norm_tol {nt:.2e} not reached by updating the environment, "
+                               "current norm_err = {ne:.2e}\n"
+                               "Call psi.canonical_form()").format(nt=norm_tol, ne=norm_err)
+                        print(msg)
                     self.psi.canonical_form()
         if self.verbose >= 1:
             print("=" * 80)
