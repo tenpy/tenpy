@@ -3,10 +3,11 @@
 """
 # Copyright 2018 TeNPy Developers
 
+import numpy as np
+
 from ..networks.site import BosonSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
-import numpy as np
 
 __all__ = ["BoseHubbardModel", "BoseHubbardChain"]
 
@@ -85,7 +86,7 @@ class BoseHubbardModel(CouplingMPOModel):
             self.add_onsite(U/2., u, 'NN')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(t, u1, 'Bd', u2, 'B', dx)
-            self.add_coupling(t, u2, 'Bd', u1, 'B', -dx)  # h.c.
+            self.add_coupling(np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
 
 
 class BoseHubbardChain(BoseHubbardModel,NearestNeighborModel):

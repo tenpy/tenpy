@@ -88,8 +88,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
 
         # hopping in x-direction: uniform
         self.add_coupling(-Jx, 0, 'Cd', 0, 'C', (1, 0), 'JW', True)
-        self.add_coupling(-Jx, 0, 'Cd', 0, 'C', (-1, 0), 'JW', True)
-        #self.add_coupling(Jx, 0, 'C', 0, 'Cd', (1, 0), 'JW', True)
+        self.add_coupling(np.conj(-Jx), 0, 'Cd', 0, 'C', (-1, 0), 'JW', True)  # h.c.
         # hopping in y-direction:
         # The hopping amplitudes depend on position -> use an array for couplings.
         # If the array is smaller than the actual number of couplings,
@@ -97,7 +96,7 @@ class HofstadterFermions(CouplingModel, MPOModel):
         # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', [0, 1], 'JW', True)
-        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', [0, -1], 'JW', True)
+        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', [0, -1], 'JW', True)  # h.c.
 
         # 7) initialize MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
@@ -178,7 +177,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
 
         # hopping in x-direction: uniform
         self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [1, 0])
-        self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [-1, 0])
+        self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])
         # hopping in y-direction:
         # The hopping amplitudes depend on position -> use an array for couplings.
         # If the array is smaller than the actual number of couplings,

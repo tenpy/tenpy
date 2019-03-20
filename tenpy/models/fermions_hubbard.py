@@ -6,6 +6,8 @@
 """
 # Copyright 2018 TeNPy Developers
 
+import numpy as np
+
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
 from ..networks.site import SpinHalfFermionSite
@@ -86,10 +88,10 @@ class FermionicHubbardModel(CouplingMPOModel):
             self.add_onsite(mu, 0, 'Ntot')
             self.add_onsite(U, 0, 'NuNd')
         for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx, 'JW', True)
-            self.add_coupling(t, u2, 'Cdu', u1, 'Cu', -dx, 'JW', True)  # h.c.
-            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', dx, 'JW', True)
-            self.add_coupling(t, u2, 'Cdd', u1, 'Cd', -dx, 'JW', True)  # h.c.
+            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx)
+            self.add_coupling(np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
+            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', dx)
+            self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cd', -dx)  # h.c.
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
