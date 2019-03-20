@@ -930,8 +930,8 @@ class CouplingModel(Model):
         >>> phi = np.pi/4 # determines the external flux strength
         >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
         >>> for u1, u2, dx in self.lat.nearest_neighbors:
-        ...     self.add_coupling(strength_with_flux, 'Cd', u1, 'C', u2, dx)
-        ...     self.add_coupling(np.conj(strength_with_flux), 'Cd', u1, 'C', u2, -dx)
+        ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
+        ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
 
         """
         (_, c_shape) = self.lat._coupling_shape(dx)
