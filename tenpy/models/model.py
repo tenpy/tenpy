@@ -670,17 +670,30 @@ class CouplingModel(Model):
 
         >>> J = 1.  # the strength
         >>> for u1, u2, dx in self.lat.nearest_neighbors:
-        ...     self.add_coupling(J * 0.5, u1, 'Sp', u2, 'Sm', dx)
-        ...     self.add_coupling(J * 0.5, u1, 'Sm', u2, 'Sp', dx)
         ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
-        To add the hermitian conjugate for a hopping term, you can add it in the opposite
-        direction:
+        The strength can be an array, which get's tiled to the correct shape.
+        For example, in a 1D :class`~tenpy.models.lattice.Chain` with an even number of sites and
+        periodic (or infinite) boundary conditions, you can add alternating strong and weak
+        couplings with a line like::
 
-        >>> t = 1.  # the strength
+        >>> self.add_coupling([1.5, 1.], 0, 'Sz', 0, 'Sz', dx)
+
+        To add the hermitian conjugate, e.g. for a hopping term, you should add it in the opposite
+        direction ``-dx``, complex conjugate the strength, and take the hermitian conjugate
+        of the operators in swapped order (including a swap of `u1` <-> `u2`).
+        For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
+
+        >>> t = 1.  # hopping strength
         >>> for u1, u2, dx in self.lat.nearest_neighbors:
         ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', -dx)
+        ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
+
+        With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
+
+        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
+        ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])

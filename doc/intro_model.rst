@@ -231,10 +231,12 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
       If you have terms like :math:`c^\dagger_i c_j` in your Hamiltonian, you *need* to add it in both directions to get
       a hermitian Hamiltonian! Simply add another line with switched, conjugated operatores, switched (`u1`, `u2`), 
       and negative `dx`, for example when using the :class:`~tenpy.networks.site.SpinHalfFermionSite`::
-      
+
           self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)
           self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c.
           # ('Cdd' is h.c. of 'Cd', and 'Cu' is h.c. of 'Cdu'!)
+
+      See also the other examples in :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.
    If you need to add or multipliy some parameters of the model for the `strength` of certain terms,
