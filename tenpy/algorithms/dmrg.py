@@ -1434,6 +1434,10 @@ class TwoSiteMixer(SingleSiteMixer):
 
     This is the two-site version of the mixer described in [Hubig2015]_.
     Equivalent to the :class:`DensityMatrixMixer`, but never construct the full density matrix.
+
+    .. todo :
+        This is still under development.
+        Seems to works correctly only with EngineCombine with finite MPS.
     """
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
