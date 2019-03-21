@@ -195,6 +195,10 @@ class Lattice:
                    axis=1)[self._perm] == np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
+        if self.bc[0] and self.bc_MPS == 'infinite':
+            raise ValueError("Need periodic boundary conditions along the x-direction "
+                             "for 'infinite' `bc_MPS`")
+
 
     @property
     def dim(self):

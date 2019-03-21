@@ -23,7 +23,7 @@ def check_hermitian(H):
         Ws = H._W * 2
     else:
         Ws = H._W
-    #check trace(H.H) = trace(H.H^dagger)
+    #check trace(H.H) = trace(H.H^dagger):  equivalent to H=H^dagger
     W = Ws[0].take_slice([H.get_IdL(0)], ['wL'])
 
     trHH = npc.tensordot(W, W.replace_label('wR', 'wR*'), axes=[['p', 'p*'], ['p*', 'p']])
