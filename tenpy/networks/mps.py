@@ -3208,3 +3208,325 @@ class TransferMatrix(sparse.NpcLinearOperator):
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
+
+
+class OnsiteTerms:
+    """Operator names, site indices and strengths representing onsite terms.
+
+    Represents a sum of onsite terms where the operators are only given by their name (in the form
+    of a string). What the operator represents is later given by the :attr:`MPS.sites` using
+    :meth:`~tenpy.networks.site.get_op`.
+
+
+    .. todo ::
+        Tests. Allow addition of terms.
+
+    Parameters
+    ----------
+    L : int
+        Number of sites.
+
+    Attributes
+    ----------
+    L : int
+        Number of sites.
+    onsite_terms : list of dict
+        Filled by meth:`add_onsite_term`.
+        For each index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
+    """
+
+    def __init__(self, L):
+        self.L = L
+        self.onsite_terms = [dict() for _ in range(L)]
+
+    def add_onsite_term(self, strength, i, op):
+        """Add a onsite term on a given MPS site.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the term.
+        i : int
+            The MPS index of the site on which the operator acts.
+            We require ``0 <= i < L``.
+        op : str
+            Name of the involved operator.
+        """
+        term = self.onsite_terms[i]
+        term[op] = term.get(op, 0) + strength
+
+    def _test_onsite_terms(self, mps_sites):
+        """Check that all given operators exist in the `mps_sites`."""
+        for site, terms in zip(mps_sites, self.onsite_terms):
+            for opname, strength in terms.items():
+                if not site.valid_opname(opname):
+                    raise ValueError("Operator {op!r} not in site".format(op=opname))
+
+    def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
+        """remove entries of strength `0` from ``self.onsite_terms``."""
+        for term in self.onsite_terms:
+            for op in list(term.keys()):
+                if abs(term[op]) < tol_zero:
+                    del term[op]
+        # done
+
+
+class CouplingTerms:
+    """Operator names, site indices and strengths representing two-site coupling terms.
+
+    Parameters
+    ----------
+    L : int
+        Number of sites.
+
+    Attributes
+    ----------
+    L : int
+        Number of sites.
+    coupling_terms : dict of dict
+        Filled by :meth:`add_coupling_term`.
+        Nested dictionaries of the form
+        ``{i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}``.
+        Note that always ``i < j``, but entries with ``j >= L`` are allowed for
+        ``bc_MPS == 'infinite'``, in which case they indicate couplings between different
+        iMPS unit cells.
+    """
+    def __init__(self, L):
+        self.L = L
+        self.coupling_terms = dict()
+
+    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id'):
+        """Add a two-site coupling term on given MPS sites.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        i, j : int
+            The MPS indices of the two sites on which the operator acts.
+            We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
+            If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
+        op1, op2 : str
+            Names of the involved operators.
+        op_string : str
+            The operator to be inserted between `i` and `j`.
+        """
+        if not 0 <= i < self.L:
+            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
+        if not i < j:
+            raise ValueError("need i < j")
+        assert i < j
+        d1 = self.coupling_terms.setdefault(i, dict())
+        # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': current_strength}}}``
+        d2 = d1.setdefault((op_i, op_string), dict())
+        d3 = d2.setdefault(j, dict())
+        d3[op_j] = d3.get(op_j, 0) + strength
+
+    def plot_coupling_terms(self, ax, style_map=None):
+        """"Plot coupling terms into a given lattice.
+
+        This function plots the :attr:`coupling_terms`
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        style_map : function
+            Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
+            each two-site coupling and should return a keyword-dictionary
+            with the desired plot-style for this combination.
+            By default (``None``), the linecolor depends on the phase of `strength`,
+            the `linewidth` is given by the phase of `strength` (using the `hsv` colormap),
+            and the linestyle depends on the type of operators coupled.
+
+        See also
+        --------
+        :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
+        """
+        lat = self.lat
+        pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
+        N_sites = lat.N_sites
+        x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
+        if style_map is None:
+            linestyles = ['--', '-.', ':', '-']
+            style_cache = {}
+            from matplotlib.cm import hsv
+            from matplotlib.colors import Normalize
+            norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
+            def style_map(i, j, op_i, op_string, op_j, strength):
+                """define the plot style for a given coupling"""
+                key = (op_i, op_string, op_j)
+                if key in style_cache:
+                    return style_cache[key]
+                style = {}
+                style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
+                style['color'] = hsv(norm_angle(np.angle(strength)))
+                style['linewidth'] = np.abs(strength)
+                style_cache[key] = style.copy()
+                style['label'] = str(key) # when key occurs for the first time, use a label.
+                return style
+
+        for i in sorted(self.coupling_terms.keys()):
+            d1 = self.coupling_terms[i]
+            x_y[0, :] = pos[i]
+            for (op_i, op_string) in sorted(d1.keys()):
+                d2 = d1[(op_i, op_string)]
+                for j in sorted(d2.keys()):
+                    d3 = d2[j]
+                    shift = j - j % N_sites
+                    if shift == 0:
+                        x_y[1, :] = pos[j]
+                    else:
+                        lat_idx_j = np.array(lat.order[j % N_sites])
+                        lat_idx_j[0] += (shift // N_sites) * lat.N_rings
+                        x_y[1, :] = lat.position(lat_idx_j)
+                    for op_j in sorted(d3.keys()):
+                        if isinstance(op_j, tuple):
+                            continue  # multi-site coupling!
+                        strength = d3[op_j]
+                        style = style_map(i, j, op_i, op_string, op_j, strength)
+                        ax.plot(x_y[:, 0], x_y[:, 1], **style)
+        # done
+
+    def _test_coupling_terms(self, mps_sites):
+        """Check the format of self.coupling_terms"""
+        L = self.L
+        for i, d1 in self.coupling_terms.items():
+            site_i = mps_sites[i]
+            for (op_i, opstring), d2 in d1.items():
+                if not site_i.valid_opname(op_i):
+                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                for j, d3 in d2.items():
+                    if not i < j:
+                        raise ValueError("wrong order of indices in coupling terms")
+                    for op_j in d3.keys():
+                        if not mps_sites[j % L].valid_opname(op_j):
+                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
+        # done
+
+    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
+        """remove entries of strength `0` from ``self.coupling_terms``."""
+        for d1 in self.coupling_terms.values():
+            # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
+            for op_i_op_str, d2 in list(d1.items()):
+                for j, d3 in list(d2.items()):
+                    for op_j, st in list(d3.items()):
+                        if abs(st) < tol_zero:
+                            del d3[op_j]
+                    if len(d3) == 0:
+                        del d2[j]
+                if len(d2) == 0:
+                    del d1[op_i_op_str]
+        # done
+
+
+class MultiCouplingTerms(CouplingTerms):
+    """Operator names, site indices and strengths representing general `M`-site coupling terms.
+
+    Generalizes the :attr:`coupling_terms` of :class:`CouplingTerms` to `M`-site couplings.
+    The structure of the nested dictionary :attr:`coupling_terms` is similar, but we allow
+    an arbitrary recursion depth of the dictionary.
+
+    Parameters
+    ----------
+    L : int
+        Number of sites.
+
+    Attributes
+    ----------
+    L : int
+        Number of sites.
+    coupling_terms : dict of dict
+        Nested dictionaries of the following form::
+
+            {i: {('opname_i', 'opname_string_ij'):
+                    {j: {('opname_j', 'opname_string_jk'):
+                            {k: {('opname_k', 'opname_string_kl'):
+                                ...
+                                    {l: {'opname_l':
+                                            strength
+                                    }   }
+                                ...
+                            }   }
+                    }   }
+            }   }
+
+        For a M-site coupling, this involves a nesting depth of ``2*M`` dictionaries.
+        Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= L``
+        are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
+        between different iMPS unit cells.
+
+    """
+
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string):
+        """Add a multi-site coupling term on given MPS sites.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        ijkl : list of int
+            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            we require that they are ordered ascending, ``i < j < k < ...`` and
+            that ``0 <= i < N_sites``.
+            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+        ops_ijkl : list of str
+            Names of the involved operators on sites `i, j, k, ...`.
+        op_string : list of str
+            Names of the operator to be inserted between the operators,
+            e.g., op_string[0] is inserted between `i` and `j`.
+        """
+        assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
+        # create the nested structure
+        # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
+        #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
+        #                       ...
+        #                           {ijkl[-1]: {ops_ijkl[-1]: strength}
+        #            }         }
+        # }         }
+        d0 = self.coupling_terms
+        for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
+            d1 = d0.setdefault(i, dict())
+            d0 = d1.setdefault((op, op_str), dict())
+        d1 = d0.setdefault(ijkl[-1], dict())
+        op = ops_ijkl[-1]
+        d1[op] = d1.get(op, 0) + strength
+
+    def _test_coupling_terms(self, sites, d0=None):
+        N_sites = len(sites)
+        if d0 is None:
+            d0 = self.coupling_terms
+        for i, d1 in d0.items():
+            site_i = sites[i % N_sites]
+            for key, d2 in d1.items():
+                if isinstance(key, tuple):  # further couplings
+                    op_i, opstring_ij = key
+                    if not site_i.valid_opname(op_i):
+                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                    self._test_coupling_terms(sites, d2)  # recursive!
+                else:  # last term of the coupling
+                    op_i = key
+                    if not site_i.valid_opname(op_i):
+                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+        # done
+
+    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15, d0=None):
+        """remove entries of strength `0` from ``self.coupling_terms``."""
+        if d0 is None:
+            d0 = self.coupling_terms
+        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
+        for i, d1 in list(d0.items()):
+            for key, d2 in list(d1.items()):
+                if isinstance(key, tuple):
+                    self._remove_coupling_terms_zeros(tol_zero, d2)  # recursive!
+                    if len(d2) == 0:
+                        del d1[key]
+                else:
+                    # key is opname_j, d2 is strength
+                    if abs(d2) < tol_zero:
+                        del d1[key]
+            if len(d1) == 0:
+                del d0[i]
+        # done
+
+

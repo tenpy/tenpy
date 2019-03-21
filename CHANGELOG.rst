@@ -62,6 +62,9 @@ Added
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
 - :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
 - :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
+- :class:`tenpy.networks.mps.OnsiteTerm`, :class:`tenpy.networks.mps.CouplingTerm`, :class:`tenpy.networks.mps.MultiCouplingTerm` 
+  containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
+
 
 
 Changed

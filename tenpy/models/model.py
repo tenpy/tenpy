@@ -26,7 +26,7 @@ For simplicity, the :class:`CouplingModel` is limited to interactions involving 
 Yet, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
 involving couplings between multiple sites.
 
-The :class:`CouplingMPOModel` aims at structuring the initialization for most models is used
+The :class:`CouplingMPOModel` aims at structuring the initialization for most models and is used
 as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro_model`.
@@ -42,6 +42,7 @@ from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
+from ..networks.mps import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.site import group_sites
 
 __all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
@@ -496,15 +497,21 @@ class MPOModel(Model):
         return H_bond
 
 
-class CouplingModel(Model):
+class CouplingModel(Model, OnsiteTerms, CouplingTerms):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
-    In this class, the terms of the Hamiltonian are specified explicitly as onsite or coupling
-    terms.
+    In this class, the terms of the Hamiltonian are specified explicitly as
+    :class:`~tenpy.networks.mps.OnsiteTerms` or :class:`~tenpy.networks.mps.CouplingTerms`.
 
     .. deprecated:: 0.4.0
         `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
         use the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
+
+    .. todo ::
+       save terms by category and only add them up in the end when generating the Hamiltonian.
+       calc_H_onsite, calc_H_bond, calc_H_MPO should become global functions of tenpy.networks.mps
+       taking `sites` as arguments.
+       _graph_add_* should become methods of CouplingTerms
 
     Parameters
     ----------
@@ -519,16 +526,6 @@ class CouplingModel(Model):
 
     Attributes
     ----------
-    onsite_terms : list of dict
-        Filled by :meth:`add_onsite`.
-        For each MPS index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
-    coupling_terms : dict of dict
-        Filled by :meth:`add_coupling`.
-        Nested dictionaries of the form
-        ``{i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}``.
-        Note that always ``i < j``, but entries with ``j >= lat.N_sites`` are allowed for
-        ``lat.bc_MPS == 'infinite'``, in which case they indicate couplings between different
-        iMPS unit cells.
     H_onsite : list of :class:`npc.Array`
         For each site (in MPS order) the onsite part of the Hamiltonian.
     """
@@ -537,25 +534,20 @@ class CouplingModel(Model):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
             warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
-                          FutureWarning)
+                          FutureWarning, stacklevel=2)
             lattice._set_bc(bc_coupling)
-        self.onsite_terms = [dict() for _ in range(self.lat.N_sites)]
-        self.coupling_terms = dict()
+        L = self.lat.N_sites
+        OnsiteTerms.__init__(self, L)
+        CouplingTerms.__init__(self, L)
         self.H_onsite = None
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self.lat.bc[0] and self.lat.bc_MPS == 'infinite':
-            raise ValueError("Need periodic boundary conditions along the x-direction "
-                             "for 'infinite' `bc_MPS`")
         sites = self.lat.mps_sites()
-        for site, terms in zip(sites, self.onsite_terms):
-            for opname, strength in terms.items():
-                if not site.valid_opname(opname):
-                    raise ValueError("Operator {op!r} not in site".format(op=opname))
-        self._test_coupling_terms()
+        self._test_onsite_terms(sites)
+        self._test_coupling_terms(sites)
 
     def add_onsite(self, strength, u, opname):
         """Add onsite terms to self.
@@ -585,22 +577,6 @@ class CouplingModel(Model):
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             self.add_onsite_term(strength[tuple(i_lat)], i, opname)
-
-    def add_onsite_term(self, strength, i, op):
-        """Add a onsite term on a given MPS site.
-
-        Parameters
-        ----------
-        strength : float
-            The strength of the coupling term.
-        i : int
-            The MPS index of the site on which the operator acts.
-            We require ``0 <= i < N_sites``.
-        op : str
-            Name of the involved operators.
-        """
-        term = self.onsite_terms[i]
-        term[op] = term.get(op, 0) + strength
 
     def add_coupling(self,
                      strength,
@@ -743,31 +719,6 @@ class CouplingModel(Model):
                     o1 = ' '.join([o1, op_string])  # o1==op2 should act first
             self.add_coupling_term(current_strength, i, j, o1, o2, op_string)
         # done
-
-    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id'):
-        """Add a two-site coupling term on given MPS sites.
-
-        Parameters
-        ----------
-        strength : float
-            The strength of the coupling term.
-        i, j : int
-            The MPS indices of the two sites on which the operator acts.
-            We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
-            If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
-        op1, op2 : str
-            Names of the involved operators.
-        op_string : str
-            The operator to be inserted between `i` and `j`.
-        """
-        if not 0 <= i < self.lat.N_sites:
-            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
-        assert i < j
-        d1 = self.coupling_terms.setdefault(i, dict())
-        # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': current_strength}}}``
-        d2 = d1.setdefault((op_i, op_string), dict())
-        d3 = d2.setdefault(j, dict())
-        d3[op_j] = d3.get(op_j, 0) + strength
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
@@ -957,110 +908,6 @@ class CouplingModel(Model):
                 strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
         return strength
 
-    def plot_coupling_terms(self, ax, style_map=None):
-        """"Plot coupling terms into a given lattice.
-
-        This function plots the :attr:`coupling_terms`
-
-        Parameters
-        ----------
-        ax : :class:`matplotlib.axes.Axes`
-            The axes on which we should plot.
-        style_map : function
-            Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
-            each two-site coupling and should return a keyword-dictionary
-            with the desired plot-style for this combination.
-            By default (``None``), the linecolor depends on the phase of `strength`,
-            the `linewidth` is given by the phase of `strength` (using the `hsv` colormap),
-            and the linestyle depends on the type of operators coupled.
-
-        See also
-        --------
-        :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
-        """
-        lat = self.lat
-        pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
-        N_sites = lat.N_sites
-        x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
-        if style_map is None:
-            linestyles = ['--', '-.', ':', '-']
-            style_cache = {}
-            from matplotlib.cm import hsv
-            from matplotlib.colors import Normalize
-            norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
-            def style_map(i, j, op_i, op_string, op_j, strength):
-                """define the plot style for a given coupling"""
-                key = (op_i, op_string, op_j)
-                if key in style_cache:
-                    return style_cache[key]
-                style = {}
-                style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
-                style['color'] = hsv(norm_angle(np.angle(strength)))
-                style['linewidth'] = np.abs(strength)
-                style_cache[key] = style.copy()
-                style['label'] = str(key) # when key occurs for the first time, use a label.
-                return style
-
-        for i in sorted(self.coupling_terms.keys()):
-            d1 = self.coupling_terms[i]
-            x_y[0, :] = pos[i]
-            for (op_i, op_string) in sorted(d1.keys()):
-                d2 = d1[(op_i, op_string)]
-                for j in sorted(d2.keys()):
-                    d3 = d2[j]
-                    shift = j - j % N_sites
-                    if shift == 0:
-                        x_y[1, :] = pos[j]
-                    else:
-                        lat_idx_j = np.array(lat.order[j % N_sites])
-                        lat_idx_j[0] += (shift // N_sites) * lat.N_rings
-                        x_y[1, :] = lat.position(lat_idx_j)
-                    for op_j in sorted(d3.keys()):
-                        if isinstance(op_j, tuple):
-                            continue  # multi-site coupling!
-                        strength = d3[op_j]
-                        style = style_map(i, j, op_i, op_string, op_j, strength)
-                        ax.plot(x_y[:, 0], x_y[:, 1], **style)
-        # done
-
-    def _test_coupling_terms(self):
-        """Check the format of self.coupling_terms"""
-        sites = self.lat.mps_sites()
-        N_sites = len(sites)
-        for i, d1 in self.coupling_terms.items():
-            site_i = sites[i]
-            for (op_i, opstring), d2 in d1.items():
-                if not site_i.valid_opname(op_i):
-                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                for j, d3 in d2.items():
-                    for op_j in d3.keys():
-                        if not sites[j % N_sites].valid_opname(op_j):
-                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
-        # done
-
-    def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
-        """remove entries of strength `0` from ``self.onsite_terms``."""
-        for term in self.onsite_terms:
-            for op in list(term.keys()):
-                if abs(term[op]) < tol_zero:
-                    del term[op]
-        # done
-
-    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
-        """remove entries of strength `0` from ``self.coupling_terms``."""
-        for d1 in self.coupling_terms.values():
-            # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
-            for op_i_op_str, d2 in list(d1.items()):
-                for j, d3 in list(d2.items()):
-                    for op_j, st in list(d3.items()):
-                        if abs(st) < tol_zero:
-                            del d3[op_j]
-                    if len(d3) == 0:
-                        del d2[j]
-                if len(d2) == 0:
-                    del d1[op_i_op_str]
-        # done
-
     def _graph_add_coupling_terms(self, graph):
         # structure of coupling terms:
         # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
@@ -1075,30 +922,9 @@ class CouplingModel(Model):
         # done
 
 
-class MultiCouplingModel(CouplingModel):
+class MultiCouplingModel(CouplingModel, MultiCouplingTerms):
     """Generalizes :class:`CouplingModel` to allow couplings involving more than two sites.
 
-    Attributes
-    ----------
-    coupling_terms : dict of dict
-        Generalization of the coupling_terms of a :class:`CouplingModel` for M-site couplings.
-        Filled by :meth:`add_coupling` or :meth:`add_multi_coupling`.
-        Nested dictionaries of the following form::
-
-            {i: {('opname_i', 'opname_string_ij'):
-                 {j: {('opname_j', 'opname_string_jk'):
-                      {k: {('opname_k', 'opname_string_kl'):
-                           ...
-                           {l: {'opname_l': strength
-                           }   }
-                      }   }
-                 }   }
-            }   }
-
-        For a M-site coupling, this involves a nesting depth of 2*M dictionaries.
-        Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= lat.N_sites``
-        are allowed for ``lat.bc_MPS == 'infinite'``, in which case they indicate couplings
-        between different iMPS unit cells.
     """
 
     def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None):
@@ -1190,78 +1016,6 @@ class MultiCouplingModel(CouplingModel):
             self.add_multi_coupling_term(current_strength, ijkl, ops, op_str)
         # done
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string):
-        """Add a multi-site coupling term on given MPS sites.
-
-        Parameters
-        ----------
-        strength : float
-            The strength of the coupling term.
-        ijkl : list of int
-            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
-            we require that they are ordered ascending, ``i < j < k < ...`` and
-            that ``0 <= i < N_sites``.
-            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
-        ops_ijkl : list of str
-            Names of the involved operators on sites `i, j, k, ...`.
-        op_string : list of str
-            Names of the operator to be inserted between the operators,
-            e.g., op_string[0] is inserted between `i` and `j`.
-        """
-        assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
-        # create the nested structure
-        # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
-        #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
-        #                       ...
-        #                           {ijkl[-1]: {ops_ijkl[-1]: strength}
-        #            }         }
-        # }         }
-        d0 = self.coupling_terms
-        for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
-            d1 = d0.setdefault(i, dict())
-            d0 = d1.setdefault((op, op_str), dict())
-        d1 = d0.setdefault(ijkl[-1], dict())
-        op = ops_ijkl[-1]
-        d1[op] = d1.get(op, 0) + strength
-
-    def _test_coupling_terms(self, d0=None):
-        sites = self.lat.mps_sites()
-        N_sites = len(sites)
-        if d0 is None:
-            d0 = self.coupling_terms
-        for i, d1 in d0.items():
-            site_i = sites[i % N_sites]
-            for key, d2 in d1.items():
-                if isinstance(key, tuple):  # further couplings
-                    op_i, opstring_ij = key
-                    if not site_i.valid_opname(op_i):
-                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                    self._test_coupling_terms(d2)  # recursive!
-                else:  # last term of the coupling
-                    op_i = key
-                    if not site_i.valid_opname(op_i):
-                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
-        # done
-
-    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15, d0=None):
-        """remove entries of strength `0` from ``self.coupling_terms``."""
-        if d0 is None:
-            d0 = self.coupling_terms
-        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
-        for i, d1 in list(d0.items()):
-            for key, d2 in list(d1.items()):
-                if isinstance(key, tuple):
-                    self._remove_coupling_terms_zeros(tol_zero, d2)  # recursive!
-                    if len(d2) == 0:
-                        del d1[key]
-                else:
-                    # key is opname_j, d2 is strength
-                    if abs(d2) < tol_zero:
-                        del d1[key]
-            if len(d1) == 0:
-                del d0[i]
-        # done
-
     def _graph_add_coupling_terms(self, graph, i=None, d1=None, label_left=None):
         # nested structure of coupling_terms:
         # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
@@ -1288,7 +1042,7 @@ class MultiCouplingModel(CouplingModel):
 
 
 class CouplingMPOModel(CouplingModel,MPOModel):
-    """Combination of the CouplingModel and MPOModel.
+    """Combination of the :class:`CouplingModel` and :class:`MPOModel`.
 
     This class provides the interface for most of the model classes in `tenpy`.
     Examples based on this class are given in :mod:`~tenpy.models.xxz_chain`
