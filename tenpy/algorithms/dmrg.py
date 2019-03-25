@@ -327,8 +327,8 @@ class Engine(NpcLinearOperator):
                     H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
                 except ValueError:
                     compatible = False
-                    warings.warn("The leg of the new model is incompatible with the previous one."
-                                 "Rebuild environment from scratch.")
+                    warnings.warn("The leg of the new model is incompatible with the previous one."
+                                  "Rebuild environment from scratch.")
             if compatible:
                 LP = self.env.get_LP(0, False)
                 LP_age = self.env.get_LP_age(0)
