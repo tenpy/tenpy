@@ -3217,10 +3217,6 @@ class OnsiteTerms:
     of a string). What the operator represents is later given by the :attr:`MPS.sites` using
     :meth:`~tenpy.networks.site.get_op`.
 
-
-    .. todo ::
-        Tests. Allow addition of terms.
-
     Parameters
     ----------
     L : int
@@ -3254,6 +3250,16 @@ class OnsiteTerms:
         """
         term = self.onsite_terms[i]
         term[op] = term.get(op, 0) + strength
+
+    def __iadd__(self, other):
+        if not isinstance(other, OnsiteTerms):
+            return NotImplemented  # unknown type of other
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        for self_t, other_t in zip(self.onsite_terms, other.onsite_terms):
+            for key, value in other_t.items():
+                self_t[key] = self_t.get(key, 0.) + value
+        return self
 
     def _test_onsite_terms(self, mps_sites):
         """Check that all given operators exist in the `mps_sites`."""
@@ -3321,6 +3327,24 @@ class CouplingTerms:
         d2 = d1.setdefault((op_i, op_string), dict())
         d3 = d2.setdefault(j, dict())
         d3[op_j] = d3.get(op_j, 0) + strength
+
+    def __iadd__(self, other):
+        if not isinstance(other, CouplingTerms):
+            return NotImplemented  # unknown type of other
+        if isinstance(other, MultiCouplingTerms):
+            raise ValueError("Can't add MultiCouplingTerms into CouplingTerms")
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
+        for i, other_d1 in other.coupling_terms.items():
+            self_d1 = self.coupling_terms.setdefault(i, dict())
+            for opname_i_string, other_d2 in other_d1.items():
+                self_d2 = self_d1.setdefault(opname_i_string, dict())
+                for j, other_d3 in other_d2.items():
+                    self_d3 = self_d2.setdefault(j, dict())
+                    for opname_j, strength in other_d3.items():
+                        self_d3[opname_j] = self_d3.get(opname_j, 0.) + strength
+        return self
 
     def plot_coupling_terms(self, ax, style_map=None):
         """"Plot coupling terms into a given lattice.
@@ -3477,6 +3501,9 @@ class MultiCouplingTerms(CouplingTerms):
             e.g., op_string[0] is inserted between `i` and `j`.
         """
         assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
+        for i, j in zip(ijkl, ijkl[1:]):
+            if not i < j:
+                raise ValueError("Need i < j < k < ...")
         # create the nested structure
         # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
         #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
@@ -3491,6 +3518,36 @@ class MultiCouplingTerms(CouplingTerms):
         d1 = d0.setdefault(ijkl[-1], dict())
         op = ops_ijkl[-1]
         d1[op] = d1.get(op, 0) + strength
+
+    def __iadd__(self, other):
+        if not isinstance(other, CouplingTerms):
+            return NotImplemented  # unknown type of other
+        if isinstance(other, MultiCouplingTerms):
+            raise ValueError("Can't add MultiCouplingTerms into CouplingTerms")
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        self._iadd_multi_coupling_terms(self.coupling_terms, other.coupling_terms)
+        return self
+
+    def _iadd_multi_coupling_terms(self, self_d0=None, other_d0=None):
+        # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
+        #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
+        #                       ...
+        #                           {ijkl[-1]: {ops_ijkl[-1]: strength}
+        #            }         }
+        # }         }
+        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
+        for i, other_d1 in other_d0.items():
+            self_d1 = self_d0.setdefault(i, dict())
+            for key, other_d2 in other_d1.items():
+                if isinstance(key, tuple):  # further couplings
+                    self_d2 = self_d1.setdefault(key, dict())
+                    self._iadd_multi_coupling_terms(self_d2, other_d2)  # recursive!
+                else:  # last term of the coupling
+                    opname_j = key
+                    strength = other_d2
+                    self_d1[opname_j] = self_d1.get(opname_j, 0.) + strength
+        # done
 
     def _test_coupling_terms(self, sites, d0=None):
         N_sites = len(sites)

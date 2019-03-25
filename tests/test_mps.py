@@ -294,9 +294,91 @@ def test_expectation_value_term():
                                                  [('Nu', 1), ('Nd', 2)],
                                                  [('Nd', 2), ('Nu', 5)],
                                                  [('Nu Nd', 3)],
-                                                 [('Nu', 1), ('Nu', 5)]],
+                                                 [('Nu', 1), ('Nu', 5)]], # yapf: disable
                                                 pref) # should be zero
     assert abs(evsum) == sum(pref[1:])
+
+
+def test_onsite_terms():
+    L = 6
+    strength1 = np.arange(1., 1.+L*0.25, 0.25)
+    o1 = mps.OnsiteTerms(L)
+    for i in [1, 0, 3]:
+        o1.add_onsite_term(strength1[i], i, "X_{i:d}".format(i=i))
+    assert o1.onsite_terms == [{"X_0": strength1[0]},
+                               {"X_1": strength1[1]},
+                               {},
+                               {"X_3": strength1[3]},
+                               {},
+                               {}] # yapf: disable
+    strength2 = np.arange(2., 2.+L*0.25, 0.25)
+    o2 = mps.OnsiteTerms(L)
+    for i in [1, 4, 3, 5]:
+        o2.add_onsite_term(strength2[i], i, "Y_{i:d}".format(i=i))
+    o2.add_onsite_term(strength2[3], 3, "X_3")  # add to previous part
+    o2.add_onsite_term(-strength1[1], 1, "X_1")  # remove previous part
+    o1 += o2
+    assert o1.onsite_terms == [{"X_0": strength1[0]},
+                               {"X_1": 0., "Y_1": strength2[1]},
+                               {},
+                               {"X_3": strength1[3] + strength2[3], "Y_3": strength2[3]},
+                               {"Y_4": strength2[4]},
+                               {"Y_5": strength2[5]}] # yapf: disable
+    o1._remove_onsite_terms_zeros()
+    assert o1.onsite_terms == [{"X_0": strength1[0]},
+                               {"Y_1": strength2[1]},
+                               {},
+                               {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
+                               {"Y_4": strength2[4]},
+                               {"Y_5": strength2[5]}] # yapf: disable
+
+def test_coupling_terms():
+    L = 4
+    strength1 = np.arange(0., 4)[:, np.newaxis] + np.arange(0., 0.5, 0.125)[np.newaxis, :]
+    c1 = mps.CouplingTerms(L)
+    for i, j in [(0, 1), (0, 3), (2, 3), (0, 2)]:
+        c1.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
+    c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.125},
+                                  2: {'Y_2': 0.25},
+                                  3: {'Y_3': 0.375}}},
+              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
+    assert c1.coupling_terms == c1_des
+    mc = mps.MultiCouplingTerms(L)
+    for i, j in [(0, 1), (0, 3), (2, 3), (0, 2)]:  # exact same terms as c1
+        mc.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
+    assert mc.coupling_terms == c1_des
+    mc.add_multi_coupling_term(20., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['Id', 'Id'])
+    mc.add_multi_coupling_term(30., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['S1', 'S2'])
+    mc.add_multi_coupling_term(40., [1, 2, 3], ['X_1', 'Y_2', 'Y_3'], ['Id', 'Id'])
+    mc_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.125,
+                                      ('Y_1', 'Id'): {3: {'Y_3': 20.0}}},
+                                  2: {'Y_2': 0.25},
+                                  3: {'Y_3': 0.375}},
+                  ('X_0', 'S1'): {1: {('Y_1', 'S2'): {3: {'Y_3': 30.0}}}}},
+              1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {3: {'Y_3': 40.0}}}}},
+              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
+    assert mc.coupling_terms == mc_des
+    # addition
+    c2 = mps.CouplingTerms(L)
+    for i, j in [(0, 1), (1, 2)]:
+        c1.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
+    c1 += c2
+    c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.25},
+                                  2: {'Y_2': 0.25},
+                                  3: {'Y_3': 0.375}}},
+              1: {('X_1', 'Id'): {2: {'Y_2': 1.25}}},
+              2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
+    assert c1.coupling_terms == c1_des
+    mc += c1
+    mc_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.375,
+                                      ('Y_1', 'Id'): {3: {'Y_3': 20.0}}},
+                                  2: {'Y_2': 0.5},
+                                  3: {'Y_3': 0.75}},
+                  ('X_0', 'S1'): {1: {('Y_1', 'S2'): {3: {'Y_3': 30.0}}}}},
+              1: {('X_1', 'Id'): {2: {'Y_2': 1.25,
+                                      ('Y_2', 'Id'): {3: {'Y_3': 40.0}}}}},
+              2: {('X_2', 'Id'): {3: {'Y_3': 4.75}}}} # yapf: disable
+    assert mc.coupling_terms == mc_des
 
 
 if __name__ == "__main__":
@@ -311,3 +393,4 @@ if __name__ == "__main__":
     check_canonical_form('infinite')
     test_group()
     test_expectation_value_term()
+    test_coupling_terms()
