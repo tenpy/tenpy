@@ -123,16 +123,16 @@ class NearestNeighborModel(Model):
     ----------
     lattice : :class:`tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+    H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
         ``H_bond[i]`` acts on sites ``(i-1, i)``; we require ``len(H_bond) == lat.N_sites``.
         Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
 
     Attributes
     ----------
-    H_bond : list of :class:`npc.Array`
+    H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
         The Hamiltonian rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
-        ``H_bond[i]`` acts on sites ``(i-1, i)``.
+        ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
         Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
     """
 
@@ -487,8 +487,8 @@ class MPOModel(Model):
             i = (j - 1) % L
             strength_i = 1. if finite and i == 0 else 0.5
             strength_j = 1. if finite and j == L - 1 else 0.5
-            Hb = (npc.outer(sites[i].Id, strength_j * self.H_onsite[j]) +
-                  npc.outer(strength_i * self.H_onsite[i], sites[j].Id))
+            Hb = (npc.outer(sites[i].Id, strength_j * H_onsite[j]) +
+                  npc.outer(strength_i * H_onsite[i], sites[j].Id))
             Hb = add_with_None_0(H_bond[j], Hb)
             Hb.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
             H_bond[j] = Hb
@@ -497,7 +497,7 @@ class MPOModel(Model):
         return H_bond
 
 
-class CouplingModel(Model, OnsiteTerms, CouplingTerms):
+class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
     In this class, the terms of the Hamiltonian are specified explicitly as
@@ -506,12 +506,6 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
     .. deprecated:: 0.4.0
         `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
         use the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
-
-    .. todo ::
-       save terms by category and only add them up in the end when generating the Hamiltonian.
-       calc_H_onsite, calc_H_bond, calc_H_MPO should become global functions of tenpy.networks.mps
-       taking `sites` as arguments.
-       _graph_add_* should become methods of CouplingTerms
 
     Parameters
     ----------
@@ -526,8 +520,11 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
 
     Attributes
     ----------
-    H_onsite : list of :class:`npc.Array`
-        For each site (in MPS order) the onsite part of the Hamiltonian.
+    onsite_terms : {'category': :class:`~tenpy.networks.mps.OnsiteTerms`}
+        The :class:`~tenpy.networks.mps.OnsiteTerms` ordered by category.
+    coupling_terms : {'category': :class:`~tenpy.networks.mps.CouplingTerms`}
+        The :class:`~tenpy.networks.mps.CouplingTerms` ordered by category.
+        In a :class:`MultiCouplingModel`, values may also be :class:`MultiCouplingTerms`.
     """
 
     def __init__(self, lattice, bc_coupling=None):
@@ -537,20 +534,21 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
                           FutureWarning, stacklevel=2)
             lattice._set_bc(bc_coupling)
         L = self.lat.N_sites
-        OnsiteTerms.__init__(self, L)
-        CouplingTerms.__init__(self, L)
-        self.H_onsite = None
+        self.onsite_terms = {}
+        self.coupling_terms = {}
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         sites = self.lat.mps_sites()
-        self._test_onsite_terms(sites)
-        self._test_coupling_terms(sites)
+        for ot in self.onsite_terms.values():
+            ot._test_terms(sites)
+        for ct in self.coupling_terms.values():
+            ct._test_terms(sites)
 
-    def add_onsite(self, strength, u, opname):
-        """Add onsite terms to self.
+    def add_onsite(self, strength, u, opname, category=None):
+        """Add onsite terms to :attr:`onsite_terms`.
 
         Adds a term :math:`\sum_{x_0, ..., x_{dim-1}} strength[x_0, ..., x_{dim-1}] * OP``,
         where the operator ``OP=lat.unit_cell[u].get_op(opname)``
@@ -568,6 +566,8 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
             Picks a :class:`~tenpy.model.lattice.Site` ``lat.unit_cell[u]`` out of the unit cell.
         opname : str
             valid operator name of an onsite operator in ``lat.unit_cell[u]``.
+        category : str
+            Descriptive name used as key for :attr:`onsite_terms`. Defaults to `opname`.
         """
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
         if not np.any(strength != 0.):
@@ -575,8 +575,45 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
+        if category is None:
+            category = opname
+        ot = self.onsite_terms.get(category, None)
+        if ot is None:
+            self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
-            self.add_onsite_term(strength[tuple(i_lat)], i, opname)
+            ot.add_onsite_term(strength[tuple(i_lat)], i, opname)
+
+    def add_onsite_term(self, strength, i, op, category=None):
+        """Add an onsite term on a given MPS site.
+
+        Wrapper for ``self.onsite_terms[category].add_onsite_term(...)``.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the term.
+        i : int
+            The MPS index of the site on which the operator acts.
+            We require ``0 <= i < L``.
+        op : str
+            Name of the involved operator.
+        category : str
+            Descriptive name used as key for :attr:`onsite_terms`. Defaults to `op`.
+        """
+        if category is None:
+            category = op
+        ot = self.onsite_terms.get(category, None)
+        if ot is None:
+            self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
+        ot.add_onsite_term(strength, i, op)
+
+    def all_onsite_terms(self):
+        """Sum of all :attr:`onsite_terms`."""
+        sites = self.lat.mps_sites()
+        ot = OnsiteTerms(len(sites))
+        for t in self.onsite_terms.values():
+            ot += t
+        return ot
 
     def add_coupling(self,
                      strength,
@@ -587,7 +624,8 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
                      dx,
                      op_string=None,
                      str_on_first=True,
-                     raise_op2_left=False):
+                     raise_op2_left=False,
+                     category=None):
         r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -638,6 +676,9 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
         raise_op2_left : bool
             Raise an error when `op2` appears left of `op1`
             (in the sense of the MPS ordering given by the lattice).
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op1}_i {op2}_j"``.
 
         Examples
         --------
@@ -697,7 +738,11 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
 
         mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
-
+        if category is None:
+            category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
+        ct = self.coupling_terms.get(category, None)
+        if ct is None:
+            self.coupling_terms[category] = ct = CouplingTerms(self.lat.N_sites)
         # loop to perform the sum over {x_0, x_1, ...}
         for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
             current_strength = strength[tuple(lat_idx)]
@@ -717,11 +762,55 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
                     o1 = ' '.join([op_string, o1])  # o1==op2 should act first
                 else:
                     o1 = ' '.join([o1, op_string])  # o1==op2 should act first
-            self.add_coupling_term(current_strength, i, j, o1, o2, op_string)
+            ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
         # done
+
+    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
+        """Add a two-site coupling term on given MPS sites.
+
+        Wrapper for ``self.coupling_terms[category].add_coupling_term(...)``.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        i, j : int
+            The MPS indices of the two sites on which the operator acts.
+            We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
+            If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
+        op1, op2 : str
+            Names of the involved operators.
+        op_string : str
+            The operator to be inserted between `i` and `j`.
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op1}_i {op2}_j"``.
+        """
+        if category is None:
+            category = "{op_i}_i {op_j}_j".format(op_i=op_i, op_j=op_j)
+        ct = self.coupling_terms.get(category, None)
+        if ct is None:
+            self.coupling_terms[category] = ct = CouplingTerms(self.lat.N_sites)
+        ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
+
+    def all_coupling_terms(self):
+        """Sum of all :attr:`coupling_terms`."""
+        sites = self.lat.mps_sites()
+        if any([isinstance(ct, MultiCouplingTerms) for ct in self.coupling_terms.values()]):
+            ct = MultiCouplingTerms(len(sites))
+        else:
+            ct = CouplingTerms(len(sites))
+        for t in self.coupling_terms.values():
+            ct += t
+        return ct
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
+
+        .. deprecated:: 0.4.0
+            Will be removed in 1.0.0.
+            Replace calls to this function by
+            ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
 
         Parameters
         ----------
@@ -733,20 +822,13 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
         H_onsite : list of npc.Array
             onsite terms of the Hamiltonian.
         """
-        self._remove_onsite_terms_zeros(tol_zero)
-        res = []
-        for i, terms in enumerate(self.onsite_terms):
-            s = self.lat.site(i)
-            H = npc.zeros([s.leg, s.leg.conj()])
-            for opname, strength in terms.items():
-                H = H + strength * s.get_op(opname)  # (can't use ``+=``: may change dtype)
-            res.append(H)
-        return res
+        warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        return ot.to_Arrays(self.lat.mps_sites())
 
     def calc_H_bond(self, tol_zero=1.e-15):
-        """calculate `H_bond` from `self.coupling_terms` and `self.H_onsite`.
-
-        If ``self.H_onsite is None``, it is calculated with :meth:`self.calc_H_onsite`.
+        """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
 
         Parameters
         ----------
@@ -763,47 +845,20 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
-        self._remove_coupling_terms_zeros(tol_zero)
-        if self.H_onsite is None:
-            self.H_onsite = self.calc_H_onsite(tol_zero)
+        sites = self.lat.mps_sites()
         finite = (self.lat.bc_MPS != 'infinite')
-        N_sites = self.lat.N_sites
-        res = [None] * N_sites
-        for i in range(N_sites):
-            j = (i + 1) % N_sites
-            site_i = self.lat.site(i)
-            site_j = self.lat.site(j)
-            strength_i = 1. if finite and i == 0 else 0.5
-            strength_j = 1. if finite and j == N_sites - 1 else 0.5
-            if finite and j == 0:  # over the boundary
-                strength_i, strength_j = 0., 0.  # just to make the assert below happy
-            H = npc.outer(strength_i * self.H_onsite[i], site_j.Id)
-            H = H + npc.outer(site_i.Id, strength_j * self.H_onsite[j])
-            res[j] = H
-        for i, d1 in self.coupling_terms.items():
-            j = (i + 1) % N_sites
-            d1 = self.coupling_terms[i]
-            site_i = self.lat.site(i)
-            site_j = self.lat.site(j)
-            H = res[j]
-            for (op1, op_str), d2 in d1.items():
-                for j2, d3 in d2.items():
-                    if isinstance(j2, tuple):
-                        # This should only happen in a MultiSiteCoupling model
-                        raise ValueError("multi-site coupling: can't generate H_bond")
-                    # i, j in coupling_terms are defined such that we expect j2 = i + 1
-                    if j2 != i + 1:
-                        msg = "Can't give nearest neighbor H_bond for long-range {i:d}-{j:d}"
-                        raise ValueError(msg.format(i=i, j=j2))
-                    for op2, strength in d3.items():
-                        H = H + strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-            res[j] = H
-        for H in res:
-            H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+
+        ct = self.all_coupling_terms()
+        ct.remove_zeros(tol_zero)
+        H_bond = ct.to_nn_bond_Arrays(sites)
+
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        ot.add_to_nn_bond_Arrays(H_bond, sites, finite, distribute=(0.5, 0.5))
+
         if finite:
-            assert (res[0].norm(np.inf) <= tol_zero)
-            res[0] = None
-        return res
+            assert H_bond[0] is None
+        return H_bond
 
     def calc_H_MPO(self, tol_zero=1.e-15):
         """Calculate MPO representation of the Hamiltonian.
@@ -821,19 +876,13 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
         H_MPO : :class:`~tenpy.networks.mpo.MPO`
             MPO representation of the Hamiltonian.
         """
-        graph = mpo.MPOGraph(self.lat.mps_sites(), self.lat.bc_MPS)
-        # onsite terms
-        self._remove_onsite_terms_zeros(tol_zero)
-        for i, terms in enumerate(self.onsite_terms):
-            for opname, strength in terms.items():
-                graph.add(i, 'IdL', 'IdR', opname, strength)
-        # coupling terms
-        self._remove_coupling_terms_zeros(tol_zero)
-        self._graph_add_coupling_terms(graph)
-        # add 'IdL' and 'IdR' and convert the graph to an MPO
-        graph.add_missing_IdL_IdR()
-        self.H_MPO_graph = graph
-        H_MPO = graph.build_MPO()
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        ct = self.all_coupling_terms()
+        ct.remove_zeros(tol_zero)
+
+        self.H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO = self.H_MPO_graph.build_MPO()
         return H_MPO
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
@@ -908,26 +957,16 @@ class CouplingModel(Model, OnsiteTerms, CouplingTerms):
                 strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
         return strength
 
-    def _graph_add_coupling_terms(self, graph):
-        # structure of coupling terms:
-        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
-        for i, d1 in self.coupling_terms.items():
-            for (opname_i, op_string), d2 in d1.items():
-                label = (i, opname_i, op_string)
-                graph.add(i, 'IdL', label, opname_i, 1.)
-                for j, d3 in d2.items():
-                    label_j = graph.add_string(i, j, label, op_string)
-                    for opname_j, strength in d3.items():
-                        graph.add(j, label_j, 'IdR', opname_j, strength)
-        # done
 
-
-class MultiCouplingModel(CouplingModel, MultiCouplingTerms):
+class MultiCouplingModel(CouplingModel):
     """Generalizes :class:`CouplingModel` to allow couplings involving more than two sites.
 
+    The corresponding couplings can be added with :meth:`add_multi_coupling` and
+    :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
+    instances of :class:`~tenpy.networks.mps.MultiCouplingTerms`.
     """
 
-    def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None):
+    def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None, category=None):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -973,6 +1012,10 @@ class MultiCouplingModel(CouplingModel, MultiCouplingTerms):
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on
                 each segment!
+
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
         """
         other_ops = list(other_ops)
         M = len(other_ops)
@@ -1005,6 +1048,16 @@ class MultiCouplingModel(CouplingModel, MultiCouplingTerms):
             u0, all_us[1:], dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
 
+        if category is None:
+            category = " ".join(["{op}_{i}".format(op=op, i=chr(ord('i')+m)) for m, op in
+                                 enumerate(all_ops)])
+        ct = self.coupling_terms.get(category, None)
+        if ct is None:
+            self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
+        elif not isinstance(ct, MultiCouplingTerms):
+            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
+            new_ct += ct
+            ct = new_ct
         N_sites = self.lat.N_sites
         # loop to perform the sum over {x_0, x_1, ...}
         for ijkl, i_lat in zip(mps_ijkl, lat_indices):
@@ -1013,32 +1066,43 @@ class MultiCouplingModel(CouplingModel, MultiCouplingTerms):
                 continue
             ijkl, ops, op_str = _multi_coupling_group_handle_JW(
                 ijkl, all_ops, need_JW, op_string, N_sites)
-            self.add_multi_coupling_term(current_strength, ijkl, ops, op_str)
+            ct.add_multi_coupling_term(current_strength, ijkl, ops, op_str)
         # done
 
-    def _graph_add_coupling_terms(self, graph, i=None, d1=None, label_left=None):
-        # nested structure of coupling_terms:
-        # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
-        if d1 is None:  # beginning of recursion
-            for i, d1 in self.coupling_terms.items():
-                self._graph_add_coupling_terms(graph, i, d1, 'IdL')
-        else:
-            for key, d2 in d1.items():
-                if isinstance(key, tuple): # further nesting
-                    op_i, op_string_ij = key
-                    if isinstance(label_left, str) and label_left == 'IdL':
-                        label = (i, op_i, op_string_ij)
-                    else:
-                        label = label_left + (i, op_i, op_string_ij)
-                    graph.add(i, label_left, label, op_i, 1.)
-                    for j, d3 in d2.items():
-                        label_j = graph.add_string(i, j, label, op_string_ij)
-                        self._graph_add_coupling_terms(graph, j, d3, label_j)
-                else:  # maximal nesting reached: exit recursion
-                    # i is actually the `l`
-                    op_i, strength = key, d2
-                    graph.add(i, label_left, 'IdR', op_i, strength)
-        # done
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
+        """Add a general M-site coupling term on given MPS sites.
+
+        Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        ijkl : list of int
+            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            we require that they are ordered ascending, ``i < j < k < ...`` and
+            that ``0 <= i < N_sites``.
+            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+        ops_ijkl : list of str
+            Names of the involved operators on sites `i, j, k, ...`.
+        op_string : list of str
+            Names of the operator to be inserted between the operators,
+            e.g., op_string[0] is inserted between `i` and `j`.
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+        """
+        if category is None:
+            category = " ".join(["{op}_{i}".format(op=op, i=chr(ord('i')+m)) for m, op in
+                                 enumerate(ops_ijkl)])
+        ct = self.coupling_terms.get(category, None)
+        if ct is None:
+            self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
+        elif not isinstance(ct, MultiCouplingTerms):
+            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
+            new_ct += ct
+            ct = new_ct
+        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
 
 
 class CouplingMPOModel(CouplingModel,MPOModel):

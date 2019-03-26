@@ -31,6 +31,10 @@ Backwards incompatible changes
   This should not break backwards-compatibility, but if you compiled the cython files, you **need** to remove the 
   old binaries in the source directory. Using ``bash cleanup.sh`` might be helpful to do that, but also remove other files within the repository, so be careful and make a backup beforehand to be on the save side.
   Afterwards recompile with ``bash compile.sh``.
+- Changed structure of :attr:`tenpy.models.model.CouplingModel.onsite_terms` and :attr:`tenpy.models.model.CouplingModel.coupling_terms`:
+  Each of them is now a dictionary with category strings as keys and the newly introduced
+  :class:`tenpy.networks.mps.OnsiteTerms` and :class:`tenpy.networks.mps.CouplingTerms` as values.
+- :meth:`tenpy.models.model.CouplingModel.calc_H_onsite` is deprecated in favor of new methods.
 
 
 Added
@@ -64,7 +68,7 @@ Added
 - :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
 - :class:`tenpy.networks.mps.OnsiteTerm`, :class:`tenpy.networks.mps.CouplingTerm`, :class:`tenpy.networks.mps.MultiCouplingTerm` 
   containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
-
+  This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
 
 
 Changed

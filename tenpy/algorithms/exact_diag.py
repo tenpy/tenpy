@@ -125,7 +125,10 @@ class ExactDiag:
             # H_bond[i] lifes on sites (i-1, i)
             lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
             lR, lRc = self._labels_p[i], self._labels_pconj[i]
-            Hb = H_bond[i].replace_labels(['p0', 'p0*', 'p1', 'p1*'], [lL, lLc, lR, lRc])
+            Hb = H_bond[i]
+            if Hb is None:
+                continue
+            Hb = Hb.replace_labels(['p0', 'p0*', 'p1', 'p1*'], [lL, lLc, lR, lRc])
             if i > 1:
                 Hb = npc.outer(Ids_L[i - 2], Hb)  # need i-2 == j
             if i < L - 1:

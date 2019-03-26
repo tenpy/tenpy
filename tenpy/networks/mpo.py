@@ -361,6 +361,27 @@ class MPOGraph:
         self._ordered_states = None
         self.test_sanity()
 
+    @classmethod
+    def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
+        """Initialize an :class:`MPOGraph` from onsite_terms and coupling_terms.
+
+        Parameters
+        ----------
+        onsite_terms : :class:`~tenpy.networks.mps.OnsiteTerms`
+            Onsite terms to be added to the new :class:`MPOGraph`.
+        coupling_terms :class:`~tenpy.networks.mps.CouplingTerms` | :class:`~tenpy.networks.mps.MultiCouplingTerms`
+            Coupling terms to be added to the new :class:`MPOGraph`.
+        sites : list of :class:`~tenpy.networks.site.Site`
+            Local sites of the Hilbert space.
+        bc : ``'finite' | 'infinite'``
+            MPO boundary conditions.
+        """
+        graph = cls(sites, bc)
+        onsite_terms.add_to_graph(graph)
+        coupling_terms.add_to_graph(graph)
+        graph.add_missing_IdL_IdR()
+        return graph
+
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
         assert len(self.graph) == self.L

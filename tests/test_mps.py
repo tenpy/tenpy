@@ -324,7 +324,7 @@ def test_onsite_terms():
                                {"X_3": strength1[3] + strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
                                {"Y_5": strength2[5]}] # yapf: disable
-    o1._remove_onsite_terms_zeros()
+    o1.remove_zeros()
     assert o1.onsite_terms == [{"X_0": strength1[0]},
                                {"Y_1": strength2[1]},
                                {},
@@ -334,19 +334,34 @@ def test_onsite_terms():
 
 def test_coupling_terms():
     L = 4
-    strength1 = np.arange(0., 4)[:, np.newaxis] + np.arange(0., 0.5, 0.125)[np.newaxis, :]
+    sites = []
+    for i in range(L):
+        s = site.Site(spin_half.leg)
+        s.add_op("X_{i:d}".format(i=i), 2.*np.eye(2))
+        s.add_op("Y_{i:d}".format(i=i), 3.*np.eye(2))
+        sites.append(s)
+    strength1 = np.arange(0., 5)[:, np.newaxis] + np.arange(0., 0.625, 0.125)[np.newaxis, :]
     c1 = mps.CouplingTerms(L)
-    for i, j in [(0, 1), (0, 3), (2, 3), (0, 2)]:
+    for i, j in [(2, 3)]:
+        c1.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
+    assert c1.max_range() == 3 - 2
+    for i, j in [(0, 1), (0, 3), (0, 2)]:
         c1.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
     c1_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.125},
                                   2: {'Y_2': 0.25},
                                   3: {'Y_3': 0.375}}},
               2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
     assert c1.coupling_terms == c1_des
+    c1._test_terms(sites)
+    assert c1.max_range() == 3 - 0
     mc = mps.MultiCouplingTerms(L)
-    for i, j in [(0, 1), (0, 3), (2, 3), (0, 2)]:  # exact same terms as c1
+    for i, j in [(2, 3)]:  # exact same terms as c1
+        mc.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
+    assert mc.max_range() == 3 - 2
+    for i, j in [(0, 1), (0, 3), (0, 2)]:  # exact same terms as c1
         mc.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
     assert mc.coupling_terms == c1_des
+    assert mc.max_range() == 3 - 0
     mc.add_multi_coupling_term(20., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['Id', 'Id'])
     mc.add_multi_coupling_term(30., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['S1', 'S2'])
     mc.add_multi_coupling_term(40., [1, 2, 3], ['X_1', 'Y_2', 'Y_3'], ['Id', 'Id'])
@@ -358,6 +373,7 @@ def test_coupling_terms():
               1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {3: {'Y_3': 40.0}}}}},
               2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
     assert mc.coupling_terms == mc_des
+    mc._test_terms(sites)
     # addition
     c2 = mps.CouplingTerms(L)
     for i, j in [(0, 1), (1, 2)]:
@@ -369,6 +385,7 @@ def test_coupling_terms():
               1: {('X_1', 'Id'): {2: {'Y_2': 1.25}}},
               2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
     assert c1.coupling_terms == c1_des
+    c1._test_terms(sites)
     mc += c1
     mc_des = {0: {('X_0', 'Id'): {1: {'Y_1': 0.375,
                                       ('Y_1', 'Id'): {3: {'Y_3': 20.0}}},
@@ -379,6 +396,15 @@ def test_coupling_terms():
                                       ('Y_2', 'Id'): {3: {'Y_3': 40.0}}}}},
               2: {('X_2', 'Id'): {3: {'Y_3': 4.75}}}} # yapf: disable
     assert mc.coupling_terms == mc_des
+    # coupling accross mps boundary
+    mc.add_multi_coupling_term(50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['JW', 'STR'])
+    assert mc.max_range() == 5 - 1
+    mc._test_terms(sites)
+    # remove the last coupling again
+    mc.add_multi_coupling_term(-50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['JW', 'STR'])
+    mc.remove_zeros()
+    assert mc.coupling_terms == mc_des
+    assert mc.max_range() == 3 - 0
 
 
 if __name__ == "__main__":

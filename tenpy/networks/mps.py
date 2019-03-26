@@ -83,7 +83,7 @@ import scipy.sparse.linalg.eigen.arpack
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, argsort
+from ..tools.misc import to_iterable, argsort, add_with_None_0
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
@@ -3251,6 +3251,106 @@ class OnsiteTerms:
         term = self.onsite_terms[i]
         term[op] = term.get(op, 0) + strength
 
+    def add_to_graph(self, graph):
+        """Add terms from :attr:`onsite_terms` to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`onsite_terms` should be added.
+        """
+        for i, terms in enumerate(self.onsite_terms):
+            for opname, strength in terms.items():
+                graph.add(i, 'IdL', 'IdR', opname, strength)
+
+    def to_Arrays(self, sites):
+        """Convert the :attr:`onsite_terms` into a list of np_conserved Arrays.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites for translating the operator names on the :attr:`L` sites into
+            :class:`~tenpy.linalg.np_conserved.Array`.
+
+        Returns
+        -------
+        onsite_arrays : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Onsite terms represented by `self`. Entry `i` of the list lives on ``sites[i]``.
+        """
+        if len(sites) != self.L:
+            raise ValueError("Incompatible length")
+        res = []
+        for site, terms in zip(sites, self.onsite_terms):
+            H = None
+            for opname, strength in terms.items():
+                H = add_with_None_0(H, strength * site.get_op(opname))
+                # Note: H can change from None to npc Array and can change dtype
+            res.append(H)
+        return res
+
+    def remove_zeros(self, tol_zero=1.e-15):
+        """Remove entries close to 0 from :attr:`onsite_terms`.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Entries in :attr:`onsite_terms` with `strength` < `tol_zero` are considered to be
+            zero and removed.
+        """
+        for term in self.onsite_terms:
+            for op in list(term.keys()):
+                if abs(term[op]) < tol_zero:
+                    del term[op]
+        # done
+
+    def add_to_nn_bond_Arrays(self, H_bond, sites, finite, distribute=(0.5, 0.5)):
+        """Add :attr:`self.onsite_terms` into nearest-neighbor bond arrays.
+
+        Parameters
+        ----------
+        H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
+            The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+            ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
+            Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
+            Modified *in place*.
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites for translating the operator names on the :attr:`L` sites into
+            :class:`~tenpy.linalg.np_conserved.Array`.
+        distribute : (float, float)
+            How to split the onsite terms (in the bulk) into the bond terms to the left
+            (``distribute[0]``) and right (``distribute[1]``).
+        finite : bool
+            Boundary conditions of the MPS, :attr:`MPS.finite`.
+            If finite, we distribute the onsite term of the
+        """
+        dist_L, dist_R = distribute
+        if dist_L + dist_R != 1.:
+            warnings.warn("sum of `distribute` not 1!!!")
+        N_sites = self.L
+        H_onsite = self.to_Arrays(sites)
+        for j in range(N_sites):
+            H_j = H_onsite[j]
+            if H_j is None:
+                continue
+            if finite and j == 0:
+                dist_L, dist_R = 0., 1.
+            elif finite and j == N_sites - 1:
+                dist_L, dist_R = 1., 0.
+            else:
+                dist_L, dist_R = distribute
+            if dist_L != 0.:
+                i = (j - 1) % N_sites
+                Id_i = sites[i].Id
+                H_bond[j] = add_with_None_0(H_bond[j], dist_L * npc.outer(Id_i, H_j))
+            if dist_R != 0.:
+                k = (j + 1) % N_sites
+                Id_k = sites[k].Id
+                H_bond[k] = add_with_None_0(H_bond[k], dist_R * npc.outer(H_j, Id_k))
+        for H in H_bond:
+            if H is not None:
+                H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+        # done
+
     def __iadd__(self, other):
         if not isinstance(other, OnsiteTerms):
             return NotImplemented  # unknown type of other
@@ -3261,20 +3361,12 @@ class OnsiteTerms:
                 self_t[key] = self_t.get(key, 0.) + value
         return self
 
-    def _test_onsite_terms(self, mps_sites):
-        """Check that all given operators exist in the `mps_sites`."""
-        for site, terms in zip(mps_sites, self.onsite_terms):
+    def _test_terms(self, sites):
+        """Check that all given operators exist in the `sites`."""
+        for site, terms in zip(sites, self.onsite_terms):
             for opname, strength in terms.items():
                 if not site.valid_opname(opname):
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
-
-    def _remove_onsite_terms_zeros(self, tol_zero=1.e-15):
-        """remove entries of strength `0` from ``self.onsite_terms``."""
-        for term in self.onsite_terms:
-            for op in list(term.keys()):
-                if abs(term[op]) < tol_zero:
-                    del term[op]
-        # done
 
 
 class CouplingTerms:
@@ -3300,6 +3392,21 @@ class CouplingTerms:
     def __init__(self, L):
         self.L = L
         self.coupling_terms = dict()
+
+    def max_range(self):
+        """Determine the maximal range in :attr:`coupling_terms`.
+
+        Returns
+        -------
+        max_range : int
+            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
+        """
+        max_range = 0
+        for i, d1 in self.coupling_terms.items():
+            for d2 in d1.values():
+                j_max = max(d2.keys())
+                max_range = max(max_range, j_max - i)
+        return max_range
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id'):
         """Add a two-site coupling term on given MPS sites.
@@ -3327,24 +3434,6 @@ class CouplingTerms:
         d2 = d1.setdefault((op_i, op_string), dict())
         d3 = d2.setdefault(j, dict())
         d3[op_j] = d3.get(op_j, 0) + strength
-
-    def __iadd__(self, other):
-        if not isinstance(other, CouplingTerms):
-            return NotImplemented  # unknown type of other
-        if isinstance(other, MultiCouplingTerms):
-            raise ValueError("Can't add MultiCouplingTerms into CouplingTerms")
-        if other.L != self.L:
-            raise ValueError("incompatible lengths")
-        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
-        for i, other_d1 in other.coupling_terms.items():
-            self_d1 = self.coupling_terms.setdefault(i, dict())
-            for opname_i_string, other_d2 in other_d1.items():
-                self_d2 = self_d1.setdefault(opname_i_string, dict())
-                for j, other_d3 in other_d2.items():
-                    self_d3 = self_d2.setdefault(j, dict())
-                    for opname_j, strength in other_d3.items():
-                        self_d3[opname_j] = self_d3.get(opname_j, 0.) + strength
-        return self
 
     def plot_coupling_terms(self, ax, style_map=None):
         """"Plot coupling terms into a given lattice.
@@ -3412,24 +3501,77 @@ class CouplingTerms:
                         ax.plot(x_y[:, 0], x_y[:, 1], **style)
         # done
 
-    def _test_coupling_terms(self, mps_sites):
-        """Check the format of self.coupling_terms"""
-        L = self.L
+    def add_to_graph(self, graph):
+        """Add terms from :attr:`coupling_terms` to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`coupling_terms` should be added.
+        """
+        # structure of coupling terms:
+        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
         for i, d1 in self.coupling_terms.items():
-            site_i = mps_sites[i]
-            for (op_i, opstring), d2 in d1.items():
-                if not site_i.valid_opname(op_i):
-                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
+            for (opname_i, op_string), d2 in d1.items():
+                label = (i, opname_i, op_string)
+                graph.add(i, 'IdL', label, opname_i, 1.)
                 for j, d3 in d2.items():
-                    if not i < j:
-                        raise ValueError("wrong order of indices in coupling terms")
-                    for op_j in d3.keys():
-                        if not mps_sites[j % L].valid_opname(op_j):
-                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
+                    label_j = graph.add_string(i, j, label, op_string)
+                    for opname_j, strength in d3.items():
+                        graph.add(j, label_j, 'IdR', opname_j, strength)
         # done
 
-    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15):
-        """remove entries of strength `0` from ``self.coupling_terms``."""
+    def to_nn_bond_Arrays(self, sites):
+        """Convert the :attr:`coupling_terms` into Arrays on nearest neighbor bonds.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites for translating the operator names on the :attr:`L` sites into
+            :class:`~tenpy.linalg.np_conserved.Array`.
+
+        Returns
+        -------
+        H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
+            The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+            ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
+            Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
+        """
+        N_sites = self.L
+        if len(sites) != N_sites:
+            raise ValueError("incompatible length")
+        H_bond = [None] * N_sites
+        for i, d1 in self.coupling_terms.items():
+            j = (i + 1) % N_sites
+            site_i = sites[i]
+            site_j = sites[j]
+            H = H_bond[j]
+            for (op1, op_str), d2 in d1.items():
+                for j2, d3 in d2.items():
+                    if isinstance(j2, tuple):
+                        # This should only happen in a MultiSiteCoupling model
+                        raise ValueError("MultiCouplingTerms: can't generate H_bond")
+                    # i, j in coupling_terms are defined such that we expect j2 = i + 1
+                    if j2 != i + 1:
+                        msg = "Can't give nearest neighbor H_bond for long-range {i:d}-{j:d}"
+                        raise ValueError(msg.format(i=i, j=j2))
+                    for op2, strength in d3.items():
+                        H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
+                        H = add_with_None_0(H, H_add)
+            if H is not None:
+                H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+            H_bond[j] = H
+        return H_bond
+
+    def remove_zeros(self, tol_zero=1.e-15):
+        """Remove entries close to 0 from :attr:`coupling_terms`.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
+            zero and removed.
+        """
         for d1 in self.coupling_terms.values():
             # d1 = ``{('opname_i', 'opname_string'): {j: {'opname_j': strength}}}``
             for op_i_op_str, d2 in list(d1.items()):
@@ -3441,6 +3583,40 @@ class CouplingTerms:
                         del d2[j]
                 if len(d2) == 0:
                     del d1[op_i_op_str]
+        # done
+
+    def __iadd__(self, other):
+        if not isinstance(other, CouplingTerms):
+            return NotImplemented  # unknown type of other
+        if isinstance(other, MultiCouplingTerms):
+            raise ValueError("Can't add MultiCouplingTerms into CouplingTerms")
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
+        for i, other_d1 in other.coupling_terms.items():
+            self_d1 = self.coupling_terms.setdefault(i, dict())
+            for opname_i_string, other_d2 in other_d1.items():
+                self_d2 = self_d1.setdefault(opname_i_string, dict())
+                for j, other_d3 in other_d2.items():
+                    self_d3 = self_d2.setdefault(j, dict())
+                    for opname_j, strength in other_d3.items():
+                        self_d3[opname_j] = self_d3.get(opname_j, 0.) + strength
+        return self
+
+    def _test_terms(self, sites):
+        """Check the format of self.coupling_terms"""
+        L = self.L
+        for i, d1 in self.coupling_terms.items():
+            site_i = sites[i]
+            for (op_i, opstring), d2 in d1.items():
+                if not site_i.valid_opname(op_i):
+                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                for j, d3 in d2.items():
+                    if not i < j:
+                        raise ValueError("wrong order of indices in coupling terms")
+                    for op_j in d3.keys():
+                        if not sites[j % L].valid_opname(op_j):
+                            raise ValueError("Operator {op!r} not in site".format(op=op_j))
         # done
 
 
@@ -3500,6 +3676,8 @@ class MultiCouplingTerms(CouplingTerms):
             Names of the operator to be inserted between the operators,
             e.g., op_string[0] is inserted between `i` and `j`.
         """
+        if len(ijkl) < 2:
+            raise ValueError("Need to act on at least 2 sites. Use onsite terms!")
         assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
         for i, j in zip(ijkl, ijkl[1:]):
             if not i < j:
@@ -3519,15 +3697,98 @@ class MultiCouplingTerms(CouplingTerms):
         op = ops_ijkl[-1]
         d1[op] = d1.get(op, 0) + strength
 
+    def max_range(self):
+        """Determine the maximal range in :attr:`coupling_terms`.
+
+        Returns
+        -------
+        max_range : int
+            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
+        """
+        max_range = 0
+        for i, d1 in self.coupling_terms.items():
+            max_range = max(max_range, self._max_range(i, d1))
+        return max_range
+
+    def add_to_graph(self, graph, _i=None, _d1=None, _label_left=None):
+        """Add terms from :attr:`coupling_terms` to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`coupling_terms` should be added.
+        _i, _d1, _label_left : None
+            Should not be given; only needed for recursion.
+        """
+        # nested structure of coupling_terms:
+        # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
+        if _i is None:  # beginning of recursion
+            for i, d1 in self.coupling_terms.items():
+                self.add_to_graph(graph, i, d1, 'IdL')
+        else:
+            for key, d2 in _d1.items():
+                if isinstance(key, tuple): # further nesting
+                    op_i, op_string_ij = key
+                    if isinstance(_label_left, str) and _label_left == 'IdL':
+                        label = (_i, op_i, op_string_ij)
+                    else:
+                        label = _label_left + (_i, op_i, op_string_ij)
+                    graph.add(_i, _label_left, label, op_i, 1.)
+                    for j, d3 in d2.items():
+                        label_j = graph.add_string(_i, j, label, op_string_ij)
+                        self.add_to_graph(graph, j, d3, label_j)
+                else:  # maximal nesting reached: exit recursion
+                    # i is actually the `l`
+                    op_i, strength = key, d2
+                    graph.add(_i, _label_left, 'IdR', op_i, strength)
+        # done
+    def remove_zeros(self, tol_zero=1.e-15, _d0=None):
+        """Remove entries close to 0 from :attr:`coupling_terms`.
+
+        Parameters
+        ----------
+        tol_zero : float
+            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
+            zero and removed.
+        _d0 : None
+            Should not be given; only needed for recursion.
+        """
+        if _d0 is None:
+            _d0 = self.coupling_terms
+        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
+        for i, d1 in list(_d0.items()):
+            for key, d2 in list(d1.items()):
+                if isinstance(key, tuple):
+                    self.remove_zeros(tol_zero, d2)  # recursive!
+                    if len(d2) == 0:
+                        del d1[key]
+                else:
+                    # key is opname_j, d2 is strength
+                    if abs(d2) < tol_zero:
+                        del d1[key]
+            if len(d1) == 0:
+                del _d0[i]
+        # done
+
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):
             return NotImplemented  # unknown type of other
-        if isinstance(other, MultiCouplingTerms):
-            raise ValueError("Can't add MultiCouplingTerms into CouplingTerms")
         if other.L != self.L:
             raise ValueError("incompatible lengths")
         self._iadd_multi_coupling_terms(self.coupling_terms, other.coupling_terms)
         return self
+
+    def _max_range(self, i, d1):
+        max_range = 0
+        for key, d2 in d1.items():
+            if isinstance(key, tuple):
+                # further couplings: d2 is dictionary
+                j_max = max(d2.keys())
+                max_range = max(max_range, j_max - i)
+                for d3 in d2.values():
+                    max_range = max(max_range, self._max_range(i, d3))
+            # else: d2 is strength, last coupling reached
+        return max_range
 
     def _iadd_multi_coupling_terms(self, self_d0=None, other_d0=None):
         # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
@@ -3549,7 +3810,7 @@ class MultiCouplingTerms(CouplingTerms):
                     self_d1[opname_j] = self_d1.get(opname_j, 0.) + strength
         # done
 
-    def _test_coupling_terms(self, sites, d0=None):
+    def _test_terms(self, sites, d0=None):
         N_sites = len(sites)
         if d0 is None:
             d0 = self.coupling_terms
@@ -3560,30 +3821,10 @@ class MultiCouplingTerms(CouplingTerms):
                     op_i, opstring_ij = key
                     if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                    self._test_coupling_terms(sites, d2)  # recursive!
+                    self._test_terms(sites, d2)  # recursive!
                 else:  # last term of the coupling
                     op_i = key
                     if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
         # done
-
-    def _remove_coupling_terms_zeros(self, tol_zero=1.e-15, d0=None):
-        """remove entries of strength `0` from ``self.coupling_terms``."""
-        if d0 is None:
-            d0 = self.coupling_terms
-        # d0 = ``{i: {('opname_i', 'opname_string_ij'): ... {j: {'opname_j': strength}}}``
-        for i, d1 in list(d0.items()):
-            for key, d2 in list(d1.items()):
-                if isinstance(key, tuple):
-                    self._remove_coupling_terms_zeros(tol_zero, d2)  # recursive!
-                    if len(d2) == 0:
-                        del d1[key]
-                else:
-                    # key is opname_j, d2 is strength
-                    if abs(d2) < tol_zero:
-                        del d1[key]
-            if len(d1) == 0:
-                del d0[i]
-        # done
-
 
