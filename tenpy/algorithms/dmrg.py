@@ -416,10 +416,10 @@ class Engine(NpcLinearOperator):
         N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
         min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
         max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
-        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-5, 'DMRG')
-        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-3, 'DMRG')
+        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-8, 'DMRG')
+        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-5, 'DMRG')
         max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
-        norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-3, 'DMRG')
+        norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-5, 'DMRG')
         if not self.finite:
             update_env = get_parameter(DMRG_params, 'update_env', N_sweeps_check // 2, 'DMRG')
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
