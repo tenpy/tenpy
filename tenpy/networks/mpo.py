@@ -642,10 +642,12 @@ class MPOEnvironment(MPSEnvironment):
         Should have 'IdL' and 'IdR' set on the first and last bond.
     ket : :class:`~tenpy.networks.mpo.MPS`
         The MPS on which `H` acts. May be identical with `bra`.
-    firstLP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part. If ``None``, build trivial one.
-    rightRP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part. If ``None``, build trivial one.
+    init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very left part ``LP``. If ``None``, build trivial one with
+        :meth:`~tenpy.networks.mps.MPS.init_LP`.
+    init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very right part ``RP``. If ``None``, build trivial one with
+        :meth:`~tenpy.networks.mps.MPS.init_RP`.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -657,9 +659,11 @@ class MPOEnvironment(MPSEnvironment):
         The MPO sandwiched between `bra` and `ket`.
     """
 
-    def __init__(self, bra, H, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
+    def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
+        if ket is not bra:
+            ket._gauge_compatible_vL_vR(bra) # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.H = H
@@ -670,27 +674,12 @@ class MPOEnvironment(MPSEnvironment):
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
-        if firstLP is None:
-            # Build trivial verly first LP
-            leg_bra = bra.get_B(0).get_leg('vL')
-            leg_mpo = H.get_W(0).get_leg('wL').conj()
-            leg_ket = ket.get_B(0).get_leg('vL').conj()
-            leg_ket.test_contractible(leg_bra)
-            firstLP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
-            # should work for both finite and segment bc
-            firstLP[:, H.IdL[0], :] = npc.diag(1., leg_bra, dtype=self.dtype)
-            firstLP.iset_leg_labels(['vR*', 'wR', 'vR'])
-        self.set_LP(0, firstLP, age=age_LP)
-        if lastRP is None:
-            # Build trivial verly last RP
-            leg_bra = bra.get_B(L - 1).get_leg('vR')
-            leg_mpo = H.get_W(L - 1).get_leg('wR').conj()
-            leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
-            leg_ket.test_contractible(leg_bra)
-            lastRP = npc.zeros([leg_bra, leg_mpo, leg_ket], dtype=self.dtype)
-            lastRP[:, H.IdR[L], :] = npc.diag(1., leg_bra, dtype=self.dtype)
-            lastRP.iset_leg_labels(['vL*', 'wL', 'vL'])
-        self.set_RP(L - 1, lastRP, age=age_RP)
+        if init_LP is None:
+            init_LP = self.ket.init_LP(0, bra, H)
+        self.set_LP(0, init_LP, age=age_LP)
+        if init_RP is None:
+            init_RP = self.ket.init_RP(L - 1, bra, H)
+        self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
     def test_sanity(self):

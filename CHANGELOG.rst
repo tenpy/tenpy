@@ -69,6 +69,8 @@ Added
 - :class:`tenpy.networks.mps.OnsiteTerm`, :class:`tenpy.networks.mps.CouplingTerm`, :class:`tenpy.networks.mps.MultiCouplingTerm` 
   containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
   This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+- :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
+  of an Environment.
 
 
 Changed
@@ -112,6 +114,7 @@ Changed
   :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 - The way the labels of npc Arrays are stored internally changed to a simple list with None entries.
   There is a deprecated propery setter yielding a dictionary with the labels.
+- renamed `first_LP` and `last_RP` arguments of :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment` to `init_LP` and `init_RP`.
 
 Fixed
 ^^^^^
