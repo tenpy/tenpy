@@ -756,20 +756,6 @@ class MPOEnvironment(MPSEnvironment):
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything right of site `i`,
             with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
-            It looks like
-
-
-       RP_i =     --M[i+1]--  ...  --->M[i-2]-->.
-                      |                     |      |
-                 -->W[i+1]--->  ...  --->W[i-2]-->RP[-1]
-                      |                     |      |
-                      ^                     ^      |
-                      |                     |      |
-                 -->N[i+1]*-->  ... -->N[i-2]*-->.
-
-
-        where the M's and the N's are in the 'B' form
-
         """
         # actually same as MPSEnvironment, just updated the labels in the doc string.
         return super().get_RP(i, store)

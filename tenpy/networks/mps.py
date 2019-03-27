@@ -2205,7 +2205,8 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation during permutation,
+            see :func:`~tenpy.algorithms.truncation.truncate`.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -2257,7 +2258,7 @@ class MPS:
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("self.norm_test() = {0!s} ==> canonicalize".format(self.norm_test()))
+            warnings.warn("psi_t.norm_test() = {0!s} ==> canonicalize".format(psi_t.norm_test()))
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.

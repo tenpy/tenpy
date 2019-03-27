@@ -178,7 +178,7 @@ If you have the python package manager ``pip``, all of these can be installed wi
 
 Updating to a new version
 =========================
-**Before** you update, take a look at the :doc:`/CHANGELOG.rst`, which lists the changes, fixes, and new stuff. 
+**Before** you update, take a look at the :doc:`/changelog`, which lists the changes, fixes, and new stuff. 
 Most importantly, it has a section on *backwards incompatible changes* (i.e., changes which may break your
 existing code) along with information how to fix it. Of course, we try to avoid introducing such incompatible changes,
 but sometimes, there's no way around them.

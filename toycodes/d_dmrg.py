@@ -33,7 +33,10 @@ class SimpleHeff(scipy.sparse.linalg.LinearOperator):
         self.dtype = W1.dtype
 
     def _matvec(self, theta):
-        """calculate |theta'> = H_eff |theta>"""
+        """Calculate |theta'> = H_eff |theta>.
+
+        This function is used by :func:scipy.sparse.linalg.eigen.arpack.eigsh` to diagonalize
+        the effective Hamiltonian with a Lanczos method, withouth generating the full matrix."""
         x = np.reshape(theta, self.theta_shape)  # vL i j vR
         x = np.tensordot(self.LP, x, axes=(2, 0))  # vL wL* [vL*], [vL] i j vR
         x = np.tensordot(x, self.W1, axes=([1, 2], [0, 3]))  # vL [wL*] [i] j vR, [wL] wC i [i*]
