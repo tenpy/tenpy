@@ -797,15 +797,16 @@ class MPS:
             If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdL[i]``,
             with labels ``'vR*', 'wR', 'vR'``.
         """
-        leg_ket = self._B[i].get_leg('vL')
+        i0 = self._to_valid_index(i)
+        leg_ket = self._B[i0].get_leg('vL')
         if bra is not None:
-            leg_bra = bra._B[i].get_leg('vL')
+            leg_bra = bra._B[i0].get_leg('vL')
             leg_ket.test_equal(leg_bra)
         init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
         init_LP.iset_leg_labels(['vR*', 'vR'])
         if mpo is not None:
             leg_mpo = mpo.get_W(i).get_leg('wL').conj()
-            IdL = mpo.IdL[i]
+            IdL = mpo.get_IdL(i)
             init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
         return init_LP
 
@@ -830,15 +831,16 @@ class MPS:
             If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdR[i]``,
             with labels ``'vL*', 'wL', 'vL'``.
         """
-        leg_ket = self._B[i].get_leg('vR')
+        i0 = self._to_valid_index(i)
+        leg_ket = self._B[i0].get_leg('vR')
         if bra is not None:
-            leg_bra = bra._B[i].get_leg('vR')
+            leg_bra = bra._B[i0].get_leg('vR')
             leg_ket.test_equal(leg_bra)
         init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
         init_RP.iset_leg_labels(['vL*', 'vL'])
         if mpo is not None:
             leg_mpo = mpo.get_W(i).get_leg('wR').conj()
-            IdR = mpo.IdR[i+1]
+            IdR = mpo.get_IdR(i)
             init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
         return init_RP
 

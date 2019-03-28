@@ -42,6 +42,7 @@ Added
 - :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
 - :meth:`tenpy.networks.mps.MPS.expectation_value_term`, :meth:`tenpy.networks.mps.MPS.expectation_value_terms_sum` and
   :meth:`tenpy.networks.mps.MPS.expectation_value_multi_sites` for expectation values of terms.
+- :meth:`tenpy.networks.mpo.MPO.expectation_value`.
 - :meth:`tenpy.linalg.np_conserved.Array.extend` and :meth:`tenpy.linalg.charges.LegCharge.extend`,
   allowing to extend an Array with zeros.
 - DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.

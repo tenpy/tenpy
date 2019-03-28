@@ -38,6 +38,8 @@ i.e. between sites ``i-1`` and ``i``.
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
+import warnings
+
 from ..linalg import np_conserved as npc
 from .site import group_sites, Site
 from ..tools.string import vert_join
@@ -268,6 +270,81 @@ class MPO:
         self._W = Ws
         self.sites = grouped_sites
         self.grouped = self.grouped * n
+
+    def expectation_value(self, psi, tol=1.e-10, max_range=100):
+        """Calculate ``<psi|self|psi>/<psi|psi>``.
+
+        For a finite MPS, simply contract the network ``<psi|self|psi>``.
+        For an infinite MPS, it assumes that `self` is the a of terms, with :attr:`IdL`
+        and :attr:`IdR` defined on each site.  Under this assumption,
+        it calculates the expectation value of terms with the left-most non-trivial
+        operator inside the MPO unit cell and returns the average value per site.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            State for which the expectation value should be taken.
+        tol : float
+            Ignored for finite `psi`.
+            For infinite MPO containing exponentially decaying long-range terms, stop evaluating
+            further terms if the terms in `LP` have norm < `tol`.
+        max_range : int
+            Ignored for finite `psi`.
+            Contract at most ``self.L * max_range`` sites, even if `tol` is not reached.
+            In that case, issue a warning.
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value of `self` with respect to the state `psi`.
+            For an infinite MPS: the density per site.
+        """
+        if psi.finite:
+            return MPOEnvironment(psi, H, psi).full_contraction(0)
+        L = self.L
+        LP0 = psi.init_LP(0, mpo=self)
+        masks_L_no_IdL = []
+        masks_R_no_IdRL = []
+        for i, W in enumerate(self._W):
+            mask_L = np.ones(W.get_leg('wL').ind_len, np.bool_)
+            mask_L[self.get_IdL(i)] = False
+            masks_L_no_IdL.append(mask_L)
+            mask_R = np.ones(W.get_leg('wR').ind_len, np.bool_)
+            mask_R[self.get_IdL(i+1)] = False
+            mask_R[self.get_IdR(i)] = False
+            masks_R_no_IdRL.append(mask_R)
+        # contract first site with theta
+        theta = psi.get_theta(0, 1)
+        LP = npc.tensordot(LP0, theta, axes=['vR', 'vL'])
+        LP = npc.tensordot(LP, self._W[0], axes=[['wR', 'p0'], ['wL', 'p*']])
+        LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
+        for i in range(1, max_range*L):
+            i0 = i % L
+            W = self._W[i0]
+            if i >= L:
+                # have one full unit cell: don't use further terms starting with IdL
+                mask_L = masks_L_no_IdL[i0]
+                LP.iproject(mask_L, 'wR')
+                W = W.copy()
+                W.iproject(mask_L, 'wL')
+            B = psi.get_B(i, form='B')
+            LP = npc.tensordot(LP, B, axes=['vR', 'vL'])
+            LP = npc.tensordot(LP, W, axes=[['wR', 'p'], ['wL', 'p*']])
+            LP = npc.tensordot(LP, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
+
+            if i >= L:
+                RP = psi.init_RP(i, mpo=self)
+                current_value = npc.inner(LP, RP,
+                                          axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']],
+                                          do_conj=False)
+                LP_converged = LP.copy()
+                LP_converged.iproject(masks_R_no_IdRL[i0], 'wR')
+                if npc.norm(LP_converged) < tol:
+                    break  # no more terms left
+        else:  # no break
+            msg = "Tolerance {0:.2e} not reached with max_range={1:d}".format(tol, max_range)
+            warnings.warn(msg, stacklevel=2)
+        return current_value / L
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""

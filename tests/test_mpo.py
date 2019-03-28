@@ -46,18 +46,22 @@ def test_MPO():
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
             print(bc, ", L =", L)
-            grid = [[s.Id, s.Sp, s.Sz], [None, None, s.Sm], [None, None, s.Id]]
-            legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, [0]])
+            grid = [[s.Id, s.Sp, s.Sm, s.Sz],
+                    [None, None, None, s.Sm],
+                    [None, None, None, s.Sp],
+                    [None, None, None, s.Id]]
+            legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()])
             W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws = [W] * L
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]
-                Ws[-1] = Ws[-1][:, 2:3, :, :]
+                Ws[-1] = Ws[-1][:, 3:4, :, :]
             H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
             H.test_sanity()
             print(H.dim)
             print(H.chi)
+            check_hermitian(H)
         if L == 4:
             H2 = H.group_sites(n=2)
             H2.test_sanity()
@@ -104,3 +108,39 @@ def test_MPOEnvironment():
         if E_old is not None:
             assert (abs(E - E_old) < 1.e-14)
         E_old = E
+
+
+def test_MPO_expectation_value():
+    s = spin_half
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
+    psi1.test_sanity()
+    ot = mps.OnsiteTerms(4)
+    ot.add_onsite_term(0.1, 0, 'Sz') # -> 0.5
+    ot.add_onsite_term(0.2, 3, 'Sz') # -> 0.
+    ct = mps.CouplingTerms(4) # note: ct.L != psi1.L
+    ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz') # -> 0.
+    ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz') # -> 1.5*(-0.25)
+    ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz') # -> 2.5*0.25
+    H = mpo.MPOGraph.from_terms(ot, ct, [s]*4, 'infinite').build_MPO()
+    ev = H.expectation_value(psi1)
+    desired_ev = (0.1*0.5 + 0.2*0. + 1.*0. + 1.5*-0.25 + 2.5 * 0.25) / H.L
+    assert abs(ev - desired_ev) < 1.e-8
+    grid = [[s.Id, s.Sz, 3*s.Sz],
+            [None, 0.1*s.Id, s.Sz],
+            [None, None, s.Id]]
+    L = 1
+    exp_dec_H = mpo.MPO.from_grids([s]*L, [grid]*L, bc='infinite', IdL=0, IdR=2)
+    ev = exp_dec_H.expectation_value(psi1)
+    desired_ev = 3*0.5 + 0.25*0.1**(4-1) + 0.25*0.1**(6-1) + 0.25 * 0.1**(10-1)  # values > 1.e-15
+    assert abs(ev - desired_ev) < 1.e-15
+    L = 3
+    exp_dec_H = mpo.MPO.from_grids([s]*L, [grid]*L, bc='infinite', IdL=0, IdR=2)
+    ev = exp_dec_H.expectation_value(psi1)
+    desired_ev = (desired_ev + # first site
+                  3*0. - 0.25 * 0.1**(3-1-1)  +  # second site
+                  3*0. - 0.25 * 0.1**(5-2-1)) / 3.
+    print("ev = ", ev, "desired", desired_ev)
+    assert abs(ev - desired_ev) < 1.e-14
+
+if __name__ == "__main__":
+    test_MPO_expectation_value()

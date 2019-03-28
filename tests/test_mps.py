@@ -286,7 +286,7 @@ def test_expectation_value_term():
     # over the infinite MPS boundary
     ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 4)]) # should be zero
     assert abs(ev) == 0.
-    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 6)]) # should be zero
+    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 6)])
     assert abs(ev) == 1.
     # terms_sum
     pref = np.random.random([5])
@@ -331,6 +331,7 @@ def test_onsite_terms():
                                {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
                                {"Y_5": strength2[5]}] # yapf: disable
+
 
 def test_coupling_terms():
     L = 4

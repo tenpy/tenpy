@@ -77,8 +77,10 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
+        Edmrg3 = M.H_MPO.expectation_value(psi)
         assert abs((Edmrg - Eexact) / Eexact) < 1.e-10
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.e-10, np.max(psi.norm_test()))
+        assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.e-10, np.max(psi.norm_test()))
 
 
 @attr('slow')
