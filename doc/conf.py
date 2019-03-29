@@ -31,14 +31,14 @@ if not sys.version_info >= (3, 5):
 try:
     import tenpy.version
 except:
-    print("ERROR: can't import tenpy. Make sure you set $PYTHONPATH correctly!")
+    print("ERROR: can't import tenpy.")
     sys.exit(1)
 
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #
-# needs_sphinx = '1.0'
+needs_sphinx = '1.7'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -105,10 +105,10 @@ pygments_style = 'sphinx'
 
 # default options for autodoc
 autodoc_default_options = {
-    'member-order': 'bysource',
     'inherited-members': True,  # inherit methods and attributes from base classes
     #  'special-members': '__init__',
 }
+autodoc_member_order = 'bysource'
 
 # Avoid a bunch of warnings when using properties with doc strings in classes.
 # see https://github.com/phn/pytpm/issues/3#issuecomment-12133978

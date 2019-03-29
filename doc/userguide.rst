@@ -3,7 +3,7 @@ User Guide
 
 First a short warning: the term 'user guide' might be a bit misleading: 
 this part of the documentation simply covers everything but what is documented directly in the source - 
-the latter can be found in the :doc:`reference <reference/tenpy>`.
+the latter can be found in the :doc:`reference`.
 
 Library overview
 ----------------

@@ -7,7 +7,7 @@ Contents
    :maxdepth: 3
 
    userguide
-   reference/tenpy
+   reference
 
 
 Indices and tables
