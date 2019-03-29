@@ -897,7 +897,7 @@ class CouplingModel(Model):
 
         .. warning ::
             For the sign of `phase` it is important that you consistently use the creation
-            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling".
+            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling`.
 
         Parameters
         ----------

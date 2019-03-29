@@ -9,6 +9,7 @@ All other modules in this folder contain model classes derived from these base c
 .. rubric:: Submodules
 
 .. autosummary::
+    :toctree: .
 
     lattice
     model
@@ -16,6 +17,7 @@ All other modules in this folder contain model classes derived from these base c
 .. rubric:: Specific models
 
 .. autosummary::
+    :toctree: .
 
     tf_ising
     xxz_chain
