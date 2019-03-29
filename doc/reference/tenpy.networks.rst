@@ -1,20 +1,14 @@
-tenpy.networks package
-======================
+networks
+========
 
-Submodules
-----------
+- full name: tenpy.networks
+- parent module: :mod:`tenpy`
+- type: module
 
-.. toctree::
+.. currentmodule:: tenpy.networks
 
-   tenpy.networks.mpo
-   tenpy.networks.mps
-   tenpy.networks.purification_mps
-   tenpy.networks.site
 
-Module contents
----------------
 
+.. rubric:: Module description
 .. automodule:: tenpy.networks
-    :members:
-    :undoc-members:
     :show-inheritance:

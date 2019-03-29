@@ -1,23 +1,14 @@
-tenpy.tools package
-===================
+tools
+=====
 
-Submodules
-----------
+- full name: tenpy.tools
+- parent module: :mod:`tenpy`
+- type: module
 
-.. toctree::
+.. currentmodule:: tenpy.tools
 
-   tenpy.tools.fit
-   tenpy.tools.math
-   tenpy.tools.misc
-   tenpy.tools.optimization
-   tenpy.tools.params
-   tenpy.tools.process
-   tenpy.tools.string
 
-Module contents
----------------
 
+.. rubric:: Module description
 .. automodule:: tenpy.tools
-    :members:
-    :undoc-members:
     :show-inheritance:

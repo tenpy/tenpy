@@ -1,23 +1,14 @@
-tenpy.algorithms package
-========================
+algorithms
+==========
 
-Submodules
-----------
+- full name: tenpy.algorithms
+- parent module: :mod:`tenpy`
+- type: module
 
-.. toctree::
+.. currentmodule:: tenpy.algorithms
 
-   tenpy.algorithms.dmrg
-   tenpy.algorithms.exact_diag
-   tenpy.algorithms.network_contractor
-   tenpy.algorithms.purification_tebd
-   tenpy.algorithms.tdvp
-   tenpy.algorithms.tebd
-   tenpy.algorithms.truncation
 
-Module contents
----------------
 
+.. rubric:: Module description
 .. automodule:: tenpy.algorithms
-    :members:
-    :undoc-members:
     :show-inheritance:

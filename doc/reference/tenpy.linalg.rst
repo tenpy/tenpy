@@ -1,22 +1,14 @@
-tenpy.linalg package
-====================
+linalg
+======
 
-Submodules
-----------
+- full name: tenpy.linalg
+- parent module: :mod:`tenpy`
+- type: module
 
-.. toctree::
+.. currentmodule:: tenpy.linalg
 
-   tenpy.linalg.charges
-   tenpy.linalg.lanczos
-   tenpy.linalg.np_conserved
-   tenpy.linalg.random_matrix
-   tenpy.linalg.sparse
-   tenpy.linalg.svd_robust
 
-Module contents
----------------
 
+.. rubric:: Module description
 .. automodule:: tenpy.linalg
-    :members:
-    :undoc-members:
     :show-inheritance:
