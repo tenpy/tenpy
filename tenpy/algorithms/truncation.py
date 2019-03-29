@@ -1,4 +1,4 @@
-r"""Truncation of Schmidt values, e.g. for TEBD.
+r"""Truncation of Schmidt values.
 
 Often, it is necessary to truncate the number of states on a virtual bond of an MPS,
 keeping only the state with the largest Schmidt values.

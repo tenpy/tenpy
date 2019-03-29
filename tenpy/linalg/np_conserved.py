@@ -17,27 +17,64 @@ it has to use/combine - this is the basis for the speed-up.
 Overview
 ^^^^^^^^
 
-Classes:
-:class:`ChargeInfo`, :class:`LegCharge`, :class:`LegPipe`, :class:`Array`
+.. rubric:: Classes
 
-Array creation:
-:meth:`Array.from_ndarray_trivial`, :meth:`Array.from_ndarray`, :meth:`Array.from_func`,
-:meth:`Array.from_func_square`, :func:`zeros`, :func:`eye_like`, :func:`diag`,
+.. autosummary::
+    Array
+    ~tenpy.linalg.charges.ChargeInfo
+    ~tenpy.linalg.charges.LegCharge
+    ~tenpy.linalg.charges.LegPipe
 
-Concatenation:
-:func:`concatenate`, :func:`grid_concat`, :func:`grid_outer`
+.. rubric :: Array creation
 
-Detecting charges of flat arrays:
-:func:`detect_qtotal`, :func:`detect_legcharge`, :func:`detect_grid_outer_legcharge`
+.. autosummary::
+    Array.from_ndarray_trivial
+    Array.from_ndarray
+    Array.from_func
+    Array.from_func_square
+    zeros
+    eye_like
+    diag
 
-Contraction of some legs:
-:func:`tensordot`, :func:`outer`, :func:`inner`, :func:`trace`
+.. rubric:: Concatenation
 
-Linear algebra:
-:func:`svd`, :func:`pinv`, :func:`norm`, :func:`qr`, :func:`expm`
+.. autosummary::
+    concatenate
+    grid_concat
+    grid_outer
 
-Eigen systems:
-:func:`eigh`, :func:`eig`, :func:`eigvalsh`, :func:`eigvals`, :func:`speigs`
+.. rubric:: Detecting charges of flat arrays
+
+.. autosummary::
+    detect_qtotal
+    detect_legcharge
+    detect_grid_outer_legcharge
+
+.. rubric:: Contraction of some legs
+
+.. autosummary::
+    tensordot
+    outer
+    inner
+    trace
+
+.. rubric:: Linear algebra
+
+.. autosummary::
+    svd
+    pinv
+    norm
+    qr
+    expm
+
+.. rubric:: Eigen systems
+
+.. autosummary::
+    eigh
+    eig
+    eigvalsh
+    eigvals
+    speigs
 
 """
 # Copyright 2018 TeNPy Developers

@@ -7,6 +7,19 @@ charge conservervation in the context of tensor networks.
 Relevant contents of :mod:`~tenpy.linalg.charges`
 are imported to :mod:`~tenpy.linalg.np_conserved`,
 so you propably won't need to import `charges` directly.
+
+.. rubric:: Submodules
+
+.. autosummary::
+    :toctree: .
+
+    np_conserved
+    charges
+    svd_robust
+    random_matrix
+    sparse
+    lanczos
+
 """
 # Copyright 2018 TeNPy Developers
 
