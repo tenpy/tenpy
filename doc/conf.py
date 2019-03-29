@@ -105,7 +105,7 @@ pygments_style = 'sphinx'
 
 # default options for autodoc
 autodoc_default_options = {
-    'inherited-members': True,  # inherit methods and attributes from base classes
+    #  'inherited-members': True,  # inherit methods and attributes from base classes
     #  'special-members': '__init__',
 }
 autodoc_member_order = 'bysource'
