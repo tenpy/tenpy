@@ -251,7 +251,7 @@ def test_group():
     psi2.group_sites(n=2)
     assert psi2.L == psi1.L//2
     psi2.test_sanity()
-    psi2.group_split()
+    psi2.group_split({'chi_max': 2**3})
     psi2.test_sanity()
     ov = psi1.overlap(psi2)
     assert abs(1.-ov) < 1.e-14
@@ -259,7 +259,7 @@ def test_group():
     print("group n=4")
     psi4.group_sites(n=4)
     psi4.test_sanity()
-    psi4.group_split()
+    psi4.group_split({'chi_max': 2**3})
     psi4.test_sanity()
     ov = psi1.overlap(psi4)
     assert abs(1.-ov) < 1.e-14

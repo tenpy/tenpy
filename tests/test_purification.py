@@ -38,6 +38,7 @@ def test_purification_mps():
             # test that grouping sites works
             print('group & split sites')
             psi.group_sites(2)
+            psi.test_sanity()
             psi.group_split()
             C = psi.correlation_function('Sz', 'Sz')
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)

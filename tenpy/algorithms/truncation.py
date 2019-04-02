@@ -138,7 +138,7 @@ def truncate(S, trunc_par):
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
-        All parameters default to ``None``, in which case the constraint is ignored.
+        A value ``None`` indicates that the constraint should be ignored.
 
         ============ ====== ====================================================
         key          type   constraint

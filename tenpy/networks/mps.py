@@ -896,6 +896,7 @@ class MPS:
         ----------
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
 
         Returns
         -------
@@ -907,6 +908,8 @@ class MPS:
         :meth:`group_sites` : Should have been used before to combine sites.
         """
         self.convert_form('B')
+        if self.L > 1:
+            trunc_par.setdefault('chi_max', max(self.chi))
         n0 = self.sites[0].n_sites
         sites = []
         Bs = []
@@ -2147,12 +2150,14 @@ class MPS:
             Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
 
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
         """
+        trunc_par.setdefault('chi_max', max(self.chi))
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
         if swap_op == 'auto':
             # get sign for Fermions.
@@ -2212,6 +2217,7 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
 
@@ -2225,6 +2231,7 @@ class MPS:
         # => more or less an 'insertion' sort algorithm.
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
+        trunc_par.setdefault('chi_max', max(self.chi))
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -2273,8 +2280,8 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation during permutation,
-            see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -2302,6 +2309,8 @@ class MPS:
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
+        trunc_par.setdefault('chi_max', max(self.chi))
+        trunc_par.setdefault('verbose', verbose)
 
         if isinstance(perm, Lattice):
             lat = perm
