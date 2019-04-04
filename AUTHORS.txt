@@ -4,7 +4,7 @@ The full list of contributors can be obtained from the git repository with ``git
 Johannes Hauschild        tenpy@johannes-hauschild.de
 Frank Pollmann
 Maximilian Schulz
-Leon Schoonderwoert
+Leon Schoonderwoerd
 Jakob Unfried
 Yu-Chin Tzeng
 
