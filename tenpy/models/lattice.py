@@ -1206,10 +1206,25 @@ def get_order_grouped(shape, groups):
     index `u` of the unit cell as an "artificial direction".
     This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
     The argument `group` is a
-    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape (Lx, Ly, 3).
-    Calling this function with
-    then this function called with groups=((1), (2, 0)) returns an order
-    [[0, 0, 1], [0, 1, 1], [0, 1,
+    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape
+    (Lx, Ly, Lu).
+    Calling this function with groups=((1,), (2, 0)) returns an order of the following form::
+
+        # columns: [x, y, u]
+        [0, 0, 1]  # first for u = 1 along y
+        [0, 1, 1]
+            :
+        [0, Ly-1, 1]
+        [0, 0, 2]  # then for u = 2 and 0
+        [0, 0, 0]
+        [0, 1, 2]
+        [0, 1, 0]
+            :
+        [0, Ly-1, 2]
+        [0, Ly-1, 0]
+        # and then repeat the above for increasing `x`.
+
+
 
     Parameters
     ----------
