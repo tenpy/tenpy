@@ -398,17 +398,59 @@ def test_coupling_terms():
               2: {('X_2', 'Id'): {3: {'Y_3': 4.75}}}} # yapf: disable
     assert mc.coupling_terms == mc_des
     # coupling accross mps boundary
-    mc.add_multi_coupling_term(50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['JW', 'STR'])
+    mc.add_multi_coupling_term(50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['STR', 'JW'])
     assert mc.max_range() == 5 - 1
     mc._test_terms(sites)
     # remove the last coupling again
-    mc.add_multi_coupling_term(-50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['JW', 'STR'])
+    mc.add_multi_coupling_term(-50., [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['STR', 'JW'])
     mc.remove_zeros()
     assert mc.coupling_terms == mc_des
     assert mc.max_range() == 3 - 0
 
 
+def test_coupling_terms_handle_JW():
+    mc = mps.MultiCouplingTerms(4)
+    # two-site terms
+    term = [("X_1", 1), ("X_0", 4)]
+    args = mc.coupling_term_handle_JW(term, [False, False])
+    # args = i, j, op_i, op_j, op_str
+    assert args == (1, 4, "X_1", "X_0", "Id")
+    args = mc.coupling_term_handle_JW(term, [True, True])
+    assert args == (1, 4, "X_1 JW", "X_0", "JW")
+
+    # switch order
+    term = [("X_0", 4), ("X_1", 1)]
+    args = mc.coupling_term_handle_JW(term, [False, False])
+    assert args == (1, 4, "X_1", "X_0", "Id")
+    args = mc.coupling_term_handle_JW(term, [True, True])
+    assert args == (1, 4, "JW X_1", "X_0", "JW")
+
+    # multi coupling
+    term = [("X_0", 0), ("Y_1", 1), ("Y_3", 3)]
+    args = mc.multi_coupling_term_handle_JW(term, [False, False, False])
+    assert args == ([0, 1, 3], ["X_0", "Y_1", "Y_3"], ["Id", "Id"])
+    args = mc.multi_coupling_term_handle_JW(term, [False, True, True])
+    assert args == ([0, 1, 3], ["X_0", "Y_1 JW", "Y_3"], ["Id", "JW"])
+
+    term = [("Y_0", 0), ("X_1", 1), ("Y_3", 3), ("X_4", 4), ("Y_6", 6), ("Y_7", 7)]
+    args = mc.multi_coupling_term_handle_JW(term, [False]*6)
+    assert args == ([0, 1, 3, 4, 6, 7], [op[0] for op in term], ["Id"] * (len(term) - 1))
+    args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
+    print(args)
+    assert args == ([0, 1, 3, 4, 6, 7],
+                    ["Y_0 JW", "X_1 JW", "Y_3", "X_4", "Y_6 JW", "Y_7"],
+                    ["JW", "JW", "Id", "Id", "JW"])
+
+    term = [("Y_7", 7), ("X_1", 1), ("Y_0", 0), ("X_4", 4), ("Y_6", 6), ("Y_3", 3), ]
+    args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
+    print(args)
+    assert args == ([0, 1, 3, 4, 6, 7],
+                    ["JW Y_0", "JW X_1", "Y_3", "JW X_4 JW", "JW Y_6", "Y_7"],
+                    ["JW", "JW", "Id", "Id", "JW"])
+
+
 if __name__ == "__main__":
+    test_coupling_terms_handle_JW()
     test_charge_fluctuations()
     test_mps()
     test_mps_add()

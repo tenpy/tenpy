@@ -44,7 +44,7 @@ from ..linalg import np_conserved as npc
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import MPSEnvironment
+from .mps import MPSEnvironment, OnsiteTerms, CouplingTerms, MultiCouplingTerms
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -440,7 +440,7 @@ class MPOGraph:
 
     @classmethod
     def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
-        """Initialize an :class:`MPOGraph` from onsite_terms and coupling_terms.
+        """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
         ----------
@@ -452,12 +452,73 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+
+        Returns
+        -------
+        graph : :class:`MPOGraph`
+            Initialized with the given terms.
+
+        See also
+        --------
+        :meth:`from_term_list` : equivalent for other representation terms.
         """
         graph = cls(sites, bc)
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
         graph.add_missing_IdL_IdR()
         return graph
+
+    @classmethod
+    def from_term_list(cls, term_list, prefactors, sites, bc):
+        """Initialize form a list of operator terms and prefactors.
+
+        Parameters
+        ----------
+        term_list : list of terms
+            Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
+        prefactors : list of (complex) floats
+            Prefactors for the ``term_sum`` to be evaluated.
+        sites : list of :class:`~tenpy.networks.site.Site`
+            Local sites of the Hilbert space.
+        bc : ``'finite' | 'infinite'``
+            MPO boundary conditions.
+
+        Returns
+        -------
+        graph : :class:`MPOGraph`
+            Initialized with the given terms.
+        onsite_terms : :class:`~tenpy.networks.mps.OnsiteTerms`
+            Onsite terms added to `graph`.
+        coupling_terms :class:`~tenpy.networks.mps.CouplingTerms` | :class:`~tenpy.networks.mps.MultiCouplingTerms`
+            Coupling terms added to `graph`.
+
+        See also
+        --------
+        :meth:`from_terms` : equivalent for other representation of terms.
+        """
+        L = len(sites)
+        ot = OnsiteTerms(L)
+        if any(len(t) > 2 for t in term_list):
+            ct = MultiCouplingTerms(L)
+        else:
+            ct = CouplingTerms(L)
+        if len(term_list) != len(prefactors):
+            raise ValueError("different length of term_list and prefactors")
+        for term, strength in zip(term_list, prefactors):
+            if len(term) == 1:
+                op, i = term[0]
+                ot.add_onsite_term(strength, i, op)
+            elif len(term) == 2:
+                op_needs_JW = [sites[i%L].op_needs_JW(op) for op, i in term]
+                args = ct.coupling_term_handle_JW(term, op_needs_JW)
+                ct.add_coupling_term(strength, *args)
+            elif len(term) > 2:
+                op_needs_JW = [sites[i%L].op_needs_JW(op) for op, i in term]
+                args = ct.multi_coupling_term_handle_JW(term, op_needs_JW)
+                ct.add_multi_coupling_term(strength, *args)
+            else:
+                raise ValueError("term without entry!?")
+        return cls.from_terms(ot, ct, sites, bc), ot, ct
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""

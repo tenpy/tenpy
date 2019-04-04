@@ -640,7 +640,10 @@ class CouplingModel(Model):
         left corner of the hypercube containing the involved sites :math:`\vec{x}` and
         :math:`\vec{x}+\vec{dx}`.
 
-        The necessary terms are just added to :attr:`coupling_terms`; doesn't rebuild the MPO.
+        The necessary terms are just added to :attr:`coupling_terms`; doesn't (re)build the MPO.
+
+        .. deprecated:: 0.4.0
+            The arguments `raise_op2_left` will be removed in version 1.0.0.
 
         Parameters
         ----------
@@ -665,7 +668,7 @@ class CouplingModel(Model):
             If ``None``, auto-determine whether a Jordan-Wigner string is needed, using
             :meth:`~tenpy.networks.site.Site.op_needs_JW`.
         str_on_first : bool
-            Wheter the provided `op_string` should also act on the first site.
+            Whether the provided `op_string` should also act on the first site.
             This option should be chosen as ``True`` for Jordan-Wigner strings.
             When handling Jordan-Wigner strings we need to extend the `op_string` to also act on
             the 'left', first site (in the sense of the MPS ordering of the sites given by the
@@ -675,7 +678,7 @@ class CouplingModel(Model):
             independent of the MPS ordering.
         raise_op2_left : bool
             Raise an error when `op2` appears left of `op1`
-            (in the sense of the MPS ordering given by the lattice).
+            (in the sense of the MPS ordering given by the lattice). Deprecated.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
@@ -712,6 +715,7 @@ class CouplingModel(Model):
         ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
         ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
+        Note that the Jordan-Wigner strings are figured out automatically!
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
@@ -725,6 +729,7 @@ class CouplingModel(Model):
             need_JW2 = self.lat.unit_cell[u1].op_needs_JW(op2)
             if need_JW1 and need_JW2:
                 op_string = 'JW'
+                str_on_first = True
             elif need_JW1 or need_JW2:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
@@ -733,9 +738,10 @@ class CouplingModel(Model):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                                  "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
+        if op_string == "JW" and not str_on_first:
+            raise ValueError("Jordan Wigner string without `str_on_first`")
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
-
         mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
         if category is None:
@@ -748,6 +754,10 @@ class CouplingModel(Model):
             current_strength = strength[tuple(lat_idx)]
             if current_strength == 0.:
                 continue
+            # the following is equivalent to
+            # i, j, o1, o2, op_string = ct.coupling_term_handle_JW([(op1, i), (op2, j)],
+            #                                                      [need_JW1, need_JW2])
+            # apart for allowing `str_on_first` being set explicitly
             o1, o2 = op1, op2
             swap = (j < i)  # ensure i <= j
             if swap:
@@ -808,7 +818,7 @@ class CouplingModel(Model):
         """Calculate `H_onsite` from `self.onsite_terms`.
 
         .. deprecated:: 0.4.0
-            Will be removed in 1.0.0.
+            This function will be removed in 1.0.0.
             Replace calls to this function by
             ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
 
@@ -1026,6 +1036,8 @@ class MultiCouplingModel(CouplingModel):
             return  # nothing to do: can even accept non-defined onsite operators
         need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op)
                             for u, op in zip(all_us, all_ops)], dtype=np.bool_)
+        if not np.sum(need_JW) % 2 == 0:
+            raise ValueError("Invalid coupling: would need 'JW' string on the very left")
         if op_string is None and not any(need_JW):
             op_string = 'Id'
         for u, op, _ in [(u0, op0, None)] + other_ops :
@@ -1033,8 +1045,6 @@ class MultiCouplingModel(CouplingModel):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                                  "{2!r}".format(op, u, self.lat.unit_cell[u]))
         if op_string is not None:
-            if not np.sum(need_JW) % 2 == 0:
-                raise ValueError("Invalid coupling: would need 'JW' string on the very left")
             for u in range(len(self.lat.unit_cell)):
                 if not self.lat.unit_cell[u].valid_opname(op_string):
                     raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
@@ -1064,9 +1074,9 @@ class MultiCouplingModel(CouplingModel):
             current_strength = strength[tuple(i_lat)]
             if current_strength == 0.:
                 continue
-            ijkl, ops, op_str = _multi_coupling_group_handle_JW(
-                ijkl, all_ops, need_JW, op_string, N_sites)
-            ct.add_multi_coupling_term(current_strength, ijkl, ops, op_str)
+            term = list(zip(all_ops, ijkl))
+            args = ct.multi_coupling_term_handle_JW(term, need_JW, op_string)
+            ct.add_multi_coupling_term(current_strength, *args)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
@@ -1287,55 +1297,3 @@ class CouplingMPOModel(CouplingModel,MPOModel):
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
 
 
-def _multi_coupling_group_handle_JW(ijkl, ops, ops_need_JW, op_string, N_sites):
-    """Helping function for MultiCouplingModel.add_multi_coupling.
-
-    Sort and groups the operators by sites `ijkl` they act on, such that the returned `new_ijkl`
-    is strictly ascending, i.e. has entries `i < j < k < l`.
-    Also, handle/figure out Jordan-Wigner strings if needed.
-    """
-    number_ops = len(ijkl)
-    reorder = np.argsort(ijkl, kind='mergesort')  # need stable kind!!!
-    if not 0 <= ijkl[reorder[0]] < N_sites:  # ensure this condition with a shift
-        ijkl += ijkl[reorder[0]] % N_sites - ijkl[reorder[0]]
-    # what we want to calculate:
-    new_ijkl = []
-    new_ops = []
-    new_op_str = []  # new_op_string[x] is right of new_ops[x]
-    # first make groups with strictly ``i < j < k < ... ``
-    i0 = -1  # != the first i since -1 <  0 <= ijkl[:]
-    grouped_reorder = []
-    for x in reorder:
-        i = ijkl[x]
-        if i != i0:
-            i0 = i
-            new_ijkl.append(i)
-            grouped_reorder.append([x])
-        else:
-            grouped_reorder[-1].append(x)
-    if op_string is not None:
-        # simpler case
-        for group in grouped_reorder:
-            new_ops.append(' '.join([ops[x] for x in group]))
-            new_op_str.append(op_string)
-        new_op_str.pop()  # remove last entry (created one too much)
-    else:
-        # more complicated: handle Jordan-Wigner
-        for a, group in enumerate(grouped_reorder):
-            right = [z for gr in grouped_reorder[a+1:] for z in gr]
-            onsite_ops = []
-            need_JW_right = False
-            JW_max = -1
-            for x in group + [number_ops]:
-                JW_min, JW_max = JW_max, x
-                need_JW = (np.sum([ops_need_JW[z] for z in right if JW_min < z < JW_max]) % 2 == 1)
-                if need_JW:
-                    onsite_ops.append('JW')
-                    need_JW_right = not need_JW_right
-                if x != number_ops:
-                    onsite_ops.append(ops[x])
-            new_ops.append(' '.join(onsite_ops))
-            op_str_right = 'JW' if need_JW_right else 'Id'
-            new_op_str.append(op_str_right)
-        new_op_str.pop()  # remove last entry (created one too much)
-    return new_ijkl, new_ops, new_op_str

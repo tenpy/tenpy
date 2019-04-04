@@ -69,16 +69,15 @@ def test_MPO():
 
 
 def test_MPOGraph():
-    for bc in mpo.MPO._valid_bc:
-        for L in [1, 2, 4]:
+    for bc in ['finite', 'infinite']:
+        for L in [2, 4]:
             print("L =", L)
             g = mpo.MPOGraph([spin_half] * L, bc)
             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
-            if L > 1:
-                g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
-                g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
-                g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
-                g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
+            g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
+            g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
+            g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
+            g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
             if L > 2:
                 g.add_string(0, 3, (0, 'Sp'), 'Id')
                 g.add(3, (0, 'Sp'), 'IdR', 'Sm', 0.1)
@@ -89,6 +88,30 @@ def test_MPOGraph():
             print("build MPO")
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
+
+
+def test_MPOGraph_term_conversion():
+    L = 4
+
+    g1= mpo.MPOGraph([spin_half] * L, 'infinite')
+    g1.test_sanity()
+    for i in range(L):
+        g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g1.add(i, 'IdL', (i, 'Sp', 'Id'), 'Sp', 1.)
+        g1.add(i+1, (i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+    g1.add_missing_IdL_IdR()
+    terms = [[("Sz", i)] for i in range(L)]
+    terms += [[("Sp", i), ("Sm", i+1)] for i in range(L)]
+    prefactors = [0.5] * L + [1.5] * L
+    g2, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    g2.test_sanity()
+    assert g1.graph == g2.graph
+    terms[3:3] = [[("Sm", 2), ("Sp", 0), ("Sz", 1)]]
+    prefactors[3:3] = [3.]
+    g3, ot2, ct2 = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    g1.add(1, (0, 'Sp', 'Id'), (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
+    g1.add(2, (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    assert g1.graph == g3.graph
 
 
 def test_MPOEnvironment():
@@ -143,4 +166,4 @@ def test_MPO_expectation_value():
     assert abs(ev - desired_ev) < 1.e-14
 
 if __name__ == "__main__":
-    test_MPO_expectation_value()
+    test_MPOGraph_term_conversion()
