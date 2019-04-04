@@ -3,9 +3,6 @@
 .. todo ::
     WARNING: These models are still under development and not yet tested for correctness.
     Use at your own risk!
-
-.. todo ::
-    switch to using the CouplingMPOModel
 """
 # Copyright 2018 TeNPy Developers
 
@@ -13,13 +10,13 @@ import numpy as np
 
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
-from .model import CouplingModel, MPOModel
+from .model import CouplingModel, MPOModel, CouplingMPOModel
 from ..tools.params import get_parameter, unused_parameters
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions']
 
 
-class HofstadterFermions(CouplingModel, MPOModel):
+class HofstadterFermions(CouplingMPOModel):
     r"""Fermions on a square lattice with magnetic flux.
 
     For now, the Hamiltonian reads:
@@ -27,13 +24,10 @@ class HofstadterFermions(CouplingModel, MPOModel):
     .. math ::
         H = - \sum_{x, y} \mathtt{Jx} (c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
             - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi} x} c^\dagger_{x,y} c_{x,y+1} + h.c.)
-
+            - \sum_{x, y} \mathtt{mu} n_{x,y}
 
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
-
-    .. todo :
-        More complicated hopping amplitudes...
 
 
     Parameters
@@ -59,47 +53,53 @@ class HofstadterFermions(CouplingModel, MPOModel):
     """
 
     def __init__(self, model_params):
-        # 0) read out/set default parameters
-        Lx = get_parameter(model_params, 'Lx', 4, self.__class__)
-        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
-        filling = get_parameter(model_params, 'filling', 0.125, self.__class__)
-        Jx = get_parameter(model_params, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_params, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_params, 'phi', 2. * np.pi / Lx, self.__class__)
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
-        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.__class__)
-        conserve = get_parameter(model_params, 'conserve', 'N', self.__class__)
-        order = get_parameter(model_params, 'order', 'default', self.__class__)
-        unused_parameters(model_params, self.__class__)
+        CouplingMPOModel.__init__(self, model_params)
 
-        assert bc_y in ['cylinder', 'ladder']
-
-        # 1-4) Define the sites and the lattice.
+    def init_sites(self, model_params):
+        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        filling = get_parameter(model_params, 'filling', 0.125, self.name)
         site = FermionSite(conserve=conserve, filling=filling)
+        return site
+
+    def init_lattice(self, model_params):
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
+        order = get_parameter(model_params, 'order', 'default', self.name)
+        sites = self.init_sites(model_params)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
+        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
+        assert bc_y in ['cylinder', 'ladder']
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+        if bc_MPS == 'infinite' and bc_x == 'open':
+            raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
         lat = Square(Lx, Ly, site, order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
+        return lat
+
+    def init_terms(self, model_params):
+        Jx = get_parameter(model_params, 'Jx', 1., self.name)
+        Jy = get_parameter(model_params, 'Jy', 1., self.name)
+        phi = get_parameter(model_params, 'phi', (1, 3), self.name)
+        phi = 2 * np.pi * phi[0] / phi[1]
+        phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
+        mu = get_parameter(model_params, 'mu', 1., self.name, True)
 
         # 6) add terms of the Hamiltonian
-        #self.add_onsite(np.asarray(U)/2, 0, 'NN')
-        #self.add_onsite(-np.asarray(U)/2 - np.asarray(mu), 0, 'N')
+        self.add_onsite(-mu, 0, 'N')
 
         # hopping in x-direction: uniform
-        self.add_coupling(-Jx, 0, 'Cd', 0, 'C', (1, 0), 'JW', True)
-        self.add_coupling(np.conj(-Jx), 0, 'Cd', 0, 'C', (-1, 0), 'JW', True)  # h.c.
+        hop_x = -Jx
+        hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
         # hopping in y-direction:
         # The hopping amplitudes depend on position -> use an array for couplings.
         # If the array is smaller than the actual number of couplings,
         # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
         # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
-        self.add_coupling(hop_y, 0, 'Cd', 0, 'C', [0, 1], 'JW', True)
-        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', [0, -1], 'JW', True)  # h.c.
-
-        # 7) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        self.add_coupling(hop_x, 0, 'Cd', 0, 'C', (1, 0))
+        self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', (-1, 0))  # h.c.
+        dy = np.array([0, 1])
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, phi_ext)
+        self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
+        self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
 
 
 class HofstadterBosons(CouplingModel, MPOModel):
