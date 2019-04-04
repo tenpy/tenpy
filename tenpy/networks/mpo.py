@@ -545,7 +545,7 @@ class MPOGraph:
         """Number of physical sites. For an iMPS the length of the unit cell."""
         return len(self.sites)
 
-    def add(self, i, keyL, keyR, opname, strength, check_op=True):
+    def add(self, i, keyL, keyR, opname, strength, check_op=True, skip_existing=False):
         """Insert an edge into the graph.
 
         Parameters
@@ -561,7 +561,9 @@ class MPOGraph:
         strength : str
             Prefactor of the operator to be inserted.
         check_op : bool
-            Wheter to check that 'opname' exists on the given `site`.
+            Whether to check that 'opname' exists on the given `site`.
+        skip_existing : bool
+            If ``True``, skip adding the graph node if it exists (with same keys and `opname`).
         """
         i = i % self.L
         if check_op:
@@ -576,9 +578,11 @@ class MPOGraph:
         if keyR not in D:
             D[keyR] = [(opname, strength)]
         else:
-            D[keyR].append((opname, strength))
+            entry = D[keyR]
+            if not skip_existing or not any([op == opname for op, _ in entry]):
+                entry.append((opname, strength))
 
-    def add_string(self, i, j, key, opname='Id', check_op=True):
+    def add_string(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
         """Insert a bunch of edges for an 'operator string' into the graph.
 
         Terms like :math:`S^z_i S^z_j` actually stand for
@@ -598,6 +602,8 @@ class MPOGraph:
         opname : str
             Name of the operator to be used for the string.
             Useful for the Jordan-Wigner transformation to fermions.
+        skip_existing : bool
+            Whether existing graph nodes should be skipped.
 
         Returns
         -------
@@ -614,7 +620,7 @@ class MPOGraph:
                 keyR = (key, (k-i) // self.L)
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
-                self.add(k, keyL, keyR, opname, 1., check_op=check_op)
+                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
             keyL = keyR
         return keyL
 

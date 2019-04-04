@@ -136,6 +136,7 @@ Fixed
 - SVD could return outer indices with different axes
 - :meth:`tenpy.networks.mps.MPS.overlap` works now for MPS with different total charge
   (e.g. after ``psi.apply_local_op(i, 'Sp')``).
+- skip existing graph edges in MPOGraph.add() when building up terms without the strength part.
 
 Removed
 ^^^^^^^

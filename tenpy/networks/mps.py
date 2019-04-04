@@ -3306,6 +3306,7 @@ class OnsiteTerms:
     """
 
     def __init__(self, L):
+        assert L > 0
         self.L = L
         self.onsite_terms = [dict() for _ in range(L)]
 
@@ -3464,6 +3465,7 @@ class CouplingTerms:
         iMPS unit cells.
     """
     def __init__(self, L):
+        assert L > 0
         self.L = L
         self.coupling_terms = dict()
 
@@ -3638,7 +3640,7 @@ class CouplingTerms:
         for i, d1 in self.coupling_terms.items():
             for (opname_i, op_string), d2 in d1.items():
                 label = (i, opname_i, op_string)
-                graph.add(i, 'IdL', label, opname_i, 1.)
+                graph.add(i, 'IdL', label, opname_i, 1., skip_existing=True)
                 for j, d3 in d2.items():
                     label_j = graph.add_string(i, j, label, op_string)
                     for opname_j, strength in d3.items():
@@ -3782,7 +3784,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     """
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string):
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id"):
         """Add a multi-site coupling term on given MPS sites.
 
         Parameters
@@ -3796,12 +3798,15 @@ class MultiCouplingTerms(CouplingTerms):
             Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
             Names of the involved operators on sites `i, j, k, ...`.
-        op_string : list of str
+        op_string : (list of) str
             Names of the operator to be inserted between the operators,
             e.g., op_string[0] is inserted between `i` and `j`.
+            A single name holds for all in-between segments.
         """
         if len(ijkl) < 2:
             raise ValueError("Need to act on at least 2 sites. Use onsite terms!")
+        if isinstance(op_string, str):
+            op_string = [op_string] * (len(ijkl) - 1)
         assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
         for i, j in zip(ijkl, ijkl[1:]):
             if not i < j:
@@ -3941,7 +3946,7 @@ class MultiCouplingTerms(CouplingTerms):
                         label = (_i, op_i, op_string_ij)
                     else:
                         label = _label_left + (_i, op_i, op_string_ij)
-                    graph.add(_i, _label_left, label, op_i, 1.)
+                    graph.add(_i, _label_left, label, op_i, 1., skip_existing=True)
                     for j, d3 in d2.items():
                         label_j = graph.add_string(_i, j, label, op_string_ij)
                         self.add_to_graph(graph, j, d3, label_j)
