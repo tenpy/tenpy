@@ -34,7 +34,6 @@ class HofstadterFermions(CouplingMPOModel):
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. todo :
-        Change definition of 'filling': don't want to specify floats for e.g. 1/9 filling.
         Add different gauges
         HofstadterFermions passes nosetesting. However, HofstadterFermions threw errors, the fixes for which are not present in HofstadterFermions.
 
@@ -65,7 +64,8 @@ class HofstadterFermions(CouplingMPOModel):
 
     def init_sites(self, model_params):
         conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        filling = get_parameter(model_params, 'filling', 0.125, self.name)
+        filling = get_parameter(model_params, 'filling', (1, 8), self.name)
+        filling = filling[0] / filling[1]
         site = FermionSite(conserve=conserve, filling=filling)
         return site
 
@@ -140,7 +140,6 @@ class HofstadterBosons(CouplingModel, MPOModel):
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. todo :
-        Change definition of 'filling': don't want to specify floats for e.g. 1/9 filling.
         Add different gauges
 
 
@@ -174,7 +173,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
     def init_sites(self, model_params):
         Nmax = get_parameter(model_params, 'Nmax', 3, self.__class__)
         conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        filling = get_parameter(model_params, 'filling', 0.125, self.name)
+        filling = get_parameter(model_params, 'filling', (1, 8), self.name)
+        filling = filling[0] / filling[1]
         site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
         return site
 
@@ -234,8 +234,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         else:
             raise NotImplementedError()
 
-        self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [1, 0])
-        self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])  # h.c.
+        self.add_coupling(hop_x, 0, 'Bd', 0, 'B', [1, 0])
+        self.add_coupling(np.conj(hop_x), 0, 'Bd', 0, 'B', [-1, 0])  # h.c.
         dy = np.array([0, 1])
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
         self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
