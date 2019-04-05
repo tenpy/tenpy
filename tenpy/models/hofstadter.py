@@ -118,6 +118,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
 
     .. todo :
         More complicated hopping amplitudes...
+        Change definition of 'filling': don't want to specify floats for e.g. 1/9 filling.
+        Add different gauges
 
 
     Parameters
@@ -145,47 +147,61 @@ class HofstadterBosons(CouplingModel, MPOModel):
     """
 
     def __init__(self, model_params):
-        # 0) read out/set default parameters
-        Lx = get_parameter(model_params, 'Lx', 4, self.__class__)
-        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
-        N_max = get_parameter(model_params, 'N_max', 3, self.__class__)
-        filling = get_parameter(model_params, 'filling', 0.125, self.__class__)
-        Jx = get_parameter(model_params, 'Jx', 1., self.__class__)
-        Jy = get_parameter(model_params, 'Jy', 1., self.__class__)
-        phi = get_parameter(model_params, 'phi', 2. * np.pi / Lx, self.__class__)
-        mu = get_parameter(model_params, 'mu', 0, self.__class__)
-        U = get_parameter(model_params, 'U', 0, self.__class__)
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
-        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.__class__)
-        conserve = get_parameter(model_params, 'conserve', 'N', self.__class__)
-        order = get_parameter(model_params, 'order', 'default', self.__class__)
-        unused_parameters(model_params, self.__class__)
+        CouplingMPOModel.__init__(self, model_params)
 
+    def init_sites(self, model_params):
+        Nmax = get_parameter(model_params, 'Nmax', 3, self.__class__)
+        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        filling = get_parameter(model_params, 'filling', 0.125, self.name)
+        site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
+        return site
+
+    def init_lattice(self, model_params):
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
+        order = get_parameter(model_params, 'order', 'default', self.name)
+        site = self.init_sites(model_params)
+        Lx = get_parameter(model_params, 'Lx', 4, self.name)
+        Ly = get_parameter(model_params, 'Ly', 6, self.name)
+        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'  # Next line needs default
+        bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
+        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
         assert bc_y in ['cylinder', 'ladder']
-
-        # 1-4) Define the sites and the lattice.
-        site = BosonSite(Nmax=N_max, conserve=conserve, filling=filling)
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
-        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
-        # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
+        if bc_MPS == 'infinite' and bc_x == 'open':
+            raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
+        lat = Square(Lx, Ly, site, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
+        return lat
+
+    def init_terms(self, model_params):
+        # TODO Lx, Ly now get a default twice, which is ugly (done for debugging reasons). Figure out best way to avoid this.
+        Lx = get_parameter(model_params, 'Lx', 4, self.name)
+        Ly = get_parameter(model_params, 'Ly', 6, self.name)
+        Jx = get_parameter(model_params, 'Jx', 1., self.name)
+        Jy = get_parameter(model_params, 'Jy', 1., self.name)
+        phi = get_parameter(model_params, 'phi', (1, 3), self.name)
+        phi = 2 * np.pi * phi[0] / phi[1]
+        phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
+        mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        U = get_parameter(model_params, 'U', 0, self.name)
+        gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(np.asarray(U) / 2, 0, 'NN')
         self.add_onsite(-np.asarray(U) / 2 - np.asarray(mu), 0, 'N')
 
-        # hopping in x-direction: uniform
+        if gauge == 'landau_x':
+            # hopping in x-direction: uniform
+            # hopping in y-direction:
+            # The hopping amplitudes depend on position -> use an array for couplings.
+            # If the array is smaller than the actual number of couplings,
+            # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
+            # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+            hop_x = -Jx  
+            hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
+        else:
+            raise NotImplementedError("Only Landau gauge along x is defined.")
+
         self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [1, 0])
         self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])
-        # hopping in y-direction:
-        # The hopping amplitudes depend on position -> use an array for couplings.
-        # If the array is smaller than the actual number of couplings,
-        # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
-        # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
         self.add_coupling(hop_y, 0, 'Bd', 0, 'B', [0, 1])
         self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', [0, -1])
-
-        # 7) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
