@@ -6,6 +6,7 @@
     Replicate known results to confirm models work correctly.
     Implement different gauges (landau_y, symmetric/periodic, ...)
     Add assertions for consistency between gauge and lattice
+    Move hop_x, hop_y computation based on gauge to helper function outside classes?
     Long term: implement differet lattices
 """
 # Copyright 2018 TeNPy Developers
@@ -231,6 +232,11 @@ class HofstadterBosons(CouplingModel, MPOModel):
             # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
             # (1, Ly) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
             hop_x = -Jx * np.exp(1.j * phi * np.arange(Ly)[np.newaxis, :])  # has shape (1, Ly)
+        elif gauge == 'symmetric':
+            assert Lx % phi_pq[1] == 0, "Flux density inconsistent with Lx in symmetric gauge."
+            assert Ly % phi_pq[1] == 0, "Flux density inconsistent with Ly in symmetric gauge."
+            hop_x = -Jx * np.exp(1.j * (phi/2) * np.arange(Ly)[:, np.newaxis])
+            hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(Lx)[np.newaxis, :])
         else:
             raise NotImplementedError()
 
