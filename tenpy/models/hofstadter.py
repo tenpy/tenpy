@@ -5,6 +5,7 @@
     Use at your own risk!
     Replicate known results to confirm models work correctly.
     Implement different gauges (landau_y, symmetric/periodic, ...)
+    Add assertions for consistency between gauge and lattice
     Long term: implement differet lattices
 """
 # Copyright 2018 TeNPy Developers
@@ -79,7 +80,7 @@ class HofstadterFermions(CouplingMPOModel):
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
         if bc_MPS == 'infinite' and bc_x == 'open':
             raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
-        lat = Square(Lx, Ly, site, order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
+        lat = Square(Lx, Ly, site, order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)  # LS are Lx, Ly, site defined?
         return lat
 
     def init_terms(self, model_params):
@@ -112,7 +113,7 @@ class HofstadterFermions(CouplingMPOModel):
             # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
             # (1, Ly) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
             hop_x = -Jx * np.exp(1.j * phi * np.arange(Ly)[np.newaxis, :])  # has shape (1, Ly)
-        elif gauge == 'symmetric' or gauge == 'periodic'  # TODO confirm these are actually equal.
+        elif gauge == 'symmetric' or gauge == 'periodic':  # TODO confirm these are actually equal.
             raise NotImplementedError()
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', (1, 0))
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', (-1, 0))  # h.c.
@@ -227,11 +228,11 @@ class HofstadterBosons(CouplingModel, MPOModel):
             # (1, Ly) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
             hop_x = -Jx * np.exp(1.j * phi * np.arange(Ly)[np.newaxis, :])  # has shape (1, Ly)
         else:
-            raise NotImplementedError("Only Landau gauge along x is defined.")
+            raise NotImplementedError()
 
         self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [1, 0])
         self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])  # h.c.
         dy = np.array([0, 1])
-        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, phi_ext)
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
         self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', -dy)  # h.c.
