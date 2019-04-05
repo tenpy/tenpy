@@ -35,6 +35,7 @@ Backwards incompatible changes
   Each of them is now a dictionary with category strings as keys and the newly introduced
   :class:`tenpy.networks.mps.OnsiteTerms` and :class:`tenpy.networks.mps.CouplingTerms` as values.
 - :meth:`tenpy.models.model.CouplingModel.calc_H_onsite` is deprecated in favor of new methods.
+- Argument `raise_op2_left` of :meth:`tenpy.models.model.CouplingModel.add_coupling` is deprecated.
 
 
 Added
@@ -42,7 +43,7 @@ Added
 - :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
 - :meth:`tenpy.networks.mps.MPS.expectation_value_term`, :meth:`tenpy.networks.mps.MPS.expectation_value_terms_sum` and
   :meth:`tenpy.networks.mps.MPS.expectation_value_multi_sites` for expectation values of terms.
-- :meth:`tenpy.networks.mpo.MPO.expectation_value`.
+- :meth:`tenpy.networks.mpo.MPO.expectation_value` for an MPO.
 - :meth:`tenpy.linalg.np_conserved.Array.extend` and :meth:`tenpy.linalg.charges.LegCharge.extend`,
   allowing to extend an Array with zeros.
 - DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.
@@ -72,6 +73,7 @@ Added
   This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
 - :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
   of an Environment.
+- :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`tenpy.networks.mpo.MPOGraph.from_term_list`.
 
 
 Changed
@@ -134,6 +136,7 @@ Fixed
 - SVD could return outer indices with different axes
 - :meth:`tenpy.networks.mps.MPS.overlap` works now for MPS with different total charge
   (e.g. after ``psi.apply_local_op(i, 'Sp')``).
+- skip existing graph edges in MPOGraph.add() when building up terms without the strength part.
 
 Removed
 ^^^^^^^

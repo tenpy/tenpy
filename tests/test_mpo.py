@@ -69,16 +69,15 @@ def test_MPO():
 
 
 def test_MPOGraph():
-    for bc in mpo.MPO._valid_bc:
-        for L in [1, 2, 4]:
+    for bc in ['finite', 'infinite']:
+        for L in [2, 4]:
             print("L =", L)
             g = mpo.MPOGraph([spin_half] * L, bc)
             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
-            if L > 1:
-                g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
-                g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
-                g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
-                g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
+            g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
+            g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
+            g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
+            g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
             if L > 2:
                 g.add_string(0, 3, (0, 'Sp'), 'Id')
                 g.add(3, (0, 'Sp'), 'IdR', 'Sm', 0.1)
@@ -89,6 +88,79 @@ def test_MPOGraph():
             print("build MPO")
             g_mpo = g.build_MPO()
             g_mpo.test_sanity()
+
+
+def test_MPOGraph_term_conversion():
+    L = 4
+
+    g1= mpo.MPOGraph([spin_half] * L, 'infinite')
+    g1.test_sanity()
+    for i in range(L):
+        g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g1.add(i, 'IdL', (i, 'Sp', 'Id'), 'Sp', 1.)
+        g1.add(i+1, (i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+    g1.add_missing_IdL_IdR()
+    terms = [[("Sz", i)] for i in range(L)]
+    terms += [[("Sp", i), ("Sm", i+1)] for i in range(L)]
+    prefactors = [0.5] * L + [1.5] * L
+    g2, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    g2.test_sanity()
+    assert g1.graph == g2.graph
+    terms[3:3] = [[("Sm", 2), ("Sp", 0), ("Sz", 1)]]
+    prefactors[3:3] = [3.]
+    g3, ot2, ct2 = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    g1.add(1, (0, 'Sp', 'Id'), (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
+    g1.add(2, (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    assert g1.graph == g3.graph
+
+
+def test_MPO_conversion():
+    L = 8
+    sites = []
+    for i in range(L):
+        s = site.Site(spin_half.leg)
+        s.add_op("X_{i:d}".format(i=i), np.diag([2., 1.]))
+        s.add_op("Y_{i:d}".format(i=i), np.diag([1., 2.]))
+        sites.append(s)
+    terms = [[("X_0", 0)],
+             [("X_0", 0), ("X_1", 1)],
+             [("X_0", 0), ("X_3", 3)],
+             [("X_4", 4), ("Y_5", 5), ("Y_7", 7)],
+             [("X_4", 4), ("Y_5", 5), ("X_7", 7)],
+             [("X_4", 4), ("Y_6", 6), ("Y_7", 7)],
+            ]
+    prefactors = [0.25, 10., 11., 101., 102.,  103.]
+    g1, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, sites, bc='finite')
+    ct_add = mpo.MultiCouplingTerms(L)
+    ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
+    ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")
+    ct_add.add_to_graph(g1)
+    H1 = g1.build_MPO()
+    grids = [[['Id', 'X_0', [('X_0', 0.25)]]],  # site 0
+             [['Id', None, None],  # site 1
+              [None, 'Id', [('X_1', 10.0)]],
+              [None, None, 'Id']],
+             [['Id', None, None],  # site 2
+              [None, 'Id', None],
+              [None, None, 'Id']],
+             [['Id', None],  # site 3
+              [None, [('X_3', 11.0)]],
+              [None, 'Id']],
+             [['X_4', None],  #site 4
+              [None, 'Id']],
+             [['Id', 'Y_5', [('X_5', 12.0)]],  # site 5
+              [None, None, 'Id']],
+             [[None, 'Y_6', None],  # site 6
+              ['Id', None, None],
+              [None, None, 'Id']],
+             [[[('Y_7', 101.0), ('X_7', 102.5)]],  # site 7
+              [[('Y_7', 103.0)]],
+              ['Id']]
+             ]
+    H2 = mpo.MPO.from_grids(sites, grids, 'finite', [0]*4 + [None]*5, [None]*5 + [-1]*4)
+    for w1, w2 in zip(H1._W, H2._W):
+        assert npc.norm(w1-w2, np.inf) == 0.
+    pass
 
 
 def test_MPOEnvironment():
@@ -142,5 +214,6 @@ def test_MPO_expectation_value():
     print("ev = ", ev, "desired", desired_ev)
     assert abs(ev - desired_ev) < 1.e-14
 
+
 if __name__ == "__main__":
-    test_MPO_expectation_value()
+    test_MPO_conversion()

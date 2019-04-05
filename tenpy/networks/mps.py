@@ -1513,6 +1513,10 @@ class MPS:
             ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``,
             where ``|psi>`` is the represented MPS.
 
+        See also
+        --------
+        :meth:`correlation_function`: efficient way to evaluate many correlation functions.
+
         Examples
         --------
         >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
@@ -3302,6 +3306,7 @@ class OnsiteTerms:
     """
 
     def __init__(self, L):
+        assert L > 0
         self.L = L
         self.onsite_terms = [dict() for _ in range(L)]
 
@@ -3460,6 +3465,7 @@ class CouplingTerms:
         iMPS unit cells.
     """
     def __init__(self, L):
+        assert L > 0
         self.L = L
         self.coupling_terms = dict()
 
@@ -3498,12 +3504,62 @@ class CouplingTerms:
             raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
         if not i < j:
             raise ValueError("need i < j")
-        assert i < j
         d1 = self.coupling_terms.setdefault(i, dict())
         # form of d1: ``{('opname_i', 'opname_string'): {j: {'opname_j': current_strength}}}``
         d2 = d1.setdefault((op_i, op_string), dict())
         d3 = d2.setdefault(j, dict())
         d3[op_j] = d3.get(op_j, 0) + strength
+
+    def coupling_term_handle_JW(self, term, op_needs_JW, op_string=None):
+        """Helping function to call before :meth:`add_multi_coupling_term`.
+
+        Sort and groups the operators by sites they act on, such that the returned
+        `ijkl` is strictly ascending, i.e. has entries `i < j < k < l`.
+        Moreover, handle/figure out Jordan-Wigner strings if needed.
+
+        Parameters
+        ----------
+        term : [(str, int), (str, int)]
+            List of two tuples ``(op, i)`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+        op_needs_JW : list of bool
+            For each entry in term whether the operator needs a JW string.
+            Only used if `op_string` is None.
+        op_string : None | str
+            Operator name to be used as operator string *between* the operators, or ``None`` if the
+            Jordan Wigner string should be figured out.
+
+            .. warning :
+                ``None`` figures out for each segment between the operators, whether a
+                Jordan-Wigner string is needed.
+                This is different from a plain ``'JW'``, which just applies a string on
+                each segment!
+
+        Returns
+        -------
+        i, j, op_i, op_j, op_string:
+            Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added
+            term corresponds to the parameters of this function.
+        """
+        L = self.L
+        (op_i, i), (op_j, j) = term
+        if op_string is None:
+            need_JW1, need_JW2 = op_needs_JW
+            if need_JW1 and need_JW2:
+                op_string = 'JW'
+            elif need_JW1 or need_JW2:
+                raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
+            else:
+                op_string = 'Id'
+        swap = (j < i)
+        if swap:
+            op_i, i, op_j, j = op_j, j, op_i, i
+        if op_string == 'JW':
+            if swap:
+                op_i = ' '.join([op_string, op_i])  # op_i=(original op_j) should act first
+            else:
+                op_i = ' '.join([op_i, op_string])  # op_j should act first
+        return i, j, op_i, op_j, op_string
 
     def plot_coupling_terms(self, ax, style_map=None):
         """"Plot coupling terms into a given lattice.
@@ -3584,7 +3640,7 @@ class CouplingTerms:
         for i, d1 in self.coupling_terms.items():
             for (opname_i, op_string), d2 in d1.items():
                 label = (i, opname_i, op_string)
-                graph.add(i, 'IdL', label, opname_i, 1.)
+                graph.add(i, 'IdL', label, opname_i, 1., skip_existing=True)
                 for j, d3 in d2.items():
                     label_j = graph.add_string(i, j, label, op_string)
                     for opname_j, strength in d3.items():
@@ -3728,7 +3784,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     """
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string):
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id"):
         """Add a multi-site coupling term on given MPS sites.
 
         Parameters
@@ -3742,12 +3798,15 @@ class MultiCouplingTerms(CouplingTerms):
             Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
             Names of the involved operators on sites `i, j, k, ...`.
-        op_string : list of str
+        op_string : (list of) str
             Names of the operator to be inserted between the operators,
             e.g., op_string[0] is inserted between `i` and `j`.
+            A single name holds for all in-between segments.
         """
         if len(ijkl) < 2:
             raise ValueError("Need to act on at least 2 sites. Use onsite terms!")
+        if isinstance(op_string, str):
+            op_string = [op_string] * (len(ijkl) - 1)
         assert len(ijkl) == len(ops_ijkl) == len(op_string) + 1
         for i, j in zip(ijkl, ijkl[1:]):
             if not i < j:
@@ -3766,6 +3825,90 @@ class MultiCouplingTerms(CouplingTerms):
         d1 = d0.setdefault(ijkl[-1], dict())
         op = ops_ijkl[-1]
         d1[op] = d1.get(op, 0) + strength
+
+    def multi_coupling_term_handle_JW(self, term, op_needs_JW, op_string=None):
+        """Helping function to call before :meth:`add_multi_coupling_term`.
+
+        Sort and groups the operators by sites they act on, such that the returned
+        `ijkl` is strictly ascending, i.e. has entries `i < j < k < l`.
+        Moreover, handle/figure out Jordan-Wigner strings if needed.
+
+        Parameters
+        ----------
+        term : list of (str, int)
+            List of tuples ``(op, i)`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+        op_needs_JW : list of bool
+            For each entry in term whether the operator needs a JW string.
+            Only used if `op_string` is None.
+        op_string : None | str
+            Operator name to be used as operator string *between* the operators, or ``None`` if the
+            Jordan Wigner string should be figured out.
+
+            .. warning :
+                ``None`` figures out for each segment between the operators, whether a
+                Jordan-Wigner string is needed.
+                This is different from a plain ``'JW'``, which just applies a string on
+                each segment!
+
+        Returns
+        -------
+        ijkl, ops_ijkl, op_string :
+            Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added term
+            corresponds to the parameters of this function.
+        """
+        L = self.L
+        number_ops = len(term)
+        if number_ops < 2 :
+            raise ValueError("expect multi coupling")
+        ops = [t[0] for t in term]
+        ijkl = [t[1] for t in term]
+        reorder = np.argsort(ijkl, kind='mergesort')  # need stable kind!!!
+        i0 = ijkl[reorder[0]]
+        if not 0 <= i0 < L:  # ensure this condition with a shift
+            shift = i0 % L - i0
+            ijkl = [i + shift for i in ijkl]
+        # what we want to calculate:
+        new_ijkl = []
+        new_ops = []
+        new_op_str = []  # new_op_string[x] is right of new_ops[x]
+        # first make groups with strictly ``i < j < k < ... ``
+        i0 = -1  # != the first i since -1 <  0 <= ijkl[:]
+        grouped_reorder = []
+        for x in reorder:
+            i = ijkl[x]
+            if i != i0:
+                i0 = i
+                new_ijkl.append(i)
+                grouped_reorder.append([x])
+            else:
+                grouped_reorder[-1].append(x)
+        if op_string is not None:
+            # simpler case
+            for group in grouped_reorder:
+                new_ops.append(' '.join([ops[x] for x in group]))
+                new_op_str.append(op_string)
+            new_op_str.pop()  # remove last entry (created one too much)
+        else:
+            # more complicated: handle Jordan-Wigner
+            for a, group in enumerate(grouped_reorder):
+                right = [z for gr in grouped_reorder[a+1:] for z in gr]
+                onsite_ops = []
+                need_JW_right = False
+                JW_max = -1
+                for x in group + [number_ops]:
+                    JW_min, JW_max = JW_max, x
+                    need_JW = (np.sum([op_needs_JW[z] for z in right if JW_min < z < JW_max]) % 2 == 1)
+                    if need_JW:
+                        onsite_ops.append('JW')
+                        need_JW_right = not need_JW_right
+                    if x != number_ops:
+                        onsite_ops.append(ops[x])
+                new_ops.append(' '.join(onsite_ops))
+                op_str_right = 'JW' if need_JW_right else 'Id'
+                new_op_str.append(op_str_right)
+            new_op_str.pop()  # remove last entry (created one too much)
+        return new_ijkl, new_ops, new_op_str
 
     def max_range(self):
         """Determine the maximal range in :attr:`coupling_terms`.
@@ -3803,7 +3946,7 @@ class MultiCouplingTerms(CouplingTerms):
                         label = (_i, op_i, op_string_ij)
                     else:
                         label = _label_left + (_i, op_i, op_string_ij)
-                    graph.add(_i, _label_left, label, op_i, 1.)
+                    graph.add(_i, _label_left, label, op_i, 1., skip_existing=True)
                     for j, d3 in d2.items():
                         label_j = graph.add_string(_i, j, label, op_string_ij)
                         self.add_to_graph(graph, j, d3, label_j)
@@ -3897,4 +4040,3 @@ class MultiCouplingTerms(CouplingTerms):
                     if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
         # done
-
