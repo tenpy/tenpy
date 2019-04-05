@@ -86,8 +86,8 @@ class HofstadterFermions(CouplingMPOModel):
     def init_terms(self, model_params):
         Jx = get_parameter(model_params, 'Jx', 1., self.name)
         Jy = get_parameter(model_params, 'Jy', 1., self.name)
-        phi = get_parameter(model_params, 'phi', (1, 3), self.name)
-        phi = 2 * np.pi * phi[0] / phi[1]
+        phi_pq = get_parameter(model_params, 'phi', (1, 3), self.name)
+        phi = 2 * np.pi * phi_pq[0] / phi_pq[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
         gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
@@ -96,6 +96,7 @@ class HofstadterFermions(CouplingMPOModel):
         self.add_onsite(-mu, 0, 'N')
 
         if gauge == 'landau_x':
+            assert Lx % phi_pq[1] == 0, "Flux density inconsistent with Lx in Landau-x gauge."
             # hopping in x-direction: uniform
             hop_x = -Jx
             # hopping in y-direction:
@@ -105,6 +106,7 @@ class HofstadterFermions(CouplingMPOModel):
             # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
             hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
         elif gauge == 'landau_y':
+            assert Ly % phi_pq[1] == 0, "Flux density inconsistent with Ly in Landau-y gauge."
             # hopping in y-direction: uniform
             hop_y = -Jy
             # hopping in x-direction:
@@ -198,8 +200,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Ly = get_parameter(model_params, 'Ly', 6, self.name)
         Jx = get_parameter(model_params, 'Jx', 1., self.name)
         Jy = get_parameter(model_params, 'Jy', 1., self.name)
-        phi = get_parameter(model_params, 'phi', (1, 3), self.name)
-        phi = 2 * np.pi * phi[0] / phi[1]
+        phi_pq = get_parameter(model_params, 'phi', (1, 4), self.name)
+        phi = 2 * np.pi * phi_pq[0] / phi_pq[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
         U = get_parameter(model_params, 'U', 0, self.name)
@@ -210,6 +212,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         self.add_onsite(-np.asarray(U) / 2 - np.asarray(mu), 0, 'N')
 
         if gauge == 'landau_x':
+            assert Lx % phi_pq[1] == 0, "Flux density inconsistent with Lx in Landau-x gauge."
             # hopping in x-direction: uniform
             # hopping in y-direction:
             # The hopping amplitudes depend on position -> use an array for couplings.
@@ -219,6 +222,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
             hop_x = -Jx  
             hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
         elif gauge == 'landau_y':
+            assert Ly % phi_pq[1] == 0, "Flux density inconsistent with Ly in Landau-y gauge."
             # hopping in y-direction: uniform
             hop_y = -Jy
             # hopping in x-direction:
