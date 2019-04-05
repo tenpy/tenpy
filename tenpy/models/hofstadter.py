@@ -89,18 +89,31 @@ class HofstadterFermions(CouplingMPOModel):
         phi = 2 * np.pi * phi[0] / phi[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
 
-        # hopping in x-direction: uniform
-        hop_x = -Jx
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
-        # hopping in y-direction:
-        # The hopping amplitudes depend on position -> use an array for couplings.
-        # If the array is smaller than the actual number of couplings,
-        # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
-        # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+        if gauge == 'landau_x':
+            # hopping in x-direction: uniform
+            hop_x = -Jx
+            # hopping in y-direction:
+            # The hopping amplitudes depend on position -> use an array for couplings.
+            # If the array is smaller than the actual number of couplings,
+            # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
+            # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+            hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
+        elif gauge == 'landau_y':
+            # hopping in y-direction: uniform
+            hop_y = -Jy
+            # hopping in x-direction:
+            # The hopping amplitudes depend on position -> use an array for couplings.
+            # If the array is smaller than the actual number of couplings,
+            # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
+            # (1, Ly) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+            hop_x = -Jx * np.exp(1.j * phi * np.arange(Ly)[np.newaxis, :])  # has shape (1, Ly)
+        elif gauge == 'symmetric' or gauge == 'periodic'  # TODO confirm these are actually equal.
+            raise NotImplementedError()
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', (1, 0))
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', (-1, 0))  # h.c.
         dy = np.array([0, 1])
@@ -204,10 +217,21 @@ class HofstadterBosons(CouplingModel, MPOModel):
             # (Lx, 1) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
             hop_x = -Jx  
             hop_y = -Jy * np.exp(1.j * phi * np.arange(Lx)[:, np.newaxis])  # has shape (Lx, 1)
+        elif gauge == 'landau_y':
+            # hopping in y-direction: uniform
+            hop_y = -Jy
+            # hopping in x-direction:
+            # The hopping amplitudes depend on position -> use an array for couplings.
+            # If the array is smaller than the actual number of couplings,
+            # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
+            # (1, Ly) can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
+            hop_x = -Jx * np.exp(1.j * phi * np.arange(Ly)[np.newaxis, :])  # has shape (1, Ly)
         else:
             raise NotImplementedError("Only Landau gauge along x is defined.")
 
         self.add_coupling(-Jx, 0, 'Bd', 0, 'B', [1, 0])
-        self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])
-        self.add_coupling(hop_y, 0, 'Bd', 0, 'B', [0, 1])
-        self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', [0, -1])
+        self.add_coupling(np.conj(-Jx), 0, 'Bd', 0, 'B', [-1, 0])  # h.c.
+        dy = np.array([0, 1])
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, phi_ext)
+        self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
+        self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', -dy)  # h.c.
