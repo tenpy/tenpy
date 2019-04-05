@@ -3,6 +3,9 @@
 .. todo ::
     WARNING: These models are still under development and not yet tested for correctness.
     Use at your own risk!
+    Replicate known results to confirm models work correctly.
+    Implement different gauges (landau_y, symmetric/periodic, ...)
+    Long term: implement differet lattices
 """
 # Copyright 2018 TeNPy Developers
 
@@ -29,6 +32,10 @@ class HofstadterFermions(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
+    .. todo :
+        Change definition of 'filling': don't want to specify floats for e.g. 1/9 filling.
+        Add different gauges
+        HofstadterFermions passes nosetesting. However, HofstadterFermions threw errors, the fixes for which are not present in HofstadterFermions.
 
     Parameters
     ----------
@@ -117,7 +124,6 @@ class HofstadterBosons(CouplingModel, MPOModel):
     :func:`~tenpy.tools.params.get_parameter`.
 
     .. todo :
-        More complicated hopping amplitudes...
         Change definition of 'filling': don't want to specify floats for e.g. 1/9 filling.
         Add different gauges
 
