@@ -96,6 +96,8 @@ class HofstadterFermions(CouplingMPOModel):
         return lat
 
     def init_terms(self, model_params):
+        Lx = self.lat.shape[0]
+        Ly = self.lat.shape[1]
         Jx = get_parameter(model_params, 'Jx', 1., self.name)
         Jy = get_parameter(model_params, 'Jy', 1., self.name)
         phi_pq = get_parameter(model_params, 'phi', (1, 3), self.name)
@@ -106,8 +108,6 @@ class HofstadterFermions(CouplingMPOModel):
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
-        Lx = self.lat.shape[0]
-        Ly = self.lat.shape[1]
 
         if gauge == 'landau_x':
             assert Lx % phi_pq[1] == 0, "Flux density inconsistent with Lx in Landau-x gauge."
@@ -218,13 +218,12 @@ class HofstadterBosons(CouplingModel, MPOModel):
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
         if bc_MPS == 'infinite' and bc_x == 'open':
             raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
-        lat = Square(Lx, Ly, site, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
+        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
         return lat
 
     def init_terms(self, model_params):
-        # TODO Lx, Ly now get a default twice, which is ugly (done for debugging reasons). Figure out best way to avoid this.
-        Lx = get_parameter(model_params, 'Lx', 4, self.name)
-        Ly = get_parameter(model_params, 'Ly', 6, self.name)
+        Lx = self.lat.shape[0]
+        Ly = self.lat.shape[1]
         Jx = get_parameter(model_params, 'Jx', 1., self.name)
         Jy = get_parameter(model_params, 'Jy', 1., self.name)
         phi_pq = get_parameter(model_params, 'phi', (1, 4), self.name)
