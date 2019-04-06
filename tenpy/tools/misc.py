@@ -7,6 +7,7 @@ import random
 import os
 import itertools
 import argparse
+import warnings
 
 all = [
     'to_iterable', 'to_array', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
@@ -368,30 +369,17 @@ def add_with_None_0(a, b):
         return a
     return a + b
 
+
 def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
-        """Compute a 'ramping-up' chi_list which increases chi by dchi evry nsweeps sweeps, to a max of
-        chi_max.
-
-        Args:
-            chi_max (int): Final value for the bond dimension
-            dchi (int, optional): step size of chi
-            nsweeps (int, optional): step size in sweeps
-
-        Returns:
-            chi_list (dict): list of bond dimensions for DMRG
-        """
-        if chi_max < dchi:
-                return {0:chi_max}
-        else:
-                chi_list = {}
-                for sweep, chi in zip(range(int((chi_max)/dchi)), range(dchi, chi_max+1, dchi)):
-                        chi_list[nsweeps*sweep] = chi
-                        if verbose > 0: print ('Adding chi = {} at sweep = {}'.format(chi, nsweeps*sweep))
-
-                if chi < chi_max:
-                        chi_list[nsweeps * (sweep + 1)] = chi_max
-
-                return chi_list
+    warnings.warn("Deprecated: moved `chi_list` to `tenpy.algorithms.dmrg.chi_list`.",
+                  category=FutureWarning, stacklevel=2)
+    from tenpy.algorithms import dmrg
+    chi_list = dmrg.chi_list(chi_max, dchi, nsweeps)
+    if verbose:
+        import pprint
+        print("chi_list = ")
+        pprint.pprint(chi_list)
+    return chi_list
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

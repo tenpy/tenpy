@@ -44,7 +44,7 @@ from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
 
 __all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer',
-           'TwoSiteMixer', 'DensityMatrixMixer']
+           'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list']
 
 
 def run(psi, model, DMRG_params):
@@ -1739,3 +1739,37 @@ class DensityMatrixMixer(Mixer):
         x = npc.diag(x, wL_leg)
         x.iset_leg_labels(['wR*', 'wR'])
         return x, separate_Id
+
+
+def chi_list(chi_max, dchi=20, nsweeps=20):
+    """Compute a 'ramping-up' chi_list.
+
+    The resulting chi_list allows to increases `chi` by `dchi` every `nsweeps` sweeps up to a given
+    maximal `chi_max`.
+
+    Parameters
+    ----------
+    chi_max : int
+        Final value for the bond dimension.
+    dchi :int
+        Step size how to increase chi
+    nsweeps : int
+        Step size for sweeps
+
+    Returns
+    -------
+    chi_list : dict
+        To be used as `chi_list` parameter for DMRG, see :func:`run`.
+        Keys increase by `nsweeps`, values by `dchi`, until a maximum of `chi_max` is reached.
+    """
+    chi_max = int(chi_max)
+    nsweeps = int(nsweeps)
+    if chi_max < dchi:
+        return {0: chi_max}
+    chi_list = {}
+    for i in range(chi_max // dchi):
+        chi = int(dchi * (i+1))
+        chi_list[nsweeps*i] = chi
+    if chi < chi_max:
+        chi_list[nsweeps*(i+1)] = chi_max
+    return chi_list

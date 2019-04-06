@@ -154,6 +154,12 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(ED.V.take_slice(2, 'ps*'), ED.mps_to_full(psi2), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
 
+def test_chi_list():
+    assert dmrg.chi_list(3) == {0: 3}
+    assert dmrg.chi_list(12, 12, 5) == {0: 12}
+    assert dmrg.chi_list(24, 12, 5) == {0: 12, 5: 24}
+    assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10:27}
+
 
 if __name__ == "__main__":
     test_dmrg_excited()
