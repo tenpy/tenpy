@@ -82,7 +82,9 @@ class HofstadterFermions(CouplingMPOModel):
     def init_lattice(self, model_params):
         bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
         order = get_parameter(model_params, 'order', 'default', self.name)
-        sites = self.init_sites(model_params)
+        site = self.init_sites(model_params)
+        Lx = get_parameter(model_params, 'Lx', 3, self.name)
+        Ly = get_parameter(model_params, 'Ly', 4, self.name)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
         bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
@@ -90,7 +92,7 @@ class HofstadterFermions(CouplingMPOModel):
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
         if bc_MPS == 'infinite' and bc_x == 'open':
             raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
-        lat = Square(Lx, Ly, site, order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)  # LS are Lx, Ly, site defined?
+        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)  # LS are Lx, Ly, site defined?
         return lat
 
     def init_terms(self, model_params):
@@ -104,6 +106,8 @@ class HofstadterFermions(CouplingMPOModel):
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
+        Lx = self.lat.shape[0]
+        Ly = self.lat.shape[1]
 
         if gauge == 'landau_x':
             assert Lx % phi_pq[1] == 0, "Flux density inconsistent with Lx in Landau-x gauge."
@@ -135,7 +139,7 @@ class HofstadterFermions(CouplingMPOModel):
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', (1, 0))
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', (-1, 0))  # h.c.
         dy = np.array([0, 1])
-        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, phi_ext)
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
 
