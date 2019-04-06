@@ -193,7 +193,7 @@ class HofstadterFermions(CouplingMPOModel):
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
         gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
-        hop_x, hop_y = gauge_hopping(gauge, Lx, Ly, mx, my, Jx, Jy, phi, phi_pq)
+        hop_x, hop_y = gauge_hopping(gauge, mx, my, Jx, Jy, phi, phi_pq)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
@@ -297,7 +297,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
         U = get_parameter(model_params, 'U', 0, self.name)
         gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
-        hop_x, hop_y = gauge_hopping(gauge, Lx, Ly, mx, my, Jx, Jy, phi, phi_pq)
+        hop_x, hop_y = gauge_hopping(gauge, mx, my, Jx, Jy, phi, phi_pq)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(np.asarray(U) / 2, 0, 'NN')
