@@ -37,16 +37,16 @@ def gauge_hopping(gauge, mx, my, Jx, Jy, phi, phi_pq):
 
     The gauge choices are:
         * 'landau_x': Landau gauge along the x-axis. The magnetic unit cell will
-          have shape (mx, 1). For flux densities p/q, mx will default to q.
-          Example: at a flux density 1/3, the magnetic unit cell will have shape 
-          (3,1), so it encloses exactly 1 flux quantum.
+          have shape :math`(\mathtt{mx}, 1)`. For flux densities :math:`p/q`, mx will default to q.
+          Example: at a flux density :math:`1/3`, the magnetic unit cell will have shape 
+          :math:`(3,1)`, so it encloses exactly 1 flux quantum.
         * 'landau_y': Landau gauge along the y-axis. The magnetic unit cell will
-          have shape (1, my). For flux densities p/q, my will default to q.
-          Example: at a flux density 3/7, the magnetic unit cell will have shape
-          (1,7), so it encloses axactly 3 flux quanta.
+          have shape :math`(1, \mathtt{my})`. For flux densities :math`p/q`, my will default to q.
+          Example: at a flux density :math:`3/7`, the magnetic unit cell will have shape
+          :math:`(1,7)`, so it encloses axactly 3 flux quanta.
         * 'symmetric': symmetric gauge. The magnetic unit cell will have shape
-          (mx, my), with mx = my. For flux densities p/q, mx and my will default
-          to sqrt(q)
+          :math:`(\mathtt{mx}, \mathtt{my})`, with :math:`mx = my`. For flux densities :math:`p/q`, 
+          mx and my will default to :math:`\sqrt{q}`
           Example: at a flux density 4/9, the magnetic unit cell will have shape
           (3,3), so it encloses exactly 4 flux quanta.
 
@@ -111,9 +111,13 @@ class HofstadterFermions(CouplingMPOModel):
     For now, the Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{x, y} \mathtt{Jx} (c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
-            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi} x} c^\dagger_{x,y} c_{x,y+1} + h.c.)
-            - \sum_{x, y} \mathtt{mu} n_{x,y}
+        H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x,y+1} + h.c.)
+            - \sum_{x, y} \mathtt{mu} n_{x,y},
+
+    where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
+    phase, depending on lattice coordinates and gauge choice (see 
+    :func:`tenpy.models.hofstadter.gauge_hopping`).
 
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
@@ -127,7 +131,7 @@ class HofstadterFermions(CouplingMPOModel):
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
         Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
-    Jx, Jy: float
+    Jx, Jy, mu: float
         Hamiltonian parameters as defined above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions along the x-direction.
@@ -147,7 +151,8 @@ class HofstadterFermions(CouplingMPOModel):
     phi_ext : float
         External magnetic flux 'threaded' through the cylinder.
     gauge : 'landau_x' | 'landau_y' | 'symmetric'
-        Choice of the gauge used for the magnetic field. This changes the magnetic unit cell.
+        Choice of the gauge used for the magnetic field. This changes the 
+        magnetic unit cell.
     """
 
     def __init__(self, model_params):
@@ -206,10 +211,13 @@ class HofstadterBosons(CouplingModel, MPOModel):
     For now, the Hamiltonian reads:
 
     .. math ::
-        H = - \sum_{x, y} \mathtt{Jx} (a^\dagger_{x+1,y} a_{x,y} + h.c.)   \\
-            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi} x} a^\dagger_{x,y+1} a_{x,y} + h.c.)   \\
+        H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } a^\dagger_{x+1,y} a_{x,y} + h.c.)   \\
+            - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } a^\dagger_{x,y+1} a_{x,y} + h.c.)   \\
             + \sum_{x, y} \frac{\mathtt{U}}{2} n_{x,y} (n_{x,y} - 1) - \mathtt{mu} n_{x,y}
 
+    where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
+    phase, depending on lattice coordinates and gauge choice (see 
+    :func:`tenpy.models.hofstadter.gauge_hopping`).
 
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
@@ -225,7 +233,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
         Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
-    Jx, Jy, phi, mu, U: float
+    Jx, Jy, mu, U: float
         Hamiltonian parameters as defined above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions along the x-direction.
@@ -245,7 +253,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
     phi_ext : float
         External magnetic flux 'threaded' through the cylinder.
     gauge : 'landau_x' | 'landau_y' | 'symmetric'
-        Choice of the gauge used for the magnetic field. This changes the magnetic unit cell..
+        Choice of the gauge used for the magnetic field. This changes the 
+        magnetic unit cell. 
     """
 
     def __init__(self, model_params):
