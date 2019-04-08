@@ -3561,7 +3561,7 @@ class CouplingTerms:
                 op_i = ' '.join([op_i, op_string])  # op_j should act first
         return i, j, op_i, op_j, op_string
 
-    def plot_coupling_terms(self, ax, style_map=None):
+    def plot_coupling_terms(self, ax, lat, style_map=None):
         """"Plot coupling terms into a given lattice.
 
         This function plots the :attr:`coupling_terms`
@@ -3570,6 +3570,9 @@ class CouplingTerms:
         ----------
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            The lattice for plotting the couplings, most probably the ``M.lat`` of the
+            corresponding model ``M``, see :attr:`~tenpy.models.model.Model.lat`.
         style_map : function
             Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
             each two-site coupling and should return a keyword-dictionary
@@ -3582,7 +3585,6 @@ class CouplingTerms:
         --------
         :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
         """
-        lat = self.lat
         pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
         N_sites = lat.N_sites
         x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
