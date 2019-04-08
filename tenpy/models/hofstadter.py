@@ -18,7 +18,7 @@ from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel, CouplingMPOModel
 from ..tools.params import get_parameter, unused_parameters
 
-__all__ = ['HofstadterBosons', 'HofstadterFermions']
+__all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
 
 def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
@@ -92,7 +92,7 @@ def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
         if my is None:
             my = phi_q
         hop_y = -Jy
-        hop_x = -Jx * np.exp(1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, Ly)
+        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, Ly)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
@@ -102,7 +102,7 @@ def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
             mx = my = np.sqrt(phi_q)
             assert np.issubdtype(mx, int)
             assert np.issubdtype(my, int)
-        hop_x = -Jx * np.exp(1.j * (phi/2) * np.arange(my)[:, np.newaxis])
+        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[:, np.newaxis])
         hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[np.newaxis, :])
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
@@ -156,7 +156,7 @@ class HofstadterFermions(CouplingMPOModel):
         External magnetic flux 'threaded' through the cylinder.
     gauge : 'landau_x' | 'landau_y' | 'symmetric'
         Choice of the gauge used for the magnetic field. This changes the
-        magnetic unit cell.
+        magnetic unit cell. See :func:`gauge_hopping` for details.
     """
 
     def __init__(self, model_params):
