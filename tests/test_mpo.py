@@ -11,6 +11,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.linalg import np_conserved as npc
 
 from tenpy.networks import mps, mpo, site
+from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -131,7 +132,7 @@ def test_MPO_conversion():
             ]
     prefactors = [0.25, 10., 11., 101., 102.,  103.]
     g1, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, sites, bc='finite')
-    ct_add = mpo.MultiCouplingTerms(L)
+    ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")
     ct_add.add_to_graph(g1)
@@ -186,10 +187,10 @@ def test_MPO_expectation_value():
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
     psi1.test_sanity()
-    ot = mps.OnsiteTerms(4)
+    ot = OnsiteTerms(4)
     ot.add_onsite_term(0.1, 0, 'Sz') # -> 0.5
     ot.add_onsite_term(0.2, 3, 'Sz') # -> 0.
-    ct = mps.CouplingTerms(4) # note: ct.L != psi1.L
+    ct = CouplingTerms(4) # note: ct.L != psi1.L
     ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz') # -> 0.
     ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz') # -> 1.5*(-0.25)
     ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz') # -> 2.5*0.25

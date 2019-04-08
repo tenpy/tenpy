@@ -44,7 +44,8 @@ from ..linalg import np_conserved as npc
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import MPSEnvironment, OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from .mps import MPSEnvironment
+from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -444,9 +445,9 @@ class MPOGraph:
 
         Parameters
         ----------
-        onsite_terms : :class:`~tenpy.networks.mps.OnsiteTerms`
+        onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
             Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms :class:`~tenpy.networks.mps.CouplingTerms` | :class:`~tenpy.networks.mps.MultiCouplingTerms`
+        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
             Coupling terms to be added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
@@ -487,9 +488,9 @@ class MPOGraph:
         -------
         graph : :class:`MPOGraph`
             Initialized with the given terms.
-        onsite_terms : :class:`~tenpy.networks.mps.OnsiteTerms`
+        onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
             Onsite terms added to `graph`.
-        coupling_terms :class:`~tenpy.networks.mps.CouplingTerms` | :class:`~tenpy.networks.mps.MultiCouplingTerms`
+        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
             Coupling terms added to `graph`.
 
         See also

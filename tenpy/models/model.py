@@ -42,7 +42,7 @@ from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
-from ..networks.mps import OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.site import group_sites
 
 __all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
@@ -501,7 +501,7 @@ class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
 
     In this class, the terms of the Hamiltonian are specified explicitly as
-    :class:`~tenpy.networks.mps.OnsiteTerms` or :class:`~tenpy.networks.mps.CouplingTerms`.
+    :class:`~tenpy.networks.terms.OnsiteTerms` or :class:`~tenpy.networks.terms.CouplingTerms`.
 
     .. deprecated:: 0.4.0
         `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
@@ -520,11 +520,12 @@ class CouplingModel(Model):
 
     Attributes
     ----------
-    onsite_terms : {'category': :class:`~tenpy.networks.mps.OnsiteTerms`}
-        The :class:`~tenpy.networks.mps.OnsiteTerms` ordered by category.
-    coupling_terms : {'category': :class:`~tenpy.networks.mps.CouplingTerms`}
-        The :class:`~tenpy.networks.mps.CouplingTerms` ordered by category.
-        In a :class:`MultiCouplingModel`, values may also be :class:`MultiCouplingTerms`.
+    onsite_terms : {'category': :class:`~tenpy.networks.terms.OnsiteTerms`}
+        The :class:`~tenpy.networks.terms.OnsiteTerms` ordered by category.
+    coupling_terms : {'category': :class:`~tenpy.networks.terms.CouplingTerms`}
+        The :class:`~tenpy.networks.terms.CouplingTerms` ordered by category.
+        In a :class:`MultiCouplingModel`, values may also be
+        :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
 
     def __init__(self, lattice, bc_coupling=None):
@@ -973,7 +974,7 @@ class MultiCouplingModel(CouplingModel):
 
     The corresponding couplings can be added with :meth:`add_multi_coupling` and
     :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
-    instances of :class:`~tenpy.networks.mps.MultiCouplingTerms`.
+    instances of :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
 
     def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None, category=None):
