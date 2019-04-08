@@ -76,7 +76,7 @@ def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
     # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
     # If no magnetic unit cell size is defined, minimal size will be used.
     phi_p, phi_q = phi_pq
-    phi = 2 * np.pi * phi_p, phi_q
+    phi = 2 * np.pi * phi_p / phi_q
     if gauge == 'landau_x':
         # hopping in x-direction: uniform
         # hopping in y-direction: depends on x, shape (mx, 1)
@@ -299,13 +299,13 @@ class HofstadterBosons(CouplingModel, MPOModel):
         phi_pq = get_parameter(model_params, 'phi', (1, 4), self.name)
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
-        U = get_parameter(model_params, 'U', 0, self.name)
+        U = get_parameter(model_params, 'U', 0, self.name, True)
         gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
         hop_x, hop_y = gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq)
 
         # 6) add terms of the Hamiltonian
-        self.add_onsite(np.asarray(U) / 2, 0, 'NN')
-        self.add_onsite(-np.asarray(U) / 2 - np.asarray(mu), 0, 'N')
+        self.add_onsite(U / 2, 0, 'NN')
+        self.add_onsite(-U / 2 - mu, 0, 'N')
         dx = np.array([1, 0])
         self.add_coupling(hop_x, 0, 'Bd', 0, 'B', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Bd', 0, 'B', -dx)  # h.c.
