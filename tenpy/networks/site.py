@@ -100,7 +100,7 @@ class Site:
                 if v is not None:
                     self.state_labels[str(v)] = i
         self.opnames = set()
-        self.need_JW_string = set()
+        self.need_JW_string = set(['JW'])
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.items():
             self.add_op(name, op)
@@ -837,7 +837,7 @@ class FermionSite(Site):
         self.filling = filling
         Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
-        self.need_JW_string |= set(['C', 'Cd'])
+        self.need_JW_string |= set(['C', 'Cd', 'JW'])
 
     def __repr__(self):
         """Debug representation of self"""
@@ -1017,7 +1017,7 @@ class SpinHalfFermionSite(Site):
         self.filling = filling
         Site.__init__(self, leg, states, **ops)
         # specify fermionic operators
-        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd'])
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
     def __repr__(self):
         """Debug representation of self"""

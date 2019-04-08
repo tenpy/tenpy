@@ -77,7 +77,7 @@ def test_double_site():
     fs = site.FermionSite('N')
     ds = site.GroupedSite([fs, fs], ['a', 'b'], charges='same')
     assert ds.need_JW_string == set(
-        [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string])
+        [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string] + ['JW'])
     ss = site.GroupedSite([fs])
 
 
@@ -173,10 +173,10 @@ def test_fermion_site():
         # anti-commutate with Jordan-Wigner
         npt.assert_equal(np.dot(Cd, JW), -np.dot(JW, Cd))
         npt.assert_equal(np.dot(C, JW), -np.dot(JW, C))
-        assert S.need_JW_string == set(['Cd', 'C'])
-        for op in ['C', 'Cd', 'C N', 'C Cd C']:
+        assert S.need_JW_string == set(['Cd', 'C', 'JW'])
+        for op in ['C', 'Cd', 'C N', 'C Cd C', 'C JW Cd']:
             assert S.op_needs_JW(op)
-        for op in ['N', 'C Cd', 'JW']:
+        for op in ['N', 'C Cd', 'C JW', 'JW C']:
             assert not S.op_needs_JW(op)
 
 
