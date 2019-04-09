@@ -397,7 +397,10 @@ class CouplingTerms:
                 op_i = ' '.join([op_i, op_string])  # op_j should act first
         return i, j, op_i, op_j, op_string
 
-    def plot_coupling_terms(self, ax, lat, style_map=None):
+    def plot_coupling_terms(self, ax, lat,
+                            style_map='default',
+                            common_style={'linestyle': '--'},
+                            text=None):
         """"Plot coupling terms into a given lattice.
 
         This function plots the :attr:`coupling_terms`
@@ -409,13 +412,19 @@ class CouplingTerms:
         lat : :class:`~tenpy.models.lattice.Lattice`
             The lattice for plotting the couplings, most probably the ``M.lat`` of the
             corresponding model ``M``, see :attr:`~tenpy.models.model.Model.lat`.
-        style_map : function
-            Get's called with arguments ``i, j, op_i, op_strength, op_j, strength`` for
-            each two-site coupling and should return a keyword-dictionary
-            with the desired plot-style for this combination.
-            By default (``None``), the linecolor depends on the phase of `strength`,
-            the `linewidth` is given by the phase of `strength` (using the `hsv` colormap),
-            and the linestyle depends on the type of operators coupled.
+        style_map : function | None
+            Function which get's called with arguments ``i, j, op_i, op_string, op_j, strength``
+            for each two-site coupling and should return a keyword-dictionary with the desired
+            plot-style for this coupling.
+            By default (``None``), the `linewidth` is given by the absolute value of `strength`,
+            and the linecolor depends on the phase of `strength` (using the `hsv` colormap).
+        common_style : dict
+            Common style, which overwrites values of the dictionary returned by style_map.
+            A ``'label'`` is only used for the first plotted line.
+        text: format_string | None
+            If not ``None``, we add text labeling the couplings in the plot.
+            Available keywords are ``i, j, op_i, op_string, op_j, strength`` as well as
+            ``strength_abs, strength_angle, strength_real``.
 
         See also
         --------
@@ -424,25 +433,18 @@ class CouplingTerms:
         pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
         N_sites = lat.N_sites
         x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
-        if style_map is None:
-            linestyles = ['--', '-.', ':', '-']
-            style_cache = {}
+        if style_map == 'default':
+            import matplotlib
             from matplotlib.cm import hsv
             from matplotlib.colors import Normalize
             norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
             def style_map(i, j, op_i, op_string, op_j, strength):
                 """define the plot style for a given coupling"""
                 key = (op_i, op_string, op_j)
-                if key in style_cache:
-                    return style_cache[key]
                 style = {}
-                style['linestyle'] = linestyles[len(style_cache) % len(linestyles)]
+                style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
-                style['linewidth'] = np.abs(strength)
-                style_cache[key] = style.copy()
-                style['label'] = str(key) # when key occurs for the first time, use a label.
                 return style
-
         for i in sorted(self.coupling_terms.keys()):
             d1 = self.coupling_terms[i]
             x_y[0, :] = pos[i]
@@ -461,8 +463,27 @@ class CouplingTerms:
                         if isinstance(op_j, tuple):
                             continue  # multi-site coupling!
                         strength = d3[op_j]
-                        style = style_map(i, j, op_i, op_string, op_j, strength)
+                        if style_map:
+                            style = style_map(i, j, op_i, op_string, op_j, strength)
+                        else:
+                            style = {}
+                        style.update(common_style)
                         ax.plot(x_y[:, 0], x_y[:, 1], **style)
+                        if 'label' in common_style:
+                            common_style = common_style.copy()
+                            del common_style['label']
+                        if text:
+                            annotate = text.format(i=i,
+                                                   j=j,
+                                                   op_i=op_i,
+                                                   op_string=op_string,
+                                                   op_j=op_j,
+                                                   strength=strength,
+                                                   strength_abs=np.abs(strength),
+                                                   strength_real=np.real(strength),
+                                                   strength_angle=np.angle(strength))
+                            loc = np.mean(x_y, 0)
+                            ax.text(loc[0], loc[1], annotate)
         # done
 
     def add_to_graph(self, graph):
