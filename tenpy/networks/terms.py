@@ -1,8 +1,9 @@
 """Classes to store a collection of operator names and sites they act on, together with prefactors.
 
 This modules collects classes which are not strictly speaking tensor networks but represent "terms"
-acting on them. Each term is given by an
-
+acting on them. Each term is given by a collection of (onsite) operator names and indices of the
+sites it acts on. Moreover, we associate a `strength` to each term, which corresponds to the
+prefactor when specifying e.g. a Hamiltonian.
 """
 
 import numpy as np
@@ -11,15 +12,104 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
 
-__all__ = ['OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms']
+__all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms']
+
+
+class TermList:
+    """A list of terms (=operator names and sites they act on) and associated strengths.
+
+    A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
+    and :class:`MultiCouplingTerms`.
+
+    .. warning :
+        In contrast to the :class:`CouplingTerms` and :class:`MultiCouplingTerms`, this class
+        does **not** store the operator string between the sites.
+        Therefore, conversion from :class:`CouplingTerms` to :class:`TermList` is lossy!
+
+    Parameters
+    ----------
+    terms : list of list of (str, int)
+        List of terms where each `term` is a list of tuples ``(opname, i)``
+        of an operator name and a site `i` it acts on.
+        For Fermions, the order is the order in the mathematic sense, i.e., the right-most/last
+        operator in the list acts last.
+    strengths : list of float/complex
+        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+
+    Attributes
+    ----------
+    terms : list of list of (str, int)
+        List of terms where each `term` is a tuple ``(opname, i)`` of an operator name and a site
+        `i` it acts on.
+    strengths : 1D ndarray
+        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+    """
+    def __init__(self, terms, strength):
+        self.terms = list(terms)
+        self.strength = np.array(strength)
+        if (len(self.terms), ) != self.strength.shape:
+            raise ValueError("different length of terms and strength")
+
+    def to_OnsiteTerms_CouplingTerms(self, sites):
+        """Convert to :class:`OnsiteTerms` and :class:`CouplingTerms`
+
+        Parameters
+        ----------
+        sites : list of {:class:`~tenpy.networks.site.Site` | None}
+            Defines the local Hilbert space for each site.
+            Used to check whether the operators need Jordan-Wigner strings.
+            The length is used as `L` for the `onsite_terms` and `coupling_terms`.
+            Use ``[None]*L`` if you don't want to check for Jordan-Wigner.
+
+        Returns
+        -------
+        onsite_terms : :class:`OnsiteTerms`
+            Onsite terms.
+        coupling_terms :  :class:`CouplingTerms` | :class:`MultiCouplingTerms`
+            Coupling terms. If `self` contains terms involving more than two operators, a
+            :class:`MultiCouplingTerms` instance, otherwise just :class:`CouplingTerms`.
+        """
+        L = len(sites)
+        ot = OnsiteTerms(L)
+        if any(len(t) > 2 for t in self.terms):
+            ct = MultiCouplingTerms(L)
+        else:
+            ct = CouplingTerms(L)
+        for term, strength in self:
+            if len(term) == 1:
+                op, i = term[0]
+                ot.add_onsite_term(strength, i, op)
+            elif len(term) == 2:
+                op_needs_JW = [(sites[i%L] is not None and sites[i%L].op_needs_JW(op))
+                               for op, i in term]
+                args = ct.coupling_term_handle_JW(term, op_needs_JW)
+                ct.add_coupling_term(strength, *args)
+            elif len(term) > 2:
+                op_needs_JW = [(sites[i%L] is not None and sites[i%L].op_needs_JW(op))
+                               for op, i in term]
+                args = ct.multi_coupling_term_handle_JW(term, op_needs_JW)
+                ct.add_multi_coupling_term(strength, *args)
+            else:
+                raise ValueError("term without entry!?")
+        return ot, ct
+
+    def __iter__(self):
+        """Iterate over ``zip(self.terms, self.strength)``."""
+        return zip(self.terms, self.strength)
+
+    def __add__(self, other):
+        if isinstance(other, TermList):
+            return TermList(self.terms + other.terms,
+                            np.concatenate((self.strength, other.strength)))
+        return NotImplemented
 
 
 class OnsiteTerms:
     """Operator names, site indices and strengths representing onsite terms.
 
     Represents a sum of onsite terms where the operators are only given by their name (in the form
-    of a string). What the operator represents is later given by the :attr:`MPS.sites` using
-    :meth:`~tenpy.networks.site.get_op`.
+    of a string). What the operator represents is later given by a list of
+    :class:`~tenpy.networks.site.Site` with :meth:`~tenpy.networks.site.Site.get_op`.
 
     Parameters
     ----------
@@ -155,6 +245,22 @@ class OnsiteTerms:
             if H is not None:
                 H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
         # done
+
+    def to_TermList(self):
+        """Convert :attr:`onsite_terms` into a :class:`TermList`.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+        """
+        terms = []
+        strength = []
+        for i, terms_i in enumerate(self.onsite_terms):
+            for opname in sorted(terms_i):
+                terms.append([(opname, i)])
+                strength.append(terms_i[opname])
+        return TermList(terms, strength)
 
     def __iadd__(self, other):
         if not isinstance(other, OnsiteTerms):
@@ -443,6 +549,28 @@ class CouplingTerms:
                     del d1[op_i_op_str]
         # done
 
+    def to_TermList(self):
+        """Convert :attr:`onsite_terms` into a :class:`TermList`.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+        """
+        terms = []
+        strength = []
+        d0 = self.coupling_terms
+        for i in sorted(d0):
+            d1 = d0[i]
+            for (opname_i, op_str) in sorted(d1):
+                d2 = d1[(opname_i, op_str)]
+                for j in sorted(d2):
+                    d3 = d2[j]
+                    for opname_j  in sorted(d3):
+                        terms.append([(opname_i, i), (opname_j, j)])
+                        strength.append(d3[opname_j])
+        return TermList(terms, strength)
+
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):
             return NotImplemented  # unknown type of other
@@ -687,6 +815,7 @@ class MultiCouplingTerms(CouplingTerms):
                     op_i, strength = key, d2
                     graph.add(_i, _label_left, 'IdR', op_i, strength)
         # done
+
     def remove_zeros(self, tol_zero=1.e-15, _d0=None):
         """Remove entries close to 0 from :attr:`coupling_terms`.
 
@@ -715,6 +844,19 @@ class MultiCouplingTerms(CouplingTerms):
                 del _d0[i]
         # done
 
+    def to_TermList(self):
+        """Convert :attr:`onsite_terms` into a :class:`TermList`.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+        """
+        terms = []
+        strength = []
+        self._to_TermList(terms, strength, [], self.coupling_terms)
+        return TermList(terms, strength)
+
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):
             return NotImplemented  # unknown type of other
@@ -735,7 +877,28 @@ class MultiCouplingTerms(CouplingTerms):
             # else: d2 is strength, last coupling reached
         return max_range
 
-    def _iadd_multi_coupling_terms(self, self_d0=None, other_d0=None):
+    def _to_TermList(self, terms, strength, term0, d0):
+        for i in sorted(d0):
+            d1 = d0[i]
+            d1_keys_tuple = []
+            d1_keys_str = []
+            for key in d1.keys():
+                if isinstance(key, tuple):
+                    d1_keys_tuple.append(key)
+                else:
+                    d1_keys_str.append(key)
+            for opname_i in sorted(d1_keys_str):
+                # maximum recursion reached
+                terms.append(term0 + [(opname_i, i)])
+                strength.append(d1[opname_i])
+            for key in sorted(d1_keys_tuple):
+                (opname_i, op_str) = key
+                term1 = term0 + [(opname_i, i)]
+                d2 = d1[key]
+                self._to_TermList(terms, strength, term1, d2)
+        # done
+
+    def _iadd_multi_coupling_terms(self, self_d0, other_d0):
         # {ijkl[0]: {(ops_ijkl[0], op_string[0]):
         #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
         #                       ...

@@ -11,7 +11,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.linalg import np_conserved as npc
 
 from tenpy.networks import mps, mpo, site
-from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms, TermList
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -104,12 +104,14 @@ def test_MPOGraph_term_conversion():
     terms = [[("Sz", i)] for i in range(L)]
     terms += [[("Sp", i), ("Sm", i+1)] for i in range(L)]
     prefactors = [0.5] * L + [1.5] * L
-    g2, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    term_list = TermList(terms, prefactors)
+    g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
     g2.test_sanity()
     assert g1.graph == g2.graph
     terms[3:3] = [[("Sm", 2), ("Sp", 0), ("Sz", 1)]]
     prefactors[3:3] = [3.]
-    g3, ot2, ct2 = mpo.MPOGraph.from_term_list(terms, prefactors, [spin_half] * L, 'infinite')
+    term_list = TermList(terms, prefactors)
+    g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
     g1.add(1, (0, 'Sp', 'Id'), (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
     g1.add(2, (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
     assert g1.graph == g3.graph
@@ -131,7 +133,8 @@ def test_MPO_conversion():
              [("X_4", 4), ("Y_6", 6), ("Y_7", 7)],
             ]
     prefactors = [0.25, 10., 11., 101., 102.,  103.]
-    g1, ot, ct = mpo.MPOGraph.from_term_list(terms, prefactors, sites, bc='finite')
+    term_list = TermList(terms, prefactors)
+    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite')
     ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")

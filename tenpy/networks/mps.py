@@ -1598,37 +1598,67 @@ class MPS:
         exp_val = npc.trace(C, 'vR*', 'vR')
         return np.real_if_close(exp_val)
 
-    def expectation_value_terms_sum(self, term_list, prefactors):
+    def expectation_value_terms_sum(self, term_list, prefactors=None):
         """Calculate expectation values for a bunch of terms and sum them up.
+
+        This is equivalent to the following expression::
+
+            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
+
+        However, for effiency, the term_list is converted to an MPO and the expectation value
+        of the MPO is evaluated.
+
+        .. note ::
+            Due to the way MPO expectation values are evaluated for infinite systems,
+            it works only if all terms in the `term_list` start within the MPS unit cell.
+
+        .. deprecated:: 0.4.0
+            `prefactor` will be removed in version 1.0.0.
+            Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
 
         Parameters
         ----------
-        term_list : list of terms
-            Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
-        prefactors : list of (complex) floats
-            Prefactors for the ``term_sum`` to be evaluated.
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms and prefactors (`strength`) to be summed up.
+        prefactors :
+            Instead of specifying a :class:`~tenpy.networks.terms.TermList`,
+            one can also specify the term_list and strength separately.
+            This is deprecated.
 
         Returns
         -------
         terms_sum : list of (complex) float
             Equivalent to the expression
-            ``sum([self.expectation_value_term(t)*f for t, f in zip(terms_list, prefactors)])``.
-        cache :
-            Intermediate results. Currently the values for each of the term, but this might be
-            changed soon.
+            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
+        _mpo :
+            Intermediate results: the generated MPO.
+            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
+            ``terms_sum = _mpo.expectation_value(self) * self.L``
 
         See also
         --------
         :meth:`expectation_value_term`: evaluates a single `term`.
-
-        .. todo :
-            This is a naive implementation. For efficiency a caching is necessary:
-            We need to evaluate the expectation values of terms starting with the same operator(s)
-            from the left at the same time to avoid doing the same work many times.
+        :meth:`~tenpy.networks.mpo.MPO.expectation_value`: expectation value (density) of an MPO.
         """
-        terms = [self.expectation_value_term(term) for term in term_list]
-        terms_sum = sum([t*f for t, f in zip(terms, prefactors)])
-        return terms_sum, terms
+        from . import mpo, terms
+        if prefactors is not None:
+            warnings.warn("Deprecated argument prefactors: replace arguments with "
+                          "``TermList(term_list, prefactors)``.", FutureWarning, 2)
+            term_list = terms.TermList(term_list, prefactors)
+        L = self.L
+        if not self.finite:
+            for term in term_list.terms:
+                if not 0 <= min([i for _, i in term]) < L:
+                    raise ValueError("term doesn't start in MPS unit cell: " + repr(term))
+        # conversion
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        bc = 'finite' if self.finite else 'infinite'
+        mpo_graph = mpo.MPOGraph.from_terms(ot, ct, self.sites, bc)
+        mpo_ = mpo_graph.build_MPO()
+        terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
+        if not self.finite:
+            terms_sum = terms_sum * self.L
+        return terms_sum, mpo_
 
     def correlation_function(self,
                              ops1,
@@ -3282,4 +3312,3 @@ class TransferMatrix(sparse.NpcLinearOperator):
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
-

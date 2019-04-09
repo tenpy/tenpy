@@ -9,6 +9,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import Square
 
 from tenpy.networks import mps, site
+from tenpy.networks.terms import TermList
 from random_test import rand_permutation, random_MPS
 import tenpy.linalg.np_conserved as npc
 
@@ -290,13 +291,13 @@ def test_expectation_value_term():
     assert abs(ev) == 1.
     # terms_sum
     pref = np.random.random([5])
-    evsum, _ = psi2.expectation_value_terms_sum([[('Nd', 0)],
-                                                 [('Nu', 1), ('Nd', 2)],
-                                                 [('Nd', 2), ('Nu', 5)],
-                                                 [('Nu Nd', 3)],
-                                                 [('Nu', 1), ('Nu', 5)]], # yapf: disable
-                                                pref) # should be zero
-    assert abs(evsum) == sum(pref[1:])
+    term_list = TermList([[('Nd', 0)], [('Nu', 1), ('Nd', 2)], [('Nd', 2), ('Nu', 5)],
+                          [('Nu Nd', 3)], [('Nu', 1), ('Nu', 5)]], pref)
+    desired = sum(pref[1:])
+    assert desired == sum([psi2.expectation_value_term(term)*strength
+                           for term, strength in term_list])
+    evsum, _ = psi2.expectation_value_terms_sum(term_list)
+    assert abs(evsum - desired) < 1.e-14
 
 
 if __name__ == "__main__":

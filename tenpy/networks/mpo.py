@@ -470,15 +470,13 @@ class MPOGraph:
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, prefactors, sites, bc):
+    def from_term_list(cls, term_list, sites, bc):
         """Initialize form a list of operator terms and prefactors.
 
         Parameters
         ----------
-        term_list : list of terms
-            Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
-        prefactors : list of (complex) floats
-            Prefactors for the ``term_sum`` to be evaluated.
+        term_list : :class:`~tenpy.networks.mps.TermList`
+            Terms to be added to the MPOGraph.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
@@ -488,38 +486,13 @@ class MPOGraph:
         -------
         graph : :class:`MPOGraph`
             Initialized with the given terms.
-        onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
-            Onsite terms added to `graph`.
-        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
-            Coupling terms added to `graph`.
 
         See also
         --------
         :meth:`from_terms` : equivalent for other representation of terms.
         """
-        L = len(sites)
-        ot = OnsiteTerms(L)
-        if any(len(t) > 2 for t in term_list):
-            ct = MultiCouplingTerms(L)
-        else:
-            ct = CouplingTerms(L)
-        if len(term_list) != len(prefactors):
-            raise ValueError("different length of term_list and prefactors")
-        for term, strength in zip(term_list, prefactors):
-            if len(term) == 1:
-                op, i = term[0]
-                ot.add_onsite_term(strength, i, op)
-            elif len(term) == 2:
-                op_needs_JW = [sites[i%L].op_needs_JW(op) for op, i in term]
-                args = ct.coupling_term_handle_JW(term, op_needs_JW)
-                ct.add_coupling_term(strength, *args)
-            elif len(term) > 2:
-                op_needs_JW = [sites[i%L].op_needs_JW(op) for op, i in term]
-                args = ct.multi_coupling_term_handle_JW(term, op_needs_JW)
-                ct.add_multi_coupling_term(strength, *args)
-            else:
-                raise ValueError("term without entry!?")
-        return cls.from_terms(ot, ct, sites, bc), ot, ct
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
+        return cls.from_terms(ot, ct, sites, bc)
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""

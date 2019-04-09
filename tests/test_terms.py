@@ -42,6 +42,12 @@ def test_onsite_terms():
                                {"X_3": strength1[3]+ strength2[3], "Y_3": strength2[3]},
                                {"Y_4": strength2[4]},
                                {"Y_5": strength2[5]}] # yapf: disable
+    # convert to term_list
+    tl = o1.to_TermList()
+    assert tl.terms == [[("X_0", 0)], [("Y_1", 1)], [("X_3", 3)], [("Y_3", 3)], [("Y_4", 4)],
+                        [("Y_5", 5)]]
+    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([None]*L)
+    assert o3.onsite_terms == o1.onsite_terms
 
 
 def test_coupling_terms():
@@ -66,6 +72,15 @@ def test_coupling_terms():
     assert c1.coupling_terms == c1_des
     c1._test_terms(sites)
     assert c1.max_range() == 3 - 0
+    tl1 = c1.to_TermList()
+    term_list_des = [[('X_0', 0), ('Y_1', 1)], [('X_0', 0), ('Y_2', 2)], [('X_0', 0), ('Y_3', 3)],
+                     [('X_2', 2), ('Y_3', 3)]]
+    assert tl1.terms == term_list_des
+    assert np.all(tl1.strength == [0.125, 0.25, 0.375, 2.375])
+    ot1, ct1_conv = tl1.to_OnsiteTerms_CouplingTerms(sites)
+    assert ot1.onsite_terms == [{}] * L
+    assert ct1_conv.coupling_terms == c1_des
+
     mc = MultiCouplingTerms(L)
     for i, j in [(2, 3)]:  # exact same terms as c1
         mc.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
@@ -86,6 +101,23 @@ def test_coupling_terms():
               2: {('X_2', 'Id'): {3: {'Y_3': 2.375}}}} # yapf: disable
     assert mc.coupling_terms == mc_des
     mc._test_terms(sites)
+    # convert to TermList
+    tl_mc = mc.to_TermList()
+    term_list_des = [[('X_0', 0), ('Y_1', 1)],
+                     [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],
+                     [('X_0', 0), ('Y_2', 2)],
+                     [('X_0', 0), ('Y_3', 3)],
+                     [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],  # (!) droppend S1, S2 (!)
+                     [('X_1', 1), ('Y_2', 2), ('Y_3', 3)],
+                     [('X_2', 2), ('Y_3', 3)]]
+    assert tl_mc.terms == term_list_des
+    assert np.all(tl_mc.strength == [0.125, 20., 0.25, 0.375, 30., 40., 2.375])
+    ot, mc_conv = tl_mc.to_OnsiteTerms_CouplingTerms(sites)
+    assert ot1.onsite_terms == [{}] * L
+    del (mc_des[0])[('X_0', 'S1')]  # conversion dropped the opstring names
+    mc_des[0][('X_0', 'Id')][1][('Y_1', 'Id')][3]['Y_3'] += 30.  # add it to other term
+    assert mc_conv.coupling_terms == mc_des
+
     # addition
     c2 = CouplingTerms(L)
     for i, j in [(0, 1), (1, 2)]:
@@ -158,6 +190,3 @@ def test_coupling_terms_handle_JW():
     assert args == ([0, 1, 3, 4, 6, 7],
                     ["JW Y_0", "JW X_1", "Y_3", "JW X_4 JW", "JW Y_6", "Y_7"],
                     ["JW", "JW", "Id", "Id", "JW"])
-
-
-

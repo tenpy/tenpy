@@ -71,6 +71,8 @@ Added
 - :class:`tenpy.networks.terms.OnsiteTerms`, :class:`tenpy.networks.terms.CouplingTerms`, :class:`tenpy.networks.terms.MultiCouplingTerm` 
   containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
   This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+- :class:`tenpy.networks.terms.TermList` as another (more human readable) representation of terms with conversion from
+  and to the other ``*Term`` classes.
 - :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
   of an Environment.
 - :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`tenpy.networks.mpo.MPOGraph.from_term_list`.
