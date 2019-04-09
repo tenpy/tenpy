@@ -33,7 +33,7 @@ Backwards incompatible changes
   Afterwards recompile with ``bash compile.sh``.
 - Changed structure of :attr:`tenpy.models.model.CouplingModel.onsite_terms` and :attr:`tenpy.models.model.CouplingModel.coupling_terms`:
   Each of them is now a dictionary with category strings as keys and the newly introduced
-  :class:`tenpy.networks.mps.OnsiteTerms` and :class:`tenpy.networks.mps.CouplingTerms` as values.
+  :class:`tenpy.networks.terms.OnsiteTerms` and :class:`tenpy.networks.terms.CouplingTerms` as values.
 - :meth:`tenpy.models.model.CouplingModel.calc_H_onsite` is deprecated in favor of new methods.
 - Argument `raise_op2_left` of :meth:`tenpy.models.model.CouplingModel.add_coupling` is deprecated.
 
@@ -68,9 +68,11 @@ Added
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
 - :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
 - :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
-- :class:`tenpy.networks.mps.OnsiteTerm`, :class:`tenpy.networks.mps.CouplingTerm`, :class:`tenpy.networks.mps.MultiCouplingTerm` 
+- :class:`tenpy.networks.terms.OnsiteTerms`, :class:`tenpy.networks.terms.CouplingTerms`, :class:`tenpy.networks.terms.MultiCouplingTerm` 
   containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
   This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+- :class:`tenpy.networks.terms.TermList` as another (more human readable) representation of terms with conversion from
+  and to the other ``*Term`` classes.
 - :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
   of an Environment.
 - :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`tenpy.networks.mpo.MPOGraph.from_term_list`.
