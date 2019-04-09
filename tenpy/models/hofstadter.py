@@ -3,10 +3,9 @@
 .. todo ::
     WARNING: These models are still under development and not yet tested for correctness.
     Use at your own risk!
-    Gauge-based hopping parametres currently assume Lx, Ly to be the size of the magnetic unit cell. MUC needs to be independently defined!
     Replicate known results to confirm models work correctly.
-    Add assertions for consistency between gauge and lattice
-    Long term: implement different lattices
+    Long term: implement different lattices.
+    Long term: implement variable hopping strengths Jx, Jy.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -49,7 +48,7 @@ def gauge_hopping(model_params):
           (3,3), so it encloses exactly 4 flux quanta.
 
     .. todo :
-        Add periodic gauge (generalization of symmetric with mx, my unequal)
+        Add periodic gauge (generalization of symmetric with mx, my unequal).
 
     Parameters
     ----------
