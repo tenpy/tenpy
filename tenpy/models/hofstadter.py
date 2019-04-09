@@ -21,7 +21,7 @@ from ..tools.params import get_parameter, unused_parameters
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
 
-def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
+def gauge_hopping(model_params):
     r"""Compute hopping amplitudes for the Hofstadter models based on a gauge choice.
 
     In the Hofstadter model, the magnetic field enters as an Aharonov-Bohm phase.
@@ -75,8 +75,14 @@ def gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq):
     # If the array is smaller than the actual number of couplings,
     # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
     # If no magnetic unit cell size is defined, minimal size will be used.
-    phi_p, phi_q = phi_pq
+    gauge = get_parameter(model_params, 'gauge', 'landau_x', 'Gauge hopping')
+    mx = get_parameter(model_params, 'mx', None, 'Gauge hopping')
+    my = get_parameter(model_params, 'my', None, 'Gauge hopping')
+    Jx = get_parameter(model_params, 'Jx', 1., 'Gauge hopping')
+    Jy = get_parameter(model_params, 'Jy', 1., 'Gauge hopping')
+    phi_p, phi_q = get_parameter(model_params, 'phi', (1, 3), 'Gauge hopping')
     phi = 2 * np.pi * phi_p / phi_q
+
     if gauge == 'landau_x':
         # hopping in x-direction: uniform
         # hopping in y-direction: depends on x, shape (mx, 1)
@@ -188,15 +194,9 @@ class HofstadterFermions(CouplingMPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        mx = get_parameter(model_params, 'mx', None, self.name)
-        my = get_parameter(model_params, 'my', None, self.name)
-        Jx = get_parameter(model_params, 'Jx', 1., self.name)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name)
-        phi_pq = get_parameter(model_params, 'phi', (1, 3), self.name)
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
-        gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
-        hop_x, hop_y = gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq)
+        hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
@@ -292,16 +292,10 @@ class HofstadterBosons(CouplingModel, MPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        mx = get_parameter(model_params, 'mx', None, self.name)
-        my = get_parameter(model_params, 'my', None, self.name)
-        Jx = get_parameter(model_params, 'Jx', 1., self.name)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name)
-        phi_pq = get_parameter(model_params, 'phi', (1, 4), self.name)
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
         U = get_parameter(model_params, 'U', 0, self.name, True)
-        gauge = get_parameter(model_params, 'gauge', 'landau_x', self.name)
-        hop_x, hop_y = gauge_hopping(gauge, mx, my, Jx, Jy, phi_pq)
+        hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(U / 2, 0, 'NN')
