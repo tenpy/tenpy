@@ -181,7 +181,6 @@ class HofstadterFermions(CouplingMPOModel):
         site = self.init_sites(model_params)
         Lx = get_parameter(model_params, 'Lx', 3, self.name)
         Ly = get_parameter(model_params, 'Ly', 4, self.name)
-        v = get_parameter(model_params, 'v', 0, self.name)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
         bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
@@ -197,6 +196,7 @@ class HofstadterFermions(CouplingMPOModel):
         Ly = self.lat.shape[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
         mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        v = get_parameter(model_params, 'v', 0, self.name)
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
