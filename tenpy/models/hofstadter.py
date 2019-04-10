@@ -146,7 +146,7 @@ class HofstadterFermions(CouplingMPOModel):
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'infinite'
+    bc_x : 'periodic' | 'open'
         Lattice boundary conditions in x-direction
     bc_y : 'ladder' | 'cylinder'
         Lattice boundary conditions in y-direction.
@@ -243,7 +243,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'infinite'
+    bc_x : 'periodic' | 'open'
         Boundary conditions in x-direction
     bc_y : 'ladder' | 'cylinder'
         Boundary conditions in y-direction.
