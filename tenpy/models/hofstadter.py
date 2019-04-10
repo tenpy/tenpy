@@ -122,6 +122,7 @@ class HofstadterFermions(CouplingMPOModel):
     .. math ::
         H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
             - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x,y+1} + h.c.)
+            + \sum_{x, y} \mathtt{v} ( n_{x, y} n_{x, y + 1} + n_{x, y} n_{x + 1, y}
             - \sum_{x, y} \mathtt{mu} n_{x,y},
 
     where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
@@ -140,7 +141,7 @@ class HofstadterFermions(CouplingMPOModel):
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
         Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
-    Jx, Jy, mu: float
+    Jx, Jy, mu, v: float
         Hamiltonian parameters as defined above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions along the x-direction.
@@ -180,6 +181,7 @@ class HofstadterFermions(CouplingMPOModel):
         site = self.init_sites(model_params)
         Lx = get_parameter(model_params, 'Lx', 3, self.name)
         Ly = get_parameter(model_params, 'Ly', 4, self.name)
+        v = get_parameter(model_params, 'v', 0, self.name)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
         bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
         bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
@@ -200,13 +202,14 @@ class HofstadterFermions(CouplingMPOModel):
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
         dx = np.array([1, 0])
-        # hop_x = self.coupling_strength_add_ext_flux(hop_x, dx, [0, phi_ext]) # does nothing...
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', -dx)  # h.c.
         dy = np.array([0, 1])
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
+        self.add_coupling(v, 0, 'N', 0, 'N', dx)
+        self.add_coupling(v, 0, 'N', 0, 'N', dy)
 
 
 class HofstadterBosons(CouplingModel, MPOModel):
