@@ -7,16 +7,14 @@ from nose.plugins.attrib import attr
 
 @attr('slow')
 def test_HofstadterBosons():
-    check_general_model(HofstadterBosons, {'Lx': 4}, {
-        'conserve': [None, 'parity', 'N'],
-        'U': [0., 0.123],
+    check_general_model(HofstadterBosons, {'Lx': 3, 'U': 0.123}, {
+        'conserve': [None, 'N'],
         'bc_MPS': ['finite', 'infinite']
     })
 
 @attr('slow')
 def test_HofstadterFermions():
-    check_general_model(HofstadterBosons, {'Lx': 4}, {
-        'conserve': [None, 'parity', 'N'],
-        'U': [0., 0.123],
+    check_general_model(HofstadterBosons, {'Lx': 3, 'U': 0.123}, {
+        'conserve': [None, 'N'],
         'bc_MPS': ['finite', 'infinite']
     })
