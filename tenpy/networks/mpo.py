@@ -129,8 +129,8 @@ class MPO:
 
         See also
         --------
-        :func:`grid_insert_ops` : used to plug in `entries` of the grid
-        grid_outer : Used :func:`~tenpy.linalg.np_conserved.grid_outer` for final conversion.
+        grid_insert_ops : used to plug in `entries` of the grid.
+        tenpy.linalg.np_conserved.grid_outer : used for final conversion.
         """
         chinfo = sites[0].leg.chinfo
         L = len(sites)
@@ -461,7 +461,7 @@ class MPOGraph:
 
         See also
         --------
-        :meth:`from_term_list` : equivalent for other representation terms.
+        from_term_list : equivalent for other representation terms.
         """
         graph = cls(sites, bc)
         onsite_terms.add_to_graph(graph)
@@ -489,7 +489,7 @@ class MPOGraph:
 
         See also
         --------
-        :meth:`from_terms` : equivalent for other representation of terms.
+        from_terms : equivalent for other representation of terms.
         """
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
         return cls.from_terms(ot, ct, sites, bc)

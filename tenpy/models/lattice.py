@@ -97,7 +97,7 @@ class Lattice:
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
-    basis: ndarray (dim, Dim)
+    basis : ndarray (dim, Dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
@@ -266,9 +266,9 @@ class Lattice:
 
         See also
         --------
-        :func:`get_order` : generates the `order` from equivalent `priority` and `snake_winding`.
-        :func:`get_order_grouped` : variant of `get_order`.
-        :meth:`plot_order` : visualizes the resulting `order`.
+        get_order : generates the `order` from equivalent `priority` and `snake_winding`.
+        get_order_grouped : variant of `get_order`.
+        plot_order : visualizes the resulting `order`.
         """
         if isinstance(order, str):
             if order in ["default", "Cstyle"]:
@@ -1150,9 +1150,9 @@ def get_order(shape, snake_winding, priority=None):
 
     See also
     --------
-    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
-    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
-    :func:`get_order_grouped` : a variant grouping sites of the unit cell.
+    Lattice.ordering : method in :class:`Lattice` to obtain the order from parameters.
+    Lattice.plot_order : visualizes the resulting order in a :class:`Lattice`.
+    get_order_grouped : a variant grouping sites of the unit cell.
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations

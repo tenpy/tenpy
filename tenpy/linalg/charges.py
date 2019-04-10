@@ -346,8 +346,8 @@ class LegCharge:
 
         See also
         --------
-        :meth:`sort` : sorts by charges
-        :meth:`bunch` : bunches contiguous blocks of the same charge.
+        sort : sorts by charges
+        bunch : bunches contiguous blocks of the same charge.
         """
         qflat = np.asarray(qflat, dtype=QTYPE)
         if qflat.ndim == 1 and chargeinfo.qnumber == 1:
@@ -368,7 +368,7 @@ class LegCharge:
         See also
         --------
         sort : sorts by charges
-        block : blocks by charges
+        bunch : bunches contiguous blocks of the same charge.
         """
         res = cls(chargeinfo, slices, charges, qconj)
         res.sorted = res.is_sorted()
@@ -686,8 +686,8 @@ class LegCharge:
         See also
         --------
         bunch : enlarge blocks for contiguous qind of the same charges.
-        np.take : can apply `perm_flat` to a given axis
-        inverse_permutation : returns inverse of a permutation
+        numpy.take : can apply `perm_flat` to a given axis
+        tenpy.tools.misc.inverse_permutation : returns inverse of a permutation
         """
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
@@ -718,7 +718,8 @@ class LegCharge:
 
         See also
         --------
-        sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
+        sort : sorts by charges, thus enforcing complete blocking in combination with bunch.
+        """
         if self.bunched:  # nothing to do
             return np.arange(self.block_number + 1, dtype=np.intp), self
         cp = self.copy()
