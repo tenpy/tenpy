@@ -89,7 +89,7 @@ def gauge_hopping(model_params):
         if mx is None:
             mx = phi_q
         hop_x = -Jx
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (Lx, 1)
+        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':
         # hopping in x-direction: depends on y, shape (1, my)
         # hopping in y-direction: uniform
@@ -97,7 +97,7 @@ def gauge_hopping(model_params):
         if my is None:
             my = phi_q
         hop_y = -Jy
-        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, Ly)
+        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
@@ -107,8 +107,8 @@ def gauge_hopping(model_params):
             mx = my = np.sqrt(phi_q)
             assert mx.is_integer(), "Unable to build symmetric gauge with this flux."
             assert my.is_integer(), "Unable to build symmetric gauge with this flux."
-        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[:, np.newaxis])
-        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[np.newaxis, :])
+        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
+        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
     return hop_x, hop_y
