@@ -105,8 +105,8 @@ def gauge_hopping(model_params):
             # TODO Rework so minimal MUC always contains integer number of flux quanta (i.e. not sqrt).
             warnings.warn("Magnetic unit cell not (fully) specified.")
             mx = my = np.sqrt(phi_q)
-            assert np.issubdtype(mx, int)
-            assert np.issubdtype(my, int)
+            assert mx.is_integer(), "Unable to build symmetric gauge with this flux."
+            assert my.is_integer(), "Unable to build symmetric gauge with this flux."
         hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[:, np.newaxis])
         hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[np.newaxis, :])
     else:
@@ -232,7 +232,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Size of the simulation unit cell in terms of lattice sites.
     mx, my : int
         Size of the magnetic unit cell in terms of lattice sites.
-    N_max : int
+    Nmax : int
         Maximum number of bosons per site.
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
