@@ -195,7 +195,7 @@ class HofstadterFermions(CouplingMPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
         v = get_parameter(model_params, 'v', 0, self.name)
         hop_x, hop_y = gauge_hopping(model_params)
 
@@ -295,7 +295,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
         U = get_parameter(model_params, 'U', 0, self.name, True)
         hop_x, hop_y = gauge_hopping(model_params)
 
