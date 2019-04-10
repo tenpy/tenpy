@@ -853,7 +853,7 @@ class Array:
 
         See also
         --------
-        :meth:`add_leg` : opposite action of inserting a new leg.
+        add_leg : opposite action of inserting a new leg.
         """
         axes = self.get_leg_indices(to_iterable(axes))
         indices = np.asarray(to_iterable(indices), dtype=np.intp)
@@ -947,7 +947,7 @@ class Array:
 
         See also
         --------
-        :meth:`take_slice` : opposite action reducing the number of legs.
+        take_slice : opposite action reducing the number of legs.
         """
         if axis < 0:
             axis += self.rank
@@ -1275,7 +1275,7 @@ class Array:
 
         See also
         --------
-        :meth:`split_legs` : inverse reshaping splitting LegPipes.
+        split_legs : inverse reshaping splitting LegPipes.
 
         Notes
         -----
@@ -1409,7 +1409,7 @@ class Array:
 
         See also
         --------
-        :meth:`combine_legs` : this is reversed by split_legs.
+        combine_legs : this is reversed by split_legs.
 
         Examples
         --------
@@ -2609,7 +2609,7 @@ def diag(s, leg, dtype=None):
 
     See also
     --------
-    :meth:`Array.scale_axis` : similar as ``tensordot(diag(s), ...)``, but faster.
+    Array.scale_axis : similar as ``tensordot(diag(s), ...)``, but faster.
     """
     s = np.asarray(s, dtype)
     scalar = (s.ndim == 0)
@@ -2649,7 +2649,7 @@ def concatenate(arrays, axis=0, copy=True):
 
     See also
     --------
-    :meth:`Array.sort_legcharge` : can be used to block by charges along the axis.
+    Array.sort_legcharge : can be used to block by charges along the axis.
     """
     arrays = list(arrays)
     res = arrays[0].zeros_like()
@@ -2733,7 +2733,7 @@ def grid_concat(grid, axes, copy=True):
 
     See also
     --------
-    :meth:`Array.sort_legcharge` : can be used to block by charges.
+    Array.sort_legcharge : can be used to block by charges.
     """
     if not isinstance(grid, np.ndarray):
         grid = np.array(grid, dtype=np.object)

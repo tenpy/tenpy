@@ -860,7 +860,7 @@ class MPS:
 
         See also
         --------
-        :meth:`group_split` : Reverts the grouping.
+        group_split : Reverts the grouping.
         """
         self.convert_form('B')
         if grouped_sites is None:
@@ -905,7 +905,7 @@ class MPS:
 
         See also
         --------
-        :meth:`group_sites` : Should have been used before to combine sites.
+        group_sites : Should have been used before to combine sites.
         """
         self.convert_form('B')
         if self.L > 1:
@@ -1515,7 +1515,7 @@ class MPS:
 
         See also
         --------
-        :meth:`correlation_function`: efficient way to evaluate many correlation functions.
+        correlation_function : efficient way to evaluate many correlation functions.
 
         Examples
         --------
@@ -1637,8 +1637,8 @@ class MPS:
 
         See also
         --------
-        :meth:`expectation_value_term`: evaluates a single `term`.
-        :meth:`~tenpy.networks.mpo.MPO.expectation_value`: expectation value (density) of an MPO.
+        expectation_value_term : evaluates a single `term`.
+        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
         """
         from . import mpo, terms
         if prefactors is not None:

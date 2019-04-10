@@ -428,7 +428,7 @@ class CouplingTerms:
 
         See also
         --------
-        :func:`tenpy.models.lattice.Lattice.plot_sites` : plot the sites of the lattice.
+        tenpy.models.lattice.Lattice.plot_sites : plot the sites of the lattice.
         """
         pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
         N_sites = lat.N_sites
