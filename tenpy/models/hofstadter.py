@@ -105,8 +105,10 @@ def gauge_hopping(model_params):
             # TODO Rework so minimal MUC always contains integer number of flux quanta (i.e. not sqrt).
             warnings.warn("Magnetic unit cell not (fully) specified.")
             mx = my = np.sqrt(phi_q)
-            assert mx.is_integer(), "Unable to build symmetric gauge with this flux."
-            assert my.is_integer(), "Unable to build symmetric gauge with this flux."
+            if not mx.is_integer():
+                raise ValueError("Unable to build symmetric gauge with this flux.")
+        if mx != my or mx * my != phi_q:
+            raise ValueError("Magnetic unit cell incompatible with flux or symmetric gauge.")
         hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
         hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:

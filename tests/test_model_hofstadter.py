@@ -6,21 +6,35 @@ from nose.plugins.attrib import attr
 
 @attr('slow')
 def test_HofstadterBosons():
-    check_general_model(HofstadterBosons, {'Lx':9, 'Ly':9, 'phi':(1,9)}, {
-        'conserve': [None, 'parity', 'N'],
-        'U': [0., 0.456],
+    model_pars = {'Lx':3, 'Ly':3, 'phi':(1,3),
+                  'conserve': 'N', 'U': 0.456,
+                  'mu': 0.123, 'Nmax': 1}
+    check_general_model(HofstadterBosons, model_pars, {
         'bc_MPS': ['finite', 'infinite'],
-        'gauge': ['landau_x', 'landau_y', 'symmetric'],
-        'mu':[0, 0.123],
-        'Nmax': [1, 3],
+        'gauge': ['landau_x', 'landau_y'],
     })
+    model_pars['gauge'] = 'symmetric'
+    model_pars['Lx'] = model_pars['Ly'] = 2
+    model_pars['mx'] = model_pars['my'] = 2
+    model_pars['phi'] = (1, 4)
+    check_general_model(HofstadterBosons, model_pars, {
+        'bc_MPS': ['finite', 'infinite']
+    })
+
 
 @attr('slow')
 def test_HofstadterFermions():
-    check_general_model(HofstadterFermions, {'Lx':9, 'Ly':9, 'phi':(1,9)}, {
-        'conserve': [None, 'parity', 'N'],
+    model_pars = {'Lx':3, 'Ly':3, 'phi':(1, 3),
+                  'conserve': 'N', 'v': 0.456,
+                  'mu': 0.123}
+    check_general_model(HofstadterFermions, model_pars, {
         'bc_MPS': ['finite', 'infinite'],
-        'gauge': ['landau_x', 'landau_y', 'symmetric'],
-        'mu':[0, 0.123],
-        'v':[0,0.456],
+        'gauge': ['landau_x', 'landau_y'],
+    })
+    model_pars['gauge'] = 'symmetric'
+    model_pars['Lx'] = model_pars['Ly'] = 4
+    model_pars['phi'] = (1, 4)
+    model_pars['mx'] = model_pars['my'] = 2
+    check_general_model(HofstadterFermions, model_pars, {
+        'bc_MPS': ['finite', 'infinite']
     })
