@@ -1,7 +1,7 @@
 """Time Dependant Variational Principle (TDVP) with MPS (finite version only).
 
 The TDVP MPS algorithm was first proposed by [Haegeman2011]_. However the stability of the
-algorithm was later improved in [Haegeman2014]_, that we are following in this implementation.
+algorithm was later improved in [Haegeman2016]_, that we are following in this implementation.
 The general idea of the algorithm is to project the quantum time evolution in the manyfold of MPS
 with a given bond dimension. Compared to e.g. TEBD, the algorithm has several advantages:
 e.g. it conserves the unitarity of the time evolution and the energy (for the single-site version),
@@ -68,7 +68,7 @@ class Engine:
         The MPS, time evolved in-place.
     TDVP_params: dict
         Optional parameters, see :func:`run` and :func:`run_GS` for more details.
-    environment :
+    environment : :class:`~tenpy.networks.mpo.MPOEnvironment`
         The environment, storing the `LP` and `RP` to avoid recalculations.
     """
 
@@ -90,8 +90,11 @@ class Engine:
 
      # Actual calculation
     def run_one_site(self,N_steps=None):
-        """
-        Run the TDVP algorithm with the one site algorithm. Be aware that the bond dimension will not increase
+        """Run the TDVP algorithm with the one site algorithm.
+
+        .. warning ::
+            Be aware that the bond dimension will not increase!
+
         Parameters
         ----------
         N_steps : integer. Number of steps
@@ -108,9 +111,11 @@ class Engine:
             self.evolved_time=self.evolved_time+self.dt
 
     def run_two_sites(self,N_steps=None):
-        """
-        Run the TDVP algorithm with two sites update. The bond dimension will increase. Truncation happens at every step of the
+        """Run the TDVP algorithm with two sites update.
+
+        The bond dimension will increase. Truncation happens at every step of the
         sweep, according to the parameters set in trunc_params.
+
         Parameters
         ----------
         N_steps : integer. Number of steps
@@ -125,13 +130,15 @@ class Engine:
             self.sweep_left_right_two()
             self.sweep_right_left_two()
             self.evolved_time=self.evolved_time+self.dt
+
     def _del_correct(self,i):
-        """
-        Delete correctly the environment once the tensor at site i is updated
+        """Delete correctly the environment once the tensor at site i is updated.
+
         Parameters
         ----------
-        i: int. Site at which the tensor has been updated
-        """ 
+        i : int
+            Site at which the tensor has been updated
+        """
 
         if i+1<self.L:
             self.environment.del_LP(i+1)
@@ -139,7 +146,10 @@ class Engine:
             self.environment.del_RP(i-1)
 
     def sweep_left_right(self):
-        """Performs the sweep left->right of the second order TDVP scheme with one site update. Evolve from 0.5*dt"""
+        """Performs the sweep left->right of the second order TDVP scheme with one site update.
+
+        Evolve from 0.5*dt.
+        """
         for j in range(self.L):
             B=self.psi.get_B(j)
             # Get theta
@@ -169,9 +179,10 @@ class Engine:
                 s=self.update_s_h0(s,H,1j*0.5*self.dt)
                 s= s/np.linalg.norm(s.to_ndarray())
 
-
     def sweep_left_right_two(self):
-        """Performs the sweep left->right of the second order TDVP scheme with two sites update. Evolve from 0.5*dt"""
+        """Performs the sweep left->right of the second order TDVP scheme with two sites update.
+
+        Evolve from 0.5*dt"""
         theta_old=self.psi.get_theta(0,1)
         for j in range(self.L-1):
 
@@ -207,7 +218,9 @@ class Engine:
                 theta_old.ireplace_label('p','p0')
 
     def sweep_right_left(self):
-        """Performs the sweep right->left of the second order TDVP scheme with one site update. Evolve from 0.5*dt"""
+        """Performs the sweep right->left of the second order TDVP scheme with one site update.
+
+        Evolve from 0.5*dt"""
         expectation_O = []
         for j in range(self.L-1,-1,-1):
             B=self.psi.get_B(j,form='A')
@@ -243,7 +256,9 @@ class Engine:
 
 
     def sweep_right_left_two(self):
-        """Performs the sweep left->right of the second order TDVP scheme with two sites update. Evolve from 0.5*dt"""
+        """Performs the sweep left->right of the second order TDVP scheme with two sites update.
+
+        Evolve from 0.5*dt"""
         theta_old=self.psi.get_theta(self.L-1,1)
         for j in range(self.L-2,-1,-1):
             theta=npc.tensordot(theta_old,self.psi.get_B(j,form='A'),('vL','vR'))
@@ -280,14 +295,18 @@ class Engine:
                 theta.ireplace_label('p','p0')
 
     def update_theta_h1(self,Lp, Rp, theta, W, dt):
-        """
-        Update with the one site Hamiltonian
+        """Update with the one site Hamiltonian.
+
         Parameters
         ----------
-        Lp: tensor representing the left environment
-        Rp: tensor representing the right environment
-        theta: the theta tensor which needs to be updated
-        W: MPO which is applied to the 'p' leg of theta
+        Lp : :class:`~tenpy.linalg.np_conserved.Array`
+            tensor representing the left environment
+        Rp :  :class:`~tenpy.linalg.np_conserved.Array`
+            tensor representing the right environment
+        theta :  :class:`~tenpy.linalg.np_conserved.Array`
+            the theta tensor which needs to be updated
+        W : :class:`~tenpy.linalg.np_conserved.Array`
+            MPO which is applied to the 'p' leg of theta
         """
         H = H1_mixed(Lp,Rp,W)
         theta=theta.combine_legs(['vL','p','vR'])
@@ -301,15 +320,20 @@ class Engine:
         return theta
 
     def update_theta_h2(self,Lp, Rp, theta, W0,W1, dt):
-        """
-        Update with the two sites Hamiltonian 
+        """Update with the two sites Hamiltonian
+
         Parameters
         ----------
-        Lp: :class:`tenpy.linalg.np_conserved.Array`, tensor representing the left environment
-        Rp: :class:`tenpy.linalg.np_conserved.Array`, tensor representing the right environment
-        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor which needs to be updated
-        W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
-        W1: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p1' leg of theta
+        Lp : :class:`tenpy.linalg.np_conserved.Array`
+            tensor representing the left environment
+        Rp : :class:`tenpy.linalg.np_conserved.Array`
+            tensor representing the right environment
+        theta : :class:`tenpy.linalg.np_conserved.Array`
+            the theta tensor which needs to be updated
+        W : :class:`tenpy.linalg.np_conserved.Array`
+            MPO which is applied to the 'p0' leg of theta
+        W1 : :class:`tenpy.linalg.np_conserved.Array`
+            MPO which is applied to the 'p1' leg of theta
         """
         H = H2_mixed(Lp,Rp,W0,W1)
         theta=theta.combine_legs(['vL','p0','p1','vR'])
@@ -323,11 +347,12 @@ class Engine:
         return theta
 
     def theta_svd_left_right(self,theta):
-        """
-        Performs the SVD from left to right
+        """Performs the SVD from left to right
+
         Parameters
         ----------
-        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor on which the SVD is applied
+        theta: :class:`tenpy.linalg.np_conserved.Array`
+            the theta tensor on which the SVD is applied
         """
         theta=theta.combine_legs(['vL','p'])
         U,s,V = npc.svd(theta,full_matrices=0)
@@ -342,11 +367,12 @@ class Engine:
         return U,s,V
 
     def set_anonymous_svd(self,U,new_label):
-        """
-        Relabel the svd
+        """Relabel the svd
+
         Parameters
         ----------
-        U: :class:`tenpy.linalg.np_conserved.Array`, the tensor which lacks a leg_label  
+        U : :class:`tenpy.linalg.np_conserved.Array`
+            the tensor which lacks a leg_label
         """
         list_labels=list(U.get_leg_labels())
         for i in range(len(list_labels)):
@@ -357,11 +383,12 @@ class Engine:
         return U
 
     def theta_svd_right_left(self,theta):
-        """
-        Performs the SVD from right to left
+        """Performs the SVD from right to left
+
         Parameters
         ----------
-        theta: :class:`tenpy.linalg.np_conserved.Array`, the theta tensor on which the SVD is applied
+        theta : :class:`tenpy.linalg.np_conserved.Array`,
+            The theta tensor on which the SVD is applied
         """
         theta=theta.combine_legs(['p','vR'])
         V,s,U = npc.svd(theta,full_matrices=0)
@@ -376,13 +403,16 @@ class Engine:
         return U,s,V
 
     def update_s_h0(self,s,H,dt):
-        """
-        Update with the zero site Hamiltonian (update of the singular value)
+        """Update with the zero site Hamiltonian (update of the singular value)
+
         Parameters
         ----------
-        s: :class:`tenpy.linalg.np_conserved.Array`, representing the singular value matrix which is updated
-        H: H0_mixed, zero site Hamiltonian that we need to apply on the singular value matrix
-        dt: complex number, time step of the evolution
+        s : :class:`tenpy.linalg.np_conserved.Array`
+            representing the singular value matrix which is updated
+        H : H0_mixed
+            zero site Hamiltonian that we need to apply on the singular value matrix
+        dt : complex number
+            time step of the evolution
         """
         #Initialize Lanczos
         parameters_lanczos_h1= {
@@ -399,17 +429,21 @@ class Engine:
 
 
 class H0_mixed:
-    """
-    Class defining the zero site Hamiltonian for Lanczos
+    """Class defining the zero site Hamiltonian for Lanczos
+
     Parameters
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment 
-   
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
+
     Attributes
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment 
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
     """
     def __init__(self,Lp,Rp):
         self.Lp = Lp
@@ -427,18 +461,25 @@ class H0_mixed:
 
 
 class H1_mixed:
-    """
-    Class defining the one site Hamiltonian for Lanczos
+    """Class defining the one site Hamiltonian for Lanczos
+
     Parameters
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
-    M: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p' leg of theta
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
+    M : :class:`tenpy.linalg.np_conserved.Array`
+        MPO which is applied to the 'p' leg of theta
+
     Attributes
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
-    W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
+    W : :class:`tenpy.linalg.np_conserved.Array`
+        MPO which is applied to the 'p0' leg of theta
     """
 
     def __init__(self,Lp,Rp,W):
@@ -460,20 +501,27 @@ class H1_mixed:
         return h
 
 class H2_mixed:
-    """
-    Class defining the two sites Hamiltonian for Lanczos
-    
+    """Class defining the two sites Hamiltonian for Lanczos
+
     Parameters
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
-    W: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
+    W : :class:`tenpy.linalg.np_conserved.Array`
+        MPO which is applied to the 'p0' leg of theta
+
     Attributes
     ----------
-    Lp::class:`tenpy.linalg.np_conserved.Array`, left part of the environment
-    Rp::class:`tenpy.linalg.np_conserved.Array`, right part of the environment
-    W0: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p0' leg of theta
-    W1: :class:`tenpy.linalg.np_conserved.Array`, MPO which is applied to the 'p1' leg of theta
+    Lp : :class:`tenpy.linalg.np_conserved.Array`
+        left part of the environment
+    Rp : :class:`tenpy.linalg.np_conserved.Array`
+        right part of the environment
+    W0 : :class:`tenpy.linalg.np_conserved.Array`
+        MPO which is applied to the 'p0' leg of theta
+    W1 : :class:`tenpy.linalg.np_conserved.Array`
+        MPO which is applied to the 'p1' leg of theta
     """
 
     def __init__(self,Lp,Rp,W0,W1):
