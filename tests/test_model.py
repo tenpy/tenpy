@@ -44,7 +44,7 @@ def check_model_sanity(M, hermitian=True):
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
-    """Create a model for different sets of parameters and check it's sanity.
+    """Create a model for different sets of parameters and check its sanity.
 
     Parameters
     ----------
@@ -53,10 +53,10 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
     model_pars : dict
         Model parameters used.
     check_pars : dict
-        pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
-        ``check_params[key]`` (in each possible combination!) and create a model for it.
+        pairs (`key`, `list of values`); we update ``model_pars[key]`` with any values of
+        ``check_pars[key]`` (in each possible combination!) and create a model for it.
     hermitian : bool
-        If True, check that the Hamiltonian is hermitian.
+        If True, check that the Hamiltonian is Hermitian.
     """
     for vals in itertools.product(*list(check_pars.values())):
         print("-" * 40)

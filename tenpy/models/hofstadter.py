@@ -89,7 +89,7 @@ def gauge_hopping(model_params):
         if mx is None:
             mx = phi_q
         hop_x = -Jx
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (Lx, 1)
+        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':
         # hopping in x-direction: depends on y, shape (1, my)
         # hopping in y-direction: uniform
@@ -97,7 +97,7 @@ def gauge_hopping(model_params):
         if my is None:
             my = phi_q
         hop_y = -Jy
-        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, Ly)
+        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
@@ -105,10 +105,10 @@ def gauge_hopping(model_params):
             # TODO Rework so minimal MUC always contains integer number of flux quanta (i.e. not sqrt).
             warnings.warn("Magnetic unit cell not (fully) specified.")
             mx = my = np.sqrt(phi_q)
-            assert np.issubdtype(mx, int)
-            assert np.issubdtype(my, int)
-        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[:, np.newaxis])
-        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[np.newaxis, :])
+            assert mx.is_integer(), "Unable to build symmetric gauge with this flux."
+            assert my.is_integer(), "Unable to build symmetric gauge with this flux."
+        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
+        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
     return hop_x, hop_y
@@ -122,6 +122,7 @@ class HofstadterFermions(CouplingMPOModel):
     .. math ::
         H = - \sum_{x, y} \mathtt{Jx} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x+1,y} + h.c.)   \\
             - \sum_{x, y} \mathtt{Jy} (e^{i \mathtt{phi}_{x,y} } c^\dagger_{x,y} c_{x,y+1} + h.c.)
+            + \sum_{x, y} \mathtt{v} ( n_{x, y} n_{x, y + 1} + n_{x, y} n_{x + 1, y}
             - \sum_{x, y} \mathtt{mu} n_{x,y},
 
     where :math:`e^{i \mathtt{phi}_{x,y} }` is a complex Aharonov-Bohm hopping
@@ -140,13 +141,13 @@ class HofstadterFermions(CouplingMPOModel):
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
         Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
-    Jx, Jy, mu: float
+    Jx, Jy, mu, v: float
         Hamiltonian parameters as defined above.
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'infinite'
+    bc_x : 'periodic' | 'open'
         Lattice boundary conditions in x-direction
     bc_y : 'ladder' | 'cylinder'
         Lattice boundary conditions in y-direction.
@@ -194,19 +195,21 @@ class HofstadterFermions(CouplingMPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
+        v = get_parameter(model_params, 'v', 0, self.name)
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
         self.add_onsite(-mu, 0, 'N')
         dx = np.array([1, 0])
-        # hop_x = self.coupling_strength_add_ext_flux(hop_x, dx, [0, phi_ext]) # does nothing...
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', -dx)  # h.c.
         dy = np.array([0, 1])
         hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
+        self.add_coupling(v, 0, 'N', 0, 'N', dx)
+        self.add_coupling(v, 0, 'N', 0, 'N', dy)
 
 
 class HofstadterBosons(CouplingModel, MPOModel):
@@ -232,7 +235,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Size of the simulation unit cell in terms of lattice sites.
     mx, my : int
         Size of the magnetic unit cell in terms of lattice sites.
-    N_max : int
+    Nmax : int
         Maximum number of bosons per site.
     filling : tuple
         Average number of fermions per site, defined as a fraction (numerator, denominator)
@@ -243,7 +246,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'infinite'
+    bc_x : 'periodic' | 'open'
         Boundary conditions in x-direction
     bc_y : 'ladder' | 'cylinder'
         Boundary conditions in y-direction.
@@ -292,7 +295,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 1., self.name, True)
+        mu = get_parameter(model_params, 'mu', 0., self.name, True)
         U = get_parameter(model_params, 'U', 0, self.name, True)
         hop_x, hop_y = gauge_hopping(model_params)
 
