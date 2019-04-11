@@ -14,6 +14,8 @@ from tenpy.linalg.random_matrix import standard_normal_complex
 
 def test_CLAPACK_import():
     """just try to import the lapack library on the local system."""
+    if not svd_robust._old_scipy:
+        return  # scip test: no need to import that.
     try:
         svd_robust._load_lapack(warn=False)
     except EnvironmentError as e:
@@ -21,7 +23,6 @@ def test_CLAPACK_import():
         if str(e).startswith("Couldn't find LAPACK"):
             print("(Not an issue if you have scipy >= 0.18.0)")
         assert(False)
-
 
 
 def check_svd_function(svd_function):
@@ -60,4 +61,5 @@ def check_svd_function(svd_function):
 
 def test_svd():
     yield check_svd_function, svd_robust.svd
-    yield check_svd_function, svd_robust.svd_gesvd
+    if svd_robust._old_scipy:
+        yield check_svd_function, svd_robust.svd_gesvd

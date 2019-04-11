@@ -6,7 +6,7 @@ for ill-conditioned matrices.
 But sadly, both :func:`numpy.linalg.svd` and :func:`scipy.linalg.svd` fail from time to time,
 raising ``LinalgError("SVD did not converge")``.
 The reason is that both of them call the LAPACK function `#gesdd`
-(where `#` depends on the data type), which (to make it short) fails in some cases.
+(where `#` depends on the data type), which takes an iterative approach that can fail.
 However, it is usually much faster than the alternative (and robust) `#gesvd`.
 
 Our workaround is as follows: we provide a function :func:`svd` with call signature as scipy's svd.
@@ -24,6 +24,7 @@ at https://github.com/numpy/numpy/issues/1588
 He explains a bit more in detail what fails.
 
 The include of `dgesvd` to scipy was done in https://github.com/scipy/scipy/pull/5994.
+
 
 Examples
 --------
@@ -64,6 +65,9 @@ try:
     _old_scipy = False
 except TypeError:
     _old_scipy = True
+    warnings.warn("Old scipy <= 0.18.0: support will be dropped in TeNPy version 1.0.0",
+                  FutureWarning)
+
 # (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
 
 #: will be the the CLAPACK library loaded with _load_lapack()
