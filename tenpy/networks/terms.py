@@ -400,7 +400,7 @@ class CouplingTerms:
     def plot_coupling_terms(self, ax, lat,
                             style_map='default',
                             common_style={'linestyle': '--'},
-                            text=None):
+                            text=None, text_pos=0.4):
         """"Plot coupling terms into a given lattice.
 
         This function plots the :attr:`coupling_terms`
@@ -425,6 +425,9 @@ class CouplingTerms:
             If not ``None``, we add text labeling the couplings in the plot.
             Available keywords are ``i, j, op_i, op_string, op_j, strength`` as well as
             ``strength_abs, strength_angle, strength_real``.
+        text_pos : float
+            Specify where to put the text on the line between `i` (0.0) and `j` (1.0),
+            e.g. `0.5` is exactly in the middle between `i` and `j`.
 
         See also
         --------
@@ -445,6 +448,7 @@ class CouplingTerms:
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
                 return style
+        text_pos = np.array([1.-text_pos, text_pos], np.float_)
         for i in sorted(self.coupling_terms.keys()):
             d1 = self.coupling_terms[i]
             x_y[0, :] = pos[i]
@@ -482,7 +486,7 @@ class CouplingTerms:
                                                    strength_abs=np.abs(strength),
                                                    strength_real=np.real(strength),
                                                    strength_angle=np.angle(strength))
-                            loc = np.mean(x_y, 0)
+                            loc = np.dot(x_y.T, text_pos)
                             ax.text(loc[0], loc[1], annotate)
         # done
 
