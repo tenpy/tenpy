@@ -9,8 +9,6 @@ and yet powerful enough for day-to-day research.
 # Copyright 2018 TeNPy Developers
 # This file marks this directory as a python package.
 
-from . import version
-
 # load and provide subpackages on first input
 from . import algorithms
 from . import linalg
@@ -18,9 +16,11 @@ from . import models
 from . import networks
 from . import tools
 
+from . import version
+
 # hard-coded tuple of versions
 __version__ = version.version
 # full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
-__all__ = ["algorithms", "linalg", "models", "networks", "tools"]
+__all__ = ["algorithms", "linalg", "models", "networks", "tools", "version"]

@@ -19,6 +19,7 @@ import scipy
 import sys
 import subprocess
 import os
+from .tools.optimization import have_cython_functions
 
 __all__ = ["version", "short_version", "git_version", "full_version"]
 
@@ -42,5 +43,10 @@ def _get_git_version(file=__file__):
 git_version = _get_git_version()
 
 # git version + numpy, scipy versions
-full_version = "tenpy {0!s} using \npython {3!s}\nnumpy {1!s}, scipy {2!s}".format(
-    git_version, numpy.version.full_version, scipy.version.full_version, sys.version)
+full_version = ("tenpy {0!s}, have_cython_functions={1!s}, using \n"
+                "python {2!s}\nnumpy {3!s}, scipy {4!s}").format(
+                    git_version,
+                    have_cython_functions,
+                    sys.version,
+                    numpy.version.full_version,
+                    scipy.version.full_version)
