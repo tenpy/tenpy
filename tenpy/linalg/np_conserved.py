@@ -4161,7 +4161,7 @@ def _tensordot_worker(a, b, axes):
     To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
     Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
     equal rows of `i` are contiguous in `#_qdata_keep`.
-    Then, they are identified with :func:`Charges._find_row_differences`.
+    Then, they are identified with :func:`charges._find_row_differences`.
 
     Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
     analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.

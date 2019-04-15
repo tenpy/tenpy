@@ -46,7 +46,7 @@ def test_ChargeInfo():
     is_valid = [True, True, False, False]
     for q, valid in zip(qs, is_valid):
         print(q, valid)
-        check = chinfo.check_valid(np.array([q]))
+        check = chinfo.check_valid(np.array([q], dtype=charges.QTYPE))
         print(check)
         nst.eq_(check, valid)
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
@@ -59,6 +59,7 @@ def test_ChargeInfo():
 
 def test__find_row_differences():
     for qflat in [qflat_us, qflat_s]:
+        qflat = np.array(qflat, dtype=charges.QTYPE)
         diff = charges._find_row_differences(qflat)
         comp = [0] + [i for i in range(1, len(qflat))
                       if np.any(qflat[i - 1] != qflat[i])] + [len(qflat)]
