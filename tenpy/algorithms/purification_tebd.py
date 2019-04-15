@@ -723,7 +723,7 @@ class NormDisentangler(Disentangler):
             Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
+        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']], qconj=[+1, -1])
         X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
         lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
         dS = npc.tensordot(

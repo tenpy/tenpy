@@ -7,6 +7,7 @@ import numpy.testing as npt
 import nose.tools as nst
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
+import warnings
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -266,7 +267,9 @@ def test_npc_Array_reshape():
                                  ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]), ([[2, 0, 1]],
                                                                                        [2, 0, 1])]:
         print('combine legs', comb_legs)
-        acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
         asplit = acomb.split_legs()
@@ -317,7 +320,9 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    acomb = a.combine_legs([[0, 1]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)

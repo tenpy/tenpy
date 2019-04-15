@@ -193,8 +193,7 @@ class Engine:
             W1 = self.environment.H.get_W(j)
             W2 = self.environment.H.get_W(j+1)
             theta=self.update_theta_h2(Lp, Rp, theta, W1, W2, -0.5*1j*self.dt)
-            theta=theta.combine_legs(['vR','p1'])
-            theta=theta.combine_legs(['vL','p0'])
+            theta=theta.combine_legs([['vL', 'p0'], ['vR','p1']], qconj=[+1, -1])
             # SVD and update environment
             U,s,V,err,renorm=svd_theta(theta,self.trunc_params)
             s=s/npc.norm(s)
@@ -270,8 +269,7 @@ class Engine:
             W1 = self.environment.H.get_W(j)
             W2 = self.environment.H.get_W(j+1)
             theta=self.update_theta_h2(Lp, Rp, theta, W1, W2, -1j*0.5*self.dt)
-            theta=theta.combine_legs(['vR','p1'])
-            theta=theta.combine_legs(['vL','p0'])
+            theta=theta.combine_legs([['vL', 'p0'], ['vR','p1']], qconj=[+1, -1])
             # SVD and update environment
             U,s,V,err,renorm=svd_theta(theta,self.trunc_params)
             s=s/npc.norm(s)

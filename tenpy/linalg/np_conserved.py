@@ -2440,7 +2440,7 @@ class Array:
             pipes = [None] * npipes
         elif len(pipes) != npipes:
             raise ValueError("wrong len of `pipes`")
-        qconj = list(to_iterable(qconj if qconj is not None else +1))
+        qconj = list(to_iterable(qconj))
         if len(qconj) == 1 and 1 < npipes:
             qconj = [qconj[0]] * npipes  # same qconj for all pipes
         if len(qconj) != npipes:
@@ -2450,7 +2450,15 @@ class Array:
         # make pipes as necessary
         for i, pipe in enumerate(pipes):
             if pipe is None:
-                pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj[i])
+                qconj_i = qconj[i]
+                if qconj_i is None:
+                    qconj_i = +1  # will change in future to
+                    qconj_i_new = self.get_leg(combine_legs[i][0]).qconj
+                    if qconj_i != qconj_i_new:
+                        warnings.warn("combine_legs default value for `qconj` will change "
+                                      "from +1 to `qconj` of the first leg, here `-1`",
+                                      FutureWarning, 3)
+                pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj_i)
             else:
                 # test for compatibility
                 legs = [self.get_leg(a) for a in combine_legs[i]]
