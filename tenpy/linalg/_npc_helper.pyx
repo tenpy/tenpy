@@ -1240,7 +1240,7 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
     if qnumber == 0:  # special case no restrictions due to charge
         match_rows[:, 0] = 0
         match_rows[:, 1] = n_rows_a
-        return n_rows_a * n_cols_b, np.arange(n_rows_a), match_rows
+        return n_rows_a * n_cols_b, np.arange(n_rows_a, dtype=np.intp), match_rows
     # general case
     # note: a_charges_keep has shape (n_rows_a, qnumber)
     # b_charges_match has shape (n_cols_b, qnumber)
