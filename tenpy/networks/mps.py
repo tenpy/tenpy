@@ -2060,8 +2060,15 @@ class MPS:
         assert (not self.finite)
         T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
         num = max(target + 1, self._transfermatrix_keep)
-        E, V = T.eigenvectors(num, which='LM')
+        E, _ = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
+        if charge_sector is not None and charge_sector != 0:
+            # need also dominant eigenvector: include 0 charge sector to results
+            del T
+            T = TransferMatrix(self, self, charge_sector=0, form='B')
+            E0, _ = T.eigenvectors(num, which='LM')
+            assert abs(E0[0]) > abs(E[0])  "dominant eigenvector in zero charge sector?"
+            E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
             warnings.warn("Correlation length: largest eigenvalue not one. "
                           "Not in canonical form/normalized?", stacklevel=2)
