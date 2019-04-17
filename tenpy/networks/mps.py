@@ -2067,7 +2067,7 @@ class MPS:
             del T
             T = TransferMatrix(self, self, charge_sector=0, form='B')
             E0, _ = T.eigenvectors(num, which='LM')
-            assert abs(E0[0]) > abs(E[0])  "dominant eigenvector in zero charge sector?"
+            assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
             E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
             warnings.warn("Correlation length: largest eigenvalue not one. "
