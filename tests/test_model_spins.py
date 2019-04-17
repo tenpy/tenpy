@@ -22,5 +22,6 @@ def test_SpinChain():
         'bc_MPS': ['finite', 'infinite']
     })
 
+
 if __name__ == "__main__":
     test_SpinModel()

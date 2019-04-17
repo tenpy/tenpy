@@ -1,4 +1,3 @@
-
 import numpy as np
 import tensordot_npc
 
@@ -14,10 +13,12 @@ def setup_benchmark(**kwargs):
     b, pipes_b = combine_legs(b.to_ndarray(), (non_axes_b, axes_b))
     return a, b, pipes_a, pipes_b
 
+
 def split_legs(a, pipes):
     new_shape = [np.prod(p) for p in pipes]
     a = a.reshape(new_shape)
     return a.copy()
+
 
 def benchmark(data):
     a, b, pipes_a, pipes_b = data

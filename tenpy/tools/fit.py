@@ -62,8 +62,9 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
         # number of points inclusive
         brute_Ns = (power_mesh[i] if i == 0 else 2 * power_mesh[i]) + 1
         log_power_step = (log_power_range[1] - log_power_range[0]) / float(brute_Ns - 1)
-        brute_fit = optimize.brute(
-            alg_decay_fit_res, [log_power_range], (x, y), Ns=brute_Ns, finish=None)
+        brute_fit = optimize.brute(alg_decay_fit_res, [log_power_range], (x, y),
+                                   Ns=brute_Ns,
+                                   finish=None)
         if brute_fit <= global_log_power_range[0] + 1e-6:
             return [0., 0., y[-1]]  # shit happened
         log_power_range = (brute_fit - log_power_step, brute_fit + log_power_step)

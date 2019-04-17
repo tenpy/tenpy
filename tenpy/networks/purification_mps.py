@@ -348,8 +348,9 @@ class PurificationMPS(MPS):
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
                 Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
-                Cij = npc.inner(
-                    B.conj(), Cij, axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
+                Cij = npc.inner(B.conj(),
+                                Cij,
+                                axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:

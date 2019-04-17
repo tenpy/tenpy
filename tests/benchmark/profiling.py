@@ -57,6 +57,7 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
     print("saved profiling to", filename)
     return filename
 
+
 def print_profiling(filename, sort=[], limit=[], callees=None, callers=None):
     stats = pstats.Stats(filename)
     stats.strip_dirs()
@@ -83,43 +84,32 @@ if __name__ == "__main__":
         nargs='*',
         default=[],
         help="Nature of the charge, ``Charges.mod``. The length determines the number of charges.")
-    parser.add_argument(
-        '-l',
-        '--legs',
-        type=int,
-        default=2,
-        help="Number of legs to be contracted.")
-    parser.add_argument(
-        '-s',
-        '--sectors',
-        type=int,
-        default=5,
-        help="(Maximal) number of sectors in each leg.")
-    parser.add_argument(
-        '-S',
-        '--size',
-        type=int,
-        default=50,
-        help="Size of each leg.")
-    parser.add_argument(
-        '-m',
-        '--modules',
-        nargs='+',
-        default=None,
-        help='Perform profiling for the given modules.')
-    parser.add_argument(
-        '-p',
-        '--print_stats',
-        nargs='*',
-        default=None,
-        help='Print the produced profiling results (saved in the given files).')
-    parser.add_argument(
-        '--sort',
-        default=['cumtime'],
-        choices=['cumtime', 'time', 'ncalls', 'name', 'filename', 'tottime'],
-        nargs='*',
-        help="Defines sorting for printing."
-    )
+    parser.add_argument('-l',
+                        '--legs',
+                        type=int,
+                        default=2,
+                        help="Number of legs to be contracted.")
+    parser.add_argument('-s',
+                        '--sectors',
+                        type=int,
+                        default=5,
+                        help="(Maximal) number of sectors in each leg.")
+    parser.add_argument('-S', '--size', type=int, default=50, help="Size of each leg.")
+    parser.add_argument('-m',
+                        '--modules',
+                        nargs='+',
+                        default=None,
+                        help='Perform profiling for the given modules.')
+    parser.add_argument('-p',
+                        '--print_stats',
+                        nargs='*',
+                        default=None,
+                        help='Print the produced profiling results (saved in the given files).')
+    parser.add_argument('--sort',
+                        default=['cumtime'],
+                        choices=['cumtime', 'time', 'ncalls', 'name', 'filename', 'tottime'],
+                        nargs='*',
+                        help="Defines sorting for printing.")
     parser.add_argument(
         '--limit',
         default=[50],
@@ -127,16 +117,12 @@ if __name__ == "__main__":
         help="Limit for printing the stats. You can enter an in to limit the number of lines or" \
              " a regex to match the function name."
     )
-    parser.add_argument(
-        '--callees',
-        default=None,
-        help="Print the functions called from inside the given function"
-    )
-    parser.add_argument(
-        '--callers',
-        default=None,
-        help="Print the functions calling the given function"
-    )
+    parser.add_argument('--callees',
+                        default=None,
+                        help="Print the functions called from inside the given function")
+    parser.add_argument('--callers',
+                        default=None,
+                        help="Print the functions calling the given function")
     args = parser.parse_args()
     kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, size=args.size)
     files = []

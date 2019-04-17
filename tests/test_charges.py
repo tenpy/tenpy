@@ -61,8 +61,8 @@ def test__find_row_differences():
     for qflat in [qflat_us, qflat_s]:
         qflat = np.array(qflat, dtype=charges.QTYPE)
         diff = charges._find_row_differences(qflat)
-        comp = [0] + [i for i in range(1, len(qflat))
-                      if np.any(qflat[i - 1] != qflat[i])] + [len(qflat)]
+        comp = [0] + [i for i in range(1, len(qflat)) if np.any(qflat[i - 1] != qflat[i])
+                      ] + [len(qflat)]
         npt.assert_equal(diff, comp)
 
 
@@ -129,22 +129,23 @@ def test_LegPipe():
             nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
         # pipe.map_incoming_flat is tested by test_np_conserved.
 
+
 def test__sliced_copy():
     x = np.random.random([20, 10, 4])  # c-contiguous!
     x_cpy = x.copy()
     y = np.random.random([5, 6, 7])
     y_cpy = y.copy()
     shape = np.array([4, 3, 2], dtype=np.intp)
-    z = 2.*np.ones(shape)
+    z = 2. * np.ones(shape)
     x_beg = np.array([3, 7, 1], dtype=np.intp)
     y_beg = np.array([1, 0, 4], dtype=np.intp)
     z_beg = np.array([0, 0, 0], dtype=np.intp)
     charges._sliced_copy(z, z_beg, x, x_beg, shape)
     npt.assert_equal(x, x_cpy)
-    assert(not np.any(z == 2.))
-    npt.assert_equal(x[3:7, 7:10,1:3], z)
+    assert (not np.any(z == 2.))
+    npt.assert_equal(x[3:7, 7:10, 1:3], z)
     charges._sliced_copy(y, y_beg, x, x_beg, shape)
-    npt.assert_equal(y[1:5, 0:3,4:6], z)
+    npt.assert_equal(y[1:5, 0:3, 4:6], z)
     charges._sliced_copy(y, y_beg, y_cpy, y_beg, shape)
     npt.assert_equal(y, y_cpy)
 

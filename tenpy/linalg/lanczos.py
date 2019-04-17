@@ -161,7 +161,7 @@ class LanczosGroundState:
         w = self.psi0  # initialize
         beta = npc.norm(w)
         for k in range(self.N_max):
-            w.iscale_prefactor(1./beta)
+            w.iscale_prefactor(1. / beta)
             self._to_cache(w)
             w = self._apply_H(w)
             alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
@@ -219,7 +219,7 @@ class LanczosGroundState:
             # `reortho`=True and `N_cache` >= `N_max`
             if self.verbose > 1:
                 print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))
-        psif.iscale_prefactor(1./psif_norm)
+        psif.iscale_prefactor(1. / psif_norm)
         return psif
 
     def _to_cache(self, psi):

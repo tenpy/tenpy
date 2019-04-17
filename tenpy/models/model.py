@@ -45,8 +45,10 @@ from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.site import group_sites
 
-__all__ = ['Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
-           'CouplingMPOModel']
+__all__ = [
+    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
+    'CouplingMPOModel'
+]
 
 
 class Model:
@@ -65,6 +67,7 @@ class Model:
     lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     """
+
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeigborModel calls this
         # __init__, so it get's called multiple times when a user implements e.g. a
@@ -198,7 +201,7 @@ class NearestNeighborModel(Model):
         old_L = len(self.H_bond)
         new_L = len(grouped_sites)
         finite = self.H_bond[0] is None
-        H_bond = [None]*(new_L + 1)
+        H_bond = [None] * (new_L + 1)
         i = 0  # old index
         for k, gs in enumerate(grouped_sites):
             # calculate new_Hb on bond (k, k+1)
@@ -206,13 +209,13 @@ class NearestNeighborModel(Model):
             new_H_onsite = None  # collect old H_bond terms inside `gs`
             if gs.n_sites > 1:
                 for j in range(1, gs.n_sites):
-                    old_Hb = self.H_bond[(i+j) % old_L]
+                    old_Hb = self.H_bond[(i + j) % old_L]
                     add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
                     if new_H_onsite is None:
                         new_H_onsite = add_H_onsite
                     else:
                         new_H_onsite = new_H_onsite + add_H_onsite
-            old_Hb = self.H_bond[(i+gs.n_sites) % old_L]
+            old_Hb = self.H_bond[(i + gs.n_sites) % old_L]
             new_Hb = self._group_sites_Hb_to_bond(gs, next_gs, old_Hb)
             if new_H_onsite is not None:
                 if k + 1 != new_L or not finite:
@@ -222,7 +225,7 @@ class NearestNeighborModel(Model):
                         new_Hb = add_Hb
                     else:
                         new_Hb = new_Hb + add_Hb
-                else: # finite and k = new_L - 1
+                else:  # finite and k = new_L - 1
                     # the new_H_onsite needs to be added to the right-most Hb
                     add_Hb = npc.outer(prev_gs.Id.transpose(['p', 'p*']), new_H_onsite)
                     if H_bond[-1] is None:
@@ -249,11 +252,12 @@ class NearestNeighborModel(Model):
         if old_Hb is None:
             return None
         old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
-        ops = [s.Id for s in gr_site.sites[:j-1]] + [old_Hb] + [s.Id for s in gr_site.sites[j+1:]]
+        ops = [s.Id
+               for s in gr_site.sites[:j - 1]] + [old_Hb] + [s.Id for s in gr_site.sites[j + 1:]]
         Hb = ops[0]
         for op in ops[1:]:
             Hb = npc.outer(Hb, op)
-        combine = [list(range(0, 2*gr_site.n_sites, 2)), list(range(1, 2*gr_site.n_sites, 2))]
+        combine = [list(range(0, 2 * gr_site.n_sites, 2)), list(range(1, 2 * gr_site.n_sites, 2))]
         pipe = gr_site.leg
         Hb = Hb.combine_legs(combine, pipes=[pipe, pipe.conj()])
         return Hb  # labels would be 'p', 'p*' w.r.t. gr_site.
@@ -271,8 +275,12 @@ class NearestNeighborModel(Model):
             Hb = npc.outer(Hb, op)
         NL, NR = gr_site_L.n_sites, gr_site_R.n_sites
         pipeL, pipeR = gr_site_L.leg, gr_site_R.leg
-        combine = [list(range(0, 2*NL, 2)), list(range(1, 2*NL, 2)),
-                   list(range(2*NL, 2*(NL+NR), 2)), list(range(2*NL+1, 2*(NL+NR), 2))]
+        combine = [
+            list(range(0, 2 * NL, 2)),
+            list(range(1, 2 * NL, 2)),
+            list(range(2 * NL, 2 * (NL + NR), 2)),
+            list(range(2 * NL + 1, 2 * (NL + NR), 2))
+        ]
         Hb = Hb.combine_legs(combine, pipes=[pipeL, pipeL.conj(), pipeR, pipeR.conj()])
         return Hb  # labels would be 'p0', 'p0*', 'p1', 'p1*' w.r.t. gr_site_{L,R}
 
@@ -294,14 +302,14 @@ class NearestNeighborModel(Model):
         bc = self.lat.bc_MPS
         sites = self.lat.mps_sites()
         L = len(sites)
-        onsite_terms = [None]*L  # onsite terms on each site `i`
-        bond_XYZ = [None]*L  # svd of couplings on each bond (i-1, i)
-        chis = [2]*(L+1)
+        onsite_terms = [None] * L  # onsite terms on each site `i`
+        bond_XYZ = [None] * L  # svd of couplings on each bond (i-1, i)
+        chis = [2] * (L + 1)
         assert len(self.H_bond) == L
         for i, Hb in enumerate(H_bond):
             if Hb is None:
                 continue
-            j = (i-1) % L
+            j = (i - 1) % L
             Hb = Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
             d_L, d_R = sites[j].dim, sites[i].dim  # dimension of local hilbert space:
             Id_L, Id_R = sites[i].Id, sites[j].Id
@@ -342,7 +350,7 @@ class NearestNeighborModel(Model):
         # now construct the W tensors
         Ws = [None] * L
         for i in range(L):
-            wL, wR = legs[i], legs[i+1].conj()
+            wL, wR = legs[i], legs[i + 1].conj()
             p = sites[i].leg
             W = npc.zeros([wL, wR, p, p.conj()], dtype)
             W[0, 0, :, :] = sites[i].Id
@@ -451,8 +459,8 @@ class MPOModel(Model):
             # bond `a` is left of site i, bond `b` is right
             IdL_a = H_MPO.IdL[i]
             IdR_a = H_MPO.IdR[i]
-            IdL_b = H_MPO.IdL[i+1]
-            IdR_b = H_MPO.IdR[i+1]
+            IdL_b = H_MPO.IdL[i + 1]
+            IdR_b = H_MPO.IdR[i + 1]
             W.itranspose(['wL', 'wR', 'p', 'p*'])
             H_onsite[i] = W[IdL_a, IdR_b, :, :]
             W[IdL_a, IdR_b, :, :] *= 0
@@ -466,10 +474,10 @@ class MPOModel(Model):
             # for bond (i, j) == (j-1, j) == (i, i+1)
             if finite and j == 0:
                 continue
-            i = (j-1) % L
+            i = (j - 1) % L
             Wi = Ws[i]
             IdL_a = H_MPO.IdL[i]
-            IdR_c = H_MPO.IdR[j+1]
+            IdR_c = H_MPO.IdR[j + 1]
             Hb = npc.tensordot(Wi[IdL_a, :, :, :], Wj[:, IdR_c, :, :], axes=('wR', 'wL'))
             Wi[IdL_a, :, :, :] *= 0.
             Wj[:, IdR_c, :, :] *= 0.
@@ -532,7 +540,8 @@ class CouplingModel(Model):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
             warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
-                          FutureWarning, stacklevel=2)
+                          FutureWarning,
+                          stacklevel=2)
             lattice._set_bc(bc_coupling)
         L = self.lat.N_sites
         self.onsite_terms = {}
@@ -956,16 +965,16 @@ class CouplingModel(Model):
                     raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
                 continue
             if abs(dx[ax]) == 0:
-                continue # nothing to do
+                continue  # nothing to do
             slices = [slice(None) for _ in range(self.lat.dim)]
             slices[ax] = slice(-abs(dx[ax]), None)
             # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
             # accross the periodic b.c.
             slices = tuple(slices)
             if dx[ax] > 0:
-                strength[slices] *= np.exp(-1.j*phase[ax])  # hopping in *negative* y-direction
+                strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
             else:
-                strength[slices] *= np.exp(1.j*phase[ax])  # hopping in *positive* y-direction
+                strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
         return strength
 
 
@@ -1035,13 +1044,14 @@ class MultiCouplingModel(CouplingModel):
         dx = np.array([oop[2] for oop in other_ops], np.intp).reshape([M, self.lat.dim])
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
-        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op)
-                            for u, op in zip(all_us, all_ops)], dtype=np.bool_)
+        need_JW = np.array(
+            [self.lat.unit_cell[u].op_needs_JW(op) for u, op in zip(all_us, all_ops)],
+            dtype=np.bool_)
         if not np.sum(need_JW) % 2 == 0:
             raise ValueError("Invalid coupling: would need 'JW' string on the very left")
         if op_string is None and not any(need_JW):
             op_string = 'Id'
-        for u, op, _ in [(u0, op0, None)] + other_ops :
+        for u, op, _ in [(u0, op0, None)] + other_ops:
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                                  "{2!r}".format(op, u, self.lat.unit_cell[u]))
@@ -1060,8 +1070,8 @@ class MultiCouplingModel(CouplingModel):
         strength = to_array(strength, strength_shape)  # tile to correct shape
 
         if category is None:
-            category = " ".join(["{op}_{i}".format(op=op, i=chr(ord('i')+m)) for m, op in
-                                 enumerate(all_ops)])
+            category = " ".join(
+                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
         ct = self.coupling_terms.get(category, None)
         if ct is None:
             self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
@@ -1104,8 +1114,8 @@ class MultiCouplingModel(CouplingModel):
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
         """
         if category is None:
-            category = " ".join(["{op}_{i}".format(op=op, i=chr(ord('i')+m)) for m, op in
-                                 enumerate(ops_ijkl)])
+            category = " ".join(
+                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(ops_ijkl)])
         ct = self.coupling_terms.get(category, None)
         if ct is None:
             self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
@@ -1116,7 +1126,7 @@ class MultiCouplingModel(CouplingModel):
         ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
 
 
-class CouplingMPOModel(CouplingModel,MPOModel):
+class CouplingMPOModel(CouplingModel, MPOModel):
     """Combination of the :class:`CouplingModel` and :class:`MPOModel`.
 
     This class provides the interface for most of the model classes in `tenpy`.
@@ -1154,6 +1164,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
+
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
@@ -1253,7 +1264,7 @@ class CouplingMPOModel(CouplingModel,MPOModel):
                 L = get_parameter(model_params, 'L', 2, self.name)
                 # 4) lattice
                 lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
-            elif LatticeClass.dim == 2:   # 2D lattice
+            elif LatticeClass.dim == 2:  # 2D lattice
                 Lx = get_parameter(model_params, 'Lx', 1, self.name)
                 Ly = get_parameter(model_params, 'Ly', 4, self.name)
                 bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
@@ -1296,5 +1307,3 @@ class CouplingMPOModel(CouplingModel,MPOModel):
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
-
-

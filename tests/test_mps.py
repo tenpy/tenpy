@@ -103,7 +103,7 @@ def test_singlet_mps():
     npt.assert_almost_equal(psi.norm, 1.)
     npt.assert_almost_equal(psi.overlap(psi), 1.)
     id_vals = psi.expectation_value("Id")
-    npt.assert_almost_equal(id_vals, [1.]*L)
+    npt.assert_almost_equal(id_vals, [1.] * L)
     Sz_vals = psi.expectation_value("Sigmaz")
     expected_Sz_vals = [(0. if i not in lonely else 1.) for i in range(L)]
     print("Sz_vals = ", Sz_vals)
@@ -121,40 +121,42 @@ def test_singlet_mps():
         k = coord.index((i, j))
         mutinf[k] -= 2.  # S(i)+S(j)-S(ij) = (1+1-0)*log(2)
     npt.assert_array_almost_equal(mutinf, 0., decimal=14)
-    product_state = [None]*L
+    product_state = [None] * L
     for i, j in pairs:
         product_state[i] = u
         product_state[j] = d
     for k in lonely:
         product_state[k] = u
-    psi2 = mps.MPS.from_product_state([spin_half]*L, product_state, bc='finite')
-    npt.assert_almost_equal(psi.overlap(psi2), 0.5**(0.5*len(pairs)))
+    psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite')
+    npt.assert_almost_equal(psi.overlap(psi2), 0.5**(0.5 * len(pairs)))
 
 
 def test_charge_fluctuations():
     L = 6
     pairs = [(0, 3), (2, 4)]
     lonely = [1, 5]
-    psi = mps.MPS.from_singlets(spin_half, L, pairs, lonely=lonely, lonely_state='up',
+    psi = mps.MPS.from_singlets(spin_half,
+                                L,
+                                pairs,
+                                lonely=lonely,
+                                lonely_state='up',
                                 bc='segment')
     # mps not yet gauged to zero qtotal!
-    average_charge = np.array([psi.average_charge(b) for b in range(psi.L+1)]).T
-    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L+1)]).T
+    average_charge = np.array([psi.average_charge(b) for b in range(psi.L + 1)]).T
+    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L + 1)]).T
     print(average_charge)
     print(charge_variance)
     npt.assert_array_almost_equal(average_charge, [[0., 0., 0., 0., 0., 0., 0.]], decimal=14)
-    npt.assert_array_almost_equal(charge_variance, [[ 0.,  1.,  1.,  2.,  1.,  0.,  0.]],
-                                  decimal=14)
+    npt.assert_array_almost_equal(charge_variance, [[0., 1., 1., 2., 1., 0., 0.]], decimal=14)
 
     # now gauge to zero qtotal
     psi.gauge_total_charge()
-    average_charge = np.array([psi.average_charge(b) for b in range(psi.L+1)]).T
-    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L+1)]).T
+    average_charge = np.array([psi.average_charge(b) for b in range(psi.L + 1)]).T
+    charge_variance = np.array([psi.charge_variance(b) for b in range(psi.L + 1)]).T
     print(average_charge)
     print(charge_variance)
     npt.assert_array_almost_equal(average_charge, [[0., 0., 1., 1., 1., 1., 2.]], decimal=14)
-    npt.assert_array_almost_equal(charge_variance, [[ 0.,  1.,  1.,  2.,  1.,  0.,  0.]],
-                                  decimal=14)
+    npt.assert_array_almost_equal(charge_variance, [[0., 1., 1., 2., 1., 0., 0.]], decimal=14)
 
 
 def test_mps_swap():
@@ -250,12 +252,12 @@ def test_group():
     psi2 = psi1.copy()
     print("group n=2")
     psi2.group_sites(n=2)
-    assert psi2.L == psi1.L//2
+    assert psi2.L == psi1.L // 2
     psi2.test_sanity()
     psi2.group_split({'chi_max': 2**3})
     psi2.test_sanity()
     ov = psi1.overlap(psi2)
-    assert abs(1.-ov) < 1.e-14
+    assert abs(1. - ov) < 1.e-14
     psi4 = psi1.copy()
     print("group n=4")
     psi4.group_sites(n=4)
@@ -263,21 +265,21 @@ def test_group():
     psi4.group_split({'chi_max': 2**3})
     psi4.test_sanity()
     ov = psi1.overlap(psi4)
-    assert abs(1.-ov) < 1.e-14
+    assert abs(1. - ov) < 1.e-14
 
 
 def test_expectation_value_term():
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
     ev = psi1.expectation_value_term([('Sz', 2), ('Sz', 3)])
-    assert abs(0.-ev) < 1.e-14
+    assert abs(0. - ev) < 1.e-14
     ev = psi1.expectation_value_term([('Sz', 1), ('Sz', 3)])
-    assert abs(-0.25-ev) < 1.e-14
+    assert abs(-0.25 - ev) < 1.e-14
     ev = psi1.expectation_value_term([('Sz', 3), ('Sz', 1), ('Sz', 4)])
-    assert abs(-0.25*0.5-ev) < 1.e-14
+    assert abs(-0.25 * 0.5 - ev) < 1.e-14
     fs = site.SpinHalfFermionSite()
     # check fermionic signs
-    psi2 = mps.MPS.from_product_state([fs]*4, ['empty', 'up', 'down', 'full'], bc="infinite")
+    psi2 = mps.MPS.from_product_state([fs] * 4, ['empty', 'up', 'down', 'full'], bc="infinite")
     ev = psi2.expectation_value_term([('Cu', 2), ('Nu', 1), ('Cdu', 2)])
     assert 1. == ev
     ev2 = psi2.expectation_value_term([('Cu', 2), ('Cd', 1), ('Cdd', 1), ('Cdu', 2)])
@@ -285,17 +287,19 @@ def test_expectation_value_term():
     ev3 = psi2.expectation_value_term([('Cd', 1), ('Cu', 2), ('Cdd', 1), ('Cdu', 2)])
     assert ev3 == -ev2
     # over the infinite MPS boundary
-    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 4)]) # should be zero
+    ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 4)])  # should be zero
     assert abs(ev) == 0.
     ev = psi2.expectation_value_term([('Nu', 1), ('Nd', 6)])
     assert abs(ev) == 1.
     # terms_sum
     pref = np.random.random([5])
-    term_list = TermList([[('Nd', 0)], [('Nu', 1), ('Nd', 2)], [('Nd', 2), ('Nu', 5)],
-                          [('Nu Nd', 3)], [('Nu', 1), ('Nu', 5)]], pref)
+    term_list = TermList(
+        [[('Nd', 0)], [('Nu', 1), ('Nd', 2)], [('Nd', 2),
+                                               ('Nu', 5)], [('Nu Nd', 3)], [('Nu', 1),
+                                                                            ('Nu', 5)]], pref)
     desired = sum(pref[1:])
-    assert desired == sum([psi2.expectation_value_term(term)*strength
-                           for term, strength in term_list])
+    assert desired == sum(
+        [psi2.expectation_value_term(term) * strength for term, strength in term_list])
     evsum, _ = psi2.expectation_value_terms_sum(term_list)
     assert abs(evsum - desired) < 1.e-14
 

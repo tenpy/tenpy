@@ -41,7 +41,8 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     for chi in chi_list:
 
         t0 = time.time()
-        eng.reset_stats()  # necessary if you for example have a fixed numer of sweeps, if you don't set this you option your simulation stops after initial number of sweeps!
+        eng.reset_stats(
+        )  # necessary if you for example have a fixed numer of sweeps, if you don't set this you option your simulation stops after initial number of sweeps!
         eng.trunc_params['chi_max'] = chi
         ##   DMRG Calculation    ##
         print("Start IDMRG CALCULATION")
@@ -54,7 +55,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         xi_list.append(psi.correlation_length())
 
         print(chi,
-              time.time()-t0,
+              time.time() - t0,
               np.mean(psi.expectation_value(M.H_bond)),
               s_list[-1],
               xi_list[-1],
@@ -72,7 +73,7 @@ def fit_plot_central_charge(s_list, xi_list, filename):
     from scipy.optimize import curve_fit
 
     def fitFunc(Xi, c, a):
-        return (c/6)*np.log(Xi) + a
+        return (c / 6) * np.log(Xi) + a
 
     Xi = np.array(xi_list)
     S = np.array(s_list)
@@ -85,26 +86,20 @@ def fit_plot_central_charge(s_list, xi_list, filename):
     print('Covariance Matrix', fitCovariances)
 
     # plot the data as blue circles
-    plt.errorbar(
-        LXi,
-        S,
-        fmt='o',
-        c='blue',
-        ms=5.5,
-        markerfacecolor='white',
-        markeredgecolor='blue',
-        markeredgewidth=1.4)
+    plt.errorbar(LXi,
+                 S,
+                 fmt='o',
+                 c='blue',
+                 ms=5.5,
+                 markerfacecolor='white',
+                 markeredgecolor='blue',
+                 markeredgewidth=1.4)
     # plot the fitted line
-    plt.plot(
-        LXi,
-        fitFunc(
-            Xi,
-            fitParams[0],
-            fitParams[1]),
-        linewidth=1.5,
-        c='black',
-        label='fit c={c:.2f}'.format(
-            c=fitParams[0]))
+    plt.plot(LXi,
+             fitFunc(Xi, fitParams[0], fitParams[1]),
+             linewidth=1.5,
+             c='black',
+             label='fit c={c:.2f}'.format(c=fitParams[0]))
 
     plt.xlabel(r'$\log{\,}\xi_{\chi}$', fontsize=16)
     plt.ylabel(r'$S$', fontsize=16)

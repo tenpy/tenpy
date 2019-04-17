@@ -43,6 +43,7 @@ def test_purification_mps():
             C = psi.correlation_function('Sz', 'Sz')
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
+
 @attr('slow')
 def test_purification_TEBD(L=3):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
@@ -111,7 +112,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     assert (S < S_0)  # this should always be true...
     if S > 100 * eps:
         print("final S =", S)
-        assert(False) # test of purification failed to find the optimum.
+        assert (False)  # test of purification failed to find the optimum.
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
 

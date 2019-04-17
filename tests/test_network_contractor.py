@@ -56,13 +56,13 @@ def contract_to_real_number():
     S = Sz
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(
-        tensor_list=[v, h2, S, h, w],
-        leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                          ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'], ['S', 'L', 'h', 'p2*'],
-                          ['h', 'p1', 'w', 'U1'], ['h', 'p2', 'w', 'U2']],
-        open_legs=None,
-        tensor_names=['v', 'h2', 'S', 'h', 'w'])
+    res = contract(tensor_list=[v, h2, S, h, w],
+                   leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
+                                     ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
+                                     ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
+                                     ['h', 'p2', 'w', 'U2']],
+                   open_legs=None,
+                   tensor_names=['v', 'h2', 'S', 'h', 'w'])
     expected_result = -0.2970000000000002  # from MatLab
 
     assert np.abs(res - expected_result) < 1.e-10
@@ -80,12 +80,12 @@ def contract_to_complex_number():
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(
-        tensor_list=[v, h2, S, h, w],
-        tensor_names=['v', 'h2', 'S', 'h', 'w'],
-        leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                          ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'], ['S', 'L', 'h', 'p2*'],
-                          ['h', 'p1', 'w', 'U1'], ['h', 'p2', 'w', 'U2']])
+    res = contract(tensor_list=[v, h2, S, h, w],
+                   tensor_names=['v', 'h2', 'S', 'h', 'w'],
+                   leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
+                                     ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
+                                     ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
+                                     ['h', 'p2', 'w', 'U2']])
     expected_result = -0.1735 - 0.5015j  # from MatLab
 
     assert np.abs(res - expected_result) < 1.e-10
@@ -108,14 +108,13 @@ def contract_with_sequence():
         # Cause all warnings to always be triggered.
         warnings.simplefilter("always")
 
-        res = contract(
-            tensor_list=[v, h2, S, h, w],
-            tensor_names=['v', 'h2', 'S', 'h', 'w'],
-            leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                              ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                              ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w',
-                                                       'U1'], ['h', 'p2', 'w', 'U2']],
-            sequence=[1, 3, 5, 6, 4, 2, 0])
+        res = contract(tensor_list=[v, h2, S, h, w],
+                       tensor_names=['v', 'h2', 'S', 'h', 'w'],
+                       leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
+                                         ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
+                                         ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
+                                         ['h', 'p2', 'w', 'U2']],
+                       sequence=[1, 3, 5, 6, 4, 2, 0])
 
         assert len(cw) == 3
         assert "Suboptimal contraction sequence" in str(cw[0].message)
@@ -133,12 +132,12 @@ def contract_to_tensor():
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    res = contract(
-        tensor_list=[h2, S, h],
-        tensor_names=['h2', 'S', 'h'],
-        leg_contractions=[['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'], ['S', 'L', 'h',
-                                                                             'p2*']],
-        open_legs=[['h2', 'p1*', 'U1'], ['h2', 'p2*', 'U2'], ['h', 'p1', 'L1'], ['h', 'p2', 'L2']])
+    res = contract(tensor_list=[h2, S, h],
+                   tensor_names=['h2', 'S', 'h'],
+                   leg_contractions=[['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
+                                     ['S', 'L', 'h', 'p2*']],
+                   open_legs=[['h2', 'p1*', 'U1'], ['h2', 'p2*', 'U2'], ['h', 'p1', 'L1'],
+                              ['h', 'p2', 'L2']])
 
     expected_result = np.ones([2, 2, 2, 2], dtype=complex)
     expected_result[:, :, 0, 0] = [[.35j, -1j], [0, .65j]]
@@ -155,10 +154,10 @@ def outer_product():
     S2 = Sz
     S2.iset_leg_labels(['U', 'L'])
 
-    res = contract(
-        tensor_list=[S, S2],
-        tensor_names=['Sy', 'Sz'],
-        open_legs=[['Sy', 'U', 'U2'], ['Sy', 'L', 'L2'], ['Sz', 'U', 'U1'], ['Sz', 'L', 'L1']])
+    res = contract(tensor_list=[S, S2],
+                   tensor_names=['Sy', 'Sz'],
+                   open_legs=[['Sy', 'U', 'U2'], ['Sy', 'L', 'L2'], ['Sz', 'U', 'U1'],
+                              ['Sz', 'L', 'L1']])
     expected_result = np.kron(np.array([[1., 0.], [0., -1.]]), np.array([[0., -1.j], [1.j, 0.]]))
     expected_result = expected_result.reshape([2, 2, 2, 2])
     expected_result = expected_result.transpose([1, 3, 0, 2])

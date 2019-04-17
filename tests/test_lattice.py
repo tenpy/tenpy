@@ -10,9 +10,10 @@ import nose.tools as nst
 
 from random_test import gen_random_legcharge
 
+
 def test_bc_choices():
     assert int(lattice.bc_choices['open']) == 1  # this is used explicitly
-    assert int(lattice.bc_choices['periodic']) == 0   # and this as well
+    assert int(lattice.bc_choices['periodic']) == 0  # and this as well
 
 
 def test_lattice():
@@ -52,6 +53,7 @@ def test_lattice():
             A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
             npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
+
 
 def test_TrivialLattice():
     s1 = site.SpinHalfSite('Sz')

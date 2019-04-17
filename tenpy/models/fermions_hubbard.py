@@ -95,11 +95,12 @@ class FermionicHubbardModel(CouplingMPOModel):
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
-class FermionicHubbardChain(FermionicHubbardModel,NearestNeighborModel):
+class FermionicHubbardChain(FermionicHubbardModel, NearestNeighborModel):
     """The :class:`FermionicHubbardModel` on a Chain, suitable for TEBD.
 
     See the :class:`FermionicHubbardModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

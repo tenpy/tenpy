@@ -121,12 +121,11 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
         S.append(psi.entanglement_entropy())
     import matplotlib.pyplot as plt
     plt.figure()
-    plt.imshow(
-        S[::-1],
-        vmin=0.,
-        aspect='auto',
-        interpolation='nearest',
-        extent=(0, L - 1., -0.5*dt, (Nsteps + 0.5) * dt))
+    plt.imshow(S[::-1],
+               vmin=0.,
+               aspect='auto',
+               interpolation='nearest',
+               extent=(0, L - 1., -0.5 * dt, (Nsteps + 0.5) * dt))
     plt.xlabel('site $i$')
     plt.ylabel('time $t/J$')
     plt.ylim(0., tmax)

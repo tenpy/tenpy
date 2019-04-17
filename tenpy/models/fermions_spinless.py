@@ -89,11 +89,12 @@ class FermionModel(CouplingMPOModel):
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
-class FermionChain(FermionModel,NearestNeighborModel):
+class FermionChain(FermionModel, NearestNeighborModel):
     """The :class:`FermionModel` on a Chain, suitable for TEBD.
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

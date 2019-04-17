@@ -82,18 +82,19 @@ class BoseHubbardModel(CouplingMPOModel):
         U = get_parameter(model_params, 'U', 0., self.name, True)
         mu = get_parameter(model_params, 'mu', 0, self.name, True)
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu-U/2., u, 'N')
-            self.add_onsite(U/2., u, 'NN')
+            self.add_onsite(mu - U / 2., u, 'N')
+            self.add_onsite(U / 2., u, 'NN')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(t, u1, 'Bd', u2, 'B', dx)
             self.add_coupling(np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
 
 
-class BoseHubbardChain(BoseHubbardModel,NearestNeighborModel):
+class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
     """The :class:`BoseHubbardModel` on a Chain, suitable for TEBD.
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

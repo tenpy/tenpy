@@ -257,14 +257,14 @@ class MPO:
         for gs in grouped_sites:
             new_W = self.get_W(i).itranspose(['wL', 'p', 'p*', 'wR'])
             for j in range(1, gs.n_sites):
-                W = self.get_W(i+j).itranspose(['wL', 'p', 'p*', 'wR'])
+                W = self.get_W(i + j).itranspose(['wL', 'p', 'p*', 'wR'])
                 new_W = npc.tensordot(new_W, W, axes=[-1, 0])
-            comb = [list(range(1, 1+2*gs.n_sites, 2)), list(range(2, 2+2*gs.n_sites, 2))]
+            comb = [list(range(1, 1 + 2 * gs.n_sites, 2)), list(range(2, 2 + 2 * gs.n_sites, 2))]
             new_W = new_W.combine_legs(comb, pipes=[gs.leg, gs.leg.conj()])
             Ws.append(new_W.iset_leg_labels(['wL', 'p', 'p*', 'wR']))
             IdL.append(self.get_IdL(i))
             i += gs.n_sites
-            IdR.append(self.get_IdR(i-1))
+            IdR.append(self.get_IdR(i - 1))
         IdL.append(self.IdL[-1])
         self.IdL = IdL
         self.IdR = IdR
@@ -311,7 +311,7 @@ class MPO:
             mask_L[self.get_IdL(i)] = False
             masks_L_no_IdL.append(mask_L)
             mask_R = np.ones(W.get_leg('wR').ind_len, np.bool_)
-            mask_R[self.get_IdL(i+1)] = False
+            mask_R[self.get_IdL(i + 1)] = False
             mask_R[self.get_IdR(i)] = False
             masks_R_no_IdRL.append(mask_R)
         # contract first site with theta
@@ -319,7 +319,7 @@ class MPO:
         LP = npc.tensordot(LP0, theta, axes=['vR', 'vL'])
         LP = npc.tensordot(LP, self._W[0], axes=[['wR', 'p0'], ['wL', 'p*']])
         LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
-        for i in range(1, max_range*L):
+        for i in range(1, max_range * L):
             i0 = i % L
             W = self._W[i0]
             if i >= L:
@@ -335,7 +335,8 @@ class MPO:
 
             if i >= L:
                 RP = psi.init_RP(i, mpo=self)
-                current_value = npc.inner(LP, RP,
+                current_value = npc.inner(LP,
+                                          RP,
                                           axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']],
                                           do_conj=False)
                 LP_converged = LP.copy()
@@ -370,17 +371,17 @@ class MPO:
 
     def get_grouped_mpo(self, blocklen):
         """contract blocklen subsequent tensors into a single one and return result as a new MPO object"""
-        groupedMPO=copy.deepcopy(self)
+        groupedMPO = copy.deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
         return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a d**L x d**L matrix"""
-        if (self.dim[0]**(2*self.L)>maxsize):
-            print ('Matrix dimension exceeds maxsize')
+        if (self.dim[0]**(2 * self.L) > maxsize):
+            print('Matrix dimension exceeds maxsize')
             return np.zeros(1)
-        singlesitempo=self.get_grouped_mpo(self.L)
-        return npc.trace(singlesitempo.get_W(0),axes=[['wL'],['wR']])
+        singlesitempo = self.get_grouped_mpo(self.L)
+        return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
 
 class MPOGraph:
@@ -591,7 +592,7 @@ class MPOGraph:
         keyL = keyR = key
         for k in range(i + 1, j):
             if (k - i) % self.L == 0:
-                keyR = (key, (k-i) // self.L)
+                keyR = (key, (k - i) // self.L)
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
                 self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
@@ -781,7 +782,7 @@ class MPOEnvironment(MPSEnvironment):
         if ket is None:
             ket = bra
         if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra) # ensure matching charges
+            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.H = H
@@ -903,8 +904,9 @@ class MPOEnvironment(MPSEnvironment):
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        LP = npc.tensordot(
-            self.bra.get_B(i, form='A').conj(), LP, axes=(['p*', 'vL*'], ['p', 'vR*']))
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(),
+                           LP,
+                           axes=(['p*', 'vL*'], ['p', 'vR*']))
         return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
@@ -912,8 +914,9 @@ class MPOEnvironment(MPSEnvironment):
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
-        RP = npc.tensordot(
-            self.bra.get_B(i, form='B').conj(), RP, axes=(['p*', 'vR*'], ['p', 'vL*']))
+        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(),
+                           RP,
+                           axes=(['p*', 'vR*'], ['p', 'vL*']))
         return RP  # labels 'vL', 'wL', 'vL*'
 
 
@@ -938,7 +941,7 @@ def grid_insert_ops(site, grid):
         ``sum([strength*site.get_op('opname') for opname, strength in entry])``
         and entries ``'opname'`` replaced by ``site.get_op('opname')``.
     """
-    new_grid = [None]*len(grid)
+    new_grid = [None] * len(grid)
     for i, row in enumerate(grid):
         new_row = new_grid[i] = list(row)
         for j, entry in enumerate(new_row):
@@ -969,8 +972,11 @@ def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
     legs = [leg0]
     for i, gr in enumerate(grids):
         gr_legs = [legs[-1], None]
-        gr_legs = npc.detect_grid_outer_legcharge(
-            gr, gr_legs, qtotal=Ws_qtotal[i], qconj=-1, bunch=False)
+        gr_legs = npc.detect_grid_outer_legcharge(gr,
+                                                  gr_legs,
+                                                  qtotal=Ws_qtotal[i],
+                                                  qconj=-1,
+                                                  bunch=False)
         legs.append(gr_legs[1].conj())
     return legs
 
@@ -991,7 +997,7 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
         return legs
     L = len(grids)
     chis = [len(g) for g in grids]
-    charges = [[None]*chi for chi in chis]
+    charges = [[None] * chi for chi in chis]
     charges.append(charges[0])  # the *same* list is shared for 0 and -1.
 
     charges[0][IdL_0] = chinfo.make_valid(None)  # default charge = 0.

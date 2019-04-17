@@ -25,7 +25,10 @@ def test_ToricCode(Lx=1, Ly=2):
         psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite')
         dmrg_params = {
             'mixer': True,
-            'trunc_params': {'chi_max': 10, 'svd_min': 1.e-10},
+            'trunc_params': {
+                'chi_max': 10,
+                'svd_min': 1.e-10
+            },
             'max_E_err': 1.e-10,
             'N_sweeps_check': 4,
             'verbose': 1
@@ -35,11 +38,12 @@ def test_ToricCode(Lx=1, Ly=2):
         print("E =", E)
         psi.canonical_form()
         # energy per "cell"=2 -> energy per site in the dual lattice = 1
-        assert abs(E-(-1.)) < dmrg_params['max_E_err']
+        assert abs(E - (-1.)) < dmrg_params['max_E_err']
         print("chi=", psi.chi)
         if Ly == 2:
             assert tuple(psi.chi[:4]) == (2, 4, 4, 4)
-        assert abs(psi.entanglement_entropy(bonds=[0])[0] - np.log(2)*(Ly-1)) < 1.e-5
+        assert abs(psi.entanglement_entropy(bonds=[0])[0] - np.log(2) * (Ly - 1)) < 1.e-5
+
 
 if __name__ == "__main__":
     test_ToricCode()

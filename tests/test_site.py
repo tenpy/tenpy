@@ -76,8 +76,8 @@ def test_double_site():
             ds.test_sanity()
     fs = site.FermionSite('N')
     ds = site.GroupedSite([fs, fs], ['a', 'b'], charges='same')
-    assert ds.need_JW_string == set(
-        [op + 'a' for op in fs.need_JW_string] + [op + 'b' for op in fs.need_JW_string] + ['JW'])
+    assert ds.need_JW_string == set([op + 'a' for op in fs.need_JW_string] +
+                                    [op + 'b' for op in fs.need_JW_string] + ['JW'])
     ss = site.GroupedSite([fs])
 
 
@@ -103,7 +103,8 @@ def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
             if S == 0.5:
                 # for pauli matrices ``sigma_a . sigma_b = 1.j * epsilon_{a,b,c} sigma_c``
                 # with ``Sa = 0.5 sigma_a``, we get ``Sa . Sb = 0.5j epsilon_{a,b,c} Sc``.
-                npt.assert_almost_equal(np.dot(Sa, Sb), 0.5j*Sc, 13) # holds only for S=1/2
+                npt.assert_almost_equal(np.dot(Sa, Sb), 0.5j * Sc, 13)  # holds only for S=1/2
+
 
 def check_same_operators(sites):
     """check that the given sites have the same onsite-operator using get_site_op_flat"""
@@ -234,8 +235,8 @@ def test_boson_site():
         for conserve in ['N', 'parity', None]:
             S = site.BosonSite(Nmax, conserve=conserve)
             S.test_sanity()
-        npt.assert_array_almost_equal_nulp(
-            np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()), S.N.to_ndarray(), 2)
+        npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
+                                           S.N.to_ndarray(), 2)
 
 
 def test_boson_site_ops():
@@ -247,51 +248,51 @@ def test_boson_site_ops():
 
 
 def test_multi_sites_combine_charges():
-   spin = site.SpinSite(0.5, 'Sz')
-   spin1 = site.SpinSite(1, 'Sz')
-   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-   spin_ops = {op_name: get_site_op_flat(spin, op_name) for op_name in spin.opnames}
-   spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
-   ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
-   site.multi_sites_combine_charges([spin, ferm])
-   assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
-   spin.test_sanity()
-   ferm.test_sanity()
-   for op_name, op_flat in spin_ops.items():
-       op_flat2 = get_site_op_flat(spin, op_name)
-       npt.assert_equal(op_flat, op_flat2)
-   for op_name, op_flat in ferm_ops.items():
-       op_flat2 = get_site_op_flat(ferm, op_name)
-       npt.assert_equal(op_flat, op_flat2)
+    spin = site.SpinSite(0.5, 'Sz')
+    spin1 = site.SpinSite(1, 'Sz')
+    ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    spin_ops = {op_name: get_site_op_flat(spin, op_name) for op_name in spin.opnames}
+    spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
+    ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
+    site.multi_sites_combine_charges([spin, ferm])
+    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
+    spin.test_sanity()
+    ferm.test_sanity()
+    for op_name, op_flat in spin_ops.items():
+        op_flat2 = get_site_op_flat(spin, op_name)
+        npt.assert_equal(op_flat, op_flat2)
+    for op_name, op_flat in ferm_ops.items():
+        op_flat2 = get_site_op_flat(ferm, op_name)
+        npt.assert_equal(op_flat, op_flat2)
 
-   spin = site.SpinSite(0.5, 'Sz')
-   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-   site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, '2*Sz')]])
-   assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz')
-   spin.test_sanity()
-   ferm.test_sanity()
-   for op_name, op_flat in spin_ops.items():
-       op_flat2 = get_site_op_flat(spin, op_name)
-       npt.assert_equal(op_flat, op_flat2)
-   for op_name, op_flat in ferm_ops.items():
-       op_flat2 = get_site_op_flat(ferm, op_name)
-       npt.assert_equal(op_flat, op_flat2)
+    spin = site.SpinSite(0.5, 'Sz')
+    ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, '2*Sz')]])
+    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz')
+    spin.test_sanity()
+    ferm.test_sanity()
+    for op_name, op_flat in spin_ops.items():
+        op_flat2 = get_site_op_flat(spin, op_name)
+        npt.assert_equal(op_flat, op_flat2)
+    for op_name, op_flat in ferm_ops.items():
+        op_flat2 = get_site_op_flat(ferm, op_name)
+        npt.assert_equal(op_flat, op_flat2)
 
-   # and finally a few more, changing orders as well
-   ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-   spin = site.SpinSite(0.5, 'Sz')
-   spin1 = site.SpinSite(1, 'Sz')
-   site.multi_sites_combine_charges([ferm, spin1, spin], same_charges=[[(0, 'Sz'), (2, '2*Sz')]])
-   assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz', '2*Sz')
-   spin.test_sanity()
-   ferm.test_sanity()
-   spin1.test_sanity()
-   for op_name, op_flat in spin_ops.items():
-       op_flat2 = get_site_op_flat(spin, op_name)
-       npt.assert_equal(op_flat, op_flat2)
-   for op_name, op_flat in ferm_ops.items():
-       op_flat2 = get_site_op_flat(ferm, op_name)
-       npt.assert_equal(op_flat, op_flat2)
-   for op_name, op_flat in spin1_ops.items():
-       op_flat2 = get_site_op_flat(spin1, op_name)
-       npt.assert_equal(op_flat, op_flat2)
+    # and finally a few more, changing orders as well
+    ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    spin = site.SpinSite(0.5, 'Sz')
+    spin1 = site.SpinSite(1, 'Sz')
+    site.multi_sites_combine_charges([ferm, spin1, spin], same_charges=[[(0, 'Sz'), (2, '2*Sz')]])
+    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz', '2*Sz')
+    spin.test_sanity()
+    ferm.test_sanity()
+    spin1.test_sanity()
+    for op_name, op_flat in spin_ops.items():
+        op_flat2 = get_site_op_flat(spin, op_name)
+        npt.assert_equal(op_flat, op_flat2)
+    for op_name, op_flat in ferm_ops.items():
+        op_flat2 = get_site_op_flat(ferm, op_name)
+        npt.assert_equal(op_flat, op_flat2)
+    for op_name, op_flat in spin1_ops.items():
+        op_flat2 = get_site_op_flat(spin1, op_name)
+        npt.assert_equal(op_flat, op_flat2)

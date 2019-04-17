@@ -81,12 +81,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
 
 
-class XXZChain2(CouplingMPOModel,NearestNeighborModel):
+class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
     based on the :class:`~tenpy.models.model.CouplingMPOModel`.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

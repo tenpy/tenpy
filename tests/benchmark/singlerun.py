@@ -41,7 +41,7 @@ def single_run(mod_name, repeat=1, seed=0, **kwargs):
     t0 = time.time()
     exec(timing_code, namespace, namespace)
     t1 = time.time()
-    print("finished single run for module", mod_name, "after {0:.2e} seconds".format(t1-t0))
+    print("finished single run for module", mod_name, "after {0:.2e} seconds".format(t1 - t0))
 
 
 if __name__ == "__main__":
@@ -55,29 +55,21 @@ if __name__ == "__main__":
         nargs='*',
         default=[],
         help="Nature of the charge, ``Charges.mod``. The length determines the number of charges.")
-    parser.add_argument(
-        '-l',
-        '--legs',
-        type=int,
-        default=2,
-        help="Number of legs to be contracted.")
-    parser.add_argument(
-        '-s',
-        '--sectors',
-        type=int,
-        default=5,
-        help="(Maximal) number of sectors in each leg.")
-    parser.add_argument(
-        '-S',
-        '--size',
-        type=int,
-        default=50,
-        help="Size of each leg.")
-    parser.add_argument(
-        '-m',
-        '--modules',
-        nargs='+',
-        help='Perform profiling for the given modules.')
+    parser.add_argument('-l',
+                        '--legs',
+                        type=int,
+                        default=2,
+                        help="Number of legs to be contracted.")
+    parser.add_argument('-s',
+                        '--sectors',
+                        type=int,
+                        default=5,
+                        help="(Maximal) number of sectors in each leg.")
+    parser.add_argument('-S', '--size', type=int, default=50, help="Size of each leg.")
+    parser.add_argument('-m',
+                        '--modules',
+                        nargs='+',
+                        help='Perform profiling for the given modules.')
     args = parser.parse_args()
     kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, size=args.size)
     for mod_name in args.modules:

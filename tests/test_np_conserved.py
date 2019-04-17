@@ -264,8 +264,8 @@ def test_npc_Array_reshape():
     a = random_Array((20, 15, 10), chinfo, sort=False)
     aflat = a.to_ndarray()
     for comb_legs, transpose in [([[1]], [0, 1, 2]), ([[1], [2]], [0, 1, 2]),
-                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]), ([[2, 0, 1]],
-                                                                                       [2, 0, 1])]:
+                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
+                                 ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
@@ -341,7 +341,7 @@ def test_npc_grid_outer():
     ci = chinfo3
     p_leg = gen_random_legcharge(ci, 4)
     legs_op = [p_leg, p_leg.conj()]
-    op_0 = 1.j*npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
+    op_0 = 1.j * npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
     op_pl = npc.Array.from_func(np.random.random, legs_op, qtotal=[1], shape_kw='size')
     op_min = npc.Array.from_func(np.random.random, legs_op, qtotal=[-1], shape_kw='size')
     op_id = npc.eye_like(op_0)
@@ -530,11 +530,11 @@ def test_npc_tensordot_extra():
     for i, val in zip(idx, vals):
         theta_flat[i] = val
     theta = npc.Array.from_ndarray(theta_flat, [leg, leg, leg.conj(), leg.conj()], cutoff=0.)
-    assert abs(np.linalg.norm(theta_flat) - npc.norm(theta) ) < 1.e-14
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(theta)) < 1.e-14
     Utheta_flat = np.tensordot(Uflat, theta_flat, axes=2)
     Utheta = npc.tensordot(U, theta, axes=2)
     npt.assert_array_almost_equal_nulp(Utheta.to_ndarray(), Utheta_flat, 10)
-    assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta) ) < 1.e-10
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta)) < 1.e-10
 
 
 def test_npc_inner():
@@ -804,7 +804,6 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
-
 
 
 if __name__ == "__main__":

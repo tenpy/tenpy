@@ -62,11 +62,12 @@ def check_lanczos_gs(n=30, N_cache=6, tol=5.e-15):
     else:
         print("warning: test didn't find a second eigenvector in the same charge sector!")
         return  # just ignore the rest....
-    E1, psi1, N = lanczos.lanczos(
-        H_Op, psi_init, {
-            'verbose': 1,
-            'reortho': True
-        }, orthogonal_to=[psi0])
+    E1, psi1, N = lanczos.lanczos(H_Op,
+                                  psi_init, {
+                                      'verbose': 1,
+                                      'reortho': True
+                                  },
+                                  orthogonal_to=[psi0])
     print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
     print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
     psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), do_conj=True)

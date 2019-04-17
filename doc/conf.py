@@ -16,13 +16,11 @@
 import sys
 import os
 
-
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 
 if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
@@ -172,12 +170,10 @@ html_sidebars = {
     '**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'],
 }
 
-
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'tenpydoc'
-
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -203,20 +199,14 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'tenpy.tex', 'tenpy Documentation',
-     'TenPy Team', 'manual'),
+    (master_doc, 'tenpy.tex', 'tenpy Documentation', 'TenPy Team', 'manual'),
 ]
-
 
 # -- Options for manual page output ---------------------------------------
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    (master_doc, 'tenpy', 'tenpy Documentation',
-     [author], 1)
-]
-
+man_pages = [(master_doc, 'tenpy', 'tenpy Documentation', [author], 1)]
 
 # -- Options for Texinfo output -------------------------------------------
 
@@ -228,19 +218,18 @@ texinfo_documents = [
      'One line description of project.', 'Miscellaneous'),
 ]
 
-
-
 # cross links to other sphinx documentations
-intersphinx_mapping = {'python': ('https://docs.python.org/3', None),
-                       'numpy': ('https://docs.scipy.org/doc/numpy', None),
-                       'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
-                       'matplotlib': ('https://matplotlib.org', None),
-                       }
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
+    'matplotlib': ('https://matplotlib.org', None),
+}
 
 # extlinks
-extlinks = {'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:'),
-            'doi': ('https://dx.doi.org/%s', 'doi:'),
-            'issue': ('https://github.com/tenpy/tenpy/issues/%s', 'issue #'),
-            'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
-                      'Community forum topic ')
-            }
+extlinks = {
+    'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:'),
+    'doi': ('https://dx.doi.org/%s', 'doi:'),
+    'issue': ('https://github.com/tenpy/tenpy/issues/%s', 'issue #'),
+    'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s', 'Community forum topic ')
+}

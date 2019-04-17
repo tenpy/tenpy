@@ -33,7 +33,7 @@ def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
     # energy:
-    E = np.sum(M.bond_energies(psi)) # M.bond_energies() works only a for NearestNeighborModel
+    E = np.sum(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.sum(psi.expectation_value(M.H_bond[1:]))
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -69,7 +69,7 @@ def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
     }
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
-    E = np.sum(M.bond_energies(psi)) # M.bond_energies() works only a for NearestNeighborModel
+    E = np.sum(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.mean(psi.expectation_value(M.H_bond))
     print("E (per site) = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -118,12 +118,11 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
         S.append(psi.entanglement_entropy())
     import matplotlib.pyplot as plt
     plt.figure()
-    plt.imshow(
-        S[::-1],
-        vmin=0.,
-        aspect='auto',
-        interpolation='nearest',
-        extent=(0, L - 1., -0.5 * dt_measure, eng.evolved_time + 0.5 * dt_measure))
+    plt.imshow(S[::-1],
+               vmin=0.,
+               aspect='auto',
+               interpolation='nearest',
+               extent=(0, L - 1., -0.5 * dt_measure, eng.evolved_time + 0.5 * dt_measure))
     plt.xlabel('site $i$')
     plt.ylabel('time $t/J$')
     plt.ylim(0., tmax)

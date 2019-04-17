@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 import numpy as np
 
 from tenpy.networks.mps import MPS
@@ -27,7 +26,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
     model_params = dict(L=L, S=2., D=0.3, bc_MPS='infinite', conserve=conserve, verbose=0)
     #  print("conserve =", repr(conserve))
     M = SpinChain(model_params)
-    initial_state = (['up', 'down'] * L )[:L]
+    initial_state = (['up', 'down'] * L)[:L]
     psi = MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite')
     dmrg_params = {
         'trunc_params': {
@@ -59,6 +58,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         print('initial chi', eng.psi.chi)
     eng.reset_stats()
     return eng
+
 
 def benchmark(data):
     eng = data

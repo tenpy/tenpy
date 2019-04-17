@@ -10,9 +10,10 @@ from tenpy.networks import site
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
+
 def test_onsite_terms():
     L = 6
-    strength1 = np.arange(1., 1.+L*0.25, 0.25)
+    strength1 = np.arange(1., 1. + L * 0.25, 0.25)
     o1 = OnsiteTerms(L)
     for i in [1, 0, 3]:
         o1.add_onsite_term(strength1[i], i, "X_{i:d}".format(i=i))
@@ -22,7 +23,7 @@ def test_onsite_terms():
                                {"X_3": strength1[3]},
                                {},
                                {}] # yapf: disable
-    strength2 = np.arange(2., 2.+L*0.25, 0.25)
+    strength2 = np.arange(2., 2. + L * 0.25, 0.25)
     o2 = OnsiteTerms(L)
     for i in [1, 4, 3, 5]:
         o2.add_onsite_term(strength2[i], i, "Y_{i:d}".format(i=i))
@@ -46,7 +47,7 @@ def test_onsite_terms():
     tl = o1.to_TermList()
     assert tl.terms == [[("X_0", 0)], [("Y_1", 1)], [("X_3", 3)], [("Y_3", 3)], [("Y_4", 4)],
                         [("Y_5", 5)]]
-    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([None]*L)
+    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([None] * L)
     assert o3.onsite_terms == o1.onsite_terms
 
 
@@ -55,8 +56,8 @@ def test_coupling_terms():
     sites = []
     for i in range(L):
         s = site.Site(spin_half.leg)
-        s.add_op("X_{i:d}".format(i=i), 2.*np.eye(2))
-        s.add_op("Y_{i:d}".format(i=i), 3.*np.eye(2))
+        s.add_op("X_{i:d}".format(i=i), 2. * np.eye(2))
+        s.add_op("Y_{i:d}".format(i=i), 3. * np.eye(2))
         sites.append(s)
     strength1 = np.arange(0., 5)[:, np.newaxis] + np.arange(0., 0.625, 0.125)[np.newaxis, :]
     c1 = CouplingTerms(L)
@@ -103,13 +104,15 @@ def test_coupling_terms():
     mc._test_terms(sites)
     # convert to TermList
     tl_mc = mc.to_TermList()
-    term_list_des = [[('X_0', 0), ('Y_1', 1)],
-                     [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],
-                     [('X_0', 0), ('Y_2', 2)],
-                     [('X_0', 0), ('Y_3', 3)],
-                     [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],  # (!) droppend S1, S2 (!)
-                     [('X_1', 1), ('Y_2', 2), ('Y_3', 3)],
-                     [('X_2', 2), ('Y_3', 3)]]
+    term_list_des = [
+        [('X_0', 0), ('Y_1', 1)],
+        [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],
+        [('X_0', 0), ('Y_2', 2)],
+        [('X_0', 0), ('Y_3', 3)],
+        [('X_0', 0), ('Y_1', 1), ('Y_3', 3)],  # (!) droppend S1, S2 (!)
+        [('X_1', 1), ('Y_2', 2), ('Y_3', 3)],
+        [('X_2', 2), ('Y_3', 3)]
+    ]
     assert tl_mc.terms == term_list_des
     assert np.all(tl_mc.strength == [0.125, 20., 0.25, 0.375, 30., 40., 2.375])
     ot, mc_conv = tl_mc.to_OnsiteTerms_CouplingTerms(sites)
@@ -176,17 +179,22 @@ def test_coupling_terms_handle_JW():
     assert args == ([0, 1, 3], ["X_0", "Y_1 JW", "Y_3"], ["Id", "JW"])
 
     term = [("Y_0", 0), ("X_1", 1), ("Y_3", 3), ("X_4", 4), ("Y_6", 6), ("Y_7", 7)]
-    args = mc.multi_coupling_term_handle_JW(term, [False]*6)
+    args = mc.multi_coupling_term_handle_JW(term, [False] * 6)
     assert args == ([0, 1, 3, 4, 6, 7], [op[0] for op in term], ["Id"] * (len(term) - 1))
     args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
     print(args)
-    assert args == ([0, 1, 3, 4, 6, 7],
-                    ["Y_0 JW", "X_1 JW", "Y_3", "X_4", "Y_6 JW", "Y_7"],
-                    ["JW", "JW", "Id", "Id", "JW"])
+    assert args == ([0, 1, 3, 4, 6, 7], ["Y_0 JW", "X_1 JW", "Y_3", "X_4", "Y_6 JW",
+                                         "Y_7"], ["JW", "JW", "Id", "Id", "JW"])
 
-    term = [("Y_7", 7), ("X_1", 1), ("Y_0", 0), ("X_4", 4), ("Y_6", 6), ("Y_3", 3), ]
+    term = [
+        ("Y_7", 7),
+        ("X_1", 1),
+        ("Y_0", 0),
+        ("X_4", 4),
+        ("Y_6", 6),
+        ("Y_3", 3),
+    ]
     args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
     print(args)
-    assert args == ([0, 1, 3, 4, 6, 7],
-                    ["JW Y_0", "JW X_1", "Y_3", "JW X_4 JW", "JW Y_6", "Y_7"],
-                    ["JW", "JW", "Id", "Id", "JW"])
+    assert args == ([0, 1, 3, 4, 6, 7], ["JW Y_0", "JW X_1", "Y_3", "JW X_4 JW", "JW Y_6",
+                                         "Y_7"], ["JW", "JW", "Id", "Id", "JW"])

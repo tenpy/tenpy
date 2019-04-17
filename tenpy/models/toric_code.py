@@ -34,16 +34,17 @@ class DualSquare(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
+
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
         pos = np.array([[0.5, 0.], [0., 0.5]])
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [(0, 1, np.array([0, 0])), (0, 1, np.array([1, 0])),
-              (1, 0, np.array([-1, 1])), (1, 0, np.array([0, 1]))]
-        nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1,0]), np.array([0, 1])]]
-        nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1,1]), np.array([-1, 1])]]
+        NN = [(0, 1, np.array([0, 0])), (0, 1, np.array([1, 0])), (1, 0, np.array([-1, 1])),
+              (1, 0, np.array([0, 1]))]
+        nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
+        nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_nearest_neighbors', nnNN)
@@ -81,7 +82,6 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
-
     def init_sites(self, model_params):
         conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
         site = SpinHalfSite(conserve)
@@ -102,11 +102,9 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Jv = get_parameter(model_params, 'Jv', 1., self.name, True)
         Jp = get_parameter(model_params, 'Jp', 1., self.name, True)
         # vertex/star term
-        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]),
-                                                  (0, 'Sigmax', [-1, 0]),
+        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]), (0, 'Sigmax', [-1, 0]),
                                                   (1, 'Sigmax', [0, -1])])
         # plaquette term
-        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]),
-                                                  (0, 'Sigmaz', [0, 1]),
+        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]), (0, 'Sigmaz', [0, 1]),
                                                   (1, 'Sigmaz', [1, 0])])
         # done

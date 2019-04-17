@@ -109,8 +109,8 @@ def gauge_hopping(model_params):
                 raise ValueError("Unable to build symmetric gauge with this flux.")
         if mx != my or mx * my != phi_q:
             raise ValueError("Magnetic unit cell incompatible with flux or symmetric gauge.")
-        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
-        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
+        hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
+        hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
     return hop_x, hop_y

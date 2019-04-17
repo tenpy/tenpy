@@ -307,8 +307,15 @@ class MPS:
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=None, permute=True,
-                   form='B', legL=None):
+    def from_Bflat(cls,
+                   sites,
+                   Bflat,
+                   SVs=None,
+                   bc='finite',
+                   dtype=None,
+                   permute=True,
+                   form='B',
+                   legL=None):
         """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
@@ -430,8 +437,10 @@ class MPS:
             S_list[i] = S
             psi = psi.split_legs(0)
         psi = psi.combine_legs([labels[0], 'vR'])
-        psi, S, B = npc.svd(
-            psi, qtotal_LR=[None, psi.qtotal], inner_labels=['vR', 'vL'], cutoff=cutoff)
+        psi, S, B = npc.svd(psi,
+                            qtotal_LR=[None, psi.qtotal],
+                            inner_labels=['vR', 'vL'],
+                            cutoff=cutoff)
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
         phase = psi[0, 0]
@@ -742,7 +751,7 @@ class MPS:
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
         i = self._to_valid_index(i)
-        for j in range(i, i+n):
+        for j in range(i, i + n):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
@@ -751,9 +760,9 @@ class MPS:
         theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
         _, old_fR = self.form[i]
         for k in range(1, n):  # non-empty range
-            j = self._to_valid_index(i+k)
+            j = self._to_valid_index(i + k)
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
-            B = self.get_B(j, (1.-old_fR, new_fR), False, cutoff, str(k))
+            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[j]
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
@@ -874,12 +883,12 @@ class MPS:
         for gs in grouped_sites:
             n_sites = gs.n_sites
             new_B = self.get_theta(i, gs.n_sites, formL=B_form[0], formR=B_form[1])
-            comb_legs = [[lbl+str(k) for k in range(n_sites)] for lbl in self._p_label]
+            comb_legs = [[lbl + str(k) for k in range(n_sites)] for lbl in self._p_label]
             # comb_legs = [['p0', 'p1', ... ]] for usual MPS
-            axes = list(range(1, 1+len(self._p_label))) # [1]
-            new_B = new_B.combine_legs(comb_legs, new_axes=axes, qconj=[+1]*len(axes))
+            axes = list(range(1, 1 + len(self._p_label)))  # [1]
+            new_B = new_B.combine_legs(comb_legs, new_axes=axes, qconj=[+1] * len(axes))
             new_B.legs[1].test_equal(gs.leg)  # test legcharge compatibility
-            Bs.append(new_B.iset_leg_labels(self._B_labels)) # ['vL', 'p', 'vR']
+            Bs.append(new_B.iset_leg_labels(self._B_labels))  # ['vL', 'p', 'vR']
             Ss.append(self._S[i])
             i += n_sites
         Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
@@ -920,11 +929,11 @@ class MPS:
             n = gs.n_sites
             Ss_new = []
             Bs_new = []
-            B_gr = self.get_B(i, form='B').transpose(self._B_labels) # vL, p, vR
+            B_gr = self.get_B(i, form='B').transpose(self._B_labels)  # vL, p, vR
             B_gr.idrop_labels(self._p_label)  # avoid warning: split label not called '(...)'
             n_p_label = len(self._p_label)
             split_legs = list(range(1, 1 + n_p_label))
-            transp = [i for k in range(n) for i in range(1+k, 1 + n * n_p_label, n)]
+            transp = [i for k in range(n) for i in range(1 + k, 1 + n * n_p_label, n)]
             transp = ['vL'] + transp + ['vR']
             B_gr = B_gr.split_legs(split_legs).itranspose(transp)
             theta = self.get_theta(i, n=1)
@@ -934,19 +943,19 @@ class MPS:
             # for MPS with legs p, q, they have legs vL p0 q0 p1 q1 ... q{-n-1} vR
             combine = [list(range(B_gr.rank - n_p_label - 1)), list(range(-n_p_label - 1, 0, +1))]
             # combine = [[0, 1, .... {n-1}], [-2, -1]] for usual MPS
-            axes_contr = [combine[1], list(range(1, 2+n_p_label))]
-            for j in range(n-1, 0, -1):
+            axes_contr = [combine[1], list(range(1, 2 + n_p_label))]
+            for j in range(n - 1, 0, -1):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
                 U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
-                theta = U.split_legs(0) # vL p0 ... pj-1 vR
+                theta = U.split_legs(0)  # vL p0 ... pj-1 vR
                 for _ in range(n_p_label):
                     combine[0].pop()
-                B = V.split_legs(1).iset_leg_labels(self._B_labels) # vL p vR
-                B_gr = npc.tensordot(B_gr, B.conj(), axes=axes_contr) # vL p0 ... pj-1 vR
+                B = V.split_legs(1).iset_leg_labels(self._B_labels)  # vL p vR
+                B_gr = npc.tensordot(B_gr, B.conj(), axes=axes_contr)  # vL p0 ... pj-1 vR
                 Bs_new.append(B)
             Bs_new.append(B_gr.iset_leg_labels(self._B_labels))  # inversion free :)
             Ss_new.append(self.get_SL(i))
@@ -970,7 +979,7 @@ class MPS:
         -------
         new MPS object with bunched sites.
         """
-        groupedMPS= self.copy()
+        groupedMPS = self.copy()
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
@@ -1014,7 +1023,7 @@ class MPS:
                 qtotal = self.get_total_charge() + vL_chdiff + vR_chdiff
         qtotal = self.chinfo.make_valid(qtotal)
         if qtotal.ndim == 1:
-            qtotal_factor = np.array([0]*(self.L-1) + [1], npc.QTYPE)
+            qtotal_factor = np.array([0] * (self.L - 1) + [1], npc.QTYPE)
             qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
         if qtotal.shape != (self.L, self.chinfo.qnumber):
             raise ValueError("wrong shape of `qtotal`")
@@ -1034,7 +1043,7 @@ class MPS:
                     # so we need to adjust the next B as well
                     nextB = self._B[i + 1]
                     self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
-                    self._B[i].get_leg('vR').test_contractible(self._B[i+1].get_leg('vL'))
+                    self._B[i].get_leg('vR').test_contractible(self._B[i + 1].get_leg('vL'))
         # just to check
         assert np.all(self.get_total_charge() == self.chinfo.make_valid(np.sum(qtotal, 0)))
         if vR_leg is not None:
@@ -1243,8 +1252,8 @@ class MPS:
             For each row of `charge_values` the probablity for these values of charge fluctuations.
         """
         if self.bc == 'segment' and bond == self.L:
-            S = self.get_SR(self.L-1)**2
-            leg = self.get_B(self.L-1, form=None).get_leg('vR').conj()
+            S = self.get_SR(self.L - 1)**2
+            leg = self.get_B(self.L - 1, form=None).get_leg('vR').conj()
         else:  # usually the case
             S = self.get_SL(bond)**2
             leg = self.get_B(bond, form=None).get_leg('vL')
@@ -1304,7 +1313,7 @@ class MPS:
         """
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * (charges-charges_mean[:, np.newaxis])**2, axis=0)
+        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[:, np.newaxis])**2, axis=0)
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
@@ -1531,7 +1540,7 @@ class MPS:
         ops = [None] * (i_max - i_min + 1)
         count_JW = 0
         for op, i in term:
-            j = i - i_min # index in ops
+            j = i - i_min  # index in ops
             if ops[j] is not None:
                 ops[j] = ops[j] + " " + op
             else:
@@ -1582,11 +1591,11 @@ class MPS:
             op = self.sites[self._to_valid_index(i0)].get_op(op)
         theta = self.get_B(i0, 'Th')
         C = npc.tensordot(op, theta, axes=['p*', 'p'])
-        axes = [['vL*'] + self._get_p_label('*') ,['vL'] + self._p_label]
+        axes = [['vL*'] + self._get_p_label('*'), ['vL'] + self._p_label]
         C = npc.tensordot(theta.conj(), C, axes=axes)
         axes[1][0] = 'vR*'
         for j in range(1, len(operators)):
-            op = operators[j] # the operator
+            op = operators[j]  # the operator
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
@@ -1642,8 +1651,9 @@ class MPS:
         """
         from . import mpo, terms
         if prefactors is not None:
-            warnings.warn("Deprecated argument prefactors: replace arguments with "
-                          "``TermList(term_list, prefactors)``.", FutureWarning, 2)
+            warnings.warn(
+                "Deprecated argument prefactors: replace arguments with "
+                "``TermList(term_list, prefactors)``.", FutureWarning, 2)
             term_list = terms.TermList(term_list, prefactors)
         L = self.L
         if not self.finite:
@@ -1799,10 +1809,8 @@ class MPS:
 
         """
         err = np.empty((self.L, 2), dtype=np.float)
-        lbl_R = (self._get_p_label('0') + ['vR'],
-                 self._get_p_label('0*') + ['vR*'])
-        lbl_L = (['vL'] + self._get_p_label('0'),
-                 ['vL*'] + self._get_p_label('0*'))
+        lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
+        lbl_L = (['vL'] + self._get_p_label('0'), ['vL*'] + self._get_p_label('0*'))
         for i in range(self.L):
             th = self.get_theta(i, 1)
             rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
@@ -1900,14 +1908,16 @@ class MPS:
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
-            U, S, VR_segment = npc.svd(
-                M.combine_legs(['vL'] + self._p_label), cutoff=cutoff, inner_labels=['vR', 'vL'])
+            U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
+                                       cutoff=cutoff,
+                                       inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                          cutoff=cutoff, inner_labels=['vR', 'vL'])
+                          cutoff=cutoff,
+                          inner_labels=['vR', 'vL'])
         if not renormalize:
             self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
@@ -1916,10 +1926,9 @@ class MPS:
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                cutoff=cutoff,
-                inner_labels=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              cutoff=cutoff,
+                              inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
@@ -1995,7 +2004,7 @@ class MPS:
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            axes = [self._p_label  + ['vR'], self._get_p_label('*') + ['vR*']]
+            axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
             Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
             Wr_list[j1 % L] = Wr = self._canonical_form_correct_right(j1, Gr)
 
@@ -2008,7 +2017,7 @@ class MPS:
                 B1.conj(),  # old B1; now on site j1-1
                 npc.tensordot(Gl, B1, axes=['vR', 'vL']),
                 axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']])
-                # axes=[['p*', 'vL*'], ['p', 'vR*']])
+            # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
@@ -2070,8 +2079,10 @@ class MPS:
             assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
             E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
-            warnings.warn("Correlation length: largest eigenvalue not one. "
-                          "Not in canonical form/normalized?", stacklevel=2)
+            warnings.warn(
+                "Correlation length: largest eigenvalue not one. "
+                "Not in canonical form/normalized?",
+                stacklevel=2)
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -2236,10 +2247,9 @@ class MPS:
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
-        B_L = npc.tensordot(
-            C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
-            V.conj(),
-            axes=['(vR.p1)', '(vR*.p1*)'])
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(vR.p1)', '(vR*.p1*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.set_SR(i, S)
@@ -2794,7 +2804,7 @@ class MPSEnvironment:
         if ket is None:
             ket = bra
         if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra) # ensure matching charges
+            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
@@ -3167,7 +3177,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         form = ket._to_valid_form(form)
         p = ket._p_label  # for ususal MPS just ['p']
         assert p == bra._p_label
-        pstar = ket._get_p_label('*') # ['p*']
+        pstar = ket._get_p_label('*')  # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']

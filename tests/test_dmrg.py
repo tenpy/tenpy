@@ -94,10 +94,10 @@ def test_dmrg():
 
 
 def test_dmrg_rerun(L=2):
-    bc_MPS='infinite'
+    bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc_MPS)
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
     dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4}
     eng = dmrg.EngineCombine(psi, M, dmrg_pars)
     E1, _ = eng.run()
@@ -128,37 +128,38 @@ def test_dmrg_excited(eps=1.e-12):
     # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
     print("Exact diag: E[:5] = ", ED.E[:5])
     # first DMRG run
-    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}}
     eng0 = dmrg.EngineCombine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
-    assert abs((E0 - ED.E[0])/ED.E[0]) < eps
+    assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
     ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
     dmrg_pars['orthogonal_to'] = [psi0]
-    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     eng1 = dmrg.EngineCombine(psi1, M, dmrg_pars)
     E1, psi1 = eng1.run()
-    assert abs((E1 - ED.E[1])/ED.E[1]) < eps
+    assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
     ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
-    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1]* (L//2), bc=bc)
+    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1] * (L // 2), bc=bc)
     eng2 = dmrg.EngineCombine(psi2, M, dmrg_pars)
     E2, psi2 = eng2.run()
     print(E2)
-    assert abs((E2 - ED.E[2])/ED.E[2]) < eps
+    assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
     ov = npc.inner(ED.V.take_slice(2, 'ps*'), ED.mps_to_full(psi2), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
+
 
 def test_chi_list():
     assert dmrg.chi_list(3) == {0: 3}
     assert dmrg.chi_list(12, 12, 5) == {0: 12}
     assert dmrg.chi_list(24, 12, 5) == {0: 12, 5: 24}
-    assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10:27}
+    assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}
 
 
 if __name__ == "__main__":

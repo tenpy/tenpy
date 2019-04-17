@@ -44,6 +44,7 @@ class TermList:
     strengths : 1D ndarray
         For each term in `terms` an associated prefactor or strength (e.g. expectation value).
     """
+
     def __init__(self, terms, strength):
         self.terms = list(terms)
         self.strength = np.array(strength)
@@ -80,12 +81,12 @@ class TermList:
                 op, i = term[0]
                 ot.add_onsite_term(strength, i, op)
             elif len(term) == 2:
-                op_needs_JW = [(sites[i%L] is not None and sites[i%L].op_needs_JW(op))
+                op_needs_JW = [(sites[i % L] is not None and sites[i % L].op_needs_JW(op))
                                for op, i in term]
                 args = ct.coupling_term_handle_JW(term, op_needs_JW)
                 ct.add_coupling_term(strength, *args)
             elif len(term) > 2:
-                op_needs_JW = [(sites[i%L] is not None and sites[i%L].op_needs_JW(op))
+                op_needs_JW = [(sites[i % L] is not None and sites[i % L].op_needs_JW(op))
                                for op, i in term]
                 args = ct.multi_coupling_term_handle_JW(term, op_needs_JW)
                 ct.add_multi_coupling_term(strength, *args)
@@ -300,6 +301,7 @@ class CouplingTerms:
         ``bc_MPS == 'infinite'``, in which case they indicate couplings between different
         iMPS unit cells.
     """
+
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -397,10 +399,13 @@ class CouplingTerms:
                 op_i = ' '.join([op_i, op_string])  # op_j should act first
         return i, j, op_i, op_j, op_string
 
-    def plot_coupling_terms(self, ax, lat,
+    def plot_coupling_terms(self,
+                            ax,
+                            lat,
                             style_map='default',
                             common_style={'linestyle': '--'},
-                            text=None, text_pos=0.4):
+                            text=None,
+                            text_pos=0.4):
         """"Plot coupling terms into a given lattice.
 
         This function plots the :attr:`coupling_terms`
@@ -433,7 +438,7 @@ class CouplingTerms:
         --------
         tenpy.models.lattice.Lattice.plot_sites : plot the sites of the lattice.
         """
-        pos = lat.position(lat.order) # row `i` gives position where to plot site `i`
+        pos = lat.position(lat.order)  # row `i` gives position where to plot site `i`
         N_sites = lat.N_sites
         x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
         if style_map == 'default':
@@ -441,6 +446,7 @@ class CouplingTerms:
             from matplotlib.cm import hsv
             from matplotlib.colors import Normalize
             norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
+
             def style_map(i, j, op_i, op_string, op_j, strength):
                 """define the plot style for a given coupling"""
                 key = (op_i, op_string, op_j)
@@ -448,7 +454,8 @@ class CouplingTerms:
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
                 style['color'] = hsv(norm_angle(np.angle(strength)))
                 return style
-        text_pos = np.array([1.-text_pos, text_pos], np.float_)
+
+        text_pos = np.array([1. - text_pos, text_pos], np.float_)
         for i in sorted(self.coupling_terms.keys()):
             d1 = self.coupling_terms[i]
             x_y[0, :] = pos[i]
@@ -591,7 +598,7 @@ class CouplingTerms:
                 d2 = d1[(opname_i, op_str)]
                 for j in sorted(d2):
                     d3 = d2[j]
-                    for opname_j  in sorted(d3):
+                    for opname_j in sorted(d3):
                         terms.append([(opname_i, i), (opname_j, j)])
                         strength.append(d3[opname_j])
         return TermList(terms, strength)
@@ -744,7 +751,7 @@ class MultiCouplingTerms(CouplingTerms):
         """
         L = self.L
         number_ops = len(term)
-        if number_ops < 2 :
+        if number_ops < 2:
             raise ValueError("expect multi coupling")
         ops = [t[0] for t in term]
         ijkl = [t[1] for t in term]
@@ -777,13 +784,14 @@ class MultiCouplingTerms(CouplingTerms):
         else:
             # more complicated: handle Jordan-Wigner
             for a, group in enumerate(grouped_reorder):
-                right = [z for gr in grouped_reorder[a+1:] for z in gr]
+                right = [z for gr in grouped_reorder[a + 1:] for z in gr]
                 onsite_ops = []
                 need_JW_right = False
                 JW_max = -1
                 for x in group + [number_ops]:
                     JW_min, JW_max = JW_max, x
-                    need_JW = (np.sum([op_needs_JW[z] for z in right if JW_min < z < JW_max]) % 2 == 1)
+                    need_JW = (np.sum([op_needs_JW[z]
+                                       for z in right if JW_min < z < JW_max]) % 2 == 1)
                     if need_JW:
                         onsite_ops.append('JW')
                         need_JW_right = not need_JW_right
@@ -825,7 +833,7 @@ class MultiCouplingTerms(CouplingTerms):
                 self.add_to_graph(graph, i, d1, 'IdL')
         else:
             for key, d2 in _d1.items():
-                if isinstance(key, tuple): # further nesting
+                if isinstance(key, tuple):  # further nesting
                     op_i, op_string_ij = key
                     if isinstance(_label_left, str) and _label_left == 'IdL':
                         label = (_i, op_i, op_string_ij)

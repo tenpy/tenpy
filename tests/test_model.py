@@ -21,6 +21,7 @@ fermion_site = tenpy.networks.site.FermionSite('N')
 
 __all__ = ["check_model_sanity", "check_general_model"]
 
+
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M"""
     if isinstance(M, model.CouplingModel):
@@ -89,14 +90,14 @@ def test_ext_flux():
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
     M = model.CouplingModel(lat)
     strength = 1.23
-    strength_array = np.ones((Lx, Ly))*strength
-    for phi in [0, 2*np.pi]:  # flux shouldn't do anything
+    strength_array = np.ones((Lx, Ly)) * strength
+    for phi in [0, 2 * np.pi]:  # flux shouldn't do anything
         print("phi = ", phi)
         for dx in [1, 0], [0, 1], [0, 2], [1, -1], [-2, 2]:
             print("dx = ", dx)
             strength_flux = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
             npt.assert_array_almost_equal_nulp(strength_flux, strength_array, 10)
-    for phi in [np.pi/2, 0.123]:
+    for phi in [np.pi / 2, 0.123]:
         print("phi = ", phi)
         strength_hop_x = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
         npt.assert_array_almost_equal_nulp(strength_hop_x, strength_array, 10)
@@ -132,7 +133,7 @@ def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[Lx:2*Lx]
+        assert dims[:Lx] == dims[Lx:2 * Lx]
 
 
 def test_CouplingModel_fermions():
@@ -150,7 +151,7 @@ def test_CouplingModel_explicit():
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl)
     M.add_onsite(0.125, 0, 'N')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None) # auto-determine JW-string!
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None)  # auto-determine JW-string!
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
@@ -243,7 +244,7 @@ def test_MultiCouplingModel_explicit():
 
 
 def test_CouplingMPOModel_group():
-    class MyMod(model.CouplingMPOModel,model.NearestNeighborModel):
+    class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
         def __init__(self, model_params):
             model.CouplingMPOModel.__init__(self, model_params)
 
@@ -255,8 +256,8 @@ def test_CouplingMPOModel_group():
             self.add_onsite_term(0.25, 0, 'Sz')
             self.add_onsite_term(0.25, 4, 'Sz')
             self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
-            self.add_coupling_term(2.*x, 1, 2, 'Sy', 'Sy')
-            self.add_coupling_term(3.*x, 3, 4, 'Sy', 'Sy')
+            self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
+            self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
 
     m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
     m.test_sanity()
@@ -274,16 +275,17 @@ def test_CouplingMPOModel_group():
     Hgr = ED_gr.full_H.split_legs()
     Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H-Hgr) == 0
+    assert np.linalg.norm(H - Hgr) == 0
     ED_gr.full_H = None
     ED_gr.build_full_H_from_bonds()
     Hgr = ED_gr.full_H.split_legs()
     Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H-Hgr) == 0
+    assert np.linalg.norm(H - Hgr) == 0
+
 
 def test_model_H_conversion(L=6):
-    bc='finite'
+    bc = 'finite'
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
     m = XXZChain(model_params)
     # can we run the conversion?

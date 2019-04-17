@@ -14,9 +14,10 @@ def test_TFIChain_general():
 
 @attr('slow')
 def test_TFIModel2D_general():
-    check_general_model(TFIModel, dict(Lx=2, J=1., g=0.1), {
-        'Ly': [2, 3],
-        'bc_MPS': ['finite', 'infinite'],
-        'bc_y': ['ladder', 'cylinder'],
-        'lattice': ['Square', 'Honeycomb', 'Kagome']
-    })
+    check_general_model(
+        TFIModel, dict(Lx=2, J=1., g=0.1), {
+            'Ly': [2, 3],
+            'bc_MPS': ['finite', 'infinite'],
+            'bc_y': ['ladder', 'cylinder'],
+            'lattice': ['Square', 'Honeycomb', 'Kagome']
+        })

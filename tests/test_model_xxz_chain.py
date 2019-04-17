@@ -62,4 +62,4 @@ def test_XXZChain_general(tol=1.e-14):
         if Hb1 is None:
             assert Hb2 is None
             continue
-        assert npc.norm(Hb1-Hb2) < tol
+        assert npc.norm(Hb1 - Hb2) < tol

@@ -43,8 +43,10 @@ from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
 
-__all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer',
-           'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list']
+__all__ = [
+    'run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
+    'DensityMatrixMixer', 'chi_list'
+]
 
 
 def run(psi, model, DMRG_params):
@@ -175,8 +177,12 @@ def run(psi, model, DMRG_params):
         Engine_class = globals()[Engine_class]
     engine = Engine_class(psi, model, DMRG_params)
     E, _ = engine.run()
-    return {'E': E, 'shelve': engine.shelve, 'bond_statistics': engine.update_stats,
-            'sweep_statistics': engine.sweep_stats}
+    return {
+        'E': E,
+        'shelve': engine.shelve,
+        'bond_statistics': engine.update_stats,
+        'sweep_statistics': engine.sweep_stats
+    }
 
 
 class Engine(NpcLinearOperator):
@@ -299,7 +305,7 @@ class Engine(NpcLinearOperator):
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model) # calls reset_stats
+        self.init_env(model)  # calls reset_stats
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
@@ -432,8 +438,8 @@ class Engine(NpcLinearOperator):
             # check convergence criteria
             if self.sweeps >= max_sweeps:
                 break
-            if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * max(abs(E), 1.) and
-                    abs(Delta_S) < max_S_err):
+            if (self.sweeps > min_sweeps and -Delta_E < max_E_err * max(abs(E), 1.)
+                    and abs(Delta_S) < max_S_err):
                 if self.mixer is None:
                     break
                 else:
@@ -446,7 +452,7 @@ class Engine(NpcLinearOperator):
                 warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
             # --------- the main work --------------
-            for i in range(N_sweeps_check-1):
+            for i in range(N_sweeps_check - 1):
                 self.sweep(meas_E_trunc=False)
             max_trunc_err, max_E_trunc = self.sweep(meas_E_trunc=True)
             # --------------------------------------
@@ -501,19 +507,19 @@ class Engine(NpcLinearOperator):
                        "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
                        "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
                        "MPS bond dimensions: {chi!s}")
-                print(msg.format(
-                        sweep=self.sweeps,
-                        mem=memory_usage(),
-                        time=time.time() - start_time,
-                        chi=self.psi.chi,
-                        age=self.update_stats['age'][-1],
-                        E=E,
-                        S=S,
-                        DE=Delta_E,
-                        DS=Delta_S,
-                        trerr=max_trunc_err,
-                        Eerr=max_E_trunc,
-                        norm_err=norm_err))
+                print(
+                    msg.format(sweep=self.sweeps,
+                               mem=memory_usage(),
+                               time=time.time() - start_time,
+                               chi=self.psi.chi,
+                               age=self.update_stats['age'][-1],
+                               E=E,
+                               S=S,
+                               DE=Delta_E,
+                               DS=Delta_S,
+                               trerr=max_trunc_err,
+                               Eerr=max_E_trunc,
+                               norm_err=norm_err))
 
         # clean up from mixer
         self.mixer_cleanup()
@@ -543,8 +549,10 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
             msg = ("DMRG finished after {sweep:d} sweeps.\n"
                    "total size = {age:d}, maximum chi = {chimax:d}")
-            print(msg.format(sweep=self.sweeps, age=self.update_stats['age'][-1],
-                             chimax=np.max(self.psi.chi)))
+            print(
+                msg.format(sweep=self.sweeps,
+                           age=self.update_stats['age'][-1],
+                           chimax=np.max(self.psi.chi)))
             print("=" * 80)
         return E, self.psi
 
@@ -674,7 +682,7 @@ class Engine(NpcLinearOperator):
                 o_env.get_RP(i0, store=True)
         E_trunc = None
         if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real   # uses updated LP/RP (if calculated)
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
             E_trunc = E_trunc - E0
@@ -684,9 +692,9 @@ class Engine(NpcLinearOperator):
             for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
         if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0+1)
+            self.env.del_RP(i0 + 1)
             for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0+1)
+                o_env.del_RP(i0 + 1)
         return E0, E_trunc, err, N, age
 
     def prepare_diag(self, i0, update_LP, update_RP):
@@ -722,9 +730,9 @@ class Engine(NpcLinearOperator):
         """
         theta_ortho = []
         for o_env in self.ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=2)   # the environments are of the form <psi|ortho>
+            theta = o_env.ket.get_theta(i0, n=2)  # the environments are of the form <psi|ortho>
             LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0+1, store=True)
+            RP = o_env.get_RP(i0 + 1, store=True)
             theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
             theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
@@ -834,8 +842,10 @@ class Engine(NpcLinearOperator):
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
             qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(
-                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
             return U, S, VH, err
         # else: we have a mixer
         return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
@@ -953,12 +963,12 @@ class Engine(NpcLinearOperator):
 
         E = np.array(stats['E_total'])
         schedule, _ = self._get_sweep_schedule()
-        N = len(schedule) # bond updates per sweep
+        N = len(schedule)  # bond updates per sweep
         if xaxis is None or xaxis == 'index':
             xaxis = 'index'
             x = np.arange(len(E))
         elif xaxis == 'sweep':
-            x = np.arange(1, len(E)+1)/N
+            x = np.arange(1, len(E) + 1) / N
         else:
             x = np.array(stats[xaxis])
         if yaxis == 'E':
@@ -967,14 +977,14 @@ class Engine(NpcLinearOperator):
                 age = np.array(stats['age'])
                 d_age = age[N:] - age[:-N]
                 d_E = E[N:] - E[:-N]
-                y = d_E/d_age
+                y = d_E / d_age
                 x = x[N:]
             else:
                 y = E
         else:
             y = np.array(stats[yaxis])
         if y_exact is not None:
-            y = np.abs(y-y_exact)/np.abs(y_exact)
+            y = np.abs(y - y_exact) / np.abs(y_exact)
             axes.set_yscale('log')
         axes.plot(x, y, **kwargs)
         axes.set_xlabel(xaxis)
@@ -1006,7 +1016,7 @@ class Engine(NpcLinearOperator):
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
         if y_exact is not None:
-            y = np.abs(y-y_exact)/np.abs(y_exact)
+            y = np.abs(y - y_exact) / np.abs(y_exact)
             axes.set_yscale('log')
         axes.plot(x, y, **kwargs)
         axes.set_xlabel(xaxis)
@@ -1063,24 +1073,29 @@ class EngineCombine(Engine):
         LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
         H1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
         RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
+        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
+                                                ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         # calculate LHeff
         LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs(
-            [['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, -1])
+        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                        pipes=[pipeL, pipeL.conj()],
+                                        new_axes=[0, -1])
         # calculate RHeff
         RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
         pipeR = RHeff.make_pipe(['p1', 'vL*'])
-        self.RHeff = RHeff.combine_legs(
-            [['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
+        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                        pipes=[pipeR, pipeR.conj()],
+                                        new_axes=[-1, 0])
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
         theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
         theta_ortho = self.get_theta_ortho(i0)
-        theta_ortho = [th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-                       for th_o in theta_ortho]
+        theta_ortho = [
+            th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
+            for th_o in theta_ortho
+        ]
         return theta, theta_ortho
 
     def matvec(self, theta):
@@ -1363,6 +1378,7 @@ class SingleSiteMixer(Mixer):
         This is still under development.
         Works only with EngineCombine
     """
+
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1399,7 +1415,9 @@ class SingleSiteMixer(Mixer):
         """
         theta, next_B = self.subspace_expand(engine, theta, i0, move_right, next_B)
         qtotal_LR = [theta.qtotal, None] if move_right else [None, theta.qtotal]
-        U, S, VH, err, _ = svd_theta(theta, engine.trunc_params, qtotal_LR=qtotal_LR,
+        U, S, VH, err, _ = svd_theta(theta,
+                                     engine.trunc_params,
+                                     qtotal_LR=qtotal_LR,
                                      inner_labels=['vR', 'vL'])
         if move_right:
             VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
@@ -1413,7 +1431,7 @@ class SingleSiteMixer(Mixer):
             # theta has legs (vL.p), vR
             LHeff = engine.LHeff
             expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
-            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1) # (vR*.p), (wR.vR)
+            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
@@ -1439,6 +1457,7 @@ class TwoSiteMixer(SingleSiteMixer):
         This is still under development.
         Seems to works correctly only with EngineCombine with finite MPS.
     """
+
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1469,13 +1488,17 @@ class TwoSiteMixer(SingleSiteMixer):
         """
         # first perform an SVD as if the mixer didn't exist
         qtotal_i0 = engine.psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, _ = svd_theta(
-            theta, engine.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
-        move_right = update_LP # TODO: get argument inferred from schedule?
+        U, S, VH, err, _ = svd_theta(theta,
+                                     engine.trunc_params,
+                                     qtotal_LR=[qtotal_i0, None],
+                                     inner_labels=['vR', 'vL'])
+        move_right = update_LP  # TODO: get argument inferred from schedule?
         if move_right:  # move to the right
-            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0, move_right, VH)
-        else: # update_RP is True
-            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, VH.iscale_axis(S, 0), i0, move_right, U)
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0,
+                                                         move_right, VH)
+        else:  # update_RP is True
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, VH.iscale_axis(S, 0), i0,
+                                                         move_right, U)
         return U, S, VH, err + err2
 
 
@@ -1600,13 +1623,14 @@ class DensityMatrixMixer(Mixer):
             LP = engine.env.get_LP(i0, store=False)
             LHeff = npc.tensordot(LP, H0, axes=['wR', 'wL'])
             pipeL = theta.get_leg('(vL.p0)')
-            LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()],
+            LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                       pipes=[pipeL, pipeL.conj()],
                                        new_axes=[0, -1])
         rho = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)']).split_legs('(p1.vR)')
         rho_c = rho.conj()
         H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        mixer_xR, add_separate_Id = self.get_xR(
-            H1.get_leg('wR'), H.get_IdL(i0 + 2), H.get_IdR(i0 + 1))
+        mixer_xR, add_separate_Id = self.get_xR(H1.get_leg('wR'), H.get_IdL(i0 + 2),
+                                                H.get_IdR(i0 + 1))
         H1m = npc.tensordot(H1, mixer_xR, axes=['wR', 'wL'])
         H1m = npc.tensordot(H1m, H1.conj(), axes=[['p1', 'wL*'], ['p1*', 'wR*']])
         rho = npc.tensordot(rho, H1m, axes=[['wR', 'p1'], ['wL', 'p1*']])
@@ -1657,18 +1681,18 @@ class DensityMatrixMixer(Mixer):
         try:
             RHeff = engine.RHeff
         except AttributeError:
-            H1 = H.get_W(i0+1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+            H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
             RP = engine.env.get_RP(i0 + 1, store=False)
             RHeff = npc.tensordot(RP, H1, axes=['wL', 'wR'])
             pipeR = theta.get_leg('(p1.vR)')
-            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()],
+            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                       pipes=[pipeR, pipeR.conj()],
                                        new_axes=[-1, 0])
         rho = npc.tensordot(RHeff, theta, axes=['(p1*.vL)', '(p1.vR)']).split_legs('(vL.p0)')
         rho_c = rho.conj()
 
         H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        mixer_xL, add_separate_Id = self.get_xL(
-            H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
+        mixer_xL, add_separate_Id = self.get_xL(H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
         H0m = npc.tensordot(mixer_xL, H0, axes=['wR', 'wL'])
         H0m = npc.tensordot(H0m, H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
         rho = npc.tensordot(H0m, rho, axes=[['p0*', 'wR'], ['p0', 'wL']])
@@ -1768,8 +1792,8 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
         return {0: chi_max}
     chi_list = {}
     for i in range(chi_max // dchi):
-        chi = int(dchi * (i+1))
-        chi_list[nsweeps*i] = chi
+        chi = int(dchi * (i + 1))
+        chi_list[nsweeps * i] = chi
     if chi < chi_max:
-        chi_list[nsweeps*(i+1)] = chi_max
+        chi_list[nsweeps * (i + 1)] = chi_max
     return chi_list

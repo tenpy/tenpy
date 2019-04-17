@@ -96,9 +96,9 @@ def test_tebd():
 def test_RandomUnitaryEvolution():
     L = 8
     spin_half = SpinHalfSite(conserve='Sz')
-    psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
+    psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite')  # Neel state
     assert tuple(psi.chi) == (1, 1, 1, 1, 1, 1, 1)
-    TEBD_params = dict(N_steps=2, trunc_params={'chi_max':10})
+    TEBD_params = dict(N_steps=2, trunc_params={'chi_max': 10})
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
     eng.run()
     print(eng.psi.chi)
@@ -106,16 +106,15 @@ def test_RandomUnitaryEvolution():
 
     # infinite versions
     TEBD_params['trunc_params']['chi_max'] = 20
-    psi = MPS.from_product_state([spin_half]*2, [0, 0], bc='infinite')
+    psi = MPS.from_product_state([spin_half] * 2, [0, 0], bc='infinite')
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (1, 1)  # all up can not be changed
-    eng.psi = MPS.from_product_state([spin_half]*2, [0, 1], bc='infinite')
+    eng.psi = MPS.from_product_state([spin_half] * 2, [0, 1], bc='infinite')
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
-
 
 
 if __name__ == "__main__":
