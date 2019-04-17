@@ -2011,7 +2011,7 @@ class MPS:
                 # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
 
-    def correlation_length(self, target=1, tol_ev0=1.e-8):
+    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -2044,6 +2044,10 @@ class MPS:
             We look for the `target` + 1 largest eigenvalues.
         tol_ev0 : float
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
+        charge_sector : None | charges | ``0``
+            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
 
         Returns
         -------
@@ -2054,7 +2058,7 @@ class MPS:
             see the warning above.
         """
         assert (not self.finite)
-        T = TransferMatrix(self, self, charge_sector=0, form='B')
+        T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
         num = max(target + 1, self._transfermatrix_keep)
         E, V = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude

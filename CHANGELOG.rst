@@ -76,6 +76,7 @@ Added
 - :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
   of an Environment.
 - :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`tenpy.networks.mpo.MPOGraph.from_term_list`.
+- argument `charge_sector` in :meth:`tenpy.networks.mps.MPS.correlation_length`.
 
 
 Changed
