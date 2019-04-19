@@ -8,7 +8,8 @@ To update a version, change `version` in this module and create a git tag ::
 Make shure to push your tag into the shared git repo with `git push origin [tagname]`.
 
 This module provides the three variables `version`, `git_version` and `full_version`.
-`version` is a tuple of three integers (major, minor, revision).
+`version` is version string in standard python format ``major.minor.revision``.
+(Use `pkg_resources.parse_version` before comparing versions.)
 `git_version` is a string including information about the current git commit,
 `full_version` includes the versions of the used python, numpy and scipy libraries.
 """
@@ -24,8 +25,8 @@ from .tools.optimization import have_cython_functions
 __all__ = ["version", "short_version", "git_version", "full_version"]
 
 # hard-coded version for people without git...
-version = (0, 3, 0)
-short_version = 'v' + '.'.join(map(str, version))
+version = "0.3.0"
+short_version = 'v' + version
 
 
 def _get_git_version(file=__file__):
