@@ -71,6 +71,16 @@ class Lattice:
     positions : iterable of 1D arrays
         For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
+    nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
+        as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
+        couplings.
+        Note that we include each coupling only in one direction; to get both directions, use
+        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+    next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the next-nearest neigbhors.
+    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the next-next-nearest neigbhors.
 
     Attributes
     ----------
@@ -109,7 +119,7 @@ class Lattice:
         as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
         couplings.
         Note that we include each coupling only in one direction; to get both directions, use
-        ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``

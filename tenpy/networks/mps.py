@@ -2925,7 +2925,7 @@ class MPSEnvironment:
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
-        """Store part to the right of site 1i1."""
+        """Store part to the right of site `i`."""
         i = self._to_valid_index(i)
         self._RP[i] = RP
         self._RP_age[i] = age
