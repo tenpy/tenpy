@@ -2,21 +2,21 @@
 
 from tenpy.models.toric_code import ToricCode
 from test_model import check_general_model
-from nose.plugins.attrib import attr
+import pytest
 from tenpy.networks.mps import MPS
 from tenpy.algorithms import dmrg
 import numpy as np
 import warnings
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_ToricCode_general():
     check_general_model(ToricCode, dict(Lx=2, Ly=3, bc_MPS='infinite'), {
         'conserve': [None, 'parity'],
     })
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -43,7 +43,3 @@ def test_ToricCode(Lx=1, Ly=2):
         if Ly == 2:
             assert tuple(psi.chi[:4]) == (2, 4, 4, 4)
         assert abs(psi.entanglement_entropy(bonds=[0])[0] - np.log(2) * (Ly - 1)) < 1.e-5
-
-
-if __name__ == "__main__":
-    test_ToricCode()

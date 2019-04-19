@@ -3,7 +3,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 import itertools as it
 import tenpy.tools as tools
 import warnings
@@ -86,13 +85,3 @@ def test_optimization():
     with tools.optimization.temporary_level(level_change):
         assert tools.optimization.get_level() == level_change
     assert tools.optimization.get_level() == level_now
-
-
-if __name__ == "__main__":
-    test_inverse_permutation()
-    test_argsort()
-    test_speigs()
-    test_perm_sign()
-    test_memory_usage()
-    test_omp()
-    test_mkl()

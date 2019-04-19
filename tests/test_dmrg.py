@@ -7,7 +7,7 @@ from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import dmrg
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
-from nose.plugins.attrib import attr
+import pytest
 import numpy as np
 from scipy import integrate
 
@@ -24,7 +24,17 @@ def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
 
-def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
+
+@pytest.mark.parametrize("bc_MPS, engine, mixer",
+                         [('finite', 'EngineCombine', None),
+                          ('finite', 'EngineCombine', True),
+                          ('finite', 'EngineFracture', True),
+                          ('finite', 'EngineCombine', 'TwoSiteMixer'),
+                          ('infinite', 'EngineCombine', None),
+                          ('infinite', 'EngineCombine', True),
+                          ('infinite', 'EngineFracture', True)])
+@pytest.mark.slow
+def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
@@ -83,16 +93,6 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.e-10, np.max(psi.norm_test()))
 
 
-@attr('slow')
-def test_dmrg():
-    for bc_MPS, engine, mixer in it.product(['finite', 'infinite'],
-                                            ['EngineCombine', 'EngineFracture'], [None, True]):
-        L = 4 if bc_MPS == 'finite' else 2
-        yield check_dmrg, L, bc_MPS, engine, mixer
-    for mixer in ['TwoSiteMixer', 'DensityMatrixMixer']:
-        yield check_dmrg, 2, 'infinite', 'EngineCombine', mixer
-
-
 def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
@@ -113,7 +113,7 @@ def test_dmrg_rerun(L=2):
     assert abs(E2 - -1.50082324) < 1.e-6
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_dmrg_excited(eps=1.e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
     # (without truncation)
@@ -160,14 +160,3 @@ def test_chi_list():
     assert dmrg.chi_list(12, 12, 5) == {0: 12}
     assert dmrg.chi_list(24, 12, 5) == {0: 12, 5: 24}
     assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}
-
-
-if __name__ == "__main__":
-    test_dmrg_excited()
-    test_dmrg_rerun()
-    for f_args in test_dmrg():
-        f = f_args[0]
-        print("=" * 80)
-        print(' '.join([str(a) for a in f_args]))
-        print("=" * 80)
-        f(*f_args[1:])

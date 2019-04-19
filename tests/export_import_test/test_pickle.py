@@ -7,13 +7,15 @@ import numpy.testing as npt
 import tenpy
 import tenpy.linalg.np_conserved as npc
 import warnings
+import pytest
 
 datadir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.isdir(datadir):
     os.mkdir(datadir)
 
 
-def pickle_import_old_version(fn):
+@pytest.mark.parametrize('fn', [fn for fn in os.listdir(datadir) if fn.endswith('.pkl')])
+def test_pickle_import_old_version(fn):
     print("import ", fn)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
@@ -28,13 +30,6 @@ def pickle_import_old_version(fn):
             npt.assert_equal(v.to_ndarray(), Sz)
         elif k == 'trivial_array':
             npt.assert_equal(v.to_ndarray(), np.arange(20).reshape([4, 5]))
-
-
-def test_data_import():
-    for fn in os.listdir(datadir):
-        if fn.endswith('.pkl'):
-            yield pickle_import_old_version, fn
-    # done
 
 
 def test_pickle_export():

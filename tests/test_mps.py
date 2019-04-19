@@ -13,7 +13,7 @@ from tenpy.networks.terms import TermList
 from random_test import rand_permutation, random_MPS
 import tenpy.linalg.np_conserved as npc
 
-from nose.plugins.attrib import attr
+import pytest
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -219,7 +219,8 @@ def test_compute_K():
     npt.assert_array_equal(W, [1.])
 
 
-def check_canonical_form(bc):
+@pytest.mark.parametrize("bc", ['finite', 'infinite'])
+def test_canonical_form(bc):
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
     norm = np.sqrt(psi2.overlap(psi2, ignore_form=True))
@@ -240,10 +241,6 @@ def check_canonical_form(bc):
     assert np.max(psi.norm_test()) < 1.e-14
 
 
-@attr('slow')
-def test_canonical_form():
-    yield check_canonical_form, 'finite'
-    yield check_canonical_form, 'infinite'
 
 
 def test_group():
@@ -302,19 +299,3 @@ def test_expectation_value_term():
         [psi2.expectation_value_term(term) * strength for term, strength in term_list])
     evsum, _ = psi2.expectation_value_terms_sum(term_list)
     assert abs(evsum - desired) < 1.e-14
-
-
-if __name__ == "__main__":
-    test_coupling_terms_handle_JW()
-    test_charge_fluctuations()
-    test_mps()
-    test_mps_add()
-    test_MPSEnvironment()
-    test_singlet_mps()
-    test_TransferMatrix()
-    test_compute_K()
-    check_canonical_form('finite')
-    check_canonical_form('infinite')
-    test_group()
-    test_expectation_value_term()
-    test_coupling_terms()

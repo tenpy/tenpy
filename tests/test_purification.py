@@ -11,7 +11,7 @@ from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
 import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
-from nose.plugins.attrib import attr
+import pytest
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -44,7 +44,7 @@ def test_purification_mps():
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_purification_TEBD(L=3):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
@@ -157,7 +157,7 @@ def gen_disentangler_psi_prod(psiP, psiQ):
     return purification_mps.PurificationMPS(psiP.sites, Bs, Ss)
 
 
-@attr('slow')
+@pytest.mark.slow
 def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     psi0, pairs_PQ = gen_disentangler_psi_singlets(site_P, L, max_range)
     psi0.test_sanity()

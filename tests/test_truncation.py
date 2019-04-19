@@ -3,7 +3,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 
 from tenpy.algorithms import truncation
 

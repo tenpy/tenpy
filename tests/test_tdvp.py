@@ -156,7 +156,3 @@ def test_tdvp():
         psit_.append(B)
     assert np.abs(np.abs(overlap(psit_, psit_compare)) - 1.0) < 1e-13
     print("one site TDVP works")
-
-
-if __name__ == "__main__":
-    test_tdvp()

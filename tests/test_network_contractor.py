@@ -4,7 +4,7 @@
 from tenpy.algorithms.network_contractor import contract, outer_product
 import numpy as np
 from tenpy.linalg import np_conserved as npc
-from nose.plugins.attrib import attr
+import pytest
 import warnings
 
 # Contruct toy tensors
@@ -44,7 +44,7 @@ def two_site_hamiltonian(coupling=1, ferro=True):
 # =======
 
 
-def contract_to_real_number():
+def test_contract_to_real_number():
     # 1 contract to real number
     # ==========================
     v = npc.Array.from_ndarray_trivial([[1., .5], [0, -1.6]])
@@ -68,7 +68,7 @@ def contract_to_real_number():
     assert np.abs(res - expected_result) < 1.e-10
 
 
-def contract_to_complex_number():
+def test_contract_to_complex_number():
     # 2 contract to complex number
     # ==========================
     v = npc.Array.from_ndarray_trivial([[1. + .2j, .5], [0 + .1j, -1.6]], dtype=complex)
@@ -91,7 +91,7 @@ def contract_to_complex_number():
     assert np.abs(res - expected_result) < 1.e-10
 
 
-def contract_with_sequence():
+def test_contract_with_sequence():
     # 3 contract to complex number using a sequence
     # ==========================
     v = npc.Array.from_ndarray_trivial([[1. + .2j, .5], [0 + .1j, -1.6]], dtype=complex)
@@ -126,7 +126,7 @@ def contract_with_sequence():
     assert np.abs(res - expected_result) < 1.e-10
 
 
-def contract_to_tensor():
+def test_contract_to_tensor():
     h2 = two_site_hamiltonian()
     h = two_site_hamiltonian(coupling=.3)
     S = Sy
@@ -148,7 +148,7 @@ def contract_to_tensor():
     assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
 
 
-def outer_product():
+def test_outer_product():
     S = Sy
     S.iset_leg_labels(['U', 'L'])
     S2 = Sz
@@ -163,20 +163,3 @@ def outer_product():
     expected_result = expected_result.transpose([1, 3, 0, 2])
 
     assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
-
-
-@attr('slow')
-def test_network_contractor():
-    for test in [
-            contract_to_real_number, contract_to_complex_number, contract_with_sequence,
-            contract_to_tensor, outer_product
-    ]:
-        yield test
-
-
-if __name__ == "__main__":
-    for f in test_network_contractor():
-        print("=" * 80)
-        print(' '.join(str(f)))
-        print("=" * 80)
-        f()
