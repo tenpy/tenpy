@@ -258,6 +258,7 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
         self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
         self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
 
+
 def test_CouplingMPOModel_group():
     m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
     m.test_sanity()

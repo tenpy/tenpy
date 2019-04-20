@@ -33,7 +33,7 @@ def check_svd_function(svd_function):
         for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:
             print("m, n = ", m, n)
             tol_NULP = 200 * max(max(m, n)**3,
-                                    100)  # quite large tolerance, but seems to be required...
+                                 100)  # quite large tolerance, but seems to be required...
             if np.dtype(dtype).kind == 'c':  # complex?
                 A = standard_normal_complex((m, n))
             else:

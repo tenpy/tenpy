@@ -241,8 +241,6 @@ def test_canonical_form(bc):
     assert np.max(psi.norm_test()) < 1.e-14
 
 
-
-
 def test_group():
     s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')

@@ -59,4 +59,4 @@ def test_examples_import():
 def test_toycodes_import():
     for fn in sorted(os.listdir(toycodes_dir)):
         if fn[-3:] == '.py' and fn not in exclude:
-            import_file( fn[:-3], toycodes_dir)
+            import_file(fn[:-3], toycodes_dir)

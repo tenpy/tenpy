@@ -24,15 +24,13 @@ def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
 
-
-@pytest.mark.parametrize("bc_MPS, engine, mixer",
-                         [('finite', 'EngineCombine', None),
-                          ('finite', 'EngineCombine', True),
-                          ('finite', 'EngineFracture', True),
-                          ('finite', 'EngineCombine', 'TwoSiteMixer'),
-                          ('infinite', 'EngineCombine', None),
-                          ('infinite', 'EngineCombine', True),
-                          ('infinite', 'EngineFracture', True)])
+@pytest.mark.parametrize("bc_MPS, engine, mixer", [('finite', 'EngineCombine', None),
+                                                   ('finite', 'EngineCombine', True),
+                                                   ('finite', 'EngineFracture', True),
+                                                   ('finite', 'EngineCombine', 'TwoSiteMixer'),
+                                                   ('infinite', 'EngineCombine', None),
+                                                   ('infinite', 'EngineCombine', True),
+                                                   ('infinite', 'EngineFracture', True)])
 @pytest.mark.slow
 def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
