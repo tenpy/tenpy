@@ -3,7 +3,6 @@
 
 import warnings
 from tenpy.tools import params
-import nose.tools as nst
 
 
 def example_function(example_pars, keys=['a', 'b']):
@@ -23,5 +22,5 @@ def test_paramters():
         pars = dict(miss_spelled=1.23)
         example_function(pars)
         unused = params.unused_parameters(pars, "testing")
-        nst.eq_(len(unused), 1)
-        nst.eq_(len(w), 1)
+        assert len(unused) == 1
+        assert len(w) == 1

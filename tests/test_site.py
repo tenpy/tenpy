@@ -3,7 +3,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 import itertools as it
 import copy
 
@@ -40,14 +39,14 @@ def test_site():
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     labels = ['up'] + [None] * (leg.ind_len - 2) + ['down']
     s = site.Site(leg, labels, silly_op=op1)
-    nst.eq_(s.state_index('up'), 0)
-    nst.eq_(s.state_index('down'), leg.ind_len - 1)
-    nst.eq_(s.opnames, set(['silly_op', 'Id', 'JW']))
-    assert (s.silly_op is op1)
+    assert s.state_index('up') == 0
+    assert s.state_index('down') == leg.ind_len - 1
+    assert s.opnames == set(['silly_op', 'Id', 'JW'])
+    assert s.silly_op is op1
     s.add_op('op2', op2)
-    assert (s.op2 is op2)
-    assert (s.get_op('op2') is op2)
-    assert (s.get_op('silly_op') is op1)
+    assert s.op2 is op2
+    assert s.get_op('op2') is op2
+    assert s.get_op('silly_op') is op1
     npt.assert_equal(
         s.get_op('silly_op op2').to_ndarray(),
         npc.tensordot(op1, op2, [1, 0]).to_ndarray())
@@ -135,7 +134,7 @@ def test_spin_half_site():
     for conserve in [None, 'Sz', 'parity']:
         S = site.SpinHalfSite(conserve)
         sites.append(S)
-    yield check_same_operators, sites
+    check_same_operators(sites)
 
 
 def test_spin_site():
@@ -158,7 +157,7 @@ def test_spin_site_ops():
         for conserve in [None, 'Sz', 'parity']:
             S = site.SpinSite(s, conserve)
             sites.append(S)
-        yield check_same_operators, sites
+        check_same_operators(sites)
 
 
 def test_fermion_site():
@@ -186,7 +185,7 @@ def test_fermion_site_ops():
     for conserve in [None, 'N', 'parity']:
         S = site.FermionSite(conserve)
         sites.append(S)
-    yield check_same_operators, sites
+    check_same_operators(sites)
 
 
 def test_spin_half_fermion_site():
@@ -227,7 +226,7 @@ def test_spin_half_fermion_site_ops():
     for cons_n, cons_sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
         S = site.SpinHalfFermionSite(cons_n, cons_sz)
         sites.append(S)
-    yield check_same_operators, sites
+    check_same_operators(sites)
 
 
 def test_boson_site():
@@ -244,7 +243,7 @@ def test_boson_site_ops():
         sites = []
         for conserve in ['N', 'parity', None]:
             S = site.BosonSite(Nmax, conserve=conserve)
-        yield check_same_operators, sites
+        check_same_operators(sites)
 
 
 def test_multi_sites_combine_charges():

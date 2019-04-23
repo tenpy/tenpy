@@ -5,7 +5,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.linalg import np_conserved as npc
@@ -232,7 +231,3 @@ def test_MPO_expectation_value():
         3 * 0. - 0.25 * 0.1**(5 - 2 - 1)) / 3.
     print("ev = ", ev, "desired", desired_ev)
     assert abs(ev - desired_ev) < 1.e-14
-
-
-if __name__ == "__main__":
-    test_MPO_conversion()

@@ -59,8 +59,3 @@ def test_FlatHermitianOperator(n=30, k=5, tol=5.e-15):
     psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
     print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
-
-
-if __name__ == "__main__":
-    test_FlatLinearOperator()
-    test_FlatHermitianOperator()

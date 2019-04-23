@@ -84,7 +84,7 @@ Once you managed to install conda, ensure that you have the needed packages with
 
 Optional packages (see `Optional Requirements`_ below) can be installed with::
 
-    conda install matplotlib sphinx numpydoc pip nose bottleneck
+    conda install matplotlib sphinx numpydoc pip pytest bottleneck
     pip install yapf    # (if you want to contribute)
 
 
@@ -128,17 +128,17 @@ Checking the installation
 As a first check of the installation you can try to run the python files in the `examples/` subfolder; all of them
 should run without error.
 
-You can also run the automated testsuite with `nose <http://nose.readthedocs.io/en/latest/>`_ to make sure everything works fine::
+You can also run the automated testsuite with `pytest <http://pytest.org>`_ to make sure everything works fine::
 
     cd $HOME/TeNPy/tests
-    nosetests
+    pytest
 
 This should run some tests, hopefully indicated by a lot of dots ``.`` and 
 no ``E`` or ``F``, which indicate successfully run tests, errors and failures, respectively.
 In case of errors or failures it gives a detailed traceback and possibly some output of the test.
 At least the stable releases should run these tests without any failures.
 
-If you can run the examples but not the tests, check whether `nosetests` actually uses the correct python version.
+If you can run the examples but not the tests, check whether `pytest` actually uses the correct python version.
 
 
 Optional Requirements
@@ -148,7 +148,7 @@ However, having matplotlib is not necessary for running any of the algorithms: t
 
 For building the documentation, you need `Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.
 
-If you ever plan to contribute to the code, you should use `yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
+If you ever plan to contribute to the code, you should use `yapf <http://github.com/google/yapf>`_ and `pytest <http://pytest.org>`_.
 
 If you have the python package manager ``pip``, all of these can be installed with::
 
@@ -157,7 +157,7 @@ If you have the python package manager ``pip``, all of these can be installed wi
     sudo pip install --upgrade bottleneck       # some optimization of numpy bottlenecks
 
     # the following are only required for developers
-    sudo pip install --upgrade nose             # nosetest: automated teseting to check if everything works as it should
+    sudo pip install --upgrade pytest           # pytest: automated teseting to check if everything works as it should
     sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
     sudo pip install --upgrade yapf             # python formater to unify the code style
 

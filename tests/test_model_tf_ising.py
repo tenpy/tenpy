@@ -2,7 +2,7 @@
 
 from tenpy.models.tf_ising import TFIModel, TFIChain
 from test_model import check_general_model
-from nose.plugins.attrib import attr
+import pytest
 
 
 def test_TFIChain_general():
@@ -12,7 +12,7 @@ def test_TFIChain_general():
     })
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_TFIModel2D_general():
     check_general_model(
         TFIModel, dict(Lx=2, J=1., g=0.1), {
