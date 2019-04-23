@@ -49,7 +49,7 @@ Added
 - DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.
 - possibility to change the number of charges after creating LegCharges/Arrays.
 - more general way to specify the order of sites in a :class:`tenpy.models.lattice.Lattice`.
-- new :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
+- new :class:`tenpy.models.lattice.Triangular`, :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
 - a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
   along with methods to count the number of nearest neighbors for sites in the bulk, and
   a way to plot them (:meth:`~tenpy.models.lattice.Lattice.plot_coupling` and friends)

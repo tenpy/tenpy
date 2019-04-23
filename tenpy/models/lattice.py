@@ -839,7 +839,7 @@ class TrivialLattice(Lattice):
 class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
-    .. todo :
+    .. todo ::
         this doesn't fully work yet...
     """
 
@@ -914,7 +914,7 @@ class SimpleLattice(Lattice):
 
 
 class Chain(SimpleLattice):
-    """A simple uniform chain of L equal sites.
+    """A chain of L equal sites.
 
     .. image :: /images/lattices/Chain.*
 
@@ -981,7 +981,7 @@ class Ladder(Lattice):
 
 
 class Square(SimpleLattice):
-    """A simple uniform square lattice.
+    """A square lattice.
 
     .. image :: /images/lattices/Square.*
 
@@ -1004,6 +1004,40 @@ class Square(SimpleLattice):
         NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
         nNN = [(0, 0, np.array([1, 1])), (0, 0, np.array([1, -1]))]
         nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2]))]
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
+
+
+class Triangular(SimpleLattice):
+    """A triangular lattice.
+
+    .. image :: /images/lattices/Triangular.*
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    site : :class:`~tenpy.networks.Site`
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
+    """
+    dim = 2
+
+    def __init__(self, Lx, Ly, site, **kwargs):
+        sqrt3_half = 0.5 * np.sqrt(3)  # = cos(pi/6)
+        basis = np.array([[sqrt3_half, 0.5], [0., 1.]])
+
+        NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([-1, 1])), (0, 0, np.array([0, -1]))]
+        nNN = [(0, 0, np.array([2, -1])), (0, 0, np.array([1, 1])), (0, 0, np.array([-1, 2]))]
+        nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2])), (0, 0, np.array([-2, 2]))]
+        kwargs.setdefault('basis', basis)
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)

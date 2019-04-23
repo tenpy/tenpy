@@ -75,6 +75,9 @@ def test_number_nn():
     square = lattice.Square(2, 2, s)
     assert square.number_nearest_neighbors() == 4
     assert square.number_next_nearest_neighbors() == 4
+    triang = lattice.Triangular(2, 2, s)
+    assert triang.number_nearest_neighbors() == 6
+    assert triang.number_next_nearest_neighbors() == 6
     hc = lattice.Honeycomb(2, 2, s)
     assert hc.number_nearest_neighbors(0) == 3
     assert hc.number_nearest_neighbors(1) == 3
