@@ -66,7 +66,8 @@ def _get_version_summary():
             if git_revision != "unknown" and _version.git_revision != git_revision:
                 warnings.warn("TeNPy is compiled from different git version than the current HEAD")
             cython_info = "compiled from git rev. " + _version.git_revision
-
+        else:
+            cython_info = "(not compiled)"
     except ImportError:
         cython_info = "(not compiled)"
         if have_cython_functions:
