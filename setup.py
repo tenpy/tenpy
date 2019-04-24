@@ -26,7 +26,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -a "v0.1.2"
-#      # run tests!
+#      python setup.py test # run tests!
 #      # reset RELEASED = False in this module"
 #      git commit -m "reset RELEASED to False"
 #      git push
