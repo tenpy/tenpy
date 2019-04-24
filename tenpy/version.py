@@ -17,7 +17,7 @@ __all__ = ["version", "released", "short_version", "git_revision", "full_version
 version = '0.4.0'
 
 # whether this is a released version or modified
-released = True
+released = False
 
 # short version
 short_version = 'v' + version
