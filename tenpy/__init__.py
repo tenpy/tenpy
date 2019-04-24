@@ -23,4 +23,9 @@ __version__ = version.version
 # full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
-__all__ = ["algorithms", "linalg", "models", "networks", "tools", "version"]
+__all__ = ["algorithms", "linalg", "models", "networks", "tools", "version", "show_config"]
+
+
+def show_config():
+    """Print information about the version of tenpy and used libraries."""
+    print(version.version_summary)

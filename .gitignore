@@ -7,6 +7,7 @@
 __pycache__
 playground
 build
+tenpy/_version.py
 tenpy/linalg/*.c
 tenpy/linalg/*.cpp
 tenpy/linalg/*.so

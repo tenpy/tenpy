@@ -51,10 +51,14 @@ Whenever the path is set, you should be able to use the library from within pyth
 
     >>> import tenpy
     >>> print(tenpy.__version__)
-    (0, 3, 0)
-    >>> print(tenpy.__full_version__)
-    v0.3.0-57-gdfacc70 using python 3.5.2 |Intel Corporation| (default, Feb 12 2017, 04:02:50)
-    [GCC 4.8.2 20140120 (Red Hat 4.8.2-15)] with numpy 1.13.3, scipy 1.0.0
+    0.3.0
+    >>> tenpy.show_config()
+    tenpy 0.3.0.dev0+4d253e0 (compiled from git rev. 4d253e034ce19cde5dde2ecc3bfe53828615a338),
+    git revision 4d253e034ce19cde5dde2ecc3bfe53828615a338 using
+    python 3.5.2 |Intel Corporation| (default, Feb 12 2017, 04:02:50) 
+    [GCC 4.8.2 20140120 (Red Hat 4.8.2-15)]
+    numpy 1.13.3, scipy 1.0.0
+
 
 This should statement printes the current version of this TeNPy library as well as the versions of the used python, numpy and scipy libraries,
 which might be different on your computer. It is a good idea to save this along with your data.
