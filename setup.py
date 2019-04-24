@@ -12,37 +12,6 @@ if not sys.version_info >= (3, 5):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
 
-SETUP_REQUIRES = [
-    'setuptools',
-    'pytest-runner',
-    'Cython>=0.27',
-    'numpy>=1.13',
-    'scipy>=0.18.0',
-]
-
-EXTRAS_REQUIRE = {
-    'doc': ['Sphinx>=2', 'numpydoc', 'yapf', 'matplotlib'],
-}
-
-
-CLASSIFIERS = """\
-Development Status :: 4 - Beta
-Intended Audience :: Science/Research
-Intended Audience :: Developers
-License :: OSI Approved :: GNU General Public License v3 (GPLv3)
-Natural Language :: English
-Programming Language :: C
-Programming Language :: Python
-Programming Language :: Python :: 3
-Programming Language :: Python :: 3.5
-Programming Language :: Python :: 3.6
-Programming Language :: Python :: 3.7
-Operating System :: Unix
-Operating System :: MacOS
-Operating System :: Microsoft :: Windows
-Topic :: Scientific/Engineering
-Topic :: Scientific/Engineering :: Physics
-"""
 
 # hardcode version for people without git
 
@@ -155,37 +124,12 @@ def setup_package():
     src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     os.chdir(src_path)
 
-    with open("README.rst", "r") as f:
-        long_description = f.read()
-
     full_version, git_rev = get_version_info()
     write_version_py(full_version, git_rev)
 
-    metadata = dict(
-        name="tenpy",
-        packages=find_packages(),
-        description="Simulation of quantum many-body systems with tensor networks in Python",
-        long_description=long_description,
-        long_description_content_type='text/x-rst',
-        version=full_version,
-        classifiers=CLASSIFIERS,
-        url="https://github.com/tenpy/tenpy",
-        maintainer="Johannes Hauschild",
-        maintainer_email="tenpy@johannes-hauschild.de",
-        author="TeNPy Developer Team",
-        setup_requires=SETUP_REQUIRES,
-        extras_require=EXTRAS_REQUIRE,
-        tests_require=['pytest'],
-        project_urls = {
-            "Source Code": "https://github.com/tenpy/tenpy",
-            "Documentation": "https://tenpy.github.io/",
-            "Bug Tracker": "https://github.com/tenpy/tenpy/issues",
-            "User Forum": "https://tenpy.johannes-hauschild.de"
-        }
-    )
-    metadata['ext_modules'] = setup_cython_extension()
+    ext_modules = setup_cython_extension()
 
-    setup(**metadata)
+    setup(version=full_version, ext_modules=ext_modules)
 
 if __name__ == "__main__":
     setup_package()
