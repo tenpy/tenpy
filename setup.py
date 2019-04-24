@@ -23,6 +23,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
 #  To update:
+#      # update CHANGELOG.rst
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -a "v0.1.2"
