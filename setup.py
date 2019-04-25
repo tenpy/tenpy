@@ -7,11 +7,9 @@ import sys
 import os
 import subprocess
 
-
 if not sys.version_info >= (3, 5):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
-
 
 # hardcode version for people without git
 
@@ -94,10 +92,10 @@ def setup_cython_extension():
 
     extensions = [
         Extension("*", ["tenpy/linalg/*.pyx"],
-                include_dirs=include_dirs,
-                libraries=libs,
-                library_dirs=lib_dirs,
-                language='c++')
+                  include_dirs=include_dirs,
+                  libraries=libs,
+                  library_dirs=lib_dirs,
+                  language='c++')
     ]
 
     comp_direct = {  # compiler_directives
@@ -131,6 +129,7 @@ def setup_package():
     ext_modules = setup_cython_extension()
 
     setup(version=full_version, ext_modules=ext_modules)
+
 
 if __name__ == "__main__":
     setup_package()

@@ -9,8 +9,9 @@ import sys
 import subprocess
 import os
 
-__all__ = ["version", "released", "short_version", "git_revision", "full_version",
-           "version_summary"]
+__all__ = [
+    "version", "released", "short_version", "git_revision", "full_version", "version_summary"
+]
 
 # hard-coded version for people without git...
 # current release version
@@ -45,6 +46,7 @@ def _get_full_version():
     if not released:
         full_version += '.dev0+' + git_revision[:7]
     return full_version
+
 
 # full version string including a begin of git revision hash
 full_version = _get_full_version()
