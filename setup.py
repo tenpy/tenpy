@@ -1,7 +1,6 @@
 # Copyright 2018 TeNPy Developers
 from setuptools import setup, find_packages
 from setuptools import Extension
-from Cython.Build import cythonize
 import numpy
 import sys
 import os
@@ -71,19 +70,27 @@ git_revision = '{git_rev!s}'
 numpy_version = '{numpy_ver!s}'
 cython_version = '{cython_ver!s}'
 """
-    import Cython
+    try:
+        import Cython
+        cython_ver = Cython.__version__
+    except:
+        cython_ver = "(not available)"
     content = content.format(version=VERSION,
                              full_version=full_version,
                              released=RELEASED,
                              git_rev=git_rev,
                              numpy_ver=numpy.version.full_version,
-                             cython_ver=Cython.__version__)
+                             cython_ver=cython_ver)
     with open(filename, 'w') as f:
         f.write(content)
     # done
 
 
 def setup_cython_extension():
+    try:
+        from Cython.Build import cythonize
+    except:
+        return []
     # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
     TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
     include_dirs = [numpy.get_include()]
