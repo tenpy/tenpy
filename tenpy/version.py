@@ -30,9 +30,8 @@ def _get_git_revision():
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                       cwd=os.path.dirname(os.path.abspath(__file__)),
                                       stderr=subprocess.STDOUT).decode().strip()
-    except ValueError:
-        raise
-        #  rev = "unknown"
+    except:
+        rev = "unknown"
     return rev
 
 
@@ -65,15 +64,19 @@ def _get_version_summary():
         if have_cython_functions and _version.numpy_version != numpy.version.full_version:
             raise ValueError("Numpy version changed since compilation")
         if have_cython_functions:
-            if git_revision != "unknown" and _version.git_revision != git_revision:
-                warnings.warn("TeNPy is compiled from different git version than the current HEAD")
-            cython_info = "compiled from git rev. " + _version.git_revision
+            if git_revision != "unknown":
+                if _version.git_revision != git_revision:
+                    warnings.warn("TeNPy is compiled from different git "
+                                  "version than the current HEAD")
+                cython_info = "compiled from git rev. " + _version.git_revision
+            else:
+                cython_info = "compiled"
         else:
-            cython_info = "(not compiled)"
+            cython_info = "not compiled"
     except ImportError:
-        cython_info = "(not compiled)"
+        cython_info = "not compiled"
         if have_cython_functions:
-            warnings.warn("Compiled, but tenpy/_verion.py not available!")
+            warnings.warn("Compiled, but tenpy/_version.py not available!")
 
     summary = ("tenpy {tenpy_ver!s} ({cython_info!s}),\n"
                "git revision {git_rev!s} using\n"
