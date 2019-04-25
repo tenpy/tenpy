@@ -1,0 +1,4 @@
+numpy>=1.13
+scipy>=0.18
+Cython>=0.27
+pytest

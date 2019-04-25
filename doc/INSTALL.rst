@@ -3,9 +3,8 @@ Installation instructions
 
 Minimal Requirements
 --------------------
-This code works with a minimal requirement of pure Python 3 
+This code works with a minimal requirement of pure Python>=3.5 
 and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
-(If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.)
 
 Getting the source
 ------------------
