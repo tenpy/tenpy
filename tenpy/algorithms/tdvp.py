@@ -19,9 +19,7 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
     cases.
 """
 
-import sys
 import numpy as np
-import pylab as pl
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import get_parameter
