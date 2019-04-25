@@ -86,6 +86,21 @@ cython_version = '{cython_ver!s}'
     # done
 
 
+def read_requ_file(filename):
+    with open(filename, 'r') as f:
+        requ = f.readlines()
+    return [l.strip() for l in requ if l.strip()]
+
+def read_requirements():
+    extra_requ = {
+        'doc': read_requ_file('requirements-doc.txt'),
+        'plot': read_requ_file('requirements-plot.txt'),
+        'test': read_requ_file('requirements-test.txt'),
+    }
+    extra_requ['all'] = [r for requ in extra_requ.values() for r in requ]
+    return extra_requ
+
+
 def setup_cython_extension():
     try:
         from Cython.Build import cythonize
@@ -135,7 +150,15 @@ def setup_package():
 
     ext_modules = setup_cython_extension()
 
-    setup(version=full_version, ext_modules=ext_modules)
+    extras_require = read_requirements()
+
+    setup_requires = ['setuptools>=30.3.0', 'pytest-runner', 'Cython>=0.27']
+
+    setup(version=full_version, ext_modules=ext_modules,
+          setup_requires=setup_requires,
+          install_requires=read_requ_file('requirements.txt'),
+          extras_require=extras_require)
+          tests_require=extras_require['test'])
 
 
 if __name__ == "__main__":
