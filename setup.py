@@ -157,7 +157,7 @@ def setup_package():
     setup(version=full_version, ext_modules=ext_modules,
           setup_requires=setup_requires,
           install_requires=read_requ_file('requirements.txt'),
-          extras_require=extras_require)
+          extras_require=extras_require,
           tests_require=extras_require['test'])
 
 
