@@ -94,6 +94,7 @@ def read_requ_file(filename):
         requ = f.readlines()
     return [l.strip() for l in requ if l.strip()]
 
+
 def read_requirements():
     extra_requ = {
         'doc': read_requ_file('requirements-doc.txt'),
