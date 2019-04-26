@@ -24,11 +24,14 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -a "v0.1.2"
+#      bash ./compile.sh
+#      python setup.py sdist  # create source package for PyPI
 #      python setup.py test # run tests!
 #      # reset RELEASED = False in this module"
 #      git commit -m "reset RELEASED to False"
 #      git push
 #      git push origin v0.1.2 # also push the tag
+#      python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
 
 
 def get_git_revision():
@@ -152,9 +155,10 @@ def setup_package():
 
     extras_require = read_requirements()
 
-    setup_requires = ['setuptools>=30.3.0', 'pytest-runner', 'Cython>=0.27']
+    setup_requires = ['setuptools>=30.3.0', 'pytest-runner', 'Cython>=0.27', 'numpy>=1.13']
 
-    setup(version=full_version, ext_modules=ext_modules,
+    setup(version=full_version,
+          ext_modules=ext_modules,
           setup_requires=setup_requires,
           install_requires=read_requ_file('requirements.txt'),
           extras_require=extras_require,
