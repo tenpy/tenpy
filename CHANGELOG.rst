@@ -9,6 +9,22 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- nothing yet
+
+
+[0.4.0] - 2019-04-28
+--------------------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - The argument order of :class:`tenpy.models.lattice.Lattice` could be a tuple ``(priority, snake_winding)`` before. 
   This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``.
 - Moved the boundary conditions `bc_coupling` from the :class:`tenpy.models.model.CouplingModel` into the :class:`tenpy.models.lattice.Lattice` (as `bc`).

@@ -1,0 +1,13 @@
+recursive-include tenpy *.py
+recursive-include tenpy *.pyx
+recursive-include tenpy *.cpp
+
+include setup.py
+include setup.cfg
+include requirements*.txt
+include environment.yml
+include AUTHORS.txt
+include LICENSE
+include README.rst
+include MANIFEST.in
+include

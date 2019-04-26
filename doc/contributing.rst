@@ -79,7 +79,7 @@ You can use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documenta
 in various formats (including HTML or PDF) yourself, as described in the following.
 First, install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
 
-    sudo pip install --upgrade sphinx numpydoc
+    pip install --upgrade sphinx numpydoc
 
 Afterwards, simply go to the folder `doc/` and run the following command::
 

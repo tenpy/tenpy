@@ -48,8 +48,8 @@ if __name__ == "__main__":
         lat = lattice.__dict__.get(name)(4, None, bc='periodic')
         plot_lattice(lat, ax, name)
     # 2D lattices
-    for name, figsize in zip(["Square", "Triangular", "Honeycomb", "Kagome"],
-                             [(5, 5), (4, 5), (5, 6), (5, 4)]):
+    for name, figsize in zip(["Square", "Triangular", "Honeycomb", "Kagome"], [(5, 5), (4, 5),
+                                                                               (5, 6), (5, 4)]):
         print(name)
         fig = plt.figure(figsize=figsize)
         ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])

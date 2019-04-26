@@ -1,8 +1,6 @@
-import sys
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np
-import pylab as pl
 from scipy.sparse.linalg import onenormest
 
 

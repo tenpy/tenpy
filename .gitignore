@@ -4,9 +4,13 @@
 *.dat
 .DS_Store
 ._*
+.eggs
+*.egg-info
 __pycache__
 playground
 build
+dist
+tenpy/_version.py
 tenpy/linalg/*.c
 tenpy/linalg/*.cpp
 tenpy/linalg/*.so
