@@ -43,9 +43,9 @@ def gauge_hopping(model_params):
           :math:`(1,7)`, so it encloses axactly 3 flux quanta.
         * 'symmetric': symmetric gauge. The magnetic unit cell will have shape
           :math:`(\mathtt{mx}, \mathtt{my})`, with :math:`mx = my`. For flux densities :math:`p/q`,
-          `mx` and `my` will default to :math:`\sqrt{q}`
+          `mx` and `my` will default to :math:`q`
           Example: at a flux density 4/9, the magnetic unit cell will have shape
-          (3,3), so it encloses exactly 4 flux quanta.
+          (9,9).
 
     .. todo :
         Add periodic gauge (generalization of symmetric with mx, my unequal).
@@ -102,15 +102,9 @@ def gauge_hopping(model_params):
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
         if mx is None or my is None:
-            # TODO Rework so minimal MUC always contains integer number of flux quanta (i.e. not sqrt).
-            warnings.warn("Magnetic unit cell not (fully) specified.")
-            mx = my = np.sqrt(phi_q)
-            if not mx.is_integer():
-                raise ValueError("Unable to build symmetric gauge with this flux.")
-        if mx != my or mx * my != phi_q:
-            raise ValueError("Magnetic unit cell incompatible with flux or symmetric gauge.")
-        hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # shape (1, my)
-        hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
+            mx = my = phi_q
+        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
+        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
     return hop_x, hop_y
