@@ -17,7 +17,7 @@ Changed
 
 Added
 ^^^^^
-- nothing yet
+- `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
 
 
 [0.4.0] - 2019-04-28

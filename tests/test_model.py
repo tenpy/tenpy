@@ -261,15 +261,13 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
 
 def test_CouplingMPOModel_group():
     m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    m.test_sanity()
-    for Hb in m.H_bond:
-        if Hb is not None:
-            Hb.test_sanity()
+    assert m.H_MPO.max_range == 1
     # test grouping sites
     ED = ExactDiag(m)
     #  ED.build_full_H_from_mpo()
     ED.build_full_H_from_bonds()
     m.group_sites(n=2)
+    assert m.H_MPO.max_range == 1
     ED_gr = ExactDiag(m)
     ED_gr.build_full_H_from_mpo()
     H = ED.full_H.split_legs().to_ndarray()

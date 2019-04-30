@@ -67,6 +67,8 @@ class MPO:
         A single entry holds for all bonds.
     IdR : (iterable of) {int | None}
         Indices on the bonds, which correpond to 'only identities to the right'.
+    max_range : int | np.inf | None
+        Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
 
     Attributes
     ----------
@@ -87,6 +89,8 @@ class MPO:
     IdR : list of {int | None}
         Indices on the bonds, which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
+    max_range : int | np.inf | None
+        Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -97,7 +101,7 @@ class MPO:
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None):
+    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
@@ -106,6 +110,7 @@ class MPO:
         self.IdR = self._get_Id(IdR, len(sites))
         self.grouped = 1
         self.bc = bc
+        self.max_range = max_range
         self.test_sanity()
 
     @classmethod
@@ -250,6 +255,9 @@ class MPO:
             grouped_sites = group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
+        if self.max_range is not None:
+            min_n = min([gs.n_sites for gs in grouped_sites])
+            self.max_range = int(np.ceil(self.max_range // min_n))
         Ws = []
         IdL = []
         IdR = [self.IdR[0]]
@@ -319,6 +327,7 @@ class MPO:
         LP = npc.tensordot(LP0, theta, axes=['vR', 'vL'])
         LP = npc.tensordot(LP, self._W[0], axes=[['wR', 'p0'], ['wL', 'p*']])
         LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
+
         for i in range(1, max_range * L):
             i0 = i % L
             W = self._W[i0]
@@ -344,7 +353,7 @@ class MPO:
                 if npc.norm(LP_converged) < tol:
                     break  # no more terms left
         else:  # no break
-            msg = "Tolerance {0:.2e} not reached with max_range={1:d}".format(tol, max_range)
+            msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
         return current_value / L
 
@@ -411,6 +420,8 @@ class MPOGraph:
         Local sites of the Hilbert space.
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
+    max_range : int | np.inf | None
+        Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
 
     Attributes
     ----------
@@ -421,6 +432,8 @@ class MPOGraph:
         The nature of the charge.
     bc : {'finite', 'infinite'}
         MPO boundary conditions.
+    max_range : int | np.inf | None
+        Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     states : list of set of keys
         ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
     graph : list of dict of dict of list of tuples
@@ -430,10 +443,11 @@ class MPOGraph:
         The charges for the MPO
     """
 
-    def __init__(self, sites, bc='finite'):
+    def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
+        self.max_range = max_range
         # empty graph
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
@@ -464,7 +478,7 @@ class MPOGraph:
         --------
         from_term_list : equivalent for other representation terms.
         """
-        graph = cls(sites, bc)
+        graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
         graph.add_missing_IdL_IdR()

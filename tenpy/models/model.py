@@ -367,7 +367,7 @@ class NearestNeighborModel(Model):
                 W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
             W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws[i] = W
-        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1)
+        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
         return H_MPO
 
 
@@ -903,6 +903,7 @@ class CouplingModel(Model):
 
         self.H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
         H_MPO = self.H_MPO_graph.build_MPO()
+        H_MPO.max_range = ct.max_range()
         return H_MPO
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
