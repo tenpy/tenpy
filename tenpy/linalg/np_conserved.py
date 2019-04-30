@@ -2671,7 +2671,7 @@ def concatenate(arrays, axis=0, copy=True):
             raise ValueError("wrong shape " + repr(a))
         if a.chinfo != res.chinfo:
             raise ValueError("wrong ChargeInfo")
-        if a.qtotal != res.qtotal:
+        if np.any(a.qtotal != res.qtotal):
             raise ValueError("wrong qtotal")
         for l in not_axis:
             a.legs[l].test_equal(res.legs[l])
