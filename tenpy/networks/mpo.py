@@ -114,7 +114,8 @@ class MPO:
         self.test_sanity()
 
     @classmethod
-    def from_grids(cls, sites, grids, bc='finite', IdL=None, IdR=None, Ws_qtotal=None, leg0=None):
+    def from_grids(cls, sites, grids, bc='finite', IdL=None, IdR=None, Ws_qtotal=None, leg0=None,
+                   max_range=None):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -131,6 +132,13 @@ class MPO:
             A single entry holds for all bonds.
         IdR : (iterable of) {int | None}
             Indices on the bonds, which correpond to 'only identities to the right'.
+        Ws_qtotal : (list of) total charge
+            The `qtotal` to be used for each grid. Defaults to zero charges.
+        leg0 : :class:`~tenpy.linalg.charge.LegCharge`
+            LegCharge for 'wL' of the left-most `W`. By default, construct it.
+        max_range : int | np.inf | None
+            Maximum range of hopping/interactions (in unit of sites) of the MPO.
+            ``None`` for unknown.
 
         See also
         --------
@@ -172,7 +180,7 @@ class MPO:
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i])
             W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR)
+        return cls(sites, Ws, bc, IdL, IdR, max_range)
 
     def test_sanity(self):
         """Sanity check. Raises Errors if something is wrong."""
@@ -356,6 +364,57 @@ class MPO:
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
         return current_value / L
+
+    def is_hermitian(self, tol=1.e-10):
+        """Check if `H` is a hermitian MPO.
+
+        Parameters
+        ----------
+        tol : float
+            Ignored for finite `psi`.
+            For infinite MPO containing exponentially decaying long-range terms, stop evaluating
+            further terms if the terms in `LP` have norm < `tol`.
+        max_range : int | None
+            Ignored for finite `psi`.
+            Contract at most ``self.L + max_range`` sites, even if `tol` is not reached.
+
+        Returns
+        -------
+        hermitian : bool
+            Whether self is considered to be hermitian.
+        """
+        # strategy:
+        #            H-H^dagger == 0
+        # <=> trace((H-H^dagger) . (H-H^dagger)^dagger) == 0
+        # <=> 2 trace(H.H^dagger) == trace(H.H) + trace(H^dagger.H^dagger)
+        # <=>   trace(H.H^dagger) == np.real(trace(H.H))
+        # trace(H.H) and trace(H.H^dagger) can be evaluated efficiently
+        # go from left to right
+        if self.finite:
+            max_i = self.L
+        elif self.max_range is not None:
+            if self.max_range != np.inf:
+                max_i = self.L + self.max_range
+            else:
+                max_i = self.L * 2
+        else:
+            max_i = self.L * 2  # might be too short if
+
+        W = self.get_W(0).take_slice([self.get_IdL(0)], ['wL'])
+        trHH = npc.tensordot(W, W.replace_label('wR', 'wR*'), axes=[['p', 'p*'], ['p*', 'p']])
+        trHHd = npc.tensordot(W, W.conj(), axes=[['p', 'p*'], ['p*', 'p']])
+        i = 0
+        for i in range(1, max_i):
+            W = self.get_W(i)
+            trHH = npc.tensordot(trHH, W, axes=['wR', 'wL'])
+            trHHd = npc.tensordot(trHHd, W, axes=['wR', 'wL'])
+            trHH = npc.tensordot(trHH, W.replace_label('wR', 'wR*'),
+                                 axes=[['wR*', 'p', 'p*'], ['wL', 'p*', 'p']])
+            trHHd = npc.tensordot(trHHd, W.conj(), axes=[['wR*', 'p', 'p*'], ['wL*', 'p*', 'p']])
+        IdR = self.get_IdR(i)
+        trHH = trHH[IdR, IdR]
+        trHHd = trHHd[IdR, IdR]
+        return abs(np.real(trHH) - trHHd) < tol
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
@@ -664,7 +723,8 @@ class MPOGraph:
         grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        return MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range)
+        return H
 
     def __repr__(self):
         return "<MPOGraph L={L:d}>".format(L=self.L)

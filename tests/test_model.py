@@ -10,7 +10,6 @@ import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import get_parameter
 from tenpy.algorithms.exact_diag import ExactDiag
-import test_mpo
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -41,7 +40,7 @@ def check_model_sanity(M, hermitian=True):
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         if hermitian:
-            test_mpo.check_hermitian(M.H_MPO)
+            assert M.H_MPO.is_hermitian()
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
