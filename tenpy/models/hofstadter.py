@@ -103,8 +103,8 @@ def gauge_hopping(model_params):
         # hopping in y-direction: depends on x, shape (mx, my)
         if mx is None or my is None:
             mx = my = phi_q
-        hop_x = -Jx * np.exp(-1.j * (phi/2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
-        hop_y = -Jy * np.exp(1.j * (phi/2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
+        hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
+        hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
         raise ValueError("Undefinied gauge " + repr(gauge))
     return hop_x, hop_y
