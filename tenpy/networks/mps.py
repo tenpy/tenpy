@@ -825,7 +825,7 @@ class MPS:
         Parameters
         ----------
         i : int
-            Build ``RP`` rigth of site `i`.
+            Build ``RP`` right of site `i`.
         bra : :class:`MPS`
             Check leg compatiblity with a `bra`. Note that the returned `init_RP` will
             only be the contraction for the ``RP`` of  ``<bra|self>`` on the right most site
@@ -1008,7 +1008,7 @@ class MPS:
             Desired new virtual leg on the very left. Needs to have the same block strucuture as
             current leg, but can have shifted charge entries.
         vR_leg : None | LegCharge
-            Desired new virtual leg on the very rigth. Needs to have the same block strucuture as
+            Desired new virtual leg on the very right. Needs to have the same block strucuture as
             current leg, but can have shifted charge entries.
             Should be `vL_leg.conj()` for infinite MPS, if `qtotal` is not given.
         """
@@ -2887,7 +2887,7 @@ class MPSEnvironment:
         Parameters
         ----------
         i : int
-            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
+            The returned `RP` will contain the contraction *strictly* right of site `i`.
         store : bool
             Wheter to store the calculated `RP` in `self` (``True``) or discard them (``False``).
 

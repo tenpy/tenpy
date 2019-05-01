@@ -145,7 +145,7 @@ After a successful compilation, the warning that TeNPy was not compiled should g
 
 Checking the installation
 -------------------------
-As a first check of the installation you can try to run (one of) the python files in the `examples/` subfolder; 
+As a first check of the installation you can try to run (one of) the python files in the `examples/` subfolder;
 hopefully all of them should run without error.
 
 You can also run the automated testsuite with `pytest <http://pytest.org>`_  (``pip install pytest``) to make sure everything works fine::
@@ -158,9 +158,7 @@ At least the stable releases should run these tests without any failures.
 
 If you can run the examples but not the tests, check whether `pytest` actually uses the correct python version.
 
-The test suite is also run automatically with `travis-ci <https://travis-ci.com>`, results can be inspected at
-
-    https://travis-ci.com/tenpy/tenpy
+The test suite is also run automatically with `travis-ci <https://travis-ci.org>`_, results can be inspected at `here <https://travis-ci.org/tenpy/tenpy>`_.
 
 Installation instructions: from packages
 ========================================
@@ -170,7 +168,7 @@ If you have the conda package manager, you can simply download the ``environment
     conda env create -f environment.yml
     conda activate tenpy
     
-This will also install `pip <https://pip.pypa.io/en/stable/>`. Alternatively, if you only have `pip`, install the
+This will also install `pip <https://pip.pypa.io/en/stable/>`_. Alternatively, if you only have `pip`, install the
 required packages with::
     
     pip install -r requirements.txt

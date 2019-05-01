@@ -20,6 +20,10 @@ Added
 - `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
 - :meth:`~tenpy.networks.mpo.MPO.is_hermitian`
 
+Fixed
+^^^^^
+- Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
+
 
 [0.4.0] - 2019-04-28
 --------------------
