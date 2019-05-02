@@ -114,7 +114,14 @@ class MPO:
         self.test_sanity()
 
     @classmethod
-    def from_grids(cls, sites, grids, bc='finite', IdL=None, IdR=None, Ws_qtotal=None, leg0=None,
+    def from_grids(cls,
+                   sites,
+                   grids,
+                   bc='finite',
+                   IdL=None,
+                   IdR=None,
+                   Ws_qtotal=None,
+                   leg0=None,
                    max_range=None):
         """Initialize an MPO from `grids`.
 
@@ -408,7 +415,8 @@ class MPO:
             W = self.get_W(i)
             trHH = npc.tensordot(trHH, W, axes=['wR', 'wL'])
             trHHd = npc.tensordot(trHHd, W, axes=['wR', 'wL'])
-            trHH = npc.tensordot(trHH, W.replace_label('wR', 'wR*'),
+            trHH = npc.tensordot(trHH,
+                                 W.replace_label('wR', 'wR*'),
                                  axes=[['wR*', 'p', 'p*'], ['wL', 'p*', 'p']])
             trHHd = npc.tensordot(trHHd, W.conj(), axes=[['wR*', 'p', 'p*'], ['wL*', 'p*', 'p']])
         IdR = self.get_IdR(i)
