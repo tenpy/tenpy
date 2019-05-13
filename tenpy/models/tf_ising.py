@@ -3,12 +3,8 @@
 Like the :class:`~tenpy.models.xxz_chain.XXZChain`, the transverse field ising chain
 :class:`TFIChain` is contained in the more general :class:`~tenpy.models.spins.SpinChain`;
 the idea is more to serve as a pedagogical example for a 'model'.
-Choosing the field along z allow to preserve parity, if desired, at the expense of a larger MPO
-bond dimension for the Hamiltion.
 
-The :class:`TFIModel2D` contains the same couplings but on a square lattice in 2D
-(with chooseable boundary conditions).
-As such, it illustrates the correct usage of the :class:`~tenpy.models.lattice.Lattice` classes.
+We choose the field along z to allow to conserve the parity, if desired.
 """
 # Copyright 2018 TeNPy Developers
 

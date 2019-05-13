@@ -19,6 +19,7 @@ Added
 ^^^^^
 - `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
 - :meth:`~tenpy.networks.mpo.MPO.is_hermitian`
+- nearest-Neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
 
 Fixed
 ^^^^^
