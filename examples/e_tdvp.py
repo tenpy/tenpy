@@ -6,12 +6,13 @@ import tenpy.networks.mps as mps
 import tenpy.networks.site as site
 from tenpy.algorithms import tdvp
 from tenpy.networks.mps import MPS
+import copy
 
 
 def run_out_of_equilibrium():
     L=10
-    chi=20
-    delta_t=0.01
+    chi=5
+    delta_t=0.1
     model_params = {
         'L':L,
         'S':0.5,
@@ -34,7 +35,7 @@ def run_out_of_equilibrium():
         'start_time': 0,
         'dt':delta_t,
         'trunc_params': {
-            'chi_max': 50,
+            'chi_max': chi,
             'svd_min': 1.e-10,
             'trunc_cut':None
         }
@@ -48,6 +49,8 @@ def run_out_of_equilibrium():
         S_mid.append(psi.entanglement_entropy(bonds=[L//2])[0])
     for i in range(30):
         tdvp_engine.run_one_site(N_steps=1)
+        #psi_2=copy.deepcopy(psi)
+        #psi_2.canonical_form()
         times.append(tdvp_engine.evolved_time)
         S_mid.append(psi.entanglement_entropy(bonds=[L//2])[0])
     import matplotlib.pyplot as plt
@@ -55,9 +58,9 @@ def run_out_of_equilibrium():
     plt.plot(times,S_mid)
     plt.xlabel('t')
     plt.ylabel('S')
-    plt.axvline(x=0.3,color='red')
+    plt.axvline(x=3.1,color='red')
     plt.text(0.0,0.0000015,"Two sites update")
-    plt.text(0.31,0.0000015,"One site update")
+    plt.text(3.1,0.0000015,"One site update")
     plt.show()
 
 if __name__ == "__main__":

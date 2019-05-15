@@ -435,6 +435,8 @@ class Engine(NpcLinearOperator):
             if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * max(abs(E), 1.) and
                     abs(Delta_S) < max_S_err):
                 if self.mixer is None:
+                    print("Delta_E")
+                    print(-Delta_E)
                     break
                 else:
                     if self.verbose >= 1:
