@@ -521,6 +521,30 @@ cpdef np.ndarray _find_row_differences(np.ndarray qflat):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
+cpdef np.ndarray _find_row_differences_qdata(np.ndarray qdata):
+    """same as _find_row_differences but different dtype"""
+    if qdata.shape[1] == 0:
+        return np.array([0, qdata.shape[0]], dtype=np.intp)
+    cdef int i, j, n=1, L = qdata.shape[0], M = qdata.shape[1]
+    cdef bint rows_equal = False
+    cdef np.ndarray[intp_t, ndim=2] qdata_c = qdata
+    cdef np.ndarray[intp_t, ndim=1] res = _np_empty_1D(max(L + 1, 2), intp_num)
+    res[0] = 0
+    for i in range(1, L):
+        rows_equal = True
+        for j in range(M):
+            if qdata_c[i-1, j] != qdata_c[i, j]:
+                rows_equal = False
+                break
+        if not rows_equal:
+            res[n] = i
+            n += 1
+    res[n] = L
+    return res[:n+1]
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
 cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdata, QTYPE_t qconj,
                                 QTYPE_t[::1] add_qtotal=None):
     """Calculate qtotal of a part of the legs of a npc.Array.
@@ -888,7 +912,7 @@ def _combine_legs_worker(self,
         block_shape[:, ax] = sizes[:, 1] - sizes[:, 0] # TODO size directly in pipe!?
 
     # divide qdata into parts, which give a single new block
-    cdef np.ndarray[intp_t, ndim=1, mode='c'] diffs = _find_row_differences(qdata)
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] diffs = _find_row_differences_qdata(qdata)
     cdef intp_t res_stored_blocks = diffs.shape[0] - 1
     qdata = qdata[diffs[:res_stored_blocks], :]  # (keeps the dimensions)
     cdef np.ndarray[intp_t, ndim=2, mode='c'] res_blockshapes = _np_empty_2D(res_stored_blocks, res_rank, intp_num)
@@ -1216,7 +1240,7 @@ cdef _tensordot_match_charges(QTYPE_t[::1] chinfo_mod,
     if qnumber == 0:  # special case no restrictions due to charge
         match_rows[:, 0] = 0
         match_rows[:, 1] = n_rows_a
-        return n_rows_a * n_cols_b, np.arange(n_rows_a), match_rows
+        return n_rows_a * n_cols_b, np.arange(n_rows_a, dtype=np.intp), match_rows
     # general case
     # note: a_charges_keep has shape (n_rows_a, qnumber)
     # b_charges_match has shape (n_cols_b, qnumber)
@@ -1339,7 +1363,7 @@ def _tensordot_worker(a, b, int axes):
     To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
     Note that we give priority to the `#_qdata_keep` over the `#_qdata_sum`, such that
     equal rows of `i` are contiguous in `#_qdata_keep`.
-    Then, they are identified with :func:`Charges._find_row_differences`.
+    Then, they are identified with :func:`charges._find_row_differences`.
 
     Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
     analogous to step 3) above. This is implemented in :func:`_tensordot_worker`.
@@ -1402,8 +1426,8 @@ def _tensordot_worker(a, b, int axes):
 
 
     # find blocks where a_qdata_keep and b_qdata_keep change; use that they are sorted.
-    cdef np.ndarray[intp_t, ndim=1] a_slices = _find_row_differences(a_qdata_keep)
-    cdef np.ndarray[intp_t, ndim=1] b_slices = _find_row_differences(b_qdata_keep)
+    cdef np.ndarray[intp_t, ndim=1] a_slices = _find_row_differences_qdata(a_qdata_keep)
+    cdef np.ndarray[intp_t, ndim=1] b_slices = _find_row_differences_qdata(b_qdata_keep)
     # the slices divide a_data and b_data into rows and columns
     cdef intp_t n_rows_a = a_slices.shape[0] - 1
     cdef intp_t n_cols_b = b_slices.shape[0] - 1

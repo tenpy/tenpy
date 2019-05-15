@@ -55,6 +55,10 @@ def test_XXZChain_general(tol=1.e-14):
         'Jz': [0., 1., 2.],
         'hz': [0., 0.2]
     })
+    check_general_model(XXZChain2, dict(L=4, Jxx=1., hz=0., bc_MPS='finite'), {
+        'Jz': [0., 1., 2.],
+        'hz': [0., 0.2]
+    })
     model_param = dict(L=3, Jxx=1., Jz=1.5, hz=0.25, bc_MPS='finite')
     m1 = XXZChain(model_param)
     m2 = XXZChain2(model_param)
@@ -62,4 +66,4 @@ def test_XXZChain_general(tol=1.e-14):
         if Hb1 is None:
             assert Hb2 is None
             continue
-        assert npc.norm(Hb1-Hb2) < tol
+        assert npc.norm(Hb1 - Hb2) < tol

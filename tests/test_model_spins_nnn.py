@@ -15,6 +15,7 @@ def test_SpinChainNNN():
         'bc_MPS': ['finite', 'infinite']
     })
 
+
 def test_SpinChainNNN2():
     check_general_model(spins_nnn.SpinChainNNN2, {
         'hz': 0.5,

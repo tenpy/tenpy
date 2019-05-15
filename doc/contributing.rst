@@ -57,11 +57,11 @@ To keep consistency, we ask you to comply with the following guidelines for cont
 
       from ..linalg import np_conserved as npc
 
-- Use the python package `nose <http://nose.readthedocs.io/en/latest/>`_ for testing.
-  Run it simply with ``nosetest`` in `tests/`.
+- Use the python package `pytest <https://pytest.org>`_ for testing.
+  Run it simply with ``pytest`` in `tests/`.
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
   Long-running tests are marked with the attribute `slow`; for a quick check you can also run
-  ``nosetest -a '!slow'``.
+  ``pytest -m "not slow"``.
 - Reversely, if you write new functions, please also include suitable tests!
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
   If you're not 100% sure that you will remove it soon, please add a doc-string with a 
@@ -79,7 +79,7 @@ You can use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documenta
 in various formats (including HTML or PDF) yourself, as described in the following.
 First, install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
 
-    sudo pip install --upgrade sphinx numpydoc
+    pip install --upgrade sphinx numpydoc
 
 Afterwards, simply go to the folder `doc/` and run the following command::
 
@@ -90,8 +90,6 @@ Open this folder (or to be precise: the file `index.html` in it) in your webbros
 and enjoy this and other documentation beautifully rendered, with cross links, math formulas
 and even a search function.
 Other output formats are available as other make targets, e.g., ``make latexpdf``.
-If you changed the file strucuture of tenpy, run ``make src2rst`` in the ``doc/`` folder
-to update the documentation index for the reference.
 
 .. note ::
 

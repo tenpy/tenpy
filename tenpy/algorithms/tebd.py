@@ -182,7 +182,7 @@ class Engine:
         ============== ====== =============================================
         delta_tau_list list   A list of floats: the timesteps to be used.
                               Choosing a large timestep `delta_tau`
-                              introduces large (Trotter) erros, but a too
+                              introduces large (Trotter) errors, but a too
                               small time step requires a lot of steps to
                               reach  ``exp(-tau H) --> |psi0><psi0|``.
                               Therefore, we start with fairly large time
@@ -485,8 +485,9 @@ class Engine:
 
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
@@ -502,10 +503,9 @@ class Engine:
         # such that we obtain ``B_L = SL**-1 U S = SL**-1 U S V V^dagger = C V^dagger``
         # here, C is the same as theta, but without the `S` on the very left
         # (Note: this requires no inverse if the MPS is initially in 'B' canonical form)
-        B_L = npc.tensordot(
-            C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
-            V.conj(),
-            axes=['(p1.vR)', '(p1*.vR*)'])
+        B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(p1.vR)', '(p1*.vR*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
@@ -598,8 +598,9 @@ class Engine:
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
         A_L = U.split_legs(0).ireplace_label('p0', 'p')
@@ -698,6 +699,7 @@ class RandomUnitaryEvolution(Engine):
     >>> print(psi2.chi)  # still a product state, not really random!!!
     [1, 1, 1, 1, 1, 1, 1]
     """
+
     def __init__(self, psi, TEBD_params):
         Engine.__init__(self, psi, None, TEBD_params)
 
@@ -744,7 +746,7 @@ class RandomUnitaryEvolution(Engine):
             if i == 0 and self.psi.finite:
                 U_bonds.append(None)
             else:
-                leg_L = sites[i-1].leg
+                leg_L = sites[i - 1].leg
                 leg_R = sites[i].leg
                 pipe = npc.LegPipe([leg_L, leg_R])
                 U = npc.Array.from_func_square(CUE, pipe).split_legs()
@@ -777,4 +779,4 @@ class RandomUnitaryEvolution(Engine):
         return trunc_err
 
     def _calc_bond_eig(self):
-        pass # do nothing
+        pass  # do nothing

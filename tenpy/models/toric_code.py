@@ -2,9 +2,6 @@
 
 As we put the model on a cylinder, the name "toric code" is a bit misleading,
 but it is the established name for this model...
-
-.. todo ::
-    switch to using the CouplingMPOModel
 """
 # Copyright 2018 TeNPy Developers
 
@@ -12,7 +9,7 @@ import numpy as np
 
 from .lattice import Lattice, _parse_sites
 from ..networks.site import SpinHalfSite
-from .model import MultiCouplingModel, MPOModel
+from .model import MultiCouplingModel, CouplingMPOModel
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.misc import any_nonzero
 
@@ -37,16 +34,17 @@ class DualSquare(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
+
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
         pos = np.array([[0.5, 0.], [0., 0.5]])
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [(0, 1, np.array([0, 0])), (0, 1, np.array([1, 0])),
-              (1, 0, np.array([-1, 1])), (1, 0, np.array([0, 1]))]
-        nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1,0]), np.array([0, 1])]]
-        nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1,1]), np.array([-1, 1])]]
+        NN = [(0, 1, np.array([0, 0])), (0, 1, np.array([1, 0])), (1, 0, np.array([-1, 1])),
+              (1, 0, np.array([0, 1]))]
+        nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
+        nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_nearest_neighbors', nnNN)
@@ -54,7 +52,7 @@ class DualSquare(Lattice):
         super().__init__([Lx, Ly], sites, **kwargs)
 
 
-class ToricCode(MultiCouplingModel, MPOModel):
+class ToricCode(CouplingMPOModel, MultiCouplingModel):
     r"""Spin-S sites coupled by nearest neighbour interactions.
 
     The Hamiltonian reads:
@@ -82,34 +80,31 @@ class ToricCode(MultiCouplingModel, MPOModel):
     """
 
     def __init__(self, model_params):
-        # 0) read out/set default parameters
-        verbose = get_parameter(model_params, 'verbose', 1, self.__class__)
-        Lx = get_parameter(model_params, 'Lx', 2, self.__class__)
-        Ly = get_parameter(model_params, 'Ly', 2, self.__class__)
-        Jv = get_parameter(model_params, 'Jv', 1., self.__class__)
-        Jp = get_parameter(model_params, 'Jp', 1., self.__class__)
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.__class__)
-        order = get_parameter(model_params, 'order', 'default', self.__class__)
-        conserve = get_parameter(model_params, 'conserve', 'parity', self.__class__)
-        unused_parameters(model_params, self.__class__)
-        # 1) define Site and lattice
+        CouplingMPOModel.__init__(self, model_params)
+
+    def init_sites(self, model_params):
+        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
         site = SpinHalfSite(conserve)
+        return site
+
+    def init_lattice(self, model_params):
+        site = self.init_sites(model_params)
+        Lx = get_parameter(model_params, 'Lx', 2, self.name)
+        Ly = get_parameter(model_params, 'Ly', 2, self.name)
+        order = get_parameter(model_params, 'order', 'default', self.name)
+        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
         bc = [None, 'periodic']
         bc[0] = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = DualSquare(Lx, Ly, site, order=order, bc=bc, bc_MPS=bc_MPS)
-        # 2) initialize CouplingModel
-        MultiCouplingModel.__init__(self, lat)
-        # 3) add terms of the Hamiltonian
-        # (u is always 0 as we have only one site in the unit cell)
-        Jv = np.asarray(Jv)
-        Jp = np.asarray(Jp)
+        return lat
+
+    def init_terms(self, model_params):
+        Jv = get_parameter(model_params, 'Jv', 1., self.name, True)
+        Jp = get_parameter(model_params, 'Jp', 1., self.name, True)
         # vertex/star term
-        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]),
-                                                  (0, 'Sigmax', [-1, 0]),
+        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]), (0, 'Sigmax', [-1, 0]),
                                                   (1, 'Sigmax', [0, -1])])
         # plaquette term
-        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]),
-                                                  (0, 'Sigmaz', [0, 1]),
+        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]), (0, 'Sigmaz', [0, 1]),
                                                   (1, 'Sigmaz', [1, 0])])
-        # 4) initialize MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        # done

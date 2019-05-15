@@ -9,6 +9,28 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
+- :meth:`~tenpy.networks.mpo.MPO.is_hermitian`
+- nearest-Neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
+
+Fixed
+^^^^^
+- Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
+
+
+[0.4.0] - 2019-04-28
+--------------------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - The argument order of :class:`tenpy.models.lattice.Lattice` could be a tuple ``(priority, snake_winding)`` before. 
   This is no longer valid and needs to be replaced by ``("standard", snake_winding, priority)``.
 - Moved the boundary conditions `bc_coupling` from the :class:`tenpy.models.model.CouplingModel` into the :class:`tenpy.models.lattice.Lattice` (as `bc`).
@@ -31,6 +53,11 @@ Backwards incompatible changes
   This should not break backwards-compatibility, but if you compiled the cython files, you **need** to remove the 
   old binaries in the source directory. Using ``bash cleanup.sh`` might be helpful to do that, but also remove other files within the repository, so be careful and make a backup beforehand to be on the save side.
   Afterwards recompile with ``bash compile.sh``.
+- Changed structure of :attr:`tenpy.models.model.CouplingModel.onsite_terms` and :attr:`tenpy.models.model.CouplingModel.coupling_terms`:
+  Each of them is now a dictionary with category strings as keys and the newly introduced
+  :class:`tenpy.networks.terms.OnsiteTerms` and :class:`tenpy.networks.terms.CouplingTerms` as values.
+- :meth:`tenpy.models.model.CouplingModel.calc_H_onsite` is deprecated in favor of new methods.
+- Argument `raise_op2_left` of :meth:`tenpy.models.model.CouplingModel.add_coupling` is deprecated.
 
 
 Added
@@ -38,12 +65,13 @@ Added
 - :meth:`tenpy.networks.mps.MPS.canonical_form_infinite`.
 - :meth:`tenpy.networks.mps.MPS.expectation_value_term`, :meth:`tenpy.networks.mps.MPS.expectation_value_terms_sum` and
   :meth:`tenpy.networks.mps.MPS.expectation_value_multi_sites` for expectation values of terms.
+- :meth:`tenpy.networks.mpo.MPO.expectation_value` for an MPO.
 - :meth:`tenpy.linalg.np_conserved.Array.extend` and :meth:`tenpy.linalg.charges.LegCharge.extend`,
   allowing to extend an Array with zeros.
 - DMRG parameter ``'orthogonal_to'`` allows to calculate excited states for finite systems.
 - possibility to change the number of charges after creating LegCharges/Arrays.
 - more general way to specify the order of sites in a :class:`tenpy.models.lattice.Lattice`.
-- new :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
+- new :class:`tenpy.models.lattice.Triangular`, :class:`tenpy.models.lattice.Honeycomb` and :class:`tenpy.models.lattice.Kagome` lattice
 - a way to specify nearest neighbor couplings in a :class:`~tenpy.models.lattice.Lattice`, 
   along with methods to count the number of nearest neighbors for sites in the bulk, and
   a way to plot them (:meth:`~tenpy.models.lattice.Lattice.plot_coupling` and friends)
@@ -62,6 +90,15 @@ Added
   e.g. ``:issue:`5`, :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`, :forum:`3```
 - :meth:`tenpy.models.model.CouplingModel.coupling_strength_add_ext_flux` for adding hoppings with external flux.
 - :meth:`tenpy.models.model.CouplingModel.plot_coupling_terms` to visualize the added coupling terms.
+- :class:`tenpy.networks.terms.OnsiteTerms`, :class:`tenpy.networks.terms.CouplingTerms`, :class:`tenpy.networks.terms.MultiCouplingTerm` 
+  containing the of terms for the :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.models.model.MultiCouplingModel`.
+  This allowed to add the `category` argument to :class:`~tenpy.models.model.CouplingModel.add_onsite`, :class:`~tenpy.models.model.CouplingModel.add_coupling` and :class:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+- :class:`tenpy.networks.terms.TermList` as another (more human readable) representation of terms with conversion from
+  and to the other ``*Term`` classes.
+- :meth:`tenpy.networks.mps.MPS.init_LP` and :meth:`tenpy.networks.mps.MPS.init_RP` to initialize left and right parts
+  of an Environment.
+- :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`tenpy.networks.mpo.MPOGraph.from_term_list`.
+- argument `charge_sector` in :meth:`tenpy.networks.mps.MPS.correlation_length`.
 
 
 Changed
@@ -87,12 +124,16 @@ Changed
 
 - Changed **default values** for some parameters:
 
+  - set ``trunc_params['chi_max'] = 100``. Not setting a `chi_max` at all will lead to memory problems.
+    Disable ``DMRG_params['chi_list'] = None`` by default to avoid conflicting settings.
   - reduce to ``mixer_params['amplitude'] = 1.e-5``. A too strong mixer screws DMRG up pretty bad.
   - increase ``Lanczos_params['N_cache'] = N_max`` (i.e., keep all states)
   - set ``DMRG_params['P_tol_to_trunc'] = 0.05`` and provide reasonable ..._min and ..._max values.
   - increased (default) DMRG accuracy by setting
-    ``DMRG_params['max_E_err'] = 1.e-5`` and ``DMRG_params['max_S_err'] = 1.e-3``.
-  - don't check the (absolute) energy for convergence in Lanczos 
+    ``DMRG_params['max_E_err'] = 1.e-8`` and ``DMRG_params['max_S_err'] = 1.e-5``.
+  - don't check the (absolute) energy for convergence in Lanczos.
+  - set ``DMRG_params['norm_tol'] = 1.e-5`` to check whether the final state is in canonical form.
+
 - Verbosity of :func:`~tenpy.tools.params.get_parameter` reduced: Print parameters only for verbosity >=1.
   and default values only for verbosity >= 2.
 - Don't print the energy during real-time TEBD evolution - it's preserved up to truncation errors.
@@ -101,6 +142,8 @@ Changed
   :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 - The way the labels of npc Arrays are stored internally changed to a simple list with None entries.
   There is a deprecated propery setter yielding a dictionary with the labels.
+- renamed `first_LP` and `last_RP` arguments of :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment` to `init_LP` and `init_RP`.
+- Testing: insetad of the (outdated) `nose <https://nose.readthedocs.io/en/latest/>`_, we now use `pytest <https://pytest.org>` for testing.
 
 Fixed
 ^^^^^
@@ -119,6 +162,7 @@ Fixed
 - SVD could return outer indices with different axes
 - :meth:`tenpy.networks.mps.MPS.overlap` works now for MPS with different total charge
   (e.g. after ``psi.apply_local_op(i, 'Sp')``).
+- skip existing graph edges in MPOGraph.add() when building up terms without the strength part.
 
 Removed
 ^^^^^^^

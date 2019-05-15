@@ -153,7 +153,7 @@ class ChargeInfo:
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
-        if self._mod_masked.ndim != 1 or tuple(self.mod.shape) != (self.qnumber,):
+        if self._mod_masked.ndim != 1 or tuple(self.mod.shape) != (self.qnumber, ):
             raise ValueError("mod has wrong shape")
         if np.any(self._mod_masked <= 0):
             raise ValueError("mod should be > 0")
@@ -346,8 +346,8 @@ class LegCharge:
 
         See also
         --------
-        :meth:`sort` : sorts by charges
-        :meth:`bunch` : bunches contiguous blocks of the same charge.
+        sort : sorts by charges
+        bunch : bunches contiguous blocks of the same charge.
         """
         qflat = np.asarray(qflat, dtype=QTYPE)
         if qflat.ndim == 1 and chargeinfo.qnumber == 1:
@@ -368,7 +368,7 @@ class LegCharge:
         See also
         --------
         sort : sorts by charges
-        block : blocks by charges
+        bunch : bunches contiguous blocks of the same charge.
         """
         res = cls(chargeinfo, slices, charges, qconj)
         res.sorted = res.is_sorted()
@@ -620,8 +620,8 @@ class LegCharge:
             return  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.slices, other.slices) or \
                 not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
-            raise ValueError("incompatible LegCharge\n" + vert_join(
-                ["self\n" + str(self), "other\n" + str(other)], delim=' | '))
+            raise ValueError("incompatible LegCharge\n" +
+                             vert_join(["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
     def get_slice(self, qindex):
         """Return slice selecting the block for a given `qindex`."""
@@ -686,8 +686,8 @@ class LegCharge:
         See also
         --------
         bunch : enlarge blocks for contiguous qind of the same charges.
-        np.take : can apply `perm_flat` to a given axis
-        inverse_permutation : returns inverse of a permutation
+        numpy.take : can apply `perm_flat` to a given axis
+        tenpy.tools.misc.inverse_permutation : returns inverse of a permutation
         """
         if self.sorted and ((not bunch) or self.bunched):  # nothing to do
             return np.arange(self.block_number, dtype=np.intp), self
@@ -718,7 +718,8 @@ class LegCharge:
 
         See also
         --------
-        sort : sorts by charges, thus enforcing complete blocking in combination with bunch"""
+        sort : sorts by charges, thus enforcing complete blocking in combination with bunch.
+        """
         if self.bunched:  # nothing to do
             return np.arange(self.block_number + 1, dtype=np.intp), self
         cp = self.copy()
@@ -787,7 +788,7 @@ class LegCharge:
         if self.qconj == extra.qconj:
             new_charges[bn:] = extra.charges
         else:
-            new_charges[bn:] = - extra.charges
+            new_charges[bn:] = -extra.charges
         return LegCharge(self.chinfo, new_slices, new_charges, qconj=self.qconj)
 
     def charge_sectors(self):
@@ -870,14 +871,8 @@ class LegCharge:
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        return (self.ind_len,
-                self.block_number,
-                self.chinfo,
-                self.slices,
-                self.charges,
-                self.qconj,
-                self.sorted,
-                self.bunched)
+        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
+                self.qconj, self.sorted, self.bunched)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
@@ -1238,15 +1233,8 @@ class LegPipe(LegCharge):
     def __getstate__(self):
         """Allow to pickle and copy."""
         super_state = LegCharge.__getstate__(self)
-        return (super_state,
-                self.nlegs,
-                self.legs,
-                self.subshape,
-                self.subqshape,
-                self.q_map,
-                self.q_map_slices,
-                self._perm,
-                self._strides)
+        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
+                self.q_map_slices, self._perm, self._strides)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
@@ -1306,13 +1294,15 @@ def _find_row_differences(qflat):
     diff[1:-1] = np.any(qflat[1:] != qflat[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
 
+
 def _map_blocks(blocksizes):
     """Create an index array mapping 1D blocks of given sizes to a new array.
 
     Equivalent to ``np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])``."""
     if len(blocksizes) == 0:
-        return np.zeros((0,), np.intp)
-    return np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])
+        return np.zeros((0, ), np.intp)
+    return np.concatenate([np.ones(s, np.intp) * i for i, s in enumerate(blocksizes)])
+
 
 @use_cython
 def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
@@ -1345,12 +1335,12 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
         The lenght of the slices.
     """
     if dest_beg is None:
-        dest_beg = [0]*dest.ndim
+        dest_beg = [0] * dest.ndim
     if src_beg is None:
-        src_beg = [0]*dest.ndim
+        src_beg = [0] * dest.ndim
     assert dest.ndim == src.ndim == len(dest_beg) == len(src_beg) == len(slice_shape)
-    dst_sl = tuple([slice(i, i+d) for (i, d) in zip(dest_beg, slice_shape)])
-    src_sl = tuple([slice(i, i+d) for (i, d) in zip(src_beg, slice_shape)])
+    dst_sl = tuple([slice(i, i + d) for (i, d) in zip(dest_beg, slice_shape)])
+    src_sl = tuple([slice(i, i + d) for (i, d) in zip(src_beg, slice_shape)])
     dest[dst_sl] = src[src_sl]
 
 
@@ -1364,13 +1354,13 @@ def _make_stride(shape, cstyle=True):
     stride = 1
     res = np.empty([L], np.intp)
     if cstyle:
-        res[L-1] = 1
-        for a in range(L-1, 0, -1):
+        res[L - 1] = 1
+        for a in range(L - 1, 0, -1):
             stride *= shape[a]
-            res[a-1] = stride
+            res[a - 1] = stride
     else:
         res[0] = 1
-        for a in range(0, L-1):
+        for a in range(0, L - 1):
             stride *= shape[a]
-            res[a+1] = stride
+            res[a + 1] = stride
     return res

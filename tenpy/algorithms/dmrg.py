@@ -43,8 +43,10 @@ from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
 
-__all__ = ['run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer',
-           'TwoSiteMixer', 'DensityMatrixMixer']
+__all__ = [
+    'run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
+    'DensityMatrixMixer', 'chi_list'
+]
 
 
 def run(psi, model, DMRG_params):
@@ -95,11 +97,12 @@ def run(psi, model, DMRG_params):
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
         -------------- --------- ---------------------------------------------------------------
-        chi_list       dict      A dictionary to gradually increase the `chi_max` parameter of
-                                 `trunc_params`. The key defines starting from which sweep
+        chi_list       dict |    A dictionary to gradually increase the `chi_max` parameter of
+                       None      `trunc_params`. The key defines starting from which sweep
                                  `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
                                  ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                                 afterwards.
+                                 afterwards. Overwrites `trunc_params['chi_list']``.
+                                 By default (``None``) this feature is disabled.
         -------------- --------- ---------------------------------------------------------------
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
@@ -174,8 +177,12 @@ def run(psi, model, DMRG_params):
         Engine_class = globals()[Engine_class]
     engine = Engine_class(psi, model, DMRG_params)
     E, _ = engine.run()
-    return {'E': E, 'shelve': engine.shelve, 'bond_statistics': engine.update_stats,
-            'sweep_statistics': engine.sweep_stats}
+    return {
+        'E': E,
+        'shelve': engine.shelve,
+        'bond_statistics': engine.update_stats,
+        'sweep_statistics': engine.sweep_stats
+    }
 
 
 class Engine(NpcLinearOperator):
@@ -232,8 +239,8 @@ class Engine(NpcLinearOperator):
         conditions; same as `psi.finite`.
     shelve : bool
         True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
-    chi_list : dict
-        See DMRG_params `chi_list`.
+    chi_list : dict | None
+        See DMRG_params `chi_list`. ``None`` (default) disables this feature.
     update_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
@@ -295,12 +302,10 @@ class Engine(NpcLinearOperator):
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        chi_max_default = self.trunc_params.get('chi_max', max(50, np.max(psi.chi)))
-        self.chi_list = get_parameter(DMRG_params, 'chi_list', {0: chi_max_default}, 'DMRG')
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model) # calls reset_stats
+        self.init_env(model)  # calls reset_stats
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
@@ -328,23 +333,20 @@ class Engine(NpcLinearOperator):
                     H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
                 except ValueError:
                     compatible = False
-                    warings.warn("The leg of the new model is incompatible with the previous one."
-                                 "Rebuild environment from scratch.")
+                    warnings.warn("The leg of the new model is incompatible with the previous one."
+                                  "Rebuild environment from scratch.")
             if compatible:
                 LP = self.env.get_LP(0, False)
                 LP_age = self.env.get_LP_age(0)
                 RP = self.env.get_RP(self.psi.L - 1, False)
                 RP_age = self.env.get_RP_age(self.psi.L - 1)
-                self.chi_list = {0: self.trunc_params['chi_max']}  # chi_list makes no sense
             else:
                 LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
                 RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
                 LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
                 RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-                # reset chi_list
-                self.chi_list = get_parameter(DMRG_params, 'chi_list', self.chi_list, 'DMRG')
-                chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-                self.trunc_params['chi_max'] = chi_max
+            if self.DMRG_params.get('chi_list', None) is not None:
+                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
 
         # (re)initialize ortho_to_envs
@@ -376,8 +378,12 @@ class Engine(NpcLinearOperator):
             'norm_err': []
         }
         self.shelve = False
-        chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-        self.trunc_params['chi_max'] = chi_max
+        self.chi_list = get_parameter(self.DMRG_params, 'chi_list', None, 'DMRG')
+        if self.chi_list is not None:
+            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+            self.trunc_params['chi_max'] = chi_max
+            if self.verbose >= 1:
+                print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
     def __del__(self):
@@ -416,10 +422,10 @@ class Engine(NpcLinearOperator):
         N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
         min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
         max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
-        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-5, 'DMRG')
-        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-3, 'DMRG')
+        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-8, 'DMRG')
+        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-5, 'DMRG')
         max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
-        norm_tol = get_parameter(DMRG_params, 'norm_tol', None, 'DMRG')
+        norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-5, 'DMRG')
         if not self.finite:
             update_env = get_parameter(DMRG_params, 'update_env', N_sweeps_check // 2, 'DMRG')
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
@@ -432,8 +438,8 @@ class Engine(NpcLinearOperator):
             # check convergence criteria
             if self.sweeps >= max_sweeps:
                 break
-            if (self.sweeps > min_sweeps and -Delta_E  < max_E_err * max(abs(E), 1.) and
-                    abs(Delta_S) < max_S_err):
+            if (self.sweeps > min_sweeps and -Delta_E < max_E_err * max(abs(E), 1.)
+                    and abs(Delta_S) < max_S_err):
                 if self.mixer is None:
                     print("Delta_E")
                     print(-Delta_E)
@@ -448,7 +454,7 @@ class Engine(NpcLinearOperator):
                 warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
             # --------- the main work --------------
-            for i in range(N_sweeps_check-1):
+            for i in range(N_sweeps_check - 1):
                 self.sweep(meas_E_trunc=False)
             max_trunc_err, max_E_trunc = self.sweep(meas_E_trunc=True)
             # --------------------------------------
@@ -503,25 +509,29 @@ class Engine(NpcLinearOperator):
                        "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
                        "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
                        "MPS bond dimensions: {chi!s}")
-                print(msg.format(
-                        sweep=self.sweeps,
-                        mem=memory_usage(),
-                        time=time.time() - start_time,
-                        chi=self.psi.chi,
-                        age=self.update_stats['age'][-1],
-                        E=E,
-                        S=S,
-                        DE=Delta_E,
-                        DS=Delta_S,
-                        trerr=max_trunc_err,
-                        Eerr=max_E_trunc,
-                        norm_err=norm_err))
+                print(
+                    msg.format(sweep=self.sweeps,
+                               mem=memory_usage(),
+                               time=time.time() - start_time,
+                               chi=self.psi.chi,
+                               age=self.update_stats['age'][-1],
+                               E=E,
+                               S=S,
+                               DE=Delta_E,
+                               DS=Delta_S,
+                               trerr=max_trunc_err,
+                               Eerr=max_E_trunc,
+                               norm_err=norm_err))
 
         # clean up from mixer
         self.mixer_cleanup()
         # update environment until norm_tol is reached
         if norm_tol is not None and norm_err > norm_tol:
-            warnings.warn("final DMRG state not in canonical form: too much truncation!")
+            msg = "final DMRG state not in canonical form within `norm_tol` = {nt:.2e}"
+            warnings.warn(msg.format(nt=norm_tol))
+            if self.verbose >= 1:
+                print("norm_tol={nt:.2e} not reached, norm_err={ne:.2e}".format(nt=norm_tol,
+                                                                                ne=norm_err))
             if self.finite:
                 self.psi.canonical_form()
             else:
@@ -531,16 +541,20 @@ class Engine(NpcLinearOperator):
                     if norm_err <= norm_tol:
                         break
                 else:
-                    msg = ("DMRG: norm_tol {nt:.1e} not reached by updating the environment."
-                           "Call psi.canonical_form()")
-                    warnings.warn(msg.format(nt=norm_tol))
+                    if self.verbose >= 1:
+                        msg = ("DMRG: norm_tol {nt:.2e} not reached by updating the environment, "
+                               "current norm_err = {ne:.2e}\n"
+                               "Call psi.canonical_form()").format(nt=norm_tol, ne=norm_err)
+                        print(msg)
                     self.psi.canonical_form()
         if self.verbose >= 1:
             print("=" * 80)
             msg = ("DMRG finished after {sweep:d} sweeps.\n"
                    "total size = {age:d}, maximum chi = {chimax:d}")
-            print(msg.format(sweep=self.sweeps, age=self.update_stats['age'][-1],
-                             chimax=np.max(self.psi.chi)))
+            print(
+                msg.format(sweep=self.sweeps,
+                           age=self.update_stats['age'][-1],
+                           chimax=np.max(self.psi.chi)))
             print("=" * 80)
         return E, self.psi
 
@@ -603,11 +617,12 @@ class Engine(NpcLinearOperator):
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
-            new_chi_max = self.chi_list.get(self.sweeps, None)
-            if new_chi_max is not None:
-                self.trunc_params['chi_max'] = new_chi_max
-                if self.verbose >= 1:
-                    print("Setting chi_max =", new_chi_max)
+            if self.chi_list is not None:
+                new_chi_max = self.chi_list.get(self.sweeps, None)
+                if new_chi_max is not None:
+                    self.trunc_params['chi_max'] = new_chi_max
+                    if self.verbose >= 1:
+                        print("Setting chi_max =", new_chi_max)
             # update mixer
             if self.mixer is not None:
                 self.mixer = self.mixer.update_amplitude(self.sweeps)
@@ -669,7 +684,7 @@ class Engine(NpcLinearOperator):
                 o_env.get_RP(i0, store=True)
         E_trunc = None
         if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real   # uses updated LP/RP (if calculated)
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
             E_trunc = E_trunc - E0
@@ -679,9 +694,9 @@ class Engine(NpcLinearOperator):
             for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
         if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0+1)
+            self.env.del_RP(i0 + 1)
             for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0+1)
+                o_env.del_RP(i0 + 1)
         return E0, E_trunc, err, N, age
 
     def prepare_diag(self, i0, update_LP, update_RP):
@@ -717,9 +732,9 @@ class Engine(NpcLinearOperator):
         """
         theta_ortho = []
         for o_env in self.ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=2)   # the environments are of the form <psi|ortho>
+            theta = o_env.ket.get_theta(i0, n=2)  # the environments are of the form <psi|ortho>
             LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0+1, store=True)
+            RP = o_env.get_RP(i0 + 1, store=True)
             theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
             theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
@@ -829,8 +844,10 @@ class Engine(NpcLinearOperator):
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
             qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(
-                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
             return U, S, VH, err
         # else: we have a mixer
         return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
@@ -918,26 +935,29 @@ class Engine(NpcLinearOperator):
         # hence the additional argument `VH`
         self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
-    def plot_update_stats(self, ax1, ax2, xaxis='time', E_exact=None, **kwargs):
-        """Plot the update statistics to display the convergence during the sweeps.
-
-        Makes two subplots, showing the energy (`ax1`) and number of lanczos iterations (`ax2`).
+    def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
+        """Plot :attr:`update_stats` to display the convergence during the sweeps.
 
         Parameters
         ----------
-        ax1, ax2 : :class:`matplotlib.axes.Axes`
-            The axes to plot into. If ``None``, we skip plotting.
-        xaxis : ``'index'`` | ``'sweep'`` | keys of :attr:`update_stats`
+        axes : :class:`matplotlib.axes.Axes`
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
             ``'index'`` is just enumerating the number of bond updates,
-            and ``'sweep'`` corresponds to the sweep number
-            (including environment sweeps).
-        E_exact : float
-            Exact energy (for infinite systems: per site) for comparison.
-            If given, plot ``abs((E-E_exact)/E_exact)`` on a log-scale yaxis.
+            and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
+        yaxis : ``'E'`` | keys of :attr:`update_stats`
+            Key of :attr:`update_stats` to be used for the y-axisof the plots.
+            For 'E', use the energy (per site for infinite systems).
+        y_exact : float
+            Exact value for the quantity on the y-axis for comparison.
+            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
-            Further keyword arguments given to ``ax1.plot(...)`` and ``ax2.plot(...)``.
+            Further keyword arguments given to ``axes.plot(...)``.
         """
+        if axes is None:
+            import matplotlib.pyplot as plt
+            axes = plt.gca()
         stats = self.update_stats
         L = self.psi.L
         kwargs.setdefault('marker', 'x')
@@ -945,48 +965,43 @@ class Engine(NpcLinearOperator):
 
         E = np.array(stats['E_total'])
         schedule, _ = self._get_sweep_schedule()
-        N = len(schedule) # bond updates per sweep
-        if xaxis is None:
+        N = len(schedule)  # bond updates per sweep
+        if xaxis is None or xaxis == 'index':
             xaxis = 'index'
-            X = np.arange(len(E))
+            x = np.arange(len(E))
         elif xaxis == 'sweep':
-            X = np.arange(1, len(E)+1)/N
+            x = np.arange(1, len(E) + 1) / N
         else:
-            X = np.array(stats[xaxis])
-        N_lanczos = np.array(stats['N_lanczos'])
-
-        if not self.psi.finite:
-            # use energy per site instead of total energy
-            age = np.array(stats['age'])
-            d_age = age[N:] - age[:-N]
-            d_E = E[N:] - E[:-N]
-            E = d_E/d_age
-            X = X[N:]
-            N_lanczos = N_lanczos[N:]
-        if ax1 is not None:
-            if E_exact is None:
-                ax1.plot(X, E, **kwargs)
+            x = np.array(stats[xaxis])
+        if yaxis == 'E':
+            if not self.psi.finite:
+                # use energy per site instead of total energy
+                age = np.array(stats['age'])
+                d_age = age[N:] - age[:-N]
+                d_E = E[N:] - E[:-N]
+                y = d_E / d_age
+                x = x[N:]
             else:
-                ax1.plot(X, np.abs(E-E_exact)/np.abs(E_exact), **kwargs)
-                ax1.set_yscale('log')
-            ax1.set_xlabel(xaxis)
-            ax1.set_ylabel("Energy")
+                y = E
+        else:
+            y = np.array(stats[yaxis])
+        if y_exact is not None:
+            y = np.abs(y - y_exact) / np.abs(y_exact)
+            axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
+        axes.set_xlabel(xaxis)
+        axes.set_ylabel(yaxis)
 
-        if ax2 is not None:
-            ax2.plot(X, N_lanczos, **kwargs)
-            ax2.set_xlabel(xaxis)
-            ax2.set_ylabel(r'$N_{lanczos}$')
-
-    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', exact_y_value=None, **kwargs):
-        """Plot the sweep statistics to display the convergence with the sweeps.
+    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', y_exact=None, **kwargs):
+        """Plot :attr:`sweep_stats` to display the convergence with the sweeps.
 
         Parameters
         ----------
         axes : :class:`matplotlib.axes.Axes`
-            The axes to plot into. Defaults to ``plt.gca()``
-        xaxis, yaxis : 'sweep' | 'time' | ...
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis, yaxis : key of :attr:`sweep_stats`
             Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
-        exact_Y_value : float
+        y_exact : float
             Exact value for the quantity on the y-axis for comparison.
             If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
         **kwargs :
@@ -1002,11 +1017,10 @@ class Engine(NpcLinearOperator):
 
         x = np.array(stats[xaxis])
         y = np.array(stats[yaxis])
-        if exact_y_value is None:
-            axes.plot(x, y, **kwargs)
-        else:
-            axes.plot(x, np.abs(y-exact_y_value)/np.abs(exact_y_value), **kwargs)
+        if y_exact is not None:
+            y = np.abs(y - y_exact) / np.abs(y_exact)
             axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
@@ -1061,24 +1075,29 @@ class EngineCombine(Engine):
         LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
         H1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
         RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
+        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
+                                                ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         # calculate LHeff
         LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs(
-            [['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, -1])
+        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                        pipes=[pipeL, pipeL.conj()],
+                                        new_axes=[0, -1])
         # calculate RHeff
         RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
         pipeR = RHeff.make_pipe(['p1', 'vL*'])
-        self.RHeff = RHeff.combine_legs(
-            [['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[-1, 0])
+        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                        pipes=[pipeR, pipeR.conj()],
+                                        new_axes=[-1, 0])
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
         theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
         theta_ortho = self.get_theta_ortho(i0)
-        theta_ortho = [th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-                       for th_o in theta_ortho]
+        theta_ortho = [
+            th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
+            for th_o in theta_ortho
+        ]
         return theta, theta_ortho
 
     def matvec(self, theta):
@@ -1361,6 +1380,7 @@ class SingleSiteMixer(Mixer):
         This is still under development.
         Works only with EngineCombine
     """
+
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1397,7 +1417,9 @@ class SingleSiteMixer(Mixer):
         """
         theta, next_B = self.subspace_expand(engine, theta, i0, move_right, next_B)
         qtotal_LR = [theta.qtotal, None] if move_right else [None, theta.qtotal]
-        U, S, VH, err, _ = svd_theta(theta, engine.trunc_params, qtotal_LR=qtotal_LR,
+        U, S, VH, err, _ = svd_theta(theta,
+                                     engine.trunc_params,
+                                     qtotal_LR=qtotal_LR,
                                      inner_labels=['vR', 'vL'])
         if move_right:
             VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
@@ -1411,7 +1433,7 @@ class SingleSiteMixer(Mixer):
             # theta has legs (vL.p), vR
             LHeff = engine.LHeff
             expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
-            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1) # (vR*.p), (wR.vR)
+            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
@@ -1432,7 +1454,12 @@ class TwoSiteMixer(SingleSiteMixer):
 
     This is the two-site version of the mixer described in [Hubig2015]_.
     Equivalent to the :class:`DensityMatrixMixer`, but never construct the full density matrix.
+
+    .. todo :
+        This is still under development.
+        Seems to works correctly only with EngineCombine with finite MPS.
     """
+
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1463,13 +1490,17 @@ class TwoSiteMixer(SingleSiteMixer):
         """
         # first perform an SVD as if the mixer didn't exist
         qtotal_i0 = engine.psi.get_B(i0, form=None).qtotal
-        U, S, VH, err, _ = svd_theta(
-            theta, engine.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL'])
-        move_right = update_LP # TODO: get argument inferred from schedule?
+        U, S, VH, err, _ = svd_theta(theta,
+                                     engine.trunc_params,
+                                     qtotal_LR=[qtotal_i0, None],
+                                     inner_labels=['vR', 'vL'])
+        move_right = update_LP  # TODO: get argument inferred from schedule?
         if move_right:  # move to the right
-            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0, move_right, VH)
-        else: # update_RP is True
-            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, VH.iscale_axis(S, 0), i0, move_right, U)
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0,
+                                                         move_right, VH)
+        else:  # update_RP is True
+            U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, VH.iscale_axis(S, 0), i0,
+                                                         move_right, U)
         return U, S, VH, err + err2
 
 
@@ -1594,13 +1625,14 @@ class DensityMatrixMixer(Mixer):
             LP = engine.env.get_LP(i0, store=False)
             LHeff = npc.tensordot(LP, H0, axes=['wR', 'wL'])
             pipeL = theta.get_leg('(vL.p0)')
-            LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()],
+            LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                       pipes=[pipeL, pipeL.conj()],
                                        new_axes=[0, -1])
         rho = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)']).split_legs('(p1.vR)')
         rho_c = rho.conj()
         H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        mixer_xR, add_separate_Id = self.get_xR(
-            H1.get_leg('wR'), H.get_IdL(i0 + 2), H.get_IdR(i0 + 1))
+        mixer_xR, add_separate_Id = self.get_xR(H1.get_leg('wR'), H.get_IdL(i0 + 2),
+                                                H.get_IdR(i0 + 1))
         H1m = npc.tensordot(H1, mixer_xR, axes=['wR', 'wL'])
         H1m = npc.tensordot(H1m, H1.conj(), axes=[['p1', 'wL*'], ['p1*', 'wR*']])
         rho = npc.tensordot(rho, H1m, axes=[['wR', 'p1'], ['wL', 'p1*']])
@@ -1651,18 +1683,18 @@ class DensityMatrixMixer(Mixer):
         try:
             RHeff = engine.RHeff
         except AttributeError:
-            H1 = H.get_W(i0+1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+            H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
             RP = engine.env.get_RP(i0 + 1, store=False)
             RHeff = npc.tensordot(RP, H1, axes=['wL', 'wR'])
             pipeR = theta.get_leg('(p1.vR)')
-            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()],
+            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                       pipes=[pipeR, pipeR.conj()],
                                        new_axes=[-1, 0])
         rho = npc.tensordot(RHeff, theta, axes=['(p1*.vL)', '(p1.vR)']).split_legs('(vL.p0)')
         rho_c = rho.conj()
 
         H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        mixer_xL, add_separate_Id = self.get_xL(
-            H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
+        mixer_xL, add_separate_Id = self.get_xL(H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
         H0m = npc.tensordot(mixer_xL, H0, axes=['wR', 'wL'])
         H0m = npc.tensordot(H0m, H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
         rho = npc.tensordot(H0m, rho, axes=[['p0*', 'wR'], ['p0', 'wL']])
@@ -1733,3 +1765,37 @@ class DensityMatrixMixer(Mixer):
         x = npc.diag(x, wL_leg)
         x.iset_leg_labels(['wR*', 'wR'])
         return x, separate_Id
+
+
+def chi_list(chi_max, dchi=20, nsweeps=20):
+    """Compute a 'ramping-up' chi_list.
+
+    The resulting chi_list allows to increases `chi` by `dchi` every `nsweeps` sweeps up to a given
+    maximal `chi_max`.
+
+    Parameters
+    ----------
+    chi_max : int
+        Final value for the bond dimension.
+    dchi :int
+        Step size how to increase chi
+    nsweeps : int
+        Step size for sweeps
+
+    Returns
+    -------
+    chi_list : dict
+        To be used as `chi_list` parameter for DMRG, see :func:`run`.
+        Keys increase by `nsweeps`, values by `dchi`, until a maximum of `chi_max` is reached.
+    """
+    chi_max = int(chi_max)
+    nsweeps = int(nsweeps)
+    if chi_max < dchi:
+        return {0: chi_max}
+    chi_list = {}
+    for i in range(chi_max // dchi):
+        chi = int(dchi * (i + 1))
+        chi_list[nsweeps * i] = chi
+    if chi < chi_max:
+        chi_list[nsweeps * (i + 1)] = chi_max
+    return chi_list

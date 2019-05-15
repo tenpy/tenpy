@@ -8,6 +8,7 @@ from random_test import gen_random_legcharge
 from tenpy.linalg import lanczos, sparse
 import tenpy.linalg.random_matrix as rmat
 from scipy.linalg import expm
+import pytest
 
 ch = npc.ChargeInfo([2])
 
@@ -27,7 +28,8 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
     assert (np.linalg.norm(ovs - np.eye(k)) < 2 * n * k * k * tol)
 
 
-def check_lanczos_gs(n=30, N_cache=6, tol=5.e-15):
+@pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
+def test_lanczos_gs(n, N_cache, tol=5.e-15):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg)
@@ -62,11 +64,12 @@ def check_lanczos_gs(n=30, N_cache=6, tol=5.e-15):
     else:
         print("warning: test didn't find a second eigenvector in the same charge sector!")
         return  # just ignore the rest....
-    E1, psi1, N = lanczos.lanczos(
-        H_Op, psi_init, {
-            'verbose': 1,
-            'reortho': True
-        }, orthogonal_to=[psi0])
+    E1, psi1, N = lanczos.lanczos(H_Op,
+                                  psi_init, {
+                                      'verbose': 1,
+                                      'reortho': True
+                                  },
+                                  orthogonal_to=[psi0])
     print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
     print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
     psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), do_conj=True)
@@ -83,7 +86,8 @@ def check_lanczos_gs(n=30, N_cache=6, tol=5.e-15):
     assert (abs(ov) < tol**0.5)
 
 
-def check_lanczos_evolve(n=30, N_cache=6, tol=5.e-15):
+@pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
+def test_lanczos_evolve(n, N_cache, tol=5.e-15):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg) - npc.diag(1., leg)
@@ -101,24 +105,3 @@ def check_lanczos_evolve(n=30, N_cache=6, tol=5.e-15):
         ov /= np.linalg.norm(psi_final_flat)
         print("<psi1|psi1_flat>/norm=", ov)
         assert (abs(1. - abs(ov)) < tol)
-
-
-def test_lanczos_gs():
-    yield check_lanczos_gs, 10, 20
-    for n in [1, 2, 4, 20]:
-        yield check_lanczos_gs, n, 6
-
-
-def test_lanczos_evolve():
-    yield check_lanczos_evolve, 10, 20
-    for n in [1, 2, 4, 20]:
-        yield check_lanczos_evolve, n, 6
-
-
-if __name__ == "__main__":
-    check_lanczos_gs(10, 20)
-    for n in [1, 2, 4, 20]:
-        check_lanczos_gs(n, 6)
-    check_lanczos_evolve(10, 20)
-    for n in [1, 2, 4, 20]:
-        check_lanczos_evolve(n, 6)

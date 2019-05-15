@@ -52,6 +52,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
@@ -97,25 +98,25 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         # nearest neighbors
         self.add_onsite((Jx + Jy) / 4., 0, 'Sp0 Sm1')
-        self.add_onsite((Jx + Jy) / 4., 0, 'Sp1 Sm0')  # h.c.
+        self.add_onsite(np.conj((Jx + Jy) / 4.), 0, 'Sp1 Sm0')  # h.c.
         self.add_onsite((Jx - Jy) / 4., 0, 'Sp0 Sp1')
-        self.add_onsite((Jx - Jy) / 4., 0, 'Sm1 Sm0')  # h.c.
+        self.add_onsite(np.conj((Jx - Jy) / 4.), 0, 'Sm1 Sm0')  # h.c.
         self.add_onsite(Jz, 0, 'Sz0 Sz1')
         self.add_coupling((Jx + Jy) / 4., 0, 'Sp1', 0, 'Sm0', 1)
-        self.add_coupling((Jx + Jy) / 4., 0, 'Sp0', 0, 'Sm1', -1)  # h.c.
+        self.add_coupling(np.conj((Jx + Jy) / 4.), 0, 'Sp0', 0, 'Sm1', -1)  # h.c.
         self.add_coupling((Jx - Jy) / 4., 0, 'Sp1', 0, 'Sp0', 1)
-        self.add_coupling((Jx - Jy) / 4., 0, 'Sp0', 0, 'Sm1', -1)  # h.c.
+        self.add_coupling(np.conj((Jx - Jy) / 4.), 0, 'Sp0', 0, 'Sm1', -1)  # h.c.
         self.add_coupling(Jz, 0, 'Sz1', 0, 'Sz0', 1)
         # next nearest neighbors
         self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp0', 0, 'Sm0', 1)
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp0', 0, 'Sm0', -1)  # h.c.
+        self.add_coupling(np.conj((Jxp + Jyp) / 4.), 0, 'Sp0', 0, 'Sm0', -1)  # h.c.
         self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp0', 0, 'Sp0', 1)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm0', 0, 'Sm0', -1)  # h.c.
+        self.add_coupling(np.conj((Jxp - Jyp) / 4.), 0, 'Sm0', 0, 'Sm0', -1)  # h.c.
         self.add_coupling(Jzp, 0, 'Sz0', 0, 'Sz0', 1)
         self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp1', 0, 'Sm1', 1)
-        self.add_coupling((Jxp + Jyp) / 4., 0, 'Sp1', 0, 'Sm1', -1)  # h.c.
+        self.add_coupling(np.conj((Jxp + Jyp) / 4.), 0, 'Sp1', 0, 'Sm1', -1)  # h.c.
         self.add_coupling((Jxp - Jyp) / 4., 0, 'Sp1', 0, 'Sp1', 1)
-        self.add_coupling((Jxp - Jyp) / 4., 0, 'Sm1', 0, 'Sm1', -1)  # h.c.
+        self.add_coupling(np.conj((Jxp - Jyp) / 4.), 0, 'Sm1', 0, 'Sm1', -1)  # h.c.
         self.add_coupling(Jzp, 0, 'Sz1', 0, 'Sz1', 1)
 
 
@@ -169,6 +170,7 @@ class SpinChainNNN2(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
+
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -210,13 +212,13 @@ class SpinChainNNN2(CouplingMPOModel):
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling((Jx + Jy) / 4., u2, 'Sp', u1, 'Sm', -dx)  # h.c.
+            self.add_coupling(np.conj((Jx + Jy) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
-            self.add_coupling((Jx - Jy) / 4., u2, 'Sm', u1, 'Sm', -dx)  # h.c.
+            self.add_coupling(np.conj((Jx - Jy) / 4.), u2, 'Sm', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
         for u1, u2, dx in self.lat.next_nearest_neighbors:
             self.add_coupling((Jxp + Jyp) / 4., u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling((Jxp + Jyp) / 4., u2, 'Sp', u1, 'Sm', -dx)  # h.c.
+            self.add_coupling(np.conj((Jxp + Jyp) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jxp - Jyp) / 4., u1, 'Sp', u2, 'Sp', dx)
-            self.add_coupling((Jxp - Jyp) / 4., u2, 'Sm', u1, 'Sm', -dx)  # h.c.
+            self.add_coupling(np.conj((Jxp - Jyp) / 4.), u2, 'Sm', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jzp, u1, 'Sz', u2, 'Sz', dx)

@@ -1,8 +1,6 @@
-"""test whether the examples run without problems.
+"""test whether the examples can at least be imported without problems.
 
-The `test_examples` (in combination with `nose`)
-runs *all* the 'examples/*.py' (except files listed in `exclude`).
-However, the files are only imported, so you can protect example code from running with
+The files are only imported, so please protect example code from running with
 ``if __name__ == "__main__": ... `` clauses, if you want to demonstrate an interactive code.
 """
 # Copyright 2018 TeNPy Developers
@@ -10,7 +8,7 @@ However, the files are only imported, so you can protect example code from runni
 import sys
 import os
 import importlib
-from nose.plugins.attrib import attr
+import pytest
 import warnings
 
 # get directory where the examples can be found
@@ -46,26 +44,19 @@ def import_file(filename, dir):
     return mod
 
 
-@attr('example')  # allow to skip the examples with ``$> nosetest -a '!example'``
-@attr('slow')
-def test_examples():
+@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
+@pytest.mark.slow
+def test_examples_import():
     for fn in sorted(os.listdir(examples_dir)):
         if fn in exclude:
             continue
         if fn[-3:] == '.py':
-            yield import_file, fn[:-3], examples_dir
+            import_file(fn[:-3], examples_dir)
 
 
-@attr('example')
-@attr('slow')
-def test_toycodes():
+@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
+@pytest.mark.slow
+def test_toycodes_import():
     for fn in sorted(os.listdir(toycodes_dir)):
         if fn[-3:] == '.py' and fn not in exclude:
-            yield import_file, fn[:-3], toycodes_dir
-
-
-if __name__ == "__main__":
-    for f, fn, dir in test_examples():
-        f(fn, dir)
-    for f, fn, dir in test_toycodes():
-        f(fn, dir)
+            import_file(fn[:-3], toycodes_dir)

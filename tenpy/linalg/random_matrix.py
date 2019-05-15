@@ -81,7 +81,7 @@ def GUE(size):
         :math:`p(H) = 1/Z exp(-n/4 tr(H^2))`.
     """
     A = standard_normal_complex(size)
-    return A + A.T.conj()
+    return (A + A.T.conj()) * 0.5
 
 
 def CRE(size):
@@ -97,7 +97,7 @@ def CRE(size):
     U : ndarray
         Orthogonal matrix drawn from the CRE (=Haar measure on O(n)).
     """
-    # almost same code as for COE
+    # almost same code as for CUE
     n, m = size
     assert n == m  # ensure that `mode` in qr doesn't matter.
     A = np.random.standard_normal(size)
@@ -105,7 +105,7 @@ def CRE(size):
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
     # Q' = Q*L; R' = L^{-1} *R, where L = diag(phase(diagonal(R)))
     L = np.diagonal(R)
-    Q *= L / abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
+    Q *= np.sign(L)
     return Q
 
 
@@ -146,8 +146,9 @@ def CUE(size):
     Q, R = np.linalg.qr(A)
     # Q-R is not unique; to make it unique ensure that the diagonal of R is positive
     # Q' = Q*L; R' = L^{-1} *R, where L = diag(phase(diagonal(R)))
-    L = np.diagonal(R)
-    Q *= L / abs(L)  # no need to construct the diagonal matrix explicitly, just scale last axis.
+    L = np.diagonal(R).copy()
+    L[np.abs(L) < 1.e-15] = 1.
+    Q *= L / np.abs(L)
     return Q
 
 
@@ -173,7 +174,7 @@ def O_close_1(size, a=0.01):
     E = np.eye(size[0])
     Q, R = np.linalg.qr(E + a * A)
     L = np.diagonal(R)  # make QR decomposition unique & ensure Q is close to one for small `a`
-    Q *= L / abs(L)
+    Q *= np.sign(L)
     return Q
 
 

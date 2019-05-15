@@ -5,6 +5,8 @@ the idea of this module is more to serve as a pedagogical example for a model.
 """
 # Copyright 2018 TeNPy Developers
 
+import numpy as np
+
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
@@ -71,7 +73,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-hz, 0, 'Sz')
         self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', -1)  # h.c.
+        self.add_coupling(np.conj(Jxx * 0.5), 0, 'Sp', 0, 'Sm', -1)  # h.c.
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
@@ -79,12 +81,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
 
 
-class XXZChain2(CouplingMPOModel,NearestNeighborModel):
+class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     """Another implementation of the Spin-1/2 XXZ chain with Sz conservation.
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
     based on the :class:`~tenpy.models.model.CouplingMPOModel`.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
@@ -102,5 +105,5 @@ class XXZChain2(CouplingMPOModel,NearestNeighborModel):
             self.add_onsite(-hz, u, 'Sz')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling(Jxx * 0.5, u2, 'Sp', u1, 'Sm', -dx)  # h.c.
+            self.add_coupling(np.conj(Jxx * 0.5), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)

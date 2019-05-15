@@ -100,10 +100,9 @@ class ExactDiag:
             if i == mpo.L - 1:
                 W = W.take_slice(mpo.get_IdR(mpo.L - 1), 'wR')
             full_H = npc.tensordot(full_H, W, axes=['wR', 'wL'])
-        full_H = full_H.combine_legs(
-            [self._labels_p, self._labels_pconj],
-            new_axes=[0, 1],
-            pipes=[self._pipe, self._pipe_conj])
+        full_H = full_H.combine_legs([self._labels_p, self._labels_pconj],
+                                     new_axes=[0, 1],
+                                     pipes=[self._pipe, self._pipe_conj])
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
@@ -125,15 +124,17 @@ class ExactDiag:
             # H_bond[i] lifes on sites (i-1, i)
             lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
             lR, lRc = self._labels_p[i], self._labels_pconj[i]
-            Hb = H_bond[i].replace_labels(['p0', 'p0*', 'p1', 'p1*'], [lL, lLc, lR, lRc])
+            Hb = H_bond[i]
+            if Hb is None:
+                continue
+            Hb = Hb.replace_labels(['p0', 'p0*', 'p1', 'p1*'], [lL, lLc, lR, lRc])
             if i > 1:
                 Hb = npc.outer(Ids_L[i - 2], Hb)  # need i-2 == j
             if i < L - 1:
                 Hb = npc.outer(Hb, Ids_R[L - 2 - i])  # need i+1 == L-1-j   =>   j = L-2-i
-            Hb = Hb.combine_legs(
-                [self._labels_p, self._labels_pconj],
-                new_axes=[0, 1],
-                pipes=[self._pipe, self._pipe_conj])
+            Hb = Hb.combine_legs([self._labels_p, self._labels_pconj],
+                                 new_axes=[0, 1],
+                                 pipes=[self._pipe, self._pipe_conj])
             if full_H is None:
                 full_H = Hb
             else:
@@ -162,10 +163,9 @@ class ExactDiag:
         """Return ``U(dt) := exp(-i H dt)``."""
         if self.E is None or self.V is None:
             raise ValueError("You need to call `full_diagonalization` first!")
-        return npc.tensordot(
-            self.V.scale_axis(np.exp(-1.j * dt * self.E), 'ps*'),
-            self.V.conj(),
-            axes=['ps*', 'ps'])
+        return npc.tensordot(self.V.scale_axis(np.exp(-1.j * dt * self.E), 'ps*'),
+                             self.V.conj(),
+                             axes=['ps*', 'ps'])
 
     def mps_to_full(self, mps):
         """Contract an MPS along the virtual bonds and combine its legs.

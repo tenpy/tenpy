@@ -18,8 +18,10 @@ from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
-__all__ = ['Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Honeycomb', 'Kagome',
-           'get_order', 'get_order_grouped', 'bc_choices']
+__all__ = [
+    'Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Honeycomb', 'Kagome', 'get_order',
+    'get_order_grouped', 'bc_choices'
+]
 
 # (update module doc string if you add further lattices)
 
@@ -69,6 +71,16 @@ class Lattice:
     positions : iterable of 1D arrays
         For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
+    nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
+        as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
+        couplings.
+        Note that we include each coupling only in one direction; to get both directions, use
+        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+    next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the next-nearest neigbhors.
+    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the next-next-nearest neigbhors.
 
     Attributes
     ----------
@@ -97,7 +109,7 @@ class Lattice:
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
         vector (justifying the definition of `N_rings` and `N_sites_per_ring`).
-    basis: ndarray (dim, Dim)
+    basis : ndarray (dim, Dim)
         translation vectors shifting the unit cell. The row `i` gives the vector shifting in
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
@@ -107,7 +119,7 @@ class Lattice:
         as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
         couplings.
         Note that we include each coupling only in one direction; to get both directions, use
-        ``nearest_neighbors + [(u1, u2, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
         Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
@@ -126,7 +138,9 @@ class Lattice:
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
 
-    def __init__(self, Ls, unit_cell,
+    def __init__(self,
+                 Ls,
+                 unit_cell,
                  order='default',
                  bc='open',
                  bc_MPS='finite',
@@ -195,6 +209,9 @@ class Lattice:
                    axis=1)[self._perm] == np.arange(self.N_sites))  # rows of `order` unique?
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
+        if self.bc[0] and self.bc_MPS == 'infinite':
+            raise ValueError("Need periodic boundary conditions along the x-direction "
+                             "for 'infinite' `bc_MPS`")
 
     @property
     def dim(self):
@@ -262,23 +279,23 @@ class Lattice:
 
         See also
         --------
-        :func:`get_order` : generates the `order` from equivalent `priority` and `snake_winding`.
-        :func:`get_order_grouped` : variant of `get_order`.
-        :meth:`plot_order` : visualizes the resulting `order`.
+        get_order : generates the `order` from equivalent `priority` and `snake_winding`.
+        get_order_grouped : variant of `get_order`.
+        plot_order : visualizes the resulting `order`.
         """
         if isinstance(order, str):
             if order in ["default", "Cstyle"]:
                 priority = None
-                snake_winding = (False,) * (self.dim+1)
+                snake_winding = (False, ) * (self.dim + 1)
             elif order == "Fstyle":
                 priority = range(self.dim, -1, -1)
-                snake_winding = (False,) * (self.dim+1)
+                snake_winding = (False, ) * (self.dim + 1)
             elif order in ["snake", "snakeCstyle"]:
                 priority = None
-                snake_winding = (True,) * (self.dim+1)
+                snake_winding = (True, ) * (self.dim + 1)
             elif order == "snakeFstyle":
                 priority = range(self.dim, -1, -1)
-                snake_winding = (True,) * (self.dim+1)
+                snake_winding = (True, ) * (self.dim + 1)
             else:
                 # in a derived lattice use ``return super().ordering(order)`` as last option
                 # such that the derived lattice also has the orderings defined in this function.
@@ -530,7 +547,7 @@ class Lattice:
         N_sites = self.N_sites
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
-        lat_j = np.mod(lat_j_shifted, Ls) # assuming PBC
+        lat_j = np.mod(lat_j_shifted, Ls)  # assuming PBC
         if self.bc_shift is not None:
             shift = np.sum(((lat_j_shifted - lat_j) // Ls)[:, 1:] * self.bc_shift, axis=1)
             lat_j_shifted[:, 0] -= shift
@@ -567,7 +584,7 @@ class Lattice:
         mps_i, lat_i = self.mps_lat_idx_fix_u(u0)
         lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
-        lat_jkl = np.mod(lat_jkl_shifted, Ls) # assuming PBC
+        lat_jkl = np.mod(lat_jkl_shifted, Ls)  # assuming PBC
         if self.bc_shift is not None:
             shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.bc_shift, axis=2)
             lat_jkl_shifted[:, :, 0] -= shift
@@ -581,7 +598,7 @@ class Lattice:
         lat_indices = lat_i[keep, :] + shift_lat_indices[np.newaxis, :]
         lat_jkl = lat_jkl[keep, :, :]
         lat_jkl_shifted = lat_jkl_shifted[keep, :, :]
-        latu_jkl = np.concatenate((lat_jkl, np.array([other_us]*len(lat_jkl))[:, :, np.newaxis]),
+        latu_jkl = np.concatenate((lat_jkl, np.array([other_us] * len(lat_jkl))[:, :, np.newaxis]),
                                   axis=2)
         mps_jkl = self.lat2mps_idx(latu_jkl)
         if self.bc_MPS == 'infinite':
@@ -668,7 +685,7 @@ class Lattice:
             # TODO: should use `possible_couplings` somehow,
             # but then beriodic boundary conditions screew up the image
             # should plot couplings of periodic boundary conditions
-            dx = np.r_[np.array(dx), u2-u1]  # append the difference in u to dx
+            dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
             lat_idx_1 = self.order[self._mps_fix_u[u1], :]
             lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
             lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
@@ -746,9 +763,9 @@ class Lattice:
             if self.bc[i]:
                 raise ValueError("Boundary conditons are not periodic for given direction")
             x_y.append(shift)
-            x_y.append(shift + self.Ls[i]*self.basis[i])
+            x_y.append(shift + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
-                x_y[-1] = x_y[-1] - self.bc_shift[i-1] * self.basis[0]
+                x_y[-1] = x_y[-1] - self.bc_shift[i - 1] * self.basis[0]
         x_y = np.array(x_y)
         if x_y.shape[1] == 1:
             x_y = np.hstack([x_y, np.zeros_like(x_y)])
@@ -770,12 +787,12 @@ class Lattice:
             self.bc_shift = None
         else:
             bc = list(bc)  # we modify entries...
-            self.bc_shift = np.zeros(self.dim-1, np.int_)
+            self.bc_shift = np.zeros(self.dim - 1, np.int_)
             for i, bc_i in enumerate(bc):
                 if isinstance(bc_i, int):
                     if i == 0:
                         raise ValueError("Invalid bc: first entry can't be a shift")
-                    self.bc_shift[i-1] = bc_i
+                    self.bc_shift[i - 1] = bc_i
                     bc[i] = bc_choices['periodic']
                 else:
                     bc[i] = bc_choices[bc_i]
@@ -785,16 +802,15 @@ class Lattice:
 
     def _coupling_shape(self, dx):
         """calculate correct shape of the strengths for each coupling."""
-        shape = [La - abs(dxa) * int(bca)
-                 for La, dxa, bca in zip(self.Ls, dx, self.bc)]
+        shape = [La - abs(dxa) * int(bca) for La, dxa, bca in zip(self.Ls, dx, self.bc)]
         shift_strength = [min(0, dxa) for dxa in dx]
         return np.array(shift_strength), tuple(shape)
 
     def _multi_coupling_shape(self, dx):
         """calculate correct shape of the strengths for each coupling."""
         Ls = self.Ls
-        shape = [None]*len(Ls)
-        shift_strength = [None]*len(Ls)
+        shape = [None] * len(Ls)
+        shift_strength = [None] * len(Ls)
         for a in range(len(Ls)):
             max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
             box_dx = max(max_dx, 0) - min(min_dx, 0)
@@ -815,6 +831,7 @@ class TrivialLattice(Lattice):
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
     """
+
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
@@ -822,14 +839,19 @@ class TrivialLattice(Lattice):
 class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
-    .. todo :
+    .. todo ::
         this doesn't fully work yet...
     """
+
     def __init__(self, mps_sites, based_on, order=None):
         self.based_on = based_on
         self._mps_sites = mps_sites
-        Lattice.__init__(self, based_on.Ls, based_on.unit_cell, order='default',
-                         bc=based_on.bc, bc_MPS=based_on.bc_MPS)
+        Lattice.__init__(self,
+                         based_on.Ls,
+                         based_on.unit_cell,
+                         order='default',
+                         bc=based_on.bc,
+                         bc_MPS=based_on.bc_MPS)
         # don't copy nearest_neighbors, basis, positions etc: no longer valid
         self.N_sites = len(mps_sites)
         self._order = order
@@ -882,7 +904,7 @@ class SimpleLattice(Lattice):
             descr, snake_winding, priority = kwargs['order']
             assert descr == 'standard'
             snake_winding = tuple(snake_winding) + (False, )
-            priority = tuple(priority) +  (max(priority) + 1., )
+            priority = tuple(priority) + (max(priority) + 1., )
             kwargs['order'] = descr, snake_winding, priority
         Lattice.__init__(self, Ls, [site], **kwargs)
 
@@ -892,7 +914,7 @@ class SimpleLattice(Lattice):
 
 
 class Chain(SimpleLattice):
-    """A simple uniform chain of L equal sites.
+    """A chain of L equal sites.
 
     .. image :: /images/lattices/Chain.*
 
@@ -912,9 +934,15 @@ class Chain(SimpleLattice):
     dim = 1
 
     def __init__(self, L, site, **kwargs):
-        kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([1,]))])
-        kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([2,]))])
-        kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3,]))])
+        kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([
+            1,
+        ]))])
+        kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([
+            2,
+        ]))])
+        kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([
+            3,
+        ]))])
         # and otherwise default values.
         SimpleLattice.__init__(self, [L], site, **kwargs)
 
@@ -953,7 +981,7 @@ class Ladder(Lattice):
 
 
 class Square(SimpleLattice):
-    """A simple uniform square lattice.
+    """A square lattice.
 
     .. image :: /images/lattices/Square.*
 
@@ -982,6 +1010,40 @@ class Square(SimpleLattice):
         SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
 
 
+class Triangular(SimpleLattice):
+    """A triangular lattice.
+
+    .. image :: /images/lattices/Triangular.*
+
+    Parameters
+    ----------
+    Lx, Ly : int
+        The length in each direction.
+    site : :class:`~tenpy.networks.Site`
+        The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `[[next_]next_]nearest_neighbors` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
+    """
+    dim = 2
+
+    def __init__(self, Lx, Ly, site, **kwargs):
+        sqrt3_half = 0.5 * np.sqrt(3)  # = cos(pi/6)
+        basis = np.array([[sqrt3_half, 0.5], [0., 1.]])
+
+        NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([-1, 1])), (0, 0, np.array([0, -1]))]
+        nNN = [(0, 0, np.array([2, -1])), (0, 0, np.array([1, 1])), (0, 0, np.array([-1, 2]))]
+        nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2])), (0, 0, np.array([-2, 2]))]
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('nearest_neighbors', NN)
+        kwargs.setdefault('next_nearest_neighbors', nNN)
+        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
+
+
 class Honeycomb(Lattice):
     """A honeycomb lattice.
 
@@ -1002,9 +1064,9 @@ class Honeycomb(Lattice):
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
-        basis = np.array(([0.5*np.sqrt(3), 0.5], [0., 1]))
-        delta = np.array([1/(2.*np.sqrt(3.)), 0.5])
-        pos = (-delta/2., delta/2)
+        basis = np.array(([0.5 * np.sqrt(3), 0.5], [0., 1]))
+        delta = np.array([1 / (2. * np.sqrt(3.)), 0.5])
+        pos = (-delta / 2., delta / 2)
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
         NN = [(0, 1, np.array([0, 0])), (1, 0, np.array([1, 0])), (1, 0, np.array([0, 1]))]
@@ -1058,6 +1120,7 @@ class Kagome(Lattice):
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
     dim = 2
+
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 3)
         #     2
@@ -1065,30 +1128,14 @@ class Kagome(Lattice):
         #   /   \
         #  0-----1
         pos = np.array([[0, 0], [1, 0], [0.5, 0.5 * 3**0.5]])
-        basis = [2*pos[1], 2*pos[2]]
+        basis = [2 * pos[1], 2 * pos[2]]
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [
-            (0, 1, np.array([0, 0])),
-            (0, 2, np.array([0, 0])),
-            (1, 2, np.array([0, 0])),
-            (1, 0, np.array([1, 0])),
-            (2, 0, np.array([0, 1])),
-            (2, 1, np.array([-1, 1]))
-        ]
-        nNN = [
-            (0, 1, np.array([0, -1])),
-            (0, 2, np.array([1, -1])),
-            (1, 0, np.array([1, -1])),
-            (1, 2, np.array([1,  0])),
-            (2, 0, np.array([1,  0])),
-            (2, 1, np.array([0,  1]))
-        ]
-        nnNN = [
-            (0, 0, np.array([1, -1])),
-            (1, 1, np.array([0,  1])),
-            (2, 2, np.array([1,  0]))
-        ]
+        NN = [(0, 1, np.array([0, 0])), (0, 2, np.array([0, 0])), (1, 2, np.array([0, 0])),
+              (1, 0, np.array([1, 0])), (2, 0, np.array([0, 1])), (2, 1, np.array([-1, 1]))]
+        nNN = [(0, 1, np.array([0, -1])), (0, 2, np.array([1, -1])), (1, 0, np.array([1, -1])),
+               (1, 2, np.array([1, 0])), (2, 0, np.array([1, 0])), (2, 1, np.array([0, 1]))]
+        nnNN = [(0, 0, np.array([1, -1])), (1, 1, np.array([0, 1])), (2, 2, np.array([1, 0]))]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
@@ -1146,9 +1193,9 @@ def get_order(shape, snake_winding, priority=None):
 
     See also
     --------
-    :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
-    :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
-    :func:`get_order_grouped` : a variant grouping sites of the unit cell.
+    Lattice.ordering : method in :class:`Lattice` to obtain the order from parameters.
+    Lattice.plot_order : visualizes the resulting order in a :class:`Lattice`.
+    get_order_grouped : a variant grouping sites of the unit cell.
     """
     if priority is not None:
         # reduce this case to C-style order and a few permutations
@@ -1170,8 +1217,8 @@ def get_order(shape, snake_winding, priority=None):
     dim = len(shape)
     order = np.empty((1, 0), dtype=np.intp)
     for i in range(dim):
-        L = shape[dim-1-i]
-        snake = snake_winding[dim-i] # previous direction snake?
+        L = shape[dim - 1 - i]
+        snake = snake_winding[dim - i]  # previous direction snake?
         L0, D = order.shape
         # insert a new first column into order
         new_order = np.empty((L * L0, D + 1), dtype=np.intp)
@@ -1202,10 +1249,25 @@ def get_order_grouped(shape, groups):
     index `u` of the unit cell as an "artificial direction".
     This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
     The argument `group` is a
-    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape (Lx, Ly, 3).
-    Calling this function with
-    then this function called with groups=((1), (2, 0)) returns an order
-    [[0, 0, 1], [0, 1, 1], [0, 1,
+    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape
+    (Lx, Ly, Lu).
+    Calling this function with groups=((1,), (2, 0)) returns an order of the following form::
+
+        # columns: [x, y, u]
+        [0, 0, 1]  # first for u = 1 along y
+        [0, 1, 1]
+            :
+        [0, Ly-1, 1]
+        [0, 0, 2]  # then for u = 2 and 0
+        [0, 0, 0]
+        [0, 1, 2]
+        [0, 1, 0]
+            :
+        [0, Ly-1, 2]
+        [0, Ly-1, 0]
+        # and then repeat the above for increasing `x`.
+
+
 
     Parameters
     ----------
@@ -1234,11 +1296,11 @@ def get_order_grouped(shape, groups):
     groups = list(groups)
     all = [g for gr in groups for g in gr]
     all_set = set(all)
-    assert all_set == set(range(Lu)) # does every number appear?
-    assert len(all) == len(all_set) == Lu # exactly once?
+    assert all_set == set(range(Lu))  # does every number appear?
+    assert len(all) == len(all_set) == Lu  # exactly once?
     assert len(shape) > 1
     rLy = np.arange(Ly)
-    pre_order = np.empty((Ly*Lu, 2), dtype=np.intp)
+    pre_order = np.empty((Ly * Lu, 2), dtype=np.intp)
     start = 0
     for gr in groups:
         gr = np.array(gr)
@@ -1249,8 +1311,8 @@ def get_order_grouped(shape, groups):
         start = end
     other_order = get_order(shape[:-2], [False])
     order = np.empty((N_sites, len(shape)), dtype=np.intp)
-    order[:, :-2] = np.repeat(other_order, Ly*Lu, axis=0)
-    order[:, -2:] = np.tile(pre_order, (N_sites//(Ly*Lu), 1))
+    order[:, :-2] = np.repeat(other_order, Ly * Lu, axis=0)
+    order[:, -2:] = np.tile(pre_order, (N_sites // (Ly * Lu), 1))
     return order
 
 

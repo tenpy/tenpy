@@ -1,4 +1,3 @@
-
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 
@@ -46,7 +45,12 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     return npc.LegCharge.from_qind(chinfo, slices, qs)
 
 
-def setup_benchmark(mod_q=[1], sectors=3, size=20, legs=2, select_frac=1., dtype=np.float,
+def setup_benchmark(mod_q=[1],
+                    sectors=3,
+                    size=20,
+                    legs=2,
+                    select_frac=1.,
+                    dtype=np.float,
                     **kwargs):
     """Returns ``a, b, axes`` for timing of ``npc.tensordot(a, b, axes)``
 
@@ -78,7 +82,7 @@ def setup_benchmark(mod_q=[1], sectors=3, size=20, legs=2, select_frac=1., dtype
             b._qdata = b._qdata[b_subset, :]
             b._data = [b._data[i] for i in b_subset]
 
-    labs = ["l{i:d}".format(i=i) for i in range(2*legs)]
+    labs = ["l{i:d}".format(i=i) for i in range(2 * legs)]
     a.iset_leg_labels(labs[:a.rank])
     b.iset_leg_labels(labs[:b.rank])
     a.itranspose(rand_permutation(a.rank))

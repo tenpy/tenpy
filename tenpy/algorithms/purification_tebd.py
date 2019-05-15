@@ -77,8 +77,9 @@ class PurificationTEBD(tebd.Engine):
         if self.verbose >= 1:
             E = np.average(self.model.bond_energies(self.psi))
             S = np.average(self.psi.entanglement_entropy())
-            print("--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(
-                t=self.evolved_time, E=E.real, S=S.real))
+            print("--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(t=self.evolved_time,
+                                                                         E=E.real,
+                                                                         S=S.real))
 
     @property
     def disent_iterations(self):
@@ -131,8 +132,9 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -150,10 +152,9 @@ class PurificationTEBD(tebd.Engine):
         C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U as for theta
         if U_disent is not None:
             C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        B_L = npc.tensordot(
-            C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
-            V.conj(),
-            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
         B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
@@ -191,8 +192,9 @@ class PurificationTEBD(tebd.Engine):
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
         A_L = U.split_legs(0).ireplace_labels(['p0', 'q0'], ['p', 'q'])
@@ -296,8 +298,9 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
         self.psi.set_SL(i + n1, S)  # update S
         if n1 == 1:
             # save U as left B in psi
@@ -358,8 +361,9 @@ class PurificationTEBD(tebd.Engine):
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
 
         # Perform the SVD and truncate the wavefunction
-        U, S, V, trunc_err, renormalize = svd_theta(
-            theta, self.trunc_params, inner_labels=['vR', 'vL'])
+        U, S, V, trunc_err, renormalize = svd_theta(theta,
+                                                    self.trunc_params,
+                                                    inner_labels=['vR', 'vL'])
 
         # bring back to right-canonical 'B' form and update matrices
         B_R = V.split_legs(1).ireplace_labels(['p1', 'q1'], ['p', 'q'])
@@ -368,10 +372,9 @@ class PurificationTEBD(tebd.Engine):
             C.ireplace_labels(['p0', 'q0', 'p1', 'q1'], ['p1', 'q1', 'p0', 'q0'])
         if disentangle and U_disent is not None:
             C = npc.tensordot(U_disent, C, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        B_L = npc.tensordot(
-            C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
-            V.conj(),
-            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1', 'q1'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(vR.p1.q1)', '(vR*.p1*.q1*)'])
         B_L.ireplace_labels(['vL*', 'p0', 'q0'], ['vR', 'p', 'q'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.psi.set_SR(i0, S)
@@ -576,8 +579,8 @@ class RenyiDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
-                j=j, DS=S0 - Sold))
+            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j,
+                                                                                  DS=S0 - Sold))
         return theta, U
 
     def iter(self, theta, U):
@@ -622,13 +625,15 @@ class RenyiDisentangler(Disentangler):
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         # same legs as theta: 'vL', 'p0', 'q0', 'p1', 'q1', 'vR'
         # contract diagram from bottom to top
-        dS = npc.tensordot(
-            U_theta, U_theta.conj(), axes=[['p1', 'q1', 'vR'], ['p1*', 'q1*', 'vR*']])
+        dS = npc.tensordot(U_theta,
+                           U_theta.conj(),
+                           axes=[['p1', 'q1', 'vR'], ['p1*', 'q1*', 'vR*']])
         # dS has legs 'vL', 'p0', 'q0', 'vL*', 'p0*', 'q0*'
         dS = npc.tensordot(U_theta.conj(), dS, axes=[['vL*', 'p0*', 'q0*'], ['vL', 'p0', 'q0']])
         # dS has legs 'vL', 'p0', 'q0', 'vR', 'p1', 'q1'
-        dS = npc.tensordot(
-            theta, dS, axes=[['vL', 'p0', 'vR', 'p1'], ['vL*', 'p0*', 'vR*', 'p1*']])
+        dS = npc.tensordot(theta,
+                           dS,
+                           axes=[['vL', 'p0', 'vR', 'p1'], ['vL*', 'p0*', 'vR*', 'p1*']])
         S2 = npc.inner(U, dS, axes=[['q0', 'q1', 'q0*', 'q1*'], ['q0*', 'q1*', 'q0', 'q1']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
@@ -673,8 +678,8 @@ class NormDisentangler(Disentangler):
                                        'PurificationTEBD')
         self.chi_max = get_parameter(self.trunc_par, 'chi_max', 100, 'PurificationTEBD')
         self.trunc_cut = get_parameter(self.trunc_par, 'trunc_cut', None, 'PurificationTEBD')
-        self.chi_range = get_parameter(self.trunc_par, 'disent_norm_chi', range(1, self.chi_max+1),
-                                       'PurificationTEBD')
+        self.chi_range = get_parameter(self.trunc_par, 'disent_norm_chi',
+                                       range(1, self.chi_max + 1), 'PurificationTEBD')
         self.parent = parent
 
     def __call__(self, theta):
@@ -692,7 +697,7 @@ class NormDisentangler(Disentangler):
                     break
                 err = err2
             if self.trunc_cut is not None:
-                if err2.eps < self.trunc_cut*self.trunc_cut:
+                if err2.eps < self.trunc_cut * self.trunc_cut:
                     break
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
@@ -723,11 +728,12 @@ class NormDisentangler(Disentangler):
             Chosen such that ``new_U|theta>`` has maximal overlap with the truncated ``U|theta>``.
         """
         U_theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
-        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']])
+        lambda_ = U_theta.combine_legs([['vL', 'p0', 'q0'], ['vR', 'p1', 'q1']], qconj=[+1, -1])
         X, Y, Z, err, _ = svd_theta(lambda_, trunc_params)
         lambda_ = npc.tensordot(X.scale_axis(Y), Z, axes=1).split_legs()
-        dS = npc.tensordot(
-            theta, lambda_.conj(), axes=[['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']])
+        dS = npc.tensordot(theta,
+                           lambda_.conj(),
+                           axes=[['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']])
         # dS has legs 'q0', 'q1', 'q0*', 'q1*'
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[+1, -1])
         # Find unitary U2 which maximizes `trace(U dS)`.
@@ -785,8 +791,8 @@ class GradientDescentDisentangler(Disentangler):
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
         if self.parent.verbose >= 10:
-            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(
-                j=j, DS=S0 - Sold))
+            print("disentangle renyi: {j:d} iterations, Sold-S = {DS:.3e}".format(j=j,
+                                                                                  DS=S0 - Sold))
         return theta, U
 
     def iter(self, theta):
@@ -836,8 +842,9 @@ class GradientDescentDisentangler(Disentangler):
             #  r = Y*ss *(1 - n.)  # TODO: why not?
             #  S = np.log(tr_pn)/(1 - n)
         XrZ = npc.tensordot(X.scale_axis(r, 'vR'), Z, axes=['vR', 'vL']).split_legs()
-        dS = npc.tensordot(
-            theta, XrZ.conj(), axes=[['vL', 'p0', 'p1', 'vR'], ['vL*', 'p0*', 'p1*', 'vR*']])
+        dS = npc.tensordot(theta,
+                           XrZ.conj(),
+                           axes=[['vL', 'p0', 'p1', 'vR'], ['vL*', 'p0*', 'p1*', 'vR*']])
         dS = dS.combine_legs([['q0', 'q1'], ['q0*', 'q1*']], qconj=[1, -1])
         dS = dS - dS.conj().transpose(['(q0.q1)', '(q0*.q1*)'])  # project: anti-hermitian part
         new_Ss = []
@@ -909,8 +916,9 @@ class DiagonalizeDisentangler(Disentangler):
     """
 
     def __call__(self, theta):
-        rho = npc.tensordot(
-            theta, theta.conj(), axes=(['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']))
+        rho = npc.tensordot(theta,
+                            theta.conj(),
+                            axes=(['vL', 'vR', 'p0', 'p1'], ['vL*', 'vR*', 'p0*', 'p1*']))
         # eigh sorts only within the charge blocks...
         E, V = npc.eigh(rho.combine_legs((['q0', 'q1'], ['q0*', 'q1*']), qconj=[+1, -1]))
         # the phase of the eigenvectors is not well defined. Thus, even if V is the identity,

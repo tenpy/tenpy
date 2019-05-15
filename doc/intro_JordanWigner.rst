@@ -165,7 +165,7 @@ take a look at :attr:`~tenpy.networks.site.Site.need_JW_string` and :meth:`~tenp
 In case of operators acting on different sites, you typically have a Jordan-Wigner string inbetween (e.g. for the
 :math:`c^\dagger_i c_j` examples described above and below) or no Jordan-Wigner strings at all (e.g. for density-density
 interactions :math:`n_i n_j`).
-Actually, the case that the Jordan Wigner string on the left of the first non-trivial operator does not cancel is currently not really supported
+In fact, the case that the Jordan Wigner string on the left of the first non-trivial operator does not cancel is currently not supported
 for models and expectation values, as it usually doesn't appear in practice. 
 
 When **building a model** with the :class:`~tenpy.models.model.CouplingModel`,
@@ -173,7 +173,7 @@ When **building a model** with the :class:`~tenpy.models.model.CouplingModel`,
 Care has to be taken when adding *couplings* with :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 When you need a Jordan-Wigner string inbetween the operators, set the optional arguments ``op_string='JW', str_on_first=True``.
 Then, the function automatically takes care of the Jordan-Wigner string in the correct way, adding it on the left
-operator.
+operator. With the default arguments, it is checked automatically whether the model 
 
 Obviously, you should be careful about the convention which of the two coupling terms is applied first (in a physical
 sense as an operator acting on a state), as this corresponds to a sign. We follow the convention that the operator given
@@ -183,8 +183,9 @@ As a concrete example, let us specify a hopping
 :math:`\sum_{\langle i, j\rangle} (c^\dagger_i c_j + h.c.) = \sum_{\langle i, j\rangle} (c^\dagger_i c_j + c^\dagger_j c_i)`
 in a 1D chain of :class:`~tenpy.networks.site.FermionSite` with :meth:`~tenpy.models.model.CouplingModel.add_coupling`::
 
-    add_coupling(strength, 0, 'Cd', 0, 'C', 1, 'JW', True)
+    add_coupling(strength, 0, 'Cd', 0, 'C', 1, 'JW', True) 
     add_coupling(strength, 0, 'Cd', 0, 'C', -1, 'JW', True)
+    # (without the last 2 arguments, add_coupling checks for necessary JW strings automatically)
 
 Slightly more complicated, to specify the hopping
 :math:`\sum_{\langle i, j\rangle, s} (c^\dagger_{s,i} c_{s,j} + h.c.)`
@@ -194,7 +195,7 @@ in the Fermi-Hubbard model on a 2D square lattice, we would need more terms::
         add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)
         add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)
 
-If you want to build a model directly as an MPO or with nearest-neighbor bonds, you have to worry yourself about how to handle the Jordan-Wigner string correctly.
+If you want to build a model directly as an MPO or with nearest-neighbor bonds only, *you* have to care about how to handle the Jordan-Wigner string correctly.
 
 
 The most important functions for doing **measurements** are probably :meth:`~tenpy.networks.mps.MPS.expectation_value`
@@ -202,5 +203,7 @@ and :meth:`~tenpy.networks.mps.MPS.correlation_function`. Again, if all the Jord
 to worry about them at all, e.g. for many onsite operators or correlation functions involving only number operators.
 If you measure operators involving multiple sites with `expectation_value`, take care to include the Jordan-Wigner
 string correctly while building these operators.
+
 The :meth:`~tenpy.networks.mps.MPS.correlation_function` supports a Jordan-Wigner string in between the two operators to
-be measured; as for :meth:`~tenpy.models.model.CouplingModel.add_coupling`, you should set the optional arguments ``op_string='JW', str_on_first=True`` in that case.
+be measured. As for :meth:`~tenpy.models.model.CouplingModel.add_coupling`, you should set the optional arguments ``op_string='JW', str_on_first=True`` in that case.
+Functions like :meth:`~tenpy.networks.mps.MPS.expectation_value_term` also care about the Jordan Wigner string (if specified in the documentation).

@@ -37,7 +37,7 @@ p_leg = site.leg
 chinfo = p_leg.chinfo
 # make lattice from unit cell and create product state MPS
 lat = Chain(L, site, bc_MPS='finite')
-state = ["up", "down"] * (L // 2) + ["up"] * (L % 2) # Neel state
+state = ["up", "down"] * (L // 2) + ["up"] * (L % 2)  # Neel state
 print("state = ", state)
 psi = MPS.from_product_state(lat.mps_sites(), state, lat.bc_MPS)
 
@@ -112,5 +112,5 @@ for even_odd in [0, 1]:
         A_L = U.split_legs('(vL.p0)').ireplace_label('p0', 'p')
         B_R = V.split_legs('(p1.vR)').ireplace_label('p1', 'p')
         psi.set_B(i, A_L, form='A')  # left-canonical form
-        psi.set_B(i + 1, B_R, form='B') # right-canonical form
+        psi.set_B(i + 1, B_R, form='B')  # right-canonical form
 print("finished")

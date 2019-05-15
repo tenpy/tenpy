@@ -189,10 +189,11 @@ def _ncon(tensor_list, leg_links, sequence):
                 # check if this is in accordance with sequence and update sequence
                 doing_traces, sequence = _find_in_sequence(traced_indices, sequence)
                 if not np.array_equal(np.sort(traced_indices), np.sort(doing_traces)):
-                    warnings.warn('Suboptimal contraction sequence. When tracing legs ' + str(
-                        doing_traces) + ' the legs ' + str(
-                            list(filter(lambda n: n not in doing_traces, traced_indices))) +
-                                  'should also be traced')
+                    warnings.warn(
+                        'Suboptimal contraction sequence. When tracing legs ' + str(doing_traces) +
+                        ' the legs ' +
+                        str(list(filter(lambda n: n not in doing_traces, traced_indices))) +
+                        'should also be traced')
                 # TODO translate this back to human readable leg label?
 
                 # perform traces
@@ -215,10 +216,11 @@ def _ncon(tensor_list, leg_links, sequence):
                 # check if this is in accordance with sequence
                 contraction_indices, sequence = _find_in_sequence(common_indices, sequence)
                 if not np.array_equal(np.sort(contraction_indices), np.sort(common_indices)):
-                    warnings.warn('Suboptimal contraction sequence. When contracting legs ' + str(
-                        contraction_indices) + ' the legs ' + str(
-                            list(filter(lambda n: n not in contraction_indices, common_indices))) +
-                                  'should also be traced')
+                    warnings.warn(
+                        'Suboptimal contraction sequence. When contracting legs ' +
+                        str(contraction_indices) + ' the legs ' +
+                        str(list(filter(lambda n: n not in contraction_indices, common_indices))) +
+                        'should also be traced')
                     # TODO translate this back to human readable leg names
 
                 # are there traced indices on either of these tensors?

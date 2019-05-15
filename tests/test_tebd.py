@@ -9,7 +9,7 @@ from tenpy.models.spins import SpinChain
 import tenpy.algorithms.tebd as tebd
 from tenpy.networks.site import SpinHalfSite
 from tenpy.algorithms.exact_diag import ExactDiag
-from nose.plugins.attrib import attr
+import pytest
 
 from test_dmrg import e0_tranverse_ising
 
@@ -25,7 +25,9 @@ def test_trotter_decomposition():
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
 
-def check_tebd(bc_MPS='finite', g=0.5):
+@pytest.mark.slow
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+def test_tebd(bc_MPS, g=0.5):
     L = 2 if bc_MPS == 'infinite' else 6
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
@@ -87,18 +89,12 @@ def check_tebd(bc_MPS='finite', g=0.5):
         assert (abs(Sold - Snew) < 1.e-5)  # somehow we need larger tolerance here....
 
 
-@attr('slow')
-def test_tebd():
-    for bc_MPS in ['finite', 'infinite']:
-        yield check_tebd, bc_MPS
-
-
 def test_RandomUnitaryEvolution():
     L = 8
     spin_half = SpinHalfSite(conserve='Sz')
-    psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
+    psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite')  # Neel state
     assert tuple(psi.chi) == (1, 1, 1, 1, 1, 1, 1)
-    TEBD_params = dict(N_steps=2, trunc_params={'chi_max':10})
+    TEBD_params = dict(N_steps=2, trunc_params={'chi_max': 10})
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
     eng.run()
     print(eng.psi.chi)
@@ -106,23 +102,12 @@ def test_RandomUnitaryEvolution():
 
     # infinite versions
     TEBD_params['trunc_params']['chi_max'] = 20
-    psi = MPS.from_product_state([spin_half]*2, [0, 0], bc='infinite')
+    psi = MPS.from_product_state([spin_half] * 2, [0, 0], bc='infinite')
     eng = tebd.RandomUnitaryEvolution(psi, TEBD_params)
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (1, 1)  # all up can not be changed
-    eng.psi = MPS.from_product_state([spin_half]*2, [0, 1], bc='infinite')
+    eng.psi = MPS.from_product_state([spin_half] * 2, [0, 1], bc='infinite')
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
-
-
-
-if __name__ == "__main__":
-    test_RandomUnitaryEvolution()
-    for f_args in test_tebd():
-        f = f_args[0]
-        print("=" * 80)
-        print(' '.join([str(a) for a in f_args]))
-        print("=" * 80)
-        f(*f_args[1:])

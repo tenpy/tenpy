@@ -21,7 +21,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
     dmrg_params = {
-        'mixer': None, # setting this to True helps to escape local minima
+        'mixer': None,  # setting this to True helps to escape local minima
         'max_E_err': 1.e-10,
         'trunc_params': {
             'chi_max': 30,
@@ -53,7 +53,7 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
     dmrg_params = {
-        'mixer': True, # setting this to True helps to escape local minima
+        'mixer': True,  # setting this to True helps to escape local minima
         'trunc_params': {
             'chi_max': 30,
             'svd_min': 1.e-10
@@ -85,15 +85,20 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
 def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
     print("infinite DMRG, Heisenberg XXZ chain")
     print("Jz={Jz:.2f}, conserve={conserve!r}".format(Jz=Jz, conserve=conserve))
-    model_params = dict(L=2,
-                        S=0.5,  # spin 1/2
-                        Jx=1., Jy=1., Jz=Jz, # couplings
-                        bc_MPS='infinite', conserve=conserve, verbose=verbose)
+    model_params = dict(
+        L=2,
+        S=0.5,  # spin 1/2
+        Jx=1.,
+        Jy=1.,
+        Jz=Jz,  # couplings
+        bc_MPS='infinite',
+        conserve=conserve,
+        verbose=verbose)
     M = SpinModel(model_params)
     product_state = ["up", "down"]  # initial Neel state
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
     dmrg_params = {
-        'mixer': True, # setting this to True helps to escape local minima
+        'mixer': True,  # setting this to True helps to escape local minima
         'trunc_params': {
             'chi_max': 100,
             'svd_min': 1.e-10,
@@ -105,9 +110,10 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
     E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
-    Sz = psi.expectation_value("Sz") # Sz instead of Sigma z: spin-1/2 operators!
+    Sz = psi.expectation_value("Sz")  # Sz instead of Sigma z: spin-1/2 operators!
     mag_z = np.mean(Sz)
-    print("<S_z> = [{Sz0:.5f}, {Sz1:.5f}]; mean ={mag_z:.5f}".format(Sz0=Sz[0], Sz1=Sz[1],
+    print("<S_z> = [{Sz0:.5f}, {Sz1:.5f}]; mean ={mag_z:.5f}".format(Sz0=Sz[0],
+                                                                     Sz1=Sz[1],
                                                                      mag_z=mag_z))
     # note: it's clear that mean(<Sz>) is 0: the model has Sz conservation!
     print("correlation length:", psi.correlation_length())

@@ -20,7 +20,6 @@ To be done at some point for the next releases
 ----------------------------------------------
 - remove this file: use GitHub issues instead
 - overview and usage introduction to the overall library
-- suggest installing nose2 instead of nose, change compatibility as needed. Like numpy: tests directly in tenpy tree?
 - trace: allow multiple axes to be traced over; optimize
 - Summary of defined classes/functions at the beginning of a module in the reference
 - Inconsistency: `NearestNeighborModel.H_bond` with ``bc_MPS='infinite'`` has bonds ``[(L, 0), (0, 1), ...]``, 

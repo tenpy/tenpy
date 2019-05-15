@@ -4,7 +4,6 @@
 import tenpy.linalg.charges as charges
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 import itertools as it
 from random_test import gen_random_legcharge
 
@@ -38,17 +37,15 @@ def test_ChargeInfo():
     trivial = charges.ChargeInfo()
     trivial.test_sanity()
     print("trivial: ", trivial)
-    nst.eq_(trivial.qnumber, 0)
+    assert trivial.qnumber == 0
     chinfo = charges.ChargeInfo([3, 1], ['some', ''])
     print("nontrivial chinfo: ", chinfo)
-    nst.eq_(chinfo.qnumber, 2)
+    assert chinfo.qnumber == 2
     qs = [[0, 2], [2, 0], [5, 3], [-2, -3]]
     is_valid = [True, True, False, False]
-    for q, valid in zip(qs, is_valid):
-        print(q, valid)
-        check = chinfo.check_valid(np.array([q]))
-        print(check)
-        nst.eq_(check, valid)
+    for q, expect in zip(qs, is_valid):
+        check = chinfo.check_valid(np.array([q], dtype=charges.QTYPE))
+        assert check == expect
     qs_valid = np.array([chinfo.make_valid(q) for q in qs])
     npt.assert_equal(qs_valid, chinfo.make_valid(qs))
     chinfo2 = charges.ChargeInfo([3, 1], ['some', ''])
@@ -59,9 +56,10 @@ def test_ChargeInfo():
 
 def test__find_row_differences():
     for qflat in [qflat_us, qflat_s]:
+        qflat = np.array(qflat, dtype=charges.QTYPE)
         diff = charges._find_row_differences(qflat)
-        comp = [0] + [i for i in range(1, len(qflat))
-                      if np.any(qflat[i - 1] != qflat[i])] + [len(qflat)]
+        comp = [0] + [i for i in range(1, len(qflat)) if np.any(qflat[i - 1] != qflat[i])
+                      ] + [len(qflat)]
         npt.assert_equal(diff, comp)
 
 
@@ -79,10 +77,10 @@ def test_LegCharge():
     npt.assert_equal(lc.charges, charges_s)  # check from_qdict
     npt.assert_equal(lc.slices, slices_s)  # check from_dict
     npt.assert_equal(lc.to_qdict(), qdict_s)  # chec to_qdict
-    nst.eq_(lcs.is_sorted(), True)
-    nst.eq_(lcs.is_blocked(), True)
-    nst.eq_(lcus.is_sorted(), False)
-    nst.eq_(lcus.is_blocked(), False)
+    assert lcs.is_sorted() == True
+    assert lcs.is_blocked() == True
+    assert lcus.is_sorted() == False
+    assert lcus.is_blocked() == False
 
     # test sort & bunch
     lcus_charges = lcus.charges.copy()
@@ -90,18 +88,18 @@ def test_LegCharge():
     lcus_s.test_sanity()
     npt.assert_equal(lcus_charges, lcus.charges)  # don't change the old instance
     npt.assert_equal(lcus_s.charges, lcus.charges[pqind])  # permutation returned by sort ok?
-    nst.eq_(lcus_s.is_sorted(), True)
-    nst.eq_(lcus_s.is_bunched(), False)
-    nst.eq_(lcus_s.is_blocked(), False)
-    nst.eq_(lcus_s.ind_len, lcus.ind_len)
-    nst.eq_(lcus_s.block_number, lcus.block_number)
+    assert lcus_s.is_sorted() == True
+    assert lcus_s.is_bunched() == False
+    assert lcus_s.is_blocked() == False
+    assert lcus_s.ind_len == lcus.ind_len
+    assert lcus_s.block_number == lcus.block_number
     idx, lcus_sb = lcus_s.bunch()
     lcus_sb.test_sanity()
     lcus_sb.sorted = False  # to ensure that is_blocked really runs the check
-    nst.eq_(lcus_sb.is_sorted(), True)
-    nst.eq_(lcus_sb.is_bunched(), True)
-    nst.eq_(lcus_sb.is_blocked(), True)
-    nst.eq_(lcus_sb.ind_len, lcus.ind_len)
+    assert lcus_sb.is_sorted() == True
+    assert lcus_sb.is_bunched() == True
+    assert lcus_sb.is_blocked() == True
+    assert lcus_sb.ind_len == lcus.ind_len
 
     # test get_qindex
     for i in range(lcs.ind_len):
@@ -125,8 +123,9 @@ def test_LegPipe():
         for i in range(len(qind_inc)):
             npt.assert_equal(pipe.q_map[qmap_ind[i], 3:], qind_inc[i])
             size = np.prod([l.slices[j + 1] - l.slices[j] for l, j in zip(legs, qind_inc[i])])
-            nst.eq_(size, pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0])
+            assert size == pipe.q_map[qmap_ind[i], 1] - pipe.q_map[qmap_ind[i], 0]
         # pipe.map_incoming_flat is tested by test_np_conserved.
+
 
 def test__sliced_copy():
     x = np.random.random([20, 10, 4])  # c-contiguous!
@@ -134,23 +133,15 @@ def test__sliced_copy():
     y = np.random.random([5, 6, 7])
     y_cpy = y.copy()
     shape = np.array([4, 3, 2], dtype=np.intp)
-    z = 2.*np.ones(shape)
+    z = 2. * np.ones(shape)
     x_beg = np.array([3, 7, 1], dtype=np.intp)
     y_beg = np.array([1, 0, 4], dtype=np.intp)
     z_beg = np.array([0, 0, 0], dtype=np.intp)
     charges._sliced_copy(z, z_beg, x, x_beg, shape)
     npt.assert_equal(x, x_cpy)
-    assert(not np.any(z == 2.))
-    npt.assert_equal(x[3:7, 7:10,1:3], z)
+    assert (not np.any(z == 2.))
+    npt.assert_equal(x[3:7, 7:10, 1:3], z)
     charges._sliced_copy(y, y_beg, x, x_beg, shape)
-    npt.assert_equal(y[1:5, 0:3,4:6], z)
+    npt.assert_equal(y[1:5, 0:3, 4:6], z)
     charges._sliced_copy(y, y_beg, y_cpy, y_beg, shape)
     npt.assert_equal(y, y_cpy)
-
-
-if __name__ == "__main__":
-    test__sliced_copy()
-    test__find_row_differences()
-    test_ChargeInfo()
-    test_LegCharge()
-    test_LegPipe()

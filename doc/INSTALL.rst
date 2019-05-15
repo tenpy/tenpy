@@ -1,11 +1,10 @@
-Installation instructions
-=========================
+Installation instructions: from source
+======================================
 
 Minimal Requirements
 --------------------
-This code works with a minimal requirement of pure Python 3 
+This code works with a minimal requirement of pure Python>=3.5 
 and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
-(If you have numpy >= 1.11.1 and scipy >= 0.17.0, the code should run fine.)
 
 Getting the source
 ------------------
@@ -29,7 +28,7 @@ Optionally, if you don't want to contribute, you can checkout the latest stable 
 .. note ::
 
     In case you don't have Git, you can download the repository as a ZIP archive.
-    You can find under `releases <https://github.com/tenpy/tenpy/releases>`_,
+    You can find it under `releases <https://github.com/tenpy/tenpy/releases>`_,
     or the `latest development version <https://github.com/tenpy/tenpy/archive/master.zip>`_.
 
 
@@ -50,20 +49,25 @@ You might need to restart the terminal session or need to relogin to force a rel
 Whenever the path is set, you should be able to use the library from within python::
 
     >>> import tenpy
-    >>> print(tenpy.__version__)
-    (0, 3, 0)
-    >>> print(tenpy.__full_version__)
-    v0.3.0-57-gdfacc70 using python 3.5.2 |Intel Corporation| (default, Feb 12 2017, 04:02:50)
-    [GCC 4.8.2 20140120 (Red Hat 4.8.2-15)] with numpy 1.13.3, scipy 1.0.0
+    /home/username/TeNPy/tenpy/tools/optimization.py:276: UserWarning: Couldn't load compiled cython code. Code will run a bit slower.
+      warnings.warn("Couldn't load compiled cython code. Code will run a bit slower.")
+    >>> tenpy.show_config()
+    tenpy 0.4.0.dev0+7706003 (not compiled),
+    git revision 77060034a9fa64d2c7c16b4211e130cf5b6f5272 using
+    python 3.7.3 (default, Mar 27 2019, 22:11:17) 
+    [GCC 7.3.0]
+    numpy 1.16.3, scipy 1.2.1
 
-This should statement printes the current version of this TeNPy library as well as the versions of the used python, numpy and scipy libraries,
-which might be different on your computer. It is a good idea to save this along with your data.
+
+:func:`tenpy.show_config` prints the current version of the used TeNPy library as well as the versions of the used python, numpy and scipy libraries,
+which might be different on your computer. It is a good idea to save this data (given as string in ``tenpy.version.version_summary`` along with your data to allow to reproduce your results exactly.
 
 If you got a similar output as above: congratulations! You can now run the codes :)
 
-Recommendation for optimization
--------------------------------
-If you want to run larger simulations, we recommend the use of Intels MKL.
+
+MKL and further packages
+------------------------
+If you want to run larger simulations, we recommend the use of Intel's MKL.
 It ships with a Lapack library, and uses optimization for Intel CPUs.
 Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execution much faster.
 As of now, the library itself supports no other way of parallelization.
@@ -71,22 +75,21 @@ As of now, the library itself supports no other way of parallelization.
 If you don't have a python version which is built against MKL, 
 we recommend using the `anaconda <https://www.continuum.io/downloads>`_ distribution, which ships with Intel MKL,
 or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`_.
+Conda has the advantage that it allows to use different environments for different projects.
 Both are available for Linux, Mac and Windows; note that you don't even need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
 After a successfull installation, if you run ``python`` interactively, the first output line should 
 state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
-On Linux, make sure that ``$PATH`` contains the ``bin/`` folder of the installation; you might want to adjust your
-``~/.bashrc`` if necessary.
 
-Once you managed to install conda, ensure that you have the needed packages with::
+If you have a working conda package manager, you can install the numpy build against mkl with::
 
-    conda install mkl scipy numpy
+    conda install mkl numpy scipy
 
-Optional packages (see `Optional Requirements`_ below) can be installed with::
+If you prefer using a separete conda environment, you can also use the following code to install all the recommended
+packages::
 
-    conda install matplotlib sphinx numpydoc pip nose bottleneck
-    pip install yapf    # (if you want to contribute)
-
+    conda env create -f environment.yml
+    conda activate tenpy
 
 .. note ::
 
@@ -96,6 +99,9 @@ Optional packages (see `Optional Requirements`_ below) can be installed with::
     cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
 
+Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
+However, having matplotlib is not necessary for running any of the algorithms: tenpy does not ``import matplotlib`` by default.
+Further optional requirements are listed in the ``requirements*.txt`` files in the source repository.
 
 Compilation of np_conserved
 ---------------------------
@@ -109,66 +115,71 @@ cases where most of the CPU-time is already spent in matrix multiplications (i.e
 To compile the code, you first need to install `Cython <http://cython.org>`_ ::
 
     conda install cython                    # when using anaconda, or
-    sudo pip install --upgrade cython       # when using pip
+    pip install --upgrade Cython            # when using pip
+
+Moreover, you need a C++ compiler. 
+For example, on Ubuntu you can install ``sudo apt-get install build_essential``,
+or on Windows you can download MS Visual Studio 2015.
 
 After that, go to the root directory of TeNPy (``$HOME/TeNPy``) and simply run ::
 
     bash ./compile.sh
 
-It is not required to separately download (and install) Intel MKL: the compilation just obtains the includes from numpy.
-In other words, if your current numpy version uses MKL (as the one provided by anaconda), the compiled TeNPy code will also use it.
+Note that it is not required to separately download (and install) Intel MKL: the compilation just obtains the includes 
+from numpy. In other words, if your current numpy version uses MKL (as the one provided by anaconda),
+the compiled TeNPy code will also use it.
+
+After a successful compilation, the warning that TeNPy was not compiled should go away::
+
+    >>> import tenpy
+    >>> tenpy.show_config()
+    tenpy 0.4.0.dev0+b60bad3 (compiled from git rev. b60bad3243b7e54f549f4f7c1f074dc55bb54ba3),
+    git revision b60bad3243b7e54f549f4f7c1f074dc55bb54ba3 using
+    python 3.7.3 (default, Mar 27 2019, 22:11:17) 
+    [GCC 7.3.0]
+    numpy 1.16.3, scipy 1.2.1
 
 .. note ::
 
     For further optimization options, look at :mod:`tenpy.tools.optimization`.
 
-
 Checking the installation
 -------------------------
-As a first check of the installation you can try to run the python files in the `examples/` subfolder; all of them
-should run without error.
+As a first check of the installation you can try to run (one of) the python files in the `examples/` subfolder;
+hopefully all of them should run without error.
 
-You can also run the automated testsuite with `nose <http://nose.readthedocs.io/en/latest/>`_ to make sure everything works fine::
+You can also run the automated testsuite with `pytest <http://pytest.org>`_  (``pip install pytest``) to make sure everything works fine::
 
     cd $HOME/TeNPy/tests
-    nosetests
+    pytest
 
-This should run some tests, hopefully indicated by a lot of dots ``.`` and 
-no ``E`` or ``F``, which indicate successfully run tests, errors and failures, respectively.
-In case of errors or failures it gives a detailed traceback and possibly some output of the test.
+This should run some tests. In case of errors or failures it gives a detailed traceback and possibly some output of the test.
 At least the stable releases should run these tests without any failures.
 
-If you can run the examples but not the tests, check whether `nosetests` actually uses the correct python version.
+If you can run the examples but not the tests, check whether `pytest` actually uses the correct python version.
 
+The test suite is also run automatically with `travis-ci <https://travis-ci.org>`_, results can be inspected at `here <https://travis-ci.org/tenpy/tenpy>`_.
 
-Optional Requirements
----------------------
-Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
-However, having matplotlib is not necessary for running any of the algorithms: tenpy does not ``import matplotlib`` by default.
+Installation instructions: from packages
+========================================
 
-For building the documentation, you need `Sphinx <http://www.sphinx-doc.org>`_ and `numpydoc <http://pypi.python.org/pypi/numpydoc>`_.
+If you have the conda package manager, you can simply download the ``environment.yml`` file and create a new environment for tenpy with all the require packages::
 
-If you ever plan to contribute to the code, you should use `yapf <http://github.com/google/yapf>`_ and `nose <http://nose.readthedocs.io/en/latest/>`_.
-
-If you have the python package manager ``pip``, all of these can be installed with::
-
-    sudo pip install --upgrade numpy scipy      # the required libraries
-    sudo pip install --upgrade matplotlib       # for plotting
-    sudo pip install --upgrade bottleneck       # some optimization of numpy bottlenecks
-
-    # the following are only required for developers
-    sudo pip install --upgrade nose             # nosetest: automated teseting to check if everything works as it should
-    sudo pip install --upgrade Sphinx numpydoc  # for building html documentation
-    sudo pip install --upgrade yapf             # python formater to unify the code style
-
+    conda env create -f environment.yml
+    conda activate tenpy
+    
+This will also install `pip <https://pip.pypa.io/en/stable/>`_. Alternatively, if you only have `pip`, install the
+required packages with::
+    
+    pip install -r requirements.txt
 
 .. note ::
 
-    If you don't have super user rights (``sudo``), try ``pip install --upgrade --user [packagenames...]``
-    instead to install the packages to your home directory.
-    If you still run into troubles, you might want to check whether the `pip` you call corresponds to the python version
-    you want to use.
-   
+    Make sure that the `pip` you call corresponds to the python version
+    you want to use. (e.g. by using ``python -m pip`` instead of a simple ``pip``
+    Also, you might need to use the arguement ``--user`` to install the packages to your home directory, 
+    if you don't have ``sudo`` rights.
+
 .. warning ::
     
     It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
@@ -176,9 +187,29 @@ If you have the python package manager ``pip``, all of these can be installed wi
     If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
 
 
+After that, you can install the latest *stable* TeNPy package (without downloading the source) from `PyPi
+<https://pypi.org>` with::
+
+    pip install physics-tenpy # note the different package name - 'tenpy' was taken!
+
+To get the latest development version from the github master branch, you can use::
+
+    pip install git+git://github.com/tenpy/tenpy.git
+
+Finally, if you downloaded the source and want to **modify parts of the source**, you should install tenpy in
+development version with ``-e``::
+
+    cd $HOME/TeNPy # after downloading the source
+    pip install --editable .
+
+In all cases, you can uninstall tenpy with::
+
+    pip uninstall physics-tenpy  # note the longer name!
+   
+
 Updating to a new version
 =========================
-**Before** you update, take a look at the :doc:`/CHANGELOG.rst`, which lists the changes, fixes, and new stuff. 
+**Before** you update, take a look at the :doc:`/changelog`, which lists the changes, fixes, and new stuff. 
 Most importantly, it has a section on *backwards incompatible changes* (i.e., changes which may break your
 existing code) along with information how to fix it. Of course, we try to avoid introducing such incompatible changes,
 but sometimes, there's no way around them.

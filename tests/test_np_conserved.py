@@ -4,9 +4,9 @@
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
+import warnings
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -61,7 +61,7 @@ def test_npc_Array_conversion():
     npt.assert_equal(a.qtotal, [0, 0])
     print("check type conversion")
     a_clx = a.astype(np.complex128)
-    nst.eq_(a_clx.dtype, np.complex128)
+    assert a_clx.dtype == np.complex128
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
     print("from_func")
     a = npc.Array.from_func(np.ones, [lc, lc.conj()])
@@ -118,14 +118,14 @@ def test_npc_Array_labels():
     a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     for t in [['x', None], [None, 'y'], ['x', 'y']]:
         a.iset_leg_labels(t)
-        nst.eq_(a.get_leg_labels(), t)
+        assert a.get_leg_labels() == t
         axes = (0, 1, 1, 0, 1, 0)
         axes_l = list(axes)  # replace with labels, where available
         for i, l in enumerate(axes[:4]):
             if t[l] is not None:
                 axes_l[i] = t[l]
-        nst.eq_(tuple(a.get_leg_indices(axes_l)), axes)
-    nst.eq_(a.get_leg_index(-1), 1)  # negative indices
+        assert tuple(a.get_leg_indices(axes_l)) == axes
+    assert a.get_leg_index(-1) == 1  # negative indice
 
 
 def test_npc_Array_project():
@@ -197,7 +197,7 @@ def test_npc_Array_itemacces():
     a = npc.Array.from_ndarray(arr, [lc, lc.conj()])
     aflat = a.to_ndarray().copy()
     for i, j in it.product(range(5), range(5)):  # access all elements
-        nst.eq_(a[i, j], aflat[i, j])
+        assert a[i, j] == aflat[i, j]
     for i, j in [(0, 0), (2, 2), (1, 4), (4, 1), (3, 3), (4, 4)]:  # sets also emtpy blocks
         val = np.random.rand()
         aflat[i, j] = val
@@ -207,7 +207,7 @@ def test_npc_Array_itemacces():
     a = random_Array((10, 10), chinfo3)
     aflat = a.to_ndarray().copy()
     for i, j in it.product(range(10), range(10)):  # access all elements
-        nst.eq_(a[i, j], aflat[i, j])
+        assert a[i, j] == aflat[i, j]
     # take_slice and add_leg
     a = random_Array((20, 10, 5), chinfo3)
     aflat = a.to_ndarray().copy()
@@ -263,10 +263,12 @@ def test_npc_Array_reshape():
     a = random_Array((20, 15, 10), chinfo, sort=False)
     aflat = a.to_ndarray()
     for comb_legs, transpose in [([[1]], [0, 1, 2]), ([[1], [2]], [0, 1, 2]),
-                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]), ([[2, 0, 1]],
-                                                                                       [2, 0, 1])]:
+                                 ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
+                                 ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
-        acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
         asplit = acomb.split_legs()
@@ -284,7 +286,7 @@ def test_npc_Array_reshape():
         idx = tuple([l.slices[qi] for l, qi in zip(b.legs, b._qdata[0])])
     else:
         idx = tuple([0] * b.rank)
-    nst.eq_(b[idx[0], :, idx[2], :].squeeze(), bflat[idx])
+    assert b[idx[0], :, idx[2], :].squeeze() == bflat[idx]
     print("test add_trivial_leg")
     be = bs.copy(deep=True).add_trivial_leg(1, 'tr1', +1).add_trivial_leg(3, 'tr2', -1)
     be.test_sanity()
@@ -317,7 +319,9 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    acomb = a.combine_legs([[0, 1]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)
@@ -336,7 +340,7 @@ def test_npc_grid_outer():
     ci = chinfo3
     p_leg = gen_random_legcharge(ci, 4)
     legs_op = [p_leg, p_leg.conj()]
-    op_0 = 1.j*npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
+    op_0 = 1.j * npc.Array.from_func(np.random.random, legs_op, qtotal=[0], shape_kw='size')
     op_pl = npc.Array.from_func(np.random.random, legs_op, qtotal=[1], shape_kw='size')
     op_min = npc.Array.from_func(np.random.random, legs_op, qtotal=[-1], shape_kw='size')
     op_id = npc.eye_like(op_0)
@@ -389,7 +393,7 @@ def test_npc_Array_conj():
     npt.assert_equal(a.to_ndarray(), aflat.conj())
     a.test_sanity()
     print(a.get_leg_labels())
-    nst.eq_(a._conj_leg_label('(a*.(b.c*).(d*.e))'), '(a.(b*.c).(d.e*))')
+    assert a._conj_leg_label('(a*.(b.c*).(d*.e))') == '(a.(b*.c).(d.e*))'
     print("conjugate Trivial charges")
     a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
     aflat = a.to_ndarray()
@@ -525,11 +529,11 @@ def test_npc_tensordot_extra():
     for i, val in zip(idx, vals):
         theta_flat[i] = val
     theta = npc.Array.from_ndarray(theta_flat, [leg, leg, leg.conj(), leg.conj()], cutoff=0.)
-    assert abs(np.linalg.norm(theta_flat) - npc.norm(theta) ) < 1.e-14
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(theta)) < 1.e-14
     Utheta_flat = np.tensordot(Uflat, theta_flat, axes=2)
     Utheta = npc.tensordot(U, theta, axes=2)
     npt.assert_array_almost_equal_nulp(Utheta.to_ndarray(), Utheta_flat, 10)
-    assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta) ) < 1.e-10
+    assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta)) < 1.e-10
 
 
 def test_npc_inner():
@@ -541,7 +545,7 @@ def test_npc_inner():
         b = npc.Array.from_func(np.random.random, legs_b, qtotal=-a.qtotal, shape_kw='size')
         bflat = b.to_ndarray()
         c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
-        nst.eq_(type(c), np.dtype(float))
+        assert type(c) == np.dtype(float)
         cflat = np.tensordot(aflat, bflat, axes=[[2, 0, 1], [0, 2, 1]])
         npt.assert_array_almost_equal_nulp(c, cflat, max(a.size, b.size))
 
@@ -739,7 +743,7 @@ def test_charge_detection():
             legs[i] = None
             legs = npc.detect_legcharge(Aflat, chinfo, legs, A.qtotal, correct_leg.qconj)
             res_leg = legs[i]
-            nst.eq_(res_leg.qconj, correct_leg.qconj)
+            assert res_leg.qconj == correct_leg.qconj
             legs[i].bunch()[1].test_equal(correct_leg.bunch()[1])
     # done
 
@@ -799,29 +803,3 @@ def test_pickle():
     b2flat = b2.to_ndarray()
     npt.assert_array_equal(aflat, a2flat)
     npt.assert_array_equal(bflat, b2flat)
-
-
-
-if __name__ == "__main__":
-    test_npc_Array_conversion()
-    test_npc_Array_sort()
-    test_npc_Array_labels()
-    test_npc_Array_project()
-    test_npc_Array_permute()
-    test_npc_Array_transpose()
-    test_npc_Array_itemacces()
-    test_npc_Array_reshape()
-    test_npc_Array_scale_axis()
-    test_npc_Array_conj()
-    test_npc_Array_norm()
-    test_npc_Array_ops()
-    test_npc_tensordot()
-    test_npc_inner()
-    test_npc_outer()
-    test_npc_svd()
-    test_npc_pinv()
-    test_trace()
-    test_eig()
-    test_qr()
-    test_charge_detection()
-    test_drop_add_change_charge()

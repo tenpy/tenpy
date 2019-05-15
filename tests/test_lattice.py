@@ -6,13 +6,13 @@ import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
 import numpy as np
 import numpy.testing as npt
-import nose.tools as nst
 
 from random_test import gen_random_legcharge
 
+
 def test_bc_choices():
     assert int(lattice.bc_choices['open']) == 1  # this is used explicitly
-    assert int(lattice.bc_choices['periodic']) == 0   # and this as well
+    assert int(lattice.bc_choices['periodic']) == 0  # and this as well
 
 
 def test_lattice():
@@ -29,12 +29,12 @@ def test_lattice():
         basis = [[1., 1.], [0., 1.]]
         pos = [[0.1, 0.], [0.2, 0.]]
         lat = lattice.Lattice(Ls, [site1, site2], order=order, basis=basis, positions=pos)
-        nst.eq_(lat.dim, len(Ls))
-        nst.eq_(lat.N_sites, np.prod(Ls) * 2)
+        assert lat.dim == len(Ls)
+        assert lat.N_sites == np.prod(Ls) * 2
         for i in range(lat.N_sites):
-            nst.eq_(lat.lat2mps_idx(lat.mps2lat_idx(i)), i)
+            assert lat.lat2mps_idx(lat.mps2lat_idx(i)) == i
         idx = (4, 1, 0)
-        nst.eq_(lat.mps2lat_idx(lat.lat2mps_idx(idx)), idx)
+        assert lat.mps2lat_idx(lat.lat2mps_idx(idx)) == idx
         npt.assert_equal([4.1, 5.], lat.position(idx))
         # test lat.mps2lat_values
         A = np.random.random([lat.N_sites, 2, lat.N_sites])
@@ -46,12 +46,13 @@ def test_lattice():
                 idx_j = lat.mps2lat_idx(j)
                 for k in range(2):
                     idx = idx_i + (k, ) + idx_j
-                    nst.eq_(Ares[idx], A[i, k, j])
+                    assert Ares[idx], A[i, k == j]
         # and again for fixed `u` within the unit cell
         for u in range(len(lat.unit_cell)):
             A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
             npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
+
 
 def test_TrivialLattice():
     s1 = site.SpinHalfSite('Sz')
@@ -74,6 +75,9 @@ def test_number_nn():
     square = lattice.Square(2, 2, s)
     assert square.number_nearest_neighbors() == 4
     assert square.number_next_nearest_neighbors() == 4
+    triang = lattice.Triangular(2, 2, s)
+    assert triang.number_nearest_neighbors() == 6
+    assert triang.number_next_nearest_neighbors() == 6
     hc = lattice.Honeycomb(2, 2, s)
     assert hc.number_nearest_neighbors(0) == 3
     assert hc.number_nearest_neighbors(1) == 3

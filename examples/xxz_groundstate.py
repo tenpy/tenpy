@@ -14,8 +14,14 @@ from tenpy.algorithms.dmrg import run as run_DMRG
 
 
 def run_groundstate_xxz(L=30, Jz=1., hz=0., conserve='best', chi_max=50, Jz_init=None):
-    model_params = dict(
-        L=L, Jx=1., Jy=1., Jz=Jz, hz=hz, bc_MPS='finite', conserve='best', verbose=1)
+    model_params = dict(L=L,
+                        Jx=1.,
+                        Jy=1.,
+                        Jz=Jz,
+                        hz=hz,
+                        bc_MPS='finite',
+                        conserve='best',
+                        verbose=1)
     result = {}
     M = SpinChain(model_params)
     result['model'] = 'SpinChain'

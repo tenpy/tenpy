@@ -69,15 +69,15 @@ from enum import IntEnum
 import warnings
 import os
 
-all = ['bottleneck', 'OptimizationFlag', 'temporary_level', 'set_level', 'get_level',
-       'optimize',
-       'use_cython', 'have_cython_functions']
+all = [
+    'bottleneck', 'OptimizationFlag', 'temporary_level', 'set_level', 'get_level', 'optimize',
+    'use_cython', 'have_cython_functions'
+]
 
 try:
     import bottleneck
 except:
     bottleneck = None
-
 """bool whether the import of the cython file tenpy/linalg/_npc_helper.pyx succeeded"""
 have_cython_functions = None  # set to True or False in the first call of `use_cython`
 
@@ -146,6 +146,7 @@ class temporary_level:
             do_some_really_heavy_stuff()
         # here we are back to the optimization level as before the ``with ...`` statement
     """
+
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
 
@@ -261,6 +262,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         # so we need to return another decorator function
         def _decorator(func):
             return use_cython(func, replacement, check_doc)
+
         return _decorator
     global _npc_helper_module
     global have_cython_functions
@@ -294,7 +296,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         cdoc = fast_func.__doc__
         # if the cython compiler directive 'embedsignature' is used, the first line contains the
         # function signature, so the doc string starts only with the second line
-        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n")+1:])
+        clean_cdoc2 = inspect.cleandoc(cdoc[cdoc.find("\n") + 1:])
         if clean_fdoc != clean_cdoc and clean_fdoc != clean_cdoc2:
             msg = "cython version of {0!s} has different doc-string".format(func.__name__)
             raise ValueError(msg)

@@ -19,7 +19,7 @@ def example_exact_diagonalization(L, Jz):
 
     product_state = ["up", "down"] * (xxz_pars['L'] // 2)  # this selects a charge sector!
     psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state)
-    charge_sector = psi_DMRG.get_total_charge() # the ED charge sector should match that of the MPS
+    charge_sector = psi_DMRG.get_total_charge()  # the ED charge sector should match that of the MPS
 
     ED = ExactDiag(M, charge_sector=charge_sector)
     ED.build_full_H_from_mpo()
@@ -46,6 +46,7 @@ def example_exact_diagonalization(L, Jz):
     assert (abs(ov - ov2) < 1.e-13)
     # -> advantage: expectation_value etc. of MPS are available!
     print("<Sz> =", psi_ED_mps.expectation_value('Sz'))
+
 
 if __name__ == "__main__":
     example_exact_diagonalization(10, 1.)

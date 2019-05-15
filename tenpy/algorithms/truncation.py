@@ -1,4 +1,4 @@
-r"""Truncation of Schmidt values, e.g. for TEBD.
+r"""Truncation of Schmidt values.
 
 Often, it is necessary to truncate the number of states on a virtual bond of an MPS,
 keeping only the state with the largest Schmidt values.
@@ -138,7 +138,7 @@ def truncate(S, trunc_par):
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
-        All parameters default to ``None``, in which case the constraint is ignored.
+        A value ``None`` indicates that the constraint should be ignored.
 
         ============ ====== ====================================================
         key          type   constraint
@@ -171,7 +171,7 @@ def truncate(S, trunc_par):
     """
     # by default, only truncate values which are much closer to zero than machine precision.
     # This is only to avoid problems with taking the inverse of `S`.
-    chi_max = get_parameter(trunc_par, 'chi_max', None, 'truncation')
+    chi_max = get_parameter(trunc_par, 'chi_max', 100, 'truncation')
     chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
     sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
     svd_min = get_parameter(trunc_par, 'svd_min', 1.e-14, 'truncation')
@@ -264,12 +264,11 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     renormalization : float
         Factor, by which S was renormalized.
     """
-    U, S, VH = npc.svd(
-        theta,
-        full_matrices=False,
-        compute_uv=True,
-        qtotal_LR=qtotal_LR,
-        inner_labels=inner_labels)
+    U, S, VH = npc.svd(theta,
+                       full_matrices=False,
+                       compute_uv=True,
+                       qtotal_LR=qtotal_LR,
+                       inner_labels=inner_labels)
     renormalization = np.linalg.norm(S)
     S = S / renormalization
     piv, new_norm, err = truncate(S, trunc_par)

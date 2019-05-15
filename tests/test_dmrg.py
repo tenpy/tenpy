@@ -7,7 +7,7 @@ from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import dmrg
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
-from nose.plugins.attrib import attr
+import pytest
 import numpy as np
 from scipy import integrate
 
@@ -24,7 +24,15 @@ def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
 
-def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
+@pytest.mark.parametrize("bc_MPS, engine, mixer", [('finite', 'EngineCombine', None),
+                                                   ('finite', 'EngineCombine', True),
+                                                   ('finite', 'EngineFracture', True),
+                                                   ('finite', 'EngineCombine', 'TwoSiteMixer'),
+                                                   ('infinite', 'EngineCombine', None),
+                                                   ('infinite', 'EngineCombine', True),
+                                                   ('infinite', 'EngineFracture', True)])
+@pytest.mark.slow
+def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
@@ -77,37 +85,33 @@ def check_dmrg(L=4, bc_MPS='finite', engine='EngineCombine', mixer=None, g=1.5):
         print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
         Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
+        Edmrg3 = M.H_MPO.expectation_value(psi)
         assert abs((Edmrg - Eexact) / Eexact) < 1.e-10
         assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.e-10, np.max(psi.norm_test()))
-
-
-@attr('slow')
-def test_dmrg():
-    for bc_MPS, engine, mixer in it.product(['finite', 'infinite'],
-                                            ['EngineCombine', 'EngineFracture'], [None, True]):
-        L = 4 if bc_MPS == 'finite' else 2
-        yield check_dmrg, L, bc_MPS, engine, mixer
-    for mixer in ['TwoSiteMixer', 'DensityMatrixMixer']:
-        yield check_dmrg, 2, 'infinite', 'EngineCombine', mixer
+        assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.e-10, np.max(psi.norm_test()))
 
 
 def test_dmrg_rerun(L=2):
-    bc_MPS='infinite'
+    bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc_MPS)
-    dmrg_pars = {'verbose': 5, 'chi_list': {0: 10, 5: 20}, 'N_sweeps_check': 4}
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
+    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4}
     eng = dmrg.EngineCombine(psi, M, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
     M = TFIChain(model_params)
+    del eng.DMRG_params['chi_list']
+    new_chi = 15
+    eng.DMRG_params['trunc_params']['chi_max'] = new_chi
     eng.init_env(M)
-    E2, _ = eng.run()
+    E2, psi = eng.run()
+    assert max(psi.chi) == new_chi
     assert abs(E2 - -1.50082324) < 1.e-6
 
 
-@attr('slow')
+@pytest.mark.slow
 def test_dmrg_excited(eps=1.e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
     # (without truncation)
@@ -122,39 +126,35 @@ def test_dmrg_excited(eps=1.e-12):
     # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
     print("Exact diag: E[:5] = ", ED.E[:5])
     # first DMRG run
-    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}}
     eng0 = dmrg.EngineCombine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
-    assert abs((E0 - ED.E[0])/ED.E[0]) < eps
+    assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
     ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
     dmrg_pars['orthogonal_to'] = [psi0]
-    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0]*L, bc=bc)
+    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     eng1 = dmrg.EngineCombine(psi1, M, dmrg_pars)
     E1, psi1 = eng1.run()
-    assert abs((E1 - ED.E[1])/ED.E[1]) < eps
+    assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
     ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
-    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1]* (L//2), bc=bc)
+    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1] * (L // 2), bc=bc)
     eng2 = dmrg.EngineCombine(psi2, M, dmrg_pars)
     E2, psi2 = eng2.run()
     print(E2)
-    assert abs((E2 - ED.E[2])/ED.E[2]) < eps
+    assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
     ov = npc.inner(ED.V.take_slice(2, 'ps*'), ED.mps_to_full(psi2), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
 
 
-if __name__ == "__main__":
-    test_dmrg_excited()
-    test_dmrg_rerun()
-    for f_args in test_dmrg():
-        f = f_args[0]
-        print("=" * 80)
-        print(' '.join([str(a) for a in f_args]))
-        print("=" * 80)
-        f(*f_args[1:])
+def test_chi_list():
+    assert dmrg.chi_list(3) == {0: 3}
+    assert dmrg.chi_list(12, 12, 5) == {0: 12}
+    assert dmrg.chi_list(24, 12, 5) == {0: 12, 5: 24}
+    assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}

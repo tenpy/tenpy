@@ -307,8 +307,15 @@ class MPS:
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
-    def from_Bflat(cls, sites, Bflat, SVs=None, bc='finite', dtype=None, permute=True,
-                   form='B', legL=None):
+    def from_Bflat(cls,
+                   sites,
+                   Bflat,
+                   SVs=None,
+                   bc='finite',
+                   dtype=None,
+                   permute=True,
+                   form='B',
+                   legL=None):
         """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
@@ -430,8 +437,10 @@ class MPS:
             S_list[i] = S
             psi = psi.split_legs(0)
         psi = psi.combine_legs([labels[0], 'vR'])
-        psi, S, B = npc.svd(
-            psi, qtotal_LR=[None, psi.qtotal], inner_labels=['vR', 'vL'], cutoff=cutoff)
+        psi, S, B = npc.svd(psi,
+                            qtotal_LR=[None, psi.qtotal],
+                            inner_labels=['vR', 'vL'],
+                            cutoff=cutoff)
         assert (psi.shape == (1, 1))
         S_list[0] = np.ones([1], dtype=np.float)
         phase = psi[0, 0]
@@ -742,7 +751,7 @@ class MPS:
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
         i = self._to_valid_index(i)
-        for j in range(i, i+n):
+        for j in range(i, i + n):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
@@ -751,9 +760,9 @@ class MPS:
         theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
         _, old_fR = self.form[i]
         for k in range(1, n):  # non-empty range
-            j = self._to_valid_index(i+k)
+            j = self._to_valid_index(i + k)
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
-            B = self.get_B(j, (1.-old_fR, new_fR), False, cutoff, str(k))
+            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[j]
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
@@ -776,6 +785,74 @@ class MPS:
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
+    def init_LP(self, i, bra=None, mpo=None):
+        """Build initial left part ``LP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``LP`` left of site `i`.
+        bra : :class:`MPS`
+            Check leg compatiblity with a `bra`. Note that the returned `init_LP` will
+            only be the contraction for the ``LP`` of  ``<bra|self>`` on the left most site `i` = 0
+            of a finite MPS.
+        mpo : None | :class:`~tenpy.networks.mpo.MPO`
+            If given, add a leg for the MPO. Requires the `MPO.IdL` on site `i` to be set.
+
+        Returns
+        -------
+        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vL` leg of ``self.get_B(i)``, labels ``'vR*', 'vR'``.
+            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdL[i]``,
+            with labels ``'vR*', 'wR', 'vR'``.
+        """
+        i0 = self._to_valid_index(i)
+        leg_ket = self._B[i0].get_leg('vL')
+        if bra is not None:
+            leg_bra = bra._B[i0].get_leg('vL')
+            leg_ket.test_equal(leg_bra)
+        init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
+        init_LP.iset_leg_labels(['vR*', 'vR'])
+        if mpo is not None:
+            leg_mpo = mpo.get_W(i).get_leg('wL').conj()
+            IdL = mpo.get_IdL(i)
+            init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
+        return init_LP
+
+    def init_RP(self, i, bra=None, mpo=None):
+        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``RP`` right of site `i`.
+        bra : :class:`MPS`
+            Check leg compatiblity with a `bra`. Note that the returned `init_RP` will
+            only be the contraction for the ``RP`` of  ``<bra|self>`` on the right most site
+            `i` = L - 1 of a finite MPS.
+        mpo : None | :class:`~tenpy.networks.mpo.MPO`
+            If given, add a leg for the MPO. Requires the `MPO.IdR` on site `i` to be set.
+
+        Returns
+        -------
+        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vR` leg of ``self.get_B(i)``, labels ``'vL*', 'vL'``.
+            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdR[i]``,
+            with labels ``'vL*', 'wL', 'vL'``.
+        """
+        i0 = self._to_valid_index(i)
+        leg_ket = self._B[i0].get_leg('vR')
+        if bra is not None:
+            leg_bra = bra._B[i0].get_leg('vR')
+            leg_ket.test_equal(leg_bra)
+        init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
+        init_RP.iset_leg_labels(['vL*', 'vL'])
+        if mpo is not None:
+            leg_mpo = mpo.get_W(i).get_leg('wR').conj()
+            IdR = mpo.get_IdR(i)
+            init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
+        return init_RP
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
@@ -792,7 +869,7 @@ class MPS:
 
         See also
         --------
-        :meth:`group_split` : Reverts the grouping.
+        group_split : Reverts the grouping.
         """
         self.convert_form('B')
         if grouped_sites is None:
@@ -806,12 +883,12 @@ class MPS:
         for gs in grouped_sites:
             n_sites = gs.n_sites
             new_B = self.get_theta(i, gs.n_sites, formL=B_form[0], formR=B_form[1])
-            comb_legs = [[lbl+str(k) for k in range(n_sites)] for lbl in self._p_label]
+            comb_legs = [[lbl + str(k) for k in range(n_sites)] for lbl in self._p_label]
             # comb_legs = [['p0', 'p1', ... ]] for usual MPS
-            axes = list(range(1, 1+len(self._p_label))) # [1]
-            new_B = new_B.combine_legs(comb_legs, new_axes=axes, qconj=[+1]*len(axes))
+            axes = list(range(1, 1 + len(self._p_label)))  # [1]
+            new_B = new_B.combine_legs(comb_legs, new_axes=axes, qconj=[+1] * len(axes))
             new_B.legs[1].test_equal(gs.leg)  # test legcharge compatibility
-            Bs.append(new_B.iset_leg_labels(self._B_labels)) # ['vL', 'p', 'vR']
+            Bs.append(new_B.iset_leg_labels(self._B_labels))  # ['vL', 'p', 'vR']
             Ss.append(self._S[i])
             i += n_sites
         Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
@@ -828,6 +905,7 @@ class MPS:
         ----------
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
 
         Returns
         -------
@@ -836,9 +914,11 @@ class MPS:
 
         See also
         --------
-        :meth:`group_sites` : Should have been used before to combine sites.
+        group_sites : Should have been used before to combine sites.
         """
         self.convert_form('B')
+        if self.L > 1:
+            trunc_par.setdefault('chi_max', max(self.chi))
         n0 = self.sites[0].n_sites
         sites = []
         Bs = []
@@ -849,11 +929,11 @@ class MPS:
             n = gs.n_sites
             Ss_new = []
             Bs_new = []
-            B_gr = self.get_B(i, form='B').transpose(self._B_labels) # vL, p, vR
+            B_gr = self.get_B(i, form='B').transpose(self._B_labels)  # vL, p, vR
             B_gr.idrop_labels(self._p_label)  # avoid warning: split label not called '(...)'
             n_p_label = len(self._p_label)
             split_legs = list(range(1, 1 + n_p_label))
-            transp = [i for k in range(n) for i in range(1+k, 1 + n * n_p_label, n)]
+            transp = [i for k in range(n) for i in range(1 + k, 1 + n * n_p_label, n)]
             transp = ['vL'] + transp + ['vR']
             B_gr = B_gr.split_legs(split_legs).itranspose(transp)
             theta = self.get_theta(i, n=1)
@@ -863,19 +943,19 @@ class MPS:
             # for MPS with legs p, q, they have legs vL p0 q0 p1 q1 ... q{-n-1} vR
             combine = [list(range(B_gr.rank - n_p_label - 1)), list(range(-n_p_label - 1, 0, +1))]
             # combine = [[0, 1, .... {n-1}], [-2, -1]] for usual MPS
-            axes_contr = [combine[1], list(range(1, 2+n_p_label))]
-            for j in range(n-1, 0, -1):
+            axes_contr = [combine[1], list(range(1, 2 + n_p_label))]
+            for j in range(n - 1, 0, -1):
                 # split off the right-most physical leg and vR from theta
                 # theta: vL p0 ... pj vR
                 theta = theta.combine_legs(combine, qconj=[+1, -1])
                 U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
-                theta = U.split_legs(0) # vL p0 ... pj-1 vR
+                theta = U.split_legs(0)  # vL p0 ... pj-1 vR
                 for _ in range(n_p_label):
                     combine[0].pop()
-                B = V.split_legs(1).iset_leg_labels(self._B_labels) # vL p vR
-                B_gr = npc.tensordot(B_gr, B.conj(), axes=axes_contr) # vL p0 ... pj-1 vR
+                B = V.split_legs(1).iset_leg_labels(self._B_labels)  # vL p vR
+                B_gr = npc.tensordot(B_gr, B.conj(), axes=axes_contr)  # vL p0 ... pj-1 vR
                 Bs_new.append(B)
             Bs_new.append(B_gr.iset_leg_labels(self._B_labels))  # inversion free :)
             Ss_new.append(self.get_SL(i))
@@ -899,7 +979,7 @@ class MPS:
         -------
         new MPS object with bunched sites.
         """
-        groupedMPS= self.copy()
+        groupedMPS = self.copy()
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
@@ -928,7 +1008,7 @@ class MPS:
             Desired new virtual leg on the very left. Needs to have the same block strucuture as
             current leg, but can have shifted charge entries.
         vR_leg : None | LegCharge
-            Desired new virtual leg on the very rigth. Needs to have the same block strucuture as
+            Desired new virtual leg on the very right. Needs to have the same block strucuture as
             current leg, but can have shifted charge entries.
             Should be `vL_leg.conj()` for infinite MPS, if `qtotal` is not given.
         """
@@ -943,7 +1023,7 @@ class MPS:
                 qtotal = self.get_total_charge() + vL_chdiff + vR_chdiff
         qtotal = self.chinfo.make_valid(qtotal)
         if qtotal.ndim == 1:
-            qtotal_factor = np.array([0]*(self.L-1) + [1], npc.QTYPE)
+            qtotal_factor = np.array([0] * (self.L - 1) + [1], npc.QTYPE)
             qtotal = qtotal_factor[:, np.newaxis] * qtotal[np.newaxis, :]
         if qtotal.shape != (self.L, self.chinfo.qnumber):
             raise ValueError("wrong shape of `qtotal`")
@@ -963,7 +1043,7 @@ class MPS:
                     # so we need to adjust the next B as well
                     nextB = self._B[i + 1]
                     self._B[i + 1] = nextB.gauge_total_charge('vL', nextB.qtotal + chdiff)
-                    self._B[i].get_leg('vR').test_contractible(self._B[i+1].get_leg('vL'))
+                    self._B[i].get_leg('vR').test_contractible(self._B[i + 1].get_leg('vL'))
         # just to check
         assert np.all(self.get_total_charge() == self.chinfo.make_valid(np.sum(qtotal, 0)))
         if vR_leg is not None:
@@ -1172,8 +1252,8 @@ class MPS:
             For each row of `charge_values` the probablity for these values of charge fluctuations.
         """
         if self.bc == 'segment' and bond == self.L:
-            S = self.get_SR(self.L-1)**2
-            leg = self.get_B(self.L-1, form=None).get_leg('vR').conj()
+            S = self.get_SR(self.L - 1)**2
+            leg = self.get_B(self.L - 1, form=None).get_leg('vR').conj()
         else:  # usually the case
             S = self.get_SL(bond)**2
             leg = self.get_B(bond, form=None).get_leg('vL')
@@ -1233,7 +1313,7 @@ class MPS:
         """
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * (charges-charges_mean[:, np.newaxis])**2, axis=0)
+        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[:, np.newaxis])**2, axis=0)
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
@@ -1418,11 +1498,11 @@ class MPS:
         For example the contraction of three one-site operators on sites `i0`,
         `i1=i0+1`, `i2=i0+3` would look like::
 
-            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+1]--.
+            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
             |          |     |       |        |        |        |
             |          |    op1     op2       |       op3       |
             |          |     |       |        |        |        |
-            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+1]-.
+            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
 
         Parameters
         ----------
@@ -1442,6 +1522,10 @@ class MPS:
             ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``,
             where ``|psi>`` is the represented MPS.
 
+        See also
+        --------
+        correlation_function : efficient way to evaluate many correlation functions.
+
         Examples
         --------
         >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
@@ -1456,7 +1540,7 @@ class MPS:
         ops = [None] * (i_max - i_min + 1)
         count_JW = 0
         for op, i in term:
-            j = i - i_min # index in ops
+            j = i - i_min  # index in ops
             if ops[j] is not None:
                 ops[j] = ops[j] + " " + op
             else:
@@ -1507,11 +1591,11 @@ class MPS:
             op = self.sites[self._to_valid_index(i0)].get_op(op)
         theta = self.get_B(i0, 'Th')
         C = npc.tensordot(op, theta, axes=['p*', 'p'])
-        axes = [['vL*'] + self._get_p_label('*') ,['vL'] + self._p_label]
+        axes = [['vL*'] + self._get_p_label('*'), ['vL'] + self._p_label]
         C = npc.tensordot(theta.conj(), C, axes=axes)
         axes[1][0] = 'vR*'
         for j in range(1, len(operators)):
-            op = operators[j] # the operator
+            op = operators[j]  # the operator
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
@@ -1523,37 +1607,68 @@ class MPS:
         exp_val = npc.trace(C, 'vR*', 'vR')
         return np.real_if_close(exp_val)
 
-    def expectation_value_terms_sum(self, term_list, prefactors):
+    def expectation_value_terms_sum(self, term_list, prefactors=None):
         """Calculate expectation values for a bunch of terms and sum them up.
+
+        This is equivalent to the following expression::
+
+            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
+
+        However, for effiency, the term_list is converted to an MPO and the expectation value
+        of the MPO is evaluated.
+
+        .. note ::
+            Due to the way MPO expectation values are evaluated for infinite systems,
+            it works only if all terms in the `term_list` start within the MPS unit cell.
+
+        .. deprecated:: 0.4.0
+            `prefactor` will be removed in version 1.0.0.
+            Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
 
         Parameters
         ----------
-        term_list : list of terms
-            Each `term` should have the form ``[(Op1, site1), (Op2, site2), ...]``.
-        prefactors : list of (complex) floats
-            Prefactors for the ``term_sum`` to be evaluated.
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms and prefactors (`strength`) to be summed up.
+        prefactors :
+            Instead of specifying a :class:`~tenpy.networks.terms.TermList`,
+            one can also specify the term_list and strength separately.
+            This is deprecated.
 
         Returns
         -------
         terms_sum : list of (complex) float
             Equivalent to the expression
-            ``sum([self.expectation_value_term(t)*f for t, f in zip(terms_list, prefactors)])``.
-        cache :
-            Intermediate results. Currently the values for each of the term, but this might be
-            changed soon.
+            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
+        _mpo :
+            Intermediate results: the generated MPO.
+            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
+            ``terms_sum = _mpo.expectation_value(self) * self.L``
 
         See also
         --------
-        :meth:`expectation_value_term`: evaluates a single `term`.
-
-        .. todo :
-            This is a naive implementation. For efficiency a caching is necessary:
-            We need to evaluate the expectation values of terms starting with the same operator(s)
-            from the left at the same time to avoid doing the same work many times.
+        expectation_value_term : evaluates a single `term`.
+        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
         """
-        terms = [self.expectation_value_term(term) for term in term_list]
-        terms_sum = sum([t*f for t, f in zip(terms, prefactors)])
-        return terms_sum, terms
+        from . import mpo, terms
+        if prefactors is not None:
+            warnings.warn(
+                "Deprecated argument prefactors: replace arguments with "
+                "``TermList(term_list, prefactors)``.", FutureWarning, 2)
+            term_list = terms.TermList(term_list, prefactors)
+        L = self.L
+        if not self.finite:
+            for term in term_list.terms:
+                if not 0 <= min([i for _, i in term]) < L:
+                    raise ValueError("term doesn't start in MPS unit cell: " + repr(term))
+        # conversion
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        bc = 'finite' if self.finite else 'infinite'
+        mpo_graph = mpo.MPOGraph.from_terms(ot, ct, self.sites, bc)
+        mpo_ = mpo_graph.build_MPO()
+        terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
+        if not self.finite:
+            terms_sum = terms_sum * self.L
+        return terms_sum, mpo_
 
     def correlation_function(self,
                              ops1,
@@ -1694,10 +1809,8 @@ class MPS:
 
         """
         err = np.empty((self.L, 2), dtype=np.float)
-        lbl_R = (self._get_p_label('0') + ['vR'],
-                 self._get_p_label('0*') + ['vR*'])
-        lbl_L = (['vL'] + self._get_p_label('0'),
-                 ['vL*'] + self._get_p_label('0*'))
+        lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
+        lbl_L = (['vL'] + self._get_p_label('0'), ['vL*'] + self._get_p_label('0*'))
         for i in range(self.L):
             th = self.get_theta(i, 1)
             rho_L = npc.tensordot(th, th.conj(), axes=lbl_R)
@@ -1795,14 +1908,16 @@ class MPS:
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
-            U, S, VR_segment = npc.svd(
-                M.combine_legs(['vL'] + self._p_label), cutoff=cutoff, inner_labels=['vR', 'vL'])
+            U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
+                                       cutoff=cutoff,
+                                       inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                          cutoff=cutoff, inner_labels=['vR', 'vL'])
+                          cutoff=cutoff,
+                          inner_labels=['vR', 'vL'])
         if not renormalize:
             self.norm = self.norm * np.linalg.norm(S)
         S = S / np.linalg.norm(S)  # normalize
@@ -1811,10 +1926,9 @@ class MPS:
         for i in range(L - 2, -1, -1):
             M = self.get_B(i, 'A')
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
-            U, S, V = npc.svd(
-                M.combine_legs(['vR'] + self._p_label, qconj=-1),
-                cutoff=cutoff,
-                inner_labels=['vR', 'vL'])
+            U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
+                              cutoff=cutoff,
+                              inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
             self.set_B(i, V.split_legs(1), form='B')
@@ -1890,7 +2004,7 @@ class MPS:
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
-            axes = [self._p_label  + ['vR'], self._get_p_label('*') + ['vR*']]
+            axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
             Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
             Wr_list[j1 % L] = Wr = self._canonical_form_correct_right(j1, Gr)
 
@@ -1903,10 +2017,10 @@ class MPS:
                 B1.conj(),  # old B1; now on site j1-1
                 npc.tensordot(Gl, B1, axes=['vR', 'vL']),
                 axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']])
-                # axes=[['p*', 'vL*'], ['p', 'vR*']])
+            # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
 
-    def correlation_length(self, target=1, tol_ev0=1.e-8):
+    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -1939,6 +2053,10 @@ class MPS:
             We look for the `target` + 1 largest eigenvalues.
         tol_ev0 : float
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
+        charge_sector : None | charges | ``0``
+            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
 
         Returns
         -------
@@ -1949,13 +2067,22 @@ class MPS:
             see the warning above.
         """
         assert (not self.finite)
-        T = TransferMatrix(self, self, charge_sector=0, form='B')
+        T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
         num = max(target + 1, self._transfermatrix_keep)
-        E, V = T.eigenvectors(num, which='LM')
+        E, _ = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
+        if charge_sector is not None and charge_sector != 0:
+            # need also dominant eigenvector: include 0 charge sector to results
+            del T
+            T = TransferMatrix(self, self, charge_sector=0, form='B')
+            E0, _ = T.eigenvectors(num, which='LM')
+            assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
+            E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
-            warnings.warn("Correlation length: largest eigenvalue not one. "
-                          "Not in canonical form/normalized?", stacklevel=2)
+            warnings.warn(
+                "Correlation length: largest eigenvalue not one. "
+                "Not in canonical form/normalized?",
+                stacklevel=2)
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -2079,12 +2206,14 @@ class MPS:
             Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
 
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
         """
+        trunc_par.setdefault('chi_max', max(self.chi))
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
         if swap_op == 'auto':
             # get sign for Fermions.
@@ -2118,10 +2247,9 @@ class MPS:
         theta = theta.combine_legs([('vL', 'p0'), ('vR', 'p1')], qconj=[+1, -1])
         U, S, V, err, renormalize = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
-        B_L = npc.tensordot(
-            C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
-            V.conj(),
-            axes=['(vR.p1)', '(vR*.p1*)'])
+        B_L = npc.tensordot(C.combine_legs(('vR', 'p1'), pipes=theta.legs[1]),
+                            V.conj(),
+                            axes=['(vR.p1)', '(vR*.p1*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
         self.set_SR(i, S)
@@ -2144,6 +2272,7 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
 
@@ -2157,6 +2286,7 @@ class MPS:
         # => more or less an 'insertion' sort algorithm.
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
+        trunc_par.setdefault('chi_max', max(self.chi))
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -2206,6 +2336,7 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -2233,6 +2364,8 @@ class MPS:
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
+        trunc_par.setdefault('chi_max', max(self.chi))
+        trunc_par.setdefault('verbose', verbose)
 
         if isinstance(perm, Lattice):
             lat = perm
@@ -2257,7 +2390,7 @@ class MPS:
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("self.norm_test() = {0!s} ==> canonicalize".format(self.norm_test()))
+            warnings.warn("psi_t.norm_test() = {0!s} ==> canonicalize".format(psi_t.norm_test()))
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.
@@ -2632,10 +2765,10 @@ class MPSEnvironment:
         The MPS on which the local operator acts.
         Stored in place, without making copies.
         If ``None``, use `bra`.
-    firstLP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part. If ``None``, build trivial one.
-    rightRP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part. If ``None``, build trivial one.
+    init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very left part ``LP``. If ``None``, build trivial one.
+    init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+        Initial very right part ``RP``. If ``None``, build trivial one.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -2647,6 +2780,8 @@ class MPSEnvironment:
         Number of physical sites. For iMPS the len of the MPS unit cell.
     bra, ket : :class:`~tenpy.networks.mps.MPS`
         The two MPS for the contraction.
+    dtype : type
+        The data type.
     _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
@@ -2665,36 +2800,26 @@ class MPSEnvironment:
         network which yields ``self._RP[i]``.
     """
 
-    def __init__(self, bra, ket, firstLP=None, lastRP=None, age_LP=0, age_RP=0):
+    def __init__(self, bra, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
         if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra) # ensure matching charges
+            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
+        self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
         self.L = L = bra.L
         self.finite = bra.finite
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
-        if firstLP is None:
-            # Build trivial verly first LP
-            leg_bra = bra._B[0].get_leg('vL')
-            leg_ket = ket._B[0].get_leg('vL').conj()
-            leg_ket.test_contractible(leg_bra)
-            # should work for both finite and segment bc
-            firstLP = npc.diag(1., leg_bra, dtype=ket.dtype)
-            firstLP.iset_leg_labels(['vR*', 'vR'])
-        self.set_LP(0, firstLP, age=age_LP)
-        if lastRP is None:
-            # Build trivial verly last RP
-            leg_bra = bra.get_B(L - 1).get_leg('vR')
-            leg_ket = ket.get_B(L - 1).get_leg('vR').conj()
-            leg_ket.test_contractible(leg_bra)
-            lastRP = npc.diag(1., leg_bra, dtype=ket.dtype)  # (leg_bra, leg_ket)
-            lastRP.iset_leg_labels(['vL*', 'vL'])
-        self.set_RP(L - 1, lastRP, age=age_RP)
+        if init_LP is None:
+            init_LP = self.ket.init_LP(0, bra)
+        self.set_LP(0, init_LP, age=age_LP)
+        if init_RP is None:
+            init_RP = self.ket.init_RP(L - 1, bra)
+        self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
     def test_sanity(self):
@@ -2714,7 +2839,7 @@ class MPSEnvironment:
 
             |     .-------M[0]--- ... --M[i-1]--->-   'vR'
             |     |       |             |
-            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
+            |     LP[0]   |             |
             |     |       |             |
             |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
 
@@ -2762,7 +2887,7 @@ class MPSEnvironment:
         Parameters
         ----------
         i : int
-            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
+            The returned `RP` will contain the contraction *strictly* right of site `i`.
         store : bool
             Wheter to store the calculated `RP` in `self` (``True``) or discard them (``False``).
 
@@ -2800,7 +2925,7 @@ class MPSEnvironment:
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
-        """Store part to the right of site 1i1."""
+        """Store part to the right of site `i`."""
         i = self._to_valid_index(i)
         self._RP[i] = RP
         self._RP_age[i] = age
@@ -3052,7 +3177,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         form = ket._to_valid_form(form)
         p = ket._p_label  # for ususal MPS just ['p']
         assert p == bra._p_label
-        pstar = ket._get_p_label('*') # ['p*']
+        pstar = ket._get_p_label('*')  # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']

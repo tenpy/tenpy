@@ -10,16 +10,16 @@ import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import get_parameter
 from tenpy.algorithms.exact_diag import ExactDiag
-import test_mpo
-import nose
 import numpy as np
 import numpy.testing as npt
+import pytest
 
 spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
 
 fermion_site = tenpy.networks.site.FermionSite('N')
 
 __all__ = ["check_model_sanity", "check_general_model"]
+
 
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M"""
@@ -40,11 +40,11 @@ def check_model_sanity(M, hermitian=True):
     if isinstance(M, model.MPOModel):
         model.MPOModel.test_sanity(M)
         if hermitian:
-            test_mpo.check_hermitian(M.H_MPO)
+            assert M.H_MPO.is_hermitian()
 
 
 def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True):
-    """Create a model for different sets of parameters and check it's sanity.
+    """Create a model for different sets of parameters and check its sanity.
 
     Parameters
     ----------
@@ -53,10 +53,10 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
     model_pars : dict
         Model parameters used.
     check_pars : dict
-        pairs (`key`, `list of values`); we update ``model_paras[key]`` with any values of
-        ``check_params[key]`` (in each possible combination!) and create a model for it.
+        pairs (`key`, `list of values`); we update ``model_pars[key]`` with any values of
+        ``check_pars[key]`` (in each possible combination!) and create a model for it.
     hermitian : bool
-        If True, check that the Hamiltonian is hermitian.
+        If True, check that the Hamiltonian is Hermitian.
     """
     for vals in itertools.product(*list(check_pars.values())):
         print("-" * 40)
@@ -77,7 +77,7 @@ def test_CouplingModel():
         M.test_sanity()
         M.calc_H_MPO()
         if bc == 'periodic':
-            with nose.tools.assert_raises(ValueError):
+            with pytest.raises(ValueError, match="nearest neighbor"):
                 M.calc_H_bond()  # should raise a ValueError
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
@@ -89,14 +89,14 @@ def test_ext_flux():
     lat = lattice.Square(Lx, Ly, fermion_site, bc=['periodic', 'periodic'], bc_MPS='infinite')
     M = model.CouplingModel(lat)
     strength = 1.23
-    strength_array = np.ones((Lx, Ly))*strength
-    for phi in [0, 2*np.pi]:  # flux shouldn't do anything
+    strength_array = np.ones((Lx, Ly)) * strength
+    for phi in [0, 2 * np.pi]:  # flux shouldn't do anything
         print("phi = ", phi)
         for dx in [1, 0], [0, 1], [0, 2], [1, -1], [-2, 2]:
             print("dx = ", dx)
             strength_flux = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
             npt.assert_array_almost_equal_nulp(strength_flux, strength_array, 10)
-    for phi in [np.pi/2, 0.123]:
+    for phi in [np.pi / 2, 0.123]:
         print("phi = ", phi)
         strength_hop_x = M.coupling_strength_add_ext_flux(strength, [1, 0], [0, phi])
         npt.assert_array_almost_equal_nulp(strength_hop_x, strength_array, 10)
@@ -105,13 +105,19 @@ def test_ext_flux():
         for dx in [[0, 1], [0, -1], [1, -1], [1, 1]]:
             print("dx = ", dx)
             strength_hop_y_1 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-            npt.assert_array_almost_equal_nulp(strength_hop_y_1, expect_y_1, 10)
+            if dx[1] < 0:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_1, expect_y_1, 10)
+            else:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_1, np.conj(expect_y_1), 10)
         expect_y_2 = np.array(strength_array, dtype=np.complex128)
         expect_y_2[:, -2:] = strength * np.exp(1.j * phi)
         for dx in [[0, 2], [0, -2], [1, 2], [3, 2]]:
             print("dx = ", dx)
             strength_hop_y_2 = M.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-            npt.assert_array_almost_equal_nulp(strength_hop_y_2, expect_y_2, 10)
+            if dx[1] < 0:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_2, expect_y_2, 10)
+            else:
+                npt.assert_array_almost_equal_nulp(strength_hop_y_2, np.conj(expect_y_2), 10)
 
 
 def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
@@ -126,7 +132,7 @@ def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[Lx:2*Lx]
+        assert dims[:Lx] == dims[Lx:2 * Lx]
 
 
 def test_CouplingModel_fermions():
@@ -144,7 +150,7 @@ def test_CouplingModel_explicit():
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl)
     M.add_onsite(0.125, 0, 'N')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None) # auto-determine JW-string!
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), None)  # auto-determine JW-string!
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
@@ -236,48 +242,48 @@ def test_MultiCouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
+class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
+    def __init__(self, model_params):
+        model.CouplingMPOModel.__init__(self, model_params)
+
+    def init_sites(self, model_params):
+        return tenpy.networks.site.SpinHalfSite('parity')
+
+    def init_terms(self, model_params):
+        x = get_parameter(model_params, 'x', 1., self.name)
+        self.add_onsite_term(0.25, 0, 'Sz')
+        self.add_onsite_term(0.25, 4, 'Sz')
+        self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
+        self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
+        self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
+
+
 def test_CouplingMPOModel_group():
-    class MyMod(model.CouplingMPOModel,model.NearestNeighborModel):
-        def __init__(self, model_params):
-            model.CouplingMPOModel.__init__(self, model_params)
-
-        def init_sites(self, model_params):
-            return tenpy.networks.site.SpinHalfSite('parity')
-
-        def init_terms(self, model_params):
-            x = get_parameter(model_params, 'x', 1., self.name)
-            self.add_onsite_term(0.25, 0, 'Sz')
-            self.add_onsite_term(0.25, 4, 'Sz')
-            self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
-            self.add_coupling_term(2.*x, 1, 2, 'Sy', 'Sy')
-            self.add_coupling_term(3.*x, 3, 4, 'Sy', 'Sy')
-
     m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    m.test_sanity()
-    for Hb in m.H_bond:
-        if Hb is not None:
-            Hb.test_sanity()
+    assert m.H_MPO.max_range == 1
     # test grouping sites
     ED = ExactDiag(m)
     #  ED.build_full_H_from_mpo()
     ED.build_full_H_from_bonds()
     m.group_sites(n=2)
+    assert m.H_MPO.max_range == 1
     ED_gr = ExactDiag(m)
     ED_gr.build_full_H_from_mpo()
     H = ED.full_H.split_legs().to_ndarray()
     Hgr = ED_gr.full_H.split_legs()
     Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H-Hgr) == 0
+    assert np.linalg.norm(H - Hgr) == 0
     ED_gr.full_H = None
     ED_gr.build_full_H_from_bonds()
     Hgr = ED_gr.full_H.split_legs()
     Hgr.idrop_labels()
     Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H-Hgr) == 0
+    assert np.linalg.norm(H - Hgr) == 0
+
 
 def test_model_H_conversion(L=6):
-    bc='finite'
+    bc = 'finite'
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
     m = XXZChain(model_params)
     # can we run the conversion?
@@ -301,7 +307,3 @@ def test_model_H_conversion(L=6):
     full_H_bond = ED.full_H  # the one generated by NearstNeighborModel.calc_H_MPO_from_bond()
     print("npc.norm(H0 - full_H_bond) = ", npc.norm(H0 - full_H_bond))
     assert npc.norm(H0 - full_H_bond) < 1.e-14  # round off errors on order of 1.e-15
-
-
-if __name__ == "__main__":
-    test_model_H_conversion()

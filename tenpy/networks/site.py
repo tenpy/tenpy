@@ -100,7 +100,7 @@ class Site:
                 if v is not None:
                     self.state_labels[str(v)] = i
         self.opnames = set()
-        self.need_JW_string = set()
+        self.need_JW_string = set(['JW'])
         self.add_op('Id', npc.diag(1., self.leg))
         for name, op in site_ops.items():
             self.add_op(name, op)
@@ -163,8 +163,8 @@ class Site:
             op.test_sanity()
         for op in self.need_JW_string:
             assert op in self.opnames
-        np.testing.assert_array_almost_equal(
-            np.diag(np.exp(1.j * np.pi * self.JW_exponent)), self.JW.to_ndarray(), 15)
+        np.testing.assert_array_almost_equal(np.diag(np.exp(1.j * np.pi * self.JW_exponent)),
+                                             self.JW.to_ndarray(), 15)
 
     @property
     def dim(self):
@@ -415,12 +415,12 @@ class GroupedSite(Site):
                 legs_triv = [npc.LegCharge.from_trivial(d, s.leg.chinfo) for s in sites]
                 legs_triv[i] = sites[i].leg  # except on site i
                 chinfo = None if i == 0 else legs[0].chinfo
-                leg = npc.LegCharge.from_add_charge(legs_triv, chinfo) # combine the charges
+                leg = npc.LegCharge.from_add_charge(legs_triv, chinfo)  # combine the charges
                 legs.append(leg)
         else:
             raise ValueError("Unknown option for `charges`: " + repr(charges))
         if charges != 'same':
-            sites = [copy.copy(s) for s in sites] # avoid modifying the existing sites.
+            sites = [copy.copy(s) for s in sites]  # avoid modifying the existing sites.
             # sort legs
             for i in range(n_sites):
                 perm_qind, leg_s = legs[i].sort()
@@ -438,13 +438,13 @@ class GroupedSite(Site):
 
         # set state labels
         for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
-            inds = [v for k, v in states_labels] # values of the dictionaries
+            inds = [v for k, v in states_labels]  # values of the dictionaries
             ind_pipe = pipe.map_incoming_flat(inds)
             label = ' '.join([st + '_' + lbl for (st, idx), lbl in zip(states_labels, labels)])
             self.state_labels[label] = ind_pipe
         # add remaining operators
         Ids = [s.Id for s in sites]
-        JW_Ids = Ids[:] # in the following loop equivalent to [JW, JW, ... , Id, Id, ...]
+        JW_Ids = Ids[:]  # in the following loop equivalent to [JW, JW, ... , Id, Id, ...]
         for i in range(n_sites):
             site = sites[i]
             for opname, op in site.onsite_ops.items():
@@ -477,7 +477,7 @@ class GroupedSite(Site):
         op = ops[0].transpose(['p', 'p*'])
         for op2 in ops[1:]:
             op = npc.outer(op, op2.transpose(['p', 'p*']))
-        combine = [list(range(0, 2*self.n_sites-1, 2)), list(range(1, 2*self.n_sites, 2))]
+        combine = [list(range(0, 2 * self.n_sites - 1, 2)), list(range(1, 2 * self.n_sites, 2))]
         pipe = self.leg
         op = op.combine_legs(combine, pipes=[pipe, pipe.conj()])
         return op.iset_leg_labels(['p', 'p*'])
@@ -504,7 +504,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     if labels is None:
         labels = [str(i) for i in range(n)]
     for i in range(0, len(sites), n):
-        group = sites[i:i+n]
+        group = sites[i:i + n]
         s = GroupedSite(group, labels[:len(group)], charges)
         grouped_sites.append(s)
     return grouped_sites
@@ -557,12 +557,12 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     2
     """
     # parse same_charges argument
-    same_charges = list(same_charges) # need to modify elements...
+    same_charges = list(same_charges)  # need to modify elements...
     same_charges_flat = []
     for j in range(len(same_charges)):
         same_charges_j = []
         for s, i in same_charges[j]:
-            if isinstance(i, str): # map string to ints
+            if isinstance(i, str):  # map string to ints
                 i = sites[s].leg.chinfo.names.index(i)
             i = int(i)  # should be integer now...
             same_charges_j.append((s, i))
@@ -571,7 +571,7 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     if len(same_charges_flat) != len(set(same_charges_flat)):
         raise ValueError("Can't have duplicates in same_charges!")
     # find out which charges we keep
-    keep_charges = [] # list of (s, i) which appear in the new ChargeInfo
+    keep_charges = []  # list of (s, i) which appear in the new ChargeInfo
     map_charges = {}  # dict (s, i)->(s,i): those not appearing in keep_charges to the one in it
     for s, site in enumerate(sites):
         for i in range(site.leg.chinfo.qnumber):
@@ -760,7 +760,7 @@ class SpinSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
-        names = [str(i) for i in np.arange(-S, S+1, 1.)]
+        names = [str(i) for i in np.arange(-S, S + 1, 1.)]
         Site.__init__(self, leg, names, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
@@ -837,7 +837,7 @@ class FermionSite(Site):
         self.filling = filling
         Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
-        self.need_JW_string |= set(['C', 'Cd'])
+        self.need_JW_string |= set(['C', 'Cd', 'JW'])
 
     def __repr__(self):
         """Debug representation of self"""
@@ -1017,12 +1017,13 @@ class SpinHalfFermionSite(Site):
         self.filling = filling
         Site.__init__(self, leg, states, **ops)
         # specify fermionic operators
-        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd'])
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
     def __repr__(self):
         """Debug representation of self"""
-        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(
-            cN=self.cons_N, cS=self.cons_Sz, f=self.filling)
+        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
+                                                                   cS=self.cons_Sz,
+                                                                   f=self.filling)
 
 
 class BosonSite(Site):
@@ -1110,9 +1111,10 @@ class BosonSite(Site):
         self.conserve = conserve
         self.filling = filling
         Site.__init__(self, leg, states, **ops)
-        self.state_labels['vac'] = self.state_labels['0'] # alias
+        self.state_labels['vac'] = self.state_labels['0']  # alias
 
     def __repr__(self):
         """Debug representation of self"""
-        return "BosonSite({N:d}, {c!r}, {f:f})".format(
-            N=self.Nmax, c=self.conserve, f=self.filling)
+        return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
+                                                       c=self.conserve,
+                                                       f=self.filling)

@@ -53,9 +53,9 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
 
     def __init__(self, model_param):
         # model parameters
-        L  = get_parameter(model_param, 'L', 2, self.__class__)
+        L = get_parameter(model_param, 'L', 2, self.__class__)
         xi = get_parameter(model_param, 'xi', 0.5, self.__class__)
-        Jxx  = get_parameter(model_param, 'Jxx', 1., self.__class__)
+        Jxx = get_parameter(model_param, 'Jxx', 1., self.__class__)
         Jz = get_parameter(model_param, 'Jz', 1.5, self.__class__)
         hz = get_parameter(model_param, 'hz', 0., self.__class__)
         conserve = get_parameter(model_param, 'conserve', 'Sz', self.__class__)
@@ -64,7 +64,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         elif xi == np.inf:
             g = 1.
         else:
-            g = np.exp(-1/(xi))
+            g = np.exp(-1 / (xi))
         unused_parameters(model_param, self.__class__)
 
         # Define the sites and the lattice, which in this case is a simple uniform chain
@@ -101,7 +101,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
                 [None       , None      , None      , [("Id",g)], [("Sz",Jz)]      ],
                 [None       , None      , None      , None      , "Id"             ]]
         # yapf:enable
-        grids = [grid]*L
+        grids = [grid] * L
 
         # Generate the MPO from the grid. Note that it is not necessary to specify
         # the physical legs and their charges, since the from_grids method can extract
@@ -115,10 +115,16 @@ def example_run_dmrg():
     model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8, verbose=1)
     model = ExponentiallyDecayingHeisenberg(model_params)
     psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite')
-    dmrg_params = {'mixer': True,
-                   'chi_list': {0: 100},
-                   'trunc_params': {'svd_min': 1.e-10},
-                   'verbose': 1}
+    dmrg_params = {
+        'mixer': True,
+        'chi_list': {
+            0: 100
+        },
+        'trunc_params': {
+            'svd_min': 1.e-10
+        },
+        'verbose': 1
+    }
     results = dmrg.run(psi, model, dmrg_params)
     print("Energy per site: ", results['E'])
     print("<Sz>: ", psi.expectation_value('Sz'))

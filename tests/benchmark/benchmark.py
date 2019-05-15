@@ -32,8 +32,13 @@ colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
 linestyles = ['-', '--', ':', '-.']
 
 
-def perform_benchmark(mod_name, sizes=sizes_choices['default'], max_time=0.1, seeds=list(range(1)),
-                      repeat_average=1, repeat_bestof=3, **kwargs):
+def perform_benchmark(mod_name,
+                      sizes=sizes_choices['default'],
+                      max_time=0.1,
+                      seeds=list(range(1)),
+                      repeat_average=1,
+                      repeat_bestof=3,
+                      **kwargs):
     """Perform a benchmark for a given module and given arguments.
 
     Parameters
@@ -67,7 +72,7 @@ def perform_benchmark(mod_name, sizes=sizes_choices['default'], max_time=0.1, se
         Different entries are for the different `sizes`, averaged over the the random `seeds`.
         Sizes where the benchmark was skipped contain entries ``-1``.
     """
-    print("-"*80)
+    print("-" * 80)
     print("module ", mod_name)
     namespace = {}
     exec("import {mod_name} as benchmark_mod".format(mod_name=mod_name), namespace, namespace)
@@ -86,13 +91,14 @@ def perform_benchmark(mod_name, sizes=sizes_choices['default'], max_time=0.1, se
             timing_code = "{mod_name}.benchmark(data)".format(mod_name=mod_name)
             T = timeit.Timer(timing_code, setup_code)
             res = T.repeat(repeat_bestof, repeat_average)
-            results_seeds.append(min(res)/repeat_average)
+            results_seeds.append(min(res) / repeat_average)
         used_sizes.append(size)
         results.append(np.mean(results_seeds))
         print("size {size: 4d}: {res:.2e}".format(size=size, res=results[-1]))
         count = repeat_bestof * repeat_average * len(seeds)
         if (results[-1] > max_time or  # benchmark time
-            time.time() - t0 > count * max_time * 11):  # setup time shouldn't be too much longer
+                time.time() - t0 >
+                count * max_time * 11):  # setup time shouldn't be too much longer
             break
     return used_sizes, results
 
@@ -195,49 +201,46 @@ if __name__ == "__main__":
         nargs='*',
         default=[],
         help="Nature of the charge, ``Charges.mod``. The length determines the number of charges.")
-    parser.add_argument(
-        '-l',
-        '--legs',
-        type=int,
-        default=2,
-        help="Number of legs to be contracted.")
-    parser.add_argument(
-        '-s',
-        '--sectors',
-        type=int,
-        default=5,
-        help="(Maximal) number of sectors in each leg.")
-    parser.add_argument(
-        '-m',
-        '--modules',
-        nargs='*',
-        default=None,
-        help='Perform benchmarks for the given modules.')
-    parser.add_argument(
-        '-t',
-        '--max_time',
-        type=float,
-        default=0.1,
-        help='Maximum time after which we skip larger sizes.')
-    parser.add_argument(
-        '--sizes',
-        default='default',
-        choices=list(sizes_choices.keys()),
-        help='What sizes to benchmark.')
-    parser.add_argument(
-        '--bestof',
-        type=int,
-        default=3,
-        help='How often to repeat each benchmark to reduce the noice.')
-    parser.add_argument(
-        '-p',
-        '--plot',
-        nargs='*',
-        default=None,
-        help='Plot the produced benchmark results (saved in the given files).')
+    parser.add_argument('-l',
+                        '--legs',
+                        type=int,
+                        default=2,
+                        help="Number of legs to be contracted.")
+    parser.add_argument('-s',
+                        '--sectors',
+                        type=int,
+                        default=5,
+                        help="(Maximal) number of sectors in each leg.")
+    parser.add_argument('-m',
+                        '--modules',
+                        nargs='*',
+                        default=None,
+                        help='Perform benchmarks for the given modules.')
+    parser.add_argument('-t',
+                        '--max_time',
+                        type=float,
+                        default=0.1,
+                        help='Maximum time after which we skip larger sizes.')
+    parser.add_argument('--sizes',
+                        default='default',
+                        choices=list(sizes_choices.keys()),
+                        help='What sizes to benchmark.')
+    parser.add_argument('--bestof',
+                        type=int,
+                        default=3,
+                        help='How often to repeat each benchmark to reduce the noice.')
+    parser.add_argument('-p',
+                        '--plot',
+                        nargs='*',
+                        default=None,
+                        help='Plot the produced benchmark results (saved in the given files).')
     args = parser.parse_args()
-    kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, max_time=args.max_time,
-                  sizes=sizes_choices[args.sizes], repeat_bestof=args.bestof)
+    kwargs = dict(mod_q=args.mod_q,
+                  legs=args.legs,
+                  sectors=args.sectors,
+                  max_time=args.max_time,
+                  sizes=sizes_choices[args.sizes],
+                  repeat_bestof=args.bestof)
     kwargs["python_version"] = sys.version
     files = []
     if args.modules is not None:

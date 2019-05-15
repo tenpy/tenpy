@@ -4,6 +4,8 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 """
 # Copyright 2018 TeNPy Developers
 
+import numpy as np
+
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
@@ -105,20 +107,21 @@ class SpinModel(CouplingMPOModel):
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
-            self.add_coupling((Jx + Jy) / 4., u2, 'Sp', u1, 'Sm', -dx) # h.c.
+            self.add_coupling(np.conj((Jx + Jy) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
-            self.add_coupling((Jx - Jy) / 4., u2, 'Sm', u1, 'Sm', -dx) # h.c.
+            self.add_coupling(np.conj((Jx - Jy) / 4.), u2, 'Sm', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
             self.add_coupling(muJ * 0.5j, u1, 'Sm', u2, 'Sp', dx)
             self.add_coupling(muJ * -0.5j, u1, 'Sp', u2, 'Sm', dx)
         # done
 
 
-class SpinChain(SpinModel,NearestNeighborModel):
+class SpinChain(SpinModel, NearestNeighborModel):
     """The :class:`SpinModel` on a Chain, suitable for TEBD.
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
+
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
