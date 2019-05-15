@@ -62,7 +62,6 @@ def run_out_of_equilibrium():
     plt.plot(times, S_mid)
     plt.xlabel('t')
     plt.ylabel('S')
-<<<<<<< HEAD
     plt.axvline(x=3.1,color='red')
     plt.text(0.0,0.0000015,"Two sites update")
     plt.text(3.1,0.0000015,"One site update")
