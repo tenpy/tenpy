@@ -10,9 +10,9 @@ import copy
 
 
 def run_out_of_equilibrium():
-    L=10
-    chi=5
-    delta_t=0.1
+    L = 10
+    chi = 5
+    delta_t = 0.1
     model_params = {
         'L': L,
         'S': 0.5,
@@ -62,9 +62,9 @@ def run_out_of_equilibrium():
     plt.plot(times, S_mid)
     plt.xlabel('t')
     plt.ylabel('S')
-    plt.axvline(x=3.1,color='red')
-    plt.text(0.0,0.0000015,"Two sites update")
-    plt.text(3.1,0.0000015,"One site update")
+    plt.axvline(x=3.1, color='red')
+    plt.text(0.0, 0.0000015, "Two sites update")
+    plt.text(3.1, 0.0000015, "One site update")
     plt.show()
 
 

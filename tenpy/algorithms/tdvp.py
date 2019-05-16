@@ -162,9 +162,9 @@ class Engine:
             W1 = self.environment.H.get_W(j)
             theta = self.update_theta_h1(Lp, Rp, theta, W1, -1j * 0.5 * self.dt)
             # SVD and update environment
-            U,s,V=self.theta_svd_left_right(theta)
-            self.psi.set_B(j,U,form='A')
-            self.psi.set_SR(j,np.diag(s.to_ndarray()))
+            U, s, V = self.theta_svd_left_right(theta)
+            self.psi.set_B(j, U, form='A')
+            self.psi.set_SR(j, np.diag(s.to_ndarray()))
             self._del_correct(j)
             if j < self.L - 1:
                 # Apply expm (-dt H) for 0-site
@@ -239,9 +239,9 @@ class Engine:
             W1 = self.environment.H.get_W(j)
             theta = self.update_theta_h1(Lp, Rp, theta, W1, -1j * 0.5 * self.dt)
             # SVD and update environment
-            U,s,V=self.theta_svd_right_left(theta)
-            self.psi.set_B(j,U,form='B')
-            self.psi.set_SL(j,np.diag(s.to_ndarray()))
+            U, s, V = self.theta_svd_right_left(theta)
+            self.psi.set_B(j, U, form='B')
+            self.psi.set_SL(j, np.diag(s.to_ndarray()))
             self._del_correct(j)
             if j > 0:
                 # Apply expm (-dt H) for 0-site
