@@ -30,7 +30,7 @@ If you prefer yet another format, you can try to build the documentation yoursel
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
-We have set up a **community forum** at https://tenpy.johannes-hauschild.de/, see [TeNPyForum]_), 
+We have set up a **community forum** at https://tenpy.johannes-hauschild.de/, see [TeNPyForum]_, 
 where you can post questions and hopefully find answers.
 Once you got some experience with TeNPy, you might also be able to contribute to the community and answer some questions yourself ;-)
 We also use this forum for official annoucements, for example when we release a new version.

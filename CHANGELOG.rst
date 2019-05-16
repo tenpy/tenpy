@@ -24,6 +24,7 @@ Added
 Fixed
 ^^^^^
 - Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
+- Allow :class:`~tenpy.networks.terms.TermList` to have terms with multiple operators acting on the same site.
 
 
 [0.4.0] - 2019-04-28

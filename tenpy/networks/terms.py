@@ -21,10 +21,13 @@ class TermList:
     A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
     and :class:`MultiCouplingTerms`.
 
+    This class does not store operator strings between the sites.
+    Jordan-Wigner strings of fermions are added during conversion to (Multi)CouplingTerms.
+
     .. warning :
-        In contrast to the :class:`CouplingTerms` and :class:`MultiCouplingTerms`, this class
-        does **not** store the operator string between the sites.
-        Therefore, conversion from :class:`CouplingTerms` to :class:`TermList` is lossy!
+        Since this class does **not** store the operator string between the sites,
+        conversion from :class:`CouplingTerms` or :class:`MultiCouplingTerms`
+        to :class:`TermList` is lossy!
 
     Parameters
     ----------
@@ -54,6 +57,8 @@ class TermList:
     def to_OnsiteTerms_CouplingTerms(self, sites):
         """Convert to :class:`OnsiteTerms` and :class:`CouplingTerms`
 
+        Performs Jordan-Wigner transformation for fermionic operators.
+
         Parameters
         ----------
         sites : list of {:class:`~tenpy.networks.site.Site` | None}
@@ -72,6 +77,7 @@ class TermList:
         """
         L = len(sites)
         ot = OnsiteTerms(L)
+        self.to_one_op_per_site(sites)  # general terms might act multiple times on the same sites
         if any(len(t) > 2 for t in self.terms):
             ct = MultiCouplingTerms(L)
         else:
@@ -103,6 +109,80 @@ class TermList:
             return TermList(self.terms + other.terms,
                             np.concatenate((self.strength, other.strength)))
         return NotImplemented
+
+    def __str__(self):
+        res = []
+        for term, strength in self:
+            term_str = ' '.join(['{op!s}_{i:d}'.format(op=op, i=i) for op, i in term])
+            res.append('{s:.5f} * {t}'.format(s=strength, t=term_str))
+        return ' +\n'.join(res)
+
+    def to_one_op_per_site(self, sites):
+        """(Anti-)Commute and group operators such that each term contains each site only once.
+
+        Parameters
+        ----------
+        sites : list of {:class:`~tenpy.networks.site.Site` | None}
+            Defines the local Hilbert space for each site.
+            Used to check whether the operators need Jordan-Wigner strings.
+            Use ``[None]*L`` if you don't want to check for Jordan-Wigner.
+        """
+        for idx, term in enumerate(self.terms):
+            self.terms[idx], overall_sign = self.term_to_one_op_per_site(term, sites)
+            self.strength[idx] *= overall_sign
+
+    @staticmethod
+    def term_to_one_op_per_site(term, sites):
+        """Combine operators in a term to one terms per site.
+
+        Takes in a term of operators and sites they acts on and
+        combines operators acting on the same site by (anti)commuting them next to each other
+        and fusing them to a single, white-space separated string.
+
+        Parameters
+        ----------
+        term : a list of (opname_i, i) tuples
+            Represents a product of onsite operators with site indices `i` they act on.
+            Needs not to be ordered and can have multiple entries acting on the same site.
+        sites : list of {:class:`~tenpy.networks.site.Site` | None}
+            Defines the local Hilbert space for each site.
+            Used to check whether the operators anticommute
+            (= whether they need Jordan-Wigner strings).
+            Use ``[None]*L`` if you don't want to check for anti-commutation.
+
+        Returns
+        -------
+        combined_term :
+            Equivalent to `term` but with at most one operator per site.
+        overall_sign : +1 | -1 | 0
+            Comes from the (anti-)commutation relations.
+            When the operators in `term` are multiplied from left to right, and
+            then multiplied by `overall_sign`, the result is the same operator
+            as the product of `combined_term` from left to right.
+        """
+        # Group all operators that are on the same site and get the corresponding sign
+        L = len(sites)
+        overall_sign = 1
+        combined_term = []
+        for op_i, i in term:  # left to right
+            site_i = sites[i % L]
+            for idx, (op_j, j) in enumerate(combined_term):
+                if i == j:  # Same ring and site
+                    # commute with the operators in combined_term[idx+1:]
+                    # if anti-commuting: take care of overall_sign
+                    if site_i is not None and site_i.op_needs_JW(op_i):
+                        for op_k, k in combined_term[idx+1:]:
+                            site_k = sites[k % L]
+                            if site_k is not None and site_k.op_needs_JW(op_k):
+                                overall_sign *= -1
+                    # append op_i to op_j
+                    combined_op = op_j + ' ' + op_i
+                    combined_term[idx] = (combined_op, j)
+                    break
+            else: # finish for without break: no site i == j
+                # site `i` does not yet exist in combined_term, append to the right
+                combined_term.append((op_i, i))
+        return combined_term, overall_sign
 
 
 class OnsiteTerms:
