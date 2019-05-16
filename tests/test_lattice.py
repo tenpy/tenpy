@@ -28,13 +28,19 @@ def test_lattice():
         Ls = [5, 2]
         basis = [[1., 1.], [0., 1.]]
         pos = [[0.1, 0.], [0.2, 0.]]
-        lat = lattice.Lattice(Ls, [site1, site2], order=order, basis=basis, positions=pos)
+        lat = lattice.Lattice(Ls, [site1, site2], order=order, basis=basis, positions=pos,
+                              bc='periodic', bc_MPS='infinite')
         assert lat.dim == len(Ls)
         assert lat.N_sites == np.prod(Ls) * 2
         for i in range(lat.N_sites):
             assert lat.lat2mps_idx(lat.mps2lat_idx(i)) == i
-        idx = (4, 1, 0)
-        assert lat.mps2lat_idx(lat.lat2mps_idx(idx)) == idx
+        idx = [4, 1, 0]
+        assert np.all(lat.mps2lat_idx(lat.lat2mps_idx(idx)) == idx)
+        # index conversion should also work for arbitrary index arrays and indices outside bc_MPS
+        # for bc_MPS=infinite
+        i = np.arange(-3, lat.N_sites*2-3).reshape((-1, 2))
+        assert np.all(lat.lat2mps_idx(lat.mps2lat_idx(i)) == i)
+        # test position
         npt.assert_equal([4.1, 5.], lat.position(idx))
         # test lat.mps2lat_values
         A = np.random.random([lat.N_sites, 2, lat.N_sites])
@@ -45,8 +51,8 @@ def test_lattice():
             for j in range(lat.N_sites):
                 idx_j = lat.mps2lat_idx(j)
                 for k in range(2):
-                    idx = idx_i + (k, ) + idx_j
-                    assert Ares[idx], A[i, k == j]
+                    idx = tuple(idx_i) + (k, ) + tuple(idx_j)
+                    assert Ares[idx] == A[i, k, j]
         # and again for fixed `u` within the unit cell
         for u in range(len(lat.unit_cell)):
             A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]

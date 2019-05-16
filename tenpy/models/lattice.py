@@ -4,8 +4,8 @@ The base class :class:`Lattice` defines the general structure of a lattice,
 you can subclass this to define you own lattice.
 The :class:`SimpleLattice` is a slight simplification for lattices with a single-site unit cell.
 Further, we have some predefined lattices, namely
-:class:`Chain`, :class:`Ladder`,
-:class:`Square`, :class:`Honeycomb`, and :class:`Kagome`.
+:class:`Chain`, :class:`Ladder` in 1D and
+:class:`Square`, :class:`Triangular`, :class:`Honeycomb`, and :class:`Kagome` in 2D.
 
 See also the :doc:`/intro_model`.
 """
@@ -19,8 +19,8 @@ from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Honeycomb', 'Kagome', 'get_order',
-    'get_order_grouped', 'bc_choices'
+    'Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome',
+    'get_lattice', 'get_order', 'get_order_grouped', 'bc_choices'
 ]
 
 # (update module doc string if you add further lattices)
@@ -37,20 +37,24 @@ class Lattice:
     where ``0 <= x_l < Ls[l]`` pick the position of the unit cell in the lattice and
     ``0 <= u < len(unit_cell)`` picks the site within the unit cell. The site is located
     in 'space' at ``sum_l x_l*basis[l] + unit_cell_positions[u]`` (see :meth:`position`).
+    (Note that the position in space is only used for plotting, not for defining the couplings.)
 
-    In addition to the pure geometry, this class also defines an 'order' of all sites.
+    In addition to the pure geometry, this class also defines an `order` of all sites.
     This order maps the lattice to a finite 1D chain and defines the geometry of MPSs and MPOs.
     The **MPS index** `i` corresponds thus to the lattice sites given by
-    ``(a_0, ..., a_{D-1}, u) = tuple(self.order[i])``.
+    ``(x_0, ..., x_{dim-1}, u) = tuple(self.order[i])``.
+    Infinite boundary conditions of the MPS repeat in the first spatial direction of the lattice,
+    i.e., if the site at (x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
+    at ``(x_0 + a*Ls[0], x_1 ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
-    :meth:`mps2lat_values` perform the necessary reshaping and re-ordering from arrays indexed in
-    MPS form to arrays indexed in lattice form.
+    The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
+    arrays indexed in MPS form to arrays indexed in lattice form.
 
     Parameters
     ----------
     Ls : list of int
         the length in each direction
-    unit_cell : list of :class:`~tenpy.networks.Site`
+    unit_cell : list of :class:`~tenpy.networks.site.Site`
         The sites making up a unit cell of the lattice.
         If you want to specify it only after initialization, use ``None`` entries in the list.
     order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
@@ -98,7 +102,7 @@ class Lattice:
         the length in each direction.
     shape : tuple of int
         the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
-    unit_cell : list of :class:`~tenpy.networks.Site`
+    unit_cell : list of :class:`~tenpy.networks.site.Site`
         the lattice sites making up a unit cell of the lattice.
     bc : bool ndarray
         Boundary conditions of the couplings in each direction of the lattice,
@@ -330,23 +334,68 @@ class Lattice:
         return res
 
     def site(self, i):
-        """return :class:`~tenpy.networks.Site` instance corresponding to an MPS index `i`"""
+        """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
         return self.unit_cell[self.order[i, -1]]
 
     def mps_sites(self):
-        """Return a list [self.site(i) for i in range(self.N_sites)].
+        """Return a list of sites for all MPS indices.
+
+        Equivalent to ``[self.site(i) for i in range(self.N_sites)]``.
 
         This should be used for `sites` of 1D tensor networks (MPS, MPO,...)."""
         return [self.unit_cell[u] for u in self.order[:, -1]]
 
     def mps2lat_idx(self, i):
-        """translate MPS index `i` to lattice indices ``(x_0, ..., x_{D_1}, u)``"""
-        return tuple(self.order[i])
+        """Translate MPS index `i` to lattice indices ``(x_0, ..., x_{dim-1}, u)``.
+
+        Parameters
+        ----------
+        i : int | array_like of int
+            MPS index/indices.
+
+        Returns
+        -------
+        lat_idx : array
+            First dimensions like `i`, last dimension has len `dim`+1 and contains the lattice
+            indices ``(x_0, ..., x_{dim-1}, u)`` corresponding to `i`.
+            For `i` accross the MPS unit cell and "infinite" `bc_MPS`, we shift `x_0` accordingly.
+        """
+        if self.bc_MPS == 'infinite':
+            # allow `i` outsit of MPS unit cell for bc_MPS infinite
+            i0 = i
+            i = np.mod(i, self.N_sites)
+            if np.any(i0 != i):
+                lat = self.order[i].copy()
+                lat[..., 0] += (i0 - i) // self.N_sites * self.N_rings
+                return lat
+        return self.order[i].copy()
 
     def lat2mps_idx(self, lat_idx):
-        """translate lattice indices ``(x_0, ..., x_{D-1}, u)`` to MPS index `i`."""
-        i = np.sum(self._asvalid_latidx(lat_idx) * self._strides, axis=-1)
-        return np.take(self._perm, i)
+        """Translate lattice indices ``(x_0, ..., x_{D-1}, u)`` to MPS index `i`.
+
+        Parameters
+        ----------
+        lat_idx : array_like [..., dim+1]
+            The last dimension corresponds to lattice indices ``(x_0, ..., x_{D-1}, u)``.
+            All lattice indices should be positive and smaller than the corresponding entry in
+            ``self.shape``. Exception: for "infinite" `bc_MPS`, an `x_0` outside indicates shifts
+            accross the boundary.
+
+        Returns
+        -------
+        i : array_like
+            MPS index/indices corresponding to `lat_idx`.
+            Has the same shape as `lat_idx` without the last dimension.
+        """
+        idx = self._asvalid_latidx(lat_idx)
+        if self.bc_MPS == 'infinite':
+            i_shift = idx[..., 0] - np.mod(idx[..., 0], self.N_rings)
+            idx[..., 0] -= i_shift
+        i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
+        i = np.take(self._perm, i)  # after permutation
+        if self.bc_MPS == 'infinite':
+            i += i_shift * (self.N_sites // self.N_rings)
+        return i
 
     def mps_idx_fix_u(self, u=None):
         """return an index array of MPS indices for which the site within the unit cell is `u`.
@@ -826,7 +875,7 @@ class TrivialLattice(Lattice):
 
     Parameters
     ----------
-    mps_sites : list of :class:`~tenpy.networks.Site`
+    mps_sites : list of :class:`~tenpy.networks.site.Site`
         The sites making up a unit cell of the lattice.
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
@@ -887,7 +936,7 @@ class SimpleLattice(Lattice):
     ----------
     Ls : list of int
         the length in each direction
-    site : :class:`~tenpy.networks.Site`
+    site : :class:`~tenpy.networks.site.Site`
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -922,7 +971,7 @@ class Chain(SimpleLattice):
     ----------
     L : int
         The lenght of the chain.
-    site : :class:`~tenpy.networks.Site`
+    site : :class:`~tenpy.networks.site.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -956,9 +1005,9 @@ class Ladder(Lattice):
     ----------
     L : int
         The length of each chain, we have 2*L sites in total.
-    sites : (list of) :class:`~tenpy.networks.Site`
+    sites : (list of) :class:`~tenpy.networks.site.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.Site` is given, it is used for both chains.
+        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
@@ -989,7 +1038,7 @@ class Square(SimpleLattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    site : :class:`~tenpy.networks.Site`
+    site : :class:`~tenpy.networks.site.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -1019,7 +1068,7 @@ class Triangular(SimpleLattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    site : :class:`~tenpy.networks.Site`
+    site : :class:`~tenpy.networks.site.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
@@ -1053,9 +1102,9 @@ class Honeycomb(Lattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    sites : (list of) :class:`~tenpy.networks.Site`
+    sites : (list of) :class:`~tenpy.networks.site.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
@@ -1112,9 +1161,9 @@ class Kagome(Lattice):
     ----------
     Lx, Ly : int
         The length in each direction.
-    sites : (list of) :class:`~tenpy.networks.Site`
+    sites : (list of) :class:`~tenpy.networks.site.Site`
         The two local lattice sites making the `unit_cell` of the :class:`Lattice`.
-        If only a single :class:`~tenpy.networks.Site` is given, it is used for both sites.
+        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
