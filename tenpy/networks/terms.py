@@ -171,7 +171,7 @@ class TermList:
                     # commute with the operators in combined_term[idx+1:]
                     # if anti-commuting: take care of overall_sign
                     if site_i is not None and site_i.op_needs_JW(op_i):
-                        for op_k, k in combined_term[idx+1:]:
+                        for op_k, k in combined_term[idx + 1:]:
                             site_k = sites[k % L]
                             if site_k is not None and site_k.op_needs_JW(op_k):
                                 overall_sign *= -1
@@ -179,7 +179,7 @@ class TermList:
                     combined_op = op_j + ' ' + op_i
                     combined_term[idx] = (combined_op, j)
                     break
-            else: # finish for without break: no site i == j
+            else:  # finish for without break: no site i == j
                 # site `i` does not yet exist in combined_term, append to the right
                 combined_term.append((op_i, i))
         return combined_term, overall_sign

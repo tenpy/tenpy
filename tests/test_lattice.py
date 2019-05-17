@@ -28,8 +28,12 @@ def test_lattice():
         Ls = [5, 2]
         basis = [[1., 1.], [0., 1.]]
         pos = [[0.1, 0.], [0.2, 0.]]
-        lat = lattice.Lattice(Ls, [site1, site2], order=order, basis=basis, positions=pos,
-                              bc='periodic', bc_MPS='infinite')
+        lat = lattice.Lattice(Ls, [site1, site2],
+                              order=order,
+                              basis=basis,
+                              positions=pos,
+                              bc='periodic',
+                              bc_MPS='infinite')
         assert lat.dim == len(Ls)
         assert lat.N_sites == np.prod(Ls) * 2
         for i in range(lat.N_sites):
@@ -38,7 +42,7 @@ def test_lattice():
         assert np.all(lat.mps2lat_idx(lat.lat2mps_idx(idx)) == idx)
         # index conversion should also work for arbitrary index arrays and indices outside bc_MPS
         # for bc_MPS=infinite
-        i = np.arange(-3, lat.N_sites*2-3).reshape((-1, 2))
+        i = np.arange(-3, lat.N_sites * 2 - 3).reshape((-1, 2))
         assert np.all(lat.lat2mps_idx(lat.mps2lat_idx(i)) == i)
         # test position
         npt.assert_equal([4.1, 5.], lat.position(idx))

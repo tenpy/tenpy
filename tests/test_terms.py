@@ -12,24 +12,23 @@ from tenpy.networks import site
 spin_half = site.SpinHalfSite(conserve='Sz')
 fermion = site.FermionSite(conserve='N')
 
+
 def test_TermList():
-    terms = [[('N', 3), ('N', 2), ('N', 3)],
-             [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('C', 2)],
+    terms = [[('N', 3), ('N', 2), ('N', 3)], [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('C', 2)],
              [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('Cd', 0), ('C', 2)]]
     strength = [1., 2., 3.]
     terms_copy = copy.deepcopy(terms)
-    terms_grouped = [[('N N', 3), ('N', 2)],
-                     [('C', 0), ('N C', 2), ('N', 4), ('Cd', 3)],
+    terms_grouped = [[('N N', 3), ('N', 2)], [('C', 0), ('N C', 2), ('N', 4), ('Cd', 3)],
                      [('C Cd', 0), ('N C', 2), ('N', 4), ('Cd', 3)]]
     tl = TermList(terms, strength)
     print(tl)
-    tl.to_one_op_per_site([None]*7)
+    tl.to_one_op_per_site([None] * 7)
     print(tl)
     assert terms == terms_copy
     assert tl.terms == terms_grouped
     assert np.all(tl.strength == np.array(strength))  # no sites -> just permute
     tl = TermList(terms, strength)
-    tl.to_one_op_per_site([fermion]*3)  # should anti-commute
+    tl.to_one_op_per_site([fermion] * 3)  # should anti-commute
     assert tl.terms == terms_grouped
     assert np.all(tl.strength == np.array([1., -2., 3.]))
 
