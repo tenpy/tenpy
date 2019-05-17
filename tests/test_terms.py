@@ -7,10 +7,13 @@ import numpy as np
 import copy
 
 from tenpy.networks.terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from tenpy.networks.terms import order_combine_term
 from tenpy.networks import site
+from tenpy.linalg.np_conserved import LegCharge
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 fermion = site.FermionSite(conserve='N')
+dummy = site.Site(spin_half.leg)
 
 
 def test_TermList():
@@ -18,18 +21,18 @@ def test_TermList():
              [('C', 0), ('N', 2), ('N', 4), ('Cd', 3), ('Cd', 0), ('C', 2)]]
     strength = [1., 2., 3.]
     terms_copy = copy.deepcopy(terms)
-    terms_grouped = [[('N N', 3), ('N', 2)], [('C', 0), ('N C', 2), ('N', 4), ('Cd', 3)],
-                     [('C Cd', 0), ('N C', 2), ('N', 4), ('Cd', 3)]]
+    terms_ordered = [[('N', 2), ('N N', 3)], [('C', 0), ('N C', 2), ('Cd', 3), ('N', 4)],
+                     [('C Cd', 0), ('N C', 2), ('Cd', 3), ('N', 4)]]
     tl = TermList(terms, strength)
     print(tl)
-    tl.to_one_op_per_site([None] * 7)
+    tl.order_combine([dummy] * 7)
     print(tl)
     assert terms == terms_copy
-    assert tl.terms == terms_grouped
+    assert tl.terms == terms_ordered
     assert np.all(tl.strength == np.array(strength))  # no sites -> just permute
     tl = TermList(terms, strength)
-    tl.to_one_op_per_site([fermion] * 3)  # should anti-commute
-    assert tl.terms == terms_grouped
+    tl.order_combine([fermion] * 3)  # should anti-commute
+    assert tl.terms == terms_ordered
     assert np.all(tl.strength == np.array([1., -2., 3.]))
 
 
@@ -69,7 +72,7 @@ def test_onsite_terms():
     tl = o1.to_TermList()
     assert tl.terms == [[("X_0", 0)], [("Y_1", 1)], [("X_3", 3)], [("Y_3", 3)], [("Y_4", 4)],
                         [("Y_5", 5)]]
-    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([None] * L)
+    o3, c3 = tl.to_OnsiteTerms_CouplingTerms([dummy] * L)
     assert o3.onsite_terms == o1.onsite_terms
 
 
@@ -175,48 +178,62 @@ def test_coupling_terms():
     assert mc.coupling_terms == mc_des
     assert mc.max_range() == 3 - 0
 
+# TODO: test order_and_combine
 
 def test_coupling_terms_handle_JW():
-    mc = MultiCouplingTerms(4)
+    strength = 0.25
+    sites = []
+    L = 4
+    for i in range(L):
+        s = site.Site(spin_half.leg)
+        s.add_op("X_{i:d}".format(i=i), 2. * np.eye(2))
+        s.add_op("Y_{i:d}".format(i=i), 3. * np.eye(2), need_JW=True)
+        sites.append(s)
+    mc = MultiCouplingTerms(L)
     # two-site terms
     term = [("X_1", 1), ("X_0", 4)]
-    args = mc.coupling_term_handle_JW(term, [False, False])
+    args = mc.coupling_term_handle_JW(strength, term, sites)
     # args = i, j, op_i, op_j, op_str
-    assert args == (1, 4, "X_1", "X_0", "Id")
-    args = mc.coupling_term_handle_JW(term, [True, True])
-    assert args == (1, 4, "X_1 JW", "X_0", "JW")
+    assert args == (strength, 1, 4, "X_1", "X_0", "Id")
+    term = [("Y_1", 1), ("Y_0", 4)]
+    args = mc.coupling_term_handle_JW(strength, term, sites)
+    assert args == (strength, 1, 4, "Y_1 JW", "Y_0", "JW")
 
     # switch order
-    term = [("X_0", 4), ("X_1", 1)]
-    args = mc.coupling_term_handle_JW(term, [False, False])
-    assert args == (1, 4, "X_1", "X_0", "Id")
-    args = mc.coupling_term_handle_JW(term, [True, True])
-    assert args == (1, 4, "JW X_1", "X_0", "JW")
+    term = [("Y_0", 4), ("Y_1", 1)]
+    term, sign = order_combine_term(term, sites)
+    assert term == [("Y_1", 1), ("Y_0", 4)]
+    args = mc.coupling_term_handle_JW(strength*sign, term, sites)
+    assert args == (-strength, 1, 4, "Y_1 JW", "Y_0", "JW")
 
     # multi coupling
+    term = [("X_0", 0), ("X_1", 1), ("X_3", 3)]
+    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
+    assert args == (strength, [0, 1, 3], ["X_0", "X_1", "X_3"], ["Id", "Id"])
     term = [("X_0", 0), ("Y_1", 1), ("Y_3", 3)]
-    args = mc.multi_coupling_term_handle_JW(term, [False, False, False])
-    assert args == ([0, 1, 3], ["X_0", "Y_1", "Y_3"], ["Id", "Id"])
-    args = mc.multi_coupling_term_handle_JW(term, [False, True, True])
-    assert args == ([0, 1, 3], ["X_0", "Y_1 JW", "Y_3"], ["Id", "JW"])
+    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
+    assert args == (strength, [0, 1, 3], ["X_0", "Y_1 JW", "Y_3"], ["Id", "JW"])
 
-    term = [("Y_0", 0), ("X_1", 1), ("Y_3", 3), ("X_4", 4), ("Y_6", 6), ("Y_7", 7)]
-    args = mc.multi_coupling_term_handle_JW(term, [False] * 6)
-    assert args == ([0, 1, 3, 4, 6, 7], [op[0] for op in term], ["Id"] * (len(term) - 1))
-    args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
+    term = [("Y_0", 0), ("X_1", 1), ("Y_3", 3), ("X_0", 4), ("Y_2", 6), ("Y_3", 7)]
+    args = mc.multi_coupling_term_handle_JW(strength, term, [dummy] * 4)
+    assert args == (strength, [0, 1, 3, 4, 6, 7], [op[0] for op in term], ["Id"] * (len(term) - 1))
+    args = mc.multi_coupling_term_handle_JW(strength, term, sites)
     print(args)
-    assert args == ([0, 1, 3, 4, 6, 7], ["Y_0 JW", "X_1 JW", "Y_3", "X_4", "Y_6 JW",
-                                         "Y_7"], ["JW", "JW", "Id", "Id", "JW"])
+    assert args == (strength, [0, 1, 3, 4, 6, 7],
+                    ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW", "Y_3"],
+                    ["JW", "JW", "Id", "Id", "JW"])
 
     term = [
-        ("Y_7", 7),
+        ("Y_3", 7),
         ("X_1", 1),
         ("Y_0", 0),
-        ("X_4", 4),
-        ("Y_6", 6),
+        ("X_0", 4),
+        ("Y_2", 6),
         ("Y_3", 3),
     ]
-    args = mc.multi_coupling_term_handle_JW(term, [True, False, True, False, True, True])
+    term, sign = order_combine_term(term, sites)
+    args = mc.multi_coupling_term_handle_JW(strength*sign, term, sites)
     print(args)
-    assert args == ([0, 1, 3, 4, 6, 7], ["JW Y_0", "JW X_1", "Y_3", "JW X_4 JW", "JW Y_6",
-                                         "Y_7"], ["JW", "JW", "Id", "Id", "JW"])
+    assert args == (strength, [0, 1, 3, 4, 6, 7],
+                    ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW", "Y_3"],
+                    ["JW", "JW", "Id", "Id", "JW"])

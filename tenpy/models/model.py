@@ -43,6 +43,7 @@ from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import get_parameter, unused_parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from ..networks.terms import order_combine_term
 from ..networks.site import group_sites
 
 __all__ = [
@@ -653,7 +654,7 @@ class CouplingModel(Model):
         The necessary terms are just added to :attr:`coupling_terms`; doesn't (re)build the MPO.
 
         .. deprecated:: 0.4.0
-            The arguments `raise_op2_left` will be removed in version 1.0.0.
+            The arguments `str_on_first` and `raise_op2_left` will be removed in version 1.0.0.
 
         Parameters
         ----------
@@ -686,6 +687,7 @@ class CouplingModel(Model):
             physical sense (i.e. which of `op1` or `op2` acts first on a given state).
             We follow the convention that `op2` acts first (in the physical sense),
             independent of the MPS ordering.
+            Deprecated.
         raise_op2_left : bool
             Raise an error when `op2` appears left of `op1`
             (in the sense of the MPS ordering given by the lattice). Deprecated.
@@ -734,9 +736,11 @@ class CouplingModel(Model):
             if not self.lat.unit_cell[u].valid_opname(op):
                 raise ValueError(("unknown onsite operator {0!r} for u={1:d}\n"
                                   "{2!r}").format(op, u, self.lat.unit_cell[u]))
+        site1 = self.lat.unit_cell[u1]
+        site2 = self.lat.unit_cell[u2]
         if op_string is None:
-            need_JW1 = self.lat.unit_cell[u1].op_needs_JW(op1)
-            need_JW2 = self.lat.unit_cell[u1].op_needs_JW(op2)
+            need_JW1 = site1.op_needs_JW(op1)
+            need_JW2 = site2.op_needs_JW(op2)
             if need_JW1 and need_JW2:
                 op_string = 'JW'
                 str_on_first = True
@@ -764,24 +768,25 @@ class CouplingModel(Model):
             current_strength = strength[tuple(lat_idx)]
             if current_strength == 0.:
                 continue
-            # the following is equivalent to
-            # i, j, o1, o2, op_string = ct.coupling_term_handle_JW([(op1, i), (op2, j)],
-            #                                                      [need_JW1, need_JW2])
-            # apart for allowing `str_on_first` being set explicitly
+            # the following is roughly equivalent to
+            # CouplingTerms.coupling_term_handle_JW, but also swaps i <-> j if necessary
+            # and allows `str_on_first` being set explicitly
             o1, o2 = op1, op2
-            swap = (j < i)  # ensure i <= j
-            if swap:
+            site_i = site1
+            if j < i:  # ensure i <= j
+                # swap operators
+                i, j = j, i
+                if op_string == 'JW':
+                    current_strength = -current_strength  # swap sign
                 if raise_op2_left:
                     raise ValueError("Op2 is left")
-                i, o1, j, o2 = j, op2, i, op1  # swap OP1 <-> OP2
+                o1, o2 = op2, op1
+                site_i = site2
             # now we have always i < j and 0 <= i < N_sites
             # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
             # o1 is the "left" operator; o2 is the "right" operator
             if str_on_first and op_string != 'Id':
-                if swap:
-                    o1 = ' '.join([op_string, o1])  # o1==op2 should act first
-                else:
-                    o1 = ' '.join([o1, op_string])  # o1==op2 should act first
+                o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
         # done
 
@@ -1081,14 +1086,17 @@ class MultiCouplingModel(CouplingModel):
             new_ct += ct
             ct = new_ct
         N_sites = self.lat.N_sites
+        sites = self.lat.mps_sites()
         # loop to perform the sum over {x_0, x_1, ...}
         for ijkl, i_lat in zip(mps_ijkl, lat_indices):
             current_strength = strength[tuple(i_lat)]
             if current_strength == 0.:
                 continue
             term = list(zip(all_ops, ijkl))
-            args = ct.multi_coupling_term_handle_JW(term, need_JW, op_string)
-            ct.add_multi_coupling_term(current_strength, *args)
+            term, sign = order_combine_term(term, sites)
+            args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
+                                                    op_string)
+            ct.add_multi_coupling_term(*args)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):

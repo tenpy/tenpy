@@ -57,6 +57,8 @@ class Site:
         Note that :meth:`get_op` allows arbitrary concatenations of them.
     need_JW_string : set
         Labels of all onsite operators that need a Jordan-Wigner string.
+        Used in :meth:`op_needs_JW` to determine whether an operator anticommutes or commutes
+        with operators on other sites.
     ops : :class:`~tenpy.linalg.np_conserved.Array`
         Onsite operators are added directly as attributes to self.
         For example after ``self.add_op('Sz', Sz)`` you can use ``self.Sz`` for the `Sz` operator.
@@ -193,12 +195,14 @@ class Site:
             LegCharges have to be ``[leg, leg.conj()]``.
             We set labels ``'p', 'p*'``.
         need_JW : bool
-            Wheter the operator needs a Jordan-Wigner string.
+            Whether the operator needs a Jordan-Wigner string.
             If ``True``, the function adds `name` to :attr:`need_JW_string`.
         """
         name = str(name)
+        if not name.isidentifier():
+            raise ValueError("Invalid operator name: " + name)
         if name in self.opnames:
-            raise ValueError("operator with that name already existent: " + name)
+            raise ValueError("Operator with that name already existent: " + name)
         if hasattr(self, name):
             raise ValueError("Site already has that attribute name: " + name)
         if not isinstance(op, npc.Array):
@@ -297,7 +301,7 @@ class Site:
             The operator given by `name`, with labels ``'p', 'p*'``.
             If name already was an npc Array, it's directly returned.
         """
-        names = name.split()
+        names = name.split(' ')
         op = getattr(self, names[0])
         for name2 in names[1:]:
             op2 = getattr(self, name2)
@@ -305,7 +309,7 @@ class Site:
         return op
 
     def op_needs_JW(self, name):
-        """Wheter an (composite) onsite operator needs a Jordan-Wigner string.
+        """Whether an (composite) onsite operator is fermionic and needs a Jordan-Wigner string.
 
         Parameters
         ----------
@@ -315,7 +319,7 @@ class Site:
         Returns
         -------
         needs_JW : bool
-            Wheter the operator needs a Jordan-Wigner string, judging from :attr:`need_JW_string`.
+            Whether the operator needs a Jordan-Wigner string, judging from :attr:`need_JW_string`.
         """
         names = name.split()
         need_JW = bool(names[0] in self.need_JW_string)
@@ -325,7 +329,7 @@ class Site:
         return need_JW
 
     def valid_opname(self, name):
-        """Check wheter 'name' labels a valid onsite-operator.
+        """Check whether 'name' labels a valid onsite-operator.
 
         Parameters
         ----------
@@ -343,6 +347,25 @@ class Site:
                 return False
         return True
 
+    def multiply_op_names(self, names):
+        """Multiply operator names together.
+
+        Join the operator names in `names` such that `get_op` returns the product of the
+        corresponding operators.
+
+        Parameters
+        ----------
+        names : list of str
+            List of valid operator labels.
+
+        Returns
+        -------
+        combined_opname : str
+            A valid operator name
+            Operatorname representing the product of operators in `names`.
+        """
+        return ' '.join(names)
+
     def __repr__(self):
         """Debug representation of self"""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
@@ -357,7 +380,7 @@ class GroupedSite(Site):
     Note that this is a 'hack' at the cost of other things (e.g., measurements of 'local'
     operators) getting more complicated/computationally expensive.
 
-    If the individual sites indicate fermionic operators (with entries in `needs_JW_string`),
+    If the individual sites indicate fermionic operators (with entries in `need_JW_string`),
     we construct the new on-site oerators of `site1` to include the JW string of `site0`,
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).

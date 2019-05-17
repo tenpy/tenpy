@@ -9,7 +9,9 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
+- Change arguments of :meth:`~tenpy.networks.terms.CouplingTerms.coupling_term_handle_JW` and :meth:`~tenpy.networks.terms.MultiCouplingTerms.multi_coupling_term_handle_JW`
+  to use `strength` and `sites` instead of `op_needs_JW`.
+- Only accept valid identifiers as operator names in :meth:`~tenpy.networks.site.Site.add_op`.
 
 Changed
 ^^^^^^^
@@ -19,7 +21,9 @@ Added
 ^^^^^
 - `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
 - :meth:`~tenpy.networks.mpo.MPO.is_hermitian`
-- nearest-Neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
+- Nearest-neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
+- :meth:`~tenpy.networks.site.Site.multiply_op_names` to replace ``' '.join(op_names)`` and allow explicit compression/multiplication.
+- :func:`~tenpy.networks.terms.order_combine_term` to group operators together.
 
 Fixed
 ^^^^^

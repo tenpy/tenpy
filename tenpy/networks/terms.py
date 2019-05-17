@@ -8,11 +8,12 @@ prefactor when specifying e.g. a Hamiltonian.
 
 import numpy as np
 import warnings
+import itertools
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
 
-__all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms']
+__all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'order_combine_term']
 
 
 class TermList:
@@ -61,11 +62,10 @@ class TermList:
 
         Parameters
         ----------
-        sites : list of {:class:`~tenpy.networks.site.Site` | None}
+        sites : list of :class:`~tenpy.networks.site.Site`
             Defines the local Hilbert space for each site.
             Used to check whether the operators need Jordan-Wigner strings.
             The length is used as `L` for the `onsite_terms` and `coupling_terms`.
-            Use ``[None]*L`` if you don't want to check for Jordan-Wigner.
 
         Returns
         -------
@@ -77,7 +77,7 @@ class TermList:
         """
         L = len(sites)
         ot = OnsiteTerms(L)
-        self.to_one_op_per_site(sites)  # general terms might act multiple times on the same sites
+        self.order_combine(sites)  # general terms might act multiple times on the same sites
         if any(len(t) > 2 for t in self.terms):
             ct = MultiCouplingTerms(L)
         else:
@@ -87,15 +87,11 @@ class TermList:
                 op, i = term[0]
                 ot.add_onsite_term(strength, i, op)
             elif len(term) == 2:
-                op_needs_JW = [(sites[i % L] is not None and sites[i % L].op_needs_JW(op))
-                               for op, i in term]
-                args = ct.coupling_term_handle_JW(term, op_needs_JW)
-                ct.add_coupling_term(strength, *args)
+                args = ct.coupling_term_handle_JW(strength, term, sites)
+                ct.add_coupling_term(*args)
             elif len(term) > 2:
-                op_needs_JW = [(sites[i % L] is not None and sites[i % L].op_needs_JW(op))
-                               for op, i in term]
-                args = ct.multi_coupling_term_handle_JW(term, op_needs_JW)
-                ct.add_multi_coupling_term(strength, *args)
+                args = ct.multi_coupling_term_handle_JW(strength, term, sites)
+                ct.add_multi_coupling_term(*args)
             else:
                 raise ValueError("term without entry!?")
         return ot, ct
@@ -110,6 +106,9 @@ class TermList:
                             np.concatenate((self.strength, other.strength)))
         return NotImplemented
 
+    def __mul__(self, other):
+        return TermList(self.terms, self.strength * other)
+
     def __str__(self):
         res = []
         for term, strength in self:
@@ -117,72 +116,77 @@ class TermList:
             res.append('{s:.5f} * {t}'.format(s=strength, t=term_str))
         return ' +\n'.join(res)
 
-    def to_one_op_per_site(self, sites):
-        """(Anti-)Commute and group operators such that each term contains each site only once.
+    def order_combine(self, sites):
+        """Order and combine operators in each term.
 
         Parameters
         ----------
-        sites : list of {:class:`~tenpy.networks.site.Site` | None}
-            Defines the local Hilbert space for each site.
-            Used to check whether the operators need Jordan-Wigner strings.
-            Use ``[None]*L`` if you don't want to check for Jordan-Wigner.
-        """
-        for idx, term in enumerate(self.terms):
-            self.terms[idx], overall_sign = self.term_to_one_op_per_site(term, sites)
-            self.strength[idx] *= overall_sign
-
-    @staticmethod
-    def term_to_one_op_per_site(term, sites):
-        """Combine operators in a term to one terms per site.
-
-        Takes in a term of operators and sites they acts on and
-        combines operators acting on the same site by (anti)commuting them next to each other
-        and fusing them to a single, white-space separated string.
-
-        Parameters
-        ----------
-        term : a list of (opname_i, i) tuples
-            Represents a product of onsite operators with site indices `i` they act on.
-            Needs not to be ordered and can have multiple entries acting on the same site.
-        sites : list of {:class:`~tenpy.networks.site.Site` | None}
+        sites : list of :class:`~tenpy.networks.site.Site`
             Defines the local Hilbert space for each site.
             Used to check whether the operators anticommute
-            (= whether they need Jordan-Wigner strings).
-            Use ``[None]*L`` if you don't want to check for anti-commutation.
+            (= whether they need Jordan-Wigner strings) and for multiplication rules.
 
-        Returns
-        -------
-        combined_term :
-            Equivalent to `term` but with at most one operator per site.
-        overall_sign : +1 | -1 | 0
-            Comes from the (anti-)commutation relations.
-            When the operators in `term` are multiplied from left to right, and
-            then multiplied by `overall_sign`, the result is the same operator
-            as the product of `combined_term` from left to right.
+        See also
+        --------
+        order_and_combine_term : does it for a single term.
         """
-        # Group all operators that are on the same site and get the corresponding sign
-        L = len(sites)
-        overall_sign = 1
-        combined_term = []
-        for op_i, i in term:  # left to right
-            site_i = sites[i % L]
-            for idx, (op_j, j) in enumerate(combined_term):
-                if i == j:  # Same ring and site
-                    # commute with the operators in combined_term[idx+1:]
-                    # if anti-commuting: take care of overall_sign
-                    if site_i is not None and site_i.op_needs_JW(op_i):
-                        for op_k, k in combined_term[idx + 1:]:
-                            site_k = sites[k % L]
-                            if site_k is not None and site_k.op_needs_JW(op_k):
-                                overall_sign *= -1
-                    # append op_i to op_j
-                    combined_op = op_j + ' ' + op_i
-                    combined_term[idx] = (combined_op, j)
-                    break
-            else:  # finish for without break: no site i == j
-                # site `i` does not yet exist in combined_term, append to the right
-                combined_term.append((op_i, i))
-        return combined_term, overall_sign
+        for idx, term in enumerate(self.terms):
+            self.terms[idx], overall_sign = order_combine_term(term, sites)
+            self.strength[idx] *= overall_sign
+        # TODO: could sort terms and combine duplicates
+
+
+def order_combine_term(term, sites):
+    """Combine operators in a term to one terms per site.
+
+    Takes in a term of operators and sites they acts on, commutes operators to order them by site
+    and combines operators acting on the same site with
+    :meth:`~tenpy.networks.site.Site.multiply_op_names`.
+
+    Parameters
+    ----------
+    term : a list of (opname_i, i) tuples
+        Represents a product of onsite operators with site indices `i` they act on.
+        Needs not to be ordered and can have multiple entries acting on the same site.
+    sites : list of :class:`~tenpy.networks.site.Site`
+        Defines the local Hilbert space for each site.
+        Used to check whether the operators anticommute
+        (= whether they need Jordan-Wigner strings) and for multiplication rules.
+
+    Returns
+    -------
+    combined_term :
+        Equivalent to `term` but with at most one operator per site.
+    overall_sign : +1 | -1 | 0
+        Comes from the (anti-)commutation relations.
+        When the operators in `term` are multiplied from left to right, and
+        then multiplied by `overall_sign`, the result is the same operator
+        as the product of `combined_term` from left to right.
+    """
+    # Group all operators that are on the same site and get the corresponding sign
+    L = len(sites)
+    N = len(term)
+    overall_sign = 1
+    terms_commute = [(op, i, sites[i% L].op_needs_JW(op)) for op, i in term]
+    # perform bubble sort on terms_commute and keep track of the sign
+    if N > 100:  # bubblesort is O(N^2), assume that N is small
+        # N = 1000 takes ~1s, so 100 should be fine...
+        warnings.warn("not intended for large number of operators.")
+    for s_max in range(N-1, 0, -1):
+        for s in range(s_max):
+            t1, t2 = terms_commute[s:s + 2]
+            if t1[1] > t2[1]:  # t1 right of t2 -> swap
+                terms_commute[s] = t2
+                terms_commute[s + 1] = t1
+                if t1[2] and t2[2]:
+                    overall_sign = -overall_sign
+    # combine terms on same site
+    term = []
+    for i, same_site_terms in itertools.groupby(terms_commute, lambda t: t[1]):
+        ops = [t[0] for t in same_site_terms]
+        op = sites[i % L].multiply_op_names(ops)
+        term.append((op, i))
+    return term, overall_sign
 
 
 class OnsiteTerms:
@@ -245,8 +249,8 @@ class OnsiteTerms:
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
-            The sites for translating the operator names on the :attr:`L` sites into
-            :class:`~tenpy.linalg.np_conserved.Array`.
+            Defines the local Hilbert space for each site.
+            Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
 
         Returns
         -------
@@ -290,8 +294,8 @@ class OnsiteTerms:
             Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
             Modified *in place*.
         sites : list of :class:`~tenpy.networks.site.Site`
-            The sites for translating the operator names on the :attr:`L` sites into
-            :class:`~tenpy.linalg.np_conserved.Array`.
+            Defines the local Hilbert space for each site.
+            Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
         distribute : (float, float)
             How to split the onsite terms (in the bulk) into the bond terms to the left
             (``distribute[0]``) and right (``distribute[1]``).
@@ -301,7 +305,7 @@ class OnsiteTerms:
         """
         dist_L, dist_R = distribute
         if dist_L + dist_R != 1.:
-            warnings.warn("sum of `distribute` not 1!!!")
+            raise ValueError("sum of `distribute` not 1!")
         N_sites = self.L
         H_onsite = self.to_Arrays(sites)
         for j in range(N_sites):
@@ -428,21 +432,19 @@ class CouplingTerms:
         d3 = d2.setdefault(j, dict())
         d3[op_j] = d3.get(op_j, 0) + strength
 
-    def coupling_term_handle_JW(self, term, op_needs_JW, op_string=None):
+    def coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
-
-        Sort and groups the operators by sites they act on, such that the returned
-        `ijkl` is strictly ascending, i.e. has entries `i < j < k < l`.
-        Moreover, handle/figure out Jordan-Wigner strings if needed.
 
         Parameters
         ----------
+        strength : float
+            The strength of the coupling term.
         term : [(str, int), (str, int)]
             List of two tuples ``(op, i)`` where `i` is the MPS index of the site the operator
             named `op` acts on.
-        op_needs_JW : list of bool
-            For each entry in term whether the operator needs a JW string.
-            Only used if `op_string` is None.
+        sites : list of :class:`~tenpy.networks.site.Site`
+            Defines the local Hilbert space for each site.
+            Used to check whether the operators need Jordan-Wigner strings.
         op_string : None | str
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
@@ -455,29 +457,26 @@ class CouplingTerms:
 
         Returns
         -------
-        i, j, op_i, op_j, op_string:
+        strength, i, j, op_i, op_j, op_string:
             Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added
             term corresponds to the parameters of this function.
         """
         L = self.L
         (op_i, i), (op_j, j) = term
+        site_i = sites[i % L]
+        site_j = sites[j % L]
+        need_JW_i = site_i.op_needs_JW(op_i)
+        need_JW_j = site_j.op_needs_JW(op_j)
         if op_string is None:
-            need_JW1, need_JW2 = op_needs_JW
-            if need_JW1 and need_JW2:
+            if need_JW_i and need_JW_j:
                 op_string = 'JW'
-            elif need_JW1 or need_JW2:
+            elif need_JW_i or need_JW_j:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
                 op_string = 'Id'
-        swap = (j < i)
-        if swap:
-            op_i, i, op_j, j = op_j, j, op_i, i
-        if op_string == 'JW':
-            if swap:
-                op_i = ' '.join([op_string, op_i])  # op_i=(original op_j) should act first
-            else:
-                op_i = ' '.join([op_i, op_string])  # op_j should act first
-        return i, j, op_i, op_j, op_string
+        if op_string is 'JW':
+            op_i = site_i.multiply_op_names([op_i, op_string])
+        return strength, i, j, op_i, op_j, op_string
 
     def plot_coupling_terms(self,
                             ax,
@@ -603,8 +602,8 @@ class CouplingTerms:
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
-            The sites for translating the operator names on the :attr:`L` sites into
-            :class:`~tenpy.linalg.np_conserved.Array`.
+            Defines the local Hilbert space for each site.
+            Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
 
         Returns
         -------
@@ -798,21 +797,23 @@ class MultiCouplingTerms(CouplingTerms):
         op = ops_ijkl[-1]
         d1[op] = d1.get(op, 0) + strength
 
-    def multi_coupling_term_handle_JW(self, term, op_needs_JW, op_string=None):
+    def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
 
-        Sort and groups the operators by sites they act on, such that the returned
-        `ijkl` is strictly ascending, i.e. has entries `i < j < k < l`.
-        Moreover, handle/figure out Jordan-Wigner strings if needed.
+        Handle/figure out Jordan-Wigner strings if needed.
 
         Parameters
         ----------
+        strength : float
+            The strength of the term.
         term : list of (str, int)
-            List of tuples ``(op, i)`` where `i` is the MPS index of the site the operator
-            named `op` acts on.
-        op_needs_JW : list of bool
-            For each entry in term whether the operator needs a JW string.
-            Only used if `op_string` is None.
+            List of tuples ``(op_i, i)`` where `i` is the MPS index of the site the operator
+            named `op_i` acts on.
+            We **require** the operators to be sorted (strictly ascending) by sites.
+            If necessary, call :func:`order_combine_term` beforehand.
+        sites : list of :class:`~tenpy.networks.site.Site`
+            Defines the local Hilbert space for each site.
+            Used to check whether the operators need Jordan-Wigner strings.
         op_string : None | str
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
@@ -825,63 +826,47 @@ class MultiCouplingTerms(CouplingTerms):
 
         Returns
         -------
-        ijkl, ops_ijkl, op_string :
-            Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added term
-            corresponds to the parameters of this function.
+        strength, ijkl, ops_ijkl, op_string :
+            Arguments for :meth:`MultiCouplingTerms.add_multi_coupling_term` such that the added
+            term corresponds to the parameters of this function.
         """
         L = self.L
         number_ops = len(term)
         if number_ops < 2:
-            raise ValueError("expect multi coupling")
+            raise ValueError("got onsite term instead of coupling")
+        if op_string == 'JW':
+            warnings.warn("op_string='JW' is probably not what you want!")
         ops = [t[0] for t in term]
         ijkl = [t[1] for t in term]
-        reorder = np.argsort(ijkl, kind='mergesort')  # need stable kind!!!
-        i0 = ijkl[reorder[0]]
+        assert all([i < j for i, j in zip(ijkl, ijkl[1:])]) # ascending?
+        op_needs_JW = [sites[i % L].op_needs_JW(op) for op, i in term]
+        if not any(op_needs_JW):
+            op_string = 'Id'
+        # shift ijkl such that first site is inside unit cell
+        i0 = ijkl[0]
         if not 0 <= i0 < L:  # ensure this condition with a shift
             shift = i0 % L - i0
             ijkl = [i + shift for i in ijkl]
-        # what we want to calculate:
-        new_ijkl = []
-        new_ops = []
-        new_op_str = []  # new_op_string[x] is right of new_ops[x]
-        # first make groups with strictly ``i < j < k < ... ``
-        i0 = -1  # != the first i since -1 <  0 <= ijkl[:]
-        grouped_reorder = []
-        for x in reorder:
-            i = ijkl[x]
-            if i != i0:
-                i0 = i
-                new_ijkl.append(i)
-                grouped_reorder.append([x])
-            else:
-                grouped_reorder[-1].append(x)
         if op_string is not None:
             # simpler case
-            for group in grouped_reorder:
-                new_ops.append(' '.join([ops[x] for x in group]))
-                new_op_str.append(op_string)
-            new_op_str.pop()  # remove last entry (created one too much)
+            new_op_str = [op_string] * (number_ops - 1)
         else:
-            # more complicated: handle Jordan-Wigner
-            for a, group in enumerate(grouped_reorder):
-                right = [z for gr in grouped_reorder[a + 1:] for z in gr]
-                onsite_ops = []
-                need_JW_right = False
-                JW_max = -1
-                for x in group + [number_ops]:
-                    JW_min, JW_max = JW_max, x
-                    need_JW = (np.sum([op_needs_JW[z]
-                                       for z in right if JW_min < z < JW_max]) % 2 == 1)
-                    if need_JW:
-                        onsite_ops.append('JW')
-                        need_JW_right = not need_JW_right
-                    if x != number_ops:
-                        onsite_ops.append(ops[x])
-                new_ops.append(' '.join(onsite_ops))
-                op_str_right = 'JW' if need_JW_right else 'Id'
-                new_op_str.append(op_str_right)
-            new_op_str.pop()  # remove last entry (created one too much)
-        return new_ijkl, new_ops, new_op_str
+            # handle Jordan-Wigner transformation
+            new_op_str = []  # new_op_string[x] is right of ops[x]
+            JW_right = False # right of site -1 : no JW string: even number
+            for x in range(number_ops):
+                if op_needs_JW[x]:
+                    JW_right = not JW_right # switch on the right
+                if JW_right:
+                    new_op_str.append('JW')
+                    # need also 'JW' on current site
+                    ops[x] = sites[ijkl[x] % L].multiply_op_names([ops[x], 'JW'])
+                else:
+                    new_op_str.append('Id')
+            if JW_right:
+                raise ValueError("odd number of Jordan Wigner strings")
+            new_op_str.pop()  # created one entry too much
+        return strength, ijkl, ops, new_op_str
 
     def max_range(self):
         """Determine the maximal range in :attr:`coupling_terms`.
