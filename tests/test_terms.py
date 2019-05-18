@@ -178,7 +178,9 @@ def test_coupling_terms():
     assert mc.coupling_terms == mc_des
     assert mc.max_range() == 3 - 0
 
+
 # TODO: test order_and_combine
+
 
 def test_coupling_terms_handle_JW():
     strength = 0.25
@@ -203,7 +205,7 @@ def test_coupling_terms_handle_JW():
     term = [("Y_0", 4), ("Y_1", 1)]
     term, sign = order_combine_term(term, sites)
     assert term == [("Y_1", 1), ("Y_0", 4)]
-    args = mc.coupling_term_handle_JW(strength*sign, term, sites)
+    args = mc.coupling_term_handle_JW(strength * sign, term, sites)
     assert args == (-strength, 1, 4, "Y_1 JW", "Y_0", "JW")
 
     # multi coupling
@@ -219,9 +221,9 @@ def test_coupling_terms_handle_JW():
     assert args == (strength, [0, 1, 3, 4, 6, 7], [op[0] for op in term], ["Id"] * (len(term) - 1))
     args = mc.multi_coupling_term_handle_JW(strength, term, sites)
     print(args)
-    assert args == (strength, [0, 1, 3, 4, 6, 7],
-                    ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW", "Y_3"],
-                    ["JW", "JW", "Id", "Id", "JW"])
+    assert args == (strength, [0, 1, 3, 4, 6,
+                               7], ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW",
+                                    "Y_3"], ["JW", "JW", "Id", "Id", "JW"])
 
     term = [
         ("Y_3", 7),
@@ -232,8 +234,8 @@ def test_coupling_terms_handle_JW():
         ("Y_3", 3),
     ]
     term, sign = order_combine_term(term, sites)
-    args = mc.multi_coupling_term_handle_JW(strength*sign, term, sites)
+    args = mc.multi_coupling_term_handle_JW(strength * sign, term, sites)
     print(args)
-    assert args == (strength, [0, 1, 3, 4, 6, 7],
-                    ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW", "Y_3"],
-                    ["JW", "JW", "Id", "Id", "JW"])
+    assert args == (strength, [0, 1, 3, 4, 6,
+                               7], ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW",
+                                    "Y_3"], ["JW", "JW", "Id", "Id", "JW"])

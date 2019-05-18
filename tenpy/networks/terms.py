@@ -167,12 +167,12 @@ def order_combine_term(term, sites):
     L = len(sites)
     N = len(term)
     overall_sign = 1
-    terms_commute = [(op, i, sites[i% L].op_needs_JW(op)) for op, i in term]
+    terms_commute = [(op, i, sites[i % L].op_needs_JW(op)) for op, i in term]
     # perform bubble sort on terms_commute and keep track of the sign
     if N > 100:  # bubblesort is O(N^2), assume that N is small
         # N = 1000 takes ~1s, so 100 should be fine...
         warnings.warn("not intended for large number of operators.")
-    for s_max in range(N-1, 0, -1):
+    for s_max in range(N - 1, 0, -1):
         for s in range(s_max):
             t1, t2 = terms_commute[s:s + 2]
             if t1[1] > t2[1]:  # t1 right of t2 -> swap
@@ -838,7 +838,7 @@ class MultiCouplingTerms(CouplingTerms):
             warnings.warn("op_string='JW' is probably not what you want!")
         ops = [t[0] for t in term]
         ijkl = [t[1] for t in term]
-        assert all([i < j for i, j in zip(ijkl, ijkl[1:])]) # ascending?
+        assert all([i < j for i, j in zip(ijkl, ijkl[1:])])  # ascending?
         op_needs_JW = [sites[i % L].op_needs_JW(op) for op, i in term]
         if not any(op_needs_JW):
             op_string = 'Id'
@@ -853,10 +853,10 @@ class MultiCouplingTerms(CouplingTerms):
         else:
             # handle Jordan-Wigner transformation
             new_op_str = []  # new_op_string[x] is right of ops[x]
-            JW_right = False # right of site -1 : no JW string: even number
+            JW_right = False  # right of site -1 : no JW string: even number
             for x in range(number_ops):
                 if op_needs_JW[x]:
-                    JW_right = not JW_right # switch on the right
+                    JW_right = not JW_right  # switch on the right
                 if JW_right:
                     new_op_str.append('JW')
                     # need also 'JW' on current site

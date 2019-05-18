@@ -160,8 +160,8 @@ def test_CouplingModel_explicit():
     W1_new = H_mpo.get_W(1)
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
-    CdJW = Cd.matvec(JW) # = Cd
-    CJW = C.matvec(JW) # = -C
+    CdJW = Cd.matvec(JW)  # = Cd
+    CJW = C.matvec(JW)  # = -C
     # yapf: disable
     W0_ex = [[Id,   None, None, CJW, CdJW,  N,    None, None, None, N*0.125],
              [None, None, Id,   None, None, None, None, None, None, None],
@@ -210,7 +210,7 @@ def test_MultiCouplingModel_explicit():
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
-    CJW = C.matvec(JW) # = -C
+    CJW = C.matvec(JW)  # = -C
     NJW = N.matvec(JW)
     import pprint
     pprint.pprint(M.H_MPO_graph._build_grids())
