@@ -1074,7 +1074,6 @@ class MultiCouplingModel(CouplingModel):
         mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(
             u0, all_us[1:], dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
-
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])

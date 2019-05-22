@@ -582,9 +582,9 @@ class Lattice:
         -------
         mps1, mps2 : array
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
-            MPS indices for to be connected by the coupling.
-        lat_indices : array, shape = (len(mps1), dim)
-            Corresponding indices in the lattice. The entries are in the "bottom left corner".
+        lat_indices : 2D int array
+            Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
+            of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
@@ -608,6 +608,7 @@ class Lattice:
             axis=1)
         mps_i = mps_i[keep]
         lat_indices = lat_i[keep] + shift_lat_indices[np.newaxis, :]
+        lat_indices = np.mod(lat_indices, coupling_shape)
         lat_j = lat_j[keep]
         lat_j_shifted = lat_j_shifted[keep]
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
@@ -624,6 +625,30 @@ class Lattice:
     def possible_multi_couplings(self, u0, other_us, dx):
         """Generalization of :meth:`possible_couplings` to couplings with more than 2 sites.
 
+        Arguments
+        ---------
+        u0 : int
+            Argument `u0` of :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+        other_us : list of int
+            The `u` of the `other_ops` in
+            :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+        dx : array, shape (len(other_us), lat.dim+1)
+            The `dx` specifying relative operator positions of the `other_ops` in
+            :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+
+        Returns
+        -------
+        mps_ijkl : 2D int array
+            Each row contains MPS indices `i,j,k,l,...`` for each of the operators positions.
+            The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary coundary
+            conditions of `self` (how much the `box` for given `dx` can be shifted around without
+            hitting a boundary - these are the different rows).
+        lat_indices : 2D int array
+            Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
+            of the "lower left corner" of the box containing the coupling.
+        coupling_shape : tuple of int
+            Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
+            `lat_indices` has only rows within this shape.
         """
         shift_lat_indices, coupling_shape = self._multi_coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
@@ -645,6 +670,7 @@ class Lattice:
             axis=(1, 2))
         mps_i = mps_i[keep]
         lat_indices = lat_i[keep, :] + shift_lat_indices[np.newaxis, :]
+        lat_indices = np.mod(lat_indices, coupling_shape)
         lat_jkl = lat_jkl[keep, :, :]
         lat_jkl_shifted = lat_jkl_shifted[keep, :, :]
         latu_jkl = np.concatenate((lat_jkl, np.array([other_us] * len(lat_jkl))[:, :, np.newaxis]),

@@ -154,7 +154,7 @@ def test_CouplingModel_explicit():
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), None)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), None)
-    M.add_coupling(4., 0, 'N', 0, 'N', (2, 1), None)  # a full unit cell inbetween!
+    M.add_coupling(4., 0, 'N', 0, 'N', (-2, -1), None)  # a full unit cell inbetween!
     H_mpo = M.calc_H_MPO()
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
@@ -200,7 +200,7 @@ def test_MultiCouplingModel_explicit():
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), 'JW')
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), 'JW')
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), 'JW')
-    M.add_multi_coupling(4., 0, 'N', [(0, 'N', (2, 1))], 'Id')  # a full unit cell inbetween!
+    M.add_multi_coupling(4., 0, 'N', [(0, 'N', (-2, -1))], 'Id')  # a full unit cell inbetween!
     # some wired mediated hopping along the diagonal
     M.add_multi_coupling(1.125, 0, 'N', other_ops=[(0, 'Cd', (0, 1)), (0, 'C', (1, 0))])
     H_mpo = M.calc_H_MPO()
