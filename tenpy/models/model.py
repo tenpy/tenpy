@@ -960,7 +960,7 @@ class CouplingModel(Model):
         ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
 
         """
-        (_, c_shape) = self.lat._coupling_shape(dx)
+        c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strenght complex
         complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])

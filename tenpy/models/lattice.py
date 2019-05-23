@@ -584,12 +584,13 @@ class Lattice:
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
             MPS indices for to be connected by the coupling.
         lat_indices : array, shape = (len(mps1), dim)
-            Corresponding indices in the lattice. The entries are in the "bottom left corner".
+            Corresponding indices in the lattice. Entries are the "bottom left corner" of the
+            coupling.
         coupling_shape : tuple of int
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
-        shift_lat_indices, coupling_shape = self._coupling_shape(dx)
+        coupling_shape, shift_lat_indices = self.coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
             return [], [], np.zeros([0, self.dim]), coupling_shape
         Ls = np.array(self.Ls)
@@ -624,8 +625,30 @@ class Lattice:
     def possible_multi_couplings(self, u0, other_us, dx):
         """Generalization of :meth:`possible_couplings` to couplings with more than 2 sites.
 
+        Given the arguments of :meth:`~tenpy.models.model.MultiCouplingModel.add_coupling`
+        determine the necessary shape of `strength`.
+
+        Parameters
+        ----------
+        u0 : int
+            Index of the first operator in the unit cell.
+        other_us : list of int
+            :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+        dx : list of array
+            Length :attr:`dim`. The translation in terms of basis vectors for the other operators.
+
+        Returns
+        -------
+        mps_ijkl : array
+            For each possible multi-coupling the MPS indices for the operators to be connected.
+        lat_indices : array, shape = (len(mps_ijkl), dim)
+            Corresponding indices in the lattice. Entries are the "bottom left corner" of the
+            coupling.
+        coupling_shape : tuple of int
+            Len :attr:`dim`. The correct shape for an array specifying the coupling `strength`.
+            `lat_indices` has only rows within this shape.
         """
-        shift_lat_indices, coupling_shape = self._multi_coupling_shape(dx)
+        coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
             return [], [], [], coupling_shape
         Ls = np.array(self.Ls)
@@ -655,6 +678,52 @@ class Lattice:
             mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
         return mps_ijkl, lat_indices, coupling_shape
+
+    def coupling_shape(self, dx):
+        """Calculate correct shape of the `strengths` for a coupling.
+
+        Parameters
+        ----------
+        dx : tuple of int
+            Translation vector in the lattice for a coupling of two operators.
+
+        Returns
+        -------
+        coupling_shape : tuple of int
+            Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
+            `lat_indices` has only rows within this shape.
+        shift_lat_indices : array
+            Translation vector from lower left corner of box spanned by `dx` to the origin.
+        """
+        shape = [La - abs(dxa) * int(bca) for La, dxa, bca in zip(self.Ls, dx, self.bc)]
+        shift_strength = [min(0, dxa) for dxa in dx]
+        return tuple(shape), np.array(shift_strength)
+
+    def multi_coupling_shape(self, dx):
+        """Calculate correct shape of the `strengths` for a multi_coupling.
+
+        Parameters
+        ----------
+        dx : tuple of int
+            Translation vector in the lattice for a coupling of two operators.
+
+        Returns
+        -------
+        coupling_shape : tuple of int
+            Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
+            `lat_indices` has only rows within this shape.
+        shift_lat_indices : array
+            Translation vector from lower left corner of box spanned by `dx` to the origin.
+        """
+        Ls = self.Ls
+        shape = [None] * len(Ls)
+        shift_strength = [None] * len(Ls)
+        for a in range(len(Ls)):
+            max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
+            box_dx = max(max_dx, 0) - min(min_dx, 0)
+            shape[a] = Ls[a] - box_dx * int(self.bc[a])
+            shift_strength[a] = min(0, min_dx)
+        return tuple(shape), np.array(shift_strength)
 
     def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):
         """Plot the sites of the lattice with markers.
@@ -848,24 +917,6 @@ class Lattice:
             if not np.any(self.bc_shift != 0):
                 self.bc_shift = None
         self.bc = np.array(bc)
-
-    def _coupling_shape(self, dx):
-        """calculate correct shape of the strengths for each coupling."""
-        shape = [La - abs(dxa) * int(bca) for La, dxa, bca in zip(self.Ls, dx, self.bc)]
-        shift_strength = [min(0, dxa) for dxa in dx]
-        return np.array(shift_strength), tuple(shape)
-
-    def _multi_coupling_shape(self, dx):
-        """calculate correct shape of the strengths for each coupling."""
-        Ls = self.Ls
-        shape = [None] * len(Ls)
-        shift_strength = [None] * len(Ls)
-        for a in range(len(Ls)):
-            max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
-            box_dx = max(max_dx, 0) - min(min_dx, 0)
-            shape[a] = Ls[a] - box_dx * int(self.bc[a])
-            shift_strength[a] = min(0, min_dx)
-        return np.array(shift_strength), tuple(shape)
 
 
 class TrivialLattice(Lattice):
