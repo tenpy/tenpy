@@ -163,25 +163,25 @@ def test_CouplingModel_explicit():
     CdJW = Cd.matvec(JW)  # = Cd
     CJW = C.matvec(JW)  # = -C
     # yapf: disable
-    W0_ex = [[Id,   None, None, CJW, CdJW,  N,    None, None, None, N*0.125],
-             [None, None, Id,   None, None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
+    W0_ex = [[Id,   CJW,  CdJW, N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, Id,   None, None, None, None, None, None, None, None],
+             [None, None, None, None, Id,   None, None, None, None, None],
+             [None, None, None, None, None, Id,   None, None, None, None],
              [None, None, None, None, None, None, JW,   None, None, None],
              [None, None, None, None, None, None, None, JW,   None, None],
              [None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,  None, None, None, None, None,  CJW,  CdJW, N,    N*0.125],
-             [None, Id,   None, None, None, None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, JW,   None, None, None, None, None, Cd*-0.5],
-             [None, None, None, None, JW,   None, None, None, None, C*0.5],
-             [None, None, None, None, None, Id,   None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, Id]]
+    W1_ex = [[Id,   None, None, None, None, CJW,  CdJW, N,    None, N*0.125],
+             [None, JW,   None, None, None, None, None, None, None, Cd*-0.5],
+             [None, None, JW,   None, None, None, None, None, None, C*0.5],
+             [None, None, None, Id,   None, None, None, None, None, None],
+             [None, None, None, None, Id,   None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, Id,   None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, Id]]
 
     # yapf: enable
@@ -212,31 +212,30 @@ def test_MultiCouplingModel_explicit():
     CdJW = Cd.matvec(JW)  # = Cd
     CJW = C.matvec(JW)  # = -C
     NJW = N.matvec(JW)
-    import pprint
-    pprint.pprint(M.H_MPO_graph._build_grids())
+    # print(M.H_MPO_graph._build_grids())
     # yapf: disable
-    W0_ex = [[Id,   None, None, CJW,  CdJW, None, N,    None, None, None, N*0.125],
-             [None, None, Id,   None, None, None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, N*4.0],
+    W0_ex = [[Id,   CJW,  CdJW, None, N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, JW,   None, None, None, None, None],
-             [None, Id,   None, None, None, None, None, None, None, None, None],
+             [None, None, None, JW,   None, None, None, None, None, None, None],
+             [None, None, None, None, None, Id,   None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, None, C*1.125],
+             [None, None, None, None, None, None, Id,   None, None, None, None],
              [None, None, None, None, None, None, None, JW,   None, None, None],
              [None, None, None, None, None, None, None, None, JW,   None, None],
              [None, None, None, None, None, None, None, None, None, Id,   None],
+             [None, None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, None, None, None, None, CJW,  CdJW, N,    N*0.125],
-             [None, Id,   None, None, None, None, None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, JW,   None, None, None, None, None, None, None, Cd*-0.5],
-             [None, None, None, None, JW,   NJW,  None, None, None, None, None, C*0.5],
+    W1_ex = [[Id,   None, None, None, None, None, None, CJW,  CdJW, N,    None, N*0.125],
+             [None, JW,   None, None, None, None, None, None, None, None, None, Cd*-0.5],
+             [None, None, JW,   NJW,  None, None, None, None, None, None, None, C*0.5],
              [None, None, None, None, None, None, None, None, None, None, None, C*1.125],
-             [None, None, None, None, None, None, Id,   CdJW, None, None, None, None],
+             [None, None, None, None, Id,   CdJW, None, None, None, None, None, None],
+             [None, None, None, None, None, None, Id,   None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, Id,   None, None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, None, None, Id]]
     # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])

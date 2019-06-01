@@ -673,7 +673,9 @@ class MPOGraph:
         keyL = keyR = key
         for k in range(i + 1, j):
             if (k - i) % self.L == 0:
-                keyR = (key, (k - i) // self.L)
+                # necessary to extend key because keyL is already in use at this bond
+                keyR = keyL + (k, opname, opname) # same structure as for other standard keys
+                # (i, op_i, op_str_right_of_i) e.g. in MultiCouplingTerms.add_to_graph
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
                 self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
@@ -766,16 +768,8 @@ class MPOGraph:
         res = self._ordered_states = []
         for s in self.states:
             d = {}
-            # try 'IdL'=0 and 'IdR'=-1.
-            if 'IdL' in s:
-                offset = 1
-                d['IdL'] = 0
-            else:
-                offset = 0
-            for i, key in enumerate(sorted(s - {'IdL', 'IdR'}, key=str)):
-                d[key] = i + offset
-            if 'IdR' in s:
-                d['IdR'] = len(s) - 1
+            for i, key in enumerate(sorted(s, key=_mpo_graph_state_order)):
+                d[key] = i
             res.append(d)
 
     def _build_grids(self):
@@ -1110,3 +1104,23 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
     legs = [npc.LegCharge.from_qflat(chinfo, qflat, qconj=+1) for qflat in charges[:-1]]
     legs.append(legs[0])
     return legs
+
+def _mpo_graph_state_order(key):
+    """Key-function for sorting they `states` of an MPO Graph.
+
+    For standard TeNPy MPOs we expect keys of the form
+    ``'IdL'``, ``'IdR'``, ``(i, op_i, opstr)`` and recursively ``key + (j, op_j, opstr)``,
+    (Note that op_j can be opstr if ``j-i >= L``.)
+
+    The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
+    """
+    if isinstance(key, tuple):
+        return key
+    if isinstance(key, str):
+        if key == 'IdL': # should be first
+            return (-2,)
+        if key == 'IdR': # should be last
+            return (np.inf,)
+    # fallback: compare strings
+        return (-1, key)
+    return (-1, str(key))
