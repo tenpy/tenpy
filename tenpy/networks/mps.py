@@ -1680,7 +1680,7 @@ class MPS:
                              hermitian=False):
         r"""Correlation function  ``<psi|op1_i op2_j|psi>/<psi|psi>`` of single site operators.
 
-        Given the MPS in canonical form, it calculates n-site expectation values.
+        Given the MPS in canonical form, it calculates 2-site correlation functions.
         For examples the contraction for a two-site operator on site `i` would look like::
 
             |          .--S--B[i]--B[i+1]--...--B[j]---.
@@ -1707,7 +1707,7 @@ class MPS:
         For ``i==j``, no `opstr` is included.
         For ``str_on_first=False``, the `opstr` on site ``min(i, j)`` is always left out.
 
-        Strings (like ``'Id', 'Sz'``) in the operator lists are translated into single-site
+        Strings (like ``'Id', 'Sz'``) in the arguments are translated into single-site
         operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
         Each operator should have the two legs ``'p', 'p*'``.
 
@@ -1732,6 +1732,7 @@ class MPS:
         opstr : None | (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             Ignored by default (``None``).
             Operator(s) to be inserted between ``ops1`` and ``ops2``.
+            If less than :attr:`L` operators are given, we repeat them periodically.
             If given as a list, ``opstr[r]`` is inserted at site `r` (independent of `sites1` and
             `sites2`).
         str_on_first : bool

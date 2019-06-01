@@ -705,7 +705,7 @@ class CouplingModel(Model):
         ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         The strength can be an array, which get's tiled to the correct shape.
-        For example, in a 1D :class`~tenpy.models.lattice.Chain` with an even number of sites and
+        For example, in a 1D :class:`~tenpy.models.lattice.Chain` with an even number of sites and
         periodic (or infinite) boundary conditions, you can add alternating strong and weak
         couplings with a line like::
 

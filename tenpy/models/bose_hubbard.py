@@ -18,7 +18,7 @@ class BoseHubbardModel(CouplingMPOModel):
     The Hamiltonian is:
 
     .. math ::
-        H = t \sum_{\langle i, j \rangle, i < j} t (b_i^{\dagger} b_j + b_j^{\dagger} b_i)
+        H = t \sum_{\langle i, j \rangle, i < j} (b_i^{\dagger} b_j + b_j^{\dagger} b_i)
             + V \sum_{\langle i, j \rangle, i < j} n_i n_j
             + \frac{U}{2} \sum_i n_i (n_i - 1) + \mu \sum_i n_i
 

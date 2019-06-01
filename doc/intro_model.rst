@@ -122,18 +122,19 @@ The methods :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.
 indices of the MPS to and from indices of the lattice. If you obtained and array with expectation values for a given MPS,
 you can use :meth:`~tenpy.models.lattice.Lattice.mps2lat_values` to map it to lattice indices, thereby reverting the ordering.
 
-.. note ::
-
-    A suitable ordering is critical for the efficiency of MPS-based algorithms.
-    On one hand, different orderings can lead to different MPO bond-dimensions, with direct impact on the complexity scaling.
-    Moreover, it influences how much entanglement needs to go through each bonds of the underlying MPS,
-    e.g., the ground strate to be found in DMRG, and therefore influence the required MPS bond dimensions.
-    For the latter reason, the "optimal" bond dimension can not be known a priori, but one needs to try different
-    orderings.
-
 Performing this mapping of the Hamiltonain from a 2D lattice to a 1D chain by hand can be a tideous process.
 Therefore, we have automated this mapping in TeNPy as explained in the next section.
 (Nevertheless it's a good exercise you should do at least once in your life to understand how it works!)
+
+.. note ::
+
+    A suitable order is critical for the efficiency of MPS-based algorithms.
+    On one hand, different orderings can lead to different MPO bond-dimensions, with direct impact on the complexity scaling.
+    On the other hand, it influences how much entanglement needs to go through each bonds of the underlying MPS,
+    e.g., the ground strate to be found in DMRG, and therefore influences the required MPS bond dimensions.
+    For the latter reason, the "optimal" ordering can not be known a priori and might even depend on your coupling
+    parameters (and the phase you are in).
+    In the end, you can just try different orderings and see which one works best.
 
 Implementing you own model
 --------------------------

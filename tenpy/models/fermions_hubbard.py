@@ -12,6 +12,7 @@ from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
 from ..networks.site import SpinHalfFermionSite
 
+__all__ = ['FermionicHubbardModel', 'FermionicHubbardChain']
 
 class FermionicHubbardModel(CouplingMPOModel):
     r"""Spin-1/2 fermionic Hubbard model in 1D.

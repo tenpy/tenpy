@@ -629,7 +629,7 @@ class Lattice:
         determine the necessary shape of `strength`.
 
         Parameters
-        ---------
+        ----------
         u0 : int
             Argument `u0` of :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
         other_us : list of int
