@@ -674,7 +674,7 @@ class MPOGraph:
         for k in range(i + 1, j):
             if (k - i) % self.L == 0:
                 # necessary to extend key because keyL is already in use at this bond
-                keyR = keyL + (k, opname, opname) # same structure as for other standard keys
+                keyR = keyL + (k, opname, opname)  # same structure as for other standard keys
                 # (i, op_i, op_str_right_of_i) e.g. in MultiCouplingTerms.add_to_graph
             k = k % self.L
             if not self.has_edge(k, keyL, keyR):
@@ -1105,6 +1105,7 @@ def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
     legs.append(legs[0])
     return legs
 
+
 def _mpo_graph_state_order(key):
     """Key-function for sorting they `states` of an MPO Graph.
 
@@ -1117,10 +1118,10 @@ def _mpo_graph_state_order(key):
     if isinstance(key, tuple):
         return key
     if isinstance(key, str):
-        if key == 'IdL': # should be first
-            return (-2,)
-        if key == 'IdR': # should be last
-            return (np.inf,)
+        if key == 'IdL':  # should be first
+            return (-2, )
+        if key == 'IdR':  # should be last
+            return (np.inf, )
     # fallback: compare strings
         return (-1, key)
     return (-1, str(key))
