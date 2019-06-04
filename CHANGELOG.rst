@@ -15,7 +15,7 @@ Backwards incompatible changes
 
 Changed
 ^^^^^^^
-- nothing yet
+- :func:`~tenpy.linalg.np_conserved.grid_concat` allows for ``None`` entries (representing zero blocks).
 
 Added
 ^^^^^
@@ -24,6 +24,8 @@ Added
 - Nearest-neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
 - :meth:`~tenpy.networks.site.Site.multiply_op_names` to replace ``' '.join(op_names)`` and allow explicit compression/multiplication.
 - :func:`~tenpy.networks.terms.order_combine_term` to group operators together.
+- :meth:`~tenpy.networks.mpo.MPO.dagger` of MPO's (and to implement that also :meth:`~tenpy.linalg.charges.LegCharge.flip_charges_qconj`).
+- Addition of MPOs
 
 Fixed
 ^^^^^

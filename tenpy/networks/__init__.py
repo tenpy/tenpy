@@ -11,6 +11,7 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
     site
     mps
     mpo
+    terms
     purification_mps
 
 """
@@ -18,4 +19,4 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
 
 from . import site, mps, mpo, purification_mps
 
-__all__ = ['site', 'mps', 'mpo', 'purification_mps']
+__all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps']

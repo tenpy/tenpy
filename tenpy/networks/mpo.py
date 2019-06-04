@@ -84,11 +84,13 @@ class MPO:
         Boundary conditions as described in :mod:`~tenpy.networks.mps`.
         ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
     IdL : list of {int | None}
-        Indices on the bonds, which correpond to 'only identities to the left'.
+        Indices on the bonds (length `L`+1), which correpond to 'only identities to the left'.
         ``None`` for bonds where it is not set.
+        In standard form, this is `0` (except for unset bonds in finite case)
     IdR : list of {int | None}
-        Indices on the bonds, which correpond to 'only identities to the right'.
+        Indices on the bonds (length `L`+1), which correpond to 'only identities to the right'.
         ``None`` for bonds where it is not set.
+        In standard form, this is the last index on the bond (except for unset bonds in finite case).
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     grouped : int
@@ -372,57 +374,79 @@ class MPO:
             warnings.warn(msg, stacklevel=2)
         return current_value / L
 
-    def is_hermitian(self, tol=1.e-10):
-        """Check if `H` is a hermitian MPO.
+    def dagger(self):
+        """Return hermition conjugate copy of self."""
+        # complex conjugate and transpose everything
+        Ws = [w.conj().itranspose(['wL*', 'wR*', 'p', 'p*']) for w in self._W]
+        # and now revert conjugation of the wL/wR legs
+        # rename labels 'wL*' -> 'wL', 'wR*' -> 'wR'
+        for w in Ws:
+            w.ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
+        # flip charges and qconj back
+        for i in range(self.L-1):
+            Ws[i].legs[1] = wR = Ws[i].legs[1].flip_charges_qconj()
+            Ws[i + 1].legs[0] = wR.conj()
+        Ws[-1].legs[1] = wR = Ws[-1].legs[1].flip_charges_qconj()
+        if self.finite:
+            Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
+        else:
+            Ws[0].legs[0] = wR.conj()
+        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
+
+    def is_hermitian(self, eps=1.e-10, max_range=None):
+        """Check if `self` is a hermitian MPO.
+
+        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)"""
+        return self.is_equal(self.dagger(), eps, max_range)
+
+    def is_equal(self, other, eps=1.e-10, max_range=None):
+        """Check if `self` and `other` represent the same MPO to precision `eps`.
+
+        To compare them efficiently we view `self` and `other` as MPS and compare the overlaps
+        ``abs(<self|self> + <other|other> - 2 Re(<self|other>)) < eps*(<self|self>+<other|other>)``
 
         Parameters
         ----------
-        tol : float
-            Ignored for finite `psi`.
-            For infinite MPO containing exponentially decaying long-range terms, stop evaluating
-            further terms if the terms in `LP` have norm < `tol`.
-        max_range : int | None
-            Ignored for finite `psi`.
-            Contract at most ``self.L + max_range`` sites, even if `tol` is not reached.
+        other : :class:`MPO`
+            The MPO to compare to.
+        eps : float
+            Precision threshold what counts as zero.
+        max_range : None | int
+            Ignored for finite MPS; for finite MPS we consider only the terms contained in the
+            sites with indices ``range(self.L + max_range)``.
+            None defaults to :attr:`max_range` (or :attr:`L` in case this is infinite or None).
 
         Returns
         -------
-        hermitian : bool
-            Whether self is considered to be hermitian.
+        equal : bool
+            Whether `self` equals `other` to the desired precision.
         """
-        # strategy:
-        #            H-H^dagger == 0
-        # <=> trace((H-H^dagger) . (H-H^dagger)^dagger) == 0
-        # <=> 2 trace(H.H^dagger) == trace(H.H) + trace(H^dagger.H^dagger)
-        # <=>   trace(H.H^dagger) == np.real(trace(H.H))
-        # trace(H.H) and trace(H.H^dagger) can be evaluated efficiently
-        # go from left to right
         if self.finite:
             max_i = self.L
-        elif self.max_range is not None:
-            if self.max_range != np.inf:
-                max_i = self.L + self.max_range
-            else:
-                max_i = self.L * 2
         else:
-            max_i = self.L * 2  # might be too short if
+            if max_range is None:
+                if self.max_range is None or self.max_range == np.inf:
+                    max_range = self.L
+                else:
+                    max_range = self.max_range
+            max_i = self.L + max_range
 
-        W = self.get_W(0).take_slice([self.get_IdL(0)], ['wL'])
-        trHH = npc.tensordot(W, W.replace_label('wR', 'wR*'), axes=[['p', 'p*'], ['p*', 'p']])
-        trHHd = npc.tensordot(W, W.conj(), axes=[['p', 'p*'], ['p*', 'p']])
-        i = 0
-        for i in range(1, max_i):
-            W = self.get_W(i)
-            trHH = npc.tensordot(trHH, W, axes=['wR', 'wL'])
-            trHHd = npc.tensordot(trHHd, W, axes=['wR', 'wL'])
-            trHH = npc.tensordot(trHH,
-                                 W.replace_label('wR', 'wR*'),
-                                 axes=[['wR*', 'p', 'p*'], ['wL', 'p*', 'p']])
-            trHHd = npc.tensordot(trHHd, W.conj(), axes=[['wR*', 'p', 'p*'], ['wL*', 'p*', 'p']])
-        IdR = self.get_IdR(i)
-        trHH = trHH[IdR, IdR]
-        trHHd = trHHd[IdR, IdR]
-        return abs(np.real(trHH) - trHHd) < tol
+        def overlap(A, B):
+            """<A|B> on sites 0 to max_i"""
+            wA = A.get_W(0).take_slice([A.get_IdL(0)], ['wL']).conj()
+            wB = B.get_W(0).take_slice([B.get_IdL(0)], ['wL'])
+            trAdB = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
+            i = 0
+            for i in range(1, max_i):
+                trAdB = npc.tensordot(trAdB, A.get_W(i).conj(), axes=['wR*', 'wL*'])
+                trAdB = npc.tensordot(trAdB, B.get_W(i), axes=[['wR', 'p*', 'p'],
+                                                               ['wL', 'p', 'p*']])
+            trAdB = trAdB.itranspose(['wR*', 'wR'])[A.get_IdR(i), B.get_IdR(i)]
+            return trAdB
+
+        self_other = 2.*np.real(overlap(other, self))
+        norms = overlap(self, self) + overlap(other, other)
+        return abs(norms - self_other) < eps * abs(norms)
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
@@ -458,6 +482,86 @@ class MPO:
             return np.zeros(1)
         singlesitempo = self.get_grouped_mpo(self.L)
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
+
+    def __add__(self, other):
+        """Return an MPO representing `self + other`.
+
+        Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
+
+        Parameters
+        ----------
+        other : :class:`MPO`
+            MPO to be added to `self`.
+
+        Returns
+        -------
+        sum_mpo : :class:`MPO`
+            The sum `self + other`.
+
+        """
+        assert self.bc == other.bc
+        if self.finite:
+            raise NotImplementedError("TODO")  # lot's of cases whether IdL and IdR are None
+        L = self.L
+        assert other.L == L
+        def get_projections(length, IdL, IdR):
+            proj_IdL = np.zeros(w_s.shape[0], np.bool_)
+            proj_other = np.ones(w_s.shape[0], np.bool_)
+            proj_IdR = np.zeros(w_s.shape[0], np.bool_)
+            if IdL is not None:
+                proj_IdL[IdL] = True
+                proj_other[IdL] = False
+            if IdR is not None:
+                proj_IdR[IdR] = True
+                proj_other[IdR] = False
+            return (proj_IdL, proj_other, proj_IdR)
+
+        Ws = []
+        IdL = [None] * (L + 1)
+        IdR = [None] * (L + 1)
+        for i in range(L):
+            # l/r = left/rigth,  s/o = self/other
+            ws, wo = [H._W[i].itranspose(['wL', 'wR', 'p', 'p*']) for H in [self, other]]
+            pls, plo = [get_projections(H._W[i].shape[0], H.IdL[i], H.IdR[i])
+                        for H in [self, other]]
+            prs, pro = [get_projections(H._W[i].shape[1], H.IdL[i+1], H.IdR[i+1])
+                        for H in [self, other]]
+            w_grid = [[ws[pls[0], prs[0]], ws[pls[0], prs[1]], wo[plo[0], pro[1]],
+                       ws[pls[0], prs[2]] + wo[plo[0], pro[2]]],
+                      [None, ws[pls[1], prs[1]], None, ws[pls[1], prs[2]]],
+                      [None, None, wo[plo[1], pro[1]], wo[plo[1], pro[2]]],
+                      [None, None, None, ws[pls[2], prs[2]]]]
+            w_grid = np.array(w_grid, dtype=object)
+            IdL_l_None = self.IdL[i] is None and other.IdL[i] is None
+            IdR_l_None = self.IdR[i] is None and other.IdR[i] is None
+            IdL_r_None = self.IdL[i+1] is None and other.IdL[i+1] is None
+            IdR_r_None = self.IdR[i+1] is None and other.IdR[i+1] is None
+            if IdR_l_None:
+                w_grid = w_grid[:-1, :]
+            else:
+                IdR[i] = -1
+                if self.IdR[i] is None:
+                    w_grid[-1, -1] = wo[plo[2], pro[2]]
+            if IdR_r_None:
+                w_grid = w_grid[:, :-1]
+            else:
+                IdR[i + 1] = -1
+            if IdL_r_None:
+                w_grid = w_grid[:, 1:]
+            else:
+                IdL[i + 1] = 1
+                if self.IdL[i + 1] is None:
+                    w_grid[0, 0] = wo[plo[0], pro[0]]
+            if IdL_l_None:
+                w_grid = w_grid[1:, :]
+            else:
+                IdL[i] = 1
+            Ws.append(npc.grid_concat(w_grid, [0, 1]))
+        if self.max_range is not None and other.max_range is not None:
+            max_range = max(self.max_range, other.max_range)
+        else:
+            max_range = None
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range)
 
 
 class MPOGraph:

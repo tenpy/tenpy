@@ -33,6 +33,7 @@ def test_MPO():
             H.test_sanity()
             print(H.dim)
             print(H.chi)
+            assert H.is_equal(H)  # everything should be equal to itself
             assert H.is_hermitian()
         if L == 4:
             H2 = H.group_sites(n=2)
@@ -113,7 +114,9 @@ def test_MPO_conversion():
     ct_add.add_to_graph(g1)
     H1 = g1.build_MPO()
     grids = [
-        [['Id', 'X_0', [('X_0', 0.25)]]],  # site 0
+        [
+            ['Id', 'X_0', [('X_0', 0.25)]]  # site 0
+        ],
         [
             ['Id', None, None],  # site 1
             [None, 'Id', [('X_1', 10.0)]],
@@ -179,18 +182,21 @@ def test_MPO_hermitian():
     ct = CouplingTerms(4)
     ct.add_coupling_term(1., 2, 3, 'Sm', 'Sp')
     H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
-    #  assert not H.is_hermitian()
+    assert not H.is_hermitian()
+    assert H.is_equal(H)
     ct.add_coupling_term(1., 2, 3, 'Sp', 'Sm')
     H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
-    #  assert H.is_hermitian()
+    assert H.is_hermitian()
+    assert H.is_equal(H)
 
     ct.add_coupling_term(1., 3, 18, 'Sm', 'Sp')
     H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
     assert not H.is_hermitian()
-
+    assert H.is_equal(H)
     ct.add_coupling_term(1., 3, 18, 'Sp', 'Sm')
     H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
     assert H.is_hermitian()
+    assert H.is_equal(H)
 
 
 def test_MPO_expectation_value():

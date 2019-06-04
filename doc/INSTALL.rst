@@ -231,7 +231,7 @@ Then, do a ``git pull`` to download (and possibly merge) the newest commit from 
     To do that, simply call the command ``bash ./compile`` again.
     If you are unsure whether a cython file changed, compiling again doesn't hurt.
 
-To summarize, you need to execute the folllowing bash commands in the repository::
+To summarize, you need to execute the following bash commands in the repository::
 
     # 0) make a backup of the whole folder
     git status   # check the output whether you modified some files

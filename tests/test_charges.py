@@ -72,6 +72,8 @@ def test_LegCharge():
     npt.assert_equal(lcus.charges, charges_us)  # check from_qflat
     npt.assert_equal(lcus.slices, slices_us)  # check from_qflat
     npt.assert_equal(lcus.to_qflat(), qflat_us)  # check to_qflat
+    lcus_flipped = lcus.flip_charges_qconj()
+    lcus_flipped.test_equal(lcus)
 
     lc = charges.LegCharge.from_qdict(ch_1, qdict_s)
     npt.assert_equal(lc.charges, charges_s)  # check from_qdict
@@ -114,6 +116,11 @@ def test_LegPipe():
     for sort, bunch in it.product([True, False], repeat=2):
         pipe = charges.LegPipe(legs, sort=sort, bunch=bunch)
         pipe.test_sanity()
+        pipe_conj = pipe.conj()
+        pipe.test_contractible(pipe.conj())
+        pipe_equal = pipe.flip_charges_qconj()
+        pipe_equal.test_equal(pipe)
+
         assert (pipe.ind_len == np.prod(shape))
         print(pipe.q_map)
         # test pipe._map_incoming_qind

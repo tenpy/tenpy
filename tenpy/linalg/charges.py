@@ -510,9 +510,32 @@ class LegCharge:
             raise ValueError("qconj has invalid value != +-1 :" + repr(self.qconj))
 
     def conj(self):
-        """Return a (shallow) copy with opposite ``self.qconj``."""
+        """Return a (shallow) copy with opposite ``self.qconj``.
+
+        Returns
+        -------
+        conjugated : :class:`LegCharge`
+            Shallow copy of `self` with flipped :attr:`qconj`.
+            :meth:`test_contractible` of `self` with `conjugated` will not raise an error.
+        """
         res = self.copy()  # shallow copy
         res.qconj = -self.qconj
+        return res
+
+    def flip_charges_qconj(self):
+        """Return a copy with both negative `qconj` and `charges`.
+
+        Returns
+        -------
+        conj_charges : :class:`LegCharge`
+            (Shallow) copy of self with negative `qconj` and `charges`, thus representing the
+            very same charges.
+            :meth:`test_equal` of `self` with `conj_charges` will not raise an error.
+        """
+        res = self.copy()
+        res.qconj = -self.qconj
+        res.charges = self.chinfo.make_valid(-self.charges)
+        res.sorted = False
         return res
 
     def to_qflat(self):
@@ -1030,7 +1053,14 @@ class LegPipe(LegCharge):
     def conj(self):
         """Return a shallow copy with opposite ``self.qconj``.
 
-        Also conjugates each of the incoming legs."""
+
+        Returns
+        -------
+        conjugated : :class:`LegCharge`
+            Shallow copy of `self` with flipped :attr:`qconj`. Whenever we contract two legs,
+            they need to be conjugated to each other.
+            The incoming legs of the pipe are also conjugated.
+        """
         res = LegCharge.conj(self)  # invert self.qconj
         res.legs = tuple([l.conj() for l in self.legs])
         return res

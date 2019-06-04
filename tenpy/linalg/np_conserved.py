@@ -2662,9 +2662,7 @@ def concatenate(arrays, axis=0, copy=True):
     arrays = list(arrays)
     res = arrays[0].zeros_like()
     axis = res.get_leg_index(axis)
-    not_axis = list(range(res.rank))
-    del not_axis[axis]
-    not_axis = np.array(not_axis, dtype=np.intp)
+    not_axis = np.array([a for a in range(res.rank) if a != axis], dtype=np.intp)
     # test for compatibility
     for a in arrays:
         if a.shape[:axis] != res.shape[:axis] or a.shape[axis + 1:] != res.shape[axis + 1:]:
@@ -2685,7 +2683,7 @@ def concatenate(arrays, axis=0, copy=True):
     axis_qconj = res.legs[axis].qconj
     for a in arrays:
         leg = a.legs[axis]
-        res_axis_bl_sizes.append(leg._get_block_sizes())
+        res_axis_bl_sizes.extend(leg._get_block_sizes())
         charges = leg.charges if leg.qconj == axis_qconj else res.chinfo.make_valid(-leg.charges)
         res_axis_charges.append(charges)
         qdata = a._qdata.copy()
@@ -2696,7 +2694,7 @@ def concatenate(arrays, axis=0, copy=True):
         else:
             res_data.extend([np.asarray(t, dtype) for t in a._data])
         qind_shift += leg.block_number
-    res_axis_slices = np.append([0], np.cumsum(np.concatenate(res_axis_bl_sizes)))
+    res_axis_slices = np.append([0], np.cumsum(res_axis_bl_sizes))
     res_axis_charges = np.concatenate(res_axis_charges, axis=0)
     res.legs[axis] = LegCharge.from_qind(res.chinfo, res_axis_slices, res_axis_charges, axis_qconj)
     res._set_shape()
@@ -2709,6 +2707,8 @@ def concatenate(arrays, axis=0, copy=True):
 
 def grid_concat(grid, axes, copy=True):
     """Given an np.array of npc.Arrays, performs a multi-dimensional concatentation along 'axes'.
+
+    Similar to :func:`numpy.block`, but only for uniform blocking.
 
     Stacks the qind of the array, *without* sorting/blocking.
 
@@ -2733,26 +2733,44 @@ def grid_concat(grid, axes, copy=True):
     (4, 6)
 
     If ``A, B, C, D`` were rank 4 arrays, with the first and last leg as before, and sharing
-    *common* legs ``1`` and ``2``, then you would get a rank-4 array:
+    *common* legs ``1`` and ``2`` of dimensions 1, 2, then you would get a rank-4 array:
 
     >>> g = grid_concat([[A, B], [C, D]], axes=[0, 3])
     >>> g.shape
-    (4, 6)
+    (4, 1, 2, 6)
 
     See also
     --------
     Array.sort_legcharge : can be used to block by charges.
     """
-    if not isinstance(grid, np.ndarray):
-        grid = np.array(grid, dtype=np.object)
+    grid = np.asarray(grid, dtype=np.object)
     if grid.ndim < 1 or grid.ndim != len(axes):
         raise ValueError("grid has wrong dimension")
-    # Simple recursion on ndim. Copy only required on first go.
-    if grid.ndim > 1:
-        grid = [grid_concat(b, axes=axes[1:], copy=copy) for b in grid]
-        copy = False
-    grid = concatenate(grid, axes[0], copy=copy)
-    return grid
+    if grid.ndim == 1:
+        if any([g is None for g in grid]):
+            raise ValueError("`None` entry in 1D grid")
+        return concatenate(grid, axis, copy)
+    if any([g is None for g in grid.flat]):
+        new_legs = []
+        for a, ax in enumerate(axes):
+            tr = [a] + [i for i in range(grid.ndim) if i != a]
+            grid_tr = np.transpose(grid, tr)
+            leg = []
+            for grid_tr_row in grid_tr:
+                # get first g which is not None in grid_tr_row
+                first_g = next((g for g in grid_tr_row.flat if g is not None), None)
+                if first_g is None:
+                    raise ValueError("Full row/column with only `None` entries")
+                else:
+                    leg.append(first_g.get_leg(ax))
+            new_legs.append(leg)
+        assert first_g is not None
+        res = np.zeros_like(first_g)
+        for idx, entry in np.ndenumerate(grid):
+            if entry is None:
+                legs = [ax_legs[i] for ax_legs, i in zip(new_legs, idx)]
+                grid[idx] = zeros(legs, first_g.dtype, first_g.qtotal)
+    return _grid_concat_recursion(grid, axes, copy)
 
 
 def grid_outer(grid, grid_legs, qtotal=None):
@@ -3856,18 +3874,18 @@ def _split_legs_worker(self, split_axes, cutoff):
 def _nontrivial_grid_entries(grid):
     """Return a list [(idx, entry)] of non-``None`` entries in an array_like grid."""
     grid = np.asarray(grid, dtype=np.object)
-    entries = []  # fill with (multi_index, entry)
-    # use np.nditer to iterate with multi-index over the grid.
-    # see https://docs.scipy.org/doc/numpy/reference/arrays.nditer.html for details.
-    it = np.nditer(grid, flags=['multi_index', 'refs_ok'])  # numpy iterator
-    while not it.finished:
-        e = it[0].item()
-        if e is not None:
-            entries.append((it.multi_index, e))
-        it.iternext()
+    entries = [(idx, entry) for idx, entry in np.ndenumerate(grid) if entry is not None]
     if len(entries) == 0:
         raise ValueError("No non-trivial entries in grid")
     return grid.shape, entries
+
+
+def _grid_concat_recursion(grid, axes, copy):
+    """Simple recursion on ndim for grid_concat."""
+    # Copy only required on last go
+    if grid.ndim > 1:
+        grid = [_grid_concat_recursion(row, axes=axes[1:], copy=False) for row in grid]
+    return concatenate(grid, axes[0], copy=copy)
 
 
 # (in cython, but with different arguments)
