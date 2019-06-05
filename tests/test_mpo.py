@@ -114,9 +114,8 @@ def test_MPO_conversion():
     ct_add.add_to_graph(g1)
     H1 = g1.build_MPO()
     grids = [
-        [
-            ['Id', 'X_0', [('X_0', 0.25)]]  # site 0
-        ],
+        [['Id', 'X_0', [('X_0', 0.25)]]  # site 0
+         ],
         [
             ['Id', None, None],  # site 1
             [None, 'Id', [('X_1', 10.0)]],

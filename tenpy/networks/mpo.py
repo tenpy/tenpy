@@ -383,7 +383,7 @@ class MPO:
         for w in Ws:
             w.ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
         # flip charges and qconj back
-        for i in range(self.L-1):
+        for i in range(self.L - 1):
             Ws[i].legs[1] = wR = Ws[i].legs[1].flip_charges_qconj()
             Ws[i + 1].legs[0] = wR.conj()
         Ws[-1].legs[1] = wR = Ws[-1].legs[1].flip_charges_qconj()
@@ -439,12 +439,13 @@ class MPO:
             i = 0
             for i in range(1, max_i):
                 trAdB = npc.tensordot(trAdB, A.get_W(i).conj(), axes=['wR*', 'wL*'])
-                trAdB = npc.tensordot(trAdB, B.get_W(i), axes=[['wR', 'p*', 'p'],
-                                                               ['wL', 'p', 'p*']])
+                trAdB = npc.tensordot(trAdB,
+                                      B.get_W(i),
+                                      axes=[['wR', 'p*', 'p'], ['wL', 'p', 'p*']])
             trAdB = trAdB.itranspose(['wR*', 'wR'])[A.get_IdR(i), B.get_IdR(i)]
             return trAdB
 
-        self_other = 2.*np.real(overlap(other, self))
+        self_other = 2. * np.real(overlap(other, self))
         norms = overlap(self, self) + overlap(other, other)
         return abs(norms - self_other) < eps * abs(norms)
 
@@ -504,6 +505,7 @@ class MPO:
             raise NotImplementedError("TODO")  # lot's of cases whether IdL and IdR are None
         L = self.L
         assert other.L == L
+
         def get_projections(length, IdL, IdR):
             proj_IdL = np.zeros(w_s.shape[0], np.bool_)
             proj_other = np.ones(w_s.shape[0], np.bool_)
@@ -522,20 +524,24 @@ class MPO:
         for i in range(L):
             # l/r = left/rigth,  s/o = self/other
             ws, wo = [H._W[i].itranspose(['wL', 'wR', 'p', 'p*']) for H in [self, other]]
-            pls, plo = [get_projections(H._W[i].shape[0], H.IdL[i], H.IdR[i])
-                        for H in [self, other]]
-            prs, pro = [get_projections(H._W[i].shape[1], H.IdL[i+1], H.IdR[i+1])
-                        for H in [self, other]]
-            w_grid = [[ws[pls[0], prs[0]], ws[pls[0], prs[1]], wo[plo[0], pro[1]],
-                       ws[pls[0], prs[2]] + wo[plo[0], pro[2]]],
-                      [None, ws[pls[1], prs[1]], None, ws[pls[1], prs[2]]],
+            pls, plo = [
+                get_projections(H._W[i].shape[0], H.IdL[i], H.IdR[i]) for H in [self, other]
+            ]
+            prs, pro = [
+                get_projections(H._W[i].shape[1], H.IdL[i + 1], H.IdR[i + 1])
+                for H in [self, other]
+            ]
+            w_grid = [[
+                ws[pls[0], prs[0]], ws[pls[0], prs[1]], wo[plo[0], pro[1]],
+                ws[pls[0], prs[2]] + wo[plo[0], pro[2]]
+            ], [None, ws[pls[1], prs[1]], None, ws[pls[1], prs[2]]],
                       [None, None, wo[plo[1], pro[1]], wo[plo[1], pro[2]]],
                       [None, None, None, ws[pls[2], prs[2]]]]
             w_grid = np.array(w_grid, dtype=object)
             IdL_l_None = self.IdL[i] is None and other.IdL[i] is None
             IdR_l_None = self.IdR[i] is None and other.IdR[i] is None
-            IdL_r_None = self.IdL[i+1] is None and other.IdL[i+1] is None
-            IdR_r_None = self.IdR[i+1] is None and other.IdR[i+1] is None
+            IdL_r_None = self.IdL[i + 1] is None and other.IdL[i + 1] is None
+            IdR_r_None = self.IdR[i + 1] is None and other.IdR[i + 1] is None
             if IdR_l_None:
                 w_grid = w_grid[:-1, :]
             else:
