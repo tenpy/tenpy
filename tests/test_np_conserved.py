@@ -336,6 +336,30 @@ def test_npc_Array_reshape_2():
     # done
 
 
+def test_npc_grid_concat():
+    # this is also a heavy test of Array.__getitem__
+    ci = chinfo3
+    legs = [gen_random_legcharge(ci, l) for l in [5, 4, 3]]
+    A = npc.Array.from_func(np.random.random, legs, qtotal=[0], shape_kw='size')
+    print("orig legs")
+    for l in legs:
+        print(l)
+    print('---')
+    Aflat = A.to_ndarray()
+    grid = [A[..., :2, :], A[:, 2:3, ...], A[:, 3:]]
+    A_full = npc.grid_concat(grid, [1])
+    npt.assert_equal(Aflat, A_full.to_ndarray())
+    grid = [[A[:, :1, 2:3], A[:, :1, 0:2]],
+            [A[:, 2:, 2:3], A[:, 2:, 0:2]]]  # yapf: disable
+    A_part = npc.grid_concat(grid, [1, 2]).to_ndarray()
+    A_part_exact = Aflat[:, [0, 2, 3], :][:, :, [2, 0, 1]]
+    npt.assert_equal(A_part, A_part_exact)
+    grid[1][0] = None
+    A_part = npc.grid_concat(grid, [1, 2]).to_ndarray()
+    A_part_exact[:, 1:, 0] = 0.
+    npt.assert_equal(A_part, A_part_exact)
+
+
 def test_npc_grid_outer():
     ci = chinfo3
     p_leg = gen_random_legcharge(ci, 4)

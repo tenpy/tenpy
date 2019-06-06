@@ -2254,12 +2254,15 @@ class Array:
         """
         if type(inds) != tuple:  # for rank 1
             inds = (inds, )
-        if len(inds) < self.rank:
+        i = next((i for i, idx in enumerate(inds) if idx is Ellipsis), None)
+        # i is index of Ellipsis or None if we don't have one
+        if i is None and len(inds) < self.rank:  # need an Ellipsis
+            i = len(inds)
             inds = inds + (Ellipsis, )
-        if any([(i is Ellipsis) for i in inds]):
+        if i is not None:
+            # replace Ellipsis with slice(None)
             fill = tuple([slice(None)] * (self.rank - len(inds) + 1))
-            e = inds.index(Ellipsis)
-            inds = inds[:e] + fill + inds[e + 1:]
+            inds = inds[:i] + fill + inds[i + 1:]
         if len(inds) > self.rank:
             raise IndexError("too many indices for Array")
         # do we have only integer entries in `inds`?
@@ -2666,7 +2669,7 @@ def concatenate(arrays, axis=0, copy=True):
     # test for compatibility
     for a in arrays:
         if a.shape[:axis] != res.shape[:axis] or a.shape[axis + 1:] != res.shape[axis + 1:]:
-            raise ValueError("wrong shape " + repr(a))
+            raise ValueError("wrong shape to fit " + repr(a.shape) + " into " + repr(res.shape))
         if a.chinfo != res.chinfo:
             raise ValueError("wrong ChargeInfo")
         if np.any(a.qtotal != res.qtotal):
@@ -2749,7 +2752,7 @@ def grid_concat(grid, axes, copy=True):
     if grid.ndim == 1:
         if any([g is None for g in grid]):
             raise ValueError("`None` entry in 1D grid")
-        return concatenate(grid, axis, copy)
+        return concatenate(grid, axes[0], copy)
     if any([g is None for g in grid.flat]):
         new_legs = []
         for a, ax in enumerate(axes):
@@ -2765,11 +2768,16 @@ def grid_concat(grid, axes, copy=True):
                     leg.append(first_g.get_leg(ax))
             new_legs.append(leg)
         assert first_g is not None
-        res = np.zeros_like(first_g)
+        labels = first_g.get_leg_labels()
+        axes = first_g.get_leg_indices(axes)
+        zeros_legs = first_g.legs[:]
         for idx, entry in np.ndenumerate(grid):
             if entry is None:
-                legs = [ax_legs[i] for ax_legs, i in zip(new_legs, idx)]
-                grid[idx] = zeros(legs, first_g.dtype, first_g.qtotal)
+                for ax, new_leg, i in zip(axes, new_legs, idx):
+                    zeros_legs[ax] = new_leg[i]
+                entry = zeros(zeros_legs, first_g.dtype, first_g.qtotal)
+                entry.iset_leg_labels(labels)
+                grid[idx] = entry
     return _grid_concat_recursion(grid, axes, copy)
 
 

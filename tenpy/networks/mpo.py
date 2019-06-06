@@ -46,6 +46,7 @@ from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from ..tools.misc import add_with_None_0
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -498,76 +499,92 @@ class MPO:
         -------
         sum_mpo : :class:`MPO`
             The sum `self + other`.
-
         """
-        assert self.bc == other.bc
-        if self.finite:
-            raise NotImplementedError("TODO")  # lot's of cases whether IdL and IdR are None
         L = self.L
+        assert self.bc == other.bc
         assert other.L == L
 
-        def get_projections(length, IdL, IdR):
-            proj_IdL = np.zeros(w_s.shape[0], np.bool_)
-            proj_other = np.ones(w_s.shape[0], np.bool_)
-            proj_IdR = np.zeros(w_s.shape[0], np.bool_)
-            if IdL is not None:
-                proj_IdL[IdL] = True
-                proj_other[IdL] = False
-            if IdR is not None:
-                proj_IdR[IdR] = True
-                proj_other[IdR] = False
-            return (proj_IdL, proj_other, proj_IdR)
+        ps = [self._get_block_projections(i) for i in range(L + 1)]
+        po = [other._get_block_projections(i) for i in range(L + 1)]
 
+        def block(of, l, r):
+            block_, pl, pr = of
+            l = pl[l]
+            r = pr[r]
+            if l is None or r is None:
+                return None
+            # else
+            return block_[l, r]
+
+        # l/r = left/rigth,  s/o = self/other
         Ws = []
         IdL = [None] * (L + 1)
+        IdL[0] = 0
         IdR = [None] * (L + 1)
+        IdR[-1] = -1
         for i in range(L):
-            # l/r = left/rigth,  s/o = self/other
-            ws, wo = [H._W[i].itranspose(['wL', 'wR', 'p', 'p*']) for H in [self, other]]
-            pls, plo = [
-                get_projections(H._W[i].shape[0], H.IdL[i], H.IdR[i]) for H in [self, other]
-            ]
-            prs, pro = [
-                get_projections(H._W[i].shape[1], H.IdL[i + 1], H.IdR[i + 1])
-                for H in [self, other]
-            ]
-            w_grid = [[
-                ws[pls[0], prs[0]], ws[pls[0], prs[1]], wo[plo[0], pro[1]],
-                ws[pls[0], prs[2]] + wo[plo[0], pro[2]]
-            ], [None, ws[pls[1], prs[1]], None, ws[pls[1], prs[2]]],
-                      [None, None, wo[plo[1], pro[1]], wo[plo[1], pro[2]]],
-                      [None, None, None, ws[pls[2], prs[2]]]]
+            ws = self._W[i].itranspose(['wL', 'wR', 'p', 'p*'])
+            wo = other._W[i].itranspose(['wL', 'wR', 'p', 'p*'])
+            s = (ws, ps[i], ps[i + 1])
+            o = (wo, po[i], po[i + 1])
+            onsite = add_with_None_0(block(s, 0, 2), block(o, 0, 2))
+
+            w_grid = [
+                [block(s, 0, 0), block(s, 0, 1), block(o, 0, 1), onsite        ],
+                [None,           block(s, 1, 1), None,           block(s, 1, 2)],
+                [None,           None,           block(o, 1, 1), block(o, 1, 2)],
+                [None,           None,           None,           block(s, 2, 2)]
+            ]  # yapf: disable
             w_grid = np.array(w_grid, dtype=object)
-            IdL_l_None = self.IdL[i] is None and other.IdL[i] is None
-            IdR_l_None = self.IdR[i] is None and other.IdR[i] is None
-            IdL_r_None = self.IdL[i + 1] is None and other.IdL[i + 1] is None
-            IdR_r_None = self.IdR[i + 1] is None and other.IdR[i + 1] is None
-            if IdR_l_None:
-                w_grid = w_grid[:-1, :]
-            else:
+            if w_grid[0, 0] is None:
+                w_grid[0, 0] = block(o, 0, 0)
+            if w_grid[0, 0] is not None:
+                IdL[i + 1] = 0
+            if w_grid[-1, -1] is None:
+                w_grid[-1, -1] = block(o, 2, 2)
+            if w_grid[-1, -1] is not None:
                 IdR[i] = -1
-                if self.IdR[i] is None:
-                    w_grid[-1, -1] = wo[plo[2], pro[2]]
-            if IdR_r_None:
-                w_grid = w_grid[:, :-1]
-            else:
-                IdR[i + 1] = -1
-            if IdL_r_None:
-                w_grid = w_grid[:, 1:]
-            else:
-                IdL[i + 1] = 1
-                if self.IdL[i + 1] is None:
-                    w_grid[0, 0] = wo[plo[0], pro[0]]
-            if IdL_l_None:
-                w_grid = w_grid[1:, :]
-            else:
-                IdL[i] = 1
+            # now drop rows and columns which are completely zero
+            w_is_None = np.array([[(w is None) for w in w_row] for w_row in w_grid], dtype=bool)
+            w_grid = w_grid[np.logical_not(np.all(w_is_None, 1)), :]
+            w_grid = w_grid[:, np.logical_not(np.all(w_is_None, 0))]
             Ws.append(npc.grid_concat(w_grid, [0, 1]))
         if self.max_range is not None and other.max_range is not None:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
         return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range)
+
+    def _get_block_projections(self, i):
+        """projecteions onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
+        if self.finite:  # allows i = L for finite bc
+            if i < self.L:
+                length = self._W[i].get_leg('wL').ind_len
+            else:
+                assert i == self.L
+                length = self._W[i - 1].get_leg('wR').ind_len
+        else:
+            i = i % self.L
+            length = self._W[i].get_leg('wL').ind_len
+        IdL = self.IdL[i]
+        IdR = self.IdR[i]
+        proj_other = np.ones(length, np.bool_)
+        if IdL is None:
+            proj_IdL = None
+        else:
+            proj_IdL = np.zeros(length, np.bool_)
+            proj_IdL[IdL] = True
+            proj_other[IdL] = False
+        if IdR is None:
+            proj_IdR = None
+        else:
+            proj_IdR = np.zeros(length, np.bool_)
+            proj_IdR[IdR] = True
+            proj_other[IdR] = False
+            assert IdR != IdL
+        if length == int(IdL is not None) + int(IdR is not None):
+            proj_other = None
+        return (proj_IdL, proj_other, proj_IdR)
 
 
 class MPOGraph:

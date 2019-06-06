@@ -198,6 +198,34 @@ def test_MPO_hermitian():
     assert H.is_equal(H)
 
 
+def test_MPO_addition():
+    for bc in ['infinite', 'finite']:
+        print('bc = ', bc, '-' * 40)
+        s = spin_half
+        ot1 = OnsiteTerms(4)
+        ct1 = CouplingTerms(4)
+        ct1.add_coupling_term(2., 2, 3, 'Sm', 'Sp')
+        ct1.add_coupling_term(2., 2, 3, 'Sp', 'Sm')
+        ct1.add_coupling_term(2., 1, 2, 'Sz', 'Sz')
+        ot1.add_onsite_term(3., 1, 'Sz')
+        H1 = mpo.MPOGraph.from_terms(ot1, ct1, [s] * 4, bc).build_MPO()
+        ot2 = OnsiteTerms(4)
+        ct2 = CouplingTerms(4)
+        ct2.add_coupling_term(4., 0, 2, 'Sz', 'Sz')
+        ct2.add_coupling_term(4., 1, 2, 'Sz', 'Sz')
+        ot2.add_onsite_term(5., 1, 'Sz')
+        H2 = mpo.MPOGraph.from_terms(ot2, ct2, [s] * 4, bc).build_MPO()
+        H12_sum = H1 + H2
+        ot12 = OnsiteTerms(4)
+        ot12 += ot1
+        ot12 += ot2
+        ct12 = CouplingTerms(4)
+        ct12 += ct1
+        ct12 += ct2
+        H12 = mpo.MPOGraph.from_terms(ot12, ct12, [s] * 4, bc).build_MPO()
+        assert H12.is_equal(H12_sum)
+
+
 def test_MPO_expectation_value():
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
