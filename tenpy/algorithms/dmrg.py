@@ -448,7 +448,7 @@ class Engine(NpcLinearOperator):
                               "disable mixer and continue")
                         self.mixer = None
             if time.time() - start_time > max_seconds:
-                shelve = True
+                self.shelve = True
                 warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
             # --------- the main work --------------
