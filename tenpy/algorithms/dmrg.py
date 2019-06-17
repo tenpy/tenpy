@@ -556,80 +556,7 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
         return E, self.psi
 
-    def environment_sweeps(self, N_sweeps):
-        """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
-        if N_sweeps <= 0:
-            return
-        if self.verbose >= 1:
-            print("Updating environment")
-        for k in range(N_sweeps):
-            self.sweep(optimize=False)
-            if self.verbose >= 1:
-                print('.', end='', flush=True)
-        if self.verbose >= 1:
-            print("", flush=True)  # end line
-
-    def sweep(self, optimize=True, meas_E_trunc=False):
-        """One 'sweep' of the DMRG algorithm.
-
-        Iteratate over the bond which is optimized, to the right and
-        then back to the left to the starting point.
-        If optimize=False, don't actually diagonalize the effective hamiltonian,
-        but only update the environment.
-
-        Parameters
-        ----------
-        optimize : bool
-            Whether we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        max_trunc_err : float
-            Maximal truncation error introduced.
-        max_E_trunc : ``None`` | float
-            ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
-            truncation.
-        """
-        E_trunc_list = []
-        trunc_err_list = []
-        schedule_i0, update_LP_RP = self._get_sweep_schedule()
-
-        # the actual sweep
-        for i0, upd_env in zip(schedule_i0, update_LP_RP):
-            if self.verbose >= 10:
-                print("in sweep: i0 =", i0)
-            # --------- the main work --------------
-            E_total, E_trunc, trunc_err, N_lanczos, age = self.update_bond(
-                i0, upd_env[0], upd_env[1], optimize=optimize, meas_E_trunc=meas_E_trunc)
-            # collect statistics
-            self.update_stats['i0'].append(i0)
-            self.update_stats['age'].append(age)
-            self.update_stats['E_total'].append(E_total)
-            self.update_stats['N_lanczos'].append(N_lanczos)
-            self.update_stats['time'].append(time.time() - self.time0)
-            E_trunc_list.append(E_trunc)
-            trunc_err_list.append(trunc_err.eps)
-
-        if optimize:  # count optimization sweeps
-            self.sweeps += 1
-            if self.chi_list is not None:
-                new_chi_max = self.chi_list.get(self.sweeps, None)
-                if new_chi_max is not None:
-                    self.trunc_params['chi_max'] = new_chi_max
-                    if self.verbose >= 1:
-                        print("Setting chi_max =", new_chi_max)
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-        if meas_E_trunc:
-            return np.max(trunc_err_list), np.max(E_trunc_list)
-        else:
-            return np.max(trunc_err_list), None
-
-    def update_bond(self, i0, update_LP, update_RP, optimize=True, meas_E_trunc=False):
+    def update_local(self, i0, optimize=True, meas_E_trunc=False):
         """Perform bond-update on the sites ``(i0, i0+1)``.
 
         Parameters
@@ -672,14 +599,9 @@ class Engine(NpcLinearOperator):
         theta = self.prepare_svd(theta)
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
-        if update_LP:
-            self.update_LP(i0, U)  # (requires updated B)
-            for o_env in self.ortho_to_envs:
-                o_env.get_LP(i0 + 1, store=True)
-        if update_RP:
-            self.update_RP(i0, VH)
-            for o_env in self.ortho_to_envs:
-                o_env.get_RP(i0, store=True)
+
+    def post_update_local(self, **kwargs):
+        # algorithm specific after update
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
@@ -758,32 +680,8 @@ class Engine(NpcLinearOperator):
         N : int
             Number of Lanczos iterations used.
         """
-        E, theta, N = lanczos(self, theta_guess, self.lanczos_params, theta_ortho)
+        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
         return E, theta, N
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-        This function turns :class:`Engine` to a linear operator, which can be
-        used for :func:`~tenpy.linalg.lanczos.lanczos`. Pictorially::
-
-            |        .----theta---.
-            |        |    |   |   |
-            |       LP----H0--H1--RP
-            |        |    |   |   |
-            |        .---       --.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Result of applying the effective Hamiltonian to `theta`, :math:`H |\theta>`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
 
     def prepare_svd(self, theta):
         """Transform theta into a matrix for svd.
@@ -1022,18 +920,6 @@ class Engine(NpcLinearOperator):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
-    def _get_sweep_schedule(self):
-        L = self.env.L
-        if self.finite:
-            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
-        else:
-            assert (L >= 2)
-            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
-            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                           [[True, True]] * 2 + [[False, True]] * (L-2)
-        return schedule_i0, update_LP_RP
-
 
 class EngineCombine(Engine):
     r"""Engine which combines legs into pipes as far as possible.
@@ -1231,30 +1117,6 @@ class EngineFracture(Engine):
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
         return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
-
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
-        """
-        self.env.get_LP(i0 + 1, store=True)  # as implemented directly in the environment
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
-        """
-        self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
 
 class Mixer:
