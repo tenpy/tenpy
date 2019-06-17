@@ -4,6 +4,7 @@
 - Build Two-site effective Hamiltonian
 - Finish Sweep class
 - Rebuild DMRG and TDVP engines as subclasses of sweep
+- Do testing
 """
 # Copyright 2018 TeNPy Developers
 
@@ -110,7 +111,6 @@ class Sweep:
         else:
             return np.max(trunc_err_list), None
 
-
     def get_sweep_schedule(self):
         """Define the schedule of the sweep.
 
@@ -134,13 +134,11 @@ class Sweep:
         self.eff_H = EffectiveH(self.env, i0)
         return theta
 
-
     def update_local(self, i0, theta, **kwargs):
         raise NotImplementedError("needs to be overwritten by subclass")
 
     def post_update_local(self, **kwargs):
         raise NotImplementedError("needs to be overwritten by subclass")
-
 
     def update_LP(self, i0, U):
         """Update left part of the environment.
@@ -213,8 +211,15 @@ class EffectiveH(NpcLinearOperator):
         raise NotImplementedError("This function should be implemented in derived classes")
 
 
-class SingleSiteH(EffectiveH):
+class OneSiteH(EffectiveH):
     """Class defining the one-site Hamiltonian for Lanczos
+
+    The effective one-site Hamiltonian ooks like this:
+            |        .---       ---.
+            |        |    |   |    |
+            |       LP----H0--H1---RP
+            |        |    |   |    |
+            |        .---       ---.
     
     Parameters
     ----------
@@ -223,9 +228,9 @@ class SingleSiteH(EffectiveH):
     ----------
     length : int
         Number of (MPS) sites the effective hamiltonian covers.
-    Lp : :class:`tenpy.linalg.np_conserved.Array`
+    LP : :class:`tenpy.linalg.np_conserved.Array`
         left part of the environment
-    Rp : :class:`tenpy.linalg.np_conserved.Array`
+    RP : :class:`tenpy.linalg.np_conserved.Array`
         right part of the environment
     W : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p0' leg of theta
@@ -233,25 +238,42 @@ class SingleSiteH(EffectiveH):
     length = 1
 
     def __init__(self, env, i0, fracture=False):
-        self.Lp = env.get_LP(i0)  # a,ap,m
-        self.Rp = env.get_RP(i0)  # b,bp,n
-        self.W = env.H.get_W(i0)  # m,n,i,ip
+        self.LP = env.get_LP(i0)
+        self.RP = env.get_RP(i0)
+        self.W = env.H.get_W(i0)
 
     def matvec(self, theta):
-        theta = theta.split_legs(['(vL.p.vR)'])
-        Lp = self.Lp
-        Rp = self.Rp
-        x = npc.tensordot(Lp, theta, axes=('vR', 'vL'))
-        x = npc.tensordot(x, self.W, axes=(['p', 'wR'], ['p*', 'wL']))
-        x = npc.tensordot(x, Rp, axes=(['vR', 'wR'], ['vL', 'wL']))
-        #TODO:next line not needed. Since the transpose does not do anything, should not cost anything. Keep for safety ?
-        x = x.transpose(['vR*', 'p', 'vL*'])
-        x = x.iset_leg_labels(['vL', 'p', 'vR'])
-        h = x.combine_legs(['vL', 'p', 'vR'])
-        return h
+        # TODO fracture needs self.LHeff, which isn't there yet.
+        # TODO figure out if more steps can be shared.
+        LP = self.LP
+        RP = self.RP
+        labels = theta.get_leg_labels()
+        if fracture: 
+            theta = theta.split_legs(['(vL.p.vR)'])
+            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
+            theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+        else:
+            theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
+            theta = npc.tensordot(self.W, theta, axes=[['wL', 'p*'], ['wR', 'p']])
+            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        theta.itranspose(labels)  # if necessary, transpose
+        return theta
 
 
 class TwoSiteH(EffectiveH):
+    """Class defining the two-site Hamiltonian for Lanczos
+
+    The effective two-site Hamiltonian ooks like this:
+            |        .---       ---.
+            |        |    |   |    |
+            |       LP----H0--H1---RP
+            |        |    |   |    |
+            |        .---       ---.
+    """
+    length = 2
+
     pass # TODO
 
 
