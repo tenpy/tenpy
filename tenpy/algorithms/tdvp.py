@@ -480,6 +480,7 @@ class H1_mixed:
     W : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p0' leg of theta
     """
+    length = 1
 
     def __init__(self, Lp, Rp, W):
         self.Lp = Lp  # a,ap,m
