@@ -1,9 +1,30 @@
+"""
+.. TODO ::
+- Overall docstring for this file.
+- Build Two-site effective Hamiltonian
+- Finish Sweep class
+- Rebuild DMRG and TDVP engines as subclasses of sweep
+"""
+# Copyright 2018 TeNPy Developers
 
 from ..linalg.sparse import NpcLinearOperator
 
 
 class Sweep:
-
+    """Prototype class for a 'sweeping' algorithm.
+    
+    Attributes
+    ----------
+    eff_H : :class:`~tenpy.algorithms.mps_sweep.EffectiveH`.
+        Effective Hamiltonian, used in the local updates.
+    EffectiveH : TYPE
+        Description
+    mixer : TYPE
+        Description
+    stats : dict
+        Description
+    """
+    
     def __init__(self, EffectiveH):
         self.EffectiveH = EffectiveH  # class type
         self.stats = {}
@@ -148,23 +169,36 @@ class Sweep:
 
 
 class EffectiveH(NpcLinearOperator):
-    # Documentaion: This is the local effective Hamiltonian
+    """Prototype class for effective Hamiltonians used in sweep algorithms.
+
+    As an example, the effective Hamiltonian for a two-site (DMRG) algorithm 
+    looks like:
+            |        .---       ---.
+            |        |    |   |    |
+            |       LP----H0--H1---RP
+            |        |    |   |    |
+            |        .---       ---.
+    where ``H0`` and ``H1`` are MPO tensors.
+    
+    Attributes
+    ----------
+    length : int
+        Number of (MPS) sites the effective hamiltonian covers.
+    """
+
+    # Documentation: This is the local effective Hamiltonian
     # class attribute length
     # provides matvec, __init__ from env, i0
     length = None
+
+    def __init__(self, env, i0):
+        raise NotImplementedError("This function should be implemented in derived classes")
 
     def matvec(self, theta):
         r"""Apply the effective Hamiltonian to `theta`.
 
         This function turns :class:`EffectiveH` to a linear operator, which can be
-        used for :func:`~tenpy.linalg.lanczos.lanczos`. Pictorially for a two-site effective
-        Hamiltonian::
-
-            |        .----theta---.
-            |        |    |   |   |
-            |       LP----H0--H1--RP
-            |        |    |   |   |
-            |        .---       --.
+        used for :func:`~tenpy.linalg.lanczos.lanczos`. 
 
         Parameters
         ----------
@@ -180,14 +214,15 @@ class EffectiveH(NpcLinearOperator):
 
 
 class SingleSiteH(EffectiveH):
-    """Class defining the one site Hamiltonian for Lanczos
-
+    """Class defining the one-site Hamiltonian for Lanczos
+    
     Parameters
     ----------
-
-
+    
     Attributes
     ----------
+    length : int
+        Number of (MPS) sites the effective hamiltonian covers.
     Lp : :class:`tenpy.linalg.np_conserved.Array`
         left part of the environment
     Rp : :class:`tenpy.linalg.np_conserved.Array`
@@ -198,9 +233,9 @@ class SingleSiteH(EffectiveH):
     length = 1
 
     def __init__(self, env, i0, fracture=False):
-        self.Lp = env.get_LP(  # a,ap,m
-        self.Rp = Rp  # b,bp,n
-        self.W = W  # m,n,i,ip
+        self.Lp = env.get_LP(i0)  # a,ap,m
+        self.Rp = env.get_RP(i0)  # b,bp,n
+        self.W = env.H.get_W(i0)  # m,n,i,ip
 
     def matvec(self, theta):
         theta = theta.split_legs(['(vL.p.vR)'])
