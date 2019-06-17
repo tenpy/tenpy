@@ -213,30 +213,39 @@ class EffectiveH(NpcLinearOperator):
 
 
 class OneSiteH(EffectiveH):
-    """Class defining the one-site Hamiltonian for Lanczos
-
+    r"""Class defining the one-site Hamiltonian for Lanczos
+    
     The effective one-site Hamiltonian ooks like this:
-            |        .---       ---.
-            |        |    |   |    |
-            |       LP----H0--H1---RP
-            |        |    |   |    |
-            |        .---       ---.
+            |        .---   ---.
+            |        |    |    |
+            |       LP----W0---RP
+            |        |    |    |
+            |        .---   ---.
     
     TODO orthogonal theta's?
-
+    
     Parameters
     ----------
     
     Attributes
     ----------
+    combine : bool
+        Whether to combine legs into pipes. This combines the virtual and 
+        physical leg for the left site into pipes. This reduces 
+        the overhead of calculating charge combinations in the contractions,
+        but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
+        Is originally from the wo-site method; unclear if it works wel for 1 site.
     length : int
         Number of (MPS) sites the effective hamiltonian covers.
+    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
+        Left part of the effective Hamiltonian.
+        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
     LP : :class:`tenpy.linalg.np_conserved.Array`
         left part of the environment
     RP : :class:`tenpy.linalg.np_conserved.Array`
         right part of the environment
     W : :class:`tenpy.linalg.np_conserved.Array`
-        MPO which is applied to the 'p0' leg of theta
+        MPO tensor, applied to the 'p' leg of theta
     """
     length = 1
 
@@ -262,8 +271,8 @@ class OneSiteH(EffectiveH):
         
         Returns
         -------
-        TYPE
-            Description
+        theta :class:`~tenpy.linalg.np_conserved.Array`
+            Product of `theta` and the effective Hamiltonian.
         """
         LP = self.LP
         RP = self.RP
@@ -300,28 +309,54 @@ class OneSiteH(EffectiveH):
 
 
 class TwoSiteH(EffectiveH):
-    """Class defining the two-site Hamiltonian for Lanczos
+    r"""Class defining the two-site Hamiltonian for Lanczos
     
     The effective two-site Hamiltonian ooks like this:
             |        .---       ---.
             |        |    |   |    |
-            |       LP----H0--H1---RP
+            |       LP----W0--W1---RP
             |        |    |   |    |
             |        .---       ---.
     
+    
+    TODO orthogonal theta's.
+    
     Attributes
     ----------
+    combine : bool
+        Whether to combine legs into pipes. This combines the virtual and 
+        physical leg for the left site and right site into pipes. This reduces 
+        the overhead of calculating charge combinations in the contractions,
+        but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
     length : int
-        Description
-    LHeff : TYPE
-        Description
-    RHeff : TYPE
-        Description
+        Number of (MPS) sites the effective hamiltonian covers.
+    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
+        Left part of the effective Hamiltonian.
+        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
+    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+        Right part of the effective Hamiltonian.
+        Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
+    LP : :class:`~tenpy.linalg.np_conserved.Array`
+        Left part of the environment.
+    RP : :class:`~tenpy.linalg.np_conserved.Array`
+        Right part of the environment
+    W1 : :class:`~tenpy.linalg.np_conserved.Array`
+        Left MPO tensor, applied to the 'p0' leg of theta
+    W2 : :class:`~tenpy.linalg.np_conserved.Array`
+        Right MPO tensor, applied to the 'p1' leg of theta
     """
     length = 2
 
     def __init__():
-        #TODO
+        self.LP = env.get_LP(i0)
+        self.RP = env.get_RP(i0 + 1)
+        self.W1 = env.H.get_W(i0)
+        self.W2 = env.H.get_W(i0 + 1)
+        self.combine = combine
+        if combine:
+            W1 = W1.replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
+            W2 = W2.replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
+            combine_Heff()
         pass
 
     def matvec(self, theta):
@@ -334,8 +369,8 @@ class TwoSiteH(EffectiveH):
         
         Returns
         -------
-        TYPE
-            Description
+        theta :class:`~tenpy.linalg.np_conserved.Array`
+            Product of `theta` and the effective Hamiltonian.
         """
         # TODO fracture needs self.LHeff, which isn't there yet.
         # TODO figure out if more steps can be shared.
@@ -359,12 +394,12 @@ class TwoSiteH(EffectiveH):
     def combine_Heff(self):
         """Combine 
         """
-        LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
+        LHeff = npc.tensordot(LP, W1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
         self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, -1])
-        RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
+        RHeff = npc.tensordot(RP, W2, axes=['wL', 'wR'])
         pipeR = RHeff.make_pipe(['p1', 'vL*'])
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
