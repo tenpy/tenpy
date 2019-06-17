@@ -392,7 +392,8 @@ class TwoSiteH(EffectiveH):
         return theta
 
     def combine_Heff(self):
-        """Combine 
+        """Combine LP with W1 and RP with W2 to get the effectife parts of the 
+        Hamiltonian with piped legs.
         """
         LHeff = npc.tensordot(LP, W1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
