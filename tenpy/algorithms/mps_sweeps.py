@@ -8,6 +8,7 @@
 """
 # Copyright 2018 TeNPy Developers
 
+from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator
 
 
@@ -221,6 +222,8 @@ class OneSiteH(EffectiveH):
             |        |    |   |    |
             |        .---       ---.
     
+    TODO orthogonal theta's?
+
     Parameters
     ----------
     
@@ -237,22 +240,39 @@ class OneSiteH(EffectiveH):
     """
     length = 1
 
-    def __init__(self, env, i0, fracture=False):
+    def __init__(self, env, i0, combine=False):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W = env.H.get_W(i0)
+        self.combine = combine
+        if combine:
+            combine_Heff()
+            
 
     def matvec(self, theta):
-        # TODO fracture needs self.LHeff, which isn't there yet.
-        # TODO figure out if more steps can be shared.
+        """Apply the effective Hamiltonian to `theta`.
+        
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Labels: ``vL, p, vR``
+
+        TODO fracture needs self.LHeff, which isn't there yet.
+        TODO figure out if more steps can be shared.
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
         LP = self.LP
         RP = self.RP
         labels = theta.get_leg_labels()
-        if fracture: 
-            theta = theta.split_legs(['(vL.p.vR)'])
-            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-            theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
-            theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+        if self.combine: 
+            theta = theta.combine_legs(['vL', 'p0'])  # labels 'vL.p0', 'vR'
+            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])  # labels 'vR*.p0', 'wR', 'vR'
+            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
+            theta.ireplace_labels(['(vR*.p0)', 'vL*'], ['(vL.p0)', 'vR'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
             theta = npc.tensordot(self.W, theta, axes=[['wL', 'p*'], ['wR', 'p']])
@@ -261,20 +281,95 @@ class OneSiteH(EffectiveH):
         theta.itranspose(labels)  # if necessary, transpose
         return theta
 
+    def combine_Heff(self):
+        """Combine LP with W.
+
+        TODO do we need LP and RP or can we get away with just one? Is there a
+        preference?
+        """
+        LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
+        pipeL = LHeff.make_pipe(['vR*', 'p0'])
+        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                        pipes=[pipeL, pipeL.conj()],
+                                        new_axes=[0, -1])
+        # RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])  #single-site.
+        # pipeR = RHeff.make_pipe(['p1', 'vL*'])
+        # self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+        #                                 pipes=[pipeR, pipeR.conj()],
+        #                                 new_axes=[-1, 0])
+
 
 class TwoSiteH(EffectiveH):
     """Class defining the two-site Hamiltonian for Lanczos
-
+    
     The effective two-site Hamiltonian ooks like this:
             |        .---       ---.
             |        |    |   |    |
             |       LP----H0--H1---RP
             |        |    |   |    |
             |        .---       ---.
+    
+    Attributes
+    ----------
+    length : int
+        Description
+    LHeff : TYPE
+        Description
+    RHeff : TYPE
+        Description
     """
     length = 2
 
-    pass # TODO
+    def __init__():
+        #TODO
+        pass
+
+    def matvec(self, theta):
+        """Apply the effective Hamiltonian to `theta`.
+        
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Labels: ``vL, p0, p1, vR``
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
+        # TODO fracture needs self.LHeff, which isn't there yet.
+        # TODO figure out if more steps can be shared.
+        LP = self.LP
+        RP = self.RP
+        labels = theta.get_leg_labels()
+        if self.combine: 
+            theta = theta.split_legs(['(vL.p.vR)'])
+            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
+            theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+        else:
+            theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
+            theta = npc.tensordot(self.W, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
+            theta = npc.tensordot(theta, self.H1, axes=[['wR', 'p1'], ['wL', 'p1*']])
+            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        theta.itranspose(labels)  # if necessary, transpose
+        return theta
+
+    def combine_Heff(self):
+        """Combine 
+        """
+        LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
+        pipeL = LHeff.make_pipe(['vR*', 'p0'])
+        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                        pipes=[pipeL, pipeL.conj()],
+                                        new_axes=[0, -1])
+        RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
+        pipeR = RHeff.make_pipe(['p1', 'vL*'])
+        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                        pipes=[pipeR, pipeR.conj()],
+                                        new_axes=[-1, 0])
+
 
 
 
