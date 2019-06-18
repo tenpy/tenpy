@@ -86,7 +86,8 @@ class Sweep:
                 print("in sweep: i0 =", i0)
             # --------- the main work --------------
             theta, theta_ortho = self.prepare_update(i0)
-            update_data = self.update_local(i0, optimize=optimize)
+            update_data = self.update_local(i0, theta, theta_ortho, upd_env[0], 
+                                            upd_env[1], optimize=optimize)
             if update_LP:
                 self.update_LP(i0, U)  # (requires updated B)
                 for o_env in self.ortho_to_envs:
@@ -187,6 +188,7 @@ class Sweep:
         self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
         # as implemented directly in the environment
 
+    
 
 class EffectiveH(NpcLinearOperator):
     """Prototype class for effective Hamiltonians used in sweep algorithms.

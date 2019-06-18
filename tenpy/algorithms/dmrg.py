@@ -289,7 +289,15 @@ class TwoSiteDMRGEngine(Sweep):
         self.env = env
         self.EffectiveH = EffectiveH  # class type
         self.combine = combine  # Whether to use combined legs. Put in params?
-        self.engine_params = params
+        self.engine_params = engine_params
+
+        self.psi = env.bra
+        self.finite = self.env.bra.finite
+        self.verbose = get_parameter(engine_params, 'verbose', 1, 'DMRG')
+        self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'DMRG')
+        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
+        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.stats = {}
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
     
@@ -300,6 +308,9 @@ class TwoSiteDMRGEngine(Sweep):
         ----------
         i0 : int
             We want to optimize on sites ``(i0, i0+1)``.
+
+        .. todo ::
+        generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
 
         Returns
         -------
@@ -316,7 +327,6 @@ class TwoSiteDMRGEngine(Sweep):
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        # TODO generalize next line with n=EffectiveH.length? Then transposing will be harder.
         theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
         theta_ortho = self.get_theta_ortho(i0)
         if self.combine:
@@ -331,7 +341,7 @@ class TwoSiteDMRGEngine(Sweep):
                 th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
         return theta, theta_ortho
 
-    def update_local(self, i0, optimize=True, meas_E_trunc=False):
+    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
         """Perform bond-update on the sites ``(i0, i0+1)``.
 
         Parameters
@@ -365,7 +375,6 @@ class TwoSiteDMRGEngine(Sweep):
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
         """
-        theta, theta_ortho = self.prepare_diag(i0)
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
             E0, theta, N = self.diag(theta, theta_ortho)
@@ -394,8 +403,113 @@ class TwoSiteDMRGEngine(Sweep):
                 o_env.del_RP(i0 + 1)
         return E0, E_trunc, err, N, age
 
-    def diag(self):
-        pass
+    def diag(self, theta_guess, theta_ortho):
+        """Diagonalize the effective Hamiltonian represented by self.
+
+        Parameters
+        ----------
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta_guess`.
+
+        Returns
+        -------
+        E0 : float
+            Energy of the found ground state.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state of the effective Hamiltonian.
+        N : int
+            Number of Lanczos iterations used.
+        """
+        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        return E, theta, N
+
+    def prepare_svd(self, theta):
+        """Transform theta into matrix for svd."""
+        if self.combine:
+            return theta
+        else:
+            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
+
+    def mixed_svd(self, theta, i0, update_LP, update_RP):
+        """Get (truncated) `B` from the new theta (as returned by diag).
+
+        The goal ist to split theta and truncate it::
+
+            |   -- theta --   ==>    -- U -- S --  VH -
+            |      |   |                |          |
+
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
+
+        With a mixer, the state is perturbed before the SVD.
+        The details of the perturbation are defined by the :class:`Mixer` class.
+
+        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
+
+        .. todo ::
+        This might be generalizable to all sweep engines.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+        i0 : int
+            Site index; `theta` lives on ``i0, i0+1``.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_RP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singluar values of the array; with mixer it might be a general
+            matrix with labels ``'vL', 'vR'``; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        # get qtotal_LR from i0
+        if self.mixer is None:
+            # simple case: real svd, defined elsewhere.
+            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
+            return U, S, VH, err
+        # else: we have a mixer
+        return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
+
+    def set_B(self, i0, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
+
+        Parameters
+        ----------
+        i0 : int
+            We update the MPS `B` at sites ``i0, i0+1``.
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
+        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_SR(i0, S)
+        # the old stored environments are now invalid
+        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
+        for o_env in self.ortho_to_envs:
+            o_env.del_LP(i0 + 1)
+            o_env.del_RP(i0)
+        self.env.del_LP(i0 + 1)
+        self.env.del_RP(i0)
 
 
 class Engine(NpcLinearOperator):
@@ -769,7 +883,6 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
         return E, self.psi
 
-
     def prepare_diag(self, i0, update_LP, update_RP):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
@@ -812,28 +925,6 @@ class Engine(NpcLinearOperator):
             theta_ortho.append(theta)
         return theta_ortho
 
-    def diag(self, theta_guess, theta_ortho):
-        """Diagonalize the effective Hamiltonian represented by self.
-
-        Parameters
-        ----------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta_guess`.
-
-        Returns
-        -------
-        E0 : float
-            Energy of the found ground state.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian.
-        N : int
-            Number of Lanczos iterations used.
-        """
-        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
-        return E, theta, N
-
     def prepare_svd(self, theta):
         """Transform theta into a matrix for svd.
 
@@ -848,56 +939,6 @@ class Engine(NpcLinearOperator):
             Same as `theta`, but with legs combined into a 2D array for svd partition.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
-
-    def mixed_svd(self, theta, i0, update_LP, update_RP):
-        """Get (truncated) `B` from the new theta (as returned by diag).
-
-        The goal ist to split theta and truncate it::
-
-            |   -- theta --   ==>    -- U -- S --  VH -
-            |      |   |                |          |
-
-        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
-
-        With a mixer, the state is perturbed before the SVD.
-        The details of the perturbation are defined by the :class:`Mixer` class.
-
-        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-
-        Returns
-        -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
-            matrix with labels ``'vL', 'vR'``; see comment above.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced.
-        """
-        # get qtotal_LR from i0
-        if self.mixer is None:
-            # simple case: real svd, defined elsewhere.
-            qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(theta,
-                                         self.trunc_params,
-                                         qtotal_LR=[qtotal_i0, None],
-                                         inner_labels=['vR', 'vL'])
-            return U, S, VH, err
-        # else: we have a mixer
-        return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""
@@ -928,31 +969,7 @@ class Engine(NpcLinearOperator):
             self.sweep(optimize=False)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
 
-    def set_B(self, i0, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        Parameters
-        ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1``.
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-        """
-        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
-        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
-        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
-        self.psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
+ 
 
     def update_LP(self, i0, U):
         """Update left part of the environment.
