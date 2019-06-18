@@ -10,12 +10,16 @@
 
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator
+from ..tools.params import get_parameter, unused_parameters
 
 
 __all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 
 class Sweep:
     """Prototype class for a 'sweeping' algorithm.
+
+    In a change from the original setup of the engines, this class is supplied
+    with an environment, rather than a state and a model.
     
     Attributes
     ----------
@@ -29,11 +33,114 @@ class Sweep:
         Description
     """
     
-    def __init__(self, env, EffectiveH):
+    def __init__(self, env, EffectiveH, engine_params):
         self.env = env
         self.EffectiveH = EffectiveH  # class type
-        self.stats = {}
+        self.engine_params = engine_params
+        self.combine = engine_params['combine']  # Whether to use combined legs. Put in params?
+        self.psi = env.bra
+        self.finite = self.env.bra.finite
+        self.verbose = get_parameter(engine_params, 'verbose', 1, 'DMRG')
+        self.sweeps = 0
+
+        self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'DMRG')
+        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
+        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
+
+        self.init_env()
+
+    def init_env(self, model=None):
+        """(Re-)initialize the environment.
+
+        This function is useful to re-start a Sweep with a slightly different 
+        model or different (engine) parameters. Note that we assume that we 
+        still have the same `psi`.
+        Calls :meth:`reset_stats`.
+
+        .. todo ::
+        Do we only want to overwrite self.env if self.env is None and/or model is not None?
+
+        Parameters
+        ----------
+        model : :class:`~tenpy.models.MPOModel`
+            The model representing the Hamiltonian for which we want to find the ground state.
+            If ``None``, keep the model used before.
+        """
+        H = model.H_MPO if model is not None else self.env.H
+        if self.env is None or self.finite:
+            LP = get_parameter(self.engine_params, 'LP', None, 'Sweep')
+            RP = get_parameter(self.engine_params, 'RP', None, 'Sweep')
+            LP_age = get_parameter(self.engine_params, 'LP_age', 0, 'Sweep')
+            RP_age = get_parameter(self.engine_params, 'RP_age', 0, 'Sweep')
+        else:  # re-initialize
+            compatible = True
+            if model is not None:
+                try:
+                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
+                except ValueError:
+                    compatible = False
+                    warnings.warn("The leg of the new model is incompatible with the previous one."
+                                  "Rebuild environment from scratch.")
+            if compatible:
+                LP = self.env.get_LP(0, False)
+                LP_age = self.env.get_LP_age(0)
+                RP = self.env.get_RP(self.psi.L - 1, False)
+                RP_age = self.env.get_RP_age(self.psi.L - 1)
+            else:
+                LP = get_parameter(self.engine_params, 'LP', None, 'Sweep')
+                RP = get_parameter(self.engine_params, 'RP', None, 'Sweep')
+                LP_age = get_parameter(self.engine_params, 'LP_age', 0, 'Sweep')
+                RP_age = get_parameter(self.engine_params, 'RP_age', 0, 'Sweep')
+            if self.engine_params.get('chi_list', None) is not None:
+                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
+        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
+
+        # (re)initialize ortho_to_envs
+        orthogonal_to = get_parameter(self.engine_params, 'orthogonal_to', [], 'Sweep')
+        if len(orthogonal_to) > 0:
+            if not self.finite:
+                raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
+            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
+
+        self.reset_stats()
+
+        # initial sweeps of the environment (without mixer)
+        if not self.finite:
+            start_env = get_parameter(self.engine_params, 'start_env', 1, 'Sweep')
+            self.environment_sweeps(start_env)
+
+    def reset_stats(self):
+        """Reset the statistics. Useful if you want to start a new Sweep run.
+
+        .. todo ::
+
+        These stats (hardcoded) are DMRG-specific but should be general. Figure
+        out how to make this general (perhaps overwrite reset_stats in DMRG?
+        """
+        self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
+        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[], 
+                             'time':[], 'err':[], 'E_trunc':[]}
+        self.sweep_stats = {
+            'sweep': [],
+            'E': [],
+            'S': [],
+            'time': [],
+            'max_trunc_err': [],
+            'max_E_trunc': [],
+            'max_chi': [],
+            'norm_err': []
+        }
+        self.shelve = False
+        self.chi_list = get_parameter(self.engine_params, 'chi_list', None, 'Sweep')
+        if self.chi_list is not None:
+            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+            self.trunc_params['chi_max'] = chi_max
+            if self.verbose >= 1:
+                print("Setting chi_max =", chi_max)
+        self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
         """Perform `N_sweeps` sweeps without bond optimization to update the environment."""

@@ -288,26 +288,6 @@ class TwoSiteDMRGEngine(Sweep):
     .. todo ::
     update_LP and update_RP might be generalizable.
     """
-    def __init__(self, env, EffectiveH, combine, engine_params):
-        self.env = env
-        self.EffectiveH = EffectiveH  # class type
-        self.combine = combine  # Whether to use combined legs. Put in params?
-        self.engine_params = engine_params
-
-        self.psi = env.bra
-        self.finite = self.env.bra.finite
-        self.verbose = get_parameter(engine_params, 'verbose', 1, 'DMRG')
-        self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'DMRG')
-        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-
-
-        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[], 
-                             'time':[], 'err':[], 'E_trunc':[]}
-        self.ortho_to_envs = []
-        self.time0 = time.time()
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()
     
     def prepare_update(self, i0):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
@@ -697,85 +677,6 @@ class Engine(NpcLinearOperator):
         self.env = None
         self.ortho_to_envs = []
         self.init_env(model)  # calls reset_stats
-
-    def init_env(self, model=None):
-        """(Re-)initialize the environment.
-
-        This function is useful to re-start DMRG after with a slightly different model or
-        different (DMRG) parameters. Note that we assume that we still have the same `psi`.
-        Calls :meth:`reset_stats`.
-
-        Parameters
-        ----------
-        model : :class:`~tenpy.models.MPOModel`
-            The model representing the Hamiltonian for which we want to find the ground state.
-            If ``None``, keep the model used before.
-        """
-        H = model.H_MPO if model is not None else self.env.H
-        if self.env is None or self.finite:
-            LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
-            RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
-            LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
-            RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-        else:  # re-initialize
-            compatible = True
-            if model is not None:
-                try:
-                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
-                except ValueError:
-                    compatible = False
-                    warnings.warn("The leg of the new model is incompatible with the previous one."
-                                  "Rebuild environment from scratch.")
-            if compatible:
-                LP = self.env.get_LP(0, False)
-                LP_age = self.env.get_LP_age(0)
-                RP = self.env.get_RP(self.psi.L - 1, False)
-                RP_age = self.env.get_RP_age(self.psi.L - 1)
-            else:
-                LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
-                RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
-                LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
-                RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-            if self.DMRG_params.get('chi_list', None) is not None:
-                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
-
-        # (re)initialize ortho_to_envs
-        orthogonal_to = get_parameter(self.DMRG_params, 'orthogonal_to', [], 'DMRG')
-        if len(orthogonal_to) > 0:
-            if not self.finite:
-                raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
-            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
-
-        self.reset_stats()
-
-        # initial sweeps of the environment (without mixer)
-        if not self.finite:
-            start_env = get_parameter(self.DMRG_params, 'start_env', 1, 'DMRG')
-            self.environment_sweeps(start_env)
-
-    def reset_stats(self):
-        """Reset the statistics. Useful if you want to start a new DMRG run."""
-        self.sweeps = get_parameter(self.DMRG_params, 'sweep_0', 0, 'DMRG')
-        self.update_stats = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': [], 'time': []}
-        self.sweep_stats = {
-            'sweep': [],
-            'E': [],
-            'S': [],
-            'time': [],
-            'max_trunc_err': [],
-            'max_E_trunc': [],
-            'max_chi': [],
-            'norm_err': []
-        }
-        self.shelve = False
-        self.chi_list = get_parameter(self.DMRG_params, 'chi_list', None, 'DMRG')
-        if self.chi_list is not None:
-            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-            self.trunc_params['chi_max'] = chi_max
-            if self.verbose >= 1:
-                print("Setting chi_max =", chi_max)
-        self.time0 = time.time()
 
     def __del__(self):
         DMRG_params = self.DMRG_params
