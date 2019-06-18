@@ -398,7 +398,7 @@ class TwoSiteDMRGEngine(Sweep):
 
         return E0, E_trunc, err, N, age
 
-    def post_update_local(self, i0, update_data, **kwargs):
+    def post_update_local(self, i0, update_data):
         """Summary
         
         Parameters

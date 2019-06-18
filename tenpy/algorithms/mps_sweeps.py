@@ -43,15 +43,17 @@ class Sweep:
         self.env = env
         self.EffectiveH = EffectiveH  # class type
         self.engine_params = engine_params
-        self.combine = engine_params['combine']  # Whether to use combined legs. Put in params?
+        self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
+
+        self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
         self.psi = env.bra
         self.finite = self.env.bra.finite
-        self.verbose = get_parameter(engine_params, 'verbose', 1, 'DMRG')
-        self.sweeps = 0
+        self.mixer = None  # means 'ignore mixer'
+        # the mixer is activated in in :meth:`run`.
 
-        self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'DMRG')
+        self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'Sweep')
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
+        self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'Sweep')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
 
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
@@ -240,23 +242,24 @@ class Sweep:
         return schedule_i0, update_LP_RP
 
     def prepare_update(self, i0):
-        """Prepare everything to perform a local update.
-        
-        Parameters
-        ----------
-        i0 : int
-            Index of the (left-most) active site.
-        """
-        EffectiveH = self.EffectiveH
-        self.eff_H = EffectiveH(self.env, i0)
-        # return theta  # Are not handling theta here; perhaps in subclass?
+        """Prepare everything algorithm-specific to perform a local update."""
+        raise NotImplementedError("needs to be overwritten by subclass")
 
     def update_local(self, i0, theta, **kwargs):
+        """Perform algorithm-specific local update."""
         raise NotImplementedError("needs to be overwritten by subclass")
 
     def post_update_local(self, **kwargs):
+        """Algorithm-specific actions to be taken after local update, such as
+        collecting statistics.
+        """
         raise NotImplementedError("needs to be overwritten by subclass")
 
+    def update_LP(self, i0, U):
+        raise NotImplementedError("needs to be overwritten by subclass")
+
+    def update_RP(self, i0, VH):
+        raise NotImplementedError("needs to be overwritten by subclass")
     
 
 
@@ -350,7 +353,6 @@ class OneSiteH(EffectiveH):
         self.combine = combine
         if combine:
             combine_Heff()
-            
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -387,8 +389,9 @@ class OneSiteH(EffectiveH):
     def combine_Heff(self):
         """Combine LP with W.
 
-        TODO do we need LP and RP or can we get away with just one? Is there a
-        preference?
+        .. todo ::
+        do we need both LP and RP or can we get away with just one? Is there a
+        preference for one or the other?
         """
         LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
@@ -466,8 +469,6 @@ class TwoSiteH(EffectiveH):
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
         """
-        # TODO fracture needs self.LHeff, which isn't there yet.
-        # TODO figure out if more steps can be shared.
         LP = self.LP
         RP = self.RP
         labels = theta.get_leg_labels()
@@ -478,15 +479,15 @@ class TwoSiteH(EffectiveH):
             theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-            theta = npc.tensordot(self.W, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-            theta = npc.tensordot(theta, self.H1, axes=[['wR', 'p1'], ['wL', 'p1*']])
+            theta = npc.tensordot(self.W1, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
+            theta = npc.tensordot(theta, self.W2, axes=[['wR', 'p1'], ['wL', 'p1*']])
             theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
         theta.itranspose(labels)  # if necessary, transpose
         return theta
 
     def combine_Heff(self):
-        """Combine LP with W1 and RP with W2 to get the effectife parts of the 
+        """Combine LP with W1 and RP with W2 to get the effective parts of the 
         Hamiltonian with piped legs.
         """
         LHeff = npc.tensordot(LP, W1, axes=['wR', 'wL'])
@@ -499,8 +500,3 @@ class TwoSiteH(EffectiveH):
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[-1, 0])
-
-
-
-
-
