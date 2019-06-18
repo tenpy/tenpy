@@ -165,30 +165,9 @@ class Sweep:
     def post_update_local(self, **kwargs):
         raise NotImplementedError("needs to be overwritten by subclass")
 
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        """
-        self.env.get_LP(i0 + 1, store=True)  # as implemented directly in the environment
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
-        """
-        self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
-        # as implemented directly in the environment
-
     
+
+
 
 class EffectiveH(NpcLinearOperator):
     """Prototype class for effective Hamiltonians used in sweep algorithms.

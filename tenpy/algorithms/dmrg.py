@@ -284,6 +284,9 @@ class OneSiteDMRGEngine(Sweep):
 
 class TwoSiteDMRGEngine(Sweep):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
+
+    .. todo ::
+    update_LP and update_RP might be generalizable.
     """
     def __init__(self, env, EffectiveH, combine, engine_params):
         self.env = env
@@ -299,6 +302,7 @@ class TwoSiteDMRGEngine(Sweep):
         self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.stats = {}
+        self.ortho_to_envs = []
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
     
     def prepare_update(self, i0):
@@ -384,7 +388,7 @@ class TwoSiteDMRGEngine(Sweep):
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
-    def post_update_local(self, **kwargs):
+    def post_update_local(self, update_data, **kwargs):
         # algorithm specific after update
         E_trunc = None
         if meas_E_trunc or E0 is None:
@@ -401,6 +405,9 @@ class TwoSiteDMRGEngine(Sweep):
             self.env.del_RP(i0 + 1)
             for o_env in self.ortho_to_envs:
                 o_env.del_RP(i0 + 1)
+
+        # Update stats and data and stuff
+
         return E0, E_trunc, err, N, age
 
     def diag(self, theta_guess, theta_ortho):
@@ -510,6 +517,38 @@ class TwoSiteDMRGEngine(Sweep):
             o_env.del_RP(i0)
         self.env.del_LP(i0 + 1)
         self.env.del_RP(i0)
+
+    def update_LP(self, i0, U):
+        """Update left part of the environment.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index. We calculate ``self.env.get_LP(i0+1)``.
+        """
+        if self.combine:
+            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
+        else:  # as implemented directly in the environment
+            self.env.get_LP(i0 + 1, store=True)
+
+    def update_RP(self, i0, VH):
+        """Update right part of the environment.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index. We calculate ``self.env.get_RP(i0)``.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+        """
+        if self.combine:
+            RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+            self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
+        else:  # as implemented directly in the environment
+            self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
 
 
 class Engine(NpcLinearOperator):
