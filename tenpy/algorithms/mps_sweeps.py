@@ -283,6 +283,26 @@ class Sweep:
             theta_ortho.append(theta)
         return theta_ortho
 
+    def mixer_cleanup(self):
+        """Cleanup the effects of a mixer.
+
+        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
+        To recover the originial form, this function simply performs one sweep with disabled mixer.
+        """
+        if self.mixer is not None:
+            mixer = self.mixer
+            self.mixer = None  # disable the mixer
+            self.sweep(optimize=False)  # (discard return value)
+            self.mixer = mixer  # recover the original mixer
+
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+
+        It is expected that different algorithms have differen ways of implementing
+        mixers (with different defaults). Thus, this is algorithm-specific.
+        """
+        raise NotImplementedError("needs to be overwritten by subclass")
+
     def prepare_update(self, i0):
         """Prepare everything algorithm-specific to perform a local update."""
         raise NotImplementedError("needs to be overwritten by subclass")

@@ -584,6 +584,24 @@ class TwoSiteDMRGEngine(Sweep):
         else:  # as implemented directly in the environment
             self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
 
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+        """
+        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        if Mixer_class:
+            if Mixer_class is True:
+                Mixer_class = DensityMatrixMixer
+            if isinstance(Mixer_class, str):
+                if Mixer_class == "Mixer":
+                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
+                           'for Sweep parameter "mixer"')
+                    warnings.warn(msg, FutureWarning)
+                    Mixer = "DensityMatrixMixer"
+                Mixer_class = globals()[Mixer_class]
+            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
+
 
 class Engine(NpcLinearOperator):
     """Prototype for an DMRG 'Engine'.
@@ -855,34 +873,9 @@ class Engine(NpcLinearOperator):
 
     
 
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""
-        Mixer_class = get_parameter(self.DMRG_params, 'mixer', None, 'DMRG')
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = DensityMatrixMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
-                           'for DMRG parameter "mixer"')
-                    warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"
-                Mixer_class = globals()[Mixer_class]
-            mixer_params = get_parameter(self.DMRG_params, 'mixer_params', {}, 'DMRG')
-            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-            self.mixer = Mixer_class(mixer_params)
+    
 
-    def mixer_cleanup(self):
-        """Cleanup the effects of the mixer.
-
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if self.mixer is not None:
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
+    
 
  
 
