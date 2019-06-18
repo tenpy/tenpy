@@ -291,6 +291,7 @@ class TwoSiteDMRGEngine(Sweep):
     Implement run()
     Implement get_theta_ortho()
     Implement mixer_activate() & mixer_cleanup() / mixer utilization
+    Check if offsets are right (i0 + 1 = EffectiveH.length - 1) -- potential generalizations.
     """
     def reset_stats(self):
         """Reset the statistics. Useful if you want to start a new Sweep run.
@@ -579,7 +580,7 @@ class TwoSiteDMRGEngine(Sweep):
         if self.combine:
             RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-            self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
+            self.env.set_RP(i0 + self.EffectiveH.length - 2, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
         else:  # as implemented directly in the environment
             self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
 
@@ -688,31 +689,7 @@ class Engine(NpcLinearOperator):
         Start time of the simulation, set in :meth:`reset_stats`.
     """
 
-    def __init__(self, psi, model, DMRG_params):
-        self.psi = psi
-        self.DMRG_params = DMRG_params
-        self.verbose = get_parameter(DMRG_params, 'verbose', 1, 'DMRG')
-
-        self.finite = psi.finite
-        self.mixer = None  # means 'ignore mixer'
-        # the mixer is activated in in :meth:`run`.
-
-        self.lanczos_params = get_parameter(DMRG_params, 'lanczos_params', {}, 'DMRG')
-        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-
-        self.env = None
-        self.ortho_to_envs = []
-        self.init_env(model)  # calls reset_stats
-
-    def __del__(self):
-        DMRG_params = self.DMRG_params
-        unused_parameters(DMRG_params['lanczos_params'], "DMRG lanczos_params")
-        unused_parameters(DMRG_params['trunc_params'], "DMRG trunc_params")
-        if 'mixer_params' in DMRG_params and DMRG_params.get('mixer', True):
-            unused_parameters(DMRG_params['mixer_params'], "DMRG mixer_params")
-        unused_parameters(DMRG_params, "DMRG")
+    
 
     def run(self):
         """Run the DMRG simulation to find the ground state.
@@ -876,62 +853,7 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
         return E, self.psi
 
-    def prepare_diag(self, i0, update_LP, update_RP):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (with the same tensor structure) to orthogonalize against,
-            see :meth:`get_theta_ortho`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def get_theta_ortho(self, i0):
-        """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'.
-        """
-        theta_ortho = []
-        for o_env in self.ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=2)  # the environments are of the form <psi|ortho>
-            LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            theta_ortho.append(theta)
-        return theta_ortho
-
-    def prepare_svd(self, theta):
-        """Transform theta into a matrix for svd.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian as returned by `diag`.
-
-        Returns
-        -------
-        theta_matrix : :class:`~tenpy.linalg.np_conserved.Array`
-            Same as `theta`, but with legs combined into a 2D array for svd partition.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
+    
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""

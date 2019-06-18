@@ -48,9 +48,11 @@ class Sweep:
         self.engine_params = engine_params
         self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
 
+        # self.offset_RP = EffectiveH.length - 1
         self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
         self.psi = env.bra
         self.finite = self.env.bra.finite
+        self.ortho_to_envs = []
         self.mixer = None  # means 'ignore mixer'
         # the mixer is activated in in :meth:`run`.
 
@@ -62,6 +64,15 @@ class Sweep:
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
 
         self.init_env()
+
+    def __del__(self):
+        # TODO why do we do this?
+        engine_params = self.engine_params
+        unused_parameters(engine_params['lanczos_params'], "Sweep lanczos_params")
+        unused_parameters(engine_params['trunc_params'], "Sweep trunc_params")
+        if 'mixer_params' in engine_params and engine_params.get('mixer', True):
+            unused_parameters(engine_params['mixer_params'], "Sweep mixer_params")
+        unused_parameters(engine_params, "Sweep")
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
@@ -243,6 +254,34 @@ class Sweep:
             update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                            [[True, True]] * 2 + [[False, True]] * (L-2)
         return schedule_i0, update_LP_RP
+
+    def get_theta_ortho(self, i0):
+        """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
+
+        .. todo ::
+        Confirm that this method is indeed general if we call get_theta() with
+        n = self.EffectiveH.length.
+
+        Parameters
+        ----------
+        i0 : int
+            We want to optimize on sites ``(i0, i0+1)``.
+
+        Returns
+        -------
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'.
+        """
+        theta_ortho = []
+        for o_env in self.ortho_to_envs:
+            theta = o_env.ket.get_theta(i0, n=self.EffectiveH.length)  # the environments are of the form <psi|ortho>
+            LP = o_env.get_LP(i0, store=True)
+            RP = o_env.get_RP(i0 + self.EffectiveH.length - 1, store=True)
+            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+            theta_ortho.append(theta)
+        return theta_ortho
 
     def prepare_update(self, i0):
         """Prepare everything algorithm-specific to perform a local update."""
