@@ -19,17 +19,19 @@ class Sweep:
     ----------
     eff_H : :class:`~tenpy.algorithms.mps_sweep.EffectiveH`.
         Effective Hamiltonian, used in the local updates.
-    EffectiveH : TYPE
-        Description
-    mixer : TYPE
-        Description
+    EffectiveH : class type
+        Class of `eff_H`.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     stats : dict
         Description
     """
     
-    def __init__(self, EffectiveH):
+    def __init__(self, env, EffectiveH):
+        self.env = env
         self.EffectiveH = EffectiveH  # class type
         self.stats = {}
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()
 
     def environment_sweeps(self, N_sweeps):
         """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
@@ -115,12 +117,18 @@ class Sweep:
     def get_sweep_schedule(self):
         """Define the schedule of the sweep.
 
+        One 'sweep' is a full sequence from the leftmost site to the right and 
+        back. Only those `LP` and `RP` that can be used later should be updated.
+        
         Returns
         -------
-
+        schedule_i0 : list
+            List of indices of 'active sites'.
+        update_LP_RP : list
+            List of bools, which indicate whether to update the `LP` and `RP`.
         """
         L = self.env.L
-        if self.finite:
+        if self.env.finite:
             schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
             update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
         else:
@@ -131,9 +139,16 @@ class Sweep:
         return schedule_i0, update_LP_RP
 
     def prepare_update(self, i0):
+        """Prepare everything to perform a local update.
+        
+        Parameters
+        ----------
+        i0 : int
+            Index of the (left-most) active site.
+        """
         EffectiveH = self.EffectiveH
         self.eff_H = EffectiveH(self.env, i0)
-        return theta
+        # return theta  # Are not handling theta here; perhaps in subclass?
 
     def update_local(self, i0, theta, **kwargs):
         raise NotImplementedError("needs to be overwritten by subclass")
