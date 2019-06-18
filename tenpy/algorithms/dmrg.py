@@ -27,6 +27,8 @@ and then slowly turned off in the end.
 
 .. todo ::
     separate effective Hamiltonian from Engine for better readability?
+    Rewrite two-site DMRG using Sweep and TwoSiteH classes.
+    Implement one-site DMRG using Sweep and TwoSiteH classes.
 """
 # Copyright 2018 TeNPy Developers
 
@@ -42,6 +44,7 @@ from ..linalg.sparse import NpcLinearOperator
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
     'run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
@@ -183,6 +186,216 @@ def run(psi, model, DMRG_params):
         'bond_statistics': engine.update_stats,
         'sweep_statistics': engine.sweep_stats
     }
+
+
+class OneSiteDMRGEngine(Sweep):
+    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
+
+    .. todo ::
+    Can perhaps be combined into the two-site DMRG by using appropriate EffectiveH.
+    """
+    def __init__(self, env, EffectiveH):
+        self.env = env
+        self.EffectiveH = EffectiveH  # class type
+        self.stats = {}
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()
+        # TODO remove this comment if __init__ changes. If not, delete __init__
+
+    def update_local(self, i0, optimize=True, meas_E_trunc=False):
+        """Perform bond-update on the sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        i0 : int
+            Site left to the bond which should be optimized.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_LP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+        optimize : bool
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+        meas_E_trunc : bool
+            Wheter to measure the energy after truncation.
+
+        Returns
+        -------
+        E_total : float
+            Total energy, obtained *before* truncation (if ``optimize=True``),
+            or *after* truncation (if ``optimize=False``) (but never ``None``).
+        E_trunc : float | ``None``
+            The energy difference of the total energy after minus before truncation,
+            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced after bond optimization.
+        N_lanczos : int
+            Dimension of the Krylov space used for optimization in the lanczos algorithm.
+            0 if ``optimize=False``.
+        age : int
+            Current size of the DMRG simulation: number of physical sites involved
+            into the contraction.
+        """
+        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep 
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
+        if optimize:
+            E0, theta, N = self.diag(theta, theta_ortho)
+        else:
+            E0, N = None, 0
+        theta = self.prepare_svd(theta)
+        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
+        self.set_B(i0, U, S, VH)
+
+    def post_update_local(self, **kwargs):
+        # algorithm specific after update
+        E_trunc = None
+        if meas_E_trunc or E0 is None:
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
+            if E0 is None:
+                E0 = E_trunc
+            E_trunc = E_trunc - E0
+        # now we can also remove the LP and RP on outer bonds, which we don't need any more
+        if update_RP:  # we move to the left -> delete left LP
+            self.env.del_LP(i0)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0)
+        if update_LP:  # we move to the right -> delete right RP
+            self.env.del_RP(i0 + 1)
+            for o_env in self.ortho_to_envs:
+                o_env.del_RP(i0 + 1)
+        return E0, E_trunc, err, N, age
+
+     def diag(self, theta, theta_ortho):
+        """Diagonalize the one-site effective Hamiltonian.
+        
+        Parameters
+        ----------
+        theta : TYPE
+            Description
+        theta_ortho : TYPE
+            Description
+        """
+
+    def prepare_svd(self, theta):
+        pass  # Do we need this method?
+
+    def mixed_svd(self, theta, i0, update_LP, update_RP):
+        pass  # Do we need this method?
+
+
+class TwoSiteDMRGEngine(Sweep):
+    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
+    """
+    def __init__(self, env, EffectiveH, combine, engine_params):
+        self.env = env
+        self.EffectiveH = EffectiveH  # class type
+        self.combine = combine  # Whether to use combined legs. Put in params?
+        self.engine_params = params
+        self.stats = {}
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()
+    
+    def prepare_update(self, i0):
+        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        i0 : int
+            We want to optimize on sites ``(i0, i0+1)``.
+
+        Returns
+        -------
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
+        """
+        EffectiveH = self.EffectiveH
+        env = self.env
+        self.eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        # TODO generalize next line with n=EffectiveH.length? Then transposing will be harder.
+        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
+        theta_ortho = self.get_theta_ortho(i0)
+        if self.combine:
+            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
+            theta_ortho = [
+                th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
+                for th_o in theta_ortho
+            ]
+        else:
+            theta.itranspose(['vL', 'p0', 'vR', 'p1'])
+            for th_o in theta_ortho:
+                th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
+        return theta, theta_ortho
+
+    def update_local(self, i0, optimize=True, meas_E_trunc=False):
+        """Perform bond-update on the sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        i0 : int
+            Site left to the bond which should be optimized.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_LP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+        optimize : bool
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+        meas_E_trunc : bool
+            Wheter to measure the energy after truncation.
+
+        Returns
+        -------
+        E_total : float
+            Total energy, obtained *before* truncation (if ``optimize=True``),
+            or *after* truncation (if ``optimize=False``) (but never ``None``).
+        E_trunc : float | ``None``
+            The energy difference of the total energy after minus before truncation,
+            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced after bond optimization.
+        N_lanczos : int
+            Dimension of the Krylov space used for optimization in the lanczos algorithm.
+            0 if ``optimize=False``.
+        age : int
+            Current size of the DMRG simulation: number of physical sites involved
+            into the contraction.
+        """
+        theta, theta_ortho = self.prepare_diag(i0)
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
+        if optimize:
+            E0, theta, N = self.diag(theta, theta_ortho)
+        else:
+            E0, N = None, 0
+        theta = self.prepare_svd(theta)
+        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
+        self.set_B(i0, U, S, VH)
+
+    def post_update_local(self, **kwargs):
+        # algorithm specific after update
+        E_trunc = None
+        if meas_E_trunc or E0 is None:
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
+            if E0 is None:
+                E0 = E_trunc
+            E_trunc = E_trunc - E0
+        # now we can also remove the LP and RP on outer bonds, which we don't need any more
+        if update_RP:  # we move to the left -> delete left LP
+            self.env.del_LP(i0)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0)
+        if update_LP:  # we move to the right -> delete right RP
+            self.env.del_RP(i0 + 1)
+            for o_env in self.ortho_to_envs:
+                o_env.del_RP(i0 + 1)
+        return E0, E_trunc, err, N, age
+
+    def diag(self):
+        pass
 
 
 class Engine(NpcLinearOperator):
@@ -556,68 +769,6 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
         return E, self.psi
 
-    def update_local(self, i0, optimize=True, meas_E_trunc=False):
-        """Perform bond-update on the sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            Site left to the bond which should be optimized.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_LP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-        optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
-        """
-        theta, theta_ortho = self.prepare_diag(i0)
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
-        if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
-        else:
-            E0, N = None, 0
-        theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        self.set_B(i0, U, S, VH)
-
-    def post_update_local(self, **kwargs):
-        # algorithm specific after update
-        E_trunc = None
-        if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
-            if E0 is None:
-                E0 = E_trunc
-            E_trunc = E_trunc - E0
-        # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if update_RP:  # we move to the left -> delete left LP
-            self.env.del_LP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0)
-        if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0 + 1)
-            for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0 + 1)
-        return E0, E_trunc, err, N, age
 
     def prepare_diag(self, i0, update_LP, update_RP):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.

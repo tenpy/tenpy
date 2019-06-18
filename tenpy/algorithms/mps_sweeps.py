@@ -1,8 +1,8 @@
 """
 .. TODO ::
 - Overall docstring for this file.
-- Build Two-site effective Hamiltonian
 - Finish Sweep class
+- Double-check dependencies
 - Rebuild DMRG and TDVP engines as subclasses of sweep
 - Do testing
 """
@@ -11,6 +11,8 @@
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator
 
+
+__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 
 class Sweep:
     """Prototype class for a 'sweeping' algorithm.
@@ -47,12 +49,16 @@ class Sweep:
             print("", flush=True)  # end line
 
     def sweep(self, optimize=True, **kwargs):
-        """One 'sweep' of the DMRG algorithm.
+        """One 'sweep' of a sweeper algorithm.
 
         Iteratate over the bond which is optimized, to the right and
         then back to the left to the starting point.
         If optimize=False, don't actually diagonalize the effective hamiltonian,
         but only update the environment.
+
+        .. todo ::
+        - Remove anything DMRG-specific
+        - Make sure all called attributes are actually attributes of the Sweep class.
 
         Parameters
         ----------
@@ -79,6 +85,7 @@ class Sweep:
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
             # --------- the main work --------------
+            theta, theta_ortho = self.prepare_update(i0)
             update_data = self.update_local(i0, optimize=optimize)
             if update_LP:
                 self.update_LP(i0, U)  # (requires updated B)
@@ -90,6 +97,7 @@ class Sweep:
                     o_env.get_RP(i0, store=True)
             self.post_update_local(update_data)
             # collect statistics
+            # TODO are these DMRG-specific?
             self.update_stats['i0'].append(i0)
             self.update_stats['age'].append(age)
             self.update_stats['E_total'].append(E_total)
@@ -178,8 +186,6 @@ class Sweep:
         """
         self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
         # as implemented directly in the environment
-
-
 
 
 class EffectiveH(NpcLinearOperator):
@@ -362,7 +368,7 @@ class TwoSiteH(EffectiveH):
     """
     length = 2
 
-    def __init__():
+    def __init__(self, env, i0, combine=False):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
         self.W1 = env.H.get_W(i0)
