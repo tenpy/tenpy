@@ -288,7 +288,31 @@ class TwoSiteDMRGEngine(Sweep):
     .. todo ::
     update_LP and update_RP might be generalizable.
     """
-    
+    def reset_stats(self):
+        """Reset the statistics. Useful if you want to start a new Sweep run.
+        """
+        self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
+        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[], 
+                             'time':[], 'err':[], 'E_trunc':[]}
+        self.sweep_stats = {
+            'sweep': [],
+            'E': [],
+            'S': [],
+            'time': [],
+            'max_trunc_err': [],
+            'max_E_trunc': [],
+            'max_chi': [],
+            'norm_err': []
+        }
+        self.shelve = False
+        self.chi_list = get_parameter(self.engine_params, 'chi_list', None, 'Sweep')
+        if self.chi_list is not None:
+            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+            self.trunc_params['chi_max'] = chi_max
+            if self.verbose >= 1:
+                print("Setting chi_max =", chi_max)
+        self.time0 = time.time()
+
     def prepare_update(self, i0):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
