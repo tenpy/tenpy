@@ -26,6 +26,9 @@ class Sweep:
 
     In a change from the original setup of the engines, this class is supplied
     with an environment, rather than a state and a model.
+
+    .. todo ::
+    Possibly include something like plot_update_stats(), plot_sweep_stats().
     
     Attributes
     ----------

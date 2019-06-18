@@ -287,6 +287,10 @@ class TwoSiteDMRGEngine(Sweep):
 
     .. todo ::
     update_LP and update_RP might be generalizable.
+    Implement __del__()?
+    Implement run()
+    Implement get_theta_ortho()
+    Implement mixer_activate() & mixer_cleanup() / mixer utilization
     """
     def reset_stats(self):
         """Reset the statistics. Useful if you want to start a new Sweep run.
