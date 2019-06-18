@@ -384,49 +384,9 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
-    """Build an "initial state" list
-
-    Uses two iterables ('states' and 'filling') to determine how to fill the
-    state. The two lists should have the same length as every element in 'filling' gives the filling
-    fraction for the corresponding state in 'states'.
-
-    Example:
-        size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
-        n_states = size * filling = [2, 4, 0]
-        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will 
-        get state 2.
-
-    .. todo ::
-    Move to more reasonable location (e.g., `tenpy.networks.mps`)
-    Make more general: it should be possible to specify states as strings.
-
-    Parameters
-    ----------
-        size : int
-            length of state
-        states : iterable
-            Containing the possible local states
-        filling : iterable
-            Fraction of the total number of sites to get a certain state. If
-            infinite fractions (e.g. 1/3) are needed, one should supply a 
-            fraction (1./3.)
-        mode : str | None
-            State filling pattern. Only 'random' is implemented
-        seed : int | None
-            Seed for random number generators
-
-    Returns
-    -------
-        initial_state (list) : the initial state
-
-    Raises
-    ------
-        ValueError
-            If fractonal fillings are incommensurate with system size.
-        AssertionError
-            If the total filling is not equal to 1, or the length of `filling`
-            does not equal the length of `states`.
-    """
+    warnings.warn("Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
+                  category=FutureWarning,
+                  stacklevel=2)
 
     random.seed(seed)
 
