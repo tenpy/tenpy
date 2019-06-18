@@ -387,33 +387,8 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     warnings.warn("Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
                   category=FutureWarning,
                   stacklevel=2)
-
-    random.seed(seed)
-
-    # Do some safety checks
-    assert sum(filling) == 1
-    assert len(states) == len(filling)
-
-    # Get number of sites for each local state
-    n_states = np.array(filling) * size
-    for num in n_states:
-        if ((num - round(num)) < 1e-12):
-            num = int(round(num))
-        if type(num) != int and not num.is_integer():
-            raise ValueError("Cannot create model of length {} with filling {}".format(
-                size, filling))
-
-    # Randomly assign local states
-    initial_state = [0] * size
-    all_sites = list(range(size))  # To avoid having two types on same site.
-    for state, fill in zip(states, filling):
-        sites = random.sample(set(all_sites),
-                              int(fill * size))  # pick fill*size sites to put state
-        for site in sites:
-            initial_state[site] = state
-            all_sites.remove(site)
-
-    return initial_state
+    from tenpy.networks import mps
+    return mps.build_initial_state(size, states, filling, mode, seed)
 
 
 def setup_executable(mod, run_defaults, identifier_list=None):
