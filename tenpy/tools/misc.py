@@ -421,7 +421,11 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 
     Raises
     ------
-        ValueError: If fractonal fillings are incommensurate with system size.
+        ValueError
+            If fractonal fillings are incommensurate with system size.
+        AssertionError
+            If the total filling is not equal to 1, or the length of `filling`
+            does not equal the length of `states`.
     """
 
     random.seed(seed)
@@ -430,7 +434,8 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     assert sum(filling) == 1
     assert len(states) == len(filling)
 
-    n_states = np.array(filling) * size  # Number of sites to get
+    # Get number of sites for each local state
+    n_states = np.array(filling) * size
     for num in n_states:
         if ((num - round(num)) < 1e-12):
             num = int(round(num))
@@ -438,13 +443,14 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
             raise ValueError("Cannot create model of length {} with filling {}".format(
                 size, filling))
 
-    initial_state = np.zeros(size, dtype=int)  # Initialize
-    all_sites = list(range(size))
+    # Randomly assign local states
+    initial_state = [0] * size
+    all_sites = list(range(size))  # To avoid having two types on same site.
     for state, fill in zip(states, filling):
         sites = random.sample(set(all_sites),
                               int(fill * size))  # pick fill*size sites to put state
-        initial_state[sites] = state
         for site in sites:
+            initial_state[site] = state
             all_sites.remove(site)
 
     return initial_state
