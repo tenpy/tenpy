@@ -614,6 +614,10 @@ class Array:
         """Return list of the leg labels, with `None` for anonymous legs."""
         return self._labels[:]
 
+    def has_label(self, label):
+        """Check whether a given label exists."""
+        return (label in self._labels)
+
     def get_leg(self, label):
         """Return ``self.legs[self.get_leg_index(label)]``.
 

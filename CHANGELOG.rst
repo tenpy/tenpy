@@ -16,6 +16,8 @@ Backwards incompatible changes
 Changed
 ^^^^^^^
 - :func:`~tenpy.linalg.np_conserved.grid_concat` allows for ``None`` entries (representing zero blocks).
+- :meth:`~tenpy.networks.mps.MPS.from_full` allows for 'segment' boundary conditions.
+- :meth:`~tenpy.networks.mps.MPS.apply_local_op` allows for n-site operators.
 
 Added
 ^^^^^
@@ -25,6 +27,7 @@ Added
 - :meth:`~tenpy.networks.site.Site.multiply_op_names` to replace ``' '.join(op_names)`` and allow explicit compression/multiplication.
 - :func:`~tenpy.networks.terms.order_combine_term` to group operators together.
 - :meth:`~tenpy.networks.mpo.MPO.dagger` of MPO's (and to implement that also :meth:`~tenpy.linalg.charges.LegCharge.flip_charges_qconj`).
+- :meth:`~tenpy.linalg.np_conserved.Arrray.has_label` to check if a label exists
 - Addition of MPOs
 
 Fixed
@@ -33,6 +36,7 @@ Fixed
 - Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
 - Allow :class:`~tenpy.networks.terms.TermList` to have terms with multiple operators acting on the same site.
 - Allow MPS indices outside unit cell in :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.models.lattice.Lattice.lat2mps_idx`.
+- :meth:`~tenpy.networks.MPSEnvironment.expectation_value` did not work for n-site operators.
 
 
 [0.4.0] - 2019-04-28
