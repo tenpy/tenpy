@@ -385,12 +385,19 @@ class MPS:
         return cls(sites, Bs, SVs, form=form, bc=bc)
 
     @classmethod
-    def from_full(cls, sites, psi, form='B', cutoff=1.e-16, normalize=True):
+    def from_full(cls,
+                  sites,
+                  psi,
+                  form=None,
+                  cutoff=1.e-16,
+                  normalize=True,
+                  bc='finite',
+                  outer_S=None):
         """Construct an MPS from a single tensor `psi` with one leg per physical site.
 
         Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
         values, the result will be in canonical form.
-        Obviously, this is only well-defined for `finite` boundary conditions.
+        Obviously, this is only well-defined for `finite` or `segment` boundary conditions.
 
         Parameters
         ----------
@@ -399,54 +406,68 @@ class MPS:
         psi : :class:`~tenpy.linalg.np_conserved.Array`
             The full wave function to be represented as an MPS.
             Should have labels ``'p0', 'p1', ...,  'p{L-1}'``.
-        form  : ``'B' | 'A' | 'C' | 'G'``
+            Additionally, it may have (or must have for 'segment' `bc`) the legs ``'vL', 'vR'``,
+            which are trivial for 'finite' `bc`.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
             The canonical form of the resulting MPS, see module doc-string.
+            ``None`` defaults to 'A' form on the first site and 'B' form on all following sites.
         cutoff : float
             Cutoff of singular values used in the SVDs.
         normalize : bool
             Whether the resulting MPS should have 'norm' 1.
+        bc : 'finite' | 'segment'
+            Boundary conditions.
+        outer_S : None | (array, array)
+            For 'semgent' `bc` the singular values on the left and right of the considered segment,
+            `None` for 'finite' boundary conditions.
 
         Returns
         -------
         psi_mps : :class:`MPS`
             MPS representation of `psi`, in canonical form and possibly normalized.
         """
-        if form not in ['B', 'A', 'C', 'G']:
+        if form is not None and form not in ['B', 'A', 'C', 'G']:
             raise ValueError("Invalid form: " + repr(form))
+        if bc != 'finite' and bc != 'segment':
+            raise ValueError("Wrong boundary conditions: " + repr(bc))
         # perform SVDs to bring it into 'B' form, afterwards change the form.
         L = len(sites)
         assert (L >= 2)
         B_list = [None] * L
-        S_list = [1] * (L + 1)
+        S_list = [None] * (L + 1)
         norm = 1. if normalize else npc.norm(psi)
-        labels = ['p' + str(i) for i in range(L)]
+        if not psi.has_label('vL'):
+            psi = psi.add_trivial_leg(0, label='vL', qconj=+1)
+        elif bc == 'finite' and psi.get_leg('vL').ind_len != 1:
+            raise ValueError("non-trivial left leg for 'finite' bc!")
+        if not psi.has_label('vR'):
+            psi = psi.add_trivial_leg(len(psi.get_leg_labels()), label='vR', qconj=-1)
+        elif bc == 'finite' and psi.get_leg('vR').ind_len != 1:
+            raise ValueError("non-trivial left leg for 'finite' bc!")
+        labels = ['vL'] + ['p' + str(i) for i in range(L)] + ['vR']
         psi.itranspose(labels)
         # combine legs from left
-        psi = psi.add_trivial_leg(0, label='vL', qconj=+1)
         for i in range(0, L - 1):
             psi = psi.combine_legs([0, 1])  # combines the legs until `i`
-        psi = psi.add_trivial_leg(2, label='vR', qconj=-1)
         # now psi has only three legs: ``'(((vL.p0).p1)...p{L-2})', 'p{L-1}', 'vR'``
         for i in range(L - 1, 0, -1):
             # split off B[i]
-            psi = psi.combine_legs([labels[i], 'vR'])
+            psi = psi.combine_legs([labels[i + 1], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
             psi.iscale_axis(S, 1)
-            B_list[i] = B.split_legs(1).replace_label(labels[i], 'p')
+            B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
             S_list[i] = S
             psi = psi.split_legs(0)
-        psi = psi.combine_legs([labels[0], 'vR'])
-        psi, S, B = npc.svd(psi,
-                            qtotal_LR=[None, psi.qtotal],
-                            inner_labels=['vR', 'vL'],
-                            cutoff=cutoff)
-        assert (psi.shape == (1, 1))
-        S_list[0] = np.ones([1], dtype=np.float)
-        phase = psi[0, 0]
-        B_list[0] = phase * B.split_legs(1).replace_label(labels[0], 'p')
-        res = cls(sites, B_list, S_list, bc='finite', form='B', norm=norm)
-        if form != 'B':
+        # psi is now the first `B` in 'A' form
+        B_list[0] = psi.replace_label(labels[1], 'p')
+        B_form = ['A'] + ['B'] * (L - 1)
+        if bc == 'finite':
+            S_list[0] = S_list[-1] = np.ones([1], dtype=np.float)
+        elif outer_S is not None:
+            S_list[0], S_list[-1] = outer_S
+        res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm)
+        if form is not None:
             res.convert_form(form)
         return res
 
@@ -2093,8 +2114,8 @@ class MPS:
     def add(self, other, alpha, beta, cutoff=1.e-15):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
 
-        Works only for ``'finite', 'segment'`` boundary conditions.
-        For `segment` boundary conditions, the virtual legs on the very left/right are
+        Works only for 'finite', 'segment' boundary conditions.
+        For 'segment' boundary conditions, the virtual legs on the very left/right are
         assumed to correspond to each other (i.e. self and other have the same state outside of
         the considered segment).
         Takes into account :attr:`norm`.
@@ -2153,9 +2174,8 @@ class MPS:
             psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
             return psi
 
-    def apply_local_op(self, i, op, unitary=None, renormalize=False):
-        """Apply a local operator to `self`.
-
+    def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
+        """Apply a local (one or multi-site) operator to `self`.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -2163,28 +2183,51 @@ class MPS:
         Parameters
         ----------
         i : int
-            Index of the site on which the operator should act.
+            (Left-most) index of the site(s) on which the operator should act.
         op : str | npc.Array
-            A physical operator acting on site `i`, with legs ``'p', 'p*'``.
+            A physical operator acting on site `i`, with legs ``'p', 'p*'`` for a single-site
+            operator or with legs ``['p0', 'p1', ...], ['p0*', 'p1*', ...]`` for an operator
+            acting on `n`>=2 sites.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
             :attr:`sites`.
         unitary : None | bool
             Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
             or whether we should call :meth:`canonical_form` (``False``).
-            ``None`` checks whether ``norm(op dagger(op) - identity)`` is small.
+            ``None`` checks whether ``norm(op dagger(op) - identity)`` is smaller than `cutoff`.
         renormalize : bool
             Whether the final state should keep track of the norm (False, default) or be
             renormalized to have norm 1 (True).
-
+        cutoff : float
+            Cutoff for singular values if `op` acts on more than one site (see :meth:`from_full`).
+            (And used as cutoff for a unspecified `unitary`.)
         """
         i = self._to_valid_index(i)
         if isinstance(op, str):
             op = self.sites[i].get_op(op)
+        n = op.rank // 2  # same as int(rank/2)
+        if n == 1:
+            pstar, p = 'p*', 'p'
+        else:
+            p = self._get_p_labels(n, False)
+            pstar = self._get_p_labels(n, True)
         if unitary is None:
-            op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
-            unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < 1.e-14
-        opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
-        self.set_B(i, opB, self.form[i])
+            op_op_dagger = npc.tensordot(op, op.conj(), axes=[pstar, p])
+            if n > 1:
+                op_op_dagger = op_op_dagger.combine_legs([p, pstar], qconj=[+1, -1])
+            unitary = npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) < cutoff
+        if n == 1:
+            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+            self.set_B(i, opB, self.form[i])
+        else:
+            th = self.get_theta(i, n)
+            th = npc.tensordot(op, th, axes=[pstar, p])
+            # use MPS.from_full to split the sites
+            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
+                                      (self.get_SL(i), self.get_SR(i + n - 1)))
+            for j in range(n):
+                self.set_B(i + j, split_th._B[j], split_th.form[j])
+            for j in range(n - 1):
+                self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
             self.canonical_form(renormalize)
 
@@ -3051,7 +3094,7 @@ class MPSEnvironment:
         E = []
         for i in sites:
             LP = self.get_LP(i, store=True)
-            RP = self.get_RP(i, store=True)
+            RP = self.get_RP(i + n - 1, store=True)
             op = self.ket.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             C = self.ket.get_theta(i, n)
@@ -3334,3 +3377,76 @@ class TransferMatrix(sparse.NpcLinearOperator):
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
+
+
+def build_initial_state(size, states, filling, mode='random', seed=None):
+    """Build an "initial state" list
+
+    Uses two iterables ('states' and 'filling') to determine how to fill the
+    state. The two lists should have the same length as every element in 'filling' gives the filling
+    fraction for the corresponding state in 'states'.
+
+    Example:
+        size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
+        n_states = size * filling = [2, 4, 0]
+        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will 
+        get state 2.
+
+    .. todo ::
+    Move to more reasonable location (e.g., `tenpy.networks.mps`)
+    Make more general: it should be possible to specify states as strings.
+
+    Parameters
+    ----------
+        size : int
+            length of state
+        states : iterable
+            Containing the possible local states
+        filling : iterable
+            Fraction of the total number of sites to get a certain state. If
+            infinite fractions (e.g. 1/3) are needed, one should supply a 
+            fraction (1./3.)
+        mode : str | None
+            State filling pattern. Only 'random' is implemented
+        seed : int | None
+            Seed for random number generators
+
+    Returns
+    -------
+        initial_state (list) : the initial state
+
+    Raises
+    ------
+        ValueError
+            If fractonal fillings are incommensurate with system size.
+        AssertionError
+            If the total filling is not equal to 1, or the length of `filling`
+            does not equal the length of `states`.
+    """
+
+    random.seed(seed)
+
+    # Do some safety checks
+    assert sum(filling) == 1
+    assert len(states) == len(filling)
+
+    # Get number of sites for each local state
+    n_states = np.array(filling) * size
+    for num in n_states:
+        if ((num - round(num)) < 1e-12):
+            num = int(round(num))
+        if type(num) != int and not num.is_integer():
+            raise ValueError("Cannot create model of length {} with filling {}".format(
+                size, filling))
+
+    # Randomly assign local states
+    initial_state = [0] * size
+    all_sites = list(range(size))  # To avoid having two types on same site.
+    for state, fill in zip(states, filling):
+        sites = random.sample(set(all_sites),
+                              int(fill * size))  # pick fill*size sites to put state
+        for site in sites:
+            initial_state[site] = state
+            all_sites.remove(site)
+
+    return initial_state

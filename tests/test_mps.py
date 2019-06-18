@@ -62,8 +62,8 @@ def test_mps_add():
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite')
     psi2_prime.apply_local_op(1, 'Sm', False, False)
-    #  # now psi2_prime is psi2 up to gauging of charges.
-    #  # can MPS.add handle this?
+    # now psi2_prime is psi2 up to gauging of charges.
+    # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
 
@@ -297,3 +297,23 @@ def test_expectation_value_term():
         [psi2.expectation_value_term(term) * strength for term, strength in term_list])
     evsum, _ = psi2.expectation_value_terms_sum(term_list)
     assert abs(evsum - desired) < 1.e-14
+
+
+def test_expectation_value_multisite():
+    s = spin_half
+    psi = mps.MPS.from_singlets(s, 6, [(0, 1), (2, 3), (4, 5)], lonely=[], bc='finite')
+    SpSm = npc.outer(s.Sp.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                     s.Sm.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    psi1 = psi.copy()
+    ev = psi.expectation_value(SpSm)
+    npt.assert_almost_equal(ev, [-0.5, 0., -0.5, 0., -0.5])
+    env1 = mps.MPSEnvironment(psi1, psi)
+    ev = env1.expectation_value(SpSm)
+    npt.assert_almost_equal(ev, [-0.5, 0., -0.5, 0., -0.5])
+
+    psi1.apply_local_op(2, SpSm)  # multi-site operator
+    ev = psi1.expectation_value(SpSm)  # normalized!
+    npt.assert_almost_equal(ev, [-0.5, 0., 0.0, 0., -0.5])
+    env1 = mps.MPSEnvironment(psi1, psi)
+    ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
+    npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])

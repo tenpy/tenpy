@@ -384,55 +384,11 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
-    """
-        Initial state builder. Uses two iterables ('states' and 'filling') to determine how to fill the
-        state. The two lists should have the same length as every element in 'filling' gives the filling
-        fraction for the corresponding state in 'states'.
-
-        Example:
-            size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
-            n_states = size * filling = [2, 4, 0]
-            ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will get state 2.
-
-
-        Args:
-            size (int): length of state
-            states (tuple or list): Containing the possible local states
-            filling (tuple or list): Fraction of the total number of sites to get a certain state. If
-                                    infinite fractions (e.g. 1/3) are needed, one should supply a fraction (1./3.)
-            mode (str, optional): State filling pattern. Only 'random' is implemented
-            seed (int, optional): Seed for random number generators
-
-        Returns:
-            initial_state (list) : the initial state
-
-        Raises:
-            ValueError: If fractonal fillings are incommensurate with system size.
-        """
-    random.seed(seed)
-
-    # Do some safety checks
-    assert sum(filling) == 1
-    assert len(states) == len(filling)
-
-    n_states = np.array(filling) * size  # Number of sites to get
-    for num in n_states:
-        if ((num - round(num)) < 1e-12):
-            num = int(round(num))
-        if type(num) != int and not num.is_integer():
-            raise ValueError("Cannot create model of length {} with filling {}".format(
-                size, filling))
-
-    initial_state = np.zeros(size, dtype=int)  # Initialize
-    all_sites = list(range(size))
-    for state, fill in zip(states, filling):
-        sites = random.sample(set(all_sites),
-                              int(fill * size))  # pick fill*size sites to put state
-        initial_state[sites] = state
-        for site in sites:
-            all_sites.remove(site)
-
-    return initial_state
+    warnings.warn("Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
+                  category=FutureWarning,
+                  stacklevel=2)
+    from tenpy.networks import mps
+    return mps.build_initial_state(size, states, filling, mode, seed)
 
 
 def setup_executable(mod, run_defaults, identifier_list=None):
@@ -460,6 +416,8 @@ def setup_executable(mod, run_defaults, identifier_list=None):
             model_par, sim_par, run_par (dicts) : containing all parameters.
             args | namespace with raw arguments for some backwards compatibility with executables.
         """
+    warnings.warn("Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
+              category=FutureWarning, stacklevel=2)
     parser = argparse.ArgumentParser()
 
     # These deal with backwards compatibility (supplying a model)
