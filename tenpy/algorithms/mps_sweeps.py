@@ -165,7 +165,7 @@ class Sweep:
         if self.verbose >= 1:
             print("", flush=True)  # end line
 
-    def sweep(self, optimize=True, **kwargs):
+    def sweep(self, optimize=True, meas_E_trunc=False):
         """One 'sweep' of a sweeper algorithm.
 
         Iteratate over the bond which is optimized, to the right and
