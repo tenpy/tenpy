@@ -301,8 +301,12 @@ class TwoSiteDMRGEngine(Sweep):
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'DMRG')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.stats = {}
+
+
+        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[], 
+                             'time':[], 'err':[], 'E_trunc':[]}
         self.ortho_to_envs = []
+        self.time0 = time.time()
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
     
     def prepare_update(self, i0):
@@ -388,9 +392,23 @@ class TwoSiteDMRGEngine(Sweep):
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
-    def post_update_local(self, update_data, **kwargs):
-        # algorithm specific after update
-        E_trunc = None
+        return E0, E_trunc, err, N, age
+
+    def post_update_local(self, i0, update_data, **kwargs):
+        """Summary
+        
+        Parameters
+        ----------
+        update_data : TYPE
+            Description
+        **kwargs
+            Description
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
@@ -406,9 +424,16 @@ class TwoSiteDMRGEngine(Sweep):
             for o_env in self.ortho_to_envs:
                 o_env.del_RP(i0 + 1)
 
-        # Update stats and data and stuff
-
-        return E0, E_trunc, err, N, age
+        # collect statistics
+        E_total, E_trunc, err, N_lanczos, age = update_data
+        self.update_stats['i0'].append(i0)
+        self.update_stats['age'].append(age)
+        self.update_stats['E_total'].append(E_total)
+        self.update_stats['E_trunc'].append(E_trunc)
+        self.update_stats['N_lanczos'].append(N_lanczos)
+        self.update_stats['err'].append(err)
+        self.update_stats['time'].append(time.time() - self.time0)
+        # trunc_err_list.append(trunc_err.eps)
 
     def diag(self, theta_guess, theta_ortho):
         """Diagonalize the effective Hamiltonian represented by self.

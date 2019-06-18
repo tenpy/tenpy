@@ -96,16 +96,7 @@ class Sweep:
                 self.update_RP(i0, VH)
                 for o_env in self.ortho_to_envs:
                     o_env.get_RP(i0, store=True)
-            self.post_update_local(update_data)
-            # collect statistics
-            # TODO are these DMRG-specific?
-            self.update_stats['i0'].append(i0)
-            self.update_stats['age'].append(age)
-            self.update_stats['E_total'].append(E_total)
-            self.update_stats['N_lanczos'].append(N_lanczos)
-            self.update_stats['time'].append(time.time() - self.time0)
-            E_trunc_list.append(E_trunc)
-            trunc_err_list.append(trunc_err.eps)
+            self.post_update_local(i0, update_data)
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
