@@ -3377,3 +3377,76 @@ class TransferMatrix(sparse.NpcLinearOperator):
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
+
+
+def build_initial_state(size, states, filling, mode='random', seed=None):
+    """Build an "initial state" list
+
+    Uses two iterables ('states' and 'filling') to determine how to fill the
+    state. The two lists should have the same length as every element in 'filling' gives the filling
+    fraction for the corresponding state in 'states'.
+
+    Example:
+        size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
+        n_states = size * filling = [2, 4, 0]
+        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will 
+        get state 2.
+
+    .. todo ::
+    Move to more reasonable location (e.g., `tenpy.networks.mps`)
+    Make more general: it should be possible to specify states as strings.
+
+    Parameters
+    ----------
+        size : int
+            length of state
+        states : iterable
+            Containing the possible local states
+        filling : iterable
+            Fraction of the total number of sites to get a certain state. If
+            infinite fractions (e.g. 1/3) are needed, one should supply a 
+            fraction (1./3.)
+        mode : str | None
+            State filling pattern. Only 'random' is implemented
+        seed : int | None
+            Seed for random number generators
+
+    Returns
+    -------
+        initial_state (list) : the initial state
+
+    Raises
+    ------
+        ValueError
+            If fractonal fillings are incommensurate with system size.
+        AssertionError
+            If the total filling is not equal to 1, or the length of `filling`
+            does not equal the length of `states`.
+    """
+
+    random.seed(seed)
+
+    # Do some safety checks
+    assert sum(filling) == 1
+    assert len(states) == len(filling)
+
+    # Get number of sites for each local state
+    n_states = np.array(filling) * size
+    for num in n_states:
+        if ((num - round(num)) < 1e-12):
+            num = int(round(num))
+        if type(num) != int and not num.is_integer():
+            raise ValueError("Cannot create model of length {} with filling {}".format(
+                size, filling))
+
+    # Randomly assign local states
+    initial_state = [0] * size
+    all_sites = list(range(size))  # To avoid having two types on same site.
+    for state, fill in zip(states, filling):
+        sites = random.sample(set(all_sites),
+                              int(fill * size))  # pick fill*size sites to put state
+        for site in sites:
+            initial_state[site] = state
+            all_sites.remove(site)
+
+    return initial_state
