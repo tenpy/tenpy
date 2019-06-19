@@ -195,13 +195,16 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
 
     .. todo ::
-    Can perhaps be combined into the two-site DMRG by using appropriate EffectiveH.
-    Redo as inheriting from 2-site
+        Move inherited methods to a general DMRGEngine superclass.
+        Note: sweeps left/right need to be treated differently with respect to 
+        e.g. LHeff and RHeff
 
     Inherited from TwoSiteDMRGEngine:
     - run()
     - reset_stats()
     - diag()
+    - mixer_activate()
+    - mixed_svd()
 
     """
 
@@ -367,11 +370,34 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         else:  
             return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
 
-    def mixed_svd(self, theta, i0, update_LP, update_RP):
-        pass  # TODO check if need to override
+    def set_B(self, i0, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
 
-    def set_B():
-        pass  # TODO
+        .. todo ::
+            Do B0 and B1 definitely both have 'p' legs? 
+
+        Parameters
+        ----------
+        i0 : int
+            We update the MPS `B` at sites ``i0, i0+1``.
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        B0 = U.split_legs(['(vL.p)'])
+        B1 = VH.split_legs(['(p.vR)'])
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_SR(i0, S)
+        # the old stored environments are now invalid
+        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
+        for o_env in self.ortho_to_envs:
+            o_env.del_LP(i0 + 1)
+            o_env.del_RP(i0)
+        self.env.del_LP(i0 + 1)
+        self.env.del_RP(i0)
 
 
 class TwoSiteDMRGEngine(Sweep):
