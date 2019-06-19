@@ -28,6 +28,7 @@ class Sweep:
 
     .. todo ::
     Possibly include something like plot_update_stats(), plot_sweep_stats().
+    Initialize from psi and model rather than env.
     
     Attributes
     ----------
@@ -65,7 +66,6 @@ class Sweep:
         self.init_env()
 
     def __del__(self):
-        # TODO why do we do this?
         engine_params = self.engine_params
         unused_parameters(engine_params['lanczos_params'], "Sweep lanczos_params")
         unused_parameters(engine_params['trunc_params'], "Sweep trunc_params")
@@ -81,8 +81,6 @@ class Sweep:
         still have the same `psi`.
         Calls :meth:`reset_stats`.
 
-        .. todo ::
-        Do we only want to overwrite self.env if self.env is None and/or model is not None?
 
         Parameters
         ----------
@@ -258,10 +256,6 @@ class Sweep:
     def get_theta_ortho(self, i0):
         """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
 
-        .. todo ::
-        Confirm that this method is indeed general if we call get_theta() with
-        n = self.EffectiveH.length.
-
         Parameters
         ----------
         i0 : int
@@ -318,12 +312,42 @@ class Sweep:
         raise NotImplementedError("needs to be overwritten by subclass")
 
     def update_LP(self, i0, U):
-        raise NotImplementedError("needs to be overwritten by subclass")
+        """Update left part of the environment.
+
+        .. todo ::
+            figure out size-dependence of combine
+
+        Parameters
+        ----------
+        i0 : int
+            Site index. We calculate ``self.env.get_LP(i0+1)``.
+        """
+        if self.combine:
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
+        else:  # as implemented directly in the environment
+            self.env.get_LP(i0 + 1, store=True)
 
     def update_RP(self, i0, VH):
-        raise NotImplementedError("needs to be overwritten by subclass")
-    
+        """Update right part of the environment.
 
+        .. todo ::
+            figure out size-dependence of combine
+
+        Parameters
+        ----------
+        i0 : int
+            Site index. We calculate ``self.env.get_RP(i0)``.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+        """
+        if self.combine:
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+            self.env.set_RP(i0 + self.EffectiveH.length - 1, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
+        else:  # as implemented directly in the environment
+            self.env.get_RP(i0 + self.EffectiveH.length - 1, store=True)
 
 
 class EffectiveH(NpcLinearOperator):

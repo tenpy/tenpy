@@ -191,11 +191,13 @@ def run(psi, model, DMRG_params):
     }
 
 
-class OneSiteDMRGEngine(Sweep):
+class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
 
     .. todo ::
     Can perhaps be combined into the two-site DMRG by using appropriate EffectiveH.
+    Redo as inheriting from 2-site
+
     """
     def __init__(self, env, EffectiveH):
         self.env = env
@@ -350,14 +352,6 @@ class OneSiteDMRGEngine(Sweep):
 
 class TwoSiteDMRGEngine(Sweep):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
-
-    .. todo ::
-    update_LP and update_RP might be generalizable.
-    Implement __del__()?
-    Implement run()
-    Implement get_theta_ortho()
-    Implement mixer_activate() & mixer_cleanup() / mixer utilization
-    Check if offsets are right (i0 + 1 = EffectiveH.length - 1) -- potential generalizations.
     """
 
     def run(self):
@@ -373,7 +367,7 @@ class TwoSiteDMRGEngine(Sweep):
         """
         DMRG_params = self.engine_params
         start_time = self.time0
-        self.shelve = False  # TODO duplicate with reset_stats()?
+        self.shelve = False
         # parameters for lanczos
         p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
         if p_tol_to_trunc is not None:
@@ -538,7 +532,6 @@ class TwoSiteDMRGEngine(Sweep):
             'max_chi': [],
             'norm_err': []
         }
-        self.shelve = False  # TODO duplicate with run()?
         self.chi_list = get_parameter(self.engine_params, 'chi_list', None, 'Sweep')
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
@@ -765,8 +758,8 @@ class TwoSiteDMRGEngine(Sweep):
                                          qtotal_LR=[qtotal_i0, None],
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
-        # else: we have a mixer
-        return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
+        else: we have a mixer
+            return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
 
     def set_B(self, i0, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -794,37 +787,7 @@ class TwoSiteDMRGEngine(Sweep):
         self.env.del_LP(i0 + 1)
         self.env.del_RP(i0)
 
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        """
-        if self.combine:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
-            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
-        else:  # as implemented directly in the environment
-            self.env.get_LP(i0 + 1, store=True)
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
-        """
-        if self.combine:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-            self.env.set_RP(i0 + self.EffectiveH.length - 2, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
-        else:  # as implemented directly in the environment
-            self.env.get_RP(i0 + self.EffectiveH.length - 2, store=True)
+    
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `engine_params['mixer']`.
