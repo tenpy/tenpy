@@ -264,7 +264,7 @@ class OneSiteDMRGEngine(Sweep):
                 o_env.del_RP(i0 + 1)
         return E0, E_trunc, err, N, age
 
-     def diag(self, theta, theta_ortho):
+    def diag(self, theta, theta_ortho):
         """Diagonalize the one-site effective Hamiltonian.
         
         Parameters
@@ -274,6 +274,7 @@ class OneSiteDMRGEngine(Sweep):
         theta_ortho : TYPE
             Description
         """
+        pass #TODO
 
     def prepare_svd(self, theta):
         pass  # Do we need this method?

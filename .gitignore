@@ -9,6 +9,7 @@
 __pycache__
 playground
 build
+dev_test
 dist
 tenpy/_version.py
 tenpy/linalg/*.c
