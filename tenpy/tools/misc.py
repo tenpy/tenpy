@@ -384,9 +384,10 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
-    warnings.warn("Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
-                  category=FutureWarning,
-                  stacklevel=2)
+    warnings.warn(
+        "Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
+        category=FutureWarning,
+        stacklevel=2)
     from tenpy.networks import mps
     return mps.build_initial_state(size, states, filling, mode, seed)
 
@@ -416,8 +417,10 @@ def setup_executable(mod, run_defaults, identifier_list=None):
             model_par, sim_par, run_par (dicts) : containing all parameters.
             args | namespace with raw arguments for some backwards compatibility with executables.
         """
-    warnings.warn("Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
-              category=FutureWarning, stacklevel=2)
+    warnings.warn(
+        "Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
+        category=FutureWarning,
+        stacklevel=2)
     parser = argparse.ArgumentParser()
 
     # These deal with backwards compatibility (supplying a model)
