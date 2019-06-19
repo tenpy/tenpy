@@ -191,215 +191,6 @@ def run(psi, model, DMRG_params):
     }
 
 
-class OneSiteDMRGEngine(TwoSiteDMRGEngine):
-    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
-
-    .. todo ::
-        Move inherited methods to a general DMRGEngine superclass.
-        Note: sweeps left/right need to be treated differently with respect to 
-        e.g. LHeff and RHeff
-        Test if this engine reprodcues results from the two-site engine.
-
-    Inherited from TwoSiteDMRGEngine:
-    - run()
-    - reset_stats()
-    - diag()
-    - mixer_activate()
-    - mixed_svd()
-
-    """
-
-    def prepare_update(self, i0):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        .. todo ::
-            generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
-        """
-        EffectiveH = self.EffectiveH
-        env = self.env
-        eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
-        self.eff_H = eff_H
-
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff)  # 'vL', 'p', 'vR'
-        theta_ortho = self.get_theta_ortho(i0)
-        if self.combine:
-            theta = theta.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
-            theta_ortho = [
-                th_o.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
-                for th_o in theta_ortho
-            ]
-        else:
-            theta.itranspose(['vL', 'p', 'vR'])
-            for th_o in theta_ortho:
-                th_o.itranspose(['vL', 'p', 'vR'])
-        return theta, theta_ortho
-
-    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
-        """Perform site-update on the site ``i0``.
-
-        .. todo ::
-            The only difference between this and update_local() in the two-site
-            engine is that get_RP_age() is indexed by i0 rather than i0+1. Thus,
-            could potentially turn this into a single DMRG engine by specifying
-            the number of sites?
-
-        Parameters
-        ----------
-        i0 : int
-            Site left to the bond which should be optimized.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_LP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-        optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
-        """
-        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep 
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
-        if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
-        else:
-            E0, N = None, 0
-        theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        self.set_B(i0, U, S, VH)
-
-        update_data = {
-            'E0': E0,
-            'err': err,
-            'N': N,
-            'age': age,
-            'U': U,
-            'VH': VH,
-        }
-
-        return update_data
-
-    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
-        """Summary
-
-        TODO double check if correct and if we need to overwrite it here.
-        
-        Parameters
-        ----------
-        update_data : TYPE
-            Description
-        **kwargs
-            Description
-        
-        Returns
-        -------
-        TYPE
-            Description
-        """
-        E0 = update_data['E0']
-        update_LP, update_RP = upd_env
-        E_trunc = None
-        if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
-            if E0 is None:
-                E0 = E_trunc
-            E_trunc = E_trunc - E0
-        # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if update_RP:  # we move to the left -> delete left LP
-            self.env.del_LP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0)
-        if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0)
-
-        # collect statistics
-        self.update_stats['i0'].append(i0)
-        self.update_stats['age'].append(update_data['age'])
-        self.update_stats['E_total'].append(E0)
-        self.update_stats['E_trunc'].append(E_trunc)
-        self.update_stats['N_lanczos'].append(update_data['N'])
-        self.update_stats['err'].append(update_data['err'])
-        self.update_stats['time'].append(time.time() - self.time0)
-        self.trunc_err_list.append(update_data['err'].eps)
-        self.E_trunc_list.append(E_trunc)
-
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd.
-
-        .. todo ::
-            For combining 1- and 2-site DMRG into a single engine, this is one
-            of the trickier methods --> figure out how to do legs based on the
-            'length' of the effective Hamiltonian
-        """
-        if self.combine:
-            return theta  # Theta already in correct form
-        else:  
-            return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
-
-    def set_B(self, i0, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        .. todo ::
-            Do B0 and B1 definitely both have 'p' legs? 
-
-        Parameters
-        ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1``.
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-        """
-        B0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
-        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
-        self.psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
-
-
 class TwoSiteDMRGEngine(Sweep):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
     """
@@ -837,8 +628,6 @@ class TwoSiteDMRGEngine(Sweep):
         self.env.del_LP(i0 + 1)
         self.env.del_RP(i0)
 
-    
-
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `engine_params['mixer']`.
         """
@@ -856,6 +645,216 @@ class TwoSiteDMRGEngine(Sweep):
             mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
+            
+
+class OneSiteDMRGEngine(TwoSiteDMRGEngine):
+    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
+
+    .. todo ::
+        Move inherited methods to a general DMRGEngine superclass.
+        Note: sweeps left/right need to be treated differently with respect to 
+        e.g. LHeff and RHeff
+        Test if this engine reprodcues results from the two-site engine.
+
+    Inherited from TwoSiteDMRGEngine:
+    - run()
+    - reset_stats()
+    - diag()
+    - mixer_activate()
+    - mixed_svd()
+
+    """
+
+    def prepare_update(self, i0):
+        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        i0 : int
+            We want to optimize on sites ``(i0, i0+1)``.
+
+        .. todo ::
+            generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
+
+        Returns
+        -------
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
+        """
+        EffectiveH = self.EffectiveH
+        env = self.env
+        eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        self.eff_H = eff_H
+
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff)  # 'vL', 'p', 'vR'
+        theta_ortho = self.get_theta_ortho(i0)
+        if self.combine:
+            theta = theta.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
+            theta_ortho = [
+                th_o.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
+                for th_o in theta_ortho
+            ]
+        else:
+            theta.itranspose(['vL', 'p', 'vR'])
+            for th_o in theta_ortho:
+                th_o.itranspose(['vL', 'p', 'vR'])
+        return theta, theta_ortho
+
+    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
+        """Perform site-update on the site ``i0``.
+
+        .. todo ::
+            The only difference between this and update_local() in the two-site
+            engine is that get_RP_age() is indexed by i0 rather than i0+1. Thus,
+            could potentially turn this into a single DMRG engine by specifying
+            the number of sites?
+
+        Parameters
+        ----------
+        i0 : int
+            Site left to the bond which should be optimized.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_LP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+        optimize : bool
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+        meas_E_trunc : bool
+            Wheter to measure the energy after truncation.
+
+        Returns
+        -------
+        E_total : float
+            Total energy, obtained *before* truncation (if ``optimize=True``),
+            or *after* truncation (if ``optimize=False``) (but never ``None``).
+        E_trunc : float | ``None``
+            The energy difference of the total energy after minus before truncation,
+            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced after bond optimization.
+        N_lanczos : int
+            Dimension of the Krylov space used for optimization in the lanczos algorithm.
+            0 if ``optimize=False``.
+        age : int
+            Current size of the DMRG simulation: number of physical sites involved
+            into the contraction.
+        """
+        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep 
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
+        if optimize:
+            E0, theta, N = self.diag(theta, theta_ortho)
+        else:
+            E0, N = None, 0
+        theta = self.prepare_svd(theta)
+        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
+        self.set_B(i0, U, S, VH)
+
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+        }
+
+        return update_data
+
+    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
+        """Summary
+
+        TODO double check if correct and if we need to overwrite it here.
+        
+        Parameters
+        ----------
+        update_data : TYPE
+            Description
+        **kwargs
+            Description
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
+        E0 = update_data['E0']
+        update_LP, update_RP = upd_env
+        E_trunc = None
+        if meas_E_trunc or E0 is None:
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
+            if E0 is None:
+                E0 = E_trunc
+            E_trunc = E_trunc - E0
+        # now we can also remove the LP and RP on outer bonds, which we don't need any more
+        if update_RP:  # we move to the left -> delete left LP
+            self.env.del_LP(i0)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0)
+        if update_LP:  # we move to the right -> delete right RP
+            self.env.del_RP(i0)
+            for o_env in self.ortho_to_envs:
+                o_env.del_RP(i0)
+
+        # collect statistics
+        self.update_stats['i0'].append(i0)
+        self.update_stats['age'].append(update_data['age'])
+        self.update_stats['E_total'].append(E0)
+        self.update_stats['E_trunc'].append(E_trunc)
+        self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['err'].append(update_data['err'])
+        self.update_stats['time'].append(time.time() - self.time0)
+        self.trunc_err_list.append(update_data['err'].eps)
+        self.E_trunc_list.append(E_trunc)
+
+    def prepare_svd(self, theta):
+        """Transform theta into matrix for svd.
+
+        .. todo ::
+            For combining 1- and 2-site DMRG into a single engine, this is one
+            of the trickier methods --> figure out how to do legs based on the
+            'length' of the effective Hamiltonian
+        """
+        if self.combine:
+            return theta  # Theta already in correct form
+        else:  
+            return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
+
+    def set_B(self, i0, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
+
+        .. todo ::
+            Do B0 and B1 definitely both have 'p' legs? 
+
+        Parameters
+        ----------
+        i0 : int
+            We update the MPS `B` at sites ``i0, i0+1``.
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        B0 = U.split_legs(['(vL.p)'])
+        B1 = VH.split_legs(['(p.vR)'])
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_SR(i0, S)
+        # the old stored environments are now invalid
+        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
+        for o_env in self.ortho_to_envs:
+            o_env.del_LP(i0 + 1)
+            o_env.del_RP(i0)
+        self.env.del_LP(i0 + 1)
+        self.env.del_RP(i0)
+
 
 
 class Engine(NpcLinearOperator):
