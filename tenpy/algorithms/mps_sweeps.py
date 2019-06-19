@@ -1,8 +1,7 @@
 """
 .. TODO ::
 - Overall docstring for this file.
-- Finish Sweep class
-- Double-check dependencies
+- Docstrings
 - Rebuild DMRG and TDVP engines as subclasses of sweep
 - Do testing
 """

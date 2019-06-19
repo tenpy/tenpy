@@ -20,15 +20,15 @@ Just try both of them.
 
 Currently, there is only one :class:`Mixer` implemented.
 The mixer should be used initially to avoid that the algorithm gets stuck in local energy minima,
-and then slowly turned off in the end.
+and then slowly turned off in the end.conda install -c anaconda sphinx
 
 .. todo ::
     Write UserGuide/Example!!!
 
 .. todo ::
     separate effective Hamiltonian from Engine for better readability?
-    Rewrite two-site DMRG using Sweep and TwoSiteH classes.
     Implement one-site DMRG using Sweep and TwoSiteH classes.
+    Docstrings
 """
 # Copyright 2018 TeNPy Developers
 
