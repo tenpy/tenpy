@@ -42,7 +42,9 @@ class Sweep:
         Description
     """
     
-    def __init__(self, env, EffectiveH, engine_params):
+    def __init__(self, psi, model, EffectiveH, engine_params):
+        self.psi = psi
+        self.M = model
         self.env = env
         self.EffectiveH = EffectiveH  # class type
         self.engine_params = engine_params
@@ -50,7 +52,6 @@ class Sweep:
 
         # self.offset_RP = EffectiveH.length - 1
         self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
-        self.psi = env.bra
         self.finite = self.env.bra.finite
         self.ortho_to_envs = []
         self.mixer = None  # means 'ignore mixer'
@@ -63,7 +64,7 @@ class Sweep:
 
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
 
-        self.init_env()
+        self.init_env(model)
 
     def __del__(self):
         engine_params = self.engine_params

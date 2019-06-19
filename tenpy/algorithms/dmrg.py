@@ -1051,7 +1051,7 @@ class Engine(NpcLinearOperator):
         axes.set_ylabel(yaxis)
 
 
-class EngineCombine(Engine):
+class EngineCombine(TwoSiteDMRGEngine):
     r"""Engine which combines legs into pipes as far as possible.
 
     This engine combines the virtual and physical leg for the left site and right site into pipes.
@@ -1070,7 +1070,10 @@ class EngineCombine(Engine):
     warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
                   category=FutureWarning,
                   stacklevel=2)
-    # TODO can potentially have this return a TwoSiteDMRGEngine() until next release
+
+    def __init__(self, psi, model, DMRG_params): 
+        DMRG_params['combine'] = True  # to reproduces old-style engine
+        super().__init__(psi, model, DMRG_params)
 
 class EngineFracture(Engine):
     r"""Engine which keeps the legs separate.
@@ -1092,7 +1095,10 @@ class EngineFracture(Engine):
     warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
                   category=FutureWarning,
                   stacklevel=2)
-    # TODO can potentially have this return a TwoSiteDMRGEngine() until next release
+
+    def __init__(self, psi, model, DMRG_params):
+        DMRG_params['combine'] = False  # to reproduces old-style engine
+        super().__init__(psi, model, DMRG_params)
 
 
 class Mixer:
