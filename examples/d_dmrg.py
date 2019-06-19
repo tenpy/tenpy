@@ -8,9 +8,11 @@ but make use of the classes defined in tenpy.
 import numpy as np
 
 from tenpy.networks.mps import MPS
+from tenpy.networks.mpo import MPOEnvironment
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinModel
 from tenpy.algorithms import dmrg
+from tenpy.algorithms.mps_sweeps import TwoSiteH
 
 
 def example_DMRG_tf_ising_finite(L, g, verbose=True):
@@ -29,8 +31,11 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
         },
         'verbose': verbose,
     }
-    info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    E = info['E']
+    # dmrg.run() still needs to be rewritten.
+    # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
+    env = MPOEnvironment(psi, M.H_MPO, psi)
+    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
+    E, psi = eng.run()
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
@@ -61,11 +66,9 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
     }
-    # instead of
-    #  info = dmrg.run(psi, M, dmrg_params)
-    #  E = info['E']
-    # we can also use the a Engine directly:
-    eng = dmrg.EngineCombine(psi, M, dmrg_params)
+    # new Sweep class wants an env rather than state/model
+    env = MPOEnvironment(psi, M.H_MPO, psi)
+    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -106,8 +109,11 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
     }
-    info = dmrg.run(psi, M, dmrg_params)
-    E = info['E']
+    # info = dmrg.run(psi, M, dmrg_params)  # dmrg.run not yet ready for new engine
+    # E = info['E']
+    env = MPOEnvironment(psi, M.H_MPO, psi)
+    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
+    E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     Sz = psi.expectation_value("Sz")  # Sz instead of Sigma z: spin-1/2 operators!

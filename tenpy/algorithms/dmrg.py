@@ -55,6 +55,9 @@ __all__ = [
 def run(psi, model, DMRG_params):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
+    .. todo ::
+    This needs to be rewritten to work with the new engine build.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
