@@ -198,6 +198,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         Move inherited methods to a general DMRGEngine superclass.
         Note: sweeps left/right need to be treated differently with respect to 
         e.g. LHeff and RHeff
+        Test if this engine reprodcues results from the two-site engine.
 
     Inherited from TwoSiteDMRGEngine:
     - run()
@@ -217,8 +218,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             We want to optimize on sites ``(i0, i0+1)``.
 
         .. todo ::
-        generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
-
+            generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
 
         Returns
         -------
@@ -1067,108 +1067,10 @@ class EngineCombine(Engine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
-
-    def prepare_diag(self, i0):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'(vL.p0)', '(p1.vR)'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'(vL.p0)', '(p1.vR)'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
-        """
-        env = self.env
-        LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
-        H1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
-                                                ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
-        # calculate LHeff
-        LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
-        pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, -1])
-        # calculate RHeff
-        RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
-        pipeR = RHeff.make_pipe(['p1', 'vL*'])
-        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
-        theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-        theta_ortho = self.get_theta_ortho(i0)
-        theta_ortho = [
-            th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-            for th_o in theta_ortho
-        ]
-        return theta, theta_ortho
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The effective Hamiltonian applied to the wave function, :math:`H |\theta>`.
-        """
-        labels = theta.get_leg_labels()
-        theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-        theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
-        theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
-        theta.itranspose(labels)  # if necessary, transpose
-        return theta
-
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd."""
-        return theta  # For this engine nothing to do.
-
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
-        """
-        # make use of self.LHeff
-        LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-        LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
-        self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The VH as returned by SVD with combined legs, labels ``'vL', '(p1.vR)'``.
-        """
-        # make use of self.RHeff
-        RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-        RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-        self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
-
+    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
+                  category=FutureWarning,
+                  stacklevel=2)
+    # TODO can potentially have this return a TwoSiteDMRGEngine() until next release
 
 class EngineFracture(Engine):
     r"""Engine which keeps the legs separate.
@@ -1187,66 +1089,10 @@ class EngineFracture(Engine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
-
-    def prepare_diag(self, i0):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
-        """
-        env = self.env
-        self.LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
-        self.H0 = env.H.get_W(i0).replace_labels(['p', 'p*'],
-                                                 ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        self.RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        self.H1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
-                                                     ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta.itranspose(['vL', 'p0', 'vR', 'p1'])
-        theta_ortho = self.get_theta_ortho(i0)
-        for th_o in theta_ortho:
-            th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
-        return theta, theta_ortho
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to,  :math:`H |\theta>`
-        """
-        labels = theta.get_leg_labels()  # 'vL', 'p0', 'vR', 'p1'
-        theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-        theta = npc.tensordot(self.H0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-        theta = npc.tensordot(theta, self.H1, axes=[['wR', 'p1'], ['wL', 'p1*']])
-        theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        theta.itranspose(labels)  # if necessary, transpose
-        return theta
-
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd."""
-        return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
+    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
+                  category=FutureWarning,
+                  stacklevel=2)
+    # TODO can potentially have this return a TwoSiteDMRGEngine() until next release
 
 
 class Mixer:
