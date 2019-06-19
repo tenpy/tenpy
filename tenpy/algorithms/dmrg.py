@@ -245,8 +245,9 @@ class OneSiteDMRGEngine(Sweep):
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
-    def post_update_local(self, **kwargs):
+    def post_update_local(self, i0, update_data):
         # algorithm specific after update
+        E0, err, N, age = update_data
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
@@ -565,9 +566,18 @@ class TwoSiteDMRGEngine(Sweep):
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
-        return E0, E_trunc, err, N, age
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+        }
 
-    def post_update_local(self, i0, update_data):
+        return update_data
+
+    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
         """Summary
         
         Parameters
@@ -582,6 +592,9 @@ class TwoSiteDMRGEngine(Sweep):
         TYPE
             Description
         """
+        E0 = update_data['E0']
+        update_LP, update_RP = upd_env
+        E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
@@ -598,15 +611,15 @@ class TwoSiteDMRGEngine(Sweep):
                 o_env.del_RP(i0 + 1)
 
         # collect statistics
-        E_total, E_trunc, err, N_lanczos, age = update_data
         self.update_stats['i0'].append(i0)
-        self.update_stats['age'].append(age)
-        self.update_stats['E_total'].append(E_total)
+        self.update_stats['age'].append(update_data['age'])
+        self.update_stats['E_total'].append(E0)
         self.update_stats['E_trunc'].append(E_trunc)
-        self.update_stats['N_lanczos'].append(N_lanczos)
-        self.update_stats['err'].append(err)
+        self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['err'].append(update_data['err'])
         self.update_stats['time'].append(time.time() - self.time0)
-        # trunc_err_list.append(trunc_err.eps)
+        self.trunc_err_list.append(update_data['err'].eps)
+        self.E_trunc_list.append(E_trunc)
 
     def diag(self, theta_guess, theta_ortho):
         """Diagonalize the effective Hamiltonian represented by self.

@@ -193,27 +193,28 @@ class Sweep:
             ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
             truncation.
         """
-        E_trunc_list = []
-        trunc_err_list = []
-        schedule_i0, update_LP_RP = self._get_sweep_schedule()
+        self.E_trunc_list = []
+        self.trunc_err_list = []
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()
 
         # the actual sweep
         for i0, upd_env in zip(schedule_i0, update_LP_RP):
+            update_LP, update_RP = upd_env
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
             # --------- the main work --------------
             theta, theta_ortho = self.prepare_update(i0)
-            update_data = self.update_local(i0, theta, theta_ortho, upd_env[0], 
-                                            upd_env[1], optimize=optimize)
+            update_data = self.update_local(i0, theta, theta_ortho, update_LP, 
+                                            update_RP, optimize=optimize)
             if update_LP:
-                self.update_LP(i0, U)  # (requires updated B)
+                self.update_LP(i0, update_data['U'])  # (requires updated B)
                 for o_env in self.ortho_to_envs:
                     o_env.get_LP(i0 + 1, store=True)
             if update_RP:
-                self.update_RP(i0, VH)
+                self.update_RP(i0, update_data['VH'])
                 for o_env in self.ortho_to_envs:
                     o_env.get_RP(i0, store=True)
-            self.post_update_local(i0, update_data)
+            self.post_update_local(i0, update_data, meas_E_trunc, upd_env)
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
@@ -227,9 +228,9 @@ class Sweep:
             if self.mixer is not None:
                 self.mixer = self.mixer.update_amplitude(self.sweeps)
         if meas_E_trunc:
-            return np.max(trunc_err_list), np.max(E_trunc_list)
+            return np.max(self.trunc_err_list), np.max(self.E_trunc_list)
         else:
-            return np.max(trunc_err_list), None
+            return np.max(self.trunc_err_list), None
 
     def get_sweep_schedule(self):
         """Define the schedule of the sweep.
@@ -509,14 +510,11 @@ class TwoSiteH(EffectiveH):
     def __init__(self, env, i0, combine=False):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
-        self.W1 = env.H.get_W(i0)
-        self.W2 = env.H.get_W(i0 + 1)
+        self.W1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
+        self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         self.combine = combine
         if combine:
-            W1 = W1.replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-            W2 = W2.replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
             combine_Heff()
-        pass
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.

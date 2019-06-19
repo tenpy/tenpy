@@ -29,7 +29,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
         },
         'verbose': verbose,
     }
-    info = dmrg.run(psi, M, dmrg_params)  # the main work...
+    info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
     E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
