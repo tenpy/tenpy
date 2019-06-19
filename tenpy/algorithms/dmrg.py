@@ -198,13 +198,54 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     Can perhaps be combined into the two-site DMRG by using appropriate EffectiveH.
     Redo as inheriting from 2-site
 
+    Inherited from TwoSiteDMRGEngine:
+    - run()
+    - reset_stats()
+    - diag()
+
     """
-    def __init__(self, env, EffectiveH):
-        self.env = env
-        self.EffectiveH = EffectiveH  # class type
-        self.stats = {}
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()
-        # TODO remove this comment if __init__ changes. If not, delete __init__
+
+    def prepare_update(self, i0):
+        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        i0 : int
+            We want to optimize on sites ``(i0, i0+1)``.
+
+        .. todo ::
+        generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
+
+
+        Returns
+        -------
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
+        """
+        EffectiveH = self.EffectiveH
+        env = self.env
+        eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        self.eff_H = eff_H
+
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff)  # 'vL', 'p', 'vR'
+        theta_ortho = self.get_theta_ortho(i0)
+        if self.combine:
+            theta = theta.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
+            theta_ortho = [
+                th_o.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
+                for th_o in theta_ortho
+            ]
+        else:
+            theta.itranspose(['vL', 'p', 'vR'])
+            for th_o in theta_ortho:
+                th_o.itranspose(['vL', 'p', 'vR'])
+        return theta, theta_ortho
 
     def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
         """Perform site-update on the site ``i0``.
@@ -269,6 +310,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
     def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
         """Summary
+
+        TODO double check if correct and if we need to overwrite it here.
         
         Parameters
         ----------
@@ -311,28 +354,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         self.trunc_err_list.append(update_data['err'].eps)
         self.E_trunc_list.append(E_trunc)
 
-    def diag(self, theta_guess, theta_ortho):
-        """Diagonalize the effective Hamiltonian represented by self.
-
-        Parameters
-        ----------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta_guess`.
-
-        Returns
-        -------
-        E0 : float
-            Energy of the found ground state.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian.
-        N : int
-            Number of Lanczos iterations used.
-        """
-        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
-        return E, theta, N
-
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd.
 
@@ -347,7 +368,10 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
 
     def mixed_svd(self, theta, i0, update_LP, update_RP):
-        pass  # Do we need this method?
+        pass  # TODO check if need to override
+
+    def set_B():
+        pass  # TODO
 
 
 class TwoSiteDMRGEngine(Sweep):
