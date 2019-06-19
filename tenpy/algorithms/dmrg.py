@@ -808,7 +808,7 @@ class TwoSiteDMRGEngine(Sweep):
                                          qtotal_LR=[qtotal_i0, None],
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
-        else: we have a mixer
+        else:  # we have a mixer
             return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
 
     def set_B(self, i0, U, S, VH):
@@ -1067,7 +1067,7 @@ class EngineCombine(TwoSiteDMRGEngine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
-    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
+    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses.",
                   category=FutureWarning,
                   stacklevel=2)
 
@@ -1092,7 +1092,7 @@ class EngineFracture(Engine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
-    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses."
+    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses.",
                   category=FutureWarning,
                   stacklevel=2)
 
