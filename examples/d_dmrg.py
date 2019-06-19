@@ -35,6 +35,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
             'svd_min': 1.e-10
         },
         'verbose': verbose,
+        'combine': True
     }
     # dmrg.run() still needs to be rewritten.
     # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...

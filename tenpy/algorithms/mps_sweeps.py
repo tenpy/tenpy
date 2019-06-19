@@ -414,7 +414,7 @@ class OneSiteH(EffectiveH):
         self.W = env.H.get_W(i0)
         self.combine = combine
         if combine:
-            combine_Heff()
+            self.combine_Heff()
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -424,9 +424,6 @@ class OneSiteH(EffectiveH):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Labels: ``vL, p, vR``
 
-        TODO fracture needs self.LHeff, which isn't there yet.
-        TODO figure out if more steps can be shared.
-        
         Returns
         -------
         theta :class:`~tenpy.linalg.np_conserved.Array`
@@ -436,10 +433,10 @@ class OneSiteH(EffectiveH):
         RP = self.RP
         labels = theta.get_leg_labels()
         if self.combine: 
-            theta = theta.combine_legs(['vL', 'p0'])  # labels 'vL.p0', 'vR'
-            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])  # labels 'vR*.p0', 'wR', 'vR'
+            theta = theta.combine_legs(['vL', 'p'])  # labels 'vL.p0', 'vR'
+            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p*)', '(vL.p)'])  # labels 'vR*.p0', 'wR', 'vR'
             theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
-            theta.ireplace_labels(['(vR*.p0)', 'vL*'], ['(vL.p0)', 'vR'])
+            theta.ireplace_labels(['(vR*.p)', 'vL*'], ['(vL.p)', 'vR'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
             theta = npc.tensordot(self.W, theta, axes=[['wL', 'p*'], ['wR', 'p']])
@@ -456,8 +453,8 @@ class OneSiteH(EffectiveH):
         preference for one or the other?
         """
         LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
-        pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+        pipeL = LHeff.make_pipe(['vR*', 'p'])
+        self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, -1])
         # RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])  #single-site.
@@ -513,7 +510,7 @@ class TwoSiteH(EffectiveH):
         self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
         self.combine = combine
         if combine:
-            combine_Heff()
+            self.combine_Heff()
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -521,7 +518,7 @@ class TwoSiteH(EffectiveH):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Labels: ``vL, p0, p1, vR``
+            Labels: ``vL, p0, p1, vR`` if combine=False, ``vL.p0, p1.vR`` if True
         
         Returns
         -------
@@ -532,7 +529,6 @@ class TwoSiteH(EffectiveH):
         RP = self.RP
         labels = theta.get_leg_labels()
         if self.combine: 
-            theta = theta.split_legs(['(vL.p.vR)'])
             theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
             theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
             theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
@@ -549,13 +545,15 @@ class TwoSiteH(EffectiveH):
         """Combine LP with W1 and RP with W2 to get the effective parts of the 
         Hamiltonian with piped legs.
         """
-        LHeff = npc.tensordot(LP, W1, axes=['wR', 'wL'])
+        LHeff = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p0'])
         self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, -1])
-        RHeff = npc.tensordot(RP, W2, axes=['wL', 'wR'])
+        RHeff = npc.tensordot(self.RP, self.W2, axes=['wL', 'wR'])
         pipeR = RHeff.make_pipe(['p1', 'vL*'])
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[-1, 0])
+        self.pipeL = pipeL
+        self.pipeR = pipeR

@@ -204,8 +204,14 @@ class OneSiteDMRGEngine(Sweep):
         schedule_i0, update_LP_RP = self.get_sweep_schedule()
         # TODO remove this comment if __init__ changes. If not, delete __init__
 
-    def update_local(self, i0, optimize=True, meas_E_trunc=False):
-        """Perform bond-update on the sites ``(i0, i0+1)``.
+    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
+        """Perform site-update on the site ``i0``.
+
+        .. todo ::
+            The only difference between this and update_local() in the two-site
+            engine is that get_RP_age() is indexed by i0 rather than i0+1. Thus,
+            could potentially turn this into a single DMRG engine by specifying
+            the number of sites?
 
         Parameters
         ----------
@@ -239,7 +245,7 @@ class OneSiteDMRGEngine(Sweep):
             into the contraction.
         """
         # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep 
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
         if optimize:
             E0, theta, N = self.diag(theta, theta_ortho)
         else:
@@ -248,9 +254,34 @@ class OneSiteDMRGEngine(Sweep):
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
-    def post_update_local(self, i0, update_data):
-        # algorithm specific after update
-        E0, err, N, age = update_data
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+        }
+
+        return update_data
+
+    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
+        """Summary
+        
+        Parameters
+        ----------
+        update_data : TYPE
+            Description
+        **kwargs
+            Description
+        
+        Returns
+        -------
+        TYPE
+            Description
+        """
+        E0 = update_data['E0']
+        update_LP, update_RP = upd_env
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
@@ -263,25 +294,55 @@ class OneSiteDMRGEngine(Sweep):
             for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
         if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0 + 1)
+            self.env.del_RP(i0)
             for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0 + 1)
-        return E0, E_trunc, err, N, age
+                o_env.del_RP(i0)
 
-    def diag(self, theta, theta_ortho):
-        """Diagonalize the one-site effective Hamiltonian.
-        
+        # collect statistics
+        self.update_stats['i0'].append(i0)
+        self.update_stats['age'].append(update_data['age'])
+        self.update_stats['E_total'].append(E0)
+        self.update_stats['E_trunc'].append(E_trunc)
+        self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['err'].append(update_data['err'])
+        self.update_stats['time'].append(time.time() - self.time0)
+        self.trunc_err_list.append(update_data['err'].eps)
+        self.E_trunc_list.append(E_trunc)
+
+    def diag(self, theta_guess, theta_ortho):
+        """Diagonalize the effective Hamiltonian represented by self.
+
         Parameters
         ----------
-        theta : TYPE
-            Description
-        theta_ortho : TYPE
-            Description
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta_guess`.
+
+        Returns
+        -------
+        E0 : float
+            Energy of the found ground state.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state of the effective Hamiltonian.
+        N : int
+            Number of Lanczos iterations used.
         """
-        pass #TODO
+        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        return E, theta, N
 
     def prepare_svd(self, theta):
-        pass  # Do we need this method?
+        """Transform theta into matrix for svd.
+
+        .. todo ::
+            For combining 1- and 2-site DMRG into a single engine, this is one
+            of the trickier methods --> figure out how to do legs based on the
+            'length' of the effective Hamiltonian
+        """
+        if self.combine:
+            return theta  # Theta already in correct form
+        else:  
+            return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
 
     def mixed_svd(self, theta, i0, update_LP, update_RP):
         pass  # Do we need this method?
@@ -508,7 +569,8 @@ class TwoSiteDMRGEngine(Sweep):
         """
         EffectiveH = self.EffectiveH
         env = self.env
-        self.eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        self.eff_H = eff_H
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
@@ -649,7 +711,7 @@ class TwoSiteDMRGEngine(Sweep):
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
         if self.combine:
-            return theta
+            return theta  # Theta is already combined.
         else:
             return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
 
@@ -741,7 +803,7 @@ class TwoSiteDMRGEngine(Sweep):
             Site index. We calculate ``self.env.get_LP(i0+1)``.
         """
         if self.combine:
-            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
         else:  # as implemented directly in the environment
@@ -758,7 +820,7 @@ class TwoSiteDMRGEngine(Sweep):
             The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
         """
         if self.combine:
-            RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
             self.env.set_RP(i0 + self.EffectiveH.length - 2, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
         else:  # as implemented directly in the environment
