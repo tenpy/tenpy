@@ -139,7 +139,7 @@ class HofstadterFermions(CouplingMPOModel):
         Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
     Jx, Jy, mu, v: float
         Hamiltonian parameters as defined above.
-    bc_MPS : {'finite' | 'infinte'}
+    bc_MPS : {'finite' | 'infinite'}
         MPS boundary conditions along the x-direction.
         For 'infinite' boundary conditions, repeat the unit cell in x-direction.
         Coupling boundary conditions in x-direction are chosen accordingly.
