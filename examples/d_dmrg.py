@@ -39,8 +39,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
     }
     # dmrg.run() still needs to be rewritten.
     # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    env = MPOEnvironment(psi, M.H_MPO, psi)
-    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
     E, psi = eng.run()
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -73,8 +72,7 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
         'verbose': verbose,
     }
     # new Sweep class wants an env rather than state/model
-    env = MPOEnvironment(psi, M.H_MPO, psi)
-    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -117,8 +115,7 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
     }
     # info = dmrg.run(psi, M, dmrg_params)  # dmrg.run not yet ready for new engine
     # E = info['E']
-    env = MPOEnvironment(psi, M.H_MPO, psi)
-    eng = dmrg.TwoSiteDMRGEngine(env, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)

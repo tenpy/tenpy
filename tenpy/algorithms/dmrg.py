@@ -645,7 +645,7 @@ class TwoSiteDMRGEngine(Sweep):
             mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
-            
+
 
 class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
@@ -1070,7 +1070,7 @@ class EngineCombine(TwoSiteDMRGEngine):
                   category=FutureWarning,
                   stacklevel=2)
 
-    def __init__(self, psi, model, DMRG_params): 
+    def __init__(self, psi, model, TwoSiteH, DMRG_params): 
         DMRG_params['combine'] = True  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
@@ -1095,7 +1095,7 @@ class EngineFracture(Engine):
                   category=FutureWarning,
                   stacklevel=2)
 
-    def __init__(self, psi, model, DMRG_params):
+    def __init__(self, psi, model, TwoSiteH, DMRG_params):
         DMRG_params['combine'] = False  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 

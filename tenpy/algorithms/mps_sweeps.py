@@ -45,25 +45,23 @@ class Sweep:
     def __init__(self, psi, model, EffectiveH, engine_params):
         self.psi = psi
         self.M = model
-        self.env = env
         self.EffectiveH = EffectiveH  # class type
         self.engine_params = engine_params
         self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
 
         # self.offset_RP = EffectiveH.length - 1
         self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
-        self.finite = self.env.bra.finite
-        self.ortho_to_envs = []
-        self.mixer = None  # means 'ignore mixer'
-        # the mixer is activated in in :meth:`run`.
+        self.finite = self.psi.finite
+        self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()  # TODO duplicate with sweep()
 
         self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'Sweep')
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.trunc_params = get_parameter(engine_params, 'trunc_params', {}, 'Sweep')
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
 
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()
-
+        self.env = None
+        self.ortho_to_envs = []
         self.init_env(model)
 
     def __del__(self):
@@ -193,7 +191,7 @@ class Sweep:
         """
         self.E_trunc_list = []
         self.trunc_err_list = []
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()
+        schedule_i0, update_LP_RP = self.get_sweep_schedule()  # TODO duplicate with __init__()
 
         # the actual sweep
         for i0, upd_env in zip(schedule_i0, update_LP_RP):
@@ -243,8 +241,8 @@ class Sweep:
         update_LP_RP : list
             List of bools, which indicate whether to update the `LP` and `RP`.
         """
-        L = self.env.L
-        if self.env.finite:
+        L = self.psi.L
+        if self.finite:
             schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
             update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
         else:
