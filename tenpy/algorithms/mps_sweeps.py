@@ -192,14 +192,19 @@ class Sweep:
         self.E_trunc_list = []
         self.trunc_err_list = []
         schedule_i0, update_LP_RP = self.get_sweep_schedule()  # TODO duplicate with __init__()
+        self.move_right = True  # Always start by moving right.
 
         # the actual sweep
         for i0, upd_env in zip(schedule_i0, update_LP_RP):
             update_LP, update_RP = upd_env
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
+
+            if i0 == max(schedule_i0):  # Switch direction once we reached the end.
+                self.move_right = False
             # --------- the main work --------------
             theta, theta_ortho = self.prepare_update(i0)
+            print("Legs of theta:", theta.get_leg_labels())
             update_data = self.update_local(i0, theta, theta_ortho, update_LP,
                                             update_RP, optimize=optimize)
             if update_LP:
@@ -310,43 +315,6 @@ class Sweep:
         """
         raise NotImplementedError("needs to be overwritten by subclass")
 
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        We always update the environment at site i0 + 1: this environment then contains the site
-        where we just performed a local update (when sweeping right).
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        """
-        if self.combine:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
-            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
-        else:  # as implemented directly in the environment
-            self.env.get_LP(i0 + 1, store=True)
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        We always update the environment at site i0: this environment then contains the site
-        where we just performed a local update (when sweeping left).
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
-        """
-        if self.combine:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-            self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
-        else:  # as implemented directly in the environment
-            self.env.get_RP(i0, store=True)
 
 
 class EffectiveH(NpcLinearOperator):
@@ -431,11 +399,12 @@ class OneSiteH(EffectiveH):
     """
     length = 1
 
-    def __init__(self, env, i0, combine=False):
+    def __init__(self, env, i0, combine=False, move_right=True):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W = env.H.get_W(i0)
         self.combine = combine
+        self.move_right = move_right
         if combine:
             self.combine_Heff()
 
@@ -445,7 +414,8 @@ class OneSiteH(EffectiveH):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Labels: ``vL, p, vR``
+            Labels: ``vL, p, vR`` if combine=False, ``(vL.p), vR`` or ``vL, (p.vR)`` if True
+            (depending on the direction of movement)
 
         Returns
         -------
@@ -456,10 +426,15 @@ class OneSiteH(EffectiveH):
         RP = self.RP
         labels = theta.get_leg_labels()
         if self.combine:
-            theta = theta.combine_legs(['vL', 'p'])  # labels 'vL.p0', 'vR'
-            theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p*)', '(vL.p)'])  # labels 'vR*.p0', 'wR', 'vR'
-            theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
-            theta.ireplace_labels(['(vR*.p)', 'vL*'], ['(vL.p)', 'vR'])
+            if self.move_right:
+                theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p*)', '(vL.p)'])  # labels 'vR*.p0', 'wR', 'vR'
+                theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
+                theta.ireplace_labels(['(vR*.p)', 'vL*'], ['(vL.p)', 'vR'])
+            else:
+                # theta = theta.combine_legs(['p', 'vR'])  # labels 'vL.p0', 'vR'
+                theta = npc.tensordot(theta, self.RHeff, axes=['(p.vR)', '(p*.vL)'])  # labels 'vL', 'wL', 'p.vL*'
+                theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])  # labels 'vL', 'p.vL*'
+                theta.ireplace_labels(['vR*', '(p.vL*)'], ['vL', '(p.vR)'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
             theta = npc.tensordot(self.W, theta, axes=[['wL', 'p*'], ['wR', 'p']])
@@ -487,8 +462,6 @@ class OneSiteH(EffectiveH):
                                         new_axes=[-1, 0])
         self.pipeL = pipeL
         self.pipeR = pipeR
-
-        print(self.RP.make_pipe(['vL*']))
 
         self.pipesL = [pipeL, self.RP.make_pipe(['vL*'])]
         self.pipesR = [pipeR, self.LP.make_pipe(['vR*'])]
