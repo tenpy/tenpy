@@ -3389,7 +3389,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     Example:
         size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
         n_states = size * filling = [2, 4, 0]
-        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will 
+        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will
         get state 2.
 
     .. todo ::
@@ -3404,7 +3404,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
             Containing the possible local states
         filling : iterable
             Fraction of the total number of sites to get a certain state. If
-            infinite fractions (e.g. 1/3) are needed, one should supply a 
+            infinite fractions (e.g. 1/3) are needed, one should supply a
             fraction (1./3.)
         mode : str | None
             State filling pattern. Only 'random' is implemented

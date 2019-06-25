@@ -660,7 +660,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     - run()
     - reset_stats()
     - diag()
-    - mixer_activate()
     - mixed_svd()
     - set_B()
     - post_update_local()
@@ -789,6 +788,24 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             theta = npc.tensordot(theta, self.env.bra.get_B(i0+1), axes=['vR', 'vL']).replace_label('p', 'p1')
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
             return theta
+
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+        """
+        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        if Mixer_class:
+            if Mixer_class is True:
+                Mixer_class = SingleSiteMixer
+            if isinstance(Mixer_class, str):
+                if Mixer_class == "Mixer":
+                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
+                           'for Sweep parameter "mixer"')
+                    warnings.warn(msg, FutureWarning)
+                    Mixer = "DensityMatrixMixer"
+                Mixer_class = globals()[Mixer_class]
+            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
 
 
 class Engine(NpcLinearOperator):
