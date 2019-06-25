@@ -5,6 +5,7 @@ import numpy as np
 import warnings
 from . import misc
 
+import scipy.linalg
 from scipy.sparse.linalg import eigs as sparse_eigen
 
 int_I3 = np.eye(3, dtype=int)
@@ -171,3 +172,55 @@ def perm_sign(p):
         rp[v] = rp[i]
         s = -s
     return s
+
+
+def qr_li(A, cutoff=1.e-15):
+    """QR decomposition with cutoff to discard nearly linear dependent columns in `Q`.
+
+    Perform a QR decomposition with pivoting, discard columns where ``R[i,i] < cuttoff``,
+    reverse the permututation from pivoting and perform another QR decomposition to ensure that
+    `R` is upper right.
+
+    Parameters
+    ----------
+    A : :class:`numpy.ndarray`
+        Matrix to be decomposed as ``A = Q.R``
+
+    Returns
+    -------
+    Q, R : :class:`numpy.ndarray`
+        Decomposition of `A` into isometry `Q^d Q = 1` and upper right `R` with diagonal entries
+        larger than `cutoff`.
+    """
+    Q, R, P = scipy.linalg.qr(A, mode='economic', pivoting=True)
+    keep = np.abs(np.diag(R)) > cutoff
+    assert len(keep) == R.shape[0]
+    Q = Q[:, keep]
+    R = R[keep, :]
+    # here, A P = Q R, thus A = Q R inv(P)
+    R = R[:, misc.inverse_permutation(P)]
+    q, R = scipy.linalg.qr(R, mode='economic', pivoting=False)
+    return np.dot(Q, q), R
+
+
+def rq_li(A, cutoff=1.e-15):
+    """RQ decomposition with cutoff to discard nearly linear dependent columns in `Q`.
+
+    Uses :func:`qr_li` on tranpose of `A`.
+    Note that `R` is nonzero in the lowest left corner; `R` has entries below the diagonal
+    for non-square `R`.
+
+    Parameters
+    ----------
+    A : :class:`numpy.ndarray`
+        Matrix to be decomposed as ``A = Q.R``
+
+    Returns
+    -------
+    R, Q : :class:`numpy.ndarray`
+        Decomposition of `A` into isometry `Q Q^d = 1` and upper right `R` with diagonal entries
+        larger than `cutoff`. If ``M, N = A.shape``, then ``R.shape = M, K`` and ``Q.shape = K, N``
+        with ``K <= min(M, N)``.
+    """
+    q, r = qr_li(A.T[:, ::-1], cutoff)
+    return r.T[::-1, ::-1], q.T[::-1, :]

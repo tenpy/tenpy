@@ -140,16 +140,19 @@ def inverse_permutation(perm):
     Parameters
     ----------
     perm : 1D array_like
-        the permutation to be reversed. *Assumes* that it is a permutation with unique indices.
+        The permutation to be reversed. *Assumes* that it is a permutation with unique indices.
         If it is, ``inverse_permutation(inverse_permutation(perm)) == perm``.
 
     Returns
     -------
     inv_perm : 1D array (int)
-        the inverse permutation of `perm`
+        The inverse permutation of `perm` such that ``inv_perm[perm[j]] = j = perm[inv_perm[j]]``.
     """
-    # with O(n log(n)) not the fastes possible implementation, but sufficient for all our needs
-    return np.argsort(perm)
+    perm = np.asarray(perm, dtype=np.intp)
+    inv_perm = np.empty_like(perm)
+    inv_perm[perm] = np.arange(perm.shape[0], dtype=perm.dtype)
+    return inv_perm
+    # equivalently: return np.argsort(perm) # would be O(N log(N))
 
 
 def list_to_dict_list(l):
