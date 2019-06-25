@@ -28,6 +28,7 @@ Added
 - :func:`~tenpy.networks.terms.order_combine_term` to group operators together.
 - :meth:`~tenpy.networks.mpo.MPO.dagger` of MPO's (and to implement that also :meth:`~tenpy.linalg.charges.LegCharge.flip_charges_qconj`).
 - :meth:`~tenpy.linalg.np_conserved.Arrray.has_label` to check if a label exists
+- :meth:`~tenpy.tools.math.qr_li` and :meth:`~tenpy.tools.math.rq_li`
 - Addition of MPOs
 
 Fixed

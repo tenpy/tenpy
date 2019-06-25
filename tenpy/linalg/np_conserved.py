@@ -93,6 +93,7 @@ from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
+from ..tools.math import qr_li, rq_li
 from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
@@ -1210,10 +1211,14 @@ class Array:
         # ... and convert pipes back to leg charges
         for ax in axes:
             ax = ax[0]
-            pipe = cp.legs[ax]
-            p_qind = inverse_permutation(pipe._perm)
-            perms[ax] = self.legs[ax].perm_flat_from_perm_qind(p_qind)
-            cp.legs[ax] = pipe.to_LegCharge()
+            if sort[ax] or bunch[ax]:
+                pipe = cp.legs[ax]
+                if pipe._perm is None:
+                    perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
+                else:
+                    p_qind = inverse_permutation(pipe._perm)
+                    perms[ax] = self.legs[ax].perm_flat_from_perm_qind(p_qind)
+                cp.legs[ax] = pipe.to_LegCharge()
         return tuple(perms), cp
 
     def isort_qdata(self):
@@ -3618,7 +3623,7 @@ def expm(a):
     return res
 
 
-def qr(a, mode='reduced', inner_labels=[None, None]):
+def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
     r"""Q-R decomposition of a matrix.
 
     Decomposition such that ``A == npc.tensordot(q, r, axes=1)`` up to numerical rounding errors.
@@ -3632,6 +3637,9 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
         'complete': return `q` with shape (M,M).
     inner_labels: [{str|None}, {str|None}]
         The first label is used for ``Q.legs[1]``, the second for ``R.legs[0]``.
+    cutoff : ``None`` or float
+        If not ``None``, discard linearly dependent vectors to given precision, which might
+        reduce `K` of the 'reduced' mode even further.
 
     Returns
     -------
@@ -3655,7 +3663,10 @@ def qr(a, mode='reduced', inner_labels=[None, None]):
     a_leg0 = a.legs[0]
     inner_leg_mask = np.zeros(a_leg0.ind_len, dtype=np.bool_)
     for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
-        q_block, r_block = np.linalg.qr(block, mode)
+        if cutoff is None:
+            q_block, r_block = np.linalg.qr(block, mode)
+        else:
+            q_block, r_block = qr_li(block, cutoff)
         q_data.append(q_block)
         r_data.append(r_block)
         if mode != 'complete':

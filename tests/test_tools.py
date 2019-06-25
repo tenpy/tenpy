@@ -15,6 +15,10 @@ def test_inverse_permutation(N=10):
     xnew = x[p]
     pinv = tools.misc.inverse_permutation(p)
     npt.assert_equal(x, xnew[pinv])
+    npt.assert_equal(pinv[p], np.arange(N))
+    npt.assert_equal(p[pinv], np.arange(N))
+    pinv2 = tools.misc.inverse_permutation(tuple(p))
+    npt.assert_equal(pinv, pinv2)
 
 
 def test_argsort():
@@ -48,6 +52,24 @@ def test_perm_sign():
     res = [tools.math.perm_sign(u) for u in it.permutations(range(4))]
     check = [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]
     npt.assert_equal(res, check)
+
+
+def test_qr_li():
+    cutoff = 1.e-10
+    for shape in [(5, 4), (4, 5)]:
+        print('shape =', shape)
+        A = np.arange(20).reshape(shape)  # linearly dependent: only two rows/columns independent
+        A[3, :] = np.random.random() * (cutoff / 100)  # nearly linear dependent
+        q, r = tools.math.qr_li(A)
+        assert np.linalg.norm(r - np.triu(r)) == 0.
+        qdq = q.T.conj().dot(q)
+        assert np.linalg.norm(qdq - np.eye(len(qdq))) < 1.e-13
+        assert np.linalg.norm(q.dot(r) - A) < cutoff * 20
+        r, q = tools.math.rq_li(A)
+        assert np.linalg.norm(r - np.triu(r, r.shape[1] - r.shape[0])) == 0.
+        qqd = q.dot(q.T.conj())
+        assert np.linalg.norm(qqd - np.eye(len(qqd))) < 1.e-13
+        assert np.linalg.norm(r.dot(q) - A) < cutoff * 20
 
 
 def test_memory_usage():
