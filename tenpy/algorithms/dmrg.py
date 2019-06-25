@@ -567,6 +567,8 @@ class TwoSiteDMRGEngine(Sweep):
 
         .. todo ::
             This might be generalizable to all sweep engines.
+            On the other hand, it looks like the `SingleSiteMixer` has some different parameters
+            (like next_B), so perhaps this method should be overwritten by 1-site DMRG?
 
         Parameters
         ----------
@@ -601,7 +603,10 @@ class TwoSiteDMRGEngine(Sweep):
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
         else:  # we have a mixer
-            return self.mixer.perturb_svd(self, theta, i0, update_LP, self.env.bra.get_B(i0+1, form=None) )
+            if self.move_right:
+                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0+1, form=None) )
+            else:
+                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0-1, form=None) )
 
     def set_B(self, i0, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1302,7 +1307,7 @@ class SingleSiteMixer(Mixer):
         S : 1D ndarray
             (Perturbed) singular values on the new bond (between `theta` and `next_B`).
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `tensordot(theta, next_B)`. Labels ``'vL', '(vR.p1)'``.
+            Right-canonical part of `tensordot(theta, next_B)`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -1313,9 +1318,12 @@ class SingleSiteMixer(Mixer):
                                      qtotal_LR=qtotal_LR,
                                      inner_labels=['vR', 'vL'])
         print(U.get_leg_labels(), VH.get_leg_labels(), next_B.get_leg_labels())
+        print(U.shape, VH.shape, next_B.shape)
         if move_right:
+            VH = VH.split_legs('(p1.vR)')
             VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])  # TODO VH does not have 'vR'??
         else:
+            U = U.split_legs('(vL.p0)')
             U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
         return U, S, VH, err
 
@@ -1324,12 +1332,18 @@ class SingleSiteMixer(Mixer):
         if not engine.combine:  # Need to prepare theta.
             engine.eff_H.combine_Heff()
             print(theta.get_leg_labels())
-            # theta = theta.combine_legs(['vL'], ['p'])
+            if move_right:
+                theta = theta.combine_legs(['vL'], ['p'])
+            else:
+                theta = theta.combine_legs(['p'], ['vR'])
 
         if move_right:
             # theta has legs (vL.p), vR
             LHeff = engine.eff_H.LHeff
-            expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
+            print("Axes of LHeff", LHeff.get_leg_labels(), theta.get_leg_labels())
+            # expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
+            expand = npc.tensordot(LHeff, theta, axes=['(vR*.p)', '(vL.p0)'])  # Should this be (vR.p*)?
+            print(expand.get_leg_labels())
             expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)

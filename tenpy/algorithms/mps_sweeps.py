@@ -431,7 +431,6 @@ class OneSiteH(EffectiveH):
                 theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
                 theta.ireplace_labels(['(vR*.p)', 'vL*'], ['(vL.p)', 'vR'])
             else:
-                # theta = theta.combine_legs(['p', 'vR'])  # labels 'vL.p0', 'vR'
                 theta = npc.tensordot(theta, self.RHeff, axes=['(p.vR)', '(p*.vL)'])  # labels 'vL', 'wL', 'p.vL*'
                 theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])  # labels 'vL', 'p.vL*'
                 theta.ireplace_labels(['vR*', '(p.vL*)'], ['vL', '(p.vR)'])
