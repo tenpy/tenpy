@@ -361,7 +361,7 @@ class TwoSiteDMRGEngine(Sweep):
         """Reset the statistics. Useful if you want to start a new Sweep run.
         """
         self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
-        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[], 
+        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[],
                              'time':[], 'err':[], 'E_trunc':[]}
         self.sweep_stats = {
             'sweep': [],
@@ -478,14 +478,14 @@ class TwoSiteDMRGEngine(Sweep):
 
     def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
         """Summary
-        
+
         Parameters
         ----------
         update_data : TYPE
             Description
         **kwargs
             Description
-        
+
         Returns
         -------
         TYPE
@@ -652,7 +652,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
     .. todo ::
         Move inherited methods to a general DMRGEngine superclass.
-        Note: sweeps left/right need to be treated differently with respect to 
+        Note: sweeps left/right need to be treated differently with respect to
         e.g. LHeff and RHeff
         Test if this engine reprodcues results from the two-site engine.
 
@@ -662,6 +662,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     - diag()
     - mixer_activate()
     - mixed_svd()
+    - set_B()
 
     """
 
@@ -692,7 +693,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff)  # 'vL', 'p', 'vR'
+        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff).replace_label('p0', 'p')  # 'vL', 'p', 'vR'
         theta_ortho = self.get_theta_ortho(i0)
         if self.combine:
             theta = theta.combine_legs([['vL'], ['p']], pipes=[eff_H.pipeL, eff_H.pipeR])
@@ -746,13 +747,13 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
         """
-        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep 
+        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
         if optimize:
             E0, theta, N = self.diag(theta, theta_ortho)
         else:
             E0, N = None, 0
-        theta = self.prepare_svd(theta)
+        theta = self.prepare_svd(theta, i0)
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
         self.set_B(i0, U, S, VH)
 
@@ -771,14 +772,14 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         """Summary
 
         TODO double check if correct and if we need to overwrite it here.
-        
+
         Parameters
         ----------
         update_data : TYPE
             Description
         **kwargs
             Description
-        
+
         Returns
         -------
         TYPE
@@ -813,8 +814,11 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         self.trunc_err_list.append(update_data['err'].eps)
         self.E_trunc_list.append(E_trunc)
 
-    def prepare_svd(self, theta):
+    def prepare_svd(self, theta, i0):
         """Transform theta into matrix for svd.
+
+        In contrast with the 2-site engine, here we need to do some extra work as we need to involve
+        the next site in the SVD.
 
         .. todo ::
             For combining 1- and 2-site DMRG into a single engine, this is one
@@ -822,39 +826,14 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             'length' of the effective Hamiltonian
         """
         if self.combine:
-            return theta  # Theta already in correct form
-        else:  
-            return theta.combine_legs(['vL', 'p'], new_axes=[0, 1])
-
-    def set_B(self, i0, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        .. todo ::
-            Do B0 and B1 definitely both have 'p' legs? 
-
-        Parameters
-        ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1``.
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-        """
-        B0 = U.split_legs(['(vL.p)'])
-        B1 = VH.split_legs(['(p.vR)'])
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
-        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
-        self.psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
-
+            theta = theta.replace_label('p', 'p0')  # TODO this should handle combined leg
+            theta = npc.tensordot(theta, self.env.bra.get_B(i0+1), axes=['vR', 'vL']).replace_label('p', 'p1')
+            return theta
+        else:
+            theta = theta.replace_label('p', 'p0')
+            theta = npc.tensordot(theta, self.env.bra.get_B(i0+1), axes=['vR', 'vL']).replace_label('p', 'p1')
+            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
+            return theta
 
 
 class Engine(NpcLinearOperator):
@@ -1070,7 +1049,7 @@ class EngineCombine(TwoSiteDMRGEngine):
                   category=FutureWarning,
                   stacklevel=2)
 
-    def __init__(self, psi, model, TwoSiteH, DMRG_params): 
+    def __init__(self, psi, model, TwoSiteH, DMRG_params):
         DMRG_params['combine'] = True  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
