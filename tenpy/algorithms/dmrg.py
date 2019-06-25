@@ -505,7 +505,7 @@ class TwoSiteDMRGEngine(Sweep):
             for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
         if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0 + 1)
+            self.env.del_RP(i0 + 1)  # Always +1, even in single site.
             for o_env in self.ortho_to_envs:
                 o_env.del_RP(i0 + 1)
 
@@ -663,6 +663,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     - mixer_activate()
     - mixed_svd()
     - set_B()
+    - post_update_local()
 
     """
 
@@ -767,52 +768,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         }
 
         return update_data
-
-    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
-        """Summary
-
-        TODO double check if correct and if we need to overwrite it here.
-
-        Parameters
-        ----------
-        update_data : TYPE
-            Description
-        **kwargs
-            Description
-
-        Returns
-        -------
-        TYPE
-            Description
-        """
-        E0 = update_data['E0']
-        update_LP, update_RP = upd_env
-        E_trunc = None
-        if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
-            if E0 is None:
-                E0 = E_trunc
-            E_trunc = E_trunc - E0
-        # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if update_RP:  # we move to the left -> delete left LP
-            self.env.del_LP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0)
-        if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0)
-
-        # collect statistics
-        self.update_stats['i0'].append(i0)
-        self.update_stats['age'].append(update_data['age'])
-        self.update_stats['E_total'].append(E0)
-        self.update_stats['E_trunc'].append(E_trunc)
-        self.update_stats['N_lanczos'].append(update_data['N'])
-        self.update_stats['err'].append(update_data['err'])
-        self.update_stats['time'].append(time.time() - self.time0)
-        self.trunc_err_list.append(update_data['err'].eps)
-        self.E_trunc_list.append(E_trunc)
 
     def prepare_svd(self, theta, i0):
         """Transform theta into matrix for svd.
