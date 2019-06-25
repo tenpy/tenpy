@@ -104,6 +104,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         },
         'max_E_err': 1.e-10,
         'verbose': verbose,
+        'combine': True,
     }
     # new Sweep class wants an env rather than state/model
     eng = dmrg.OneSiteDMRGEngine(psi, M, OneSiteH, dmrg_params)
@@ -168,8 +169,8 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
 if __name__ == "__main__":
     # example_DMRG_tf_ising_finite(L=10, g=1.)
     # print("-" * 100)
-    example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
-    print("-" * 100)
+    # example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    # print("-" * 100)
     example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=True)
     # print("-" * 100)
     # example_DMRG_heisenberg_xxz_infinite(Jz=1.5)

@@ -672,7 +672,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         Parameters
         ----------
         i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
+            We want to optimize on site ``i0``.
 
         .. todo ::
             generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
@@ -1170,7 +1170,7 @@ class SingleSiteMixer(Mixer):
 
     .. todo :
         This is still under development.
-        Works only with EngineCombine
+        Works only with combine=True so far.
     """
 
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
@@ -1223,14 +1223,14 @@ class SingleSiteMixer(Mixer):
         H = engine.env.H
         if move_right:
             # theta has legs (vL.p), vR
-            LHeff = engine.LHeff
+            LHeff = engine.eff_H.LHeff
             expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
             expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
         else:  # move left
-            RHeff = engine.RHeff
+            RHeff = engine.eff_H.RHeff
             # TODO XXX: get_W(i0) vs i0+1 for 1-site vs 2-site
             # -> need RHeff from engine!!!
             expand = npc.tensordot(theta, RHeff, axes=[1, 0])

@@ -480,13 +480,18 @@ class OneSiteH(EffectiveH):
         self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, -1])
-        RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])  #single-site.
-        pipeR = RHeff.make_pipe(['p1', 'vL*'])
-        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+        RHeff = npc.tensordot(self.RP, self.W, axes=['wL', 'wR'])  #single-site.
+        pipeR = RHeff.make_pipe(['p', 'vL*'])
+        self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[-1, 0])
         self.pipeL = pipeL
         self.pipeR = pipeR
+
+        print(self.RP.make_pipe(['vL*']))
+
+        self.pipesL = [pipeL, self.RP.make_pipe(['vL*'])]
+        self.pipesR = [pipeR, self.LP.make_pipe(['vR*'])]
 
 
 class TwoSiteH(EffectiveH):
