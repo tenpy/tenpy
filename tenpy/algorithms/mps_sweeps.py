@@ -238,6 +238,9 @@ class Sweep:
         One 'sweep' is a full sequence from the leftmost site to the right and
         back. Only those `LP` and `RP` that can be used later should be updated.
 
+        .. todo ::
+            Should this depend on the length of the active site?
+
         Returns
         -------
         schedule_i0 : list
@@ -246,9 +249,10 @@ class Sweep:
             List of bools, which indicate whether to update the `LP` and `RP`.
         """
         L = self.psi.L
+        l_active = self.EffectiveH.length  # 'length' of active site.
         if self.finite:
-            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
+            schedule_i0 = list(range(0, L - l_active + 1)) + list(range(L - l_active - 1, 0, -1))
+            update_LP_RP = [[True, False]] * (L - l_active) + [[False, True]] * (L - l_active)
         else:
             assert (L >= 2)
             schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
