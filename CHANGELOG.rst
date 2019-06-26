@@ -34,6 +34,7 @@ Added
 Fixed
 ^^^^^
 - :issue:`36`: long-range couplings could give IndexError.
+- :issue:`42`: Onsite-terms in :class:`~tenpy.models.fermions_hubbard.FermionicHubbardModel` were wrong for lattices with non-trivial unit cell.
 - Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
 - Allow :class:`~tenpy.networks.terms.TermList` to have terms with multiple operators acting on the same site.
 - Allow MPS indices outside unit cell in :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.models.lattice.Lattice.lat2mps_idx`.
