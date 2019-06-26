@@ -381,7 +381,7 @@ class TwoSiteDMRGEngine(Sweep):
                 print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
-    def prepare_update(self, i0, move_right):
+    def prepare_update(self, i0):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
         Parameters
@@ -391,7 +391,6 @@ class TwoSiteDMRGEngine(Sweep):
 
         .. todo ::
             generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
-            Don't really want move_right in the two-site version.
 
         Returns
         -------
@@ -715,9 +714,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         .. todo ::
             generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
-            If we pass move_right to this, have to change Sweep.sweep(). Then we also have
-            to change prepare_update() in other subclasses of Sweep. Might be nicer to use some
-            flag self.move_right?
 
         Returns
         -------
@@ -730,7 +726,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         """
         EffectiveH = self.EffectiveH
         env = self.env
-        eff_H = EffectiveH(env, i0, self.combine, self.move_right) # eff_H has attributes LP, RP, W1, W2.
+        eff_H = EffectiveH(env, i0, self.combine, self.move_right) # eff_H has attributes LP, RP, W.
         self.eff_H = eff_H
 
         # make theta
@@ -981,11 +977,14 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         We always update the environment at site i0 + 1: this environment then contains the site
         where we just performed a local update (when sweeping right).
 
+        Assumption: update_LP only gets called when the algorithm is moving to the right.
+
         Parameters
         ----------
         i0 : int
             Site index. We calculate ``self.env.get_LP(i0+1)``.
         """
+        print("Setting LP at", i0 + 1)
         if self.combine:
             LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
@@ -999,6 +998,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         We always update the environment at site i0: this environment then contains the site
         where we just performed a local update (when sweeping left).
 
+        Assumption: update_RP only gets called when the algorithm is moving to the left.
+
         Parameters
         ----------
         i0 : int
@@ -1006,6 +1007,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
         """
+        print("Setting RP at", i0)
         if self.combine:
             RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
@@ -1430,22 +1432,17 @@ class SingleSiteMixer(Mixer):
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
         H = engine.env.H
-        if not engine.combine:  # Need to prepare theta. Do we?
+        if not engine.combine:  # Need to get Heff's. Theta is already in right form by now.
             engine.eff_H.combine_Heff()
-            if move_right:
-                theta = theta.combine_legs(['vL'], ['p'], pipes=[engine.eff_H.pipeL])
-            else:
-                theta = theta.combine_legs(['p'], ['vR'], pipes=[engine.eff_H.pipeR])
 
-        if move_right:
-            # theta has legs (vL.p), vR
+        if move_right:  # theta has legs (vL.p), vR
             LHeff = engine.eff_H.LHeff
             expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
-            expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
+            expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
-        else:  # move left TODO
+        else:  # theta has legs vL, (p.vR)
             RHeff = engine.eff_H.RHeff
             expand = npc.tensordot(theta, RHeff, axes=['(p.vR)', '(p*.vL)'])
             expand = expand.combine_legs(['vL', 'wL'], qconj=+1)

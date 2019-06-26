@@ -55,6 +55,41 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
     return E, psi, M
 
 
+def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
+    print("finite DMRG, transverse field Ising model")
+    print("L={L:d}, g={g:.2f}".format(L=L, g=g))
+    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=verbose)
+    M = TFIChain(model_params)
+    product_state = ["up"] * M.lat.N_sites
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    dmrg_params = {
+        'mixer': True,  # setting this to True helps to escape local minima
+        'max_E_err': 1.e-10,
+        'trunc_params': {
+            'chi_max': 30,
+            'svd_min': 1.e-10
+        },
+        'verbose': verbose,
+        'combine': False,
+    }
+    # dmrg.run() still needs to be rewritten.
+    # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
+    eng = dmrg.OneSiteDMRGEngine(psi, M, OneSiteH, dmrg_params)
+    E, psi = eng.run()
+    print("E = {E:.13f}".format(E=E))
+    print("final bond dimensions: ", psi.chi)
+    mag_x = np.sum(psi.expectation_value("Sigmax"))
+    mag_z = np.sum(psi.expectation_value("Sigmaz"))
+    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
+    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    if L < 20:  # compare to exact result
+        from tfi_exact import finite_gs_energy
+        E_exact = finite_gs_energy(L, 1., g)
+        print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
+        print("relative error: ", abs((E - E_exact) / E_exact))
+    return E, psi, M
+
+
 def example_DMRG_tf_ising_infinite(g, verbose=True):
     print("infinite DMRG, transverse field Ising model")
     print("g={g:.2f}".format(g=g))
@@ -167,10 +202,12 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
 
 
 if __name__ == "__main__":
-    # example_DMRG_tf_ising_finite(L=10, g=1.)
+    # example_DMRG_tf_ising_finite(L=10, g=1., verbose=100)
     # print("-" * 100)
+    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=100)
+    print("-" * 100)
     # example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
     # print("-" * 100)
-    example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    # example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=100)
     # print("-" * 100)
     # example_DMRG_heisenberg_xxz_infinite(Jz=1.5)
