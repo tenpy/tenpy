@@ -553,7 +553,7 @@ class TwoSiteDMRGEngine(Sweep):
     def mixed_svd(self, theta, i0, update_LP, update_RP):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
-        The goal ist to split theta and truncate it::
+        The goal is to split theta and truncate it::
 
             |   -- theta --   ==>    -- U -- S --  VH -
             |      |   |                |          |
@@ -564,11 +564,6 @@ class TwoSiteDMRGEngine(Sweep):
         The details of the perturbation are defined by the :class:`Mixer` class.
 
         Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
-
-        .. todo ::
-            This might be generalizable to all sweep engines.
-            On the other hand, it looks like the `SingleSiteMixer` has some different parameters
-            (like next_B), so perhaps this method should be overwritten by 1-site DMRG?
 
         Parameters
         ----------
@@ -827,30 +822,142 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     def prepare_svd(self, theta, i0):
         """Transform theta into matrix for svd.
 
-        In contrast with the 2-site engine, here we need to do some extra work as we need to involve
-        the next site in the SVD.
+        In contrast with the 2-site engine, the matrix here depends on the direction we move, as we
+        need `'p'` to point away from the direction we are going in.
 
         .. todo ::
             For combining 1- and 2-site DMRG into a single engine, this is one
             of the trickier methods --> figure out how to do legs based on the
             'length' of the effective Hamiltonian
             Needs to be different for left/right sweeps.
+            IMPORTANT: should not use an extra B!
         """
         if self.combine:
             if self.move_right:
-                theta = theta.replace_label('(vL.p)', '(vL.p0)')
-                theta = npc.tensordot(theta, self.env.bra.get_B(i0+1), axes=['vR', 'vL']).replace_label('p', 'p1')
-                theta = theta.combine_legs(['p1', 'vR'])
+                theta.itranspose(['(vL.p)', 'vR'])  # ensure the order.
             else:
-                theta = theta.replace_label('(p.vR)', '(p1.vR)')
-                theta = npc.tensordot(theta, self.env.bra.get_B(i0-1), axes=['vL', 'vR']).replace_label('p', 'p0')
-                theta = theta.combine_legs(['vL', 'p0'])
-            theta.itranspose(['(vL.p0)', '(p1.vR)'])  # ensure the order.
+                theta.itranspose(['vL', '(p.vR)'])  # ensure the order.
         else:
-            theta = theta.replace_label('p', 'p0')
-            theta = npc.tensordot(theta, self.env.bra.get_B(i0+1), axes=['vR', 'vL']).replace_label('p', 'p1')
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
+            if self.move_right:
+                theta = theta.combine_legs(['vL', 'p'])
+            else:
+                theta = theta.combine_legs(['p', 'vR'])
         return theta
+
+    def mixed_svd(self, theta, i0, update_LP, update_RP):
+        """Get (truncated) `B` from the new theta (as returned by diag).
+
+        The goal is to split theta and truncate it. For a move to the right::
+
+            |   -- theta --   ==>    -- U -- S --  VH -
+            |        |                  |
+
+        For a move to the left::
+
+            |   -- theta --   ==>    -- U -- S --  VH -
+            |        |                             |
+
+
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
+
+        With a mixer, the state is perturbed before the SVD.
+        The details of the perturbation are defined by the :class:`Mixer` class.
+
+        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
+
+        .. todo ::
+            Fix for single site.
+            In single site DMRG, this method needs to be changed particularly in the case without a
+            mixer: there we want to do the SVD on 1 site (move p to the appropriate side), then
+            contract either U to the left (if moving left) or VH to the right (if moving right)
+            Maybe this method is general and we just need to change set_B?
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+        i0 : int
+            Site index; `theta` lives on ``i0, i0+1``.
+        update_LP : bool
+            Whether to calculate the next ``env.LP[i0+1]``.
+        update_RP : bool
+            Whether to calculate the next ``env.RP[i0]``.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singluar values of the array; with mixer it might be a general
+            matrix with labels ``'vL', 'vR'``; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        # get qtotal_LR from i0
+        if self.mixer is None:
+            # simple case: real svd, defined elsewhere.
+            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
+            print("Single site mixed svd:", U.get_leg_labels(), VH.get_leg_labels())
+            if self.move_right:
+                VH = npc.tensordot(VH, self.env.bra.get_B(i0+1), axes=['vR', 'vL'])
+            else:
+                U = npc.tensordot(self.env.bra.get_B(i0-1), U, axes=['vR', 'vL'])
+            return U, S, VH, err
+        else:  # we have a mixer
+            if self.move_right:
+                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0+1, form=None) )
+            else:
+                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0-1, form=None) )
+
+    def set_B(self, i0, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
+
+        .. todo ::
+            Depending on whether the mixer is activated, we may or may not want to update the next
+            site. In any case, depending on the direction we're going, we want to do different things.
+
+            New idea: we should assume set_B always gets two updated sites worth of tensors;
+            mixed_svd() should do the extra contracting in case there is no mixer. This is because
+            perturb_svd() (called when a mixer is on) definitely involves two sites, so having
+            mixed_svd() do that makes set_B() uniform over those two cases.
+
+        Parameters
+        ----------
+        i0 : int
+            We update the MPS `B` at sites ``i0, i0+1`` (for right-moving) or ``i0-1, i0`` (for
+            left-moving).
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        if self.move_right:
+            B0 = U.split_legs(['(vL.p)'])
+            self.psi.set_B(i0, B0, form='A')  # left-canonical
+            self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
+            self.psi.set_SR(i0, S)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0 + 1)
+                o_env.del_RP(i0)
+            self.env.del_LP(i0 + 1)
+            self.env.del_RP(i0)
+        else:
+            B1 = VH.split_legs(['(p.vR)'])
+            self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
+            self.psi.set_B(i0, B1, form='B')  # right-canonical
+            self.psi.set_SR(i0 - 1, S)
+            for o_env in self.ortho_to_envs:  # TODO indexing here
+                o_env.del_LP(i0)
+                o_env.del_RP(i0 - 1)
+            self.env.del_LP(i0)
+            self.env.del_RP(i0 - 1)
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `engine_params['mixer']`.
@@ -882,8 +989,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             Site index. We calculate ``self.env.get_LP(i0+1)``.
         """
         if self.combine:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p0)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p)'])
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
         else:  # as implemented directly in the environment
             self.env.get_LP(i0 + 1, store=True)
@@ -902,8 +1009,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
         """
         if self.combine:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p1*.vR*)'])
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
             # self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
             self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)  # TODO is get_RP_age index right?
         else:  # as implemented directly in the environment
@@ -1320,34 +1427,39 @@ class SingleSiteMixer(Mixer):
         print(U.get_leg_labels(), VH.get_leg_labels(), next_B.get_leg_labels())
         print(U.shape, VH.shape, next_B.shape)
         if move_right:
-            VH = VH.split_legs('(p1.vR)')
+            print(engine.theta_pipe)
+            VH = VH.split_legs('(p1.vR)', engine.theta_pipe)
             VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])  # TODO VH does not have 'vR'??
         else:
-            U = U.split_legs('(vL.p0)')
+            U = U.split_legs('(vL.p0)', engine.theta_pipe)
             U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
         return U, S, VH, err
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
         H = engine.env.H
-        if not engine.combine:  # Need to prepare theta.
+        print(theta.get_leg_labels())
+        if not engine.combine:  # Need to prepare theta. Do we?
             engine.eff_H.combine_Heff()
-            print(theta.get_leg_labels())
             if move_right:
-                theta = theta.combine_legs(['vL'], ['p'])
+                theta = theta.combine_legs(['vL'], ['p'], pipes=[engine.eff_H.pipeL])
             else:
-                theta = theta.combine_legs(['p'], ['vR'])
+                theta = theta.combine_legs(['p'], ['vR'], pipes=[engine.eff_H.pipeR])
 
         if move_right:
             # theta has legs (vL.p), vR
             LHeff = engine.eff_H.LHeff
             print("Axes of LHeff", LHeff.get_leg_labels(), theta.get_leg_labels())
             # expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
-            expand = npc.tensordot(LHeff, theta, axes=['(vR*.p)', '(vL.p0)'])  # Should this be (vR.p*)?
+            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p0)'])
             print(expand.get_leg_labels())
+            # expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
+            print(theta.get_leg_labels(), expand.get_leg_labels())
+            print(expand.legs[1])
             next_B = next_B.extend('vL', expand.legs[1].conj())
+            print("Shapes in subspace_expand:", next_B.shape, theta.shape, expand.shape)
         else:  # move left
             RHeff = engine.eff_H.RHeff
             # TODO XXX: get_W(i0) vs i0+1 for 1-site vs 2-site
