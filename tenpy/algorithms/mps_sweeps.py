@@ -32,19 +32,32 @@ class Sweep:
 
     Attributes
     ----------
-    eff_H : :class:`~tenpy.algorithms.mps_sweep.EffectiveH`.
-        Effective Hamiltonian, used in the local updates.
     EffectiveH : class type
-        Class of `eff_H`.
+        Class for :attr:`eff_H`. Has a `length` class attribute which specifies the number of sites
+        updated at once (i.e., whether we do single-site vs. two-site DMRG).
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     stats : dict
         Description
+    i0 : int
+        Only set during sweep.
+        Left-most of the EffectiveH.length sites to be updated in :meth:`update_local`.
+    move_right : bool
+        Only set during sweep.
+        Whether the next `i0` of the sweep will be right or left of the current one.
+    update_LP_RP : (bool, bool)
+        Only set during a sweep.
+        Whether it is necessary to update the `LP` and `RP`.
+        The latter are chosen such that the environment is growing for infinite systems, but
+        we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
+    eff_H : :class:`~tenpy.algorithms.mps_sweep.EffectiveH`.
+        Only set during sweep.
+        Effective Hamiltonian, used in the local updates.
     """
 
     def __init__(self, psi, model, EffectiveH, engine_params):
         self.psi = psi
-        self.M = model
+        self.model = model  # TODO: document
         self.EffectiveH = EffectiveH  # class type
         self.engine_params = engine_params
         self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
@@ -53,7 +66,6 @@ class Sweep:
         self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
         self.finite = self.psi.finite
         self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()  # TODO duplicate with sweep()
 
         self.lanczos_params = get_parameter(engine_params, 'lanczos_params', {}, 'Sweep')
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
@@ -63,6 +75,9 @@ class Sweep:
         self.env = None
         self.ortho_to_envs = []
         self.init_env(model)
+        self.i0 = 0
+        self.move_right = True
+        self.update_LP_RP = (True, False)
 
     def __del__(self):
         engine_params = self.engine_params
@@ -191,30 +206,28 @@ class Sweep:
         """
         self.E_trunc_list = []
         self.trunc_err_list = []
-        schedule_i0, update_LP_RP = self.get_sweep_schedule()  # TODO duplicate with __init__()
-        self.move_right = True  # Always start by moving right.
+        schedule = self.get_sweep_schedule()
 
         # the actual sweep
-        for i0, upd_env in zip(schedule_i0, update_LP_RP):
-            update_LP, update_RP = upd_env
+        for i0, move_right, update_LP_RP in schedule:
+            self.i0 = i0
+            self.move_right = move_right
+            self.update_LP_RP = update_LP_RP
+            update_LP, update_RP = update_LP_RP
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
-
-            if i0 == max(schedule_i0):  # Switch direction once we reached the end.
-                self.move_right = False
             # --------- the main work --------------
-            theta, theta_ortho = self.prepare_update(i0)
-            update_data = self.update_local(i0, theta, theta_ortho, update_LP,
-                                            update_RP, optimize=optimize)
+            theta, theta_ortho = self.prepare_update()
+            update_data = self.update_local(theta, theta_ortho, optimize=optimize)
             if update_LP:
-                self.update_LP(i0, update_data['U'])  # (requires updated B)
+                self.update_LP(update_data['U'])  # (requires updated B)
                 for o_env in self.ortho_to_envs:
                     o_env.get_LP(i0 + 1, store=True)
             if update_RP:
-                self.update_RP(i0, update_data['VH'])
+                self.update_RP(update_data['VH'])
                 for o_env in self.ortho_to_envs:
                     o_env.get_RP(i0, store=True)
-            self.post_update_local(i0, update_data, meas_E_trunc, upd_env)
+            self.post_update_local(update_data, meas_E_trunc)
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
@@ -240,38 +253,44 @@ class Sweep:
 
         Returns
         -------
-        schedule_i0 : list
-            List of indices of 'active sites'.
-        update_LP_RP : list
-            List of bools, which indicate whether to update the `LP` and `RP`.
+        schedule : iterable of (int, bool, (bool, bool))
+            Schedule for the sweep. Each entry is ``(i0, move_right, (update_LP, update_RP))``,
+            where `i0` is the leftmost of the ``self.EffectiveH.length` sites to be updated in
+            :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
+            rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
+            whether it is necessary to update the `LP` and `RP`.
+            The latter are chosen such that the environment is growing for infinite systems, but
+            we only keep the minimal number of environment tensors in memory.
         """
         L = self.psi.L
         if self.finite:
-            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
+            l = self.EffectiveH.length
+            assert L >= l
+            i0s = list(range(0, L - l)) + list(range(L - l, 0, -1))
+            move_right = [True] * (L- l) + [False] * (L - l)
+            update_LP_RP = [[True, False]] * (L - l) + [[False, True]] * (L - l)
         else:
-            assert (L >= 2)
-            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
+            assert L >= 2
+            i0s = list(range(0, L)) + list(range(L, 0, -1))
+            move_right = [True] * L + [False] * L
             update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                            [[True, True]] * 2 + [[False, True]] * (L-2)
-        return schedule_i0, update_LP_RP
+        return zip(i0s, move_right, update_LP_RP)
 
-    def get_theta_ortho(self, i0):
-        """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
+    def get_theta_ortho(self):
+        """Get the n-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
 
         Returns
         -------
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'.
+            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'
+            (for EffectiveH.length=1, the 'p1' label is missing).
         """
+        i0 = self.i0
+        n = self.EffectiveH.length
         theta_ortho = []
         for o_env in self.ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=self.EffectiveH.length)  # the environments are of the form <psi|ortho>
+            theta = o_env.ket.get_theta(i0, n=n)  # the environments are of the form <psi|ortho>
             LP = o_env.get_LP(i0, store=True)
             RP = o_env.get_RP(i0 + self.EffectiveH.length - 1, store=True)
             theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
@@ -300,11 +319,11 @@ class Sweep:
         """
         raise NotImplementedError("needs to be overwritten by subclass")
 
-    def prepare_update(self, i0):
+    def prepare_update(self):
         """Prepare everything algorithm-specific to perform a local update."""
         raise NotImplementedError("needs to be overwritten by subclass")
 
-    def update_local(self, i0, theta, **kwargs):
+    def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update."""
         raise NotImplementedError("needs to be overwritten by subclass")
 
@@ -339,7 +358,7 @@ class EffectiveH(NpcLinearOperator):
     # provides matvec, __init__ from env, i0
     length = None
 
-    def __init__(self, env, i0):
+    def __init__(self, env, i0, combine=False, move_right=True):
         raise NotImplementedError("This function should be implemented in derived classes")
 
     def matvec(self, theta):
@@ -371,12 +390,12 @@ class OneSiteH(EffectiveH):
             |        |    |    |
             |        .---   ---.
 
-    TODO orthogonal theta's?
+    If `combine` is True, we define either `LHeff` as contraction of `LP` with `W0` (in the case
+    `move_right` is True) or `RHeff` as contraction of `RP` and `W0`.
+
+    TODO orthogonal theta's? Johannes: agree, might be usefull to add that here.
 
     Parameters
-    ----------
-
-    Attributes
     ----------
     combine : bool
         Whether to combine legs into pipes. This combines the virtual and
@@ -384,17 +403,25 @@ class OneSiteH(EffectiveH):
         the overhead of calculating charge combinations in the contractions,
         but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
         Is originally from the wo-site method; unclear if it works wel for 1 site.
+    move_right : bool
+        Wheter the the sweep is moving right or left for the next update.
+
+    Attributes
+    ----------
     length : int
         Number of (MPS) sites the effective hamiltonian covers.
-    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Left part of the effective Hamiltonian.
-        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
+    combine, move_right : bool
+        See above.
+    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+        Only set :attr:`combine`, and only one of them depending on :attr:`move_right`.
+        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p)', 'wR', '(vR.p*)'``
+        for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p*.vL)', 'wL', '(p, vL*)'``
     LP : :class:`tenpy.linalg.np_conserved.Array`
-        left part of the environment
+        Left part of the environment.
     RP : :class:`tenpy.linalg.np_conserved.Array`
-        right part of the environment
+        Right part of the environment.
     W : :class:`tenpy.linalg.np_conserved.Array`
-        MPO tensor, applied to the 'p' leg of theta
+        MPO tensor, to be applied to the 'p' leg of theta
     """
     length = 1
 
@@ -421,17 +448,17 @@ class OneSiteH(EffectiveH):
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
         """
-        LP = self.LP
-        RP = self.RP
         labels = theta.get_leg_labels()
         if self.combine:
             if self.move_right:
-                theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p*)', '(vL.p)'])  # labels 'vR*.p0', 'wR', 'vR'
-                theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])  # labels 'vR*.p0', 'vL*'
+                theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
+                # '(vR*.p)', 'wR', 'vR'
+                theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
                 theta.ireplace_labels(['(vR*.p)', 'vL*'], ['(vL.p)', 'vR'])
             else:
-                theta = npc.tensordot(theta, self.RHeff, axes=['(p.vR)', '(p*.vL)'])  # labels 'vL', 'wL', 'p.vL*'
-                theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])  # labels 'vL', 'p.vL*'
+                theta = npc.tensordot(theta, self.RHeff, axes=['(p.vR)', '(p*.vL)'])
+                # 'vL', 'wL', '(p.vL*)'
+                theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])
                 theta.ireplace_labels(['vR*', '(p.vL*)'], ['vL', '(p.vR)'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
@@ -448,21 +475,18 @@ class OneSiteH(EffectiveH):
         do we need both LP and RP or can we get away with just one? Is there a
         preference for one or the other?
         """
-        LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
-        pipeL = LHeff.make_pipe(['vR*', 'p'])
-        self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, -1])
-        RHeff = npc.tensordot(self.RP, self.W, axes=['wL', 'wR'])  #single-site.
-        pipeR = RHeff.make_pipe(['p', 'vL*'])
-        self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
-        self.pipeL = pipeL
-        self.pipeR = pipeR
-
-        self.pipesL = [pipeL, self.RP.make_pipe(['vL*'])]
-        self.pipesR = [pipeR, self.LP.make_pipe(['vR*'])]
+        if self.move_right:
+            LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
+            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p'])
+            self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
+                                            pipes=[pipeL, pipeL.conj()],
+                                            new_axes=[0, 2])
+        else:
+            RHeff = npc.tensordot(self.W, self.RP, axes=['wR', 'wL'])
+            self.pipeR = pipeR = RHeff.make_pipe(['p', 'vL*'])
+            self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
+                                            pipes=[pipeR, pipeR.conj()],
+                                            new_axes=[-1, 0])
 
 
 class TwoSiteH(EffectiveH):
@@ -504,11 +528,13 @@ class TwoSiteH(EffectiveH):
     """
     length = 2
 
-    def __init__(self, env, i0, combine=False):
+    def __init__(self, env, i0, combine=False, move_right=None):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
-        self.W1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
+        self.W1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        # 'wL', 'wR', 'p0', 'p0*'
+        self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+        # 'wL', 'wR', 'p1', 'p1*'
         self.combine = combine
         if combine:
             self.combine_Heff()
@@ -526,8 +552,6 @@ class TwoSiteH(EffectiveH):
         theta :class:`~tenpy.linalg.np_conserved.Array`
             Product of `theta` and the effective Hamiltonian.
         """
-        LP = self.LP
-        RP = self.RP
         labels = theta.get_leg_labels()
         if self.combine:
             theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
@@ -547,14 +571,12 @@ class TwoSiteH(EffectiveH):
         Hamiltonian with piped legs.
         """
         LHeff = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
-        pipeL = LHeff.make_pipe(['vR*', 'p0'])
+        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'])
         self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
                                         pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, -1])
+                                        new_axes=[0, 2])
         RHeff = npc.tensordot(self.RP, self.W2, axes=['wL', 'wR'])
-        pipeR = RHeff.make_pipe(['p1', 'vL*'])
+        self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'])
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
-        self.pipeL = pipeL
-        self.pipeR = pipeR
+                                        new_axes=[2, 0])
