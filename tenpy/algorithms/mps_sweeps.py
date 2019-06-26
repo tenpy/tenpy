@@ -251,6 +251,9 @@ class Sweep:
         One 'sweep' is a full sequence from the leftmost site to the right and
         back. Only those `LP` and `RP` that can be used later should be updated.
 
+        .. todo ::
+            Should this depend on the length of the active site?
+
         Returns
         -------
         schedule : iterable of (int, bool, (bool, bool))
