@@ -204,7 +204,6 @@ class Sweep:
                 self.move_right = False
             # --------- the main work --------------
             theta, theta_ortho = self.prepare_update(i0)
-            print("Legs of theta:", theta.get_leg_labels())
             update_data = self.update_local(i0, theta, theta_ortho, update_LP,
                                             update_RP, optimize=optimize)
             if update_LP:

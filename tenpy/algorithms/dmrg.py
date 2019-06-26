@@ -803,9 +803,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         else:
             E0, N = None, 0
         theta = self.prepare_svd(theta, i0)
-        print("theta to svd:", theta.get_leg_labels())
         U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        print("Update_local, legs of U and VH", U.get_leg_labels(), VH.get_leg_labels())
         self.set_B(i0, U, S, VH)
 
         update_data = {
@@ -1424,20 +1422,14 @@ class SingleSiteMixer(Mixer):
                                      engine.trunc_params,
                                      qtotal_LR=qtotal_LR,
                                      inner_labels=['vR', 'vL'])
-        print(U.get_leg_labels(), VH.get_leg_labels(), next_B.get_leg_labels())
-        print(U.shape, VH.shape, next_B.shape)
         if move_right:
-            print(engine.theta_pipe)
-            VH = VH.split_legs('(p1.vR)', engine.theta_pipe)
             VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])  # TODO VH does not have 'vR'??
         else:
-            U = U.split_legs('(vL.p0)', engine.theta_pipe)
             U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
         return U, S, VH, err
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
         H = engine.env.H
-        print(theta.get_leg_labels())
         if not engine.combine:  # Need to prepare theta. Do we?
             engine.eff_H.combine_Heff()
             if move_right:
@@ -1448,24 +1440,15 @@ class SingleSiteMixer(Mixer):
         if move_right:
             # theta has legs (vL.p), vR
             LHeff = engine.eff_H.LHeff
-            print("Axes of LHeff", LHeff.get_leg_labels(), theta.get_leg_labels())
-            # expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
-            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p0)'])
-            print(expand.get_leg_labels())
-            # expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
-            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
+            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
+            expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
-            print(theta.get_leg_labels(), expand.get_leg_labels())
-            print(expand.legs[1])
             next_B = next_B.extend('vL', expand.legs[1].conj())
-            print("Shapes in subspace_expand:", next_B.shape, theta.shape, expand.shape)
-        else:  # move left
+        else:  # move left TODO
             RHeff = engine.eff_H.RHeff
-            # TODO XXX: get_W(i0) vs i0+1 for 1-site vs 2-site
-            # -> need RHeff from engine!!!
-            expand = npc.tensordot(theta, RHeff, axes=[1, 0])
-            expand = expand.combine_legs([0, 'wL'], qconj=+1)
+            expand = npc.tensordot(theta, RHeff, axes=['(p.vR)', '(p*.vL)'])
+            expand = expand.combine_legs(['vL', 'wL'], qconj=+1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=0, copy=False)
             next_B = next_B.extend('vR', expand.legs[0].conj())
