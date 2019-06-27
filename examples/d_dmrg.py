@@ -63,7 +63,7 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
     dmrg_params = {
-        'mixer': True,  # setting this to True helps to escape local minima
+        'mixer': True,  # setting this to True is essential for the 1-site algorithm to work.
         'max_E_err': 1.e-10,
         'trunc_params': {
             'chi_max': 30,
@@ -134,7 +134,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
     dmrg_params = {
-        'mixer': True,  # setting this to True helps to escape local minima
+        'mixer': True,  # setting this to True is essential for the 1-site algorithm to work.
         'trunc_params': {
             'chi_max': 30,
             'svd_min': 1.e-10
@@ -204,12 +204,12 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
 
 
 if __name__ == "__main__":
-    # example_DMRG_tf_ising_finite(L=10, g=1., verbose=100)
-    # print("-" * 100)
-    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=20)
+    example_DMRG_tf_ising_finite(L=10, g=1., verbose=True)
     print("-" * 100)
-    # example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
-    # print("-" * 100)
-    # example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=100)
-    # print("-" * 100)
-    # example_DMRG_heisenberg_xxz_infinite(Jz=1.5)
+    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=True)
+    print("-" * 100)
+    example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    print("-" * 100)
+    example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    print("-" * 100)
+    example_DMRG_heisenberg_xxz_infinite(Jz=1.5)

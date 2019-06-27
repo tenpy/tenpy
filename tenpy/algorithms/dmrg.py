@@ -901,7 +901,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         i0 = self.i0
         if self.move_right:
             B0 = U.split_legs(['(vL.p)'])
-            print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
             self.psi.set_B(i0, B0, form='A')  # left-canonical
             self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
             self.psi.set_SR(i0, S)
@@ -912,7 +911,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             self.env.del_RP(i0)
         else:
             B1 = VH.split_legs(['(p.vR)'])
-            print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
             self.psi.set_SL(i0, S)
@@ -986,9 +984,9 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
         else:  # as implemented directly in the environment
             if self.move_right:
-                self.env.get_RP(i0 - 1, store=True)
-            else:
                 self.env.get_RP(i0, store=True)
+            else:
+                self.env.get_RP(i0 - 1, store=True)
 
 
 class Engine(NpcLinearOperator):
