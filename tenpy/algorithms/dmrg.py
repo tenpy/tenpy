@@ -1483,7 +1483,7 @@ class DensityMatrixMixer(Mixer):
     This mixer constructs density matrices as described in the original paper [White2005]_.
     """
 
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
+    def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
         We calculate the left and right reduced density using the mixer
@@ -1516,6 +1516,7 @@ class DensityMatrixMixer(Mixer):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
+        update_LP, update_RP = move_right, not move_right
         rho_L = self.mix_rho_L(engine, theta, i0, update_LP)
         # don't mix left parts, when we're going to the right
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
