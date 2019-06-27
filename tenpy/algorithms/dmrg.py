@@ -381,13 +381,8 @@ class TwoSiteDMRGEngine(Sweep):
                 print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
-    def prepare_update(self, i0):
+    def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
 
         .. todo ::
             generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
@@ -403,13 +398,13 @@ class TwoSiteDMRGEngine(Sweep):
         """
         EffectiveH = self.EffectiveH
         env = self.env
-        eff_H = EffectiveH(env, i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        eff_H = EffectiveH(env, self.i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
         self.eff_H = eff_H
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta_ortho = self.get_theta_ortho(i0)
+        theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
+        theta_ortho = self.get_theta_ortho()
         if self.combine:
             theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
             theta_ortho = [
@@ -417,22 +412,17 @@ class TwoSiteDMRGEngine(Sweep):
                 for th_o in theta_ortho
             ]
         else:
-            theta.itranspose(['vL', 'p0', 'vR', 'p1'])
+            theta.itranspose(['vL', 'p0', 'p1', 'vR'])
             for th_o in theta_ortho:
-                th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
+                th_o.itranspose(['vL', 'p0', 'p1', 'vR'])
         return theta, theta_ortho
 
-    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
         """Perform bond-update on the sites ``(i0, i0+1)``.
 
         Parameters
         ----------
-        i0 : int
-            Site left to the bond which should be optimized.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_LP : bool
-            Whether to calculate the next ``env.RP[i0]``.
+        # TODO : theta, theta_ortho
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -456,15 +446,15 @@ class TwoSiteDMRGEngine(Sweep):
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
         """
+        i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
             E0, theta, N = self.diag(theta, theta_ortho)
         else:
             E0, N = None, 0
         theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        self.set_B(i0, U, S, VH)
-
+        U, S, VH, err = self.mixed_svd(theta)
+        self.set_B(U, S, VH)
         update_data = {
             'E0': E0,
             'err': err,
@@ -473,10 +463,9 @@ class TwoSiteDMRGEngine(Sweep):
             'U': U,
             'VH': VH,
         }
-
         return update_data
 
-    def post_update_local(self, i0, update_data, meas_E_trunc=False, upd_env=[False, False]):
+    def post_update_local(self, update_data, meas_E_trunc=False):
         """Summary
 
         Parameters
@@ -492,7 +481,7 @@ class TwoSiteDMRGEngine(Sweep):
             Description
         """
         E0 = update_data['E0']
-        update_LP, update_RP = upd_env
+        i0 = self.i0
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
@@ -500,16 +489,17 @@ class TwoSiteDMRGEngine(Sweep):
                 E0 = E_trunc
             E_trunc = E_trunc - E0
         # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if update_RP:  # we move to the left -> delete left LP
-            print("Deleting LP at site", i0 + 1)
-            self.env.del_LP(i0 + 1)  # Always +1, even in single site.
-            for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0 + 1)
-        if update_LP:  # we move to the right -> delete right RP
-            print("Deleting RP at site", i0)
-            self.env.del_RP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0)
+        if self.EffectiveH.length == 2:
+            # TODO: Do we need those for single site DMRG? In infinite case?
+            update_LP, update_RP = self.update_LP_RP
+            if update_RP:  # we move to the left -> delete left LP
+                self.env.del_LP(i0)
+                for o_env in self.ortho_to_envs:
+                    o_env.del_LP(i0)
+            if update_LP:  # we move to the right -> delete right RP
+                self.env.del_RP(i0 + 1)  # Always +1, even in single site.
+                for o_env in self.ortho_to_envs:
+                    o_env.del_RP(i0 + 1)
 
         # collect statistics
         self.update_stats['i0'].append(i0)
@@ -551,7 +541,7 @@ class TwoSiteDMRGEngine(Sweep):
         else:
             return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
 
-    def mixed_svd(self, theta, i0, update_LP, update_RP):
+    def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
         The goal is to split theta and truncate it::
@@ -570,12 +560,6 @@ class TwoSiteDMRGEngine(Sweep):
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
 
         Returns
         -------
@@ -589,6 +573,7 @@ class TwoSiteDMRGEngine(Sweep):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
+        i0 = self.i0
         # get qtotal_LR from i0
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
@@ -598,19 +583,14 @@ class TwoSiteDMRGEngine(Sweep):
                                          qtotal_LR=[qtotal_i0, None],
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
-        else:  # we have a mixer
-            if self.move_right:
-                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0+1, form=None) )
-            else:
-                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0-1, form=None) )
+        # else: we have a mixer
+        return self.mixer.perturb_svd(self, theta, self.i0, self.move_right)
 
-    def set_B(self, i0, U, S, VH):
+    def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
 
         Parameters
         ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1``.
         U, VH : :class:`~tenpy.linalg.np_conserved.Array`
             Left and Right-canonical matrices as returned by the SVD.
         S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
@@ -619,6 +599,7 @@ class TwoSiteDMRGEngine(Sweep):
         """
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        i0 = self.i0
         self.psi.set_B(i0, B0, form='A')  # left-canonical
         self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         self.psi.set_SR(i0, S)
@@ -648,7 +629,7 @@ class TwoSiteDMRGEngine(Sweep):
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
-    def update_LP(self, i0, U):
+    def update_LP(self, U):
         """Update left part of the environment.
 
         We always update the environment at site i0 + 1: this environment then contains the site
@@ -656,9 +637,9 @@ class TwoSiteDMRGEngine(Sweep):
 
         Parameters
         ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
+        U
         """
+        i0 = self.i0
         if self.combine:
             LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
@@ -666,7 +647,7 @@ class TwoSiteDMRGEngine(Sweep):
         else:  # as implemented directly in the environment
             self.env.get_LP(i0 + 1, store=True)
 
-    def update_RP(self, i0, VH):
+    def update_RP(self, VH):
         """Update right part of the environment.
 
         We always update the environment at site i0: this environment then contains the site
@@ -674,11 +655,10 @@ class TwoSiteDMRGEngine(Sweep):
 
         Parameters
         ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+            The VH as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
         """
+        i0 = self.i0
         if self.combine:
             RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
@@ -706,13 +686,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
     """
 
-    def prepare_update(self, i0):
+    def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on site ``i0``.
 
         .. todo ::
             generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
@@ -728,13 +703,16 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         """
         EffectiveH = self.EffectiveH
         env = self.env
-        eff_H = EffectiveH(env, i0, self.combine, self.move_right) # eff_H has attributes LP, RP, W.
-        self.eff_H = eff_H
+        self.eff_H = eff_H = EffectiveH(env, self.i0, self.combine, self.move_right)
+        # eff_H has attributes LP, RP, W.
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=1, cutoff=cutoff).replace_label('p0', 'p')  # 'vL', 'p', 'vR'
-        theta_ortho = self.get_theta_ortho(i0)
+        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff).replace_label('p0', 'p')
+        # 'vL', 'p', 'vR'
+        theta_ortho = self.get_theta_ortho()
+        for th_o in theta_ortho:
+                th_o.ireplace_label('p0', 'p')
         if self.combine:
             if self.move_right:
                 theta = theta.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
@@ -751,10 +729,10 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         else:
             theta.itranspose(['vL', 'p', 'vR'])
             for th_o in theta_ortho:
-                th_o.itranspose(['vL', 'p', 'vR'])
+                th_o.ireplace_label('p0', 'p').itranspose(['vL', 'p', 'vR'])
         return theta, theta_ortho
 
-    def update_local(self, i0, theta, theta_ortho, update_LP, update_RP, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
         """Perform site-update on the site ``i0``.
 
         .. todo ::
@@ -765,12 +743,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         Parameters
         ----------
-        i0 : int
-            Site left to the bond which should be optimized.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_LP : bool
-            Whether to calculate the next ``env.RP[i0]``.
+        # theta, theta_ortho
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -794,15 +767,19 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             Current size of the DMRG simulation: number of physical sites involved
             into the contraction.
         """
-        # theta, theta_ortho = self.prepare_update(i0)  # moved to main sweep
+        i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
         if optimize:
             E0, theta, N = self.diag(theta, theta_ortho)
         else:
             E0, N = None, 0
-        theta = self.prepare_svd(theta, i0)
-        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        self.set_B(i0, U, S, VH)
+        theta = self.prepare_svd(theta)
+        if self.move_right:
+            next_B = self.env.bra.get_B(i0 + 1, form='B')
+        else:
+            next_B = self.env.bra.get_B(i0 - 1, form='A')
+        U, S, VH, err = self.mixed_svd(theta, next_B)
+        self.set_B(U, S, VH)
 
         update_data = {
             'E0': E0,
@@ -815,7 +792,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         return update_data
 
-    def prepare_svd(self, theta, i0):
+    def prepare_svd(self, theta):
         """Transform theta into matrix for svd.
 
         In contrast with the 2-site engine, the matrix here depends on the direction we move, as we
@@ -835,49 +812,40 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
                 theta.itranspose(['vL', '(p.vR)'])  # ensure the order.
         else:
             if self.move_right:
-                theta = theta.combine_legs(['vL', 'p'])
+                theta = theta.combine_legs(['vL', 'p'], qconj=+1, new_axes=0)
             else:
-                theta = theta.combine_legs(['p', 'vR'])
+                theta = theta.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
         return theta
 
-    def mixed_svd(self, theta, i0, update_LP, update_RP):
+    def mixed_svd(self, theta, next_B):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
         The goal is to split theta and truncate it. For a move to the right::
 
-            |   -- theta --   ==>    -- U -- S --  VH -
-            |        |                  |
+            |   -- theta -- next_B --    ==>    -- U -- S -- VH -- next_B --
+            |        |      |                      |               |
 
         For a move to the left::
 
-            |   -- theta --   ==>    -- U -- S --  VH -
-            |        |                             |
+            |   -- next_B -- theta -- ==>    -- next_B -- U -- S -- VH --
+            |      |         |                  |                   |
+
+        The `VH` for right-move or `U` for left-move is absorebed into the `next_B`.
 
 
-        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values of theta
+        followed by the absorption of VH/U.
 
         With a mixer, the state is perturbed before the SVD.
         The details of the perturbation are defined by the :class:`Mixer` class.
 
-        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
-
-        .. todo ::
-            Fix for single site.
-            In single site DMRG, this method needs to be changed particularly in the case without a
-            mixer: there we want to do the SVD on 1 site (move p to the appropriate side), then
-            contract either U to the left (if moving left) or VH to the right (if moving right)
-            Maybe this method is general and we just need to change set_B?
-
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
+            The optimized wave function, prepared for svd with :meth:`prepare_svd`,
+            i.e. with combined legs.
+        nextB : :class:`~tenpy.linalg.np_conserved.Array`
+            TODO
 
         Returns
         -------
@@ -894,24 +862,20 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         # get qtotal_LR from i0
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
-            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+            qtotal = [theta.qtotal, None] if self.move_right else [None, theta.qtotal]
             U, S, VH, err, _ = svd_theta(theta,
                                          self.trunc_params,
-                                         qtotal_LR=[qtotal_i0, None],
+                                         qtotal_LR=qtotal,
                                          inner_labels=['vR', 'vL'])
-            print("Single site mixed svd:", U.get_leg_labels(), VH.get_leg_labels())
             if self.move_right:
-                VH = npc.tensordot(VH, self.env.bra.get_B(i0+1), axes=['vR', 'vL'])
+                VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
             else:
-                U = npc.tensordot(self.env.bra.get_B(i0-1), U, axes=['vR', 'vL'])
+                U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
             return U, S, VH, err
         else:  # we have a mixer
-            if self.move_right:
-                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0+1, form=None) )
-            else:
-                return self.mixer.perturb_svd(self, theta, i0, self.move_right, self.env.bra.get_B(i0-1, form=None) )
+            return self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
 
-    def set_B(self, i0, U, S, VH):
+    def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
 
         .. todo ::
@@ -934,6 +898,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             The middle part returned by the SVD, ``theta = U S VH``.
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
         """
+        i0 = self.i0
         if self.move_right:
             B0 = U.split_legs(['(vL.p)'])
             print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
@@ -950,7 +915,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
-            self.psi.set_SR(i0 - 1, S)
+            self.psi.set_SL(i0, S)
             for o_env in self.ortho_to_envs:  # TODO indexing here
                 o_env.del_LP(i0)
                 o_env.del_RP(i0 - 1)
@@ -975,7 +940,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
-    def update_LP(self, i0, U):
+    def update_LP(self, U):
         """Update left part of the environment.
 
         We always update the environment at site i0 + 1: this environment then contains the site
@@ -988,15 +953,19 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         i0 : int
             Site index. We calculate ``self.env.get_LP(i0+1)``.
         """
-        print("Setting LP at", i0 + 1)
-        if self.combine:
+        i0 = self.i0
+        if self.combine and self.move_right:
             LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
-            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
+            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
         else:  # as implemented directly in the environment
-            self.env.get_LP(i0 + 1, store=True)
+            if self.move_right:
+                self.env.get_LP(i0 + 1, store=True)
+            else:
+                self.env.get_LP(i0, store=True)
 
-    def update_RP(self, i0, VH):
+
+    def update_RP(self, VH):
         """Update right part of the environment.
 
         We always update the environment at site i0: this environment then contains the site
@@ -1006,19 +975,20 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         Parameters
         ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+            The U as returned by SVD, with combined legs,
+            labels ``'vL', '(vR.p1)'`` (if not self.move_right).
         """
-        print("Setting RP at", i0)
-        if self.combine:
+        i0 = self.i0
+        if self.combine and not self.move_right:
             RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
-            # self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
-            self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)  # TODO is get_RP_age index right?
+            self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
         else:  # as implemented directly in the environment
-            self.env.get_RP(i0, store=True)
+            if self.move_right:
+                self.env.get_RP(i0 - 1, store=True)
+            else:
+                self.env.get_RP(i0, store=True)
 
 
 class Engine(NpcLinearOperator):
@@ -1229,13 +1199,11 @@ class EngineCombine(TwoSiteDMRGEngine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
-    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses.",
-                  category=FutureWarning,
-                  stacklevel=2)
-
-    def __init__(self, psi, model, TwoSiteH, DMRG_params):
+    def __init__(self, psi, model, DMRG_params):
+        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
+                      category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = True  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
+        super().__init__(psi, model, TwoSiteH, DMRG_params)
 
 class EngineFracture(Engine):
     r"""Engine which keeps the legs separate.
@@ -1254,13 +1222,11 @@ class EngineFracture(Engine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
-    warnings.warn("Old-style engines are deprecated in favor of `Sweep subclasses.",
-                  category=FutureWarning,
-                  stacklevel=2)
-
-    def __init__(self, psi, model, TwoSiteH, DMRG_params):
+    def __init__(self, psi, model, DMRG_params):
+        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
+                      category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = False  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
+        super().__init__(psi, model, TwoSiteH, DMRG_params)
 
 
 class Mixer:
@@ -1280,6 +1246,7 @@ class Mixer:
     the perturbation becomes completely irrelevant and the mixer gets disabled.
 
     This original idea of the mixer was introduced in [White2005]_.
+    [Hubig2015]_ discusses the mixer and provides an improved version.
 
     Parameters
     ----------
@@ -1435,7 +1402,6 @@ class SingleSiteMixer(Mixer):
         return U, S, VH, err
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
-        H = engine.env.H
         if not engine.combine:  # Need to get Heff's. Theta is already in right form by now.
             engine.eff_H.combine_Heff()
 
@@ -1467,7 +1433,7 @@ class TwoSiteMixer(SingleSiteMixer):
         Seems to works correctly only with EngineCombine with finite MPS.
     """
 
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
+    def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
         Parameters

@@ -76,7 +76,9 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
     # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
     eng = dmrg.OneSiteDMRGEngine(psi, M, OneSiteH, dmrg_params)
     E, psi = eng.run()
+    E2 = np.sum(M.bond_energies(psi))
     print("E = {E:.13f}".format(E=E))
+    print("E2 = {E:.13f}".format(E=E2))
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
     mag_z = np.sum(psi.expectation_value("Sigmaz"))
@@ -204,7 +206,7 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
 if __name__ == "__main__":
     # example_DMRG_tf_ising_finite(L=10, g=1., verbose=100)
     # print("-" * 100)
-    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=100)
+    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=20)
     print("-" * 100)
     # example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
     # print("-" * 100)
