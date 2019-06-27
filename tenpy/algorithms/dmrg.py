@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 
-def run(psi, model, DMRG_params):
+def run(psi, model, DMRG_params, n=2):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     .. todo ::
@@ -178,10 +178,12 @@ def run(psi, model, DMRG_params):
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
     """
     # initialize the engine
-    Engine_class = get_parameter(DMRG_params, 'engine', 'EngineCombine', 'DMRG')
-    if isinstance(Engine_class, str):
-        Engine_class = globals()[Engine_class]
-    engine = Engine_class(psi, model, DMRG_params)
+    if n ==  1:
+        engine = OneSiteDMRGEngine(psi, model, OneSiteH, DMRG_params)
+    elif n == 2:
+        engine = TwoSiteDMRGEngine(psi, model, TwoSiteH, DMRG_params)
+    else:
+        raise ValueError("For DMRG, can only use n=1 or n=2, not n={}".format(n))
     E, _ = engine.run()
     return {
         'E': E,
