@@ -23,36 +23,75 @@ __all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 class Sweep:
     """Prototype class for a 'sweeping' algorithm.
 
-    In a change from the original setup of the engines, this class is supplied
-    with an environment, rather than a state and a model.
+    This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
+    includes DMRG, TDVP, TEBD, etc. Only DMRG is currently implemented in this way.
 
     .. todo ::
     Possibly include something like plot_update_stats(), plot_sweep_stats().
-    Initialize from psi and model rather than env.
+
+    Parameters
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for :attr:`eff_H`. Has a `length` class attribute which specifies the number of sites
-        updated at once (i.e., whether we do single-site vs. two-site DMRG).
-    mixer : :class:`Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    stats : dict
-        Description
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    combine : bool
+        Whether to combine legs into pipes as far as possible. This reduces the overhead of
+        calculating charge combinations in the contractions. Makes the two-site DMRG engine
+        equivalent to the old `EngineCombine`.
+    E_trunc_list : list
+        List of truncation energies throughout a sweep.
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    finite : bool
+        Whether the MPS boundary conditions are finite (True) or infinite (False)
     i0 : int
         Only set during sweep.
         Left-most of the EffectiveH.length sites to be updated in :meth:`update_local`.
+    lanczos_params : dict
+        Parameters for the Lanczos algorithm.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     move_right : bool
         Only set during sweep.
         Whether the next `i0` of the sweep will be right or left of the current one.
+    ortho_to_envs : list
+        List of environments. Any newly found states will be orthogonalized against these.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    trunc_err_list : list
+        List of truncation errors.
+    trunc_params : dict
+        Parameters for truncations.
     update_LP_RP : (bool, bool)
         Only set during a sweep.
         Whether it is necessary to update the `LP` and `RP`.
         The latter are chosen such that the environment is growing for infinite systems, but
         we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
-    eff_H : :class:`~tenpy.algorithms.mps_sweep.EffectiveH`.
-        Only set during sweep.
-        Effective Hamiltonian, used in the local updates.
+    verbose : bool | int
+        Level of verbosity (i.e. how much status information to print); higher=more output.
     """
 
     def __init__(self, psi, model, EffectiveH, engine_params):
@@ -90,7 +129,7 @@ class Sweep:
     def init_env(self, model=None):
         """(Re-)initialize the environment.
 
-        This function is useful to re-start a Sweep with a slightly different
+        This function is useful to (re-)start a Sweep with a slightly different
         model or different (engine) parameters. Note that we assume that we
         still have the same `psi`.
         Calls :meth:`reset_stats`.
@@ -101,6 +140,12 @@ class Sweep:
         model : :class:`~tenpy.models.MPOModel`
             The model representing the Hamiltonian for which we want to find the ground state.
             If ``None``, keep the model used before.
+
+        Raises
+        ------
+        ValueError
+            If the engine is re-initialized with a new model, which legs are incompatible with
+            those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
         if self.env is None or self.finite:
@@ -149,7 +194,7 @@ class Sweep:
         """Reset the statistics. Useful if you want to start a new Sweep run.
 
         This method is expected to be overwritten by subclass, and should then
-        define self.updat e_stats and self.sweep_stats dicts consistent with the
+        define self.update_stats and self.sweep_stats dicts consistent with the
         statistics generated by the algorithm particular to that subclass.
         """
         warnings.warn("reset_stats() is not overwritten by the engine. No statistics will be collected!")
@@ -164,7 +209,18 @@ class Sweep:
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
-        """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
+        """Perform `N_sweeps` sweeps without optimization to update the environment.
+
+        Parameters
+        ----------
+        N_sweeps : int
+            Number of sweeps to run without optimization
+
+        Returns
+        -------
+        None
+            Only if asked for <=0 sweeps.
+        """
         if N_sweeps <= 0:
             return
         if self.verbose >= 1:
@@ -184,17 +240,13 @@ class Sweep:
         If optimize=False, don't actually diagonalize the effective hamiltonian,
         but only update the environment.
 
-        .. todo ::
-        - Remove anything DMRG-specific
-        - Make sure all called attributes are actually attributes of the Sweep class.
-
         Parameters
         ----------
-        optimize : bool
+        optimize : bool, optional
             Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        **kwargs : dict
-            Further parameters given to :meth:`update_local` and :meth:`post_update_local`
+        meas_E_trunc : bool, optional
+            Whether to measure truncation energies.
 
         Returns
         -------
@@ -250,9 +302,6 @@ class Sweep:
 
         One 'sweep' is a full sequence from the leftmost site to the right and
         back. Only those `LP` and `RP` that can be used later should be updated.
-
-        .. todo ::
-            Should this depend on the length of the active site?
 
         Returns
         -------
@@ -339,9 +388,9 @@ class Sweep:
 
 
 class EffectiveH(NpcLinearOperator):
-    """Prototype class for effective Hamiltonians used in sweep algorithms.
+    """Prototype class for local effective Hamiltonians used in sweep algorithms.
 
-    As an example, the effective Hamiltonian for a two-site (DMRG) algorithm
+    As an example, the local effective Hamiltonian for a two-site (DMRG) algorithm
     looks like:
             |        .---       ---.
             |        |    |   |    |
@@ -350,15 +399,24 @@ class EffectiveH(NpcLinearOperator):
             |        .---       ---.
     where ``H0`` and ``H1`` are MPO tensors.
 
+    Parameters
+    ----------
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    i0 : int
+        Index of the active site if length=1, or of the left-most active site if length>1.
+    combine : bool, optional
+        Whether to combine legs into pipes as far as possible. This reduces the overhead of
+        calculating charge combinations in the contractions. Makes the two-site DMRG engine
+        equivalent to the old `EngineCombine`.
+    move_right : bool, optional
+        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right.
+
     Attributes
     ----------
     length : int
-        Number of (MPS) sites the effective hamiltonian covers.
+        Number of (MPS) sites the effective hamiltonian covers. NB: Class attribute.
     """
-
-    # Documentation: This is the local effective Hamiltonian
-    # class attribute length
-    # provides matvec, __init__ from env, i0
     length = None
 
     def __init__(self, env, i0, combine=False, move_right=True):
@@ -384,7 +442,7 @@ class EffectiveH(NpcLinearOperator):
 
 
 class OneSiteH(EffectiveH):
-    r"""Class defining the one-site Hamiltonian for Lanczos
+    r"""Class defining the one-site effective Hamiltonian for Lanczos.
 
     The effective one-site Hamiltonian ooks like this:
             |        .---   ---.
@@ -396,16 +454,21 @@ class OneSiteH(EffectiveH):
     If `combine` is True, we define either `LHeff` as contraction of `LP` with `W0` (in the case
     `move_right` is True) or `RHeff` as contraction of `RP` and `W0`.
 
-    TODO orthogonal theta's? Johannes: agree, might be usefull to add that here.
+    .. todo ::
+        orthogonal theta's? Johannes: agree, might be usefull to add that here.
 
     Parameters
     ----------
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    i0 : int
+        Index of the active site if length=1, or of the left-most active site if length>1.
     combine : bool
         Whether to combine legs into pipes. This combines the virtual and
-        physical leg for the left site into pipes. This reduces
-        the overhead of calculating charge combinations in the contractions,
-        but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-        Is originally from the wo-site method; unclear if it works wel for 1 site.
+        physical leg for the left site (when moving right) or right side (when moving left)
+        into pipes. This reduces the overhead of calculating charge combinations in the
+        contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
+        Is originally from the wo-site method; unclear if it works well for 1 site.
     move_right : bool
         Wheter the the sweep is moving right or left for the next update.
 
@@ -472,9 +535,10 @@ class OneSiteH(EffectiveH):
         return theta
 
     def combine_Heff(self):
-        """Combine LP with W.
+        """Combine LP and RP with W to form LHeff and RHeff, depending on the direction.
 
-        Need both LHeff and RHeff; be careful that both include the same W though.
+        In a move to the right, we need LHeff. In a move to the left, we need RHeff. Both contain
+        the same W.
         """
         if self.move_right:
             LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
@@ -491,7 +555,7 @@ class OneSiteH(EffectiveH):
 
 
 class TwoSiteH(EffectiveH):
-    r"""Class defining the two-site Hamiltonian for Lanczos
+    r"""Class defining the two-site effective Hamiltonian for Lanczos.
 
     The effective two-site Hamiltonian ooks like this:
             |        .---       ---.
@@ -499,9 +563,26 @@ class TwoSiteH(EffectiveH):
             |       LP----W0--W1---RP
             |        |    |   |    |
             |        .---       ---.
+    This class defines `LHeff` and `RHeff`, which are the contractions of `LP` with `W0`, and `RP`
+    with `W1`, respectively.
 
+    .. todo ::
+        orthogonal theta's.
 
-    TODO orthogonal theta's.
+    Parameters
+    ----------
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    i0 : int
+        Index of the active site if length=1, or of the left-most active site if length>1.
+    combine : bool
+        Whether to combine legs into pipes. This combines the virtual and
+        physical leg for the left site (when moving right) or right side (when moving left)
+        into pipes. This reduces the overhead of calculating charge combinations in the
+        contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
+        Is originally from the wo-site method; unclear if it works well for 1 site.
+    move_right : bool
+        Wheter the the sweep is moving right or left for the next update.
 
     Attributes
     ----------
@@ -546,7 +627,7 @@ class TwoSiteH(EffectiveH):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Labels: ``vL, p0, p1, vR`` if combine=False, ``vL.p0, p1.vR`` if True
+            Labels: ``vL, p0, p1, vR`` if combine=False, ``(vL.p0), (p1.vR)`` if True
 
         Returns
         -------
