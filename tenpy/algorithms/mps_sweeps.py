@@ -267,11 +267,11 @@ class Sweep:
         """
         L = self.psi.L
         if self.finite:
-            l = self.EffectiveH.length
-            assert L >= l
-            i0s = list(range(0, L - l)) + list(range(L - l, 0, -1))
-            move_right = [True] * (L- l) + [False] * (L - l)
-            update_LP_RP = [[True, False]] * (L - l) + [[False, True]] * (L - l)
+            n = self.EffectiveH.length
+            assert L >= n
+            i0s = list(range(0, L - n)) + list(range(L - n, 0, -1))
+            move_right = [True] * (L- n) + [False] * (L - n)
+            update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n)
         else:
             assert L >= 2
             i0s = list(range(0, L)) + list(range(L, 0, -1))
