@@ -448,9 +448,7 @@ class OneSiteH(EffectiveH):
     def combine_Heff(self):
         """Combine LP with W.
 
-        .. todo ::
-        do we need both LP and RP or can we get away with just one? Is there a
-        preference for one or the other?
+        Need both LHeff and RHeff; be careful that both include the same W though.
         """
         LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
         pipeL = LHeff.make_pipe(['vR*', 'p'])

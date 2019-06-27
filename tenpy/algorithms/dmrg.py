@@ -192,7 +192,7 @@ def run(psi, model, DMRG_params):
 
 
 class TwoSiteDMRGEngine(Sweep):
-    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
+    """'Engine' for the two-site DMRG algorithm, as a subclass of the `Sweep` class.
     """
 
     def run(self):
@@ -501,13 +501,15 @@ class TwoSiteDMRGEngine(Sweep):
             E_trunc = E_trunc - E0
         # now we can also remove the LP and RP on outer bonds, which we don't need any more
         if update_RP:  # we move to the left -> delete left LP
-            self.env.del_LP(i0)
+            print("Deleting LP at site", i0 + 1)
+            self.env.del_LP(i0 + 1)  # Always +1, even in single site.
             for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0)
+                o_env.del_LP(i0 + 1)
         if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0 + 1)  # Always +1, even in single site.
+            print("Deleting RP at site", i0)
+            self.env.del_RP(i0)
             for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0 + 1)
+                o_env.del_RP(i0)
 
         # collect statistics
         self.update_stats['i0'].append(i0)
@@ -934,6 +936,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         """
         if self.move_right:
             B0 = U.split_legs(['(vL.p)'])
+            print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
             self.psi.set_B(i0, B0, form='A')  # left-canonical
             self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
             self.psi.set_SR(i0, S)
@@ -944,6 +947,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             self.env.del_RP(i0)
         else:
             B1 = VH.split_legs(['(p.vR)'])
+            print("Setting new MPS tensors on sites {} and {}".format(i0, i0+1))
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
             self.psi.set_SR(i0 - 1, S)
