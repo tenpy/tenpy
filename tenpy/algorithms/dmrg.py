@@ -9,25 +9,29 @@ both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
 and in the thermodynamic limit (``'infinite'`` b.c.).
 
 The function :func:`run` - well - runs one DMRG simulation.
-Internally, it generates an instance of an :class:`Engine`.
+Internally, it generates an instance of an :class:`Sweep`.
 This class implements the common functionality like defining a `sweep`,
 but leaves the details of the contractions to be performed to the derived classes.
 
-Currently, there are two derived classes implementing the contractions.
-They should both give the same results (up to rounding errors).
-Which one is in the end faster is not obvious a priory and might depend on the used model.
+Currently, there are two derived classes implementing the contractions: :class:`OneSiteDMRGEngine`
+and :class:`TwoSiteDMRGEngine`. They differ (as their name implies) in the number of sites which
+are optimized simultaneously.
+They should both give the same results (up to rounding errors). However, if started from a product
+state, :class:`OneSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
+:class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
+occasionally displayed some convergence issues..
+Which one is preffered in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
-Currently, there is only one :class:`Mixer` implemented.
-The mixer should be used initially to avoid that the algorithm gets stuck in local energy minima,
-and then slowly turned off in the end.conda install -c anaconda sphinx
+A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
+minima, and then slowly turned off in the end. For :class:`OneSiteDMRGEngine`, using a mixer is
+crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 .. todo ::
     Write UserGuide/Example!!!
 
 .. todo ::
-    separate effective Hamiltonian from Engine for better readability?
-    Implement one-site DMRG using Sweep and TwoSiteH classes.
+    DMRG superclass (all methods that OneSiteDMRGEngine inherits from TwoSiteDMRGEngine)
     Docstrings
 """
 # Copyright 2018 TeNPy Developers
@@ -55,15 +59,15 @@ __all__ = [
 def run(psi, model, DMRG_params, n=2):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
-    .. todo ::
-    This needs to be rewritten to work with the new engine build.
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
+    n : int, optional
+        Number of active sites in the DMRG algorithm. Switches between :class:`OneSiteDMRGEngine`
+        and :class:`TwoSiteDMRGEngine`.
     DMRG_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
@@ -80,9 +84,11 @@ def run(psi, model, DMRG_params, n=2):
                                  of the environment.
         -------------- --------- ---------------------------------------------------------------
         mixer          str |     Chooses the :class:`Mixer` to be used.
-                       class     A string stands for one of the mixers defined in this module,
-                                 a class is used as custom mixer.
-                                 Default (``None``) uses no mixer, ``True`` uses :class:`Mixer`.
+                       class |   A string stands for one of the mixers defined in this module,
+                       bool      a class is used as custom mixer.
+                                 Default (``None``) uses no mixer, ``True`` uses
+                                 :class:`DensityMatrixMixer` for the 2-site case and
+                                 :class:`SingleSiteMixer` for the 1-site case.
         -------------- --------- ---------------------------------------------------------------
         mixer_params   dict      Non-default initialization arguments of the mixer.
                                  Options may be custom to the specified mixer, so they're
@@ -96,9 +102,12 @@ def run(psi, model, DMRG_params, n=2):
                                  which yields the first excited state (in the same symmetry
                                  sector), and so on.
         -------------- --------- ---------------------------------------------------------------
-        engine         str |     Chooses the (derived class of) :class:`Engine` to be used.
-                       class     A string stands for one of the engines defined in this module,
-                                 a class (not an instance!) can be used as custom engine.
+        combine        bool      Whether to combine legs into pipes. This combines the virtual and
+                                 physical leg for the left site (when moving right) or right side
+                                 (when moving left) into pipes. This reduces the overhead of
+                                 calculating charge combinations in the contractions, but one
+                                 :meth:`matvec` is formally more expensive,
+                                 :math:`O(2 d^3 \chi^3 D)`.
         -------------- --------- ---------------------------------------------------------------
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
@@ -176,6 +185,11 @@ def run(psi, model, DMRG_params, n=2):
     -------
     info : dict
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
+
+    Raises
+    ------
+    ValueError
+        If `n` is not set to `1` or `2`.
     """
     # initialize the engine
     if n ==  1:
@@ -195,6 +209,44 @@ def run(psi, model, DMRG_params, n=2):
 
 class TwoSiteDMRGEngine(Sweep):
     """'Engine' for the two-site DMRG algorithm, as a subclass of the `Sweep` class.
+
+    Parameters
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+
+    Attributes
+    ----------
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweep_stats : dict
+        Statistics at sweep-level.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        Statistics at local update-level.
     """
 
     def run(self):
@@ -386,12 +438,9 @@ class TwoSiteDMRGEngine(Sweep):
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
-        .. todo ::
-            generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
-
         Returns
         -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -424,29 +473,35 @@ class TwoSiteDMRGEngine(Sweep):
 
         Parameters
         ----------
-        # TODO : theta, theta_ortho
-        optimize : bool
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta`.
+        optimize : bool, optional
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        meas_E_trunc : bool
+        meas_E_trunc : bool, optional
             Wheter to measure the energy after truncation.
 
         Returns
         -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
+        update_data : dict
+            Data computed during the local update, as described in the following list.
+
+            E_total : float
+                Total energy, obtained *before* truncation (if ``optimize=True``),
+                or *after* truncation (if ``optimize=False``) (but never ``None``).
+            E_trunc : float | ``None``
+                The energy difference of the total energy after minus before truncation,
+                ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+            err : :class:`~tenpy.algorithms.truncation.TruncationError`
+                The truncation error introduced after bond optimization.
+            N_lanczos : int
+                Dimension of the Krylov space used for optimization in the lanczos algorithm.
+                0 if ``optimize=False``.
+            age : int
+                Current size of the DMRG simulation: number of physical sites involved
+                into the contraction.
         """
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
@@ -468,19 +523,17 @@ class TwoSiteDMRGEngine(Sweep):
         return update_data
 
     def post_update_local(self, update_data, meas_E_trunc=False):
-        """Summary
+        """Perform post-update actions.
+
+        Compute truncation energy, remove `LP`/`RP` that are no longer needed and collect
+        statistics.
 
         Parameters
         ----------
-        update_data : TYPE
-            Description
-        **kwargs
-            Description
-
-        Returns
-        -------
-        TYPE
-            Description
+        update_data : dict
+            Data computed during the local update, as described in the following list.
+        meas_E_trunc : bool, optional
+            Wheter to measure the energy after truncation.
         """
         E0 = update_data['E0']
         i0 = self.i0
@@ -639,7 +692,8 @@ class TwoSiteDMRGEngine(Sweep):
 
         Parameters
         ----------
-        U
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by the SVD, with combined legs, labels ``'vL.p0', 'vR'``.
         """
         i0 = self.i0
         if self.combine:
@@ -672,27 +726,56 @@ class TwoSiteDMRGEngine(Sweep):
 class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
 
-    .. todo ::
-        Move inherited methods to a general DMRGEngine superclass.
-        Note: sweeps left/right need to be treated differently with respect to
-        e.g. LHeff and RHeff
-        Test if this engine reprodcues results from the two-site engine.
-
-    Inherited from TwoSiteDMRGEngine:
+    Inherits the following methods from TwoSiteDMRGEngine:
     - run()
     - reset_stats()
     - diag()
-    - mixed_svd()
-    - set_B()
     - post_update_local()
 
+    .. todo ::
+        Move inherited methods to a general DMRGEngine superclass.
+
+    Parameters
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+
+    Attributes
+    ----------
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweep_stats : dict
+        Statistics at sweep-level.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        Statistics at local update-level.
     """
 
     def prepare_update(self):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        .. todo ::
-            generalize get_theta with n=EffectiveH.length? Then transposing will be harder.
+        """Prepare `self` to represent the effective Hamiltonian on site ``i0``.
 
         Returns
         -------
@@ -737,15 +820,12 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
         """Perform site-update on the site ``i0``.
 
-        .. todo ::
-            The only difference between this and update_local() in the two-site
-            engine is that get_RP_age() is indexed by i0 rather than i0+1. Thus,
-            could potentially turn this into a single DMRG engine by specifying
-            the number of sites?
-
         Parameters
         ----------
-        # theta, theta_ortho
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta`.
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -799,13 +879,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         In contrast with the 2-site engine, the matrix here depends on the direction we move, as we
         need `'p'` to point away from the direction we are going in.
-
-        .. todo ::
-            For combining 1- and 2-site DMRG into a single engine, this is one
-            of the trickier methods --> figure out how to do legs based on the
-            'length' of the effective Hamiltonian
-            Needs to be different for left/right sweeps.
-            IMPORTANT: should not use an extra B!
         """
         if self.combine:
             if self.move_right:
@@ -834,7 +907,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         The `VH` for right-move or `U` for left-move is absorebed into the `next_B`.
 
-
         Without a mixer, this is done by a simple svd and truncation of Schmidt values of theta
         followed by the absorption of VH/U.
 
@@ -847,17 +919,17 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
             The optimized wave function, prepared for svd with :meth:`prepare_svd`,
             i.e. with combined legs.
         nextB : :class:`~tenpy.linalg.np_conserved.Array`
-            TODO
+            MPS tensor at the site that will be visited next.
 
         Returns
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singluar values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -880,20 +952,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
 
-        .. todo ::
-            Depending on whether the mixer is activated, we may or may not want to update the next
-            site. In any case, depending on the direction we're going, we want to do different things.
-
-            New idea: we should assume set_B always gets two updated sites worth of tensors;
-            mixed_svd() should do the extra contracting in case there is no mixer. This is because
-            perturb_svd() (called when a mixer is on) definitely involves two sites, so having
-            mixed_svd() do that makes set_B() uniform over those two cases.
-
         Parameters
         ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1`` (for right-moving) or ``i0-1, i0`` (for
-            left-moving).
         U, VH : :class:`~tenpy.linalg.np_conserved.Array`
             Left and Right-canonical matrices as returned by the SVD.
         S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
@@ -943,10 +1003,9 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     def update_LP(self, U):
         """Update left part of the environment.
 
-        We always update the environment at site i0 + 1: this environment then contains the site
-        where we just performed a local update (when sweeping right).
-
-        Assumption: update_LP only gets called when the algorithm is moving to the right.
+        The site at which to update the environment depends on the direction of the sweep. If we
+        are sweeping right, update the invironment at `i0+1`. If we are sweeping left, update the
+        environment at `i0`
 
         Parameters
         ----------
@@ -968,10 +1027,9 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
     def update_RP(self, VH):
         """Update right part of the environment.
 
-        We always update the environment at site i0: this environment then contains the site
-        where we just performed a local update (when sweeping left).
-
-        Assumption: update_RP only gets called when the algorithm is moving to the left.
+        The site at which to update the environment depends on the direction of the sweep. If we
+        are sweeping right, update the invironment at `i0`. If we are sweeping left, update the
+        environment at `i0-1`
 
         Parameters
         ----------
@@ -993,6 +1051,15 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
 class Engine(NpcLinearOperator):
     """Prototype for an DMRG 'Engine'.
+
+    This class is deprecated with the arrival of the new `Sweep`-based classes. It is kept alive
+    only because Leon has not yet ported plot_update_stats() and plot_sweep_stats() to the new
+    setup
+
+    .. todo ::
+        Port plotter functions.
+
+    The old docstring:
 
     This class is the working horse of DMRG. It implements the :meth:`sweep` and large
     parts of the (two-site) optimization.
@@ -1345,11 +1412,7 @@ class Mixer:
 class SingleSiteMixer(Mixer):
     """Mixer for single-site DMRG.
 
-    Perform a subspace expansion following [Hubig2015]_.
-
-    .. todo :
-        This is still under development.
-        Make work with `combine=False`
+    Performs a subspace expansion following [Hubig2015]_.
     """
 
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
@@ -1359,9 +1422,6 @@ class SingleSiteMixer(Mixer):
         (which might include applications of `H`).
         These density matrices are diagonalized and truncated such that we effectively perform
         a svd for the case ``mixer.amplitude=0``.
-
-        .. todo ::
-            I think the axes specified for the tensordots are wrong...
 
         Parameters
         ----------
@@ -1402,7 +1462,34 @@ class SingleSiteMixer(Mixer):
         return U, S, VH, err
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
-        if not engine.combine:  # Need to get Heff's. Theta is already in right form by now.
+        """Expand the MPS subspace, to allow the bond dimension to increase.
+
+        This is the subspace expansion following [Hubig2015]_.
+
+        Parameters
+        ----------
+        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
+            'Engine' for the DMRG algorithm
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Optimized guess for the ground state of the effective local Hamiltonian.
+        i0 : int
+            Site index at which the local update has taken place.
+        move_right : bool
+            Whether the next `i0` of the sweep will be right or left of the current one.
+        next_B : :class:`~tenpy.linalg.np_conserved.Array`
+            The subspace expansion requires to change the tensor on the next site as well.
+            If `move_right`, it should correspond to ``engine.psi.get_B(i0+1, form='B')``.
+            If not `move_right`, it should correspond to ``engine.psi.get_B(i0-1, form='A')``.
+
+        Returns
+        -------
+        theta :
+            Local MPS tensor at site `i0` after subspace expansion.
+        next_B :
+            MPS tensor at site `i0+1` or `i0-1` (depending on sweep direction) after subspace
+            expansion.
+        """
+        if not engine.combine:  # Need to get Heff's even if combine=False
             engine.eff_H.combine_Heff()
 
         if move_right:  # theta has legs (vL.p), vR
@@ -1431,6 +1518,7 @@ class TwoSiteMixer(SingleSiteMixer):
     .. todo :
         This is still under development.
         Seems to works correctly only with EngineCombine with finite MPS.
+        Has not been ported to `Sweep`-based setup yet. Do we need to?
     """
 
     def perturb_svd(self, engine, theta, i0, move_right):
@@ -1493,7 +1581,7 @@ class DensityMatrixMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.

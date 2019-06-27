@@ -1,8 +1,7 @@
 """
-.. TODO ::
+.. todo ::
 - Overall docstring for this file.
-- Docstrings
-- Rebuild DMRG and TDVP engines as subclasses of sweep
+- Rebuild TDVP engine as subclasses of sweep
 - Do testing
 """
 # Copyright 2018 TeNPy Developers
@@ -43,7 +42,6 @@ class Sweep:
         The model representing the Hamiltonian for which we want to find the ground state.
     psi : :class:`~tenpy.networks.mps.MPS`
         Initial guess for the ground state, which is to be optimized in-place.
-
 
     Attributes
     ----------
