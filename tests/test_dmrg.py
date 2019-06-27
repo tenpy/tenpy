@@ -5,6 +5,7 @@ import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import dmrg
+from tenpy.algorithms.mps_sweeps import OneSiteH, TwoSiteH
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
 import pytest
@@ -23,23 +24,28 @@ def e0_tranverse_ising(g=0.5):
 def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
-
-@pytest.mark.parametrize("bc_MPS, engine, mixer", [('finite', 'EngineCombine', None),
-                                                   ('finite', 'EngineCombine', True),
-                                                   ('finite', 'EngineFracture', True),
-                                                   ('finite', 'EngineCombine', 'TwoSiteMixer'),
-                                                   ('infinite', 'EngineCombine', None),
-                                                   ('infinite', 'EngineCombine', True),
-                                                   ('infinite', 'EngineFracture', True)])
+params = [('finite', True, True, 1),  # 1-site DMRG with mixer=False is expected to fail.
+          ('finite', True, True, 2),
+          ('finite', True, False, 2),
+          ('finite', False, True, 1),
+          ('finite', False, True, 2),
+          ('finite', False, False, 2),
+          ('infinite', True, True, 1),
+          ('infinite', True, True, 2),
+          ('infinite', True, False, 2),
+          ('infinite', False, True, 1),
+          ('infinite', False, True, 2),
+          ('infinite', False, False, 2)]
+@pytest.mark.parametrize("bc_MPS, combine, mixer, n", params)
 @pytest.mark.slow
-def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
+def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     dmrg_pars = {
         'verbose': 5,
-        'engine': engine,
+        'combine': combine,
         'mixer': mixer,
         'chi_list': {
             0: 10,
@@ -49,7 +55,7 @@ def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
         'max_S_err': 1.e-8,
         'N_sweeps_check': 4,
         'mixer_params': {
-            'disable_after': 6,
+            'disable_after': 15,
             'amplitude': 1.e-5
         },
         'trunc_params': {
@@ -64,10 +70,10 @@ def test_dmrg(bc_MPS, engine, mixer, L=4, g=1.5):
     if mixer is None:
         del dmrg_pars['mixer_params']  # avoid warning of unused parameter
     if bc_MPS == 'infinite':
-        if mixer is not None:
-            dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
+        # if mixer is not None:
+        #     dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
         dmrg_pars['start_env'] = 1
-    res = dmrg.run(psi, M, dmrg_pars)
+    res = dmrg.run(psi, M, dmrg_pars, n)
     if bc_MPS == 'finite':
         ED = ExactDiag(M)
         ED.build_full_H_from_mpo()
@@ -96,15 +102,15 @@ def test_dmrg_rerun(L=2):
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
-    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4}
-    eng = dmrg.EngineCombine(psi, M, dmrg_pars)
+    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine':True}
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
     M = TFIChain(model_params)
-    del eng.DMRG_params['chi_list']
+    del eng.engine_params['chi_list']
     new_chi = 15
-    eng.DMRG_params['trunc_params']['chi_max'] = new_chi
+    eng.engine_params['trunc_params']['chi_max'] = new_chi
     eng.init_env(M)
     E2, psi = eng.run()
     assert max(psi.chi) == new_chi
@@ -127,8 +133,8 @@ def test_dmrg_excited(eps=1.e-12):
     print("Exact diag: E[:5] = ", ED.E[:5])
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
-    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}}
-    eng0 = dmrg.EngineCombine(psi0, M, dmrg_pars)
+    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}, 'combine':True}
+    eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, TwoSiteH, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
     ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
@@ -136,7 +142,7 @@ def test_dmrg_excited(eps=1.e-12):
     # second DMRG run for first excited state
     dmrg_pars['orthogonal_to'] = [psi0]
     psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
-    eng1 = dmrg.EngineCombine(psi1, M, dmrg_pars)
+    eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, TwoSiteH, dmrg_pars)
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
     ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
@@ -145,7 +151,7 @@ def test_dmrg_excited(eps=1.e-12):
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1] * (L // 2), bc=bc)
-    eng2 = dmrg.EngineCombine(psi2, M, dmrg_pars)
+    eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, TwoSiteH, dmrg_pars)
     E2, psi2 = eng2.run()
     print(E2)
     assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
