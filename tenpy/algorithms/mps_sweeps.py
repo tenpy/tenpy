@@ -540,13 +540,13 @@ class OneSiteH(EffectiveH):
         """
         if self.move_right:
             LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
-            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p'])
+            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p'], qconj=+1)
             self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
                                             pipes=[pipeL, pipeL.conj()],
                                             new_axes=[0, 2])
         else:
             RHeff = npc.tensordot(self.W, self.RP, axes=['wR', 'wL'])
-            self.pipeR = pipeR = RHeff.make_pipe(['p', 'vL*'])
+            self.pipeR = pipeR = RHeff.make_pipe(['p', 'vL*'], qconj=-1)
             self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
                                             pipes=[pipeR, pipeR.conj()],
                                             new_axes=[-1, 0])
@@ -651,12 +651,12 @@ class TwoSiteH(EffectiveH):
         Hamiltonian with piped legs.
         """
         LHeff = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
-        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'])
+        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
         self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, 2])
         RHeff = npc.tensordot(self.RP, self.W2, axes=['wL', 'wR'])
-        self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'])
+        self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[2, 0])
