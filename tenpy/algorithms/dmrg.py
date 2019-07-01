@@ -594,7 +594,8 @@ class TwoSiteDMRGEngine(Sweep):
         if self.combine:
             return theta  # Theta is already combined.
         else:
-            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
+            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1],
+                                      qconj=[+1, -1])
 
     def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
@@ -1022,7 +1023,6 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
                 self.env.get_LP(i0 + 1, store=True)
             else:
                 self.env.get_LP(i0, store=True)
-
 
     def update_RP(self, VH):
         """Update right part of the environment.
