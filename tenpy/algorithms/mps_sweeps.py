@@ -1,4 +1,20 @@
-"""
+"""'Sweep' algorithm and effective Hamiltonians.
+
+Many MPS-based algorithms use a 'sweep' structure, wherein local updates are
+performed on the MPS tensors sequentially, first from left to right, then from
+right to left. This procedure is common to DMRG, TDVP, sequential time evolution,
+etc.
+
+Another common feature of these algorithms is the use of an effective local 
+Hamiltonian to perform the local updates. The most prominent example of this is 
+probably DMRG, where the local MPS object is optimized with respect to the rest
+of the MPS-MPO-MPS network, the latter forming the effective Hamiltonian.
+
+the :class:`Sweep` class attempts to generalize as many aspects of 'sweeping'
+algorithms as possible. :class:`EffectiveH` and its subclasses implement the 
+effective Hamiltonians mentioned above. Currently, effective Hamiltonians for 
+1-site and 2-site optimization are implemented.
+
 .. todo ::
 - Overall docstring for this file.
 - Rebuild TDVP engine as subclasses of sweep
