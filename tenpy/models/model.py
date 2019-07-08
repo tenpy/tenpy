@@ -1164,6 +1164,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         This may happen in any of the ``init_...()`` methods.
         The parameter ``'verbose'`` is read out in the `__init__` of this function
         and specifies how much status information should be printed during initialization.
+        The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
+        sorted by charges (see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`).
 
     Attributes
     ----------
@@ -1190,7 +1192,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
         # 7) initialize H_MPO
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        H_MPO = self.calc_H_MPO()
+        if get_parameter(model_params, 'sort_mpo_legs', False, self.name):
+            H_MPO.sort_legcharges()
+        MPOModel.__init__(self, lat, H_MPO)
         if isinstance(self, NearestNeighborModel):
             # 8) initialize H_bonds
             NearestNeighborModel.__init__(self, lat, self.calc_H_bond())

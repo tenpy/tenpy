@@ -30,11 +30,15 @@ def test_MPO():
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 3:4, :, :]
             H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
+            H_copy = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
             H.test_sanity()
             print(H.dim)
             print(H.chi)
             assert H.is_equal(H)  # everything should be equal to itself
             assert H.is_hermitian()
+            H.sort_legcharges()
+            H.test_sanity()
+            assert H.is_equal(H_copy)
         if L == 4:
             H2 = H.group_sites(n=2)
             H2.test_sanity()
