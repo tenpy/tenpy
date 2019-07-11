@@ -17,7 +17,7 @@ def test_ToricCode_general():
 
 
 @pytest.mark.slow
-def test_ToricCode(Lx=1, Ly=2):
+def test_ToricCode(Lx=2, Ly=2):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         model_params = {'Lx': Lx, 'Ly': Ly}
