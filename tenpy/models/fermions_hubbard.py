@@ -87,8 +87,8 @@ class FermionicHubbardModel(CouplingMPOModel):
         mu = get_parameter(model_params, 'mu', 0., self.name, True)
 
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, 0, 'Ntot')
-            self.add_onsite(U, 0, 'NuNd')
+            self.add_onsite(mu, u, 'Ntot')
+            self.add_onsite(U, u, 'NuNd')
         for u1, u2, dx in self.lat.nearest_neighbors:
             self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx)
             self.add_coupling(np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
