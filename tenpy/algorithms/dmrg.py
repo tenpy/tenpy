@@ -1010,8 +1010,9 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
 
         Parameters
         ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by SVD, with combined legs,
+            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
         """
         i0 = self.i0
         if self.combine and self.move_right:
@@ -1034,8 +1035,8 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         Parameters
         ----------
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs,
-            labels ``'vL', '(vR.p1)'`` (if not self.move_right).
+            The VH as returned by SVD, with combined legs,
+            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
         """
         i0 = self.i0
         if self.combine and not self.move_right:
