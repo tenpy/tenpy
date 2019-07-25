@@ -27,7 +27,7 @@ def plot_lattice():
     plt.show()
 
 
-def run(phi_ext=np.linspace(0, 1.0, 3)):
+def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
