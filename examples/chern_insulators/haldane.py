@@ -9,62 +9,28 @@ import numpy as np
 
 from tenpy.algorithms import dmrg
 from tenpy.networks.mps import MPS
-
-# TODO: move model in tenpy/models/
-from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import get_parameter
-from tenpy.networks.site import FermionSite
+from tenpy.models.fermions_haldane import FermionicHaldaneModel
 
 
-class FermionicHaldaneModel(CouplingMPOModel):
+def plot_model(model_params, phi_ext=0.1):
 
-    def __init__(self, model_params):
+    model_params['phi_ext'] = phi_ext
 
-        model_params.setdefault('lattice', 'Honeycomb')
-        CouplingMPOModel.__init__(self, model_params)
-
-    def init_sites(self, model_params):
-
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        site = FermionSite(conserve=conserve)
-        return site
-
-    def init_terms(self, model_params):
-
-        t = get_parameter(model_params, 't', -1., self.name, True)
-        V = get_parameter(model_params, 'V', 0, self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
-
-        phi = np.arccos(3*np.sqrt(3/43))
-        t2 = (np.sqrt(129)/36) * t * np.exp(1j * phi)
-
-        for u in range(len(self.lat.unit_cell)):
-
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 0, 'N', category='mu N')
-
-        for u1, u2, dx in self.lat.nearest_neighbors:
-
-            t_phi = self.coupling_strength_add_ext_flux(t, dx, [0, phi_ext])
-            self.add_coupling(t_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t Cd_i C_j')
-            self.add_coupling(np.conj(t_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t Cd_i C_j h.c.')  # h.c.
-            self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
-
-        for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])), (0, 0, np.array([0, -1])),
-                           (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
-
-            t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t2 Cd_i C_j')
-            self.add_coupling(np.conj(t2_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t2 Cd_i C_j h.c.')  # h.c.
+    M = FermionicHaldaneModel(model_params)
+    import matplotlib.pyplot as plt
+    plt.figure()
+    ax = plt.gca()
+    M.lat.plot_sites(ax)
+    M.coupling_terms['t Cd_i C_j'].plot_coupling_terms(ax, M.lat)
+    M.coupling_terms['t2 Cd_i C_j'].plot_coupling_terms(ax, M.lat, text='{op_j!s} {strength_angle:.2f}', text_pos=0.9)
+    print(M.coupling_terms['t Cd_i C_j'].to_TermList())
+    ax.set_aspect(1.)
+    plt.show()
 
 
-def run(phi_ext=np.linspace(0, 1.0, 3)):
+def run(model_params, phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
-
-    model_params = dict(conserve='N', t=-1, mu=0, V=0, bc_MPS='infinite',
-                        order='default', Lx=1, Ly=3, bc_y='cylinder', verbose=0)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
@@ -87,7 +53,7 @@ def run(phi_ext=np.linspace(0, 1.0, 3)):
         'verbose': 1.,
     }
 
-    prod_state = ['full', 'empty'] * (model_params['Lx'] * model_params['Ly'] * 2 // 2)
+    prod_state = ['empty', 'full'] * (model_params['Lx'] * model_params['Ly'])
 
     eng = None
 
@@ -123,8 +89,8 @@ def plot_results(data):
     ax = plt.gca()
     ax.plot(data['phi_ext'], data['QL'], marker='o')
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
-    ax.set_ylabel(r"$ \langle Q^L \rangle$")
-    plt.show()
+    ax.set_ylabel(r"$ \langle Q^L(\Phi_y) \rangle$")
+    plt.savefig("haldane_charge_pump.pdf")
 
     plt.figure()
     ax = plt.gca()
@@ -143,10 +109,14 @@ def plot_results(data):
     ax.set_ylabel(r"$ \epsilon_\alpha $")
     ax.set_ylim(0., 8.)
     ax.legend(loc='upper right')
-    plt.show()
+    plt.savefig("haldane_ent_spec_flow.pdf")
 
 
 if __name__ == "__main__":
 
-    data = run()
+    model_params = dict(conserve='N', t=-1, mu=0, V=0, bc_MPS='infinite',
+                        order='default', Lx=1, Ly=3, bc_y='cylinder', verbose=0)
+
+    # plot_model(model_params)
+    data = run(model_params)
     plot_results(data)

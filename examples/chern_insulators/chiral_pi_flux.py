@@ -9,41 +9,8 @@ import numpy as np
 
 from tenpy.algorithms import dmrg
 from tenpy.networks.mps import MPS
-
-# TODO: move model in tenpy/models/
-from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import get_parameter
-from tenpy.networks.site import FermionSite
-
-from tenpy.models import lattice
+from tenpy.models.fermions_pi_flux import FermionicPiFluxModel, BipartiteSquare
 from tenpy.networks import site
-import sys
-
-
-class BipartiteSquare(lattice.Lattice):
-
-    def __init__(self, Lx, Ly, siteA, **kwargs):
-
-        basis = np.array(([2, 0.], [0, 2]))
-
-        pos = np.array(([0, 0], [1, 0], [0, 1], [1, 1]))
-
-        kwargs.setdefault('order', 'default')
-        kwargs.setdefault('bc', 'periodic')
-        kwargs.setdefault('bc_MPS', 'infinite')
-        kwargs.setdefault('basis', basis)
-        kwargs.setdefault('positions', pos)
-
-        super().__init__([Lx, Ly], [siteA, siteA, siteA, siteA], **kwargs)
-
-        self.NN = [(0, 1, np.array([0, 0])), (1, 3, np.array([0, 0])),
-                   (3, 2, np.array([0, 0])), (2, 0, np.array([0, 0])),
-                   (2, 0, np.array([0, 1])), (1, 3, np.array([0, -1])),
-                   (0, 1, np.array([-1, 0])), (3, 2, np.array([1, 0]))]
-        self.nNNdashed = [(0, 3, np.array([0, 0])), (2, 1, np.array([0, 0])),
-                          (3, 0, np.array([1, 1])), (1, 2, np.array([1, -1]))]
-        self.nNNdotted = [(1, 2, np.array([1, 0])), (3, 0, np.array([1, 0])),
-                          (2, 1, np.array([0, 1])), (3, 0, np.array([0, 1]))]
 
 
 def plot_lattice():
@@ -60,75 +27,11 @@ def plot_lattice():
     plt.show()
 
 
-class FermionicPiFluxModel(CouplingMPOModel):
-
-    def __init__(self, model_params):
-
-        CouplingMPOModel.__init__(self, model_params)
-
-    def init_sites(self, model_params):
-
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        site = FermionSite(conserve=conserve)
-        return site
-
-    def init_lattice(self, model_params):
-
-        choice = get_parameter(model_params, 'lattice', 'BipartiteSquare', self.name)
-
-        if choice != 'BipartiteSquare':
-            sys.exit("Error: Please choose the BipartiteSquare for pi_flux.")
-
-        Lx = get_parameter(model_params, 'Lx', 1, self.name)
-        Ly = get_parameter(model_params, 'Ly', 3, self.name)
-
-        fs = self.init_sites(model_params)
-
-        lat = BipartiteSquare(Lx, Ly, fs)
-
-        print(lat.N_sites)
-
-        return lat
-
-    def init_terms(self, model_params):
-
-        t = get_parameter(model_params, 't', -1., self.name, True)
-        V = get_parameter(model_params, 'V', 0, self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
-
-        t1 = t * np.exp(1j * np.pi/4)
-        t2 = t / np.sqrt(2)
-
-        for u in range(len(self.lat.unit_cell)):
-
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 1, 'N', category='mu N')
-
-        for u1, u2, dx in self.lat.NN:
-
-            t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
-            self.add_coupling(np.conj(t1_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t1 Cd_i C_j h.c.')
-
-        for u1, u2, dx in self.lat.nNNdashed:
-
-            t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t2 Cd_i C_j')
-            self.add_coupling(np.conj(t2_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t2 Cd_i C_j h.c.')
-
-        for u1, u2, dx in self.lat.nNNdotted:
-
-            t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='-t2 Cd_i C_j')
-            self.add_coupling(-np.conj(t2_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='-t2 Cd_i C_j h.c.')
-
-
 def run(phi_ext=np.linspace(0, 1.0, 3)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, mu=0, V=0, lattice='BipartiteSquare', Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, mu=0, V=0, Lx=1, Ly=3, verbose=1)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
@@ -151,9 +54,7 @@ def run(phi_ext=np.linspace(0, 1.0, 3)):
         'verbose': 1.,
     }
 
-    prod_state = ['full', 'empty'] * (model_params['Lx'] * model_params['Ly'] * 2)
-
-    print(prod_state)
+    prod_state = ['empty', 'full'] * (model_params['Lx'] * model_params['Ly'] * 2)
 
     eng = None
 
@@ -166,9 +67,6 @@ def run(phi_ext=np.linspace(0, 1.0, 3)):
 
         if eng is None:  # first time in the loop
             M = FermionicPiFluxModel(model_params)
-
-            print("sites = ", M.lat.mps_sites())
-
             psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS)
             eng = dmrg.EngineCombine(psi, M, dmrg_params)
         else:
@@ -192,8 +90,8 @@ def plot_results(data):
     ax = plt.gca()
     ax.plot(data['phi_ext'], data['QL'], marker='o')
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
-    ax.set_ylabel(r"$ \langle Q^L \rangle$")
-    plt.show()
+    ax.set_ylabel(r"$ \langle Q^L(\Phi_y) \rangle$")
+    plt.savefig("chiral_pi_flux_charge_pump.pdf")
 
     plt.figure()
     ax = plt.gca()
@@ -212,7 +110,7 @@ def plot_results(data):
     ax.set_ylabel(r"$ \epsilon_\alpha $")
     ax.set_ylim(0., 8.)
     ax.legend(loc='upper right')
-    plt.show()
+    plt.savefig("chiral_pi_flux_ent_spec_flow.pdf")
 
 
 if __name__ == "__main__":

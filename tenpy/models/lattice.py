@@ -82,9 +82,13 @@ class Lattice:
         Note that we include each coupling only in one direction; to get both directions, use
         ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-nearest neigbhors.
+        Same as `nearest_neighbors`, but for the next-nearest neighbors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-next-nearest neigbhors.
+        Same as `nearest_neighbors`, but for the next-next-nearest neighbors.
+    fourth_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the fourth-nearest neighbors. (Only implemented for Honeycomb).
+    fifth_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as `nearest_neighbors`, but for the fifth-nearest neighbors. (Only implemented for Honeycomb).
 
     Attributes
     ----------
@@ -125,9 +129,13 @@ class Lattice:
         Note that we include each coupling only in one direction; to get both directions, use
         ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
+        Same as :attr:`nearest_neighbors`, but for the next-nearest neighbors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neigbhors.
+        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neighbors.
+    fourth_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as :attr:`nearest_neighbors`, but for the fourth-nearest neighbors. (Only implemented for Honeycomb).
+    fifth_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
+        Same as :attr:`nearest_neighbors`, but for the fifth-nearest neighbors. (Only implemented for Honeycomb).
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -152,7 +160,9 @@ class Lattice:
                  positions=None,
                  nearest_neighbors=None,
                  next_nearest_neighbors=None,
-                 next_next_nearest_neighbors=None):
+                 next_next_nearest_neighbors=None,
+                 fourth_nearest_neighbors=None,
+                 fifth_nearest_neighbors=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
@@ -179,6 +189,8 @@ class Lattice:
         self.nearest_neighbors = nearest_neighbors
         self.next_nearest_neighbors = next_nearest_neighbors
         self.next_next_nearest_neighbors = next_next_nearest_neighbors
+        self.fourth_nearest_neighbors = fourth_nearest_neighbors
+        self.fifth_nearest_neighbors = fifth_nearest_neighbors
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -1049,6 +1061,12 @@ class Chain(SimpleLattice):
         kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([
             3,
         ]))])
+        kwargs.setdefault('fourth_nearest_neighbors', [(0, 0, np.array([
+            4,
+        ]))])
+        kwargs.setdefault('fifth_nearest_neighbors', [(0, 0, np.array([
+            5,
+        ]))])
         # and otherwise default values.
         SimpleLattice.__init__(self, [L], site, **kwargs)
 
@@ -1164,7 +1182,7 @@ class Honeycomb(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `[[next_]next_]nearest_neighbors` (etc.) are set accordingly.
     """
     dim = 2
 
@@ -1179,9 +1197,15 @@ class Honeycomb(Lattice):
         nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
                (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
         nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
+        fourthNN = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])), (0, 1, np.array([1, -2])),
+                    (0, 1, np.array([0, -2])), (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
+        fifthNN = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])), (0, 0, np.array([1, -2])),
+                   (0, 0, np.array([-1, -1])), (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('fourth_nearest_neighbors', fourthNN)
+        kwargs.setdefault('fifth_nearest_neighbors', fifthNN)
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
     def ordering(self, order):
