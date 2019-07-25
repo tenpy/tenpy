@@ -32,7 +32,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, mu=0, V=0, lattice='TripartiteTriangular', Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, mu=0, V=0, Lx=1, Ly=3, verbose=1)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
