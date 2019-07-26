@@ -15,10 +15,6 @@ tenpy/linalg/*.c
 tenpy/linalg/*.cpp
 tenpy/linalg/*.so
 tenpy/linalg/*.html
-examples/*.pdf
-examples/*.pkl
-toycodes/*.pdf
-toycodes/*.pkl
 tests/export_import_test/data/*
 tests/benchmark/*.txt
 tests/benchmark/*.png
