@@ -68,16 +68,11 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         t = get_parameter(model_params, 't', -1., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
         phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
 
         t1 = t
         t2 = 0.39*t*1j
         t3 = -0.34*t
-
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 1, 'N', category='mu N')
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
