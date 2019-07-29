@@ -148,6 +148,41 @@ class NearestNeighborModel(Model):
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
+    @classmethod
+    def from_MPOModel(cls, mpo_model):
+        """Initialize a NearestNeighborModel from a model class defining an MPO.
+
+        This is especially usefull in combination with :meth:`MPOModel.group_sites`.
+
+        Parameters
+        ----------
+        mpo_model : :class:`MPOModel`
+            A model instance implementing the MPO.
+            Does not need to be a :class:`NearestNeigborModel`, but should only have
+            nearest-neighbor couplings.
+
+        Example
+        -------
+        The `SpinChainNNN2` has next-nearest-neighbor couplings and thus only implements an MPO:
+        >>> from tenpy.models.spins_nnn import SpinChainNNN2
+        >>> nnn_chain = SpinChainNNN2({'L': 20})
+        parameter 'L'=20 for SpinChainNNN2
+        >>> print(isinstance(nnn_chain, NearestNeighborModel))
+        False
+        >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
+        range before grouping: 2
+
+        By grouping each two neighboring sites, we can bring it down to nearest neighbors.
+        >>> nnn_chain.group_sites(2)
+        >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
+        range after grouping: 1
+
+        Yet, TEBD will not yet work, as the model doesn't define `H_bond`.
+        However, we can initialize a NearestNeighborModel from the MPO::
+        >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
+        """
+        return cls(mpo_model.lat, mpo_model.calc_H_bond_from_MPO())
+
     def test_sanity(self):
         if len(self.H_bond) != self.lat.N_sites:
             raise ValueError("wrong len of H_bond")

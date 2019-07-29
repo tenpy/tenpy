@@ -1,11 +1,17 @@
 """Next-Nearest-neighbour spin-S models.
 
 Uniform lattice of spin-S sites, coupled by next-nearest-neighbour interactions.
-We have two variants implementing the same hamiltonian. The first uses the
+We have two variants implementing the same hamiltonian.
+The :class:`SpinChainNNN` uses the
 :class:`~tenpy.networks.site.GroupedSite` to keep it a
 :class:`~tenpy.models.model.NearestNeighborModel` suitable for TEBD,
-while the second one just involves longer-range couplings in the MPO.
-The second one is preferable for pure DMRG calculations.
+while the :class:`SpinChainNNN2` just involves longer-range couplings in the MPO.
+The latter is preferable for pure DMRG calculations and avoids having to add each of the short
+range couplings twice for the grouped sites.
+
+Note that you can also get a :class:`~tenpy.models.model.NearestNeighborModel` for TEBD from the
+latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
+:meth:`~tenpy.models.model.NearestNeighbormodel.from_MPOModel`.
 """
 # Copyright 2018 TeNPy Developers
 
