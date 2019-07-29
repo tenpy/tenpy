@@ -9,12 +9,12 @@ Different algorithms require different representations of the Hamiltonian.
 For example for DMRG, the Hamiltonian needs to be given as an MPO,
 while TEBD needs the Hamiltonian to be represented by 'nearest neighbor' bond terms.
 This module contains the base classes defining these possible representations,
-namley the :class:`MPOModel` and :class:`NearestNeigborModel`.
+namley the :class:`MPOModel` and :class:`NearestNeighborModel`.
 
-A particular model like the :class:`~tenpy.models.models.xxz_chain.XXZ_chain` should then
+A particular model like the :class:`~tenpy.models.models.xxz_chain.XXZChain` should then
 yet another class derived from these classes. In it's __init__, it needs to explicitly call
 the ``MPOModel.__init__(self, lattice, H_MPO)``, providing an MPO representation of H,
-and also the ``NearestNeigborModel.__init__(self, lattice, H_bond)``,
+and also the ``NearestNeighborModel.__init__(self, lattice, H_bond)``,
 providing a representation of H by bond terms `H_bond`.
 
 The :class:`CouplingModel` is the attempt to generalize the representation of `H`
@@ -70,9 +70,9 @@ class Model:
     """
 
     def __init__(self, lattice):
-        # NOTE: every subclass like CouplingModel, MPOModel, NearestNeigborModel calls this
+        # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it get's called multiple times when a user implements e.g. a
-        # class MyModel(CouplingModel, NearestNeigborModel, MPOModel).
+        # class MyModel(CouplingModel, NearestNeighborModel, MPOModel).
         if not hasattr(self, 'lat'):
             # first call: initialize everything
             self.lat = lattice
@@ -158,12 +158,13 @@ class NearestNeighborModel(Model):
         ----------
         mpo_model : :class:`MPOModel`
             A model instance implementing the MPO.
-            Does not need to be a :class:`NearestNeigborModel`, but should only have
+            Does not need to be a :class:`NearestNeighborModel`, but should only have
             nearest-neighbor couplings.
 
-        Example
-        -------
+        Examples
+        --------
         The `SpinChainNNN2` has next-nearest-neighbor couplings and thus only implements an MPO:
+
         >>> from tenpy.models.spins_nnn import SpinChainNNN2
         >>> nnn_chain = SpinChainNNN2({'L': 20})
         parameter 'L'=20 for SpinChainNNN2
@@ -173,12 +174,14 @@ class NearestNeighborModel(Model):
         range before grouping: 2
 
         By grouping each two neighboring sites, we can bring it down to nearest neighbors.
+
         >>> nnn_chain.group_sites(2)
         >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
         range after grouping: 1
 
         Yet, TEBD will not yet work, as the model doesn't define `H_bond`.
-        However, we can initialize a NearestNeighborModel from the MPO::
+        However, we can initialize a NearestNeighborModel from the MPO:
+
         >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
         """
         return cls(mpo_model.lat, mpo_model.calc_H_bond_from_MPO())

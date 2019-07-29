@@ -428,7 +428,7 @@ class MPO:
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
 
-        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)"""
+        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``."""
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):

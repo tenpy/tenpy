@@ -289,7 +289,7 @@ def test_model_H_conversion(L=6):
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
     m = XXZChain(model_params)
     # can we run the conversion?
-    # conversion from bond to MPO in NearestNeigborModel
+    # conversion from bond to MPO in NearestNeighborModel
     H_MPO = m.calc_H_MPO_from_bond()
     # conversion from MPO to bond in MPOModel
     H_bond = m.calc_H_bond_from_MPO()
