@@ -9,13 +9,12 @@ import numpy as np
 
 from tenpy.algorithms import dmrg
 from tenpy.networks.mps import MPS
-from tenpy.models.fermions_haldane import FermionicHaldaneModel
+from tenpy.models.haldane import FermionicHaldaneModel
 
 
 def plot_model(model_params, phi_ext=0.1):
 
     model_params['phi_ext'] = phi_ext
-
     M = FermionicHaldaneModel(model_params)
     import matplotlib.pyplot as plt
     plt.figure()
@@ -114,7 +113,12 @@ def plot_results(data):
 
 if __name__ == "__main__":
 
-    model_params = dict(conserve='N', t=-1, mu=0, V=0, bc_MPS='infinite',
+    t1_value = -1
+
+    phi = np.arccos(3 * np.sqrt(3 / 43))
+    t2_value = (np.sqrt(129)/36) * t1_value * np.exp(1j * phi)  # optimal band flatness
+
+    model_params = dict(conserve='N', t1=t1_value, t2=t2_value, mu=0, V=0, bc_MPS='infinite',
                         order='default', Lx=1, Ly=3, bc_y='cylinder', verbose=0)
 
     # plot_model(model_params)
