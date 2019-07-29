@@ -57,6 +57,10 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
         fs = FermionSite(conserve=conserve)
         gs = GroupedSite([fs, fs], labels=['A', 'B'], charges='same')
         gs.add_op('Ntot', gs.NA + gs.NB, False)
+
+        print(sorted(gs.opnames))
+        print(gs.state_labels)
+
         return gs
 
     def init_lattice(self, model_params):
@@ -114,7 +118,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, mu=0, V=0, Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, Lx=1, Ly=3, verbose=1)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
