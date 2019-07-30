@@ -9,6 +9,12 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Switch the sign of the :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`
+  to hopping and chemical potential having negative prefactors.
+  Of course, the same adjustment happens in the :class:`~tenpy.models.hubbard.BoseHubbardChain` and :class:`~tenpy.models.hubbard.FermiHubbardChain`.
+- moved :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.BoseHubbardChain` as well as 
+  :class:`~tenpy.models.hubbard.FermiHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardChain` into the new
+  module :mod:`tenpy.models.hubbard`.
 - Change arguments of :meth:`~tenpy.networks.terms.CouplingTerms.coupling_term_handle_JW` and :meth:`~tenpy.networks.terms.MultiCouplingTerms.multi_coupling_term_handle_JW`
   to use `strength` and `sites` instead of `op_needs_JW`.
 - Only accept valid identifiers as operator names in :meth:`~tenpy.networks.site.Site.add_op`.
@@ -30,11 +36,15 @@ Added
 - :meth:`~tenpy.linalg.np_conserved.Arrray.has_label` to check if a label exists
 - :meth:`~tenpy.tools.math.qr_li` and :meth:`~tenpy.tools.math.rq_li`
 - Addition of MPOs
+- 3 additional examples for chern insulators in ``examples/chern_insulators/``.
+- :class:`~tenpy.models.haldane.FermionicHaldaneModel`.
+- :meth:`~tenpy.models.model.NearestNeighborModel.from_MPOModel` for initializing nearest-neighbor models after grouping
+  sites.
 
 Fixed
 ^^^^^
 - :issue:`36`: long-range couplings could give IndexError.
-- :issue:`42`: Onsite-terms in :class:`~tenpy.models.fermions_hubbard.FermionicHubbardModel` were wrong for lattices with non-trivial unit cell.
+- :issue:`42`: Onsite-terms in :class:`~tenpy.models.hubbard.FermiHubbardModel` were wrong for lattices with non-trivial unit cell.
 - Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
 - Allow :class:`~tenpy.networks.terms.TermList` to have terms with multiple operators acting on the same site.
 - Allow MPS indices outside unit cell in :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.models.lattice.Lattice.lat2mps_idx`.
