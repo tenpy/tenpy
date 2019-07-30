@@ -10,7 +10,8 @@ import warnings
 msg = """RESTRUCTURING
 ***********
 * WARNING:
-* The "bose_hubbard.py" and "fermions_hubbard.py" models have now been consolidated into "hubbard.py".
+* The signs of hopping and chemical potential parameters were changed to the usual conventions!
+* Moreover, "bose_hubbard.py" and "fermions_hubbard.py" models have now been consolidated into "hubbard.py".
 ***********
 To avoid this warning, simply import the model class from `tenpy.models.hubbard` instead of `tenpy.models.fermions_hubbard`."""
 warnings.warn(msg)

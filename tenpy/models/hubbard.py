@@ -1,8 +1,5 @@
-"""Hubbard model.
+"""Bosonic and fermionic Hubbard models.
 
-.. todo ::
-    Should we redefine the hopping to have a negative prefactor by default if t = 1?
-    How to notify users of the class???
 """
 # Copyright 2019 TeNPy Developers
 
@@ -12,7 +9,9 @@ from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
-__all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermionicHubbardModel', 'FermionicHubbardChain']
+__all__ = [
+    'BoseHubbardModel', 'BoseHubbardChain', 'FermionicHubbardModel', 'FermionicHubbardChain'
+]
 
 
 class BoseHubbardModel(CouplingMPOModel):
@@ -21,11 +20,9 @@ class BoseHubbardModel(CouplingMPOModel):
     The Hamiltonian is:
 
     .. math ::
-        H = t \sum_{\langle i, j \rangle, i < j} (b_i^{\dagger} b_j + b_j^{\dagger} b_i)
+        H = - t \sum_{\langle i, j \rangle, i < j} (b_i^{\dagger} b_j + b_j^{\dagger} b_i)
             + V \sum_{\langle i, j \rangle, i < j} n_i n_j
-            + \frac{U}{2} \sum_i n_i (n_i - 1) + \mu \sum_i n_i
-
-    Note that the signs of all parameters as defined in the Hamiltonian are positive.
+            + \frac{U}{2} \sum_i n_i (n_i - 1) - \mu \sum_i n_i
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params` and read out with
@@ -41,7 +38,7 @@ class BoseHubbardModel(CouplingMPOModel):
     conserve: {'best' | 'N' | 'parity' | None}
         What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
     t, U, V, mu : float | array
-        Couplings as defined in the Hamiltonian above.
+        Couplings as defined in the Hamiltonian above. Note the signs!
     lattice : str | :class:`~tenpy.models.lattice.Lattice`
         Instance of a lattice class for the underlaying geometry.
         Alternatively a string being the name of one of the Lattices defined in
@@ -87,11 +84,11 @@ class BoseHubbardModel(CouplingMPOModel):
         V = get_parameter(model_params, 'V', 0., self.name, True)
         mu = get_parameter(model_params, 'mu', 0, self.name, True)
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu - U / 2., u, 'N')
+            self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
         for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(t, u1, 'Bd', u2, 'B', dx)
-            self.add_coupling(np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
+            self.add_coupling(-t, u1, 'Bd', u2, 'B', dx)
+            self.add_coupling(-np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
@@ -107,14 +104,14 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
 
 class FermionicHubbardModel(CouplingMPOModel):
-    r"""Spin-1/2 fermionic Hubbard model.
+    r"""Spin-1/2 Fermi-Hubbard model.
 
     The Hamiltonian reads:
 
     .. math ::
-        H = \sum_{\langle i, j \rangle, i < j, \sigma} t (c^{\dagger}_{\sigma, i} c_{\sigma j} + h.c.)
+        H = - \sum_{\langle i, j \rangle, i < j, \sigma} t (c^{\dagger}_{\sigma, i} c_{\sigma j} + h.c.)
             + \sum_i U n_{\uparrow, i} n_{\downarrow, i}
-            + \sum_i \mu ( n_{\uparrow, i} + n_{\downarrow, i} )
+            - \sum_i \mu ( n_{\uparrow, i} + n_{\downarrow, i} )
             +  \sum_{\langle i, j \rangle, i< j, \sigma} V
                        (n_{\uparrow,i} + n_{\downarrow,i})(n_{\uparrow,j} + n_{\downarrow,j})
 
@@ -136,7 +133,7 @@ class FermionicHubbardModel(CouplingMPOModel):
         Whether spin is conserved,
         see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
     t, U, mu : float | array
-        Parameters as defined for the Hamiltonian above
+        Parameters as defined for the Hamiltonian above. Note the signs!
     lattice : str | :class:`~tenpy.models.lattice.Lattice`
         Instance of a lattice class for the underlaying geometry.
         Alternatively a string being the name of one of the Lattices defined in
@@ -178,13 +175,13 @@ class FermionicHubbardModel(CouplingMPOModel):
         mu = get_parameter(model_params, 'mu', 0., self.name, True)
 
         for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, u, 'Ntot')
+            self.add_onsite(-mu, u, 'Ntot')
             self.add_onsite(U, u, 'NuNd')
         for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(t, u1, 'Cdu', u2, 'Cu', dx)
-            self.add_coupling(np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
-            self.add_coupling(t, u1, 'Cdd', u2, 'Cd', dx)
-            self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cd', -dx)  # h.c.
+            self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx)
+            self.add_coupling(-np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
+            self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx)
+            self.add_coupling(-np.conj(t), u2, 'Cdd', u1, 'Cd', -dx)  # h.c.
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
