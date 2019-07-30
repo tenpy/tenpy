@@ -3,7 +3,8 @@
 This module is just around for backwards compatibility."""
 # Copyright 2019 TeNPy Developers
 
-from .hubbard import FermionicHubbardModel, FermionicHubbardChain
+from .hubbard import FermiHubbardModel as FermionicHubbardModel
+from .hubbard import FermiHubbardChain as FermionicHubbardChain
 
 import warnings
 

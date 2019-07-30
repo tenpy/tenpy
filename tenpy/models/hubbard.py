@@ -9,9 +9,7 @@ from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
-__all__ = [
-    'BoseHubbardModel', 'BoseHubbardChain', 'FermionicHubbardModel', 'FermionicHubbardChain'
-]
+__all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain']
 
 
 class BoseHubbardModel(CouplingMPOModel):
@@ -103,7 +101,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         CouplingMPOModel.__init__(self, model_params)
 
 
-class FermionicHubbardModel(CouplingMPOModel):
+class FermiHubbardModel(CouplingMPOModel):
     r"""Spin-1/2 Fermi-Hubbard model.
 
     The Hamiltonian reads:
@@ -185,10 +183,10 @@ class FermionicHubbardModel(CouplingMPOModel):
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
-class FermionicHubbardChain(FermionicHubbardModel, NearestNeighborModel):
-    """The :class:`FermionicHubbardModel` on a Chain, suitable for TEBD.
+class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
+    """The :class:`FermiHubbardModel` on a Chain, suitable for TEBD.
 
-    See the :class:`FermionicHubbardModel` for the documentation of parameters.
+    See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
 
     def __init__(self, model_params):
