@@ -57,10 +57,6 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
         fs = FermionSite(conserve=conserve)
         gs = GroupedSite([fs, fs], labels=['A', 'B'], charges='same')
         gs.add_op('Ntot', gs.NA + gs.NB, False)
-
-        print(sorted(gs.opnames))
-        print(gs.state_labels)
-
         return gs
 
     def init_lattice(self, model_params):
@@ -72,6 +68,7 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         t = get_parameter(model_params, 't', -1., self.name, True)
+        V = get_parameter(model_params, 'V', 0, self.name, True)
         phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
 
         t1 = t
@@ -82,6 +79,7 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'CdA', u2, 'CB', dx, 'JW', True)
             self.add_coupling(np.conj(t1_phi), u2, 'CdB', u1, 'CA', -dx, 'JW', True)
+            self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
         for u1, u2, dx in self.lat.nNNA:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
@@ -118,7 +116,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, V=0, Lx=1, Ly=3, verbose=1)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima

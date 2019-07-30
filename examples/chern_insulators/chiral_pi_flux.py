@@ -61,6 +61,7 @@ class FermionicPiFluxModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         t = get_parameter(model_params, 't', -1., self.name, True)
+        V = get_parameter(model_params, 'V', 0., self.name, True)
         mu = get_parameter(model_params, 'mu', 0., self.name, True)
         phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
 
@@ -75,6 +76,7 @@ class FermionicPiFluxModel(CouplingMPOModel):
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
             self.add_coupling(np.conj(t1_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t1 Cd_i C_j h.c.')
+            self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in self.lat.nNNdashed:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
@@ -105,7 +107,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
-    model_params = dict(conserve='N', t=-1, mu=0, Lx=1, Ly=3, verbose=1)
+    model_params = dict(conserve='N', t=-1, V=0, mu=0, Lx=1, Ly=3, verbose=1)
 
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
