@@ -18,9 +18,8 @@ from tenpy.models import lattice
 
 
 class TripartiteTriangular(lattice.Lattice):
-
     def __init__(self, Lx, Ly, siteA, **kwargs):
-        basis = np.array(([3., 0.], [0.5, 0.5*np.sqrt(3)]))
+        basis = np.array(([3., 0.], [0.5, 0.5 * np.sqrt(3)]))
         pos = np.array(([0., 0.], [1., 0.], [2., 0.]))
         kwargs.setdefault('order', 'default')
         kwargs.setdefault('bc', 'periodic')
@@ -34,21 +33,27 @@ class TripartiteTriangular(lattice.Lattice):
                    (1, 0, np.array([0, 1])), (1, 2, np.array([0, 0])), (1, 1, np.array([0, -1])),
                    (2, 1, np.array([0, 1])), (2, 0, np.array([1, 0])), (2, 2, np.array([0, -1]))]
 
-        self.nNNA = [(0, 2, np.array([-1, 2])), (0, 2, np.array([0, -1])), (0, 2, np.array([-1, -1])),
-                     (1, 0, np.array([0, 2])), (1, 0, np.array([1, -1])), (1, 0, np.array([0, -1])),
-                     (2, 1, np.array([0, 2])), (2, 1, np.array([1, -1])), (2, 1, np.array([0, -1]))]
+        self.nNNA = [(0, 2, np.array([-1, 2])), (0, 2, np.array([0, -1])),
+                     (0, 2, np.array([-1, -1])), (1, 0, np.array([0, 2])), (1, 0, np.array([1,
+                                                                                            -1])),
+                     (1, 0, np.array([0, -1])), (2, 1, np.array([0, 2])), (2, 1, np.array([1,
+                                                                                           -1])),
+                     (2, 1, np.array([0, -1]))]
 
-        self.nNNB = [(0, 1, np.array([0, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([0, -2])),
-                     (1, 2, np.array([0, 1])), (1, 2, np.array([-1, 1])), (1, 2, np.array([0, -2])),
+        self.nNNB = [(0, 1, np.array([0, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([0,
+                                                                                           -2])),
+                     (1, 2, np.array([0, 1])), (1, 2, np.array([-1, 1])), (1, 2, np.array([0,
+                                                                                           -2])),
                      (2, 0, np.array([1, 1])), (2, 0, np.array([0, 1])), (2, 0, np.array([1, -2]))]
 
-        self.nnNN = [(0, 1, np.array([-1, 2])), (0, 2, np.array([0, 0])), (0, 0, np.array([0, -2])),
-                     (1, 2, np.array([-1, 2])), (1, 0, np.array([1, 0])), (1, 1, np.array([0, -2])),
+        self.nnNN = [(0, 1, np.array([-1, 2])), (0, 2, np.array([0, 0])), (0, 0, np.array([0,
+                                                                                           -2])),
+                     (1, 2, np.array([-1, 2])), (1, 0, np.array([1, 0])), (1, 1, np.array([0,
+                                                                                           -2])),
                      (2, 0, np.array([0, 2])), (2, 1, np.array([1, 0])), (2, 2, np.array([0, -2]))]
 
 
 class FermionicC3HaldaneModel(CouplingMPOModel):
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -69,11 +74,11 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
     def init_terms(self, model_params):
         t = get_parameter(model_params, 't', -1., self.name, True)
         V = get_parameter(model_params, 'V', 0, self.name, True)
-        phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
+        phi_ext = 2 * np.pi * get_parameter(model_params, 'phi_ext', 0., self.name)
 
         t1 = t
-        t2 = 0.39*t*1j
-        t3 = -0.34*t
+        t2 = 0.39 * t * 1j
+        t3 = -0.34 * t
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
@@ -132,14 +137,19 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
             'N_min': 5,
             'N_max': 20
         },
-        'chi_list': {0: 9, 10: 49, 20: 100},
+        'chi_list': {
+            0: 9,
+            10: 49,
+            20: 100
+        },
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
         'verbose': 1.,
     }
 
-    prod_state = ['full_A empty_B', 'empty_A full_B', 'full_A empty_B'] * (model_params['Lx'] * model_params['Ly'])
+    prod_state = ['full_A empty_B', 'empty_A full_B', 'full_A empty_B'
+                  ] * (model_params['Lx'] * model_params['Ly'])
 
     eng = None
 
@@ -190,7 +200,12 @@ def plot_results(data):
                 label = "{q:d}".format(q=q)
                 color_by_charge[q] = colors[len(color_by_charge) % len(colors)]
             color = color_by_charge[q]
-            ax.plot(phi_ext * np.ones(s.shape), s, linestyle='', marker='_', color=color, label=label)
+            ax.plot(phi_ext * np.ones(s.shape),
+                    s,
+                    linestyle='',
+                    marker='_',
+                    color=color,
+                    label=label)
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
     ax.set_ylabel(r"$ \epsilon_\alpha $")
     ax.set_ylim(0., 8.)

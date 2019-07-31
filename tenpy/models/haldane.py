@@ -79,10 +79,11 @@ class FermionicHaldaneModel(CouplingMPOModel):
 
         t1 = get_parameter(model_params, 't1', -1., self.name, True)
         t2 = get_parameter(model_params, 't2',
-                           (np.sqrt(129)/36)*t1*np.exp(1j*np.arccos(3*np.sqrt(3/43))), self.name, True)
+                           (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43))),
+                           self.name, True)
         V = get_parameter(model_params, 'V', 0, self.name, True)
         mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        phi_ext = 2*np.pi*get_parameter(model_params, 'phi_ext', 0., self.name)
+        phi_ext = 2 * np.pi * get_parameter(model_params, 'phi_ext', 0., self.name)
 
         for u in range(len(self.lat.unit_cell)):
 
@@ -92,11 +93,28 @@ class FermionicHaldaneModel(CouplingMPOModel):
         for u1, u2, dx in self.lat.nearest_neighbors:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
-            self.add_coupling(np.conj(t1_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t1 Cd_i C_j h.c.')  # h.c.
+            self.add_coupling(np.conj(t1_phi),
+                              u2,
+                              'Cd',
+                              u1,
+                              'C',
+                              -dx,
+                              'JW',
+                              True,
+                              category='t1 Cd_i C_j h.c.')  # h.c.
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
-        for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])), (0, 0, np.array([0, -1])),
-                           (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
+        for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])),
+                           (0, 0, np.array([0, -1])), (1, 1, np.array([0, 1])),
+                           (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
             self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t2 Cd_i C_j')
-            self.add_coupling(np.conj(t2_phi), u2, 'Cd', u1, 'C', -dx, 'JW', True, category='t2 Cd_i C_j h.c.')  # h.c.
+            self.add_coupling(np.conj(t2_phi),
+                              u2,
+                              'Cd',
+                              u1,
+                              'C',
+                              -dx,
+                              'JW',
+                              True,
+                              category='t2 Cd_i C_j h.c.')  # h.c.

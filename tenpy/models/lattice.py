@@ -152,8 +152,7 @@ class Lattice:
                  positions=None,
                  nearest_neighbors=None,
                  next_nearest_neighbors=None,
-                 next_next_nearest_neighbors=None
-                 ):
+                 next_next_nearest_neighbors=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
@@ -1181,10 +1180,12 @@ class Honeycomb(Lattice):
         nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
                (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
         nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
-        self.fourth_nearest_neighbors = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])), (0, 1, np.array([1, -2])),
-                                         (0, 1, np.array([0, -2])), (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
-        self.fifth_nearest_neighbors = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])), (0, 0, np.array([1, -2])),
-                                        (0, 0, np.array([-1, -1])), (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
+        self.fourth_nearest_neighbors = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])),
+                                         (0, 1, np.array([1, -2])), (0, 1, np.array([0, -2])),
+                                         (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
+        self.fifth_nearest_neighbors = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])),
+                                        (0, 0, np.array([1, -2])), (0, 0, np.array([-1, -1])),
+                                        (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)
