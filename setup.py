@@ -42,13 +42,8 @@ def get_git_revision():
         try:
             rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                           stderr=subprocess.STDOUT).decode().strip()
-            descr = subprocess.check_output(['git', 'describe', '--always'],
-                                            stderr=subprocess.STDOUT).decode().strip()
         except:
             rev = "unknown"
-    if rev != "unknown":
-        if not descr.startswith("v" + VERSION):
-            raise ValueError("Hard-coded version doesn't fit to git version")
     return rev
 
 
