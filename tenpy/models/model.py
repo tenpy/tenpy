@@ -735,7 +735,7 @@ class CouplingModel(Model):
 
         Examples
         --------
-        When initializing a model, you can add a term :math:` J \sum_{<i,j>} S^z_i S^z_j`
+        When initializing a model, you can add a term :math:`J \sum_{<i,j>} S^z_i S^z_j`
         on all nearest-neighbor bonds of the lattice like this:
 
         >>> J = 1.  # the strength
