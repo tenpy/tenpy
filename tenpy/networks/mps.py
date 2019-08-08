@@ -87,7 +87,7 @@ from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
-__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'build_initial_state']
+__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
 
 
 class MPS:
@@ -3389,7 +3389,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     Example:
         size = 6, states = [0, 1, 2], filling = [1./3, 2./3, 0.]
         n_states = size * filling = [2, 4, 0]
-        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will 
+        ==> Two sites will get state 0, 4 sites will get state 1, 0 sites will
         get state 2.
 
     .. todo ::
@@ -3398,30 +3398,30 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 
     Parameters
     ----------
-        size : int
-            length of state
-        states : iterable
-            Containing the possible local states
-        filling : iterable
-            Fraction of the total number of sites to get a certain state. If
-            infinite fractions (e.g. 1/3) are needed, one should supply a 
-            fraction (1./3.)
-        mode : str | None
-            State filling pattern. Only 'random' is implemented
-        seed : int | None
-            Seed for random number generators
+    size : int
+        length of state
+    states : iterable
+        Containing the possible local states
+    filling : iterable
+        Fraction of the total number of sites to get a certain state. If
+        infinite fractions (e.g. 1/3) are needed, one should supply a
+        fraction (1./3.)
+    mode : str | None
+        State filling pattern. Only 'random' is implemented
+    seed : int | None
+        Seed for random number generators
 
     Returns
     -------
-        initial_state (list) : the initial state
+    initial_state (list) : the initial state
 
     Raises
     ------
-        ValueError
-            If fractonal fillings are incommensurate with system size.
-        AssertionError
-            If the total filling is not equal to 1, or the length of `filling`
-            does not equal the length of `states`.
+    ValueError
+        If fractonal fillings are incommensurate with system size.
+    AssertionError
+        If the total filling is not equal to 1, or the length of `filling`
+        does not equal the length of `states`.
     """
 
     random.seed(seed)
