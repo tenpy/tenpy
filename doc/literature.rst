@@ -30,6 +30,8 @@ also a classic introduction.
 
 .. Quantum-Mechanical Position Operator in Extended Systems
 .. [Resta1997] R. Resta, Phys. Rev. Lett. 80, 1800 (1997) :doi:`10.1103/PhysRevLett.80.1800`
+.. Condensed Matter Applications of Entanglement Theory
+.. [Schuch2013] N. Schuch, Quantum Information Processing. Lecture Notes of the 44th IFF Spring School (2013) :arxiv:`1306.5551`
 
 **Algorithm developments**
 
