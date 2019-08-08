@@ -20,12 +20,12 @@ def plot_model(model_params, phi_ext=0.1):
     plt.figure()
     ax = plt.gca()
     M.lat.plot_sites(ax)
-    M.coupling_terms['t Cd_i C_j'].plot_coupling_terms(ax, M.lat)
+    M.coupling_terms['t1 Cd_i C_j'].plot_coupling_terms(ax, M.lat)
     M.coupling_terms['t2 Cd_i C_j'].plot_coupling_terms(ax,
                                                         M.lat,
                                                         text='{op_j!s} {strength_angle:.2f}',
                                                         text_pos=0.9)
-    print(M.coupling_terms['t Cd_i C_j'].to_TermList())
+    print(M.coupling_terms['t1 Cd_i C_j'].to_TermList())
     ax.set_aspect(1.)
     plt.show()
 
@@ -142,6 +142,6 @@ if __name__ == "__main__":
                         bc_y='cylinder',
                         verbose=0)
 
-    # plot_model(model_params)
-    data = run(model_params)
-    plot_results(data)
+    plot_model(model_params)
+    # data = run(model_params)
+    # plot_results(data)
