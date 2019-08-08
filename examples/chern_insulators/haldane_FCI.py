@@ -1,14 +1,15 @@
 """Hardcore boson Haldane model - minimal FCI example
 
-Based on Eq.1 of :arxiv:`1407.6985` with:
+Based on Eq.1 of [Grushin2015]_ with:
 - bosons instead of fermions
 - mu=0, V=0 (only infinite onsite repulsion, via hardcore constraint)
-- 1/2 filling of the lowest band (i.e. 1/4 total filling with hardcoded minimal unit cell)
+- 1/2 filling of the lowest band (i.e. 1/4 total filling)
 """
 
 # Copyright 2019 TeNPy Developers
 
 import numpy as np
+import warnings
 
 from tenpy.algorithms import dmrg
 from tenpy.networks.mps import MPS
@@ -55,7 +56,16 @@ def run(model_params, phi_ext=np.linspace(0, 2.0, 9)):
         'verbose': 1.,
     }
 
-    prod_state = [1, 0, 0, 0, 1, 0, 0, 0]
+    prod_state = [1]
+    if 2 * model_params['Lx'] * model_params['Ly'] % 4 != 0:
+        warnings.warn("Total filling factor = 1/4 cannot be achieved with this unit cell geometry.")
+    for i in range(1, 2 * model_params['Lx'] * model_params['Ly']):
+        if i % 4 == 0:
+            prod_state.append(1)
+        else:
+            prod_state.append(0)
+
+    print(prod_state)
 
     eng = None
 
@@ -122,7 +132,7 @@ if __name__ == "__main__":
     t2_value = (np.sqrt(129)/36) * t1_value * np.exp(1j * phi)  # optimal band flatness
 
     model_params = dict(conserve='N', t1=t1_value, t2=t2_value, mu=0, V=0, bc_MPS='infinite',
-                        order='default', bc_y='cylinder', verbose=0)
+                        order='default', Lx=1, Ly=6, bc_y='cylinder', verbose=0)
 
     # plot_model(model_params)
     data = run(model_params)

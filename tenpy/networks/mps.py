@@ -87,7 +87,7 @@ from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
-__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
+__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'build_initial_state']
 
 
 class MPS:

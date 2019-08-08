@@ -27,8 +27,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle ij \rangle}=t_1 \in \mathbb{R}` and
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
     :math:`\pm\phi` is the phase acquired by a boson hopping between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is translated from "Characterization and stability
-    of a fermionic :math:`\nu=1/3` fractional Chern insulator", :arxiv:`1407.6985`.
+    given by the direction of the hopping. This Hamiltonian is translated from [Grushin2015]_.
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 
@@ -123,8 +122,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle ij \rangle}=t_1 \in \mathbb{R}` and
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
     :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is described in "Characterization and stability
-    of a fermionic :math:`\nu=1/3` fractional Chern insulator", :arxiv:`1407.6985`.
+    given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
     All parameters are collected in a single dictionary `model_params` and read out with
     :func:`~tenpy.tools.params.get_parameter`.
 

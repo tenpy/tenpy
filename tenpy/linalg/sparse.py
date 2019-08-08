@@ -13,6 +13,10 @@ import numpy as np
 from . import np_conserved as npc
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 
+__all__ = [
+    'NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator'
+]
+
 
 class NpcLinearOperator:
     """Prototype for a Linear Operator acting on :class:`~tenpy.linalg.np_conserved.Array`.

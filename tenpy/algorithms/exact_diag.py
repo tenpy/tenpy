@@ -21,6 +21,10 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPS
 
+__all__ = [
+    'ExactDiag'
+]
+
 
 class ExactDiag:
     """(Full) exact diagonalization of the Hamiltonian.

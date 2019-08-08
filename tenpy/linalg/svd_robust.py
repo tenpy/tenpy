@@ -73,6 +73,10 @@ except TypeError:
 #: will be the the CLAPACK library loaded with _load_lapack()
 _lapack_lib = None
 
+__all__ = [
+    'svd', 'svd_gesvd'
+]
+
 
 def svd(a,
         full_matrices=True,

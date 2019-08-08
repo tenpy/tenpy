@@ -1,6 +1,6 @@
 """Spinless fermion Haldane model - Chern insulator example
 
-Reproduces Fig. 2.a,b) in :arxiv:`1407.6985`
+Reproduces Fig. 2.a,b) in [Grushin2015]_
 """
 
 # Copyright 2019 TeNPy Developers

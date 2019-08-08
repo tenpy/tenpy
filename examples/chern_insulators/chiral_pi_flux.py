@@ -1,6 +1,6 @@
 """Chiral pi flux model - Chern insulator example
 
-Based on the model in :arxiv:`1012.4723`
+Based on the model in [Neupert2011]_
 """
 
 # Copyright 2019 TeNPy Developers
