@@ -69,7 +69,7 @@ from enum import IntEnum
 import warnings
 import os
 
-all = [
+__all__ = [
     'bottleneck', 'OptimizationFlag', 'temporary_level', 'set_level', 'get_level', 'optimize',
     'use_cython', 'have_cython_functions'
 ]

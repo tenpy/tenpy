@@ -1,36 +1,37 @@
-"""Spinless fermion Haldane model - Chern insulator example
+"""Hardcore boson Haldane model - minimal FCI example
 
-Reproduces Fig. 2.a,b) in [Grushin2015]_
+Based on Eq.1 of [Grushin2015]_ with:
+- bosons instead of fermions
+- mu=0, V=0 (only infinite onsite repulsion, via hardcore constraint)
+- 1/2 filling of the lowest band (i.e. 1/4 total filling)
 """
 
 # Copyright 2019 TeNPy Developers
 
 import numpy as np
+import warnings
 
 from tenpy.algorithms import dmrg
 from tenpy.networks.mps import MPS
-from tenpy.models.haldane import FermionicHaldaneModel
+from tenpy.models.haldane import BosonicHaldaneModel
 
 
 def plot_model(model_params, phi_ext=0.1):
 
     model_params['phi_ext'] = phi_ext
-    M = FermionicHaldaneModel(model_params)
+    M = BosonicHaldaneModel(model_params)
     import matplotlib.pyplot as plt
     plt.figure()
     ax = plt.gca()
     M.lat.plot_sites(ax)
-    M.coupling_terms['t1 Cd_i C_j'].plot_coupling_terms(ax, M.lat)
-    M.coupling_terms['t2 Cd_i C_j'].plot_coupling_terms(ax,
-                                                        M.lat,
-                                                        text='{op_j!s} {strength_angle:.2f}',
-                                                        text_pos=0.9)
-    print(M.coupling_terms['t1 Cd_i C_j'].to_TermList())
+    M.coupling_terms['t1 Bd_i B_j'].plot_coupling_terms(ax, M.lat)
+    M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(ax, M.lat, text='{op_j!s} {strength_angle:.2f}', text_pos=0.9)
+    print(M.coupling_terms['t1 Bd_i B_j'].to_TermList())
     ax.set_aspect(1.)
     plt.show()
 
 
-def run(model_params, phi_ext=np.linspace(0, 1.0, 7)):
+def run(model_params, phi_ext=np.linspace(0, 2.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
@@ -48,18 +49,23 @@ def run(model_params, phi_ext=np.linspace(0, 1.0, 7)):
             'N_min': 5,
             'N_max': 20
         },
-        'chi_list': {
-            0: 9,
-            10: 49,
-            20: 100
-        },
+        'chi_list': {0: 9, 10: 49, 20: 100},
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
         'verbose': 1.,
     }
 
-    prod_state = ['empty', 'full'] * (model_params['Lx'] * model_params['Ly'])
+    prod_state = [1]
+    if 2 * model_params['Lx'] * model_params['Ly'] % 4 != 0:
+        warnings.warn("Total filling factor = 1/4 cannot be achieved with this unit cell geometry.")
+    for i in range(1, 2 * model_params['Lx'] * model_params['Ly']):
+        if i % 4 == 0:
+            prod_state.append(1)
+        else:
+            prod_state.append(0)
+
+    print(prod_state)
 
     eng = None
 
@@ -71,12 +77,12 @@ def run(model_params, phi_ext=np.linspace(0, 1.0, 7)):
         model_params['phi_ext'] = phi
 
         if eng is None:  # first time in the loop
-            M = FermionicHaldaneModel(model_params)
+            M = BosonicHaldaneModel(model_params)
             psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS)
             eng = dmrg.EngineCombine(psi, M, dmrg_params)
         else:
             del eng.DMRG_params['chi_list']
-            M = FermionicHaldaneModel(model_params)
+            M = BosonicHaldaneModel(model_params)
             eng.init_env(model=M)
 
         E, psi = eng.run()
@@ -96,7 +102,7 @@ def plot_results(data):
     ax.plot(data['phi_ext'], data['QL'], marker='o')
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
     ax.set_ylabel(r"$ \langle Q^L(\Phi_y) \rangle$")
-    plt.savefig("haldane_charge_pump.pdf")
+    plt.savefig("haldane_FCI_charge_pump.pdf")
 
     plt.figure()
     ax = plt.gca()
@@ -110,17 +116,12 @@ def plot_results(data):
                 label = "{q:d}".format(q=q)
                 color_by_charge[q] = colors[len(color_by_charge) % len(colors)]
             color = color_by_charge[q]
-            ax.plot(phi_ext * np.ones(s.shape),
-                    s,
-                    linestyle='',
-                    marker='_',
-                    color=color,
-                    label=label)
+            ax.plot(phi_ext * np.ones(s.shape), s, linestyle='', marker='_', color=color, label=label)
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
     ax.set_ylabel(r"$ \epsilon_\alpha $")
     ax.set_ylim(0., 8.)
     ax.legend(loc='upper right')
-    plt.savefig("haldane_ent_spec_flow.pdf")
+    plt.savefig("haldane_FCI_ent_spec_flow.pdf")
 
 
 if __name__ == "__main__":
@@ -128,20 +129,11 @@ if __name__ == "__main__":
     t1_value = -1
 
     phi = np.arccos(3 * np.sqrt(3 / 43))
-    t2_value = (np.sqrt(129) / 36) * t1_value * np.exp(1j * phi)  # optimal band flatness
+    t2_value = (np.sqrt(129)/36) * t1_value * np.exp(1j * phi)  # optimal band flatness
 
-    model_params = dict(conserve='N',
-                        t1=t1_value,
-                        t2=t2_value,
-                        mu=0,
-                        V=0,
-                        bc_MPS='infinite',
-                        order='default',
-                        Lx=1,
-                        Ly=3,
-                        bc_y='cylinder',
-                        verbose=0)
+    model_params = dict(conserve='N', t1=t1_value, t2=t2_value, mu=0, V=0, bc_MPS='infinite',
+                        order='default', Lx=1, Ly=4, bc_y='cylinder', verbose=0)
 
-    plot_model(model_params)
-    # data = run(model_params)
-    # plot_results(data)
+    # plot_model(model_params)
+    data = run(model_params)
+    plot_results(data)

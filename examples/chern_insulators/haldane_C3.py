@@ -1,6 +1,6 @@
 """Generalized (C=3) Haldane model - Chern insulator example
 
-Based on the model in :arxiv:`1205.5792`
+Based on the model in [Yang2012]_
 """
 
 # Copyright 2019 TeNPy Developers
