@@ -31,7 +31,7 @@ def plot_model(model_params, phi_ext=0.1):
     plt.show()
 
 
-def run(model_params, phi_ext=np.linspace(0, 2.0, 9)):
+def run(model_params, phi_ext=np.linspace(0, 2.0, 7)):
 
     data = dict(phi_ext=phi_ext, QL=[], ent_spectrum=[])
 
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     t2_value = (np.sqrt(129)/36) * t1_value * np.exp(1j * phi)  # optimal band flatness
 
     model_params = dict(conserve='N', t1=t1_value, t2=t2_value, mu=0, V=0, bc_MPS='infinite',
-                        order='default', Lx=1, Ly=6, bc_y='cylinder', verbose=0)
+                        order='default', Lx=1, Ly=4, bc_y='cylinder', verbose=0)
 
     # plot_model(model_params)
     data = run(model_params)
