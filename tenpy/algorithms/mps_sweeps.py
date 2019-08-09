@@ -201,6 +201,8 @@ class Sweep:
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
+            print("Initial sweeps...")
+            print(self.engine_params['start_env'])
             start_env = get_parameter(self.engine_params, 'start_env', 1, 'Sweep')
             self.environment_sweeps(start_env)
 
@@ -660,6 +662,7 @@ class TwoSiteH(EffectiveH):
             theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
         theta.itranspose(labels)  # if necessary, transpose
+        # This is where we would truncate. Separate mode from combine?
         return theta
 
     def combine_Heff(self):

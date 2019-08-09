@@ -995,7 +995,7 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
                     msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
                            'for Sweep parameter "mixer"')
                     warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"
+                    Mixer = "DensityMatrixMixer"  # TODO not for 1-site.
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
