@@ -1,7 +1,7 @@
 r"""Time evolving block decimation (TEBD).
 
 The TEBD algorithm (proposed in [Vidal2004]_) uses a trotter decomposition of the
-Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neigbor hamiltonians
+Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neighbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.model.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
 the terms on even bonds (and similar :math:`H^{odd}` the terms on odd bonds).
@@ -74,7 +74,7 @@ class Engine:
         the sequence of update steps.
     psi : :class:`~tenpy.networks.mps.MPS`
         The MPS, time evolved in-place.
-    model : :class:`~tenpy.models.model.NearestNeigborModel`
+    model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model defining the Hamiltonian.
     TEBD_params: dict
         Optional parameters, see :func:`run` and :func:`run_GS` for more details.

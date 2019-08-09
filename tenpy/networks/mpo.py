@@ -226,7 +226,7 @@ class MPO:
 
     @property
     def chi(self):
-        """Dimensions of the (nontrivial) virtual bonds."""
+        """Dimensions of the virtual bonds."""
         return [W.get_leg('wL').ind_len for W in self._W] + [self._W[-1].get_leg('wR').ind_len]
 
     def get_W(self, i, copy=False):
@@ -297,6 +297,37 @@ class MPO:
         self._W = Ws
         self.sites = grouped_sites
         self.grouped = self.grouped * n
+
+    def sort_legcharges(self):
+        """Sort virtual legs by charges. In place.
+
+        The MPO seen as matrix of the ``wL, wR`` legs is usually very sparse.
+        This sparsity is captured by the LegCharges for these bonds not being sorted and bunched.
+        This requires a tensordot to do more block-multiplications with smaller blocks.
+        This is in general faster for large blocks, but might lead to a larger overhead for small
+        blocks. Therefore, this function allows to sort the virtual legs by charges.
+        """
+        new_W = [None] * self.L
+        perms = [None] * (self.L + 1)
+        for i, w in enumerate(self._W):
+            w = w.transpose(['wL', 'wR', 'p', 'p*'])
+            p, w = w.sort_legcharge([True, True, False, False], [True, True, False, False])
+            if perms[i] is not None:
+                assert np.all(p[0] == perms[i])
+            perms[i] = p[0]
+            perms[i + 1] = p[1]
+            new_W[i] = w
+        self._W = new_W
+        chi = self.chi
+        for b, p in enumerate(perms):
+            IdL = self.IdL[b]
+            if IdL is not None:
+                self.IdL[b] = np.nonzero(p == IdL)[0][0]
+            IdR = self.IdR[b]
+            if IdR is not None:
+                IdR = IdR % chi[b]
+                self.IdR[b] = np.nonzero(p == IdR)[0][0]
+        # done
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100):
         """Calculate ``<psi|self|psi>/<psi|psi>``.
@@ -397,7 +428,7 @@ class MPO:
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
 
-        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)"""
+        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``."""
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):

@@ -24,9 +24,9 @@ All other modules in this folder contain model classes derived from these base c
     spins
     spins_nnn
     fermions_spinless
-    bose_hubbard
-    fermions_hubbard
+    hubbard
     hofstadter
+    haldane
     toric_code
 """
 # Copyright 2018 TeNPy Developers

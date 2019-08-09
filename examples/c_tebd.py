@@ -103,7 +103,7 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
     tebd_params = {
         'order': 2,
         'dt': dt,
-        'N_steps': int(dt_measure // dt),
+        'N_steps': int(dt_measure / dt + 0.5),
         'trunc_params': {
             'chi_max': 50,
             'svd_min': 1.e-10,

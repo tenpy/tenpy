@@ -374,7 +374,7 @@ class Site:
 class GroupedSite(Site):
     """Group two or more :class:`Site` into a larger one.
 
-    A typical use-case is that you want a NearestNeigborModel for TEBD although you have
+    A typical use-case is that you want a NearestNeighborModel for TEBD although you have
     next-nearest neighbor interactions: you just double your local Hilbertspace to consist of
     two original sites.
     Note that this is a 'hack' at the cost of other things (e.g., measurements of 'local'

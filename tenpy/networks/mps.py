@@ -3398,30 +3398,30 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 
     Parameters
     ----------
-        size : int
-            length of state
-        states : iterable
-            Containing the possible local states
-        filling : iterable
-            Fraction of the total number of sites to get a certain state. If
-            infinite fractions (e.g. 1/3) are needed, one should supply a
-            fraction (1./3.)
-        mode : str | None
-            State filling pattern. Only 'random' is implemented
-        seed : int | None
-            Seed for random number generators
+    size : int
+        length of state
+    states : iterable
+        Containing the possible local states
+    filling : iterable
+        Fraction of the total number of sites to get a certain state. If
+        infinite fractions (e.g. 1/3) are needed, one should supply a
+        fraction (1./3.)
+    mode : str | None
+        State filling pattern. Only 'random' is implemented
+    seed : int | None
+        Seed for random number generators
 
     Returns
     -------
-        initial_state (list) : the initial state
+    initial_state (list) : the initial state
 
     Raises
     ------
-        ValueError
-            If fractonal fillings are incommensurate with system size.
-        AssertionError
-            If the total filling is not equal to 1, or the length of `filling`
-            does not equal the length of `states`.
+    ValueError
+        If fractonal fillings are incommensurate with system size.
+    AssertionError
+        If the total filling is not equal to 1, or the length of `filling`
+        does not equal the length of `states`.
     """
 
     random.seed(seed)

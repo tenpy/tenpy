@@ -19,8 +19,8 @@ from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome',
-    'get_lattice', 'get_order', 'get_order_grouped', 'bc_choices'
+    'Lattice', 'TrivialLattice', 'IrregularLattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square',
+    'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -82,9 +82,9 @@ class Lattice:
         Note that we include each coupling only in one direction; to get both directions, use
         ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-nearest neigbhors.
+        Same as `nearest_neighbors`, but for the next-nearest neighbors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-next-nearest neigbhors.
+        Same as `nearest_neighbors`, but for the next-next-nearest neighbors.
 
     Attributes
     ----------
@@ -125,9 +125,9 @@ class Lattice:
         Note that we include each coupling only in one direction; to get both directions, use
         ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-nearest neigbhors.
+        Same as :attr:`nearest_neighbors`, but for the next-nearest neighbors.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neigbhors.
+        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neighbors.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -1165,6 +1165,7 @@ class Honeycomb(Lattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        Additionally, for the Honeycomb lattice fourth_nearest_neighbors and fifth_nearest_neighbors are implemented.
     """
     dim = 2
 
@@ -1179,6 +1180,12 @@ class Honeycomb(Lattice):
         nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
                (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
         nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
+        self.fourth_nearest_neighbors = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])),
+                                         (0, 1, np.array([1, -2])), (0, 1, np.array([0, -2])),
+                                         (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
+        self.fifth_nearest_neighbors = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])),
+                                        (0, 0, np.array([1, -2])), (0, 0, np.array([-1, -1])),
+                                        (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
         kwargs.setdefault('nearest_neighbors', NN)
         kwargs.setdefault('next_nearest_neighbors', nNN)
         kwargs.setdefault('next_next_nearest_neighbors', nnNN)

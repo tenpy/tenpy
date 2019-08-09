@@ -262,7 +262,7 @@ A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.
 The code of the module :mod:`tenpy.models.xxz_chain` is included below as an illustrative example how to implemnet a
 Model. The implementation of the :class:`~tenpy.models.xxz_chain.XXZChain` directly follows the steps
 outline above.
-The :class:`~tenpy.models.model.xxz_chain.XXZChain2` implements the very same model, but based on the
+The :class:`~tenpy.models.xxz_chain.XXZChain2` implements the very same model, but based on the
 :class:`~tenpy.models.model.CouplingMPOModel` explained in the next section.
 
 
@@ -294,7 +294,7 @@ The general structure of the  class is like this::
             # does nothing.
             # You should overwrite this
 
-The :class:`~tenpy.models.model.xxz_chain.XXZChain2` included above illustrates, how it can be used.
+The :class:`~tenpy.models.xxz_chain.XXZChain2` included above illustrates, how it can be used.
 You need to implement steps 1-3) by overwriting the method :meth:`~tenpy.models.model.CouplingMPOModel.init_sites`
 Step 4) is performed in the method :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`, which initializes arbitrary 1D or 2D
 lattices; by default a simple 1D chain.
@@ -303,7 +303,7 @@ Step 6) should be done by overwriting the method :meth:`~tenpy.models.model.Coup
 Steps 5,7,8 and calls to the `init_...` methods for the other steps are done automatically if you just call the
 ``CouplingMPOModel.__init__(self, model_param)``.
 
-The :class:`~tenpy.models.model.xxz_chain.XXZChain` and :class:`~tenpy.models.model.xxz_chain.XXZChain2` work only with the
+The :class:`~tenpy.models.xxz_chain.XXZChain` and :class:`~tenpy.models.xxz_chain.XXZChain2` work only with the
 :class:`~tenpy.models.lattice.Chain` as lattice, since they are derived from the :class:`~tenpy.models.model.NearestNeighborModel`.
 This allows to use them for TEBD in 1D (yeah!), but we can't get the MPO for DMRG on a e.g. a :class:`~tenpy.models.lattice.Square`
 lattice cylinder - although it's intuitively clear, what the hamiltonian there should be: just put the nearest-neighbor
@@ -315,8 +315,8 @@ first write the model on an arbitrary 2D lattice and then restrict it to a 1D ch
 
 Let me illustrate this with another standard example model: the transverse field Ising model, imlemented in the module
 :mod:`tenpy.models.tf_ising` included below.
-The :class:`~tenpy.models.tf_ising.TFIsingModel` works for arbitrary 1D or 2D lattices.
-The :class:`~tenpy.models.tf_ising.TFIsingChain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
+The :class:`~tenpy.models.tf_ising.TFIModel` works for arbitrary 1D or 2D lattices.
+The :class:`~tenpy.models.tf_ising.TFIChain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
 which only works for the 1D chain.
 
 .. literalinclude:: ../tenpy/models/tf_ising.py
@@ -336,7 +336,7 @@ Some final remarks
 - We suggest writing the model to take a single parameter dicitionary for the initialization, which is to be read out
   inside the class with :func:`~tenpy.tools.params.get_parameter`.
   Read the doc-string of this function for more details on why this is a good idea.
-  Th `CouplingMPOModel.__init__()` calls :func:`~tenpy.tools.params.unused_parameters`, helping to avoid typos in the specified parameters.
+  The ``CouplingMPOModel.__init__(...)`` calls :func:`~tenpy.tools.params.unused_parameters`, helping to avoid typos in the specified parameters.
 
 - When you write a model and want to include a test that it can be at least constructed,
   take a look at ``tests/test_model.py``.

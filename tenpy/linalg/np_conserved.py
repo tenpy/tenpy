@@ -1184,7 +1184,7 @@ class Array:
         -------
         perm : tuple of 1D arrays
             The permutation applied to each of the legs, such that
-            ``cp.to_ndarray() = self.to_ndarray(perm)``.
+            ``cp.to_ndarray() = self.to_ndarray()[np.ix_(*perm)]``.
         result : Array
             A shallow copy of self, with legs sorted/bunched.
         """
@@ -1208,6 +1208,7 @@ class Array:
             else:
                 perms[ax] = np.arange(self.shape[ax], dtype=np.intp)
         cp = self.combine_legs(axes, pipes=pipes)
+        cp._labels = self._labels[:]  # reset labels
         # ... and convert pipes back to leg charges
         for ax in axes:
             ax = ax[0]
