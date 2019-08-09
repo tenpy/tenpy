@@ -5,14 +5,14 @@ performed on the MPS tensors sequentially, first from left to right, then from
 right to left. This procedure is common to DMRG, TDVP, sequential time evolution,
 etc.
 
-Another common feature of these algorithms is the use of an effective local 
-Hamiltonian to perform the local updates. The most prominent example of this is 
+Another common feature of these algorithms is the use of an effective local
+Hamiltonian to perform the local updates. The most prominent example of this is
 probably DMRG, where the local MPS object is optimized with respect to the rest
 of the MPS-MPO-MPS network, the latter forming the effective Hamiltonian.
 
 the :class:`Sweep` class attempts to generalize as many aspects of 'sweeping'
-algorithms as possible. :class:`EffectiveH` and its subclasses implement the 
-effective Hamiltonians mentioned above. Currently, effective Hamiltonians for 
+algorithms as possible. :class:`EffectiveH` and its subclasses implement the
+effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 1-site and 2-site optimization are implemented.
 
 .. todo ::
@@ -556,18 +556,17 @@ class OneSiteH(EffectiveH):
         In a move to the right, we need LHeff. In a move to the left, we need RHeff. Both contain
         the same W.
         """
-        if self.move_right:
-            LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
-            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p'], qconj=+1)
-            self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
-                                            pipes=[pipeL, pipeL.conj()],
-                                            new_axes=[0, 2])
-        else:
-            RHeff = npc.tensordot(self.W, self.RP, axes=['wR', 'wL'])
-            self.pipeR = pipeR = RHeff.make_pipe(['p', 'vL*'], qconj=-1)
-            self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
-                                            pipes=[pipeR, pipeR.conj()],
-                                            new_axes=[-1, 0])
+        # Always compute both L/R, because we might need them. Could change later.
+        LHeff = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
+        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p'], qconj=+1)
+        self.LHeff = LHeff.combine_legs([['vR*', 'p'], ['vR', 'p*']],
+                                        pipes=[pipeL, pipeL.conj()],
+                                        new_axes=[0, 2])
+        RHeff = npc.tensordot(self.W, self.RP, axes=['wR', 'wL'])
+        self.pipeR = pipeR = RHeff.make_pipe(['p', 'vL*'], qconj=-1)
+        self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
+                                        pipes=[pipeR, pipeR.conj()],
+                                        new_axes=[-1, 0])
 
 
 class TwoSiteH(EffectiveH):
