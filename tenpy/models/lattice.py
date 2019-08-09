@@ -19,8 +19,8 @@ from ..tools.misc import to_iterable, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'TrivialLattice', 'IrregularLattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square', 'Triangular',
-    'Honeycomb', 'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
+    'Lattice', 'TrivialLattice', 'IrregularLattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square',
+    'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)

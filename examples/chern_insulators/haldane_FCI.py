@@ -25,7 +25,10 @@ def plot_model(model_params, phi_ext=0.1):
     ax = plt.gca()
     M.lat.plot_sites(ax)
     M.coupling_terms['t1 Bd_i B_j'].plot_coupling_terms(ax, M.lat)
-    M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(ax, M.lat, text='{op_j!s} {strength_angle:.2f}', text_pos=0.9)
+    M.coupling_terms['t2 Bd_i B_j'].plot_coupling_terms(ax,
+                                                        M.lat,
+                                                        text='{op_j!s} {strength_angle:.2f}',
+                                                        text_pos=0.9)
     print(M.coupling_terms['t1 Bd_i B_j'].to_TermList())
     ax.set_aspect(1.)
     plt.show()
@@ -49,7 +52,11 @@ def run(model_params, phi_ext=np.linspace(0, 2.0, 7)):
             'N_min': 5,
             'N_max': 20
         },
-        'chi_list': {0: 9, 10: 49, 20: 100},
+        'chi_list': {
+            0: 9,
+            10: 49,
+            20: 100
+        },
         'max_E_err': 1.e-10,
         'max_S_err': 1.e-6,
         'max_sweeps': 150,
@@ -116,7 +123,12 @@ def plot_results(data):
                 label = "{q:d}".format(q=q)
                 color_by_charge[q] = colors[len(color_by_charge) % len(colors)]
             color = color_by_charge[q]
-            ax.plot(phi_ext * np.ones(s.shape), s, linestyle='', marker='_', color=color, label=label)
+            ax.plot(phi_ext * np.ones(s.shape),
+                    s,
+                    linestyle='',
+                    marker='_',
+                    color=color,
+                    label=label)
     ax.set_xlabel(r"$\Phi_y / 2 \pi$")
     ax.set_ylabel(r"$ \epsilon_\alpha $")
     ax.set_ylim(0., 8.)
@@ -129,10 +141,19 @@ if __name__ == "__main__":
     t1_value = -1
 
     phi = np.arccos(3 * np.sqrt(3 / 43))
-    t2_value = (np.sqrt(129)/36) * t1_value * np.exp(1j * phi)  # optimal band flatness
+    t2_value = (np.sqrt(129) / 36) * t1_value * np.exp(1j * phi)  # optimal band flatness
 
-    model_params = dict(conserve='N', t1=t1_value, t2=t2_value, mu=0, V=0, bc_MPS='infinite',
-                        order='default', Lx=1, Ly=4, bc_y='cylinder', verbose=0)
+    model_params = dict(conserve='N',
+                        t1=t1_value,
+                        t2=t2_value,
+                        mu=0,
+                        V=0,
+                        bc_MPS='infinite',
+                        order='default',
+                        Lx=1,
+                        Ly=4,
+                        bc_y='cylinder',
+                        verbose=0)
 
     # plot_model(model_params)
     data = run(model_params)

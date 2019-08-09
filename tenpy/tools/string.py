@@ -2,9 +2,7 @@
 
 # Copyright 2018 TeNPy Developers
 
-__all__ = [
-    'is_non_string_iterable', 'vert_join', 'to_mathematica_lists'
-]
+__all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists']
 
 
 def is_non_string_iterable(x):

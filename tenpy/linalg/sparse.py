@@ -13,9 +13,7 @@ import numpy as np
 from . import np_conserved as npc
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 
-__all__ = [
-    'NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator'
-]
+__all__ = ['NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator']
 
 
 class NpcLinearOperator:

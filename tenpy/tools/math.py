@@ -12,7 +12,8 @@ int_I3 = np.eye(3, dtype=int)
 LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
 
 __all__ = [
-    'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'perm_sign', 'qr_li', 'rq_li'
+    'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'perm_sign', 'qr_li',
+    'rq_li'
 ]
 
 
