@@ -640,7 +640,10 @@ class TwoSiteDMRGEngine(Sweep):
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
         # else: we have a mixer
-        return self.mixer.perturb_svd(self, theta, self.i0, self.update_LP, self.update_RP)
+        if self.finite:
+            return self.mixer.perturb_svd(self, theta, self.i0, self.move_right, (not self.move_right))
+        else:
+            return self.mixer.perturb_svd(self, theta, self.i0, self.update_LP, self.update_RP)
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
