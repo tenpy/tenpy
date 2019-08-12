@@ -51,7 +51,7 @@ from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
+    'run', 'DMRGEngine', 'OneSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
     'DensityMatrixMixer', 'chi_list'
 ]
 
@@ -207,8 +207,12 @@ def run(psi, model, DMRG_params, n=2):
     }
 
 
-class TwoSiteDMRGEngine(Sweep):
-    """'Engine' for the two-site DMRG algorithm, as a subclass of the `Sweep` class.
+class DMRGEngine(Sweep):
+    """ Generic 'Engine' for the single-site DMRG algorithm.
+
+    This engine is implemented as a subclass of 
+    :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
+    are generic between :class:`OneSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
     Parameters
     ----------
@@ -435,6 +439,116 @@ class TwoSiteDMRGEngine(Sweep):
                 print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
+    def post_update_local(self, update_data, meas_E_trunc=False):
+        """Perform post-update actions.
+
+        Compute truncation energy, remove `LP`/`RP` that are no longer needed and collect
+        statistics.
+
+        Parameters
+        ----------
+        update_data : dict
+            Data computed during the local update, as described in the following list.
+        meas_E_trunc : bool, optional
+            Wheter to measure the energy after truncation.
+        """
+        E0 = update_data['E0']
+        i0 = self.i0
+        E_trunc = None
+        if meas_E_trunc or E0 is None:
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
+            if E0 is None:
+                E0 = E_trunc
+            E_trunc = E_trunc - E0
+        # now we can also remove the LP and RP on outer bonds, which we don't need any more
+        if self.EffectiveH.length == 2:
+            # TODO: Do we need those for single site DMRG? In infinite case?
+            update_LP, update_RP = self.update_LP_RP
+            if update_RP:  # we move to the left -> delete left LP
+                self.env.del_LP(i0)
+                for o_env in self.ortho_to_envs:
+                    o_env.del_LP(i0)
+            if update_LP:  # we move to the right -> delete right RP
+                self.env.del_RP(i0 + 1)  # Always +1, even in single site.
+                for o_env in self.ortho_to_envs:
+                    o_env.del_RP(i0 + 1)
+
+        # collect statistics
+        self.update_stats['i0'].append(i0)
+        self.update_stats['age'].append(update_data['age'])
+        self.update_stats['E_total'].append(E0)
+        self.update_stats['E_trunc'].append(E_trunc)
+        self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['err'].append(update_data['err'])
+        self.update_stats['time'].append(time.time() - self.time0)
+        self.trunc_err_list.append(update_data['err'].eps)
+        self.E_trunc_list.append(E_trunc)
+
+    def diag(self, theta_guess, theta_ortho):
+        """Diagonalize the effective Hamiltonian represented by self.
+
+        Parameters
+        ----------
+        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta_guess`.
+
+        Returns
+        -------
+        E0 : float
+            Energy of the found ground state.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state of the effective Hamiltonian.
+        N : int
+            Number of Lanczos iterations used.
+        """
+        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        return E, theta, N
+
+
+class TwoSiteDMRGEngine(DMRGEngine):
+    """'Engine' for the two-site DMRG algorithm.
+
+    Parameters
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+
+    Attributes
+    ----------
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweep_stats : dict
+        Statistics at sweep-level.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        Statistics at local update-level.
+    """
+
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
@@ -521,73 +635,6 @@ class TwoSiteDMRGEngine(Sweep):
             'VH': VH,
         }
         return update_data
-
-    def post_update_local(self, update_data, meas_E_trunc=False):
-        """Perform post-update actions.
-
-        Compute truncation energy, remove `LP`/`RP` that are no longer needed and collect
-        statistics.
-
-        Parameters
-        ----------
-        update_data : dict
-            Data computed during the local update, as described in the following list.
-        meas_E_trunc : bool, optional
-            Wheter to measure the energy after truncation.
-        """
-        E0 = update_data['E0']
-        i0 = self.i0
-        E_trunc = None
-        if meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
-            if E0 is None:
-                E0 = E_trunc
-            E_trunc = E_trunc - E0
-        # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if self.EffectiveH.length == 2:
-            # TODO: Do we need those for single site DMRG? In infinite case?
-            update_LP, update_RP = self.update_LP_RP
-            if update_RP:  # we move to the left -> delete left LP
-                self.env.del_LP(i0)
-                for o_env in self.ortho_to_envs:
-                    o_env.del_LP(i0)
-            if update_LP:  # we move to the right -> delete right RP
-                self.env.del_RP(i0 + 1)  # Always +1, even in single site.
-                for o_env in self.ortho_to_envs:
-                    o_env.del_RP(i0 + 1)
-
-        # collect statistics
-        self.update_stats['i0'].append(i0)
-        self.update_stats['age'].append(update_data['age'])
-        self.update_stats['E_total'].append(E0)
-        self.update_stats['E_trunc'].append(E_trunc)
-        self.update_stats['N_lanczos'].append(update_data['N'])
-        self.update_stats['err'].append(update_data['err'])
-        self.update_stats['time'].append(time.time() - self.time0)
-        self.trunc_err_list.append(update_data['err'].eps)
-        self.E_trunc_list.append(E_trunc)
-
-    def diag(self, theta_guess, theta_ortho):
-        """Diagonalize the effective Hamiltonian represented by self.
-
-        Parameters
-        ----------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta_guess`.
-
-        Returns
-        -------
-        E0 : float
-            Energy of the found ground state.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian.
-        N : int
-            Number of Lanczos iterations used.
-        """
-        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
-        return E, theta, N
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
@@ -727,17 +774,8 @@ class TwoSiteDMRGEngine(Sweep):
             self.env.get_RP(i0, store=True)
 
 
-class OneSiteDMRGEngine(TwoSiteDMRGEngine):
-    """'Engine' for the single-site DMRG algorithm, as a subclass of the `Sweep` class.
-
-    Inherits the following methods from TwoSiteDMRGEngine:
-    - run()
-    - reset_stats()
-    - diag()
-    - post_update_local()
-
-    .. todo ::
-        Move inherited methods to a general DMRGEngine superclass.
+class OneSiteDMRGEngine(DMRGEngine):
+    """'Engine' for the single-site DMRG algorithm.
 
     Parameters
     ----------
@@ -1271,6 +1309,7 @@ class Engine(NpcLinearOperator):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
+
 class EngineCombine(TwoSiteDMRGEngine):
     r"""Engine which combines legs into pipes as far as possible.
 
@@ -1292,6 +1331,7 @@ class EngineCombine(TwoSiteDMRGEngine):
                       category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = True  # to reproduces old-style engine
         super().__init__(psi, model, TwoSiteH, DMRG_params)
+
 
 class EngineFracture(Engine):
     r"""Engine which keeps the legs separate.
