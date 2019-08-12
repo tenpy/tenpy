@@ -16,7 +16,6 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 1-site and 2-site optimization are implemented.
 
 .. todo ::
-- Overall docstring for this file.
 - Rebuild TDVP engine as subclasses of sweep
 - Do testing
 """

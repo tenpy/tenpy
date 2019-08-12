@@ -640,7 +640,7 @@ class TwoSiteDMRGEngine(Sweep):
                                          inner_labels=['vR', 'vL'])
             return U, S, VH, err
         # else: we have a mixer
-        return self.mixer.perturb_svd(self, theta, self.i0, self.move_right)
+        return self.mixer.perturb_svd(self, theta, self.i0, self.update_LP, self.update_RP)
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1573,7 +1573,6 @@ class TwoSiteMixer(SingleSiteMixer):
                                      engine.trunc_params,
                                      qtotal_LR=[qtotal_i0, None],
                                      inner_labels=['vR', 'vL'])
-        move_right = update_LP  # TODO: get argument inferred from schedule?
         if move_right:  # move to the right
             U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0,
                                                          move_right, VH)
@@ -1589,7 +1588,7 @@ class DensityMatrixMixer(Mixer):
     This mixer constructs density matrices as described in the original paper [White2005]_.
     """
 
-    def perturb_svd(self, engine, theta, i0, move_right):
+    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
 
         We calculate the left and right reduced density using the mixer
@@ -1622,7 +1621,6 @@ class DensityMatrixMixer(Mixer):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
-        update_LP, update_RP = move_right, not move_right
         rho_L = self.mix_rho_L(engine, theta, i0, update_LP)
         # don't mix left parts, when we're going to the right
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
