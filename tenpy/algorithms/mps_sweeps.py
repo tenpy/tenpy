@@ -202,7 +202,7 @@ class Sweep:
         # initial sweeps of the environment (without mixer)
         if not self.finite:
             print("Initial sweeps...")
-            print(self.engine_params['start_env'])
+            # print(self.engine_params['start_env'])
             start_env = get_parameter(self.engine_params, 'start_env', 1, 'Sweep')
             self.environment_sweeps(start_env)
 

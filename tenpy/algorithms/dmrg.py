@@ -862,6 +862,23 @@ class OneSiteDMRGEngine(TwoSiteDMRGEngine):
         else:
             next_B = self.env.bra.get_B(i0 - 1, form='A')
         U, S, VH, err = self.mixed_svd(theta, next_B)
+
+        # Enforce normalization:
+        if self.move_right:
+            VH = VH.combine_legs(['p', 'vR'])
+            U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
+            VH = VH.split_legs('(p.vR)')
+            S = np.dot(np.diag(S), U_VH.to_ndarray())
+            S = np.dot(S, np.diag(S_VH))
+            S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+        else:
+            U = U.combine_legs(['vL', 'p'])
+            U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
+            U = U.split_legs(['(vL.p)'])
+            S = np.dot(VH_U.to_ndarray(), np.diag(S))
+            S = np.dot(np.diag(S_U), S)
+            S = npc.Array.from_ndarray(S, [U.legs[2], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+
         self.set_B(U, S, VH)
 
         update_data = {
@@ -1457,7 +1474,7 @@ class SingleSiteMixer(Mixer):
                                      qtotal_LR=qtotal_LR,
                                      inner_labels=['vR', 'vL'])
         if move_right:
-            VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])  # TODO VH does not have 'vR'??
+            VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
         else:
             U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
         return U, S, VH, err
