@@ -142,6 +142,6 @@ if __name__ == "__main__":
                         bc_y='cylinder',
                         verbose=0)
 
-    plot_model(model_params)
-    # data = run(model_params)
-    # plot_results(data)
+    #  plot_model(model_params)
+    data = run(model_params)
+    plot_results(data)
