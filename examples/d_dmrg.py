@@ -4,8 +4,6 @@ The example functions in this class do the same as the ones in `toycodes/d_dmrg.
 but make use of the classes defined in tenpy.
 
 .. todo ::
-Set back to using dmrg.run() once that function has been rewritten for Sweep eng.
-Single-site DMRG example.
 Docstrings?
 """
 # Copyright 2018 TeNPy Developers
