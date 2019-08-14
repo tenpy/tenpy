@@ -39,7 +39,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
     }
     # dmrg.run() still needs to be rewritten.
     # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -74,7 +74,7 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
     }
     # dmrg.run() still needs to be rewritten.
     # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    eng = dmrg.OneSiteDMRGEngine(psi, M, OneSiteH, dmrg_params)
+    eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()
     E2 = np.sum(M.bond_energies(psi))
     print("E = {E:.13f}".format(E=E))
@@ -109,7 +109,7 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
         'verbose': verbose,
     }
     # new Sweep class wants an env rather than state/model
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -144,7 +144,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         'combine': True,
     }
     # new Sweep class wants an env rather than state/model
-    eng = dmrg.OneSiteDMRGEngine(psi, M, OneSiteH, dmrg_params)
+    eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -186,7 +186,7 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
     }
     # info = dmrg.run(psi, M, dmrg_params)  # dmrg.run not yet ready for new engine
     # E = info['E']
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)

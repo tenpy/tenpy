@@ -107,14 +107,12 @@ class Sweep:
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
 
-    def __init__(self, psi, model, EffectiveH, engine_params):
+    def __init__(self, psi, model, engine_params):
         self.psi = psi
         self.model = model  # TODO: document
-        self.EffectiveH = EffectiveH  # class type
         self.engine_params = engine_params
         self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
 
-        # self.offset_RP = EffectiveH.length - 1
         self.combine = get_parameter(engine_params, 'combine', False, 'Sweep')
         self.finite = self.psi.finite
         self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.

@@ -193,9 +193,9 @@ def run(psi, model, DMRG_params, n=2):
     """
     # initialize the engine
     if n ==  1:
-        engine = OneSiteDMRGEngine(psi, model, OneSiteH, DMRG_params)
+        engine = OneSiteDMRGEngine(psi, model, DMRG_params)
     elif n == 2:
-        engine = TwoSiteDMRGEngine(psi, model, TwoSiteH, DMRG_params)
+        engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
     else:
         raise ValueError("For DMRG, can only use n=1 or n=2, not n={}".format(n))
     E, _ = engine.run()
@@ -549,6 +549,10 @@ class TwoSiteDMRGEngine(DMRGEngine):
         Statistics at local update-level.
     """
 
+    def __init__(self, psi, model, engine_params):
+        self.EffectiveH = TwoSiteH
+        super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
+
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
 
@@ -815,6 +819,11 @@ class OneSiteDMRGEngine(DMRGEngine):
     update_stats : dict
         Statistics at local update-level.
     """
+
+    def __init__(self, psi, model, engine_params):
+        self.EffectiveH = OneSiteH
+        super(OneSiteDMRGEngine, self).__init__(psi, model, engine_params)
+
 
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on site ``i0``.

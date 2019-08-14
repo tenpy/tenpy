@@ -5,7 +5,6 @@ import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import dmrg
-from tenpy.algorithms.mps_sweeps import OneSiteH, TwoSiteH
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
 import pytest
@@ -103,7 +102,7 @@ def test_dmrg_rerun(L=2):
     M = TFIChain(model_params)
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
     dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine':True}
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, TwoSiteH, dmrg_pars)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
@@ -134,7 +133,7 @@ def test_dmrg_excited(eps=1.e-12):
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}, 'combine':True}
-    eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, TwoSiteH, dmrg_pars)
+    eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
     ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
@@ -142,7 +141,7 @@ def test_dmrg_excited(eps=1.e-12):
     # second DMRG run for first excited state
     dmrg_pars['orthogonal_to'] = [psi0]
     psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
-    eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, TwoSiteH, dmrg_pars)
+    eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars)
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
     ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
@@ -151,7 +150,7 @@ def test_dmrg_excited(eps=1.e-12):
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1] * (L // 2), bc=bc)
-    eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, TwoSiteH, dmrg_pars)
+    eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars)
     E2, psi2 = eng2.run()
     print(E2)
     assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
