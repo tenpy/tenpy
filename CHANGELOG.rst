@@ -6,6 +6,11 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 [Unreleased]
 ------------
+- nothing yet
+
+
+[0.4.1] - 2019-08-14
+--------------------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -37,7 +42,7 @@ Added
 - :meth:`~tenpy.tools.math.qr_li` and :meth:`~tenpy.tools.math.rq_li`
 - Addition of MPOs
 - 3 additional examples for chern insulators in ``examples/chern_insulators/``.
-- :class:`~tenpy.models.haldane.FermionicHaldaneModel`.
+- :class:`~tenpy.models.haldane.FermionicHaldaneModel` and :class:`~tenpy.models.haldane.BosonicHaldaneModel`.
 - :meth:`~tenpy.models.model.NearestNeighborModel.from_MPOModel` for initializing nearest-neighbor models after grouping
   sites.
 
