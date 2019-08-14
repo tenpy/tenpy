@@ -175,6 +175,10 @@ def run(psi, model, DMRG_params, n=2):
                                  where ``max_E_trunc`` is the maximal energy difference due to
                                  truncation right after each Lanczos optimization during the
                                  sweeps.
+        -------------- --------- ---------------------------------------------------------------
+        active_sites   int       The number of active sites to be used by DMRG. If set to 1,
+                                 :class:`OneSiteDMRGEngine` is used. If set to 2, DMRG is handled
+                                 by :class:`TwoSiteDMRGEngine`.
         ============== ========= ===============================================================
 
     Returns
@@ -188,12 +192,13 @@ def run(psi, model, DMRG_params, n=2):
         If `n` is not set to `1` or `2`.
     """
     # initialize the engine
-    if n ==  1:
+    active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
+    if active_sites ==  1:
         engine = OneSiteDMRGEngine(psi, model, DMRG_params)
-    elif n == 2:
+    elif active_sites == 2:
         engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
     else:
-        raise ValueError("For DMRG, can only use n=1 or n=2, not n={}".format(n))
+        raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
     E, _ = engine.run()
     return {
         'E': E,
@@ -212,21 +217,21 @@ class DMRGEngine(Sweep):
 
     Parameters
     ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+
+    Attributes
+    ----------
     EffectiveH : class type
         Class for the effective Hamiltonian (i.e., a subclass of
         :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
-    engine_params : dict
-        Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in subclasses.
-    model : :class:`~tenpy.models.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial guess for the ground state, which is to be optimized in-place.
-
-    Attributes
-    ----------
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``

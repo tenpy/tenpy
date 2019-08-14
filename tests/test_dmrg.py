@@ -65,6 +65,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
             'N_cache': 20
         },
         'max_sweeps': 40,
+        'active_sites': n,
     }
     if mixer is None:
         del dmrg_pars['mixer_params']  # avoid warning of unused parameter
@@ -72,7 +73,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
         # if mixer is not None:
         #     dmrg_pars['mixer_params']['amplitude'] = 1.e-12  # don't actually contribute...
         dmrg_pars['start_env'] = 1
-    res = dmrg.run(psi, M, dmrg_pars, n)
+    res = dmrg.run(psi, M, dmrg_pars)
     if bc_MPS == 'finite':
         ED = ExactDiag(M)
         ED.build_full_H_from_mpo()

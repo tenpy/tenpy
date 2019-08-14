@@ -40,9 +40,6 @@ class Sweep:
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
     includes DMRG, TDVP, TEBD, etc. Only DMRG is currently implemented in this way.
 
-    .. todo ::
-    Possibly include something like plot_update_stats(), plot_sweep_stats().
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`

@@ -65,8 +65,9 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
         },
         'verbose': verbose,
         'combine': False,
+        'active_sites': 1  # specifies single-site
     }
-    info = dmrg.run(psi, M.H_mpo, dmrg_params, n=1)  # n=1 specifies single-site
+    info = dmrg.run(psi, M, dmrg_params)
     E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -132,6 +133,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
         'combine': True,
+        'active_sites': 1,
     }
     eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
