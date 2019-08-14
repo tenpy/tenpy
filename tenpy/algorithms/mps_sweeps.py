@@ -16,8 +16,8 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 1-site and 2-site optimization are implemented.
 
 .. todo ::
-- Rebuild TDVP engine as subclasses of sweep
-- Do testing
+    Rebuild TDVP engine as subclasses of sweep
+    Do testing
 """
 # Copyright 2018 TeNPy Developers
 
@@ -45,18 +45,13 @@ class Sweep:
 
     Parameters
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian (i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        DMRG).
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
     engine_params : dict
         Further optional parameters. These are usually algorithm-specific, and thus should be
         described in subclasses.
-    model : :class:`~tenpy.models.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial guess for the ground state, which is to be optimized in-place.
 
     Attributes
     ----------
