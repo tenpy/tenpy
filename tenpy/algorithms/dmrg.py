@@ -502,6 +502,95 @@ class DMRGEngine(Sweep):
         E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
         return E, theta, N
 
+    def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
+        """Plot :attr:`update_stats` to display the convergence during the sweeps.
+
+        Parameters
+        ----------
+        axes : :class:`matplotlib.axes.Axes`
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
+            Key of :attr:`update_stats` to be used for the x-axis of the plots.
+            ``'index'`` is just enumerating the number of bond updates,
+            and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
+        yaxis : ``'E'`` | keys of :attr:`update_stats`
+            Key of :attr:`update_stats` to be used for the y-axisof the plots.
+            For 'E', use the energy (per site for infinite systems).
+        y_exact : float
+            Exact value for the quantity on the y-axis for comparison.
+            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
+        **kwargs :
+            Further keyword arguments given to ``axes.plot(...)``.
+        """
+        if axes is None:
+            import matplotlib.pyplot as plt
+            axes = plt.gca()
+        stats = self.update_stats
+        L = self.psi.L
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
+
+        E = np.array(stats['E_total'])
+        schedule, _ = self._get_sweep_schedule()
+        N = len(schedule)  # bond updates per sweep
+        if xaxis is None or xaxis == 'index':
+            xaxis = 'index'
+            x = np.arange(len(E))
+        elif xaxis == 'sweep':
+            x = np.arange(1, len(E) + 1) / N
+        else:
+            x = np.array(stats[xaxis])
+        if yaxis == 'E':
+            if not self.psi.finite:
+                # use energy per site instead of total energy
+                age = np.array(stats['age'])
+                d_age = age[N:] - age[:-N]
+                d_E = E[N:] - E[:-N]
+                y = d_E / d_age
+                x = x[N:]
+            else:
+                y = E
+        else:
+            y = np.array(stats[yaxis])
+        if y_exact is not None:
+            y = np.abs(y - y_exact) / np.abs(y_exact)
+            axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
+        axes.set_xlabel(xaxis)
+        axes.set_ylabel(yaxis)
+
+    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', y_exact=None, **kwargs):
+        """Plot :attr:`sweep_stats` to display the convergence with the sweeps.
+
+        Parameters
+        ----------
+        axes : :class:`matplotlib.axes.Axes`
+            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
+        xaxis, yaxis : key of :attr:`sweep_stats`
+            Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
+        y_exact : float
+            Exact value for the quantity on the y-axis for comparison.
+            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
+        **kwargs :
+            Further keyword arguments given to ``axes.plot(...)``.
+        """
+        if axes is None:
+            import matplotlib.pyplot as plt
+            axes = plt.gca()
+        stats = self.sweep_stats
+        L = self.psi.L
+        kwargs.setdefault('marker', 'x')
+        kwargs.setdefault('linestyle', '-')
+
+        x = np.array(stats[xaxis])
+        y = np.array(stats[yaxis])
+        if y_exact is not None:
+            y = np.abs(y - y_exact) / np.abs(y_exact)
+            axes.set_yscale('log')
+        axes.plot(x, y, **kwargs)
+        axes.set_xlabel(xaxis)
+        axes.set_ylabel(yaxis)
+
 
 class TwoSiteDMRGEngine(DMRGEngine):
     """'Engine' for the two-site DMRG algorithm.
@@ -1196,12 +1285,7 @@ class OneSiteDMRGEngine(DMRGEngine):
 class Engine(NpcLinearOperator):
     """Prototype for an DMRG 'Engine'.
 
-    This class is deprecated with the arrival of the new `Sweep`-based classes. It is kept alive
-    only because Leon has not yet ported plot_update_stats() and plot_sweep_stats() to the new
-    setup
-
-    .. todo ::
-        Port plotter functions.
+    This class is deprecated with the arrival of the new `Sweep`-based classes. 
 
     The old docstring:
 
@@ -1305,94 +1389,7 @@ class Engine(NpcLinearOperator):
     time0 : float
         Start time of the simulation, set in :meth:`reset_stats`.
     """
-    def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
-        """Plot :attr:`update_stats` to display the convergence during the sweeps.
-
-        Parameters
-        ----------
-        axes : :class:`matplotlib.axes.Axes`
-            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
-        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
-            Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            ``'index'`` is just enumerating the number of bond updates,
-            and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
-        yaxis : ``'E'`` | keys of :attr:`update_stats`
-            Key of :attr:`update_stats` to be used for the y-axisof the plots.
-            For 'E', use the energy (per site for infinite systems).
-        y_exact : float
-            Exact value for the quantity on the y-axis for comparison.
-            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
-        **kwargs :
-            Further keyword arguments given to ``axes.plot(...)``.
-        """
-        if axes is None:
-            import matplotlib.pyplot as plt
-            axes = plt.gca()
-        stats = self.update_stats
-        L = self.psi.L
-        kwargs.setdefault('marker', 'x')
-        kwargs.setdefault('linestyle', '-')
-
-        E = np.array(stats['E_total'])
-        schedule, _ = self._get_sweep_schedule()
-        N = len(schedule)  # bond updates per sweep
-        if xaxis is None or xaxis == 'index':
-            xaxis = 'index'
-            x = np.arange(len(E))
-        elif xaxis == 'sweep':
-            x = np.arange(1, len(E) + 1) / N
-        else:
-            x = np.array(stats[xaxis])
-        if yaxis == 'E':
-            if not self.psi.finite:
-                # use energy per site instead of total energy
-                age = np.array(stats['age'])
-                d_age = age[N:] - age[:-N]
-                d_E = E[N:] - E[:-N]
-                y = d_E / d_age
-                x = x[N:]
-            else:
-                y = E
-        else:
-            y = np.array(stats[yaxis])
-        if y_exact is not None:
-            y = np.abs(y - y_exact) / np.abs(y_exact)
-            axes.set_yscale('log')
-        axes.plot(x, y, **kwargs)
-        axes.set_xlabel(xaxis)
-        axes.set_ylabel(yaxis)
-
-    def plot_sweep_stats(self, axes=None, xaxis='time', yaxis='E', y_exact=None, **kwargs):
-        """Plot :attr:`sweep_stats` to display the convergence with the sweeps.
-
-        Parameters
-        ----------
-        axes : :class:`matplotlib.axes.Axes`
-            The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
-        xaxis, yaxis : key of :attr:`sweep_stats`
-            Key of :attr:`sweep_stats` to be used for the x-axis and y-axis of the plots.
-        y_exact : float
-            Exact value for the quantity on the y-axis for comparison.
-            If given, plot ``abs((y-y_exact)/y_exact)`` on a log-scale yaxis.
-        **kwargs :
-            Further keyword arguments given to ``axes.plot(...)``.
-        """
-        if axes is None:
-            import matplotlib.pyplot as plt
-            axes = plt.gca()
-        stats = self.sweep_stats
-        L = self.psi.L
-        kwargs.setdefault('marker', 'x')
-        kwargs.setdefault('linestyle', '-')
-
-        x = np.array(stats[xaxis])
-        y = np.array(stats[yaxis])
-        if y_exact is not None:
-            y = np.abs(y - y_exact) / np.abs(y_exact)
-            axes.set_yscale('log')
-        axes.plot(x, y, **kwargs)
-        axes.set_xlabel(xaxis)
-        axes.set_ylabel(yaxis)
+    
 
 
 class EngineCombine(TwoSiteDMRGEngine):
