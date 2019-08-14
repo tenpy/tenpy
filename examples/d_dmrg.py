@@ -13,11 +13,9 @@ Docstrings?
 import numpy as np
 
 from tenpy.networks.mps import MPS
-from tenpy.networks.mpo import MPOEnvironment
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinModel
 from tenpy.algorithms import dmrg
-from tenpy.algorithms.mps_sweeps import OneSiteH, TwoSiteH
 
 
 def example_DMRG_tf_ising_finite(L, g, verbose=True):
@@ -37,10 +35,8 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
         'verbose': verbose,
         'combine': True
     }
-    # dmrg.run() still needs to be rewritten.
-    # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
-    E, psi = eng.run()
+    info = dmrg.run(psi, M, dmrg_params)  # the main work...
+    E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
@@ -72,13 +68,9 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
         'verbose': verbose,
         'combine': False,
     }
-    # dmrg.run() still needs to be rewritten.
-    # info = dmrg.run(psi, M.H_mpo, dmrg_params)  # the main work...
-    eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
-    E, psi = eng.run()
-    E2 = np.sum(M.bond_energies(psi))
+    info = dmrg.run(psi, M.H_mpo, dmrg_params, n=1)  # the main work...
+    E = info['E']
     print("E = {E:.13f}".format(E=E))
-    print("E2 = {E:.13f}".format(E=E2))
     print("final bond dimensions: ", psi.chi)
     mag_x = np.sum(psi.expectation_value("Sigmax"))
     mag_z = np.sum(psi.expectation_value("Sigmaz"))
@@ -108,7 +100,7 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
     }
-    # new Sweep class wants an env rather than state/model
+    # Sometimes, we want to call a 'DMRG engine' explicitly
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
@@ -143,7 +135,6 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         'verbose': verbose,
         'combine': True,
     }
-    # new Sweep class wants an env rather than state/model
     eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
@@ -184,10 +175,8 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
         'max_E_err': 1.e-10,
         'verbose': verbose,
     }
-    # info = dmrg.run(psi, M, dmrg_params)  # dmrg.run not yet ready for new engine
-    # E = info['E']
-    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
-    E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
+    info = dmrg.run(psi, M, dmrg_params)
+    E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
     Sz = psi.expectation_value("Sz")  # Sz instead of Sigma z: spin-1/2 operators!
