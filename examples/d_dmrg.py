@@ -50,7 +50,7 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
 
 
 def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
-    print("finite DMRG, transverse field Ising model")
+    print("single-site finite DMRG, transverse field Ising model")
     print("L={L:d}, g={g:.2f}".format(L=L, g=g))
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=verbose)
     M = TFIChain(model_params)
@@ -66,7 +66,7 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
         'verbose': verbose,
         'combine': False,
     }
-    info = dmrg.run(psi, M.H_mpo, dmrg_params, n=1)  # the main work...
+    info = dmrg.run(psi, M.H_mpo, dmrg_params, n=1)  # n=1 specifies single-site
     E = info['E']
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
@@ -117,7 +117,7 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
 
 
 def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
-    print("infinite DMRG, transverse field Ising model")
+    print("single-site infinite DMRG, transverse field Ising model")
     print("g={g:.2f}".format(g=g))
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=verbose)
     M = TFIChain(model_params)
