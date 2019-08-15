@@ -358,7 +358,7 @@ class MPO:
             For an infinite MPS: the density per site.
         """
         if psi.finite:
-            return MPOEnvironment(psi, H, psi).full_contraction(0)
+            return MPOEnvironment(psi, self, psi).full_contraction(0)
         L = self.L
         LP0 = psi.init_LP(0, mpo=self)
         masks_L_no_IdL = []

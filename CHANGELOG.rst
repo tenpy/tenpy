@@ -6,7 +6,10 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 [Unreleased]
 ------------
-- nothing yet
+
+Fixed
+-----
+- MPO :meth:`~tenpy.networks.mpo.MPO.expectation_value` did not work for finite systems.
 
 
 [0.4.1] - 2019-08-14
