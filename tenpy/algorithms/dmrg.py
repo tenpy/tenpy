@@ -211,7 +211,7 @@ def run(psi, model, DMRG_params, n=2):
 class DMRGEngine(Sweep):
     """ Generic 'Engine' for the single-site DMRG algorithm.
 
-    This engine is implemented as a subclass of 
+    This engine is implemented as a subclass of
     :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
     are generic between :class:`OneSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
@@ -905,7 +905,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             self.env.get_RP(i0, store=True)
 
 
-class OneSiteDMRGEngine(DMRGEngine):
+class SingleSiteDMRGEngine(DMRGEngine):
     """'Engine' for the single-site DMRG algorithm.
 
     Parameters
@@ -1287,7 +1287,7 @@ class OneSiteDMRGEngine(DMRGEngine):
 class Engine(NpcLinearOperator):
     """Prototype for an DMRG 'Engine'.
 
-    This class is deprecated with the arrival of the new `Sweep`-based classes. 
+    This class is deprecated with the arrival of the new `Sweep`-based classes.
 
     The old docstring:
 
@@ -1391,7 +1391,7 @@ class Engine(NpcLinearOperator):
     time0 : float
         Start time of the simulation, set in :meth:`reset_stats`.
     """
-    
+
 
 
 class EngineCombine(TwoSiteDMRGEngine):

@@ -135,7 +135,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         'combine': True,
         'active_sites': 1,
     }
-    eng = dmrg.OneSiteDMRGEngine(psi, M, dmrg_params)
+    eng = dmrg.SingleSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.
     print("E = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
