@@ -103,7 +103,6 @@ class Sweep:
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
         self.psi = psi
-        self.model = model  # TODO: document
         self.engine_params = engine_params
         self.verbose = get_parameter(engine_params, 'verbose', 1, 'Sweep')
 
