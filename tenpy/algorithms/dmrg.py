@@ -1417,9 +1417,10 @@ class EngineCombine(TwoSiteDMRGEngine):
     """
 
     def __init__(self, psi, model, DMRG_params):
-        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
-                      category=FutureWarning,
-                      stacklevel=2)
+        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
+               "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
+               "instead of `EngineCombine`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = True  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
@@ -1443,9 +1444,10 @@ class EngineFracture(Engine):
     """
 
     def __init__(self, psi, model, DMRG_params):
-        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
-                      category=FutureWarning,
-                      stacklevel=2)
+        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
+               "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
+               "instead of `EngineFracture`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = False  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
