@@ -120,6 +120,7 @@ To compile the code, you first need to install `Cython <http://cython.org>`_ ::
 Moreover, you need a C++ compiler. 
 For example, on Ubuntu you can install ``sudo apt-get install build_essential``,
 or on Windows you can download MS Visual Studio 2015.
+If you use anaconda, you can also use one ``conda install -c conda-forge cxx-compiler``. 
 
 After that, go to the root directory of TeNPy (``$HOME/TeNPy``) and simply run ::
 
