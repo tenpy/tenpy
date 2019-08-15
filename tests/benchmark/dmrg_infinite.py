@@ -44,7 +44,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         #  'max_E_err': 1.e-13,
         'verbose': 0.,
     }
-    eng = dmrg.EngineCombine(psi, M, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     eng.verbose = 0.02
     for i in range(100):
         eng.sweep(meas_E_trunc=False)

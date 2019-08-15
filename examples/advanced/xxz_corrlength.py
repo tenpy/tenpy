@@ -36,7 +36,7 @@ def run(Jzs):
     M = SpinChain(model_params)
     psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS)
 
-    engine = dmrg.EngineCombine(psi, M, dmrg_params)
+    engine = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     np.set_printoptions(linewidth=120)
     corr_length = []
     for Jz in Jzs:

@@ -163,7 +163,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
         if eng is None:  # first time in the loop
             M = FermionicC3HaldaneModel(model_params)
             psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS)
-            eng = dmrg.EngineCombine(psi, M, dmrg_params)
+            eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:
             del eng.DMRG_params['chi_list']
             M = FermionicC3HaldaneModel(model_params)

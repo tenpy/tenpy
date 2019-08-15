@@ -36,7 +36,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     chi_list = np.arange(7, 31, 2)
     s_list = []
     xi_list = []
-    eng = dmrg.EngineCombine(psi, M, dmrg_params)
+    eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
 
     for chi in chi_list:
 
