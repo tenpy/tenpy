@@ -10,4 +10,3 @@ include AUTHORS.txt
 include LICENSE
 include README.rst
 include MANIFEST.in
-include doc
