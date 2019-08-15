@@ -1414,7 +1414,7 @@ class EngineCombine(TwoSiteDMRGEngine):
         warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
                       category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = True  # to reproduces old-style engine
-        super().__init__(psi, model, TwoSiteH, DMRG_params)
+        super().__init__(psi, model, DMRG_params)
 
 
 class EngineFracture(Engine):
@@ -1438,7 +1438,7 @@ class EngineFracture(Engine):
         warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
                       category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = False  # to reproduces old-style engine
-        super().__init__(psi, model, TwoSiteH, DMRG_params)
+        super().__init__(psi, model, DMRG_params)
 
 
 class Mixer:
