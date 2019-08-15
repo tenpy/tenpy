@@ -9,24 +9,26 @@ both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
 and in the thermodynamic limit (``'infinite'`` b.c.).
 
 The function :func:`run` - well - runs one DMRG simulation.
-Internally, it generates an instance of an :class:`Engine`.
+Internally, it generates an instance of an :class:`Sweep`.
 This class implements the common functionality like defining a `sweep`,
 but leaves the details of the contractions to be performed to the derived classes.
 
-Currently, there are two derived classes implementing the contractions.
-They should both give the same results (up to rounding errors).
-Which one is in the end faster is not obvious a priory and might depend on the used model.
+Currently, there are two derived classes implementing the contractions: :class:`OneSiteDMRGEngine`
+and :class:`TwoSiteDMRGEngine`. They differ (as their name implies) in the number of sites which
+are optimized simultaneously.
+They should both give the same results (up to rounding errors). However, if started from a product
+state, :class:`OneSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
+:class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
+occasionally displayed some convergence issues..
+Which one is preffered in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
-Currently, there is only one :class:`Mixer` implemented.
-The mixer should be used initially to avoid that the algorithm gets stuck in local energy minima,
-and then slowly turned off in the end.
+A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
+minima, and then slowly turned off in the end. For :class:`OneSiteDMRGEngine`, using a mixer is
+crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 .. todo ::
     Write UserGuide/Example!!!
-
-.. todo ::
-    separate effective Hamiltonian from Engine for better readability?
 """
 # Copyright 2018 TeNPy Developers
 
@@ -42,14 +44,15 @@ from ..linalg.sparse import NpcLinearOperator
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
+    'run', 'DMRGEngine', 'OneSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
     'DensityMatrixMixer', 'chi_list'
 ]
 
 
-def run(psi, model, DMRG_params):
+def run(psi, model, DMRG_params, n=2):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -58,6 +61,9 @@ def run(psi, model, DMRG_params):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
+    n : int, optional
+        Number of active sites in the DMRG algorithm. Switches between :class:`OneSiteDMRGEngine`
+        and :class:`TwoSiteDMRGEngine`.
     DMRG_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
@@ -74,9 +80,11 @@ def run(psi, model, DMRG_params):
                                  of the environment.
         -------------- --------- ---------------------------------------------------------------
         mixer          str |     Chooses the :class:`Mixer` to be used.
-                       class     A string stands for one of the mixers defined in this module,
-                                 a class is used as custom mixer.
-                                 Default (``None``) uses no mixer, ``True`` uses :class:`Mixer`.
+                       class |   A string stands for one of the mixers defined in this module,
+                       bool      a class is used as custom mixer.
+                                 Default (``None``) uses no mixer, ``True`` uses
+                                 :class:`DensityMatrixMixer` for the 2-site case and
+                                 :class:`SingleSiteMixer` for the 1-site case.
         -------------- --------- ---------------------------------------------------------------
         mixer_params   dict      Non-default initialization arguments of the mixer.
                                  Options may be custom to the specified mixer, so they're
@@ -90,9 +98,12 @@ def run(psi, model, DMRG_params):
                                  which yields the first excited state (in the same symmetry
                                  sector), and so on.
         -------------- --------- ---------------------------------------------------------------
-        engine         str |     Chooses the (derived class of) :class:`Engine` to be used.
-                       class     A string stands for one of the engines defined in this module,
-                                 a class (not an instance!) can be used as custom engine.
+        combine        bool      Whether to combine legs into pipes. This combines the virtual and
+                                 physical leg for the left site (when moving right) or right side
+                                 (when moving left) into pipes. This reduces the overhead of
+                                 calculating charge combinations in the contractions, but one
+                                 :meth:`matvec` is formally more expensive,
+                                 :math:`O(2 d^3 \chi^3 D)`.
         -------------- --------- ---------------------------------------------------------------
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
@@ -164,18 +175,30 @@ def run(psi, model, DMRG_params):
                                  where ``max_E_trunc`` is the maximal energy difference due to
                                  truncation right after each Lanczos optimization during the
                                  sweeps.
+        -------------- --------- ---------------------------------------------------------------
+        active_sites   int       The number of active sites to be used by DMRG. If set to 1,
+                                 :class:`OneSiteDMRGEngine` is used. If set to 2, DMRG is handled
+                                 by :class:`TwoSiteDMRGEngine`.
         ============== ========= ===============================================================
 
     Returns
     -------
     info : dict
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
+
+    Raises
+    ------
+    ValueError
+        If `n` is not set to `1` or `2`.
     """
     # initialize the engine
-    Engine_class = get_parameter(DMRG_params, 'engine', 'EngineCombine', 'DMRG')
-    if isinstance(Engine_class, str):
-        Engine_class = globals()[Engine_class]
-    engine = Engine_class(psi, model, DMRG_params)
+    active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
+    if active_sites ==  1:
+        engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
+    elif active_sites == 2:
+        engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
+    else:
+        raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
     E, _ = engine.run()
     return {
         'E': E,
@@ -185,23 +208,12 @@ def run(psi, model, DMRG_params):
     }
 
 
-class Engine(NpcLinearOperator):
-    """Prototype for an DMRG 'Engine'.
+class DMRGEngine(Sweep):
+    """ Generic 'Engine' for the single-site DMRG algorithm.
 
-    This class is the working horse of DMRG. It implements the :meth:`sweep` and large
-    parts of the (two-site) optimization.
-    During the diagonalization (i.e. after calling :meth:`prepare_diag`), the class represents
-    the effective two-site Hamiltonian, which looks like this::
-
-        |        .---            ----.
-        |        |     |      |      |
-        |        LP----W[i0]--W[i1]--RP
-        |        |     |      |      |
-        |        .---            ----.
-
-    `LP` and `RP` are left and right parts of the :class:`~tenpy.networks.mpo.MPOEnvironment`,
-    `W[i0]` and `W[i1]` are the MPO matrices of the Hamiltonian at the two sites ``i0, i1=i0+1``.
-    How this network is then actually contracted in detail is left to derived classes.
+    This engine is implemented as a subclass of
+    :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
+    are generic between :class:`OneSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
     Parameters
     ----------
@@ -209,190 +221,38 @@ class Engine(NpcLinearOperator):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    DMRG_params : dict
-        Further optional parameters. See :func:`run` for more details.
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
 
     Attributes
     ----------
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS to be optimized. After :meth:`run`, this should be (close to) the ground state.
-    sweeps : int
-        The number of performed sweeps (with ``optimize=True``, i.e. not counting the
-        environment updates).
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Environment for contraction ``<psi|H|psi>``.
-    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-        Environments of the form ``<psi|orhto>`` for states `ortho` of the `orthogonal_to`
-        parameter; needed to find excited states.
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    DMRG_params : dict
-        Parameters used for the DMRG. See :func:`run` for more details.
-    lanczos_params : dict
-        Parameters for :func:`~tenpy.linalg.lanczos.lanczos`.
-    trunc_params : dict
-        Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
-    finite : bool
-        Wheter we perform DMRG for an MPS with finite/segment (True) or infinite boundary
-        conditions; same as `psi.finite`.
     shelve : bool
-        True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
-    chi_list : dict | None
-        See DMRG_params `chi_list`. ``None`` (default) disables this feature.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
     sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
-
+        Statistics at sweep-level.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
     time0 : float
-        Start time of the simulation, set in :meth:`reset_stats`.
+        Time marker for the start of the run.
+    update_stats : dict
+        Statistics at local update-level.
     """
-
-    def __init__(self, psi, model, DMRG_params):
-        self.psi = psi
-        self.DMRG_params = DMRG_params
-        self.verbose = get_parameter(DMRG_params, 'verbose', 1, 'DMRG')
-
-        self.finite = psi.finite
-        self.mixer = None  # means 'ignore mixer'
-        # the mixer is activated in in :meth:`run`.
-
-        self.lanczos_params = get_parameter(DMRG_params, 'lanczos_params', {}, 'DMRG')
-        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = get_parameter(DMRG_params, 'trunc_params', {}, 'DMRG')
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-
-        self.env = None
-        self.ortho_to_envs = []
-        self.init_env(model)  # calls reset_stats
-
-    def init_env(self, model=None):
-        """(Re-)initialize the environment.
-
-        This function is useful to re-start DMRG after with a slightly different model or
-        different (DMRG) parameters. Note that we assume that we still have the same `psi`.
-        Calls :meth:`reset_stats`.
-
-        Parameters
-        ----------
-        model : :class:`~tenpy.models.MPOModel`
-            The model representing the Hamiltonian for which we want to find the ground state.
-            If ``None``, keep the model used before.
-        """
-        H = model.H_MPO if model is not None else self.env.H
-        if self.env is None or self.finite:
-            LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
-            RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
-            LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
-            RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-        else:  # re-initialize
-            compatible = True
-            if model is not None:
-                try:
-                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
-                except ValueError:
-                    compatible = False
-                    warnings.warn("The leg of the new model is incompatible with the previous one."
-                                  "Rebuild environment from scratch.")
-            if compatible:
-                LP = self.env.get_LP(0, False)
-                LP_age = self.env.get_LP_age(0)
-                RP = self.env.get_RP(self.psi.L - 1, False)
-                RP_age = self.env.get_RP_age(self.psi.L - 1)
-            else:
-                LP = get_parameter(self.DMRG_params, 'LP', None, 'DMRG')
-                RP = get_parameter(self.DMRG_params, 'RP', None, 'DMRG')
-                LP_age = get_parameter(self.DMRG_params, 'LP_age', 0, 'DMRG')
-                RP_age = get_parameter(self.DMRG_params, 'RP_age', 0, 'DMRG')
-            if self.DMRG_params.get('chi_list', None) is not None:
-                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
-
-        # (re)initialize ortho_to_envs
-        orthogonal_to = get_parameter(self.DMRG_params, 'orthogonal_to', [], 'DMRG')
-        if len(orthogonal_to) > 0:
-            if not self.finite:
-                raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
-            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
-
-        self.reset_stats()
-
-        # initial sweeps of the environment (without mixer)
-        if not self.finite:
-            start_env = get_parameter(self.DMRG_params, 'start_env', 1, 'DMRG')
-            self.environment_sweeps(start_env)
-
-    def reset_stats(self):
-        """Reset the statistics. Useful if you want to start a new DMRG run."""
-        self.sweeps = get_parameter(self.DMRG_params, 'sweep_0', 0, 'DMRG')
-        self.update_stats = {'i0': [], 'age': [], 'E_total': [], 'N_lanczos': [], 'time': []}
-        self.sweep_stats = {
-            'sweep': [],
-            'E': [],
-            'S': [],
-            'time': [],
-            'max_trunc_err': [],
-            'max_E_trunc': [],
-            'max_chi': [],
-            'norm_err': []
-        }
-        self.shelve = False
-        self.chi_list = get_parameter(self.DMRG_params, 'chi_list', None, 'DMRG')
-        if self.chi_list is not None:
-            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-            self.trunc_params['chi_max'] = chi_max
-            if self.verbose >= 1:
-                print("Setting chi_max =", chi_max)
-        self.time0 = time.time()
-
-    def __del__(self):
-        DMRG_params = self.DMRG_params
-        unused_parameters(DMRG_params['lanczos_params'], "DMRG lanczos_params")
-        unused_parameters(DMRG_params['trunc_params'], "DMRG trunc_params")
-        if 'mixer_params' in DMRG_params and DMRG_params.get('mixer', True):
-            unused_parameters(DMRG_params['mixer_params'], "DMRG mixer_params")
-        unused_parameters(DMRG_params, "DMRG")
 
     def run(self):
         """Run the DMRG simulation to find the ground state.
@@ -405,7 +265,7 @@ class Engine(NpcLinearOperator):
             The MPS representing the ground state after the simluation,
             i.e. just a reference to :attr:`psi`.
         """
-        DMRG_params = self.DMRG_params
+        DMRG_params = self.engine_params
         start_time = self.time0
         self.shelve = False
         # parameters for lanczos
@@ -556,130 +416,45 @@ class Engine(NpcLinearOperator):
             print("=" * 80)
         return E, self.psi
 
-    def environment_sweeps(self, N_sweeps):
-        """Perform `N_sweeps` sweeps without bond optimization to update the environment."""
-        if N_sweeps <= 0:
-            return
-        if self.verbose >= 1:
-            print("Updating environment")
-        for k in range(N_sweeps):
-            self.sweep(optimize=False)
+    def reset_stats(self):
+        """Reset the statistics. Useful if you want to start a new Sweep run.
+        """
+        self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
+        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[],
+                             'time':[], 'err':[], 'E_trunc':[]}
+        self.sweep_stats = {
+            'sweep': [],
+            'E': [],
+            'S': [],
+            'time': [],
+            'max_trunc_err': [],
+            'max_E_trunc': [],
+            'max_chi': [],
+            'norm_err': []
+        }
+        self.chi_list = get_parameter(self.engine_params, 'chi_list', None, 'Sweep')
+        if self.chi_list is not None:
+            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
+            self.trunc_params['chi_max'] = chi_max
             if self.verbose >= 1:
-                print('.', end='', flush=True)
-        if self.verbose >= 1:
-            print("", flush=True)  # end line
+                print("Setting chi_max =", chi_max)
+        self.time0 = time.time()
 
-    def sweep(self, optimize=True, meas_E_trunc=False):
-        """One 'sweep' of the DMRG algorithm.
+    def post_update_local(self, update_data, meas_E_trunc=False):
+        """Perform post-update actions.
 
-        Iteratate over the bond which is optimized, to the right and
-        then back to the left to the starting point.
-        If optimize=False, don't actually diagonalize the effective hamiltonian,
-        but only update the environment.
+        Compute truncation energy, remove `LP`/`RP` that are no longer needed and collect
+        statistics.
 
         Parameters
         ----------
-        optimize : bool
-            Whether we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
+        update_data : dict
+            Data computed during the local update, as described in the following list.
+        meas_E_trunc : bool, optional
             Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        max_trunc_err : float
-            Maximal truncation error introduced.
-        max_E_trunc : ``None`` | float
-            ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
-            truncation.
         """
-        E_trunc_list = []
-        trunc_err_list = []
-        schedule_i0, update_LP_RP = self._get_sweep_schedule()
-
-        # the actual sweep
-        for i0, upd_env in zip(schedule_i0, update_LP_RP):
-            if self.verbose >= 10:
-                print("in sweep: i0 =", i0)
-            # --------- the main work --------------
-            E_total, E_trunc, trunc_err, N_lanczos, age = self.update_bond(
-                i0, upd_env[0], upd_env[1], optimize=optimize, meas_E_trunc=meas_E_trunc)
-            # collect statistics
-            self.update_stats['i0'].append(i0)
-            self.update_stats['age'].append(age)
-            self.update_stats['E_total'].append(E_total)
-            self.update_stats['N_lanczos'].append(N_lanczos)
-            self.update_stats['time'].append(time.time() - self.time0)
-            E_trunc_list.append(E_trunc)
-            trunc_err_list.append(trunc_err.eps)
-
-        if optimize:  # count optimization sweeps
-            self.sweeps += 1
-            if self.chi_list is not None:
-                new_chi_max = self.chi_list.get(self.sweeps, None)
-                if new_chi_max is not None:
-                    self.trunc_params['chi_max'] = new_chi_max
-                    if self.verbose >= 1:
-                        print("Setting chi_max =", new_chi_max)
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-        if meas_E_trunc:
-            return np.max(trunc_err_list), np.max(E_trunc_list)
-        else:
-            return np.max(trunc_err_list), None
-
-    def update_bond(self, i0, update_LP, update_RP, optimize=True, meas_E_trunc=False):
-        """Perform bond-update on the sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            Site left to the bond which should be optimized.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_LP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-        optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
-        """
-        theta, theta_ortho = self.prepare_diag(i0)
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
-        if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
-        else:
-            E0, N = None, 0
-        theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta, i0, update_LP, update_RP)
-        self.set_B(i0, U, S, VH)
-        if update_LP:
-            self.update_LP(i0, U)  # (requires updated B)
-            for o_env in self.ortho_to_envs:
-                o_env.get_LP(i0 + 1, store=True)
-        if update_RP:
-            self.update_RP(i0, VH)
-            for o_env in self.ortho_to_envs:
-                o_env.get_RP(i0, store=True)
+        E0 = update_data['E0']
+        i0 = self.i0
         E_trunc = None
         if meas_E_trunc or E0 is None:
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
@@ -687,57 +462,28 @@ class Engine(NpcLinearOperator):
                 E0 = E_trunc
             E_trunc = E_trunc - E0
         # now we can also remove the LP and RP on outer bonds, which we don't need any more
-        if update_RP:  # we move to the left -> delete left LP
-            self.env.del_LP(i0)
-            for o_env in self.ortho_to_envs:
-                o_env.del_LP(i0)
-        if update_LP:  # we move to the right -> delete right RP
-            self.env.del_RP(i0 + 1)
-            for o_env in self.ortho_to_envs:
-                o_env.del_RP(i0 + 1)
-        return E0, E_trunc, err, N, age
+        if self.EffectiveH.length == 2:
+            # TODO: Do we need those for single site DMRG? In infinite case?
+            update_LP, update_RP = self.update_LP_RP
+            if update_RP:  # we move to the left -> delete left LP
+                self.env.del_LP(i0)
+                for o_env in self.ortho_to_envs:
+                    o_env.del_LP(i0)
+            if update_LP:  # we move to the right -> delete right RP
+                self.env.del_RP(i0 + 1)  # Always +1, even in single site.
+                for o_env in self.ortho_to_envs:
+                    o_env.del_RP(i0 + 1)
 
-    def prepare_diag(self, i0, update_LP, update_RP):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (with the same tensor structure) to orthogonalize against,
-            see :meth:`get_theta_ortho`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def get_theta_ortho(self, i0):
-        """Get the 2-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'.
-        """
-        theta_ortho = []
-        for o_env in self.ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=2)  # the environments are of the form <psi|ortho>
-            LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            theta_ortho.append(theta)
-        return theta_ortho
+        # collect statistics
+        self.update_stats['i0'].append(i0)
+        self.update_stats['age'].append(update_data['age'])
+        self.update_stats['E_total'].append(E0)
+        self.update_stats['E_trunc'].append(E_trunc)
+        self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['err'].append(update_data['err'])
+        self.update_stats['time'].append(time.time() - self.time0)
+        self.trunc_err_list.append(update_data['err'].eps)
+        self.E_trunc_list.append(E_trunc)
 
     def diag(self, theta_guess, theta_ortho):
         """Diagonalize the effective Hamiltonian represented by self.
@@ -758,180 +504,8 @@ class Engine(NpcLinearOperator):
         N : int
             Number of Lanczos iterations used.
         """
-        E, theta, N = lanczos(self, theta_guess, self.lanczos_params, theta_ortho)
+        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
         return E, theta, N
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-        This function turns :class:`Engine` to a linear operator, which can be
-        used for :func:`~tenpy.linalg.lanczos.lanczos`. Pictorially::
-
-            |        .----theta---.
-            |        |    |   |   |
-            |       LP----H0--H1--RP
-            |        |    |   |   |
-            |        .---       --.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Result of applying the effective Hamiltonian to `theta`, :math:`H |\theta>`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def prepare_svd(self, theta):
-        """Transform theta into a matrix for svd.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian as returned by `diag`.
-
-        Returns
-        -------
-        theta_matrix : :class:`~tenpy.linalg.np_conserved.Array`
-            Same as `theta`, but with legs combined into a 2D array for svd partition.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def mixed_svd(self, theta, i0, update_LP, update_RP):
-        """Get (truncated) `B` from the new theta (as returned by diag).
-
-        The goal ist to split theta and truncate it::
-
-            |   -- theta --   ==>    -- U -- S --  VH -
-            |      |   |                |          |
-
-        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
-
-        With a mixer, the state is perturbed before the SVD.
-        The details of the perturbation are defined by the :class:`Mixer` class.
-
-        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-
-        Returns
-        -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
-            matrix with labels ``'vL', 'vR'``; see comment above.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced.
-        """
-        # get qtotal_LR from i0
-        if self.mixer is None:
-            # simple case: real svd, defined elsewhere.
-            qtotal_i0 = self.psi.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(theta,
-                                         self.trunc_params,
-                                         qtotal_LR=[qtotal_i0, None],
-                                         inner_labels=['vR', 'vL'])
-            return U, S, VH, err
-        # else: we have a mixer
-        return self.mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
-
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `DMRG_params['mixer']`."""
-        Mixer_class = get_parameter(self.DMRG_params, 'mixer', None, 'DMRG')
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = DensityMatrixMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
-                           'for DMRG parameter "mixer"')
-                    warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"
-                Mixer_class = globals()[Mixer_class]
-            mixer_params = get_parameter(self.DMRG_params, 'mixer_params', {}, 'DMRG')
-            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-            self.mixer = Mixer_class(mixer_params)
-
-    def mixer_cleanup(self):
-        """Cleanup the effects of the mixer.
-
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if self.mixer is not None:
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
-
-    def set_B(self, i0, U, S, VH):
-        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
-
-        Parameters
-        ----------
-        i0 : int
-            We update the MPS `B` at sites ``i0, i0+1``.
-        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Left and Right-canonical matrices as returned by the SVD.
-        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            The middle part returned by the SVD, ``theta = U S VH``.
-            Without a mixer just the singular values, with enabled `mixer` a 2D array.
-        """
-        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
-        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
-        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
-        self.psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
-
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
-        """
-        # NB: EngineCombine overwrites this function for a faster implementation
-        # hence the additional argument `U`
-        self.env.get_LP(i0 + 1, store=True)  # as implemented directly in the environment
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The VH as returned by SVD with combined legs, labels ``'vL', '(p1.vR)'``.
-        """
-        # NB: EngineCombine overwrites this function for a faster implementation
-        # hence the additional argument `VH`
-        self.env.get_RP(i0, store=True)  # as implemented directly in the environment
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
         """Plot :attr:`update_stats` to display the convergence during the sweeps.
@@ -1022,20 +596,805 @@ class Engine(NpcLinearOperator):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
-    def _get_sweep_schedule(self):
-        L = self.env.L
-        if self.finite:
-            schedule_i0 = list(range(0, L - 1)) + list(range(L - 3, 0, -1))
-            update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2)
+
+class TwoSiteDMRGEngine(DMRGEngine):
+    """'Engine' for the two-site DMRG algorithm.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+
+    Attributes
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.update_bond` is called.
+
+        =========== ===================================================================
+        key         description
+        =========== ===================================================================
+        i0          An update was performed on sites ``i0, i0+1``.
+        ----------- -------------------------------------------------------------------
+        age         The number of physical sites involved in the simulation.
+        ----------- -------------------------------------------------------------------
+        E_total     The total energy before truncation.
+        ----------- -------------------------------------------------------------------
+        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
+        =========== ===================================================================
+
+    sweep_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy *before* truncation (as calculated by Lanczos).
+        ------------- -------------------------------------------------------------------
+        S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
+        max_trunc_err The maximum truncation error in the last sweep
+        ------------- -------------------------------------------------------------------
+        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
+
+    """
+
+    def __init__(self, psi, model, engine_params):
+        self.EffectiveH = TwoSiteH
+        super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
+
+    def prepare_update(self):
+        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
+
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
+        """
+        EffectiveH = self.EffectiveH
+        env = self.env
+        eff_H = EffectiveH(env, self.i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        self.eff_H = eff_H
+
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
+        theta_ortho = self.get_theta_ortho()
+        if self.combine:
+            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
+            theta_ortho = [
+                th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
+                for th_o in theta_ortho
+            ]
         else:
-            assert (L >= 2)
-            schedule_i0 = list(range(0, L)) + list(range(L, 0, -1))
-            update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                           [[True, True]] * 2 + [[False, True]] * (L-2)
-        return schedule_i0, update_LP_RP
+            theta.itranspose(['vL', 'p0', 'p1', 'vR'])
+            for th_o in theta_ortho:
+                th_o.itranspose(['vL', 'p0', 'p1', 'vR'])
+        return theta, theta_ortho
+
+    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+        """Perform bond-update on the sites ``(i0, i0+1)``.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta`.
+        optimize : bool, optional
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+        meas_E_trunc : bool, optional
+            Wheter to measure the energy after truncation.
+
+        Returns
+        -------
+        update_data : dict
+            Data computed during the local update, as described in the following list.
+
+            E_total : float
+                Total energy, obtained *before* truncation (if ``optimize=True``),
+                or *after* truncation (if ``optimize=False``) (but never ``None``).
+            E_trunc : float | ``None``
+                The energy difference of the total energy after minus before truncation,
+                ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+            err : :class:`~tenpy.algorithms.truncation.TruncationError`
+                The truncation error introduced after bond optimization.
+            N_lanczos : int
+                Dimension of the Krylov space used for optimization in the lanczos algorithm.
+                0 if ``optimize=False``.
+            age : int
+                Current size of the DMRG simulation: number of physical sites involved
+                into the contraction.
+        """
+        i0 = self.i0
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
+        if optimize:
+            E0, theta, N = self.diag(theta, theta_ortho)
+        else:
+            E0, N = None, 0
+        theta = self.prepare_svd(theta)
+        U, S, VH, err = self.mixed_svd(theta)
+        self.set_B(U, S, VH)
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+        }
+        return update_data
+
+    def prepare_svd(self, theta):
+        """Transform theta into matrix for svd."""
+        if self.combine:
+            return theta  # Theta is already combined.
+        else:
+            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1],
+                                      qconj=[+1, -1])
+
+    def mixed_svd(self, theta):
+        """Get (truncated) `B` from the new theta (as returned by diag).
+
+        The goal is to split theta and truncate it::
+
+            |   -- theta --   ==>    -- U -- S --  VH -
+            |      |   |                |          |
+
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
+
+        With a mixer, the state is perturbed before the SVD.
+        The details of the perturbation are defined by the :class:`Mixer` class.
+
+        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singluar values of the array; with mixer it might be a general
+            matrix with labels ``'vL', 'vR'``; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        i0 = self.i0
+        # get qtotal_LR from i0
+        if self.mixer is None:
+            # simple case: real svd, defined elsewhere.
+            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
+            return U, S, VH, err
+        update_LP, update_RP = self.update_LP_RP
+        return self.mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+
+    def set_B(self, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
+
+        Parameters
+        ----------
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
+        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        i0 = self.i0
+        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        self.psi.set_SR(i0, S)
+        # the old stored environments are now invalid
+        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
+        for o_env in self.ortho_to_envs:
+            o_env.del_LP(i0 + 1)
+            o_env.del_RP(i0)
+        self.env.del_LP(i0 + 1)
+        self.env.del_RP(i0)
+
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+        """
+        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        if Mixer_class:
+            if Mixer_class is True:
+                Mixer_class = DensityMatrixMixer
+            if isinstance(Mixer_class, str):
+                if Mixer_class == "Mixer":
+                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
+                           'for Sweep parameter "mixer"')
+                    warnings.warn(msg, FutureWarning)
+                    Mixer = "DensityMatrixMixer"
+                Mixer_class = globals()[Mixer_class]
+            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
+
+    def update_LP(self, U):
+        """Update left part of the environment.
+
+        We always update the environment at site i0 + 1: this environment then contains the site
+        where we just performed a local update (when sweeping right).
+
+        Parameters
+        ----------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by the SVD, with combined legs, labels ``'vL.p0', 'vR'``.
+        """
+        i0 = self.i0
+        if self.combine:
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
+        else:  # as implemented directly in the environment
+            self.env.get_LP(i0 + 1, store=True)
+
+    def update_RP(self, VH):
+        """Update right part of the environment.
+
+        We always update the environment at site i0: this environment then contains the site
+        where we just performed a local update (when sweeping left).
+
+        Parameters
+        ----------
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            The VH as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
+        """
+        i0 = self.i0
+        if self.combine:
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+            self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
+        else:  # as implemented directly in the environment
+            self.env.get_RP(i0, store=True)
 
 
-class EngineCombine(Engine):
+class SingleSiteDMRGEngine(DMRGEngine):
+    """'Engine' for the single-site DMRG algorithm.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    engine_params : dict
+        Further optional parameters. These are usually algorithm-specific, and thus should be
+        described in subclasses.
+
+    Attributes
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian (i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        DMRG).
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        Effective two-site Hamiltonian.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.update_bond` is called.
+
+        =========== ===================================================================
+        key         description
+        =========== ===================================================================
+        i0          An update was performed on sites ``i0, i0+1``.
+        ----------- -------------------------------------------------------------------
+        age         The number of physical sites involved in the simulation.
+        ----------- -------------------------------------------------------------------
+        E_total     The total energy before truncation.
+        ----------- -------------------------------------------------------------------
+        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
+        =========== ===================================================================
+
+    sweep_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy *before* truncation (as calculated by Lanczos).
+        ------------- -------------------------------------------------------------------
+        S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
+        max_trunc_err The maximum truncation error in the last sweep
+        ------------- -------------------------------------------------------------------
+        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
+
+    """
+
+    def __init__(self, psi, model, engine_params):
+        self.EffectiveH = OneSiteH
+        super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
+
+
+    def prepare_update(self):
+        """Prepare `self` to represent the effective Hamiltonian on site ``i0``.
+
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels ``'vL', 'p0', 'vR', 'p1'``.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
+            c.f. see :meth:`get_theta_ortho`.
+        """
+        EffectiveH = self.EffectiveH
+        env = self.env
+        self.eff_H = eff_H = EffectiveH(env, self.i0, self.combine, self.move_right)
+        # eff_H has attributes LP, RP, W.
+
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff).replace_label('p0', 'p')
+        # 'vL', 'p', 'vR'
+        theta_ortho = self.get_theta_ortho()
+        for th_o in theta_ortho:
+                th_o.ireplace_label('p0', 'p')
+        if self.combine:
+            if self.move_right:
+                theta = theta.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
+                theta_ortho = [
+                    th_o.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
+                    for th_o in theta_ortho
+                ]
+            else:
+                theta = theta.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
+                theta_ortho = [
+                    th_o.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
+                    for th_o in theta_ortho
+                ]
+        else:
+            theta.itranspose(['vL', 'p', 'vR'])
+            for th_o in theta_ortho:
+                th_o.ireplace_label('p0', 'p').itranspose(['vL', 'p', 'vR'])
+        return theta, theta_ortho
+
+    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+        """Perform site-update on the site ``i0``.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
+            States to orthogonalize against, with same tensor structure as `theta`.
+        optimize : bool
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+        meas_E_trunc : bool
+            Wheter to measure the energy after truncation.
+
+        Returns
+        -------
+        E_total : float
+            Total energy, obtained *before* truncation (if ``optimize=True``),
+            or *after* truncation (if ``optimize=False``) (but never ``None``).
+        E_trunc : float | ``None``
+            The energy difference of the total energy after minus before truncation,
+            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced after bond optimization.
+        N_lanczos : int
+            Dimension of the Krylov space used for optimization in the lanczos algorithm.
+            0 if ``optimize=False``.
+        age : int
+            Current size of the DMRG simulation: number of physical sites involved
+            into the contraction.
+        """
+        i0 = self.i0
+        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
+        if optimize:
+            E0, theta, N = self.diag(theta, theta_ortho)
+        else:
+            E0, N = None, 0
+        theta = self.prepare_svd(theta)
+        if self.move_right:
+            next_B = self.env.bra.get_B(i0 + 1, form='B')
+        else:
+            next_B = self.env.bra.get_B(i0 - 1, form='A')
+        U, S, VH, err = self.mixed_svd(theta, next_B)
+
+        # Enforce normalization:
+        if self.move_right:
+            VH = VH.combine_legs(['p', 'vR'])
+            U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
+            VH = VH.split_legs('(p.vR)')
+            S = np.dot(np.diag(S), U_VH.to_ndarray())
+            S = np.dot(S, np.diag(S_VH))
+            S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+        else:
+            U = U.combine_legs(['vL', 'p'])
+            U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
+            U = U.split_legs(['(vL.p)'])
+            S = np.dot(VH_U.to_ndarray(), np.diag(S))
+            S = np.dot(np.diag(S_U), S)
+            S = npc.Array.from_ndarray(S, [U.legs[2], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+
+        self.set_B(U, S, VH)
+
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+        }
+
+        return update_data
+
+    def prepare_svd(self, theta):
+        """Transform theta into matrix for svd.
+
+        In contrast with the 2-site engine, the matrix here depends on the direction we move, as we
+        need `'p'` to point away from the direction we are going in.
+        """
+        if self.combine:
+            if self.move_right:
+                theta.itranspose(['(vL.p)', 'vR'])  # ensure the order.
+            else:
+                theta.itranspose(['vL', '(p.vR)'])  # ensure the order.
+        else:
+            if self.move_right:
+                theta = theta.combine_legs(['vL', 'p'], qconj=+1, new_axes=0)
+            else:
+                theta = theta.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
+        return theta
+
+    def mixed_svd(self, theta, next_B):
+        """Get (truncated) `B` from the new theta (as returned by diag).
+
+        The goal is to split theta and truncate it. For a move to the right::
+
+            |   -- theta -- next_B --    ==>    -- U -- S -- VH -- next_B --
+            |        |      |                      |               |
+
+        For a move to the left::
+
+            |   -- next_B -- theta -- ==>    -- next_B -- U -- S -- VH --
+            |      |         |                  |                   |
+
+        The `VH` for right-move or `U` for left-move is absorebed into the `next_B`.
+
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values of theta
+        followed by the absorption of VH/U.
+
+        With a mixer, the state is perturbed before the SVD.
+        The details of the perturbation are defined by the :class:`Mixer` class.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd with :meth:`prepare_svd`,
+            i.e. with combined legs.
+        nextB : :class:`~tenpy.linalg.np_conserved.Array`
+            MPS tensor at the site that will be visited next.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singluar values of the array; with mixer it might be a general
+            matrix with labels ``'vL', 'vR'``; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        """
+        # get qtotal_LR from i0
+        if self.mixer is None:
+            # simple case: real svd, defined elsewhere.
+            qtotal = [theta.qtotal, None] if self.move_right else [None, theta.qtotal]
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=qtotal,
+                                         inner_labels=['vR', 'vL'])
+            if self.move_right:
+                VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
+            else:
+                U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
+            return U, S, VH, err
+        else:  # we have a mixer
+            return self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
+
+    def set_B(self, U, S, VH):
+        """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
+
+        Parameters
+        ----------
+        U, VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Left and Right-canonical matrices as returned by the SVD.
+        S : 1D array | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            The middle part returned by the SVD, ``theta = U S VH``.
+            Without a mixer just the singular values, with enabled `mixer` a 2D array.
+        """
+        i0 = self.i0
+        if self.move_right:
+            B0 = U.split_legs(['(vL.p)'])
+            self.psi.set_B(i0, B0, form='A')  # left-canonical
+            self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
+            self.psi.set_SR(i0, S)
+            for o_env in self.ortho_to_envs:
+                o_env.del_LP(i0 + 1)
+                o_env.del_RP(i0)
+            self.env.del_LP(i0 + 1)
+            self.env.del_RP(i0)
+        else:
+            B1 = VH.split_legs(['(p.vR)'])
+            self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
+            self.psi.set_B(i0, B1, form='B')  # right-canonical
+            self.psi.set_SL(i0, S)
+            for o_env in self.ortho_to_envs:  # TODO indexing here
+                o_env.del_LP(i0)
+                o_env.del_RP(i0 - 1)
+            self.env.del_LP(i0)
+            self.env.del_RP(i0 - 1)
+
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+        """
+        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        if Mixer_class:
+            if Mixer_class is True:
+                Mixer_class = SingleSiteMixer
+            if isinstance(Mixer_class, str):
+                if Mixer_class == "Mixer":
+                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
+                           'for Sweep parameter "mixer"')
+                    warnings.warn(msg, FutureWarning)
+                    Mixer = "DensityMatrixMixer"  # TODO not for 1-site.
+                Mixer_class = globals()[Mixer_class]
+            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
+
+    def update_LP(self, U):
+        """Update left part of the environment.
+
+        The site at which to update the environment depends on the direction of the sweep. If we
+        are sweeping right, update the invironment at `i0+1`. If we are sweeping left, update the
+        environment at `i0`
+
+        Parameters
+        ----------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            The U as returned by SVD, with combined legs,
+            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+        """
+        i0 = self.i0
+        if self.combine and self.move_right:
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
+            self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
+        else:  # as implemented directly in the environment
+            if self.move_right:
+                self.env.get_LP(i0 + 1, store=True)
+            else:
+                self.env.get_LP(i0, store=True)
+
+    def update_RP(self, VH):
+        """Update right part of the environment.
+
+        The site at which to update the environment depends on the direction of the sweep. If we
+        are sweeping right, update the invironment at `i0`. If we are sweeping left, update the
+        environment at `i0-1`
+
+        Parameters
+        ----------
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            The VH as returned by SVD, with combined legs,
+            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+        """
+        i0 = self.i0
+        if self.combine and not self.move_right:
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
+            self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
+        else:  # as implemented directly in the environment
+            if self.move_right:
+                self.env.get_RP(i0, store=True)
+            else:
+                self.env.get_RP(i0 - 1, store=True)
+
+
+class Engine(NpcLinearOperator):
+    """Prototype for an DMRG 'Engine'.
+
+    This class is deprecated with the arrival of the new `Sweep`-based classes.
+
+    The old docstring:
+
+    This class is the working horse of DMRG. It implements the :meth:`sweep` and large
+    parts of the (two-site) optimization.
+    During the diagonalization (i.e. after calling :meth:`prepare_diag`), the class represents
+    the effective two-site Hamiltonian, which looks like this::
+
+        |        .---            ----.
+        |        |     |      |      |
+        |        LP----W[i0]--W[i1]--RP
+        |        |     |      |      |
+        |        .---            ----.
+
+    `LP` and `RP` are left and right parts of the :class:`~tenpy.networks.mpo.MPOEnvironment`,
+    `W[i0]` and `W[i1]` are the MPO matrices of the Hamiltonian at the two sites ``i0, i1=i0+1``.
+    How this network is then actually contracted in detail is left to derived classes.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    DMRG_params : dict
+        Further optional parameters. See :func:`run` for more details.
+
+    Attributes
+    ----------
+    verbose : int
+        Level of verbosity (i.e. how much status information to print); higher=more output.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The MPS to be optimized. After :meth:`run`, this should be (close to) the ground state.
+    sweeps : int
+        The number of performed sweeps (with ``optimize=True``, i.e. not counting the
+        environment updates).
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
+        Environments of the form ``<psi|orhto>`` for states `ortho` of the `orthogonal_to`
+        parameter; needed to find excited states.
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
+    DMRG_params : dict
+        Parameters used for the DMRG. See :func:`run` for more details.
+    lanczos_params : dict
+        Parameters for :func:`~tenpy.linalg.lanczos.lanczos`.
+    trunc_params : dict
+        Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
+    finite : bool
+        Wheter we perform DMRG for an MPS with finite/segment (True) or infinite boundary
+        conditions; same as `psi.finite`.
+    shelve : bool
+        True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
+    chi_list : dict | None
+        See DMRG_params `chi_list`. ``None`` (default) disables this feature.
+    update_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.update_bond` is called.
+
+        =========== ===================================================================
+        key         description
+        =========== ===================================================================
+        i0          An update was performed on sites ``i0, i0+1``.
+        ----------- -------------------------------------------------------------------
+        age         The number of physical sites involved in the simulation.
+        ----------- -------------------------------------------------------------------
+        E_total     The total energy before truncation.
+        ----------- -------------------------------------------------------------------
+        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
+        =========== ===================================================================
+
+    sweep_stats : dict
+        A dictionary with detailed statistics of the convergence.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy *before* truncation (as calculated by Lanczos).
+        ------------- -------------------------------------------------------------------
+        S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
+        max_trunc_err The maximum truncation error in the last sweep
+        ------------- -------------------------------------------------------------------
+        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
+
+    time0 : float
+        Start time of the simulation, set in :meth:`reset_stats`.
+    """
+
+
+
+class EngineCombine(TwoSiteDMRGEngine):
     r"""Engine which combines legs into pipes as far as possible.
 
     This engine combines the virtual and physical leg for the left site and right site into pipes.
@@ -1051,107 +1410,11 @@ class EngineCombine(Engine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
-
-    def prepare_diag(self, i0):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'(vL.p0)', '(p1.vR)'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'(vL.p0)', '(p1.vR)'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
-        """
-        env = self.env
-        LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
-        H1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        H2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
-                                                ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
-        # calculate LHeff
-        LHeff = npc.tensordot(LP, H1, axes=['wR', 'wL'])
-        pipeL = LHeff.make_pipe(['vR*', 'p0'])
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, -1])
-        # calculate RHeff
-        RHeff = npc.tensordot(RP, H2, axes=['wL', 'wR'])
-        pipeR = RHeff.make_pipe(['p1', 'vL*'])
-        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # labels 'vL', 'vR', 'p0', 'p1'
-        theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-        theta_ortho = self.get_theta_ortho(i0)
-        theta_ortho = [
-            th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[pipeL, pipeR])
-            for th_o in theta_ortho
-        ]
-        return theta, theta_ortho
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The effective Hamiltonian applied to the wave function, :math:`H |\theta>`.
-        """
-        labels = theta.get_leg_labels()
-        theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-        theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
-        theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
-        theta.itranspose(labels)  # if necessary, transpose
-        return theta
-
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd."""
-        return theta  # For this engine nothing to do.
-
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
-        """
-        # make use of self.LHeff
-        LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-        LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
-        self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The VH as returned by SVD with combined legs, labels ``'vL', '(p1.vR)'``.
-        """
-        # make use of self.RHeff
-        RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-        RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-        self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + 1) + 1)
+    def __init__(self, psi, model, DMRG_params):
+        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
+                      category=FutureWarning, stacklevel=2)
+        DMRG_params['combine'] = True  # to reproduces old-style engine
+        super().__init__(psi, model, TwoSiteH, DMRG_params)
 
 
 class EngineFracture(Engine):
@@ -1171,90 +1434,11 @@ class EngineFracture(Engine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
-
-    def prepare_diag(self, i0):
-        """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        i0 : int
-            We want to optimize on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
-        """
-        env = self.env
-        self.LP = env.get_LP(i0, store=True)  # labels 'vR*', 'wR', 'vR'
-        self.H0 = env.H.get_W(i0).replace_labels(['p', 'p*'],
-                                                 ['p0', 'p0*'])  # 'wL', 'wR', 'p0', 'p0*'
-        self.RP = env.get_RP(i0 + 1, store=True)  # labels 'vL*', 'wL', 'vL'
-        self.H1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'],
-                                                     ['p1', 'p1*'])  # 'wL', 'wR', 'p1', 'p1*'
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta.itranspose(['vL', 'p0', 'vR', 'p1'])
-        theta_ortho = self.get_theta_ortho(i0)
-        for th_o in theta_ortho:
-            th_o.itranspose(['vL', 'p0', 'vR', 'p1'])
-        return theta, theta_ortho
-
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to,  :math:`H |\theta>`
-        """
-        labels = theta.get_leg_labels()  # 'vL', 'p0', 'vR', 'p1'
-        theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-        theta = npc.tensordot(self.H0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-        theta = npc.tensordot(theta, self.H1, axes=[['wR', 'p1'], ['wL', 'p1*']])
-        theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
-        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-        theta.itranspose(labels)  # if necessary, transpose
-        return theta
-
-    def prepare_svd(self, theta):
-        """Transform theta into matrix for svd."""
-        return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1])
-
-    def update_LP(self, i0, U):
-        """Update left part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_LP(i0+1)``.
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD with combined legs, labels ``'(vL.p0)', 'vR'``.
-        """
-        self.env.get_LP(i0 + 1, store=True)  # as implemented directly in the environment
-
-    def update_RP(self, i0, VH):
-        """Update right part of the environment.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index. We calculate ``self.env.get_RP(i0)``.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            The U as returned by SVD, with combined legs, labels ``'vL', '(vR.p1)'``.
-        """
-        self.env.get_RP(i0, store=True)  # as implemented directly in the environment
+    def __init__(self, psi, model, DMRG_params):
+        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
+                      category=FutureWarning, stacklevel=2)
+        DMRG_params['combine'] = False  # to reproduces old-style engine
+        super().__init__(psi, model, TwoSiteH, DMRG_params)
 
 
 class Mixer:
@@ -1274,6 +1458,7 @@ class Mixer:
     the perturbation becomes completely irrelevant and the mixer gets disabled.
 
     This original idea of the mixer was introduced in [White2005]_.
+    [Hubig2015]_ discusses the mixer and provides an improved version.
 
     Parameters
     ----------
@@ -1372,17 +1557,13 @@ class Mixer:
 class SingleSiteMixer(Mixer):
     """Mixer for single-site DMRG.
 
-    Perform a subspace expansion following [Hubig2015]_.
-
-    .. todo :
-        This is still under development.
-        Works only with EngineCombine
+    Performs a subspace expansion following [Hubig2015]_.
     """
 
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
 
-        We calculate the left and right reduced density using the mixer
+        We calculate the left and right reduced density matrix using the mixer
         (which might include applications of `H`).
         These density matrices are diagonalized and truncated such that we effectively perform
         a svd for the case ``mixer.amplitude=0``.
@@ -1409,7 +1590,7 @@ class SingleSiteMixer(Mixer):
         S : 1D ndarray
             (Perturbed) singular values on the new bond (between `theta` and `next_B`).
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `tensordot(theta, next_B)`. Labels ``'vL', '(vR.p1)'``.
+            Right-canonical part of `tensordot(theta, next_B)`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -1426,21 +1607,47 @@ class SingleSiteMixer(Mixer):
         return U, S, VH, err
 
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
-        H = engine.env.H
-        if move_right:
-            # theta has legs (vL.p), vR
-            LHeff = engine.LHeff
-            expand = npc.tensordot(LHeff, theta, axes=[2, 0])  # (vR*.p), (vL.p)
-            expand = expand.combine_legs(['wR', 2], qconj=-1, new_axes=1)  # (vR*.p), (wR.vR)
+        """Expand the MPS subspace, to allow the bond dimension to increase.
+
+        This is the subspace expansion following [Hubig2015]_.
+
+        Parameters
+        ----------
+        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
+            'Engine' for the DMRG algorithm
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Optimized guess for the ground state of the effective local Hamiltonian.
+        i0 : int
+            Site index at which the local update has taken place.
+        move_right : bool
+            Whether the next `i0` of the sweep will be right or left of the current one.
+        next_B : :class:`~tenpy.linalg.np_conserved.Array`
+            The subspace expansion requires to change the tensor on the next site as well.
+            If `move_right`, it should correspond to ``engine.psi.get_B(i0+1, form='B')``.
+            If not `move_right`, it should correspond to ``engine.psi.get_B(i0-1, form='A')``.
+
+        Returns
+        -------
+        theta :
+            Local MPS tensor at site `i0` after subspace expansion.
+        next_B :
+            MPS tensor at site `i0+1` or `i0-1` (depending on sweep direction) after subspace
+            expansion.
+        """
+        if not engine.combine:  # Need to get Heff's even if combine=False
+            engine.eff_H.combine_Heff()
+
+        if move_right:  # theta has legs (vL.p), vR
+            LHeff = engine.eff_H.LHeff
+            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
+            expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
-        else:  # move left
-            RHeff = engine.RHeff
-            # TODO XXX: get_W(i0) vs i0+1 for 1-site vs 2-site
-            # -> need RHeff from engine!!!
-            expand = npc.tensordot(theta, RHeff, axes=[1, 0])
-            expand = expand.combine_legs([0, 'wL'], qconj=+1)
+        else:  # theta has legs vL, (p.vR)
+            RHeff = engine.eff_H.RHeff
+            expand = npc.tensordot(theta, RHeff, axes=['(p.vR)', '(p*.vL)'])
+            expand = expand.combine_legs(['vL', 'wL'], qconj=+1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=0, copy=False)
             next_B = next_B.extend('vR', expand.legs[0].conj())
@@ -1455,10 +1662,11 @@ class TwoSiteMixer(SingleSiteMixer):
 
     .. todo :
         This is still under development.
-        Seems to works correctly only with EngineCombine with finite MPS.
+        Works only with :class:`TwoSiteDMRGEngine`.
+        Has not been ported to `Sweep`-based setup yet. Do we need to?
     """
 
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
+    def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
         Parameters
@@ -1492,7 +1700,6 @@ class TwoSiteMixer(SingleSiteMixer):
                                      engine.trunc_params,
                                      qtotal_LR=[qtotal_i0, None],
                                      inner_labels=['vR', 'vL'])
-        move_right = update_LP  # TODO: get argument inferred from schedule?
         if move_right:  # move to the right
             U, S, VH, err2 = SingleSiteMixer.perturb_svd(self, engine, U.iscale_axis(S, 1), i0,
                                                          move_right, VH)
@@ -1518,7 +1725,7 @@ class DensityMatrixMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.

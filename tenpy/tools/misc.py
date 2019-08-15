@@ -11,7 +11,8 @@ import warnings
 
 __all__ = [
     'to_iterable', 'to_array', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
-    'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad', 'any_nonzero'
+    'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad', 'any_nonzero',
+    'add_with_None_0', 'chi_list', 'build_initial_state', 'setup_executable'
 ]
 
 
