@@ -100,6 +100,8 @@ class Sweep:
     """
 
     def __init__(self, psi, model, engine_params):
+        if not hasattr(self, "EffectiveH"):
+            raise NotImplementedError("Subclass needs to set EffectiveH")
         self.psi = psi
         self.model = model  # TODO: document
         self.engine_params = engine_params

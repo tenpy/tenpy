@@ -194,7 +194,7 @@ def run(psi, model, DMRG_params, n=2):
     # initialize the engine
     active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
     if active_sites ==  1:
-        engine = OneSiteDMRGEngine(psi, model, DMRG_params)
+        engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
     elif active_sites == 2:
         engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
     else:
@@ -989,7 +989,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def __init__(self, psi, model, engine_params):
         self.EffectiveH = OneSiteH
-        super(OneSiteDMRGEngine, self).__init__(psi, model, engine_params)
+        super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
 
     def prepare_update(self):
