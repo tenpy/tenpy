@@ -3,6 +3,7 @@
 
 import numpy as np
 from .optimization import bottleneck
+from .process import omp_set_nthreads
 import random
 import os
 import itertools
@@ -523,7 +524,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         }
 
     # Having set up all dictionaries, we can now do some other setting up
-    #omp.set_num_threads(args.ncores)
+    omp_set_nthreads(args.ncores)
     if not args.dir == None:
         os.chdir(args.dir)
     import matplotlib
