@@ -47,7 +47,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         ##   DMRG Calculation    ##
         print("Start IDMRG CALCULATION")
         eng.run()
-        eng.DMRG_params['mixer'] = None
+        eng.engine_params['mixer'] = None
         psi.canonical_form()
 
         ##   Calculating bond entropy and correlation length  ##
