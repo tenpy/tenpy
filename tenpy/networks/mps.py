@@ -76,6 +76,7 @@ site of the MPS in :attr:`MPS.form`.
 # Copyright 2018 TeNPy Developers
 
 import numpy as np
+import random
 import warnings
 from functools import reduce
 import scipy.sparse.linalg.eigen.arpack
