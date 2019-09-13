@@ -2354,7 +2354,7 @@ class MPS:
             print("Total swaps in permute_sites:", num_swaps, repr(trunc_err))
         return trunc_err
 
-    def compute_K(self, perm, swap_op='auto', trunc_par={}, canonicalize=1.e-6, verbose=0):
+    def compute_K(self, perm, swap_op='auto', trunc_par=None, canonicalize=1.e-6, verbose=0):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
         Works for an infinite MPS living on a cylinder, infinitely long in `x` direction and with
@@ -2380,7 +2380,7 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            If not set, `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -2408,6 +2408,8 @@ class MPS:
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
+        if trunc_par is None:
+            trunc_par = {}
         trunc_par.setdefault('chi_max', max(self.chi))
         trunc_par.setdefault('verbose', verbose)
 
