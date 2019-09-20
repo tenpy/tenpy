@@ -23,6 +23,7 @@ Added
   :class:`~tenpy.algorithms.mps_sweeps.EffectiveH` to be a 
   :class:`~tenpy.algorithms.mps_sweeps.OneSiteH` or  :class:`~tenpy.algorithms.mps_sweeps.TwoSiteH`.
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
+- Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
 
 
 Fixed
