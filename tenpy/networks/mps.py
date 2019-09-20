@@ -919,14 +919,14 @@ class MPS:
         self.form = [B_form] * len(grouped_sites)
         self.grouped = self.grouped * n
 
-    def group_split(self, trunc_par={}):
+    def group_split(self, trunc_par=None):
         """Modify `self` inplace to split previously grouped sites.
 
         Parameters
         ----------
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
         -------
@@ -937,6 +937,8 @@ class MPS:
         --------
         group_sites : Should have been used before to combine sites.
         """
+        if trunc_par is None:
+            trunc_par = {}
         self.convert_form('B')
         if self.L > 1:
             trunc_par.setdefault('chi_max', max(self.chi))
