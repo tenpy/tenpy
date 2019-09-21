@@ -874,6 +874,31 @@ class MPS:
             init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
         return init_RP
 
+    def increase_L(self, new_L=None):
+        """Modify `self` inplace to enlarge the unit cell.
+
+        For an infinite MPS, we have unit cells.
+
+        Parameters
+        ----------
+        new_L : int
+            New number of sites. Defaults to twice the number of current sites.
+        """
+        old_L = self.L
+        if new_L is None:
+            new_L = 2 * old_L
+        if new_L % old_L:
+            raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
+        factor = new_L // old_L
+        if factor <= 1:
+            raise ValueError("can't shrink!")
+        if self.bc == 'segment':
+            raise ValueError("can't enlarge segment MPS")
+        self.sites = factor * self.sites
+        self._B = factor * self._B
+        self._S = factor * self._S[:-1] + [self._S[-1]]
+        self.form = factor * self.form
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 

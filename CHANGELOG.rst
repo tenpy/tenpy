@@ -24,7 +24,7 @@ Added
   :class:`~tenpy.algorithms.mps_sweeps.OneSiteH` or  :class:`~tenpy.algorithms.mps_sweeps.TwoSiteH`.
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
 - Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
-
+- :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
 
 Fixed
 ^^^^^
