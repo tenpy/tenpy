@@ -246,6 +246,7 @@ def test_increase_L():
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
     psi0 = psi.copy()
     psi.increase_L(9)
+    psi.test_sanity()
     expval = psi.expectation_value('Sigmaz')
     npt.assert_equal(expval, [1., -1., 1.]*3)
 
