@@ -248,7 +248,8 @@ def test_increase_L():
     psi.increase_L(9)
     psi.test_sanity()
     expval = psi.expectation_value('Sigmaz')
-    npt.assert_equal(expval, [1., -1., 1.]*3)
+    npt.assert_equal(expval, [1., -1., 1.] * 3)
+
 
 def test_group():
     s = site.SpinHalfSite(conserve='parity')
