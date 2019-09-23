@@ -13,18 +13,18 @@ Internally, it generates an instance of an :class:`Sweep`.
 This class implements the common functionality like defining a `sweep`,
 but leaves the details of the contractions to be performed to the derived classes.
 
-Currently, there are two derived classes implementing the contractions: :class:`OneSiteDMRGEngine`
+Currently, there are two derived classes implementing the contractions: :class:`SingleSiteDMRGEngine`
 and :class:`TwoSiteDMRGEngine`. They differ (as their name implies) in the number of sites which
 are optimized simultaneously.
 They should both give the same results (up to rounding errors). However, if started from a product
-state, :class:`OneSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
+state, :class:`SingleSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
 :class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
 occasionally displayed some convergence issues..
 Which one is preffered in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
 A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
-minima, and then slowly turned off in the end. For :class:`OneSiteDMRGEngine`, using a mixer is
+minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`, using a mixer is
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 .. todo ::
@@ -62,7 +62,7 @@ def run(psi, model, DMRG_params, n=2):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     n : int, optional
-        Number of active sites in the DMRG algorithm. Switches between :class:`OneSiteDMRGEngine`
+        Number of active sites in the DMRG algorithm. Switches between :class:`SingleSiteDMRGEngine`
         and :class:`TwoSiteDMRGEngine`.
     DMRG_params : dict
         Further optional parameters as described in the following table.
@@ -177,7 +177,7 @@ def run(psi, model, DMRG_params, n=2):
                                  sweeps.
         -------------- --------- ---------------------------------------------------------------
         active_sites   int       The number of active sites to be used by DMRG. If set to 1,
-                                 :class:`OneSiteDMRGEngine` is used. If set to 2, DMRG is handled
+                                 :class:`SingleSiteDMRGEngine` is used. If set to 2, DMRG is handled
                                  by :class:`TwoSiteDMRGEngine`.
         ============== ========= ===============================================================
 
@@ -213,7 +213,7 @@ class DMRGEngine(Sweep):
 
     This engine is implemented as a subclass of
     :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
-    are generic between :class:`OneSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
+    are generic between :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
     Parameters
     ----------
@@ -1624,7 +1624,7 @@ class SingleSiteMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
+        engine : :class:`SingleSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
             'Engine' for the DMRG algorithm
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Optimized guess for the ground state of the effective local Hamiltonian.
@@ -1736,7 +1736,7 @@ class DensityMatrixMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`OneSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
+        engine : :class:`SingleSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.

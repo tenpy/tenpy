@@ -7,6 +7,7 @@
 
     truncation
     dmrg
+    mps_sweeps
     tebd
     tdvp
     purification_tebd
@@ -16,8 +17,10 @@
 """
 # Copyright 2018 TeNPy Developers
 
-from . import truncation, dmrg, tebd, tdvp, exact_diag, purification_tebd, network_contractor
+from . import truncation, dmrg, mps_sweeps, tebd, tdvp, exact_diag, purification_tebd, \
+    network_contractor
 
 __all__ = [
-    "truncation", "dmrg", "tebd", "tdvp", "exact_diag", "purification_tebd", "network_contractor"
+    "truncation", "dmrg", "mps_sweeps", "tebd", "tdvp", "exact_diag", "purification_tebd",
+    "network_contractor"
 ]
