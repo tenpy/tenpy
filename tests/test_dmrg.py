@@ -23,18 +23,23 @@ def e0_tranverse_ising(g=0.5):
 def _f_tfi(k, g):
     return -2 * np.sqrt(1 + g**2 - 2 * g * np.cos(k)) / np.pi / 2.
 
-params = [('finite', True, True, 1),  # 1-site DMRG with mixer=False is expected to fail.
-          ('finite', True, True, 2),
-          ('finite', True, False, 2),
-          ('finite', False, True, 1),
-          ('finite', False, True, 2),
-          ('finite', False, False, 2),
-          ('infinite', True, True, 1),
-          ('infinite', True, True, 2),
-          ('infinite', True, False, 2),
-          ('infinite', False, True, 1),
-          ('infinite', False, True, 2),
-          ('infinite', False, False, 2)]
+
+params = [
+    ('finite', True, True, 1),  # 1-site DMRG with mixer=False is expected to fail.
+    ('finite', True, True, 2),
+    ('finite', True, False, 2),
+    ('finite', False, True, 1),
+    ('finite', False, True, 2),
+    ('finite', False, False, 2),
+    ('infinite', True, True, 1),
+    ('infinite', True, True, 2),
+    ('infinite', True, False, 2),
+    ('infinite', False, True, 1),
+    ('infinite', False, True, 2),
+    ('infinite', False, False, 2)
+]
+
+
 @pytest.mark.parametrize("bc_MPS, combine, mixer, n", params)
 @pytest.mark.slow
 def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
@@ -67,7 +72,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
         'max_sweeps': 40,
         'active_sites': n,
     }
-    if mixer is None:
+    if not mixer:
         del dmrg_pars['mixer_params']  # avoid warning of unused parameter
     if bc_MPS == 'infinite':
         # if mixer is not None:
@@ -102,7 +107,7 @@ def test_dmrg_rerun(L=2):
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
-    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine':True}
+    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine': True}
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
@@ -133,7 +138,14 @@ def test_dmrg_excited(eps=1.e-12):
     print("Exact diag: E[:5] = ", ED.E[:5])
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
-    dmrg_pars = {'verbose': 1, 'N_sweeps_check': 1, 'lanczos_params': {'reortho': False}, 'combine':True}
+    dmrg_pars = {
+        'verbose': 1,
+        'N_sweeps_check': 1,
+        'lanczos_params': {
+            'reortho': False
+        },
+        'combine': True
+    }
     eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0]) / ED.E[0]) < eps

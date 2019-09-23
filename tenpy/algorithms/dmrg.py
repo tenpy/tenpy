@@ -47,8 +47,8 @@ from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'DMRGEngine', 'OneSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Engine', 'EngineCombine', 'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer',
-    'DensityMatrixMixer', 'chi_list'
+    'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Engine', 'EngineCombine',
+    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list'
 ]
 
 
@@ -193,7 +193,7 @@ def run(psi, model, DMRG_params, n=2):
     """
     # initialize the engine
     active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
-    if active_sites ==  1:
+    if active_sites == 1:
         engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
     elif active_sites == 2:
         engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
@@ -420,8 +420,15 @@ class DMRGEngine(Sweep):
         """Reset the statistics. Useful if you want to start a new Sweep run.
         """
         self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
-        self.update_stats = {'i0':[], 'age':[], 'E_total':[], 'N_lanczos':[],
-                             'time':[], 'err':[], 'E_trunc':[]}
+        self.update_stats = {
+            'i0': [],
+            'age': [],
+            'E_total': [],
+            'N_lanczos': [],
+            'time': [],
+            'err': [],
+            'E_trunc': []
+        }
         self.sweep_stats = {
             'sweep': [],
             'E': [],
@@ -697,7 +704,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         EffectiveH = self.EffectiveH
         env = self.env
-        eff_H = EffectiveH(env, self.i0, self.combine) # eff_H has attributes LP, RP, W1, W2.
+        eff_H = EffectiveH(env, self.i0, self.combine)  # eff_H has attributes LP, RP, W1, W2.
         self.eff_H = eff_H
 
         # make theta
@@ -705,7 +712,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
         theta_ortho = self.get_theta_ortho()
         if self.combine:
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
+            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
+                                       pipes=[eff_H.pipeL, eff_H.pipeR])
             theta_ortho = [
                 th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
                 for th_o in theta_ortho
@@ -775,7 +783,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         if self.combine:
             return theta  # Theta is already combined.
         else:
-            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1],
+            return theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
+                                      new_axes=[0, 1],
                                       qconj=[+1, -1])
 
     def mixed_svd(self, theta):
@@ -991,7 +1000,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         self.EffectiveH = OneSiteH
         super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
-
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on site ``i0``.
 
@@ -1015,19 +1023,17 @@ class SingleSiteDMRGEngine(DMRGEngine):
         # 'vL', 'p', 'vR'
         theta_ortho = self.get_theta_ortho()
         for th_o in theta_ortho:
-                th_o.ireplace_label('p0', 'p')
+            th_o.ireplace_label('p0', 'p')
         if self.combine:
             if self.move_right:
                 theta = theta.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
                 theta_ortho = [
-                    th_o.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
-                    for th_o in theta_ortho
+                    th_o.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL]) for th_o in theta_ortho
                 ]
             else:
                 theta = theta.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
                 theta_ortho = [
-                    th_o.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
-                    for th_o in theta_ortho
+                    th_o.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR]) for th_o in theta_ortho
                 ]
         else:
             theta.itranspose(['vL', 'p', 'vR'])
@@ -1082,14 +1088,14 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         # Enforce normalization:
         if self.move_right:
-            VH = VH.combine_legs(['p', 'vR'])
+            VH = VH.combine_legs(['p', 'vR'], qconj=-1)
             U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
             VH = VH.split_legs('(p.vR)')
             S = np.dot(np.diag(S), U_VH.to_ndarray())
             S = np.dot(S, np.diag(S_VH))
             S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
         else:
-            U = U.combine_legs(['vL', 'p'])
+            U = U.combine_legs(['vL', 'p'], qconj=+1)
             U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
             U = U.split_legs(['(vL.p)'])
             S = np.dot(VH_U.to_ndarray(), np.diag(S))
@@ -1393,7 +1399,6 @@ class Engine(NpcLinearOperator):
     """
 
 
-
 class EngineCombine(TwoSiteDMRGEngine):
     r"""Engine which combines legs into pipes as far as possible.
 
@@ -1410,9 +1415,12 @@ class EngineCombine(TwoSiteDMRGEngine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
+
     def __init__(self, psi, model, DMRG_params):
-        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
-                      category=FutureWarning, stacklevel=2)
+        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
+               "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
+               "instead of `EngineCombine`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = True  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
@@ -1434,9 +1442,12 @@ class EngineFracture(Engine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
+
     def __init__(self, psi, model, DMRG_params):
-        warnings.warn("Old-style engines are deprecated in favor of `Sweep` subclasses.",
-                      category=FutureWarning, stacklevel=2)
+        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
+               "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
+               "instead of `EngineFracture`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         DMRG_params['combine'] = False  # to reproduces old-style engine
         super().__init__(psi, model, DMRG_params)
 
