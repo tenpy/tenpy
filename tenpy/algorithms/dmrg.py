@@ -28,7 +28,7 @@ minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 .. todo ::
-    Write UserGuide/Example!!!
+    Write UserGuide!!!
 """
 # Copyright 2018 TeNPy Developers
 
@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 
-def run(psi, model, DMRG_params, n=2):
+def run(psi, model, DMRG_params):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -61,9 +61,6 @@ def run(psi, model, DMRG_params, n=2):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    n : int, optional
-        Number of active sites in the DMRG algorithm. Switches between :class:`SingleSiteDMRGEngine`
-        and :class:`TwoSiteDMRGEngine`.
     DMRG_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
@@ -176,20 +173,15 @@ def run(psi, model, DMRG_params, n=2):
                                  truncation right after each Lanczos optimization during the
                                  sweeps.
         -------------- --------- ---------------------------------------------------------------
-        active_sites   int       The number of active sites to be used by DMRG. If set to 1,
-                                 :class:`SingleSiteDMRGEngine` is used. If set to 2, DMRG is handled
-                                 by :class:`TwoSiteDMRGEngine`.
+        active_sites   int       The number of active sites to be used by DMRG.
+                                 If set to 1, :class:`SingleSiteDMRGEngine` is used.
+                                 If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
         ============== ========= ===============================================================
 
     Returns
     -------
     info : dict
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
-
-    Raises
-    ------
-    ValueError
-        If `n` is not set to `1` or `2`.
     """
     # initialize the engine
     active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
@@ -1091,7 +1083,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             VH = VH.combine_legs(['p', 'vR'], qconj=-1)
             U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
             VH = VH.split_legs('(p.vR)')
-            S = np.dot(np.diag(S), U_VH.to_ndarray())
+            S = np.dot(np.diag(S), U_VH.to_ndarray())  # TODO: avoid converting to numpy inbetween
             S = np.dot(S, np.diag(S_VH))
             S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
         else:
