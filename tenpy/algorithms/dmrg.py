@@ -1077,19 +1077,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         else:
             next_B = self.env.bra.get_B(i0 - 1, form='A')
         U, S, VH, err = self.mixed_svd(theta, next_B)
-
-        # Enforce normalization:
-        if self.move_right:
-            VH = VH.combine_legs(['p', 'vR'], qconj=-1)
-            U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
-            VH = VH.split_legs('(p.vR)')
-            S = U_VH.iscale_axis(S, 'vL').iscale_axis(S_VH, 'vR')
-        else:
-            U = U.combine_legs(['vL', 'p'], qconj=+1)
-            U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
-            U = U.split_legs(['(vL.p)'])
-            S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
-
         self.set_B(U, S, VH)
 
         update_data = {
@@ -1176,7 +1163,19 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
             return U, S, VH, err
         else:  # we have a mixer
-            return self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
+            U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
+            # Enforce normalization:
+            if self.move_right:
+                VH = VH.combine_legs(['p', 'vR'], qconj=-1)
+                U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
+                VH = VH.split_legs('(p.vR)')
+                S = U_VH.iscale_axis(S, 'vL').iscale_axis(S_VH, 'vR')
+            else:
+                U = U.combine_legs(['vL', 'p'], qconj=+1)
+                U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
+                U = U.split_legs(['(vL.p)'])
+                S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
+            return U, S, VH, err
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.

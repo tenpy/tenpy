@@ -77,6 +77,7 @@ site of the MPS in :attr:`MPS.form`.
 
 import numpy as np
 import warnings
+import random
 from functools import reduce
 import scipy.sparse.linalg.eigen.arpack
 
