@@ -1002,7 +1002,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
             States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
+            see :meth:`get_theta_ortho`.
         """
         EffectiveH = self.EffectiveH
         env = self.env
@@ -1083,16 +1083,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             VH = VH.combine_legs(['p', 'vR'], qconj=-1)
             U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
             VH = VH.split_legs('(p.vR)')
-            S = np.dot(np.diag(S), U_VH.to_ndarray())  # TODO: avoid converting to numpy inbetween
-            S = np.dot(S, np.diag(S_VH))
-            S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+            S = U_VH.iscale_axis(S, 'vL').iscale_axis(S_VH, 'vR')
         else:
             U = U.combine_legs(['vL', 'p'], qconj=+1)
             U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
             U = U.split_legs(['(vL.p)'])
-            S = np.dot(VH_U.to_ndarray(), np.diag(S))
-            S = np.dot(np.diag(S_U), S)
-            S = npc.Array.from_ndarray(S, [U.legs[2], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
+            S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
 
         self.set_B(U, S, VH)
 
