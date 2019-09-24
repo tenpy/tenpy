@@ -314,7 +314,7 @@ class Sweep:
         -------
         schedule : iterable of (int, bool, (bool, bool))
             Schedule for the sweep. Each entry is ``(i0, move_right, (update_LP, update_RP))``,
-            where `i0` is the leftmost of the ``self.EffectiveH.length` sites to be updated in
+            where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
             :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
             rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP`.
@@ -397,12 +397,14 @@ class EffectiveH(NpcLinearOperator):
     """Prototype class for local effective Hamiltonians used in sweep algorithms.
 
     As an example, the local effective Hamiltonian for a two-site (DMRG) algorithm
-    looks like:
+    looks like::
+
             |        .---       ---.
             |        |    |   |    |
             |       LP----H0--H1---RP
             |        |    |   |    |
             |        .---       ---.
+
     where ``H0`` and ``H1`` are MPO tensors.
 
     Parameters
@@ -449,7 +451,8 @@ class EffectiveH(NpcLinearOperator):
 class OneSiteH(EffectiveH):
     r"""Class defining the one-site effective Hamiltonian for Lanczos.
 
-    The effective one-site Hamiltonian ooks like this:
+    The effective one-site Hamiltonian looks like this::
+
             |        .---   ---.
             |        |    |    |
             |       LP----W0---RP
@@ -561,12 +564,14 @@ class OneSiteH(EffectiveH):
 class TwoSiteH(EffectiveH):
     r"""Class defining the two-site effective Hamiltonian for Lanczos.
 
-    The effective two-site Hamiltonian ooks like this:
+    The effective two-site Hamiltonian looks like this::
+
             |        .---       ---.
             |        |    |   |    |
             |       LP----W0--W1---RP
             |        |    |   |    |
             |        .---       ---.
+
     This class defines `LHeff` and `RHeff`, which are the contractions of `LP` with `W0`, and `RP`
     with `W1`, respectively.
 

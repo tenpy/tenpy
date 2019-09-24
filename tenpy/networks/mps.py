@@ -3423,8 +3423,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
         get state 2.
 
     .. todo ::
-    Move to more reasonable location (e.g., `tenpy.networks.mps`)
-    Make more general: it should be possible to specify states as strings.
+        Make more general: it should be possible to specify states as strings.
 
     Parameters
     ----------
