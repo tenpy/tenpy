@@ -49,10 +49,10 @@ def make_UI(H, dt):
 
             ind=H.get_IdL(i)
             if ind>=H.get_IdR(i-1): ind-=1
-            perm=[i for i in range(U[i].shape[1])]
+            perm=[i for i in range(U[i].shape[0])]
             del perm[ind]
             perm.insert(0, ind)
-            U[i].permute(perm, 1)
+            U[i].permute(perm, 0)
 
 
         U[i][:,0,:,:]*=dt
