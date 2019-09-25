@@ -10,6 +10,21 @@ from ..networks import mps, mpo
 
 
 def make_UI(H, dt):
+    r"""Creates the UI propagator for a given Hamiltonian.
+
+    Parameters
+    ----------
+    H: MPO
+        The Hamiltonian to use
+    dt:
+        the time step per application of the propagator
+
+    Returns
+    -------
+    UI: MPO
+        The propagator.
+
+    """
     if H.bc!='finite':
         raise ValueError("Only finite bc implemented")
     
