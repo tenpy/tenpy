@@ -1796,7 +1796,8 @@ class Array:
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
         if s.shape != (self.shape[axis], ):
-            raise ValueError("s has wrong shape: " + str(s.shape) + " instead of " + str(self.shape[axis]))
+            raise ValueError("s has wrong shape: " + str(s.shape) + " instead of " +
+                             str(self.shape[axis]))
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:
