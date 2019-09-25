@@ -8,6 +8,8 @@ from .hubbard import FermiHubbardChain as FermionicHubbardChain
 
 import warnings
 
+__all__ == ['FermionicHubbardModel', 'FermionicHubbardChain']
+
 msg = """RESTRUCTURING
 ***********
 * WARNING:

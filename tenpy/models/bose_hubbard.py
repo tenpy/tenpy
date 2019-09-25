@@ -7,6 +7,8 @@ from .hubbard import BoseHubbardModel, BoseHubbardChain
 
 import warnings
 
+__all__ = ['BoseHubbardModel', 'BoseHubbardChain']
+
 msg = """RESTRUCTURING
 ***********
 * WARNING:
