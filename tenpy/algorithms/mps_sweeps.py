@@ -69,7 +69,7 @@ class Sweep:
         Whether the MPS boundary conditions are finite (True) or infinite (False)
     i0 : int
         Only set during sweep.
-        Left-most of the EffectiveH.length sites to be updated in :meth:`update_local`.
+        Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
     lanczos_params : dict
         Parameters for the Lanczos algorithm.
     mixer : :class:`Mixer` | ``None``

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright 2019 TeNPy Developers
 
 import pickle
 import numpy as np

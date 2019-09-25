@@ -1,3 +1,6 @@
+"""To be used in the `-m` argument of benchmark.py."""
+# Copyright 2019 TeNPy Developers
+
 import numpy as np
 import tensordot_npc
 

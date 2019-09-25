@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+"""Generate the plots of the lattices included into the documentation.
+
+Feel free to reuse/modify this script accordingly e.g. if you add another lattice.
+"""
+# Copyright 2019 TeNPy Developers
 
 import matplotlib.pyplot as plt
 from tenpy.models import lattice, toric_code

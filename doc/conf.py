@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Copyright 2019 TeNPy Developers
 #
 # tenpy documentation build configuration file, created by
 # sphinx-quickstart on Mon Feb 18 00:04:33 2019.

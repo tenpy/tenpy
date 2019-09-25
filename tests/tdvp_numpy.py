@@ -1,3 +1,10 @@
+"""TDVP based purely on numpy.
+
+.. todo ::
+    Make this a nice toycode! For the test, use some pre-defined values.
+"""
+# Copyright 2019 TeNPy Developers
+
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np

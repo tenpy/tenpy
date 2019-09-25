@@ -4,6 +4,8 @@ The Hamiltonian reads
 .. math ::
     H = - J \\sum_{i} \\sigma^x_i \\sigma^x_{i+1} - g \\sum_{i} \\sigma^z_i
 """
+# Copyright 2019 TeNPy Developers
+
 import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg.eigen.arpack as arp

@@ -5,6 +5,7 @@ acting on them. Each term is given by a collection of (onsite) operator names an
 sites it acts on. Moreover, we associate a `strength` to each term, which corresponds to the
 prefactor when specifying e.g. a Hamiltonian.
 """
+# Copyright 2019 TeNPy Developers
 
 import numpy as np
 import warnings

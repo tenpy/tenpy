@@ -1,3 +1,5 @@
+#!/bin/bash
+# Copyright 2018 TeNPy Developers
 set -e
 DIR="$(dirname ${BASH_SOURCE[0]})"
 

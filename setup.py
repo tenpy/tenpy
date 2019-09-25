@@ -57,9 +57,10 @@ def get_version_info():
 
 def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
     """write the version during compilation to disc"""
-    content = """
+    content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
+# Copyright 2018-2019 TeNPy Developers
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}
