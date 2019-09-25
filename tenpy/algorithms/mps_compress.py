@@ -29,7 +29,7 @@ def make_UI(H, dt):
         raise ValueError("Only finite bc implemented")
     
 
-    U = [H.get_W(i, copy=True) for i in range(H.L)]
+    U = [H.get_W(i).astype(np.result_type(dt*H.get_W(i))) for i in range(H.L)]
     for i in range(0, H.L):
         if i!= H.L-1:
             keep=np.ones(U[i].shape[1], dtype=bool)
@@ -40,13 +40,19 @@ def make_UI(H, dt):
             if ind>=H.get_IdL(i+1): ind-=1
             perm=[i for i in range(U[i].shape[1])]
             del perm[ind]
-            #TODO the following 0 is wrong. Have to rethink that, but should work assuming the usual conventions.
             perm.insert(0, ind)
             U[i].permute(perm, 1)
         if i!=0:
             keep=np.ones(U[i].shape[0], dtype=bool)
             keep[H.get_IdR(i-1)]=False
             U[i].iproject(keep,0)
+
+            ind=H.get_IdL(i)
+            if ind>=H.get_IdR(i-1): ind-=1
+            perm=[i for i in range(U[i].shape[1])]
+            del perm[ind]
+            perm.insert(0, ind)
+            U[i].permute(perm, 1)
 
 
         U[i][:,0,:,:]*=dt
