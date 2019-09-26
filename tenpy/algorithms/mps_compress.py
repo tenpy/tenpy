@@ -254,13 +254,12 @@ def svd_two_site(i, mps, trunc_par=None):
     trunc_par : None|dict
        If None no truncation is done. Else dict as in :meth:`~tenpy.algorithms.truncation.truncate`.
     """
-    print(mps)
-    print(mps._S)
     theta=mps.get_theta(i)
     theta=theta.combine_legs([['vL','p0'],['p1','vR']], qconj=[+1,-1])
     if trunc_par==None:
-        u, s, vh = npc.svd(theta, inner_labels=['vR','vL']) # TODO Problem: We do not want to truncate in first sweep,
+        #u, s, vh = npc.svd(theta, inner_labels=['vR','vL']) # TODO Please check: We do not want to truncate in first sweep,
                                                             # but the canonical forms for the second sweep can't be calculated if SVs are zero.
+        u, s, vh, err, renorm = svd_theta(theta, {'chi_max':10000, 'svd_min':1.e-15, 'trunc_cut':1.e-15}) # Just remove the zeros to solve the problem. No actual truncation.
     else:
         u, s, vh, err, renorm = svd_theta(theta, trunc_par)
     u=u.split_legs()
