@@ -234,7 +234,10 @@ def mps_compress(psi, trunc_par):
         psi.set_SL(i%L, s)
         if i==L:
             psi.set_SR(L-1, s)
-    psi.set_B(0, B, form='Th')
+    if bc=='infinite':
+        psi.set_B(0, B, form='B')
+    else:
+        psi.set_B(0, B, form='Th')
     psi.norm=1.
 
 
