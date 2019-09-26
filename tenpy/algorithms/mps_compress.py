@@ -206,39 +206,70 @@ def mps_compress(psi, trunc_par):
     Parameters
     ----------
     psi: MPS
-        MPS to be compressed. It is taken in form=None so it has to be in a form such that no singular values have to be inserted.
+        MPS to be compressed.
+        The singular values are usually ignored and need not be set to sensible values, except for bc='infinite', where psi.S[0] is needed as an initial guess.
     trunc_par: dict
         See :func:`truncate`
     """
     bc=psi.bc
     L=psi.L
-
-    # Do QR starting from the left
-    B=psi.get_B(0,form=None)
-    for i in range(psi.L - int(bc!='infinite')):
-        B=B.combine_legs(['vL', 'p'])
-        q,r =npc.qr(B, inner_labels=['vR', 'vL'])
-        B=q.split_legs()
-        psi.set_B(i,B,form=None)
-        B=psi.get_B((i+1)%L,form=None)
-        B=npc.tensordot(r,B, axes=('vR', 'vL'))
-    # Do SVD from right to left, truncate the singular values according to trunc_par
-    for i in range(psi.L-int(bc!='infinite'),0,-1):
-        B=B.combine_legs(['p', 'vR'])
-        u, s, vh, err, norm_new = svd_theta(B, trunc_par)
-        vh=vh.split_legs()
-        psi.set_B(i%L, vh, form='B')
-        B=psi.get_B(i-1, form=None)
-        B=npc.tensordot(B, u, axes=('vR', 'vL'))
-        B.iscale_axis(s, 'vR')
-        psi.set_SL(i%L, s)
-        if i==L:
-            psi.set_SR(L-1, s)
-    if bc=='infinite':
-        psi.set_B(0, B, form='B')
-    else:
+    if bc=='finite':
+        # Do QR starting from the left
+        B=psi.get_B(0,form=None)
+        for i in range(psi.L - 1):
+            B=B.combine_legs(['vL', 'p'])
+            q,r =npc.qr(B, inner_labels=['vR', 'vL'])
+            B=q.split_legs()
+            psi.set_B(i,B,form=None)
+            B=psi.get_B((i+1)%L,form=None)
+            B=npc.tensordot(r,B, axes=('vR', 'vL'))
+        # Do SVD from right to left, truncate the singular values according to trunc_par
+        for i in range(psi.L-1,0,-1):
+            B=B.combine_legs(['p', 'vR'])
+            u, s, vh, err, norm_new = svd_theta(B, trunc_par)
+            vh=vh.split_legs()
+            psi.set_B(i%L, vh, form='B')
+            B=psi.get_B(i-1, form=None)
+            B=npc.tensordot(B, u, axes=('vR', 'vL'))
+            B.iscale_axis(s, 'vR')
+            psi.set_SL(i%L, s)
         psi.set_B(0, B, form='Th')
+    if bc=='infinite':
+        for i in range(psi.L):
+            svd_two_site(i, psi)
+        for i in range(psi.L-1,-1, -1):
+            svd_two_site(i, psi, trunc_par)
     psi.norm=1.
+
+
+def svd_two_site(i, mps, trunc_par=None):
+    r"""Builds a theta and splits it using svd for an MPS.
+
+    Parameters
+    ----------
+    i : int
+        First site.
+    mps :  MPS
+        MPS to use on.
+    trunc_par : None|dict
+       If None no truncation is done. Else dict as in :meth:`~tenpy.algorithms.truncation.truncate`.
+    """
+    print(mps)
+    print(mps._S)
+    theta=mps.get_theta(i)
+    theta=theta.combine_legs([['vL','p0'],['p1','vR']], qconj=[+1,-1])
+    if trunc_par==None:
+        u, s, vh = npc.svd(theta, inner_labels=['vR','vL']) # TODO Problem: We do not want to truncate in first sweep,
+                                                            # but the canonical forms for the second sweep can't be calculated if SVs are zero.
+    else:
+        u, s, vh, err, renorm = svd_theta(theta, trunc_par)
+    u=u.split_legs()
+    vh=vh.split_legs()
+    u.ireplace_label('p0', 'p')
+    vh.ireplace_label('p1', 'p')
+    mps.set_B(i, u, form='A')
+    mps.set_B((i+1)%mps.L, vh, form='B')
+    mps.set_SR(i, s)
 
 
 def apply_mpo(psi, mpo, trunc_par):
@@ -249,7 +280,7 @@ def apply_mpo(psi, mpo, trunc_par):
     mps: MPS
         MPS to apply operator on
     mpo: MPO
-        MPO to apply
+        MPO to apply. Usually one of make_UI() or make_UII(). The approximation being made are uncontrolled for other mpos and infinite bc.
     trunc_par: dict
         Truncation parameters. See :func:`truncate`
 
@@ -282,11 +313,19 @@ def apply_mpo(psi, mpo, trunc_par):
             Bs[i].get_leg('vL').to_LegCharge()
             Bs[i].get_leg('vR').to_LegCharge()
 
+    if bc=='infinite':
+        #calculate good (rather arbitrary) guess for S[0] (no we don't like it either)
+        weight=np.ones(mpo.get_W(0).shape[mpo.get_W(0).get_leg_index('wL')])*0.05
+        weight[mpo.get_IdL(0)]=1
+        weight=weight/np.linalg.norm(weight)
+        S=[np.kron(psi.get_SL(0), weight)]
+        print(S)
+    else:
+        S=[np.ones(Bs[0].shape[Bs[0].get_leg_index('vL')])]
     #Wrong S values but will be calculated in mps_compress
-    S=[np.ones(Bs[0].shape[Bs[0].get_leg_index('vL')])]
     for i in range(psi.L):
         S.append(np.ones(Bs[i].shape[Bs[i].get_leg_index('vR')]))
         
-    new_mps = mps.MPS(psi.sites, Bs, S, form=None, bc=psi.bc)
+    new_mps = mps.MPS(psi.sites, Bs, S, form='B', bc=psi.bc) # form='B' is not true but works
     mps_compress(new_mps, trunc_par)
     return new_mps
