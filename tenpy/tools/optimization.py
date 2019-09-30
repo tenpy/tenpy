@@ -70,8 +70,8 @@ import warnings
 import os
 
 __all__ = [
-    'bottleneck', 'OptimizationFlag', 'temporary_level', 'set_level', 'get_level', 'optimize',
-    'use_cython', 'have_cython_functions'
+    'bottleneck', 'have_cython_functions', 'OptimizationFlag', 'temporary_level',
+    'to_OptimizationFlag', 'set_level', 'get_level', 'optimize', 'use_cython'
 ]
 
 try:

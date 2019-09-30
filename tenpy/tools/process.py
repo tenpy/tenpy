@@ -20,7 +20,8 @@ import ctypes
 from ctypes.util import find_library
 
 __all__ = [
-    'memory_usage', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads', 'mkl_set_nthreads'
+    'memory_usage', 'load_omp_library', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads',
+    'mkl_set_nthreads'
 ]
 
 _omp_lib = None
