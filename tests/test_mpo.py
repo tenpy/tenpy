@@ -111,7 +111,7 @@ def test_MPO_conversion():
     ]
     prefactors = [0.25, 10., 11., 101., 102., 103.]
     term_list = TermList(terms, prefactors)
-    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite')
+    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False)
     ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")

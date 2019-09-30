@@ -31,6 +31,7 @@ Added
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
 - Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
 - :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
+- Argument `insert_all_id` for :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`~tenpy.networks.mpo.MPOGraph.from_term_list`
 
 Fixed
 ^^^^^

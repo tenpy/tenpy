@@ -687,7 +687,7 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, insert_all_Id=True):
+    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, insert_all_id=True):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -700,7 +700,7 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
-        insert_all_Id : bool
+        insert_all_id : bool
             Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
             See :meth:`add_missing_IdL_IdR`.
 
@@ -716,11 +716,11 @@ class MPOGraph:
         graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
-        graph.add_missing_IdL_IdR(insert_all_Id)
+        graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc):
+    def from_term_list(cls, term_list, sites, bc, insert_all_id=True):
         """Initialize form a list of operator terms and prefactors.
 
         Parameters
@@ -731,6 +731,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
+            See :meth:`add_missing_IdL_IdR`.
 
         Returns
         -------
@@ -742,7 +745,7 @@ class MPOGraph:
         from_terms : equivalent for other representation of terms.
         """
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc)
+        return cls.from_terms(ot, ct, sites, bc, insert_all_id)
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -850,14 +853,14 @@ class MPOGraph:
             keyL = keyR
         return keyL
 
-    def add_missing_IdL_IdR(self, insert_all_Id=True):
+    def add_missing_IdL_IdR(self, insert_all_id=True):
         """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
 
         This function should be called *after* all other operators have been inserted.
 
         Parameters
         ----------
-        insert_all_Id : bool
+        insert_all_id : bool
             If ``True``, insert 'Id' edges on *all* bonds.
             If ``False`` and boundary conditions are finite, only insert
             ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
@@ -865,7 +868,7 @@ class MPOGraph:
             The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
             'IdL'/'IdR' to exist on all bonds.
         """
-        if self.bc == 'infinite' or insert_all_Id:
+        if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
             min_IdR = 0
         else:
