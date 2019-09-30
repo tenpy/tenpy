@@ -32,9 +32,12 @@ def test_all(check_module=tenpy):
             # got a class or function defined in the module
             raise AssertionError("object {0!r} defined in {1} but not in __all__".format(
                 obj, _name_))
-        if hasattr(obj, "__package__") and getattr(obj, "__name__").startswith(_name_):
+        if hasattr(obj, "__package__") and obj.__name__.startswith(_name_):
             # imported submodule
-            print(_package_)
+            if obj.__name__.startswith('tenpy.models'):
+                # submodules of models (like xxz_chain.py) are not imported by default,
+                # but by the other tests. They can be ignored here.
+                continue
             raise AssertionError("Module {0!r} imported in {1} but not listed in __all__".format(
                 obj.__name__, _name_))
 
