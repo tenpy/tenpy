@@ -146,9 +146,12 @@ class MPO:
         Ws_qtotal : (list of) total charge
             The `qtotal` to be used for each grid. Defaults to zero charges.
         legs : list of :class:`~tenpy.linalg.charge.LegCharge`
-            List of charges for 'wL' legs left of each `W`, L + 1 entries. The last entry should be
-            the conjugate of the 'wR' leg, i.e. identical to ``legs[0]`` for infinite `bc`.
-            By default, determine the charges automatically.
+            List of charges for 'wL' legs left of each `W`, L + 1 entries.
+            The last entry should be the conjugate of the 'wR' leg,
+            i.e. identical to ``legs[0]`` for 'infinite' `bc`.
+            By default, determine the charges automatically. This is limited to cases where
+            there are no "dangling open ends" in the MPO graph. (The :class:`MPOGraph` can handle
+            those cases, though.)
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
@@ -178,11 +181,13 @@ class MPO:
                 first_grid = grids[0]
                 last_grid = grids[-1]
                 if len(first_grid) > 1:
-                    grids[0] = first_grid[IdL[0]]
+                    grids[0] = [first_grid[IdL[0]]]
                     IdL[0] = 0
+                    IdR[0] = None
                 if len(last_grid[0]) > 1:
-                    grids[0] = [row[IdR[-1]] for row in last_grid]
+                    grids[-1] = [[row[IdR[-1]]] for row in last_grid]
                     IdR[-1] = 0
+                    IdL[-1] = None
                 legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, None)
             else:
                 legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, None, IdL[0])
