@@ -359,19 +359,19 @@ class DMRGEngine(Sweep):
                        "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
                        "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
                        "MPS bond dimensions: {chi!s}")
-                print(
-                    msg.format(sweep=self.sweeps,
-                               mem=memory_usage(),
-                               time=time.time() - start_time,
-                               chi=self.psi.chi,
-                               age=self.update_stats['age'][-1],
-                               E=E,
-                               S=S,
-                               DE=Delta_E,
-                               DS=Delta_S,
-                               trerr=max_trunc_err,
-                               Eerr=max_E_trunc,
-                               norm_err=norm_err))
+                msg = msg.format(sweep=self.sweeps,
+                                 mem=memory_usage(),
+                                 time=time.time() - start_time,
+                                 chi=self.psi.chi,
+                                 age=self.update_stats['age'][-1],
+                                 E=E,
+                                 S=S,
+                                 DE=Delta_E,
+                                 DS=Delta_S,
+                                 trerr=max_trunc_err,
+                                 Eerr=max_E_trunc,
+                                 norm_err=norm_err)
+                print(msg, flush=True)
 
         # clean up from mixer
         self.mixer_cleanup()
