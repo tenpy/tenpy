@@ -39,6 +39,7 @@ i.e. between sites ``i-1`` and ``i``.
 
 import numpy as np
 import warnings
+import sys
 
 from ..linalg import np_conserved as npc
 from .site import group_sites, Site
@@ -124,7 +125,7 @@ class MPO:
                    IdL=None,
                    IdR=None,
                    Ws_qtotal=None,
-                   leg0=None,
+                   legs=None,
                    max_range=None):
         """Initialize an MPO from `grids`.
 
@@ -144,8 +145,13 @@ class MPO:
             Indices on the bonds, which correpond to 'only identities to the right'.
         Ws_qtotal : (list of) total charge
             The `qtotal` to be used for each grid. Defaults to zero charges.
-        leg0 : :class:`~tenpy.linalg.charge.LegCharge`
-            LegCharge for 'wL' of the left-most `W`. By default, construct it.
+        legs : list of :class:`~tenpy.linalg.charge.LegCharge`
+            List of charges for 'wL' legs left of each `W`, L + 1 entries.
+            The last entry should be the conjugate of the 'wR' leg,
+            i.e. identical to ``legs[0]`` for 'infinite' `bc`.
+            By default, determine the charges automatically. This is limited to cases where
+            there are no "dangling open ends" in the MPO graph. (The :class:`MPOGraph` can handle
+            those cases, though.)
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
@@ -167,22 +173,24 @@ class MPO:
                 Ws_qtotal = [Ws_qtotal] * L
         IdL = cls._get_Id(IdL, L)
         IdR = cls._get_Id(IdR, L)
-        if bc != 'infinite':
-            if leg0 is None:
+        if legs is None:
+            if bc != 'infinite':
                 # ensure that we have only a single entry in the first and last leg
                 # i.e. project grids[0][:, :] -> grids[0][IdL[0], :]
                 # and         grids[-1][:, :] -> grids[-1][:,IdR[-1], :]
                 first_grid = grids[0]
                 last_grid = grids[-1]
                 if len(first_grid) > 1:
-                    grids[0] = first_grid[IdL[0]]
+                    grids[0] = [first_grid[IdL[0]]]
                     IdL[0] = 0
+                    IdR[0] = None
                 if len(last_grid[0]) > 1:
-                    grids[0] = [row[IdR[-1]] for row in last_grid]
+                    grids[-1] = [[row[IdR[-1]]] for row in last_grid]
                     IdR[-1] = 0
-            legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0)
-        else:
-            legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL[0])
+                    IdL[-1] = None
+                legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, None)
+            else:
+                legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, None, IdL[0])
         # now build the `W` from the grid
         assert len(legs) == L + 1
         Ws = []
@@ -498,7 +506,10 @@ class MPO:
             return [None] * (L + 1)
         else:
             try:
-                return list(Id)
+                Id = list(Id)
+                if len(Id) != L + 1:
+                    raise ValueError("expected list with L+1={0:d} entries".format(L+1))
+                return Id
             except TypeError:
                 return [Id] * (L + 1)
 
@@ -661,6 +672,7 @@ class MPOGraph:
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     states : list of set of keys
         ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
+        `L+1` enries.
     graph : list of dict of dict of list of tuples
         For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
         ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
@@ -680,7 +692,7 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
+    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, insert_all_id=True):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -693,6 +705,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
+            See :meth:`add_missing_IdL_IdR`.
 
         Returns
         -------
@@ -706,11 +721,11 @@ class MPOGraph:
         graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
-        graph.add_missing_IdL_IdR()
+        graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc):
+    def from_term_list(cls, term_list, sites, bc, insert_all_id=True):
         """Initialize form a list of operator terms and prefactors.
 
         Parameters
@@ -721,6 +736,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
+            See :meth:`add_missing_IdL_IdR`.
 
         Returns
         -------
@@ -732,7 +750,7 @@ class MPOGraph:
         from_terms : equivalent for other representation of terms.
         """
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc)
+        return cls.from_terms(ot, ct, sites, bc, insert_all_id)
 
     def test_sanity(self):
         """Sanity check. Raises ValueErrors, if something is wrong."""
@@ -840,17 +858,22 @@ class MPOGraph:
             keyL = keyR
         return keyL
 
-    def add_missing_IdL_IdR(self):
+    def add_missing_IdL_IdR(self, insert_all_id=True):
         """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
 
-        For ``bc='infinite'``, insert missing identities at *all* bonds.
-        For ``bc='finite' | 'segment'`` only insert
-        ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
-        ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
-
         This function should be called *after* all other operators have been inserted.
+
+        Parameters
+        ----------
+        insert_all_id : bool
+            If ``True``, insert 'Id' edges on *all* bonds.
+            If ``False`` and boundary conditions are finite, only insert
+            ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
+            ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
+            The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
+            'IdL'/'IdR' to exist on all bonds.
         """
-        if self.bc == 'infinite':
+        if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
             min_IdR = 0
         else:
@@ -868,17 +891,14 @@ class MPOGraph:
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
         return keyR in self.graph[i].get(keyL, [])
 
-    def build_MPO(self, Ws_qtotal=None, leg0=None):
+    def build_MPO(self, Ws_qtotal=None):
         """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
         Ws_qtotal : None | (list of) charges
-            The `qtotal` for each of the Ws to be generated., default (``None``) means 0 charge.
+            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
-        leg0 : None | :class:`npc.LegCharge`
-            The charges to be used for the very first leg (which is a gauge freedom).
-            If ``None`` (default), use zeros.
 
         Returns
         -------
@@ -891,7 +911,8 @@ class MPOGraph:
         grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range)
+        legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range)
         return H
 
     def __repr__(self):
@@ -947,6 +968,124 @@ class MPOGraph:
                 grid[a] = row
             grids.append(grid)
         return grids
+
+    def _calc_legcharges(self, Ws_qtotal):
+        """Obtain charges for the virtual legs of the MPO.
+
+        Should only be called after :meth:`_set_ordered_states`.
+
+        Parameters
+        ----------
+        Ws_qtotal : None | (list of) charges
+            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
+            A single qtotal holds for each site.
+
+        Returns
+        -------
+        legs : list of :class:`~tenpy.linalg.charge.LegCharge`
+            LegCharges to be used on each bond, `L+1` entries.
+            Entry `i` contains the 'wL' leg of `W[i]`,
+            entry `i+1` needs to be conjugated to be used as `wR` leg of `W[i]`.
+        Ws_qtotal :  list of qtotal
+            Same as argument, but parsed to a list of L charges defaulting to zeros.
+        """
+        L = self.L
+        states = self._ordered_states
+        sites = self.sites
+        infinite = (self.bc == 'infinite')
+        chinfo = self.chinfo
+
+        if Ws_qtotal is None:
+            Ws_qtotal = [chinfo.make_valid()] * L
+        else:
+            Ws_qtotal = chinfo.make_valid(Ws_qtotal)
+            if Ws_qtotal.ndim == 1:
+                Ws_qtotal = [Ws_qtotal] * L
+
+        charges = [[None]*len(st) for st in states]
+        charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
+        if infinite:
+            charges[-1] = charges[0]  # bond is identical
+
+        def travel_q_LR(i, keyL):
+            """Transport charges from left to right through the MPO graph.
+
+            Inspect graph edges on site `i` starting on the left with `keyL` and add charges
+            for all connections to the right.
+            Recursively transport charges from there."""
+            l = states[i][keyL]
+            site = sites[i]
+            st_r = states[i + 1]
+            ch_r = charges[i + 1]
+            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+            qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
+            edges = self.graph[i][keyL]
+            for keyR, ops in edges.items():
+                r = st_r[keyR]
+                qR = ch_r[r]
+                if qR is None:
+                    op_qtotal = site.get_op(ops[0][0]).qtotal
+                    ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
+                    if infinite or i + 1 < L:
+                        travel_q_LR((i + 1) % L, keyR)
+
+        travel_q_LR(0, 'IdL')
+
+        # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
+
+        def travel_q_RL(i, keyL):
+            """Transport charges from the right to left through the MPO graph.
+
+            Inspect graph edges on site `i` starting on the left with 'keyL', where
+            the charge needs to be determined. If one of them has a charge defined on the right,
+            use it to determine the charge for keyL and return True.
+            If none of them has the charge defined, return False.
+            """
+            l = states[i][keyL]
+            site = sites[i]
+            st_r = states[i + 1]
+            ch_r = charges[i + 1]
+            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+            Wq = Ws_qtotal[i]  # q_left - Ws_qtotal
+            edges = self.graph[i][keyL]
+            for keyR, ops in edges.items():
+                r = st_r[keyR]
+                qR = ch_r[r]
+                if qR is not None:
+                    op_qtotal = site.get_op(ops[0][0]).qtotal
+                    charges[i][l] = Wq + qR - op_qtotal  # solve chargerule for q_left
+                    break
+            else: # no break
+                return False
+            return True
+
+        if not infinite and any([ch is None for ch in charges[-1]]):
+            raise ValueError("can't determine all charges on the very right leg of the MPO!")
+
+
+        max_checks = sys.getrecursionlimit() # I don't expect interactions with larger range...
+        for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
+            repeat = False
+            for i in reversed(range(L)):
+                ch = charges[i]
+                for keyL, l in states[i].items():
+                    if ch[l] is None:
+                        if not travel_q_RL(i, keyL):
+                            repeat = True  # couldn't find it out.
+            if not repeat:
+                break
+        else:  # no break
+            raise ValueError("MPOGraph with dead ends: can't determine charges")
+        # have all charges determined
+        # convert to LegCharges
+        legs = []
+        for ch in charges:
+            ch = chinfo.make_valid(ch)
+            leg = npc.LegCharge.from_qflat(chinfo, ch, qconj=+1)
+            legs.append(leg)
+        if infinite:
+            legs[-1] = legs[0]  # identical charges
+        return legs, Ws_qtotal
 
 
 class MPOEnvironment(MPSEnvironment):
@@ -1216,13 +1355,17 @@ def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
 
 
 def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
-    """calculate LegCharges from `grids` for an iMPO.
+    """Calculate LegCharges from `grids` for an iMPO.
 
-    The hard case. Initially, we do not know all charges of the first leg; and they have to
+    Similar like :func:`_calc_grid_legs_finite`, but the hard case.
+    Initially, we do not know all charges of the first leg; and they have to
     be consistent with the final leg.
 
-    The way this workso: gauge 'IdL' on the very left leg to 0,
-    then gradually calculate the charges by going along the edges of the graph (maybe also over the iMPO boundary).
+    The way this works: gauge 'IdL' on the very left leg to 0,
+    then gradually calculate the charges by going along the edges of the graph
+    (maybe also over the iMPO boundary).
+
+    When initializing from an MPO graph directly, use :meth:`MPOGraph._calc_legcharges` directly.
     """
     if leg0 is not None:
         # have charges of first leg: simple case, can use the _calc_grid_legs_finite version.
