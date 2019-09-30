@@ -318,7 +318,6 @@ def apply_mpo(psi, mpo, trunc_par):
         weight[mpo.get_IdL(0)]=1
         weight=weight/np.linalg.norm(weight)
         S=[np.kron(psi.get_SL(0), weight)]
-        print(S)
     else:
         S=[np.ones(Bs[0].shape[Bs[0].get_leg_index('vL')])]
     #Wrong S values but will be calculated in mps_compress
