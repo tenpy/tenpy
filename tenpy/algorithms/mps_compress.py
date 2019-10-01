@@ -8,6 +8,10 @@ from ..linalg import np_conserved as npc
 from .truncation  import svd_theta
 from ..networks import mps, mpo
 
+__all__ = [
+    'make_U', 'make_UI', 'make_UII', 'make_WII', 'mps_compress', 'svd_two_site', 'apply_mpo'
+]
+
 def make_U(H, dt, which='II'):
     r"""Creates the UI or UII propagator for a given Hamiltonian.
 
@@ -227,6 +231,7 @@ def mps_compress(psi, trunc_par):
         for i in range(psi.L-1,0,-1):
             B=B.combine_legs(['p', 'vR'])
             u, s, vh, err, norm_new = svd_theta(B, trunc_par)
+            psi.norm*=norm_new
             vh=vh.split_legs()
             psi.set_B(i%L, vh, form='B')
             B=psi.get_B(i-1, form=None)
@@ -239,7 +244,6 @@ def mps_compress(psi, trunc_par):
             svd_two_site(i, psi)
         for i in range(psi.L-1,-1, -1):
             svd_two_site(i, psi, trunc_par)
-    psi.norm=1.
 
 
 def svd_two_site(i, mps, trunc_par=None):
@@ -257,11 +261,11 @@ def svd_two_site(i, mps, trunc_par=None):
     theta=mps.get_theta(i)
     theta=theta.combine_legs([['vL','p0'],['p1','vR']], qconj=[+1,-1])
     if trunc_par==None:
-        #u, s, vh = npc.svd(theta, inner_labels=['vR','vL']) # TODO Please check: We do not want to truncate in first sweep,
-                                                            # but the canonical forms for the second sweep can't be calculated if SVs are zero.
-        u, s, vh, err, renorm = svd_theta(theta, {'chi_max':10000, 'svd_min':1.e-15, 'trunc_cut':1.e-15}) # Just remove the zeros to solve the problem. No actual truncation.
+        u, s, vh, err, renorm = svd_theta(theta, {'chi_max':10000, 'svd_min':1.e-15, 'trunc_cut':1.e-15})
+        mps.norm*=renorm
     else:
         u, s, vh, err, renorm = svd_theta(theta, trunc_par)
+        mps.norm*=renorm
     u=u.split_legs()
     vh=vh.split_legs()
     u.ireplace_label('p0', 'p')

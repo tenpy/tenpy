@@ -1,5 +1,6 @@
 from tenpy.algorithms.mps_compress import *
 import numpy as np
+import tenpy.linalg.np_conserved as npc
 import tenpy
 from tenpy.models.spins import SpinChain
 
@@ -7,11 +8,11 @@ def test_mps_compress():
     # Test compression of a sum of a state with itself
     L=5
     sites=[tenpy.networks.site.SpinHalfSite() for i in range(L)]
-    psi=tenpy.networks.mps.MPS.from_product_state(sites, [[1/np.sqrt(2), 1/np.sqrt(2)] for i in range(L)], bc='finite')
-    psiOrth=tenpy.networks.mps.MPS.from_product_state(sites, [[1/np.sqrt(2), -1/np.sqrt(2)] for i in range(L)], bc='finite')
-    psiSum = psi.add(psiOrth, 1,1)
+    psi=tenpy.networks.mps.MPS.from_product_state(sites, [[1, 1] for i in range(L)], bc='finite')
+    psiOrth=tenpy.networks.mps.MPS.from_product_state(sites, [[1, -1] for i in range(L)], bc='finite')
+    psiSum = psi.add(psiOrth, .5, .5)
     mps_compress(psiSum, {})
-    psiSum2= psiSum.add(psiSum, 1, 1)
+    psiSum2= psiSum.add(psiSum, .5, .5)
     mps_compress(psiSum2, {})
     psiSum2.test_sanity()
     assert(np.abs(psiSum.overlap(psiSum2)-1)<1e-7)
