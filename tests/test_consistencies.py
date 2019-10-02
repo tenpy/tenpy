@@ -3,6 +3,8 @@
 
 import tenpy
 import types
+import os
+import re
 
 
 def test_all(check_module=tenpy):
@@ -46,3 +48,29 @@ def test_all(check_module=tenpy):
     for m in submodules:
         if isinstance(m, types.ModuleType) and m.__name__.startswith('tenpy'):
             test_all(m)
+
+
+def get_python_files(top):
+    """return list of all python files recursively in a `top` directory."""
+    python_files = []
+    for dirpath, dirnames, filenames in os.walk(top):
+        if '__pycache__' in dirnames:
+            del dirnames[dirnames.index('__pycache__')]
+        for fn in filenames:
+            if fn.endswith('.py'):
+                python_files.append(os.path.join(dirpath, fn))
+    return python_files
+
+
+def test_copyright():
+    tenpy_files = get_python_files(os.path.dirname(tenpy.__file__))
+    regex = re.compile(r'#\s[Cc]opyright 20[0-9\-]+\s+(TeNPy|tenpy) [dD]evelopers')
+    for fn in tenpy_files:
+        with open(fn, 'r') as f:
+            for line in f:
+                if line.startswith('#'):
+                    match = regex.match(line)
+                    if match is not None:
+                        break
+            else:  # no break
+                raise AssertionError("No/wrong copyright notice in {0!s}".format(fn))
