@@ -1,7 +1,7 @@
 """test whether the examples can at least be imported without problems.
 
-The files are only imported, so please protect example code from running with
-``if __name__ == "__main__": ... `` clauses, if you want to demonstrate an interactive code.
+The files are only imported, so please protect example code from running with standard ``if
+__name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code.
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 

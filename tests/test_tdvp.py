@@ -22,7 +22,10 @@ from tenpy.tools.misc import inverse_permutation
 # just compare the np_conserved TEBD with np_conserved TDVP, using mps.overlap()
 # or even better: directly compare to ED for small system
 def overlap(mps1, mps2):
-    """ Calculate overlap <self|mps2>. Performs conjugation of self! """
+    """Calculate overlap <self|mps2>.
+
+    Performs conjugation of self!
+    """
     X = np.ones((1, 1))
     L = len(mps1)
     for i in range(0, L):

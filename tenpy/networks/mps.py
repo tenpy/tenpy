@@ -193,7 +193,7 @@ class MPS:
         self.test_sanity()
 
     def test_sanity(self):
-        """Sanity check. Raises Errors if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         if self.bc not in self._valid_bc:
             raise ValueError("invalid boundary condition: " + repr(self.bc))
         if len(self._B) != self.L:
@@ -276,7 +276,6 @@ class MPS:
 
         >>> neg_x_state = np.array([1., -1.])
         >>> p_state = [neg_x_state/np.linalg.norm(neg_x_state)]*L  # other parameters as above
-
         """
         sites = list(sites)
         L = len(sites)
@@ -589,8 +588,8 @@ class MPS:
     def copy(self):
         """Returns a copy of `self`.
 
-        The copy still shares the sites, chinfo, and LegCharges of the B tensors,
-        but the values of B and S are deeply copied.
+        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
+        B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
         cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
@@ -600,7 +599,7 @@ class MPS:
 
     @property
     def L(self):
-        """Number of physical sites. For an iMPS the len of the MPS unit cell."""
+        """Number of physical sites; for an iMPS the len of the MPS unit cell."""
         return len(self.sites)
 
     @property
@@ -610,7 +609,10 @@ class MPS:
 
     @property
     def finite(self):
-        "Distinguish MPS (``True; bc='finite', 'segment'`` ) vs. iMPS (``False; bc='infinite'``)"
+        """Distinguish MPS vs iMPS.
+
+        True for an MPS (``bc='finite', 'segment'``), False for an iMPS (``bc='infinite'``).
+        """
         assert (self.bc in self._valid_bc)
         return self.bc != 'infinite'
 
@@ -1523,7 +1525,6 @@ class MPS:
                          for i in range(0, psi.L-1, 2)]
         >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
-
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -1856,7 +1857,6 @@ class MPS:
                 |   .--theta[i]---         .--s[i+1]--
                 |   |    |          vs     |
                 |   .--theta*[i]--         .--s[i+1]--
-
         """
         err = np.empty((self.L, 2), dtype=np.float)
         lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
@@ -2536,7 +2536,8 @@ class MPS:
         (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
         The cutoff is only used in that case.
 
-        Returns scaled B."""
+        Returns scaled B.
+        """
         if form_diff == 0:
             return B  # nothing to do
         if not isinstance(S, npc.Array):
@@ -2565,9 +2566,9 @@ class MPS:
     def _replace_p_label(self, A, s):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+s``.
 
-        This is done for each of the 'physical labels' in :attr:`_p_label`.
-        With a clever use of this function, the re-implementation of various functions
-        (like get_theta) in derived classes with multiple legs per site can be avoided.
+        This is done for each of the 'physical labels' in :attr:`_p_label`. With a clever use of
+        this function, the re-implementation of various functions (like get_theta) in derived
+        classes with multiple legs per site can be avoided.
         """
         return A.replace_label('p', 'p' + s)
         #  return A.replace_labels(self._p_label, self._get_p_label(s))
@@ -2897,6 +2898,7 @@ class MPSEnvironment:
         self.test_sanity()
 
     def test_sanity(self):
+        """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.L == self.ket.L)
         assert (self.bra.finite == self.ket.finite)
         # check that the network is contractable
@@ -2985,11 +2987,17 @@ class MPSEnvironment:
         return RP
 
     def get_LP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        """Return number of physical sites in the contractions of get_LP(i).
+
+        Might be ``None``.
+        """
         return self._LP_age[self._to_valid_index(i)]
 
     def get_RP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        """Return number of physical sites in the contractions of get_LP(i).
+
+        Might be ``None``.
+        """
         return self._RP_age[self._to_valid_index(i)]
 
     def set_LP(self, i, LP, age):
@@ -3410,7 +3418,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
-    """Build an "initial state" list
+    """Build an "initial state" list.
 
     Uses two iterables ('states' and 'filling') to determine how to fill the
     state. The two lists should have the same length as every element in 'filling' gives the filling

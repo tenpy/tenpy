@@ -13,7 +13,6 @@
     purification_tebd
     network_contractor
     exact_diag
-
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 

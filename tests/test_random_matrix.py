@@ -1,4 +1,4 @@
-"""A collection of tests for :module:`tenpy.linalg.random_matrix`.  """
+"""A collection of tests for :module:`tenpy.linalg.random_matrix`."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np

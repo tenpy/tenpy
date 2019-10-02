@@ -182,7 +182,10 @@ class Lattice:
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check.
+
+        Raises ValueErrors, if something is wrong.
+        """
         assert self.dim == len(self.Ls)
         assert self.shape == self.Ls + (len(self.unit_cell), )
         assert self.N_cells == np.prod(self.Ls)
@@ -342,7 +345,8 @@ class Lattice:
 
         Equivalent to ``[self.site(i) for i in range(self.N_sites)]``.
 
-        This should be used for `sites` of 1D tensor networks (MPS, MPO,...)."""
+        This should be used for `sites` of 1D tensor networks (MPS, MPO,...).
+        """
         return [self.unit_cell[u] for u in self.order[:, -1]]
 
     def mps2lat_idx(self, i):
@@ -836,7 +840,7 @@ class Lattice:
             ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
 
     def plot_basis(self, ax, **kwargs):
-        """Plot arrows indicating the basis vectors of the lattice
+        """Plot arrows indicating the basis vectors of the lattice.
 
         Parameters
         ----------
@@ -855,7 +859,7 @@ class Lattice:
             ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
 
     def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
-        """Mark two sites indified by periodic boundary conditions
+        """Mark two sites indified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
 
@@ -946,7 +950,7 @@ class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
     .. todo ::
-        this doesn't fully work yet...
+        - this doesn't fully work yet...
     """
 
     def __init__(self, mps_sites, based_on, order=None):
@@ -1202,7 +1206,6 @@ class Honeycomb(Lattice):
         ``'default'``      (0, 2, 1)                   (False, False, False)
         ``'snake'``        (0, 2, 1)                   (False, True, False)
         ================== =========================== =============================
-
         """
         if isinstance(order, str):
             if order == "default":

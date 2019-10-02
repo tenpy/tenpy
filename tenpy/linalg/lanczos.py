@@ -156,7 +156,10 @@ class LanczosGroundState:
         return E0, self._calc_result_full(N), N
 
     def _calc_T(self):
-        """Build the tridiagonal matrix `_T`. Returns the number of steps performed."""
+        """Build the tridiagonal matrix `_T`.
+
+        Returns the number of steps performed.
+        """
         T = self._T
         w = self.psi0  # initialize
         beta = npc.norm(w)

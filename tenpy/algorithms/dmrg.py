@@ -201,7 +201,7 @@ def run(psi, model, DMRG_params):
 
 
 class DMRGEngine(Sweep):
-    """ Generic 'Engine' for the single-site DMRG algorithm.
+    """Generic 'Engine' for the single-site DMRG algorithm.
 
     This engine is implemented as a subclass of
     :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
@@ -409,8 +409,7 @@ class DMRGEngine(Sweep):
         return E, self.psi
 
     def reset_stats(self):
-        """Reset the statistics. Useful if you want to start a new Sweep run.
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
         self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
         self.update_stats = {
             'i0': [],
@@ -675,7 +674,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
-
     """
 
     def __init__(self, psi, model, engine_params):
@@ -850,8 +848,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         self.env.del_RP(i0)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
-        """
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
         Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
         if Mixer_class:
             if Mixer_class is True:
@@ -985,7 +982,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
-
     """
 
     def __init__(self, psi, model, engine_params):
@@ -1211,8 +1207,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_RP(i0 - 1)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
-        """
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
         Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
         if Mixer_class:
             if Mixer_class is True:

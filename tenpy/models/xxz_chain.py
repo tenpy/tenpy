@@ -1,7 +1,7 @@
 """Prototypical example of a 1D quantum model: the spin-1/2 XXZ chain.
 
-The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`;
-the idea of this module is more to serve as a pedagogical example for a model.
+The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
+this module is more to serve as a pedagogical example for a model.
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 

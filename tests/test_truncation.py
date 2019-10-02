@@ -1,4 +1,4 @@
-"""A test for tenpy.algorithms.truncation"""
+"""A test for tenpy.algorithms.truncation."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np

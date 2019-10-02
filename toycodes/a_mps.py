@@ -49,13 +49,15 @@ class SimpleMPS:
     def get_theta1(self, i):
         """Calculate effective single-site wave function on sites i in mixed canonical form.
 
-        The returned array has legs ``vL, i, vR`` (as one of the Bs)."""
+        The returned array has legs ``vL, i, vR`` (as one of the Bs).
+        """
         return np.tensordot(np.diag(self.Ss[i]), self.Bs[i], [1, 0])  # vL [vL'], [vL] i vR
 
     def get_theta2(self, i):
         """Calculate effective two-site wave function on sites i,j=(i+1) in mixed canonical form.
 
-        The returned array has legs ``vL, i, j, vR``."""
+        The returned array has legs ``vL, i, j, vR``.
+        """
         j = (i + 1) % self.L
         return np.tensordot(self.get_theta1(i), self.Bs[j], [2, 0])  # vL i [vR], [vL] j vR
 

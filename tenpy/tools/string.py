@@ -79,7 +79,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
 
 
 def to_mathematica_lists(a):
-    """convert nested `a` to string readable by mathematica using curly brackets '{...}'"""
+    """convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:

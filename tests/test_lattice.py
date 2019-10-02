@@ -1,4 +1,4 @@
-"""A collection of tests for tenpy.models.lattice"""
+"""A collection of tests for tenpy.models.lattice."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice

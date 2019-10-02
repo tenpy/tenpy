@@ -10,7 +10,8 @@ import re
 def test_all(check_module=tenpy):
     """Recursively check that `__all__` of a module contains only valid entries.
 
-    In each *.py file under tenpy/, there should be an __all__, """
+    In each *.py file under tenpy/, there should be an __all__,
+    """
     _file_ = check_module.__file__
     _name_ = check_module.__name__
     _package_ = check_module.__package__

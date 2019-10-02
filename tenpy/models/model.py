@@ -287,7 +287,8 @@ class NearestNeighborModel(Model):
     def _group_sites_Hb_to_onsite(self, gr_site, j, old_Hb):
         """kroneckerproduct for H_bond term within a GroupedSite.
 
-        `old_Hb` acts on sites (j-1, j) of `gr_sites`."""
+        `old_Hb` acts on sites (j-1, j) of `gr_sites`.
+        """
         if old_Hb is None:
             return None
         old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
@@ -304,7 +305,8 @@ class NearestNeighborModel(Model):
     def _group_sites_Hb_to_bond(self, gr_site_L, gr_site_R, old_Hb):
         """Kroneckerproduct for H_bond term acting on two GroupedSites.
 
-        `old_Hb` acts on the right-most site of `gr_site_L` and left-most site of `gr_site_R`."""
+        `old_Hb` acts on the right-most site of `gr_site_L` and left-most site of `gr_site_R`.
+        """
         if old_Hb is None:
             return None
         old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
@@ -589,7 +591,7 @@ class CouplingModel(Model):
         # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         sites = self.lat.mps_sites()
         for ot in self.onsite_terms.values():
             ot._test_terms(sites)
@@ -996,7 +998,6 @@ class CouplingModel(Model):
         >>> for u1, u2, dx in self.lat.nearest_neighbors:
         ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
-
         """
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)

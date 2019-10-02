@@ -1,6 +1,4 @@
-"""A collection of tests for (classes in) :module:`tenpy.networks.mpo`.
-
-"""
+"""A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np

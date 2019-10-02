@@ -291,7 +291,9 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
 
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
-    Otherwise print a warning and return just `good1`."""
+
+    Otherwise print a warning and return just `good1`.
+    """
     res = np.logical_and(good1, good2)
     if np.any(res):
         return res

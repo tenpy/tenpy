@@ -1,10 +1,8 @@
 """Example illustrating the use of TDVP in tenpy.
 
-As of now, we have TDVP only for finite systems.
-The call structure is quite similar to TEBD.
-A difference is that we can run one-site TDVP or two-site TDVP.
-In the former, the bond dimension can not grow;
-the latter allows to grow the bond dimension and hence requires a truncation.
+As of now, we have TDVP only for finite systems. The call structure is quite similar to TEBD. A
+difference is that we can run one-site TDVP or two-site TDVP. In the former, the bond dimension can
+not grow; the latter allows to grow the bond dimension and hence requires a truncation.
 """
 # Copyright 2019 TeNPy Developers, GNU GPLv3
 import numpy as np

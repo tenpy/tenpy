@@ -1,4 +1,4 @@
-""" a collection of tests to check the functionality of network_contractor.py"""
+"""a collection of tests to check the functionality of network_contractor.py."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from tenpy.algorithms.network_contractor import contract, outer_product

@@ -1,5 +1,4 @@
-"""A collection of tests for (classes in) :mod:`tenpy.models.model`.
-"""
+"""A collection of tests for (classes in) :mod:`tenpy.models.model`."""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import itertools
@@ -22,7 +21,7 @@ __all__ = ["check_model_sanity", "check_general_model"]
 
 
 def check_model_sanity(M, hermitian=True):
-    """call M.test_sanity() for all different subclasses of M"""
+    """call M.test_sanity() for all different subclasses of M."""
     if isinstance(M, model.CouplingModel):
         if isinstance(M, model.MultiCouplingModel):
             model.MultiCouplingModel.test_sanity(M)

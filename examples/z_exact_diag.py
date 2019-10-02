@@ -1,7 +1,6 @@
 """A simple example comparing DMRG output with full diagonalization (ED).
 
-Sorry that this is not well documented!
-ED is meant to be used for debugging only ;)
+Sorry that this is not well documented! ED is meant to be used for debugging only ;)
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 

@@ -117,7 +117,7 @@ class Engine:
 
     @property
     def trunc_err_bonds(self):
-        """truncation error introduced on each non-trivial bond"""
+        """truncation error introduced on each non-trivial bond."""
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     def run(self):

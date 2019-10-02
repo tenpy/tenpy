@@ -13,10 +13,11 @@ from scipy import integrate
 
 
 def e0_tranverse_ising(g=0.5):
-    """Exact groundstate energy of transverse field Ising
+    """Exact groundstate energy of transverse field Ising.
 
     H = - J sigma_z sigma_z + g sigma_x
-    Can be obtained by mapping to free fermions."""
+    Can be obtained by mapping to free fermions.
+    """
     return integrate.quad(_f_tfi, 0, np.pi, args=(g, ))[0]
 
 

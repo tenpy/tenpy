@@ -1,7 +1,7 @@
 """Access to version of this library.
 
-The version is provided in the standard python format ``major.minor.revision`` as string.
-Use ``pkg_resources.parse_version`` before comparing versions.
+The version is provided in the standard python format ``major.minor.revision`` as string. Use
+``pkg_resources.parse_version`` before comparing versions.
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -25,7 +25,7 @@ short_version = 'v' + version
 
 
 def _get_git_revision():
-    """get revision hash from git"""
+    """get revision hash from git."""
     try:
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                       cwd=os.path.dirname(os.path.abspath(__file__)),
@@ -40,7 +40,7 @@ git_revision = _get_git_revision()
 
 
 def _get_full_version():
-    """obtain version from git"""
+    """obtain version from git."""
     full_version = version
     if not released:
         full_version += '.dev0+' + git_revision[:7]

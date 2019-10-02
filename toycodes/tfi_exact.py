@@ -52,11 +52,10 @@ def finite_gs_energy(L, J, g):
 def infinite_gs_energy(J, g):
     """For comparison: Calculate groundstate energy density from analytic formula.
 
-    The analytic formula stems from mapping the model to free fermions, see
-    P. Pfeuty, The one-dimensional Ising model with a transverse field,
-    Annals of Physics 57, p. 79 (1970).
-    Note that we use Pauli matrices compared this reference using spin-1/2 matrices
-    and replace the sum_k -> integral dk/2pi to obtain the result in the N -> infinity limit.
+    The analytic formula stems from mapping the model to free fermions, see P. Pfeuty, The one-
+    dimensional Ising model with a transverse field, Annals of Physics 57, p. 79 (1970). Note that
+    we use Pauli matrices compared this reference using spin-1/2 matrices and replace the sum_k ->
+    integral dk/2pi to obtain the result in the N -> infinity limit.
     """
 
     def f(k, lambda_):

@@ -528,7 +528,7 @@ class CouplingTerms:
             norm_angle = Normalize(vmin=-np.pi, vmax=np.pi)
 
             def style_map(i, j, op_i, op_string, op_j, strength):
-                """define the plot style for a given coupling"""
+                """define the plot style for a given coupling."""
                 key = (op_i, op_string, op_j)
                 style = {}
                 style['linewidth'] = np.abs(strength) * matplotlib.rcParams['lines.linewidth']
@@ -702,7 +702,7 @@ class CouplingTerms:
         return self
 
     def _test_terms(self, sites):
-        """Check the format of self.coupling_terms"""
+        """Check the format of self.coupling_terms."""
         L = self.L
         for i, d1 in self.coupling_terms.items():
             site_i = sites[i]
@@ -753,7 +753,6 @@ class MultiCouplingTerms(CouplingTerms):
         Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= L``
         are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
         between different iMPS unit cells.
-
     """
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id"):
