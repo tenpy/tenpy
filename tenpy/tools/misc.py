@@ -1,5 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from .optimization import bottleneck

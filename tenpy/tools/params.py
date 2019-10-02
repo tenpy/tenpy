@@ -2,7 +2,7 @@
 
 See the doc-string of :func:`get_parameter` for details.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np

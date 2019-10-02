@@ -17,7 +17,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
     process
     optimization
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 from . import fit, math, misc, params, process, string, optimization
 

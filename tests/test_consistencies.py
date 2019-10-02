@@ -1,5 +1,5 @@
 """Check for consistencies."""
-# Copyright 2019 TeNPy Developers
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 
 import tenpy
 import types
@@ -64,7 +64,11 @@ def get_python_files(top):
 
 def test_copyright():
     tenpy_files = get_python_files(os.path.dirname(tenpy.__file__))
-    regex = re.compile(r'#\s[Cc]opyright 20[0-9\-]+\s+(TeNPy|tenpy) [dD]evelopers')
+    #  to check also files in examples/ and toycodes/ etc, if you have the full repository,
+    #  you can use the following:
+    # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
+    #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
+    regex = re.compile(r'#\s[Cc]opyright 20[0-9\-]+\s+(TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
     for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:

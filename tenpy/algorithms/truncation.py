@@ -50,7 +50,7 @@ is the discarded part (orthogonal to the kept part) and the
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc
@@ -84,6 +84,7 @@ class TruncationError:
     >>> TE += tebd.time_evolution(...)
 
     """
+
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
         self.ov = ov

@@ -6,7 +6,7 @@ but make use of the classes defined in tenpy.
 .. todo ::
 Docstrings?
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

@@ -6,7 +6,7 @@ A difference is that we can run one-site TDVP or two-site TDVP.
 In the former, the bond dimension can not grow;
 the latter allows to grow the bond dimension and hence requires a truncation.
 """
-# Copyright 2019 TeNPy Developers
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 import tenpy.models.spins

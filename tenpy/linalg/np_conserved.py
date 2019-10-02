@@ -77,7 +77,7 @@ Overview
     speigs
 
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg

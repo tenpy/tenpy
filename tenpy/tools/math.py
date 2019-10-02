@@ -1,5 +1,5 @@
 """Different math functions needed at some point in the library."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings

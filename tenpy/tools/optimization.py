@@ -63,7 +63,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
        help that much; in the crucial parts of the cython code, these optimizations are already
        applied. We do *not* recommend using this!
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 from enum import IntEnum
 import warnings

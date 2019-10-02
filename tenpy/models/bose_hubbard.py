@@ -1,7 +1,7 @@
 """The contents of this module have been moved to :mod:`tenpy.models.hubbard`.
 
 This module is just around for backwards compatibility."""
-# Copyright 2019 TeNPy Developers
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 
 from .hubbard import BoseHubbardModel, BoseHubbardChain
 

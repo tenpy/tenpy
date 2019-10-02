@@ -1,5 +1,5 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 from . import np_conserved as npc
 from ..tools.params import get_parameter

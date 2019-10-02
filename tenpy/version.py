@@ -3,7 +3,7 @@
 The version is provided in the standard python format ``major.minor.revision`` as string.
 Use ``pkg_resources.parse_version`` before comparing versions.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018 TeNPy Developers, GNU GPLv3
 
 import sys
 import subprocess
