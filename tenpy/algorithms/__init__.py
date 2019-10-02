@@ -22,5 +22,5 @@ from . import truncation, dmrg, mps_sweeps, tebd, tdvp, exact_diag, purification
 
 __all__ = [
     "truncation", "dmrg", "mps_sweeps", "tebd", "tdvp", "exact_diag", "purification_tebd",
-    "network_contractor", "mps_compression"
+    "network_contractor", "mps_compress"
 ]
