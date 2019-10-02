@@ -2,6 +2,9 @@ r"""Compression of a MPS.
 
 
 """
+
+# Copyright 2019 TeNPy Developers, GNU GPLv3
+
 import numpy as np
 
 from ..linalg import np_conserved as npc
@@ -17,12 +20,12 @@ def make_U(H, dt, which='II'):
 
     Parameters
     ----------
-    H: MPO
-    dt: float or complex
+    H : :class:`~tenpy.networks.mpo.MPO`
+    dt : float|complex
 
     Returns
     -------
-    U: MPO
+    U : :class:`~tepy.networks.mpo.MPO`
         The propagator.
     """
     if which=='II':
@@ -36,14 +39,14 @@ def make_UI(H, dt):
 
     Parameters
     ----------
-    H: MPO
+    H : :class:`~tenpy.networks.mpo.MPO`
         The Hamiltonian to use
-    dt: float or complex
+    dt : float|complex
         the time step per application of the propagator
 
     Returns
     -------
-    UI: MPO
+    UI : :class:`~tenpy.networks.mpo.MPO`
         The propagator.
 
     """
@@ -89,14 +92,14 @@ def make_UII(H, dt):
 
     Parameters
     ----------
-    H: MPO
+    H : :class:`~tenpy.networks.mpo.MPO`
         The Hamiltonian to use
-    dt: float or complex
+    dt : float|complex
         the time step per application of the propagator
 
     Returns
     -------
-    UII: MPO
+    UII : :class:`~tenpy.networks.mpo.MPO`
         The propagator.
 
     """
@@ -141,6 +144,15 @@ def make_UII(H, dt):
 
 def make_WII(t, A, B, C, D):
 	r""" WII approx to exp(t H) from sys (A, B, C, D)
+
+        Parameters
+        ----------
+        t : float
+            time intervall for the propagator
+        A : ndarray
+        B : ndarray
+        C : ndarray
+        D : ndarray
 		
 	"""
 	### Algorithm
@@ -209,11 +221,11 @@ def mps_compress(psi, trunc_par):
 
     Parameters
     ----------
-    psi: MPS
+    psi : :class:`tenpy.networks.mps.MPS`
         MPS to be compressed.
         The singular values are usually ignored and need not be set to sensible values, except for bc='infinite', where psi.S[0] is needed as an initial guess.
-    trunc_par: dict
-        See :func:`truncate`
+    trunc_par : dict
+        See :func:`~tenpy.algorithms.truncation.truncate`
     """
     bc=psi.bc
     L=psi.L
@@ -253,10 +265,10 @@ def svd_two_site(i, mps, trunc_par=None):
     ----------
     i : int
         First site.
-    mps :  MPS
+    mps : :class:`tenpy.networks.mps.MPS`
         MPS to use on.
     trunc_par : None|dict
-       If None no truncation is done. Else dict as in :meth:`~tenpy.algorithms.truncation.truncate`.
+       If None no truncation is done. Else dict as in :func:`~tenpy.algorithms.truncation.truncate`.
     """
     theta=mps.get_theta(i)
     theta=theta.combine_legs([['vL','p0'],['p1','vR']], qconj=[+1,-1])
@@ -280,16 +292,16 @@ def apply_mpo(psi, mpo, trunc_par):
 
     Parameters
     ----------
-    mps: MPS
+    mps : :class:`~tenpy.networks.mps.MPS`
         MPS to apply operator on
-    mpo: MPO
+    mpo : :class:`~tenpy.networks.mpo.MPO`
         MPO to apply. Usually one of make_UI() or make_UII(). The approximation being made are uncontrolled for other mpos and infinite bc.
-    trunc_par: dict
+    trunc_par : dict
         Truncation parameters. See :func:`truncate`
 
     Returns
     -------
-    mps: MPS
+    mps : :class:`~tenpy.networks.mps.MPS` 
         Resulting new MPS
     """
     bc=psi.bc
