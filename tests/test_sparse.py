@@ -1,4 +1,4 @@
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 

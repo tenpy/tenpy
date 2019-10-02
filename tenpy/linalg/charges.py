@@ -17,7 +17,7 @@ Functions with this decoartor are replaced by the ones written in Cython, implem
 the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy

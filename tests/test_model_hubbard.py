@@ -1,4 +1,4 @@
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 from tenpy.models import hubbard
 from test_model import check_general_model
 

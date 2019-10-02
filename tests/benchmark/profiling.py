@@ -5,7 +5,7 @@ Call this file with arguments, e.g:
 Afterwards, you can print the produced statistics:
     python profiling.py -p tensordot_*_profile_*.prof --sort time --limit 10
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import cProfile

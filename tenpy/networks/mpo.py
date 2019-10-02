@@ -35,7 +35,7 @@ Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings

@@ -36,7 +36,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
     Yet, imaginary TEBD might be usefull for cross-checks and testing.
 
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time

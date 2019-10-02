@@ -15,7 +15,7 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
     purification_mps
 
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from . import site, mps, mpo, purification_mps
 

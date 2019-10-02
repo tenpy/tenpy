@@ -31,7 +31,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro_model`.
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings

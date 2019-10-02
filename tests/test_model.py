@@ -1,6 +1,6 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`.
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import itertools
 

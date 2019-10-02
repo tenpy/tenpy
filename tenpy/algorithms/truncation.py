@@ -50,7 +50,7 @@ is the discarded part (orthogonal to the kept part) and the
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc

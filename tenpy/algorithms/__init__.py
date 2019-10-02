@@ -15,7 +15,7 @@
     exact_diag
 
 """
-# Copyright 2018 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from . import truncation, dmrg, mps_sweeps, tebd, tdvp, exact_diag, purification_tebd, \
     network_contractor
