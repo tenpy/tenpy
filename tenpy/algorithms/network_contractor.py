@@ -251,7 +251,7 @@ def _ncon(tensor_list, leg_links, sequence):
 def _find_in_sequence(indices, sequence):
     """Helper function for _ncon
 
-    check if the supplied indices appear at the beggining of sequence
+    check if the supplied indices appear at the beginning of sequence
 
     Parameters
     ----------
