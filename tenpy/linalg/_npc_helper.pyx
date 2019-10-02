@@ -641,7 +641,7 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
 
 @cython.binding(True)
 def Array_itranspose(self, axes=None):
-    """Transpose axes like `np.transpose`. In place.
+    """Transpose axes like `np.transpose`; in place.
 
     Parameters
     ----------
