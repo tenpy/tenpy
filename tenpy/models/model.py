@@ -68,7 +68,6 @@ class Model:
     lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     """
-
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it get's called multiple times when a user implements e.g. a
@@ -111,7 +110,7 @@ class Model:
 
 
 class NearestNeighborModel(Model):
-    """Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
+    r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
 
     In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
     "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
@@ -139,7 +138,6 @@ class NearestNeighborModel(Model):
         ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
         Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
     """
-
     def __init__(self, lattice, H_bond):
         Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
@@ -430,7 +428,6 @@ class MPOModel(Model):
     H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian.
     """
-
     def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
@@ -574,7 +571,6 @@ class CouplingModel(Model):
         In a :class:`MultiCouplingModel`, values may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-
     def __init__(self, lattice, bc_coupling=None):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
@@ -597,7 +593,7 @@ class CouplingModel(Model):
             ct._test_terms(sites)
 
     def add_onsite(self, strength, u, opname, category=None):
-        """Add onsite terms to :attr:`onsite_terms`.
+        r"""Add onsite terms to :attr:`onsite_terms`.
 
         Adds a term :math:`\sum_{x_0, ..., x_{dim-1}} strength[x_0, ..., x_{dim-1}] * OP``,
         where the operator ``OP=lat.unit_cell[u].get_op(opname)``
@@ -1029,7 +1025,6 @@ class MultiCouplingModel(CouplingModel):
     :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
     instances of :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-
     def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None, category=None):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
@@ -1212,7 +1207,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
-
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.

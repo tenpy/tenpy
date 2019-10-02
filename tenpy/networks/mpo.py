@@ -667,7 +667,6 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -797,7 +796,7 @@ class MPOGraph:
                 entry.append((opname, strength))
 
     def add_string(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
-        """Insert a bunch of edges for an 'operator string' into the graph.
+        r"""Insert a bunch of edges for an 'operator string' into the graph.
 
         Terms like :math:`S^z_i S^z_j` actually stand for
         :math:`S^z_i \otimes \prod_{i < k < j} \mathbb{1}_k \otimes S^z_j`.
@@ -1011,7 +1010,6 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-
     def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra

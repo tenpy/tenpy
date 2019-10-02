@@ -84,7 +84,6 @@ class TruncationError:
     >>> TE += tebd.time_evolution(...)
 
     """
-
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
         self.ov = ov
@@ -95,7 +94,7 @@ class TruncationError:
 
     @classmethod
     def from_norm(cls, norm_new, norm_old=1.):
-        """Construct TruncationError from norm after and before the truncation.
+        r"""Construct TruncationError from norm after and before the truncation.
 
         Parameters
         ----------
