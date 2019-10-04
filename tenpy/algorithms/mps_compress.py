@@ -26,6 +26,8 @@ def make_U(H, dt, which='II'):
         The MPO to be exponentiated. Typically the Hamiltonian. Must have all IdL and IdR defined on each bond.
     dt : float|complex
         The time step per application of the propagator. Should be imaginary for real time evolution!
+    which : 'I'|'II'
+        selects the approximation made by choosing :func:`make_UI` (``'I'``) or :func:`make_UII` (``'II'``)
 
     Returns
     -------
@@ -226,7 +228,6 @@ def mps_compress(psi, trunc_par):
     ----------
     psi : :class:`tenpy.networks.mps.MPS`
         MPS to be compressed.
-        The singular values are usually ignored and need not be set to sensible values, except for bc='infinite', where psi.S[0] is needed as an initial guess.
     trunc_par : dict
         See :func:`~tenpy.algorithms.truncation.truncate`
     """
@@ -234,13 +235,13 @@ def mps_compress(psi, trunc_par):
     L=psi.L
     if bc=='finite':
         # Do QR starting from the left
-        B=psi.get_B(0,form=None)
+        B=psi.get_B(0,form='Th')
         for i in range(psi.L - 1):
             B=B.combine_legs(['vL', 'p'])
             q,r =npc.qr(B, inner_labels=['vR', 'vL'])
             B=q.split_legs()
             psi.set_B(i,B,form=None)
-            B=psi.get_B((i+1)%L,form=None)
+            B=psi.get_B((i+1)%L,form='B')
             B=npc.tensordot(r,B, axes=('vR', 'vL'))
         # Do SVD from right to left, truncate the singular values according to trunc_par
         for i in range(psi.L-1,0,-1):
@@ -311,7 +312,8 @@ def apply_mpo(psi, U_mpo, trunc_par):
     if psi.L != U_mpo.L:
         raise ValueError("Length of MPS and MPO not the same")
     Bs=[npc.tensordot(psi.get_B(i, form='B'), U_mpo.get_W(i), axes=('p', 'p*')) for i in range(psi.L)]
-    #Bs[0]=npc.tensordot(psi.get_theta(0,1), U_mpo.get_W(0), axes=('p0', 'p*'))
+    if bc=='finite':
+        Bs[0]=npc.tensordot(psi.get_theta(0,1), U_mpo.get_W(0), axes=('p0', 'p*'))
     for i in range(psi.L):
         if i==0 and bc=='finite':
             Bs[i]=Bs[i].take_slice(U_mpo.get_IdL(i) ,'wL')
@@ -334,13 +336,16 @@ def apply_mpo(psi, U_mpo, trunc_par):
         weight=np.ones(U_mpo.get_W(0).shape[U_mpo.get_W(0).get_leg_index('wL')])*0.05
         weight[U_mpo.get_IdL(0)]=1
         weight=weight/np.linalg.norm(weight)
-        S=[np.kron(weight, psi.get_SL(0))] # Is the order correct?
+        S=[np.kron(weight, psi.get_SL(0))] # TODO Is the order correct?
     else:
         S=[np.ones(Bs[0].get_leg('vL').ind_len)]
     #Wrong S values but will be calculated in mps_compress
     for i in range(psi.L):
         S.append(np.ones(Bs[i].get_leg('vR').ind_len))
         
-    new_mps = mps.MPS(psi.sites, Bs, S, form='B', bc=psi.bc) # form='B' is not true but works
+    forms=['B' for i in range(psi.L)]
+    if bc=='finite':
+        forms[0]='Th'
+    new_mps = mps.MPS(psi.sites, Bs, S, form=forms, bc=psi.bc) # form='B' is not true but works
     mps_compress(new_mps, trunc_par)
     return new_mps
