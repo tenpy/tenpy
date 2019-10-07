@@ -10,7 +10,7 @@ form (see the grid below).
 We run the iDMRG algorithm to find the ground state and energy density of the
 system in the thermodynamic limit.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc
@@ -70,7 +70,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # Define the sites and the lattice, which in this case is a simple uniform chain
         # of spin 1/2 sites
         site = SpinHalfSite(conserve=conserve)
-        lat = Chain(L, site, bc_MPS='infinite')
+        lat = Chain(L, site, bc_MPS='infinite', bc='periodic')
 
         # The operators that appear in the Hamiltonian. Standard spin operators are
         # already defined for the spin 1/2 site, but it is also possible to add new

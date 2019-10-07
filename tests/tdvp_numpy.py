@@ -1,3 +1,9 @@
+"""TDVP based purely on numpy.
+
+.. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
+"""
+# Copyright 2019 TeNPy Developers, GNU GPLv3
+
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 import numpy as np
@@ -5,9 +11,7 @@ from scipy.sparse.linalg import onenormest
 
 
 def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):
-    """
-                Applies TDVP on an MPS.
-        """
+    """Applies TDVP on an MPS."""
     L = len(Psi)
 
     def sweep(Psi, W, dt, Lp_list, Rp_list):
@@ -293,7 +297,7 @@ def MPO_XXZ(Jp, Jz, hz):
 
 
 def middle_bond_hamiltonian(Jx, Jz, hx, hz, L):
-    """" Returns the spin operators sigma_x and sigma_z for L sites """
+    """" Returns the spin operators sigma_x and sigma_z for L sites."""
     sx = np.array([[0., 1.], [1., 0.]])
     sz = np.array([[1., 0.], [0., -1.]])
 

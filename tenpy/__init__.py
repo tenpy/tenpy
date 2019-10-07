@@ -6,7 +6,7 @@ designed to study the physics of strongly correlated quantum systems.
 The code is intended to be accessible for newcommers
 and yet powerful enough for day-to-day research.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
 # load and provide subpackages on first input

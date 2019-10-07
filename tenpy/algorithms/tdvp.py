@@ -18,6 +18,7 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
     we should have a general way to sweep through an MPS and updated one or two sites, used in both
     cases.
 """
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from tenpy.networks.mpo import MPOEnvironment
@@ -30,7 +31,7 @@ __all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
 class Engine:
-    """Time dependant variational principle 'Engine'
+    """Time dependant variational principle 'Engine'.
 
     You can call :meth:`run_one_site` for single-site TDVP, or
     :meth:`run_two_sites` for two-site TDVP.
@@ -185,7 +186,8 @@ class Engine:
     def sweep_left_right_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update.
 
-        Evolve from 0.5*dt"""
+        Evolve from 0.5*dt
+        """
         theta_old = self.psi.get_theta(0, 1)
         for j in range(self.L - 1):
 
@@ -222,7 +224,8 @@ class Engine:
     def sweep_right_left(self):
         """Performs the sweep right->left of the second order TDVP scheme with one site update.
 
-        Evolve from 0.5*dt"""
+        Evolve from 0.5*dt
+        """
         expectation_O = []
         for j in range(self.L - 1, -1, -1):
             B = self.psi.get_B(j, form='A')
@@ -261,7 +264,8 @@ class Engine:
     def sweep_right_left_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update.
 
-        Evolve from 0.5*dt"""
+        Evolve from 0.5*dt
+        """
         theta_old = self.psi.get_theta(self.L - 1, 1)
         for j in range(self.L - 2, -1, -1):
             theta = npc.tensordot(theta_old, self.psi.get_B(j, form='A'), ('vL', 'vR'))
@@ -320,7 +324,7 @@ class Engine:
         return theta
 
     def update_theta_h2(self, Lp, Rp, theta, W0, W1, dt):
-        """Update with the two sites Hamiltonian
+        """Update with the two sites Hamiltonian.
 
         Parameters
         ----------
@@ -345,7 +349,7 @@ class Engine:
         return theta
 
     def theta_svd_left_right(self, theta):
-        """Performs the SVD from left to right
+        """Performs the SVD from left to right.
 
         Parameters
         ----------
@@ -368,7 +372,7 @@ class Engine:
         return U, s, V
 
     def set_anonymous_svd(self, U, new_label):
-        """Relabel the svd
+        """Relabel the svd.
 
         Parameters
         ----------
@@ -384,7 +388,7 @@ class Engine:
         return U
 
     def theta_svd_right_left(self, theta):
-        """Performs the SVD from right to left
+        """Performs the SVD from right to left.
 
         Parameters
         ----------
@@ -429,7 +433,7 @@ class Engine:
 
 
 class H0_mixed:
-    """Class defining the zero site Hamiltonian for Lanczos
+    """Class defining the zero site Hamiltonian for Lanczos.
 
     Parameters
     ----------
@@ -462,7 +466,7 @@ class H0_mixed:
 
 
 class H1_mixed:
-    """Class defining the one site Hamiltonian for Lanczos
+    """Class defining the one site Hamiltonian for Lanczos.
 
     Parameters
     ----------
@@ -503,7 +507,7 @@ class H1_mixed:
 
 
 class H2_mixed:
-    """Class defining the two sites Hamiltonian for Lanczos
+    """Class defining the two sites Hamiltonian for Lanczos.
 
     Parameters
     ----------

@@ -50,7 +50,7 @@ is the discarded part (orthogonal to the kept part) and the
     (I couldn't follow the argument completely,
     and the factor was definetly not included in the old TenPy.)
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc
@@ -95,7 +95,7 @@ class TruncationError:
 
     @classmethod
     def from_norm(cls, norm_new, norm_old=1.):
-        """Construct TruncationError from norm after and before the truncation.
+        r"""Construct TruncationError from norm after and before the truncation.
 
         Parameters
         ----------
@@ -291,7 +291,9 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
 
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
-    Otherwise print a warning and return just `good1`."""
+
+    Otherwise print a warning and return just `good1`.
+    """
     res = np.logical_and(good1, good2)
     if np.any(res):
         return res

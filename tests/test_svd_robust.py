@@ -1,5 +1,5 @@
-"""A collection of tests for tenpy.linalg.svd_robust"""
-# Copyright 2018 TeNPy Developers
+"""A collection of tests for tenpy.linalg.svd_robust."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -27,7 +27,7 @@ def test_CLAPACK_import():
 
 
 def check_svd_function(svd_function):
-    """check whether svd_function behaves as np.linalg.svd"""
+    """check whether svd_function behaves as np.linalg.svd."""
     for dtype in [np.float32, np.float64, np.complex64, np.complex128]:
         print("dtype = ", dtype)
         for m, n in [(1, 1), (1, 10), (10, 1), (10, 10), (10, 20)]:

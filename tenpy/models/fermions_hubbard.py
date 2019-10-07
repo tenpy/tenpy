@@ -1,12 +1,15 @@
 """The contents of this module have been moved to :mod:`tenpy.models.hubbard`.
 
-This module is just around for backwards compatibility."""
-# Copyright 2019 TeNPy Developers
+This module is just around for backwards compatibility.
+"""
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 
 from .hubbard import FermiHubbardModel as FermionicHubbardModel
 from .hubbard import FermiHubbardChain as FermionicHubbardChain
 
 import warnings
+
+__all__ == ['FermionicHubbardModel', 'FermionicHubbardChain']
 
 msg = """RESTRUCTURING
 ***********

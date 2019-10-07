@@ -6,7 +6,7 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter

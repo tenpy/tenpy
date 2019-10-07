@@ -73,11 +73,12 @@ site of the MPS in :attr:`MPS.form`.
                     before using algorithms.
 ======== ========== ==========================================================================
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import random
 import warnings
+import random
 from functools import reduce
 import scipy.sparse.linalg.eigen.arpack
 
@@ -88,7 +89,7 @@ from ..tools.misc import to_iterable, argsort
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
-__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix']
+__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'build_initial_state']
 
 
 class MPS:
@@ -193,7 +194,7 @@ class MPS:
         self.test_sanity()
 
     def test_sanity(self):
-        """Sanity check. Raises Errors if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         if self.bc not in self._valid_bc:
             raise ValueError("invalid boundary condition: " + repr(self.bc))
         if len(self._B) != self.L:
@@ -276,7 +277,6 @@ class MPS:
 
         >>> neg_x_state = np.array([1., -1.])
         >>> p_state = [neg_x_state/np.linalg.norm(neg_x_state)]*L  # other parameters as above
-
         """
         sites = list(sites)
         L = len(sites)
@@ -589,8 +589,8 @@ class MPS:
     def copy(self):
         """Returns a copy of `self`.
 
-        The copy still shares the sites, chinfo, and LegCharges of the B tensors,
-        but the values of B and S are deeply copied.
+        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
+        B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
         cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
@@ -600,7 +600,7 @@ class MPS:
 
     @property
     def L(self):
-        """Number of physical sites. For an iMPS the len of the MPS unit cell."""
+        """Number of physical sites; for an iMPS the len of the MPS unit cell."""
         return len(self.sites)
 
     @property
@@ -610,7 +610,10 @@ class MPS:
 
     @property
     def finite(self):
-        "Distinguish MPS (``True; bc='finite', 'segment'`` ) vs. iMPS (``False; bc='infinite'``)"
+        """Distinguish MPS vs iMPS.
+
+        True for an MPS (``bc='finite', 'segment'``), False for an iMPS (``bc='infinite'``).
+        """
         assert (self.bc in self._valid_bc)
         return self.bc != 'infinite'
 
@@ -875,6 +878,31 @@ class MPS:
             init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
         return init_RP
 
+    def increase_L(self, new_L=None):
+        """Modify `self` inplace to enlarge the unit cell.
+
+        For an infinite MPS, we have unit cells.
+
+        Parameters
+        ----------
+        new_L : int
+            New number of sites. Defaults to twice the number of current sites.
+        """
+        old_L = self.L
+        if new_L is None:
+            new_L = 2 * old_L
+        if new_L % old_L:
+            raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
+        factor = new_L // old_L
+        if factor <= 1:
+            raise ValueError("can't shrink!")
+        if self.bc == 'segment':
+            raise ValueError("can't enlarge segment MPS")
+        self.sites = factor * self.sites
+        self._B = factor * self._B
+        self._S = factor * self._S[:-1] + [self._S[-1]]
+        self.form = factor * self.form
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
@@ -920,14 +948,14 @@ class MPS:
         self.form = [B_form] * len(grouped_sites)
         self.grouped = self.grouped * n
 
-    def group_split(self, trunc_par={}):
+    def group_split(self, trunc_par=None):
         """Modify `self` inplace to split previously grouped sites.
 
         Parameters
         ----------
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
         -------
@@ -938,6 +966,8 @@ class MPS:
         --------
         group_sites : Should have been used before to combine sites.
         """
+        if trunc_par is None:
+            trunc_par = {}
         self.convert_form('B')
         if self.L > 1:
             trunc_par.setdefault('chi_max', max(self.chi))
@@ -1496,7 +1526,6 @@ class MPS:
                          for i in range(0, psi.L-1, 2)]
         >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
-
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -1829,7 +1858,6 @@ class MPS:
                 |   .--theta[i]---         .--s[i+1]--
                 |   |    |          vs     |
                 |   .--theta*[i]--         .--s[i+1]--
-
         """
         err = np.empty((self.L, 2), dtype=np.float)
         lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
@@ -2355,7 +2383,7 @@ class MPS:
             print("Total swaps in permute_sites:", num_swaps, repr(trunc_err))
         return trunc_err
 
-    def compute_K(self, perm, swap_op='auto', trunc_par={}, canonicalize=1.e-6, verbose=0):
+    def compute_K(self, perm, swap_op='auto', trunc_par=None, canonicalize=1.e-6, verbose=0):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
         Works for an infinite MPS living on a cylinder, infinitely long in `x` direction and with
@@ -2381,7 +2409,7 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            If not set, `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -2409,6 +2437,8 @@ class MPS:
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
+        if trunc_par is None:
+            trunc_par = {}
         trunc_par.setdefault('chi_max', max(self.chi))
         trunc_par.setdefault('verbose', verbose)
 
@@ -2507,7 +2537,8 @@ class MPS:
         (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
         The cutoff is only used in that case.
 
-        Returns scaled B."""
+        Returns scaled B.
+        """
         if form_diff == 0:
             return B  # nothing to do
         if not isinstance(S, npc.Array):
@@ -2536,9 +2567,9 @@ class MPS:
     def _replace_p_label(self, A, s):
         """Return npc Array `A` with replaced label, ``'p' -> 'p'+s``.
 
-        This is done for each of the 'physical labels' in :attr:`_p_label`.
-        With a clever use of this function, the re-implementation of various functions
-        (like get_theta) in derived classes with multiple legs per site can be avoided.
+        This is done for each of the 'physical labels' in :attr:`_p_label`. With a clever use of
+        this function, the re-implementation of various functions (like get_theta) in derived
+        classes with multiple legs per site can be avoided.
         """
         return A.replace_label('p', 'p' + s)
         #  return A.replace_labels(self._p_label, self._get_p_label(s))
@@ -2868,6 +2899,7 @@ class MPSEnvironment:
         self.test_sanity()
 
     def test_sanity(self):
+        """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.L == self.ket.L)
         assert (self.bra.finite == self.ket.finite)
         # check that the network is contractable
@@ -2956,11 +2988,17 @@ class MPSEnvironment:
         return RP
 
     def get_LP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        """Return number of physical sites in the contractions of get_LP(i).
+
+        Might be ``None``.
+        """
         return self._LP_age[self._to_valid_index(i)]
 
     def get_RP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i). Might be ``None``."""
+        """Return number of physical sites in the contractions of get_LP(i).
+
+        Might be ``None``.
+        """
         return self._RP_age[self._to_valid_index(i)]
 
     def set_LP(self, i, LP, age):
@@ -3381,7 +3419,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
-    """Build an "initial state" list
+    """Build an "initial state" list.
 
     Uses two iterables ('states' and 'filling') to determine how to fill the
     state. The two lists should have the same length as every element in 'filling' gives the filling
@@ -3394,8 +3432,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
         get state 2.
 
     .. todo ::
-    Move to more reasonable location (e.g., `tenpy.networks.mps`)
-    Make more general: it should be possible to specify states as strings.
+        Make more general: it should be possible to specify states as strings.
 
     Parameters
     ----------

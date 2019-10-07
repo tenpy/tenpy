@@ -23,11 +23,14 @@ Added
   :class:`~tenpy.algorithms.mps_sweeps.EffectiveH` to be a 
   :class:`~tenpy.algorithms.mps_sweeps.OneSiteH` or  :class:`~tenpy.algorithms.mps_sweeps.TwoSiteH`.
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
-
+- Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
+- :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
 
 Fixed
 ^^^^^
 - MPO :meth:`~tenpy.networks.mpo.MPO.expectation_value` did not work for finite systems.
+- Calling :meth:`~tenpy.networks.mps.MPS.compute_K` repeatedly with default parameters but on states with different
+  `chi` would use the `chi` of the very first call for the truncation parameters.
 
 
 [0.4.1] - 2019-08-14

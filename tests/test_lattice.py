@@ -1,5 +1,5 @@
-"""A collection of tests for tenpy.models.lattice"""
-# Copyright 2018 TeNPy Developers
+"""A collection of tests for tenpy.models.lattice."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc

@@ -1,4 +1,10 @@
-#!/usr/bin/python2
+"""Example illustrating the use of TDVP in tenpy.
+
+As of now, we have TDVP only for finite systems. The call structure is quite similar to TEBD. A
+difference is that we can run one-site TDVP or two-site TDVP. In the former, the bond dimension can
+not grow; the latter allows to grow the bond dimension and hence requires a truncation.
+"""
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 import tenpy.models.spins
@@ -28,8 +34,8 @@ def run_out_of_equilibrium():
     }
 
     heisenberg = tenpy.models.spins.SpinChain(model_params)
-    product_state = ["up"] * int(L / 2) + ["down"] * (L - int(
-        L / 2))  #starting from a product state which is not an eigenstate of the Heisenberg model
+    product_state = ["up"] * (L // 2) + ["down"] * (L - L // 2)
+    # starting from a domain-wall product state which is not an eigenstate of the Heisenberg model
     psi = MPS.from_product_state(heisenberg.lat.mps_sites(),
                                  product_state,
                                  bc=heisenberg.lat.bc_MPS,
@@ -69,6 +75,4 @@ def run_out_of_equilibrium():
 
 
 if __name__ == "__main__":
-    #This demonstrates that the two sites update allow the bond dimension, and thus the entanglement, to grow.
-    #However this is not true for the one site update
     run_out_of_equilibrium()

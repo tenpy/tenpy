@@ -1,9 +1,9 @@
 """Example illustrating the use of TEBD in tenpy.
 
-The example functions in this class do the same as the ones in `toycodes/c_tebd.py`,
-but make use of the classes defined in tenpy.
+The example functions in this class do the same as the ones in `toycodes/c_tebd.py`, but make use
+of the classes defined in tenpy.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -32,7 +32,8 @@ def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
     }
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
-    # energy:
+
+    # expectation values
     E = np.sum(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.sum(psi.expectation_value(M.H_bond[1:]))
     print("E = {E:.13f}".format(E=E))
@@ -132,9 +133,67 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
     print("saved " + filename)
 
 
+def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp, verbose=True):
+    from tenpy.models.spins_nnn import SpinChainNNN2
+    from tenpy.models.model import NearestNeighborModel
+    print("finite TEBD, imaginary time evolution, transverse field Ising next-nearest neighbor")
+    print("L={L:d}, g={g:.2f}, Jp={Jp:.2f}".format(L=L, g=g, Jp=Jp))
+    model_params = dict(L=L,
+                        Jx=1.,
+                        Jy=0.,
+                        Jz=0.,
+                        Jxp=Jp,
+                        Jyp=0.,
+                        Jzp=0.,
+                        hz=g,
+                        bc_MPS='finite',
+                        conserve=None,
+                        verbose=verbose)
+    # we start with the non-grouped sites, but next-nearest neighbor interactions, building the MPO
+    M = SpinChainNNN2(model_params)
+    product_state = ["up"] * M.lat.N_sites
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+
+    # now we group each to sites ...
+    psi.group_sites(n=2)  # ... in the state
+    M.group_sites(n=2)  # ... and model
+    # now, M has only 'nearest-neighbor' interactions with respect to the grouped sites
+    # thus, we can convert the MPO into H_bond terms:
+    M_nn = NearestNeighborModel.from_MPOModel(M)  # hence, we can initialize H_bond from the MPO
+
+    # now, we continue to run TEBD as before
+    tebd_params = {
+        'order': 2,
+        'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
+        'N_steps': 10,
+        'max_error_E': 1.e-6,
+        'trunc_params': {
+            'chi_max': 30,
+            'svd_min': 1.e-10
+        },
+        'verbose': verbose,
+    }
+    eng = tebd.Engine(psi, M_nn, tebd_params)  # use M_nn and grouped psi
+    eng.run_GS()  # the main work...
+
+    # expectation values:
+    E = np.sum(M_nn.bond_energies(psi))  # bond_energies() works only a for NearestNeighborModel
+    print("E = {E:.13f}".format(E=E))
+    print("final bond dimensions: ", psi.chi)
+    # we can split the sites of the state again for an easier evaluation of expectation values
+    psi.group_split()
+    mag_x = 2. * np.sum(psi.expectation_value("Sx"))  # factor of 2 for Sx vs Sigmax
+    mag_z = 2. * np.sum(psi.expectation_value("Sz"))
+    print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
+    print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
+    return E, psi, M
+
+
 if __name__ == "__main__":
     example_TEBD_gs_tf_ising_finite(L=10, g=1.)
     print("-" * 100)
     example_TEBD_gs_tf_ising_infinite(g=1.5)
     print("-" * 100)
     example_TEBD_tf_ising_lightcone(L=20, g=1.5, tmax=3., dt=0.01)
+    print("-" * 100)
+    example_TEBD_gs_tf_ising_next_nearest_neighbor(L=10, g=1.0, Jp=0.1)

@@ -1,13 +1,13 @@
 """Providing support for sparse algorithms (using matrix-vector products only).
 
-Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of
-a linear operator, but only the action on a vector, i.e., a matrix-vector product `matvec`.
-Here we define the strucuture of such a general operator, :class:`NpcLinearOperator`,
-as it is used in our own implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`).
-Moreover, the :class:`FlatLinearOperator` allows to use all the scipy sparse methods
-by providing functionality to convert flat numpy arrays to and from np_conserved arrays.
+Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of a linear
+operator, but only the action on a vector, i.e., a matrix-vector product `matvec`. Here we define
+the strucuture of such a general operator, :class:`NpcLinearOperator`, as it is used in our own
+implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreover, the
+:class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
+to convert flat numpy arrays to and from np_conserved arrays.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from . import np_conserved as npc
@@ -19,17 +19,17 @@ __all__ = ['NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator']
 class NpcLinearOperator:
     """Prototype for a Linear Operator acting on :class:`~tenpy.linalg.np_conserved.Array`.
 
-    Note that an :class:`~tenpy.linalg.np_conserved.Array` implements a matvec function.
-    Thus you can use any (square) npc Array as an NpcLinearOperator.
+    Note that an :class:`~tenpy.linalg.np_conserved.Array` implements a matvec function. Thus you
+    can use any (square) npc Array as an NpcLinearOperator.
     """
 
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
 
-        Note that we don't require `vec` to be one-dimensional.
-        However, for square operators we require that the result of `matvec`
-        has the same legs (in the same order) as `vec` such that they can be added.
-        Note that this excludes a non-trivial `qtotal` for square operators.
+        Note that we don't require `vec` to be one-dimensional. However, for square operators we
+        require that the result of `matvec` has the same legs (in the same order) as `vec` such
+        that they can be added. Note that this excludes a non-trivial `qtotal` for square
+        operators.
         """
         raise NotImplementedError("Derived classes should implement this")
 
@@ -206,8 +206,9 @@ class FlatLinearOperator(ScipyLinearOperator):
 class FlatHermitianOperator(FlatLinearOperator):
     """Hermitian variant of :class:`FlatLinearOperator`.
 
-    Note that we don't check :meth:`matvec` to return a hermitian result,
-    we only define an adjoint to be `self`."""
+    Note that we don't check :meth:`matvec` to return a hermitian result, we only define an adjoint
+    to be `self`.
+    """
 
     def _adjoint(self):
         return self

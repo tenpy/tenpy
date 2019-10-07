@@ -12,8 +12,9 @@ range couplings twice for the grouped sites.
 Note that you can also get a :class:`~tenpy.models.model.NearestNeighborModel` for TEBD from the
 latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
 :meth:`~tenpy.models.model.NearestNeighbormodel.from_MPOModel`.
+An example for such a case is given in the file ``examples/c_tebd.py``.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

@@ -1,5 +1,5 @@
 """Toy code implementing the transverse-field ising model."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -50,7 +50,10 @@ class TFIModel:
         self.init_H_mpo()
 
     def init_H_bonds(self):
-        """Initialize `H_bonds` hamiltonian. Called by __init__()."""
+        """Initialize `H_bonds` hamiltonian.
+
+        Called by __init__().
+        """
         sx, sz, id = self.sigmax, self.sigmaz, self.id
         d = self.d
         nbonds = self.L - 1 if self.bc == 'finite' else self.L
@@ -69,7 +72,10 @@ class TFIModel:
 
     # (note: not required for TEBD)
     def init_H_mpo(self):
-        """Initialize `H_mpo` Hamiltonian. Called by __init__()."""
+        """Initialize `H_mpo` Hamiltonian.
+
+        Called by __init__().
+        """
         w_list = []
         for i in range(self.L):
             w = np.zeros((3, 3, self.d, self.d), dtype=np.float)

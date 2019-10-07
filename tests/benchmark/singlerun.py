@@ -1,10 +1,10 @@
 """Perform a single run of the "benchmark" function of a given module.
 
-Call this file with arguments, e.g:
-    python singlerun.py -m tensordot_npc tensordot_numpy -l 2 -s 20 -S 50 -q 1 1
+Call this file with arguments, e.g:     python singlerun.py -m tensordot_npc tensordot_numpy -l 2
+-s 20 -S 50 -q 1 1
 """
 
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import cProfile

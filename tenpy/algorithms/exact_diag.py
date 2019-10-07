@@ -13,7 +13,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     but just the ability to diagonalize the defined models for small system sizes
     without addional extra work.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -92,7 +92,7 @@ class ExactDiag:
             self._mask = None
 
     def build_full_H_from_mpo(self):
-        """calculate self.full_H from self.mpo"""
+        """Calculate self.full_H from self.mpo."""
         mpo = self.model.H_MPO
         full_H = mpo.get_W(0).take_slice(mpo.get_IdL(0), 'wL')
         full_H.ireplace_labels(['p', 'p*'], [self._labels_p[0], self._labels_pconj[0]])
@@ -108,7 +108,7 @@ class ExactDiag:
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):
-        """calculate self.full_H from self.mpo"""
+        """Calculate self.full_H from self.mpo."""
         sites = self.model.lat.mps_sites()
         H_bond = self.model.H_bond
         L = len(sites)
@@ -146,7 +146,8 @@ class ExactDiag:
     def full_diagonalization(self, *args, **kwargs):
         """Full diagonalization to obtain all eigenvalues and eigenvectors.
 
-        Arguments are given to :class:`~tenpy.linalg.np_conserved.eigh`."""
+        Arguments are given to :class:`~tenpy.linalg.np_conserved.eigh`.
+        """
         if self.full_H is None:
             raise ValueError("You need to call one of `build_full_H_*` first!")
         E, V = npc.eigh(self.full_H, *args, **kwargs)
@@ -155,7 +156,7 @@ class ExactDiag:
         self.V = V
 
     def groundstate(self):
-        """Pick the ground state from self.V"""
+        """Pick the ground state from self.V."""
         if self.E is None or self.V is None:
             raise ValueError("You need to call `full_diagonalization` first!")
         i0 = np.argmin(self.E)
@@ -219,7 +220,8 @@ class ExactDiag:
     def matvec(self, psi):
         """Allow to use `self` as LinearOperator for lanczos.
 
-        Just applies `full_H` to (the first axis of) the given `psi`."""
+        Just applies `full_H` to (the first axis of) the given `psi`.
+        """
         return npc.tensordot(self.full_H, psi, axes=1)
 
     def sparse_diag(self, k, *args, **kwargs):

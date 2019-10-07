@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+"""To be used in the `-m` argument of benchmark.py."""
+# Copyright 2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

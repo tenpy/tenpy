@@ -4,6 +4,8 @@ The Hamiltonian reads
 .. math ::
     H = - J \\sum_{i} \\sigma^x_i \\sigma^x_{i+1} - g \\sum_{i} \\sigma^z_i
 """
+# Copyright 2019 TeNPy Developers, GNU GPLv3
+
 import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg.eigen.arpack as arp
@@ -50,11 +52,10 @@ def finite_gs_energy(L, J, g):
 def infinite_gs_energy(J, g):
     """For comparison: Calculate groundstate energy density from analytic formula.
 
-    The analytic formula stems from mapping the model to free fermions, see
-    P. Pfeuty, The one-dimensional Ising model with a transverse field,
-    Annals of Physics 57, p. 79 (1970).
-    Note that we use Pauli matrices compared this reference using spin-1/2 matrices
-    and replace the sum_k -> integral dk/2pi to obtain the result in the N -> infinity limit.
+    The analytic formula stems from mapping the model to free fermions, see P. Pfeuty, The one-
+    dimensional Ising model with a transverse field, Annals of Physics 57, p. 79 (1970). Note that
+    we use Pauli matrices compared this reference using spin-1/2 matrices and replace the sum_k ->
+    integral dk/2pi to obtain the result in the N -> infinity limit.
     """
 
     def f(k, lambda_):

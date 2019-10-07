@@ -31,7 +31,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro_model`.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -111,7 +111,7 @@ class Model:
 
 
 class NearestNeighborModel(Model):
-    """Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
+    r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
 
     In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
     "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
@@ -287,7 +287,8 @@ class NearestNeighborModel(Model):
     def _group_sites_Hb_to_onsite(self, gr_site, j, old_Hb):
         """kroneckerproduct for H_bond term within a GroupedSite.
 
-        `old_Hb` acts on sites (j-1, j) of `gr_sites`."""
+        `old_Hb` acts on sites (j-1, j) of `gr_sites`.
+        """
         if old_Hb is None:
             return None
         old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
@@ -304,7 +305,8 @@ class NearestNeighborModel(Model):
     def _group_sites_Hb_to_bond(self, gr_site_L, gr_site_R, old_Hb):
         """Kroneckerproduct for H_bond term acting on two GroupedSites.
 
-        `old_Hb` acts on the right-most site of `gr_site_L` and left-most site of `gr_site_R`."""
+        `old_Hb` acts on the right-most site of `gr_site_L` and left-most site of `gr_site_R`.
+        """
         if old_Hb is None:
             return None
         old_Hb = old_Hb.transpose(['p0', 'p0*', 'p1', 'p1*'])
@@ -589,7 +591,7 @@ class CouplingModel(Model):
         # like self.test_sanity(), but use the version defined below even for derived class
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         sites = self.lat.mps_sites()
         for ot in self.onsite_terms.values():
             ot._test_terms(sites)
@@ -597,7 +599,7 @@ class CouplingModel(Model):
             ct._test_terms(sites)
 
     def add_onsite(self, strength, u, opname, category=None):
-        """Add onsite terms to :attr:`onsite_terms`.
+        r"""Add onsite terms to :attr:`onsite_terms`.
 
         Adds a term :math:`\sum_{x_0, ..., x_{dim-1}} strength[x_0, ..., x_{dim-1}] * OP``,
         where the operator ``OP=lat.unit_cell[u].get_op(opname)``
@@ -996,7 +998,6 @@ class CouplingModel(Model):
         >>> for u1, u2, dx in self.lat.nearest_neighbors:
         ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
-
         """
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)

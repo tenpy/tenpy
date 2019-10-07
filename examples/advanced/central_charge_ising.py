@@ -4,7 +4,7 @@ This example code evaluate the central charge of the transverse field Ising mode
 The expected value for the central charge c = 1/2. The code always recycle the environment from
 the previous simulation, which can be seen at the "age".
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy
@@ -68,7 +68,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
 
 
 def fit_plot_central_charge(s_list, xi_list, filename):
-    """Plot routine in order to determine the cental charge"""
+    """Plot routine in order to determine the cental charge."""
     import matplotlib.pyplot as plt
     from scipy.optimize import curve_fit
 

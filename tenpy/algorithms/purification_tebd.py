@@ -4,7 +4,7 @@ See introduction in :mod:`~tenpy.networks.purification_mps`.
 Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from . import tebd
 from ..linalg import np_conserved as npc
@@ -241,8 +241,8 @@ class PurificationTEBD(tebd.Engine):
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
-        Caclulate the mutual information (in the auxiliar space) between two sites
-        and determine where it is maximal. Disentangle these two sites with :meth:`disentangle`
+        Caclulate the mutual information (in the auxiliar space) between two sites and determine
+        where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
         if pair is None:
@@ -388,8 +388,8 @@ class PurificationTEBD2(PurificationTEBD):
     """Similar as PurificationTEBD, but perform sweeps instead of brickwall.
 
     Instead of the A-B pattern of even/odd bonds used in TEBD, perform sweeps similar as in DMRG
-    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag`
-    does for imaginary time evolution).
+    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag` does for
+    imaginary time evolution).
     """
 
     def update(self, N_steps):
@@ -891,7 +891,8 @@ class LastDisentangler(Disentangler):
     """Use the last total 'U' used in :meth:`disentangle` for the same _update_index as guess.
 
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
-    iterations for a following disentangler."""
+    iterations for a following disentangler.
+    """
 
     def __call__(self, theta):
         # result was saved in :meth:`PurificationTEBD.disentangle`
