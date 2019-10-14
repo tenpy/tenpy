@@ -33,9 +33,8 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
-
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -201,7 +200,7 @@ class MPO:
         return cls(sites, Ws, bc, IdL, IdR, max_range)
 
     def test_sanity(self):
-        """Sanity check. Raises Errors if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         assert self.L == len(self.sites)
         if self.bc not in self._valid_bc:
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
@@ -218,7 +217,7 @@ class MPO:
 
     @property
     def L(self):
-        """Number of physical sites. For an iMPO the len of the MPO unit cell."""
+        """Number of physical sites; for an iMPO the len of the MPO unit cell."""
         return len(self.sites)
 
     @property
@@ -228,7 +227,10 @@ class MPO:
 
     @property
     def finite(self):
-        "Distinguish MPO (``True; bc='finite', 'segment'`` ) vs. iMPO (``False; bc='infinite'``)"
+        """Distinguish MPO vs iMPO.
+
+        True for an MPO (``bc='finite', 'segment'``), False for an iMPO (``bc='infinite'``).
+        """
         assert (self.bc in self._valid_bc)
         return self.bc != 'infinite'
 
@@ -252,14 +254,16 @@ class MPO:
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
 
-        May be ``None``."""
+        May be ``None``.
+        """
         i = self._to_valid_index(i)
         return self.IdL[i]
 
     def get_IdR(self, i):
         """Return index of `IdR` at bond to the *right* of site `i`.
 
-        May be ``None``."""
+        May be ``None``.
+        """
         i = self._to_valid_index(i)
         return self.IdR[i + 1]
 
@@ -309,11 +313,11 @@ class MPO:
     def sort_legcharges(self):
         """Sort virtual legs by charges. In place.
 
-        The MPO seen as matrix of the ``wL, wR`` legs is usually very sparse.
-        This sparsity is captured by the LegCharges for these bonds not being sorted and bunched.
-        This requires a tensordot to do more block-multiplications with smaller blocks.
-        This is in general faster for large blocks, but might lead to a larger overhead for small
-        blocks. Therefore, this function allows to sort the virtual legs by charges.
+        The MPO seen as matrix of the ``wL, wR`` legs is usually very sparse. This sparsity is
+        captured by the LegCharges for these bonds not being sorted and bunched. This requires a
+        tensordot to do more block-multiplications with smaller blocks. This is in general faster
+        for large blocks, but might lead to a larger overhead for small blocks. Therefore, this
+        function allows to sort the virtual legs by charges.
         """
         new_W = [None] * self.L
         perms = [None] * (self.L + 1)
@@ -436,7 +440,8 @@ class MPO:
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
 
-        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``."""
+        Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``.
+        """
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):
@@ -472,7 +477,7 @@ class MPO:
             max_i = self.L + max_range
 
         def overlap(A, B):
-            """<A|B> on sites 0 to max_i"""
+            """<A|B> on sites 0 to max_i."""
             wA = A.get_W(0).take_slice([A.get_IdL(0)], ['wL']).conj()
             wB = B.get_W(0).take_slice([B.get_IdL(0)], ['wL'])
             trAdB = npc.tensordot(wA, wB, axes=[['p*', 'p'], ['p', 'p*']])  # wR* wR
@@ -514,13 +519,14 @@ class MPO:
                 return [Id] * (L + 1)
 
     def get_grouped_mpo(self, blocklen):
-        """contract blocklen subsequent tensors into a single one and return result as a new MPO object"""
+        """Contract `blocklen` subsequent tensors into a single one and return result as a new MPO
+        object."""
         groupedMPO = copy.deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
         return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
-        """extract the full Hamiltonian as a d**L x d**L matrix"""
+        """extract the full Hamiltonian as a d**L x d**L matrix."""
         if (self.dim[0]**(2 * self.L) > maxsize):
             print('Matrix dimension exceeds maxsize')
             return np.zeros(1)
@@ -753,7 +759,7 @@ class MPOGraph:
         return cls.from_terms(ot, ct, sites, bc, insert_all_id)
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         assert len(self.graph) == self.L
         assert len(self.states) == self.L + 1
         if self.bc not in MPO._valid_bc:
@@ -774,7 +780,7 @@ class MPOGraph:
 
     @property
     def L(self):
-        """Number of physical sites. For an iMPS the length of the unit cell."""
+        """Number of physical sites; for infinite boundaries the length of the unit cell."""
         return len(self.sites)
 
     def add(self, i, keyL, keyR, opname, strength, check_op=True, skip_existing=False):
@@ -815,7 +821,7 @@ class MPOGraph:
                 entry.append((opname, strength))
 
     def add_string(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
-        """Insert a bunch of edges for an 'operator string' into the graph.
+        r"""Insert a bunch of edges for an 'operator string' into the graph.
 
         Terms like :math:`S^z_i S^z_j` actually stand for
         :math:`S^z_i \otimes \prod_{i < k < j} \mathbb{1}_k \otimes S^z_j`.
@@ -1175,6 +1181,7 @@ class MPOEnvironment(MPSEnvironment):
         self.test_sanity()
 
     def test_sanity(self):
+        """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.L == self.ket.L == self.H.L)
         assert (self.bra.finite == self.ket.finite == self.H.finite)
         # check that the network is contractable
@@ -1335,8 +1342,9 @@ def grid_insert_ops(site, grid):
 def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
     """Calculate LegCharges from `grids` for a finite MPO.
 
-    This is the easier case. We just gauge the very first leg to the left to zeros,
-    then all other charges (hopefully) follow from the entries of the grid."""
+    This is the easier case. We just gauge the very first leg to the left to zeros, then all other
+    charges (hopefully) follow from the entries of the grid.
+    """
     if leg0 is None:
         if len(grids[0]) != 1:
             raise ValueError("finite MPO with len of first bond != 1")

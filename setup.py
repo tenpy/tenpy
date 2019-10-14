@@ -1,4 +1,4 @@
-# Copyright 2018-2019 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
 import numpy
@@ -35,7 +35,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 
 def get_git_revision():
-    """get revision hash from git"""
+    """Get revision hash from git."""
     if not os.path.exists('.git'):
         rev = "unknown"
     else:
@@ -56,10 +56,11 @@ def get_version_info():
 
 
 def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
-    """write the version during compilation to disc"""
-    content = """
+    """Write the version during compilation to disc."""
+    content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}

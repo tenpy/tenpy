@@ -6,7 +6,7 @@ but make use of the classes defined in tenpy.
 .. todo ::
 Docstrings?
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -132,8 +132,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
         },
         'max_E_err': 1.e-10,
         'verbose': verbose,
-        'combine': True,
-        'active_sites': 1,
+        'combine': True
     }
     eng = dmrg.SingleSiteDMRGEngine(psi, M, dmrg_params)
     E, psi = eng.run()  # equivalent to dmrg.run() up to the return parameters.

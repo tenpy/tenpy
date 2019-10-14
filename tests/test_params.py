@@ -1,12 +1,12 @@
-"""A test for tenpy.tools.params"""
-# Copyright 2018 TeNPy Developers
+"""A test for tenpy.tools.params."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import warnings
 from tenpy.tools import params
 
 
 def example_function(example_pars, keys=['a', 'b']):
-    """example function using a parameter dictionary"""
+    """example function using a parameter dictionary."""
     for default, k in enumerate(keys):
         p_k = params.get_parameter(example_pars, k, default, "testing")
         print("read out parameter {p_k!r}".format(p_k=p_k))

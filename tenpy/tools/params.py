@@ -2,7 +2,7 @@
 
 See the doc-string of :func:`get_parameter` for details.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np
@@ -78,8 +78,6 @@ def get_parameter(params, key, default, descr, asarray=False):
 
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
     parameter 'dt'=0.1 for TEBD
-
-
     """
     use_default = key not in params
     val = params.setdefault(key, default)  # get the value; set default if not existent

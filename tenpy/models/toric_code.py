@@ -1,9 +1,9 @@
 """Kitaev's exactly solvable toric code model.
 
-As we put the model on a cylinder, the name "toric code" is a bit misleading,
-but it is the established name for this model...
+As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
+established name for this model...
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

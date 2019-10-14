@@ -108,7 +108,7 @@ see [Hauschild2018]_.
     I think it should suffice to implement another `from_infiniteT`.
 
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -145,7 +145,7 @@ class PurificationMPS(MPS):
     # correlation_function works as it should, if we adjust _corr_up_diag
 
     def test_sanity(self):
-        """Sanity check. Raises Errors if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         for B in self._B:
             if not set(['vL', 'vR', 'p', 'q']) <= set(B.get_leg_labels()):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
@@ -154,8 +154,8 @@ class PurificationMPS(MPS):
     def copy(self):
         """Returns a copy of `self`.
 
-        The copy still shares the sites, chinfo, and LegCharges of the _B,
-        but the values of B and S are deeply copied.
+        The copy still shares the sites, chinfo, and LegCharges of the _B, but the values of B and
+        S are deeply copied.
         """
         # __init__ makes deep copies of B, S
         return PurificationMPS(self.sites, self._B, self._S, self.bc, self.form)

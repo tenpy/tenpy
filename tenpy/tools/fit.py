@@ -1,5 +1,5 @@
-"""tools to fit to an algebraic decay"""
-# Copyright 2018 TeNPy Developers
+"""tools to fit to an algebraic decay."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.optimize as optimize
@@ -11,20 +11,22 @@ __all__ = [
 
 
 def alg_decay(x, a, b, c):
-    """define the algebraic decay"""
+    """define the algebraic decay."""
     return a * x**(-b) + c
 
 
 def linear_fit(x, y):
     """Perform a linear fit of y to ax + b.
-    Returns a, b, res."""
+
+    Returns a, b, res.
+    """
     assert x.ndim == 1 and y.ndim == 1
     fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y)
     return fit[0][0], fit[0][1], fit[1][0]
 
 
 def lin_fit_res(x, y):
-    """Returns the least-square residue of a linear fit y vs. x."""
+    """Returns the least-square residue of a linear fit y vs x."""
     assert x.ndim == 1 and y.ndim == 1
     fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y)
     if len(fit[1]) < 1:
@@ -33,12 +35,12 @@ def lin_fit_res(x, y):
 
 
 def alg_decay_fit_res(log_b, x, y):
-    """Returns the residue of an algebraic decay fit of the form x ** (-np.exp(log_b))."""
+    """Returns the residue of an algebraic decay fit of the form ``x**(-np.exp(log_b))``."""
     return lin_fit_res(x**(-np.exp(log_b)), y)
 
 
 def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
-    """Fit y to the form a * x**(-b) + c.
+    """Fit y to the form ``a*x**(-b) + c``.
 
     Returns a triplet [a, b, c].
 
@@ -74,6 +76,7 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
 
 def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     """Fit arrays of y's to the form a * x**(-b) + c.
+
     Returns arrays of [a, b, c]."""
     x = np.array(x)
     if x.ndim != 1:
@@ -89,14 +92,15 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
 
 
 def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_fit_args={}):
-    """Given x, y, and fit_par (output from alg_decay_fit), produces a plot of the algebraic decay fit.
+    """Given x, y, and fit_par (output from alg_decay_fit), produces a plot of the algebraic decay
+    fit.
 
-    plot_module is matplotlib.pyplot, or a subplot.
-    x, y are the data (real, 1-dimensional np.ndarray)
-    fit_par is a triplet of numbers [a, b, c] that describes and algebraic decay (see alg_decay()).
-    xfunc is an optional parameter that scales the x-axis in the resulting plot.
-    kwargs is a dictionary, whoses key/items are passed to the plot function.
-    plot_fit_args is a dictionary that controls how the fit is shown."""
+    plot_module is matplotlib.pyplot, or a subplot. x, y are the data (real, 1-dimensional
+    np.ndarray) fit_par is a triplet of numbers [a, b, c] that describes and algebraic decay (see
+    alg_decay()). xfunc is an optional parameter that scales the x-axis in the resulting plot.
+    kwargs is a dictionary, whoses key/items are passed to the plot function. plot_fit_args is a
+    dictionary that controls how the fit is shown.
+    """
     if xfunc is None:
         xfunc = lambda x: x
     if plot_fit_args.get('show_data_points', True):

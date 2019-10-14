@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np
@@ -118,7 +118,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
 
 
 def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
-    """generate an initial state of random singlets, identical in P and Q"""
+    """generate an initial state of random singlets, identical in P and Q."""
     assert (L % 2 == 0)
     # generate pairs with given maximum range, for both P and Q
     pairs_PQ = [None, None]
@@ -143,7 +143,8 @@ def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
 def gen_disentangler_psi_prod(psiP, psiQ):
     """generate a PurificationMPS as tensorproduct (psi_P x psi_Q).
 
-    psiQ should have the same `sites` as psiP."""
+    psiQ should have the same `sites` as psiP.
+    """
     L = psiP.L
     Bs = []
     for i in range(L):

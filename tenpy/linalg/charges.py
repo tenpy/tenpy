@@ -17,7 +17,7 @@ Functions with this decoartor are replaced by the ones written in Cython, implem
 the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -152,7 +152,7 @@ class ChargeInfo:
         return cls(mod, names)
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         if self._mod_masked.ndim != 1 or tuple(self.mod.shape) != (self.qnumber, ):
             raise ValueError("mod has wrong shape")
         if np.any(self._mod_masked <= 0):
@@ -170,6 +170,7 @@ class ChargeInfo:
     @property
     def mod(self):
         """Modulo how much each of the charges is taken.
+
         1 for a U(1) charge, i.e., mod 1 -> mod infinity.
         """
         return self._mod
@@ -493,7 +494,7 @@ class LegCharge:
         return cls.from_qind(chinfo, leg.slices, charges, leg.qconj)
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         if optimize(OptimizationFlag.skip_arg_checks):
             return
         sl = self.slices
@@ -546,7 +547,10 @@ class LegCharge:
         return qflat
 
     def to_qdict(self):
-        """Return charges in `qdict` form. Raises ValueError, if not blocked."""
+        """Return charges in `qdict` form.
+
+        Raises ValueError, if not blocked.
+        """
         res = dict()
         for start, stop, ch in zip(self.slices[:-1], self.slices[1:], self.charges):
             res[tuple(ch)] = slice(start, stop)
@@ -609,7 +613,6 @@ class LegCharge:
         --------
         test_equal :
             ``self.test_contractible(other)`` just performs ``self.test_equal(other.conj())``.
-
         """
         if optimize(OptimizationFlag.skip_arg_checks):
             return
@@ -1036,7 +1039,7 @@ class LegPipe(LegCharge):
         return res
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         if optimize(OptimizationFlag.skip_arg_checks):
             return
         assert (all([l.chinfo == self.chinfo for l in self.legs]))
@@ -1045,14 +1048,15 @@ class LegPipe(LegCharge):
 
     def to_LegCharge(self):
         """Convert self to a LegCharge, discarding the information how to split the legs.
-        Usually not needed, but called by functions, which are not implemented for a LegPipe."""
+
+        Usually not needed, but called by functions, which are not implemented for a LegPipe.
+        """
         res = LegCharge.__new__(LegCharge)
         res.__setstate__(LegCharge.__getstate__(self))
         return res
 
     def conj(self):
         """Return a shallow copy with opposite ``self.qconj``.
-
 
         Returns
         -------
@@ -1328,7 +1332,8 @@ def _find_row_differences(qflat):
 def _map_blocks(blocksizes):
     """Create an index array mapping 1D blocks of given sizes to a new array.
 
-    Equivalent to ``np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])``."""
+    Equivalent to ``np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])``.
+    """
     if len(blocksizes) == 0:
         return np.zeros((0, ), np.intp)
     return np.concatenate([np.ones(s, np.intp) * i for i, s in enumerate(blocksizes)])

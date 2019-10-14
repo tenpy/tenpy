@@ -2,7 +2,7 @@
 
 The :class:`Site` is the prototype, read it's docstring.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -148,7 +148,7 @@ class Site:
         # done
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check, raises ValueErrors, if something is wrong."""
         for lab, ind in self.state_labels.items():
             if not isinstance(lab, str):
                 raise ValueError("wrong type of state label")
@@ -170,18 +170,19 @@ class Site:
 
     @property
     def dim(self):
-        """Dimension of the local Hilbert space"""
+        """Dimension of the local Hilbert space."""
         return self.leg.ind_len
 
     @property
     def onsite_ops(self):
         """Dictionary of on-site operators for iteration.
 
-        (single operators are accessible as attributes.)"""
+        Single operators are accessible as attributes.
+        """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
     def add_op(self, name, op, need_JW=False):
-        """Add one on-site operators
+        """Add one on-site operators.
 
         Parameters
         ----------
@@ -367,7 +368,7 @@ class Site:
         return ' '.join(names)
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
 
 
@@ -701,7 +702,7 @@ class SpinHalfSite(Site):
         self.add_op('Sigmaz', 2. * self.Sz)
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "SpinHalfSite({c!r})".format(c=self.conserve)
 
 
@@ -789,7 +790,7 @@ class SpinSite(Site):
         self.state_labels['up'] = self.state_labels[names[-1]]
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "SpinSite(S={S!s}, {c!r})".format(S=self.S, c=self.conserve)
 
 
@@ -863,7 +864,7 @@ class FermionSite(Site):
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
 
 
@@ -1043,7 +1044,7 @@ class SpinHalfFermionSite(Site):
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
                                                                    cS=self.cons_Sz,
                                                                    f=self.filling)
@@ -1137,7 +1138,7 @@ class BosonSite(Site):
         self.state_labels['vac'] = self.state_labels['0']  # alias
 
     def __repr__(self):
-        """Debug representation of self"""
+        """Debug representation of self."""
         return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
                                                        c=self.conserve,
                                                        f=self.filling)

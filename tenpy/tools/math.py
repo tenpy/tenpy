@@ -1,5 +1,5 @@
 """Different math functions needed at some point in the library."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -76,7 +76,9 @@ def entropy(p, n=1):
 
 def gcd(a, b):
     """Computes the greatest common divisor (GCD) of two numbers.
-    Return 0 if both a, b are zero, otherwise always return a non-negative number."""
+
+    Return 0 if both a, b are zero, otherwise always return a non-negative number.
+    """
     a, b = abs(a), abs(b)
     while b:
         a, b = b, a % b
@@ -150,7 +152,7 @@ def speigs(A, k, *args, **kwargs):
 
 
 def perm_sign(p):
-    """ Given a permutation `p` of numbers, returns its sign. (+1 or -1)
+    """Given a permutation `p` of numbers, returns its sign. (+1 or -1)
 
     Assumes that all the elements are distinct, if not, you get crap.
 

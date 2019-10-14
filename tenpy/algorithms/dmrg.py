@@ -28,9 +28,9 @@ minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 .. todo ::
-    Write UserGuide/Example!!!
+    Write UserGuide!!!
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 
-def run(psi, model, DMRG_params, n=2):
+def run(psi, model, DMRG_params):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -61,9 +61,6 @@ def run(psi, model, DMRG_params, n=2):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    n : int, optional
-        Number of active sites in the DMRG algorithm. Switches between :class:`SingleSiteDMRGEngine`
-        and :class:`TwoSiteDMRGEngine`.
     DMRG_params : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
@@ -176,20 +173,15 @@ def run(psi, model, DMRG_params, n=2):
                                  truncation right after each Lanczos optimization during the
                                  sweeps.
         -------------- --------- ---------------------------------------------------------------
-        active_sites   int       The number of active sites to be used by DMRG. If set to 1,
-                                 :class:`SingleSiteDMRGEngine` is used. If set to 2, DMRG is handled
-                                 by :class:`TwoSiteDMRGEngine`.
+        active_sites   int       The number of active sites to be used by DMRG.
+                                 If set to 1, :class:`SingleSiteDMRGEngine` is used.
+                                 If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
         ============== ========= ===============================================================
 
     Returns
     -------
     info : dict
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
-
-    Raises
-    ------
-    ValueError
-        If `n` is not set to `1` or `2`.
     """
     # initialize the engine
     active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
@@ -209,7 +201,7 @@ def run(psi, model, DMRG_params, n=2):
 
 
 class DMRGEngine(Sweep):
-    """ Generic 'Engine' for the single-site DMRG algorithm.
+    """Generic 'Engine' for the single-site DMRG algorithm.
 
     This engine is implemented as a subclass of
     :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
@@ -367,19 +359,19 @@ class DMRGEngine(Sweep):
                        "Delta E = {DE:.4e}, Delta S = {DS:.4e} (per sweep)\n"
                        "max_trunc_err = {trerr:.4e}, max_E_trunc = {Eerr:.4e}\n"
                        "MPS bond dimensions: {chi!s}")
-                print(
-                    msg.format(sweep=self.sweeps,
-                               mem=memory_usage(),
-                               time=time.time() - start_time,
-                               chi=self.psi.chi,
-                               age=self.update_stats['age'][-1],
-                               E=E,
-                               S=S,
-                               DE=Delta_E,
-                               DS=Delta_S,
-                               trerr=max_trunc_err,
-                               Eerr=max_E_trunc,
-                               norm_err=norm_err))
+                msg = msg.format(sweep=self.sweeps,
+                                 mem=memory_usage(),
+                                 time=time.time() - start_time,
+                                 chi=self.psi.chi,
+                                 age=self.update_stats['age'][-1],
+                                 E=E,
+                                 S=S,
+                                 DE=Delta_E,
+                                 DS=Delta_S,
+                                 trerr=max_trunc_err,
+                                 Eerr=max_E_trunc,
+                                 norm_err=norm_err)
+                print(msg, flush=True)
 
         # clean up from mixer
         self.mixer_cleanup()
@@ -417,8 +409,7 @@ class DMRGEngine(Sweep):
         return E, self.psi
 
     def reset_stats(self):
-        """Reset the statistics. Useful if you want to start a new Sweep run.
-        """
+        """Reset the statistics, useful if you want to start a new sweep run."""
         self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
         self.update_stats = {
             'i0': [],
@@ -683,7 +674,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
-
     """
 
     def __init__(self, psi, model, engine_params):
@@ -858,8 +848,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         self.env.del_RP(i0)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
-        """
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
         Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
         if Mixer_class:
             if Mixer_class is True:
@@ -993,7 +982,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
-
     """
 
     def __init__(self, psi, model, engine_params):
@@ -1010,7 +998,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
             States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
+            see :meth:`get_theta_ortho`.
         """
         EffectiveH = self.EffectiveH
         env = self.env
@@ -1085,23 +1073,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         else:
             next_B = self.env.bra.get_B(i0 - 1, form='A')
         U, S, VH, err = self.mixed_svd(theta, next_B)
-
-        # Enforce normalization:
-        if self.move_right:
-            VH = VH.combine_legs(['p', 'vR'], qconj=-1)
-            U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
-            VH = VH.split_legs('(p.vR)')
-            S = np.dot(np.diag(S), U_VH.to_ndarray())
-            S = np.dot(S, np.diag(S_VH))
-            S = npc.Array.from_ndarray(S, [U.legs[1], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
-        else:
-            U = U.combine_legs(['vL', 'p'], qconj=+1)
-            U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
-            U = U.split_legs(['(vL.p)'])
-            S = np.dot(VH_U.to_ndarray(), np.diag(S))
-            S = np.dot(np.diag(S_U), S)
-            S = npc.Array.from_ndarray(S, [U.legs[2], VH.legs[0]]).iset_leg_labels(['vL', 'vR'])
-
         self.set_B(U, S, VH)
 
         update_data = {
@@ -1188,7 +1159,19 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
             return U, S, VH, err
         else:  # we have a mixer
-            return self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
+            U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
+            # Enforce normalization:
+            if self.move_right:
+                VH = VH.combine_legs(['p', 'vR'], qconj=-1)
+                U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
+                VH = VH.split_legs('(p.vR)')
+                S = U_VH.iscale_axis(S, 'vL').iscale_axis(S_VH, 'vR')
+            else:
+                U = U.combine_legs(['vL', 'p'], qconj=+1)
+                U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
+                U = U.split_legs(['(vL.p)'])
+                S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
+            return U, S, VH, err
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1224,8 +1207,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_RP(i0 - 1)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
-        """
+        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
         Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
         if Mixer_class:
             if Mixer_class is True:

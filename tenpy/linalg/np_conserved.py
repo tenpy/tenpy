@@ -77,7 +77,7 @@ Overview
     speigs
 
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg
@@ -460,7 +460,10 @@ class Array:
         return res
 
     def test_sanity(self):
-        """Sanity check. Raises ValueErrors, if something is wrong."""
+        """Sanity check.
+
+        Raises ValueErrors, if something is wrong.
+        """
         if optimize(OptimizationFlag.skip_arg_checks):
             return
         if len(self.legs) == 0:
@@ -585,7 +588,7 @@ class Array:
         return [self.get_leg_index(l) for l in labels]
 
     def iset_leg_labels(self, labels):
-        """Set labels for the different axes/legs. In place.
+        """Set labels for the different axes/legs; in place.
 
         Introduction to leg labeling can be found in :doc:`/intro_npc`.
 
@@ -622,11 +625,12 @@ class Array:
     def get_leg(self, label):
         """Return ``self.legs[self.get_leg_index(label)]``.
 
-        Convenient function returning the leg corresponding to a leg label/index."""
+        Convenient function returning the leg corresponding to a leg label/index.
+        """
         return self.legs[self.get_leg_index(label)]
 
     def ireplace_label(self, old_label, new_label):
-        """Replace the leg label `old_label` with `new_label`. In place."""
+        """Replace the leg label `old_label` with `new_label`; in place."""
         old_index = self.get_leg_index(old_label)
         labels = self._labels[:]
         labels[old_index] = None
@@ -643,7 +647,7 @@ class Array:
         return self.copy(deep=False).ireplace_label(old_label, new_label)
 
     def ireplace_labels(self, old_labels, new_labels):
-        """Replace leg label ``old_labels[i]`` with ``new_labels[i]``. In place."""
+        """Replace leg label ``old_labels[i]`` with ``new_labels[i]``; in place."""
         old_inds = self.get_leg_indices(old_labels)
         labels = self._labels[:]
         for i in old_inds:
@@ -662,7 +666,7 @@ class Array:
         return self.copy(deep=False).ireplace_labels(old_labels, new_labels)
 
     def idrop_labels(self, old_labels=None):
-        """Remove leg labels from self. In place.
+        """Remove leg labels from self; in place.
 
         Parameters
         ----------
@@ -694,7 +698,7 @@ class Array:
         return '\n'.join(res)
 
     def sparse_stats(self):
-        """Returns a string detailing the sparse statistics"""
+        """Returns a string detailing the sparse statistics."""
         total = np.prod(self.shape)
         if total is 0:
             return "Array without entries, one axis is empty."
@@ -1223,7 +1227,7 @@ class Array:
         return tuple(perms), cp
 
     def isort_qdata(self):
-        """(Lexiographically) sort ``self._qdata``. In place.
+        """(Lexiographically) sort ``self._qdata``; in place.
 
         Lexsort ``self._qdata`` and ``self._data`` and set ``self._qdata_sorted = True``.
         """
@@ -1565,7 +1569,7 @@ class Array:
         return cp
 
     def ipurge_zeros(self, cutoff=QCUTOFF, norm_order=None):
-        """Removes ``self._data`` blocks with *norm* less than cutoff. In place.
+        """Removes ``self._data`` blocks with *norm* less than cutoff; in place.
 
         Parameters
         ----------
@@ -1587,7 +1591,7 @@ class Array:
         return self
 
     def iproject(self, mask, axes):
-        """Applying masks to one or multiple axes. In place.
+        """Applying masks to one or multiple axes; in place.
 
         This function is similar as `np.compress` with boolean arrays
         For each specified axis, a boolean 1D array `mask` can be given,
@@ -1728,7 +1732,7 @@ class Array:
 
     @use_cython(replacement='Array_itranspose')
     def itranspose(self, axes=None):
-        """Transpose axes like `np.transpose`. In place.
+        """Transpose axes like `np.transpose`; in place.
 
         Parameters
         ----------
@@ -1760,7 +1764,7 @@ class Array:
         return cp
 
     def iswapaxes(self, axis1, axis2):
-        """Similar as ``np.swapaxes``. In place."""
+        """Similar as ``np.swapaxes``; in place."""
         axis1 = self.get_leg_index(axis1)
         axis2 = self.get_leg_index(axis2)
         if axis1 == axis2:
@@ -1778,7 +1782,7 @@ class Array:
         return self
 
     def iscale_axis(self, s, axis=-1):
-        """Scale with varying values along an axis. In place.
+        """Scale with varying values along an axis; in place.
 
         Rescale to ``new_self[i1, ..., i_axis, ...] = s[i_axis] * self[i1, ..., i_axis, ...]``.
 
@@ -1796,7 +1800,8 @@ class Array:
         axis = self.get_leg_index(axis)
         s = np.asarray(s)
         if s.shape != (self.shape[axis], ):
-            raise ValueError("s has wrong shape: " + str(s.shape))
+            raise ValueError("s has wrong shape: " + str(s.shape) + " instead of " +
+                             str(self.shape[axis]))
         self.dtype = np.find_common_type([self.dtype], [s.dtype])
         leg = self.legs[axis]
         if axis != self.rank - 1:
@@ -1821,7 +1826,7 @@ class Array:
     # block-wise operations == element wise with numpy ufunc
 
     def iunary_blockwise(self, func, *args, **kwargs):
-        """Roughly ``self = f(self)``, block-wise. In place.
+        """Roughly ``self = f(self)``, block-wise; in place.
 
         Applies an unary function `func` to the non-zero blocks in ``self._data``.
 
@@ -1855,7 +1860,8 @@ class Array:
     def unary_blockwise(self, func, *args, **kwargs):
         """Roughly ``return func(self)``, block-wise. Copies.
 
-        Same as :meth:`iunary_blockwise`, but makes a **shallow** copy first."""
+        Same as :meth:`iunary_blockwise`, but makes a **shallow** copy first.
+        """
         res = self.copy(deep=False)
         return res.iunary_blockwise(func, *args, **kwargs)
 
@@ -1904,7 +1910,8 @@ class Array:
     def norm(self, ord=None, convert_to_float=True):
         """Norm of flattened data.
 
-        See :func:`norm` for details."""
+        See :func:`norm` for details.
+        """
         if ord == 0:
             return np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         if convert_to_float:
@@ -1921,7 +1928,7 @@ class Array:
         return self.unary_blockwise(np.negative)
 
     def ibinary_blockwise(self, func, other, *args, **kwargs):
-        """Roughly ``self = func(self, other)``, block-wise. In place.
+        """Roughly ``self = func(self, other)``, block-wise; in place.
 
         Applies a binary function 'block-wise' to the non-zero blocks of
         ``self._data`` and ``other._data``, storing result in place.
@@ -2242,7 +2249,7 @@ class Array:
         return cp
 
     def _perm_qind(self, p_qind, leg):
-        """Apply a permutation `p_qind` of the qindices in leg `leg` to _qdata. In place."""
+        """Apply a permutation `p_qind` of the qindices in leg `leg` to _qdata; in place."""
         # entry ``b`` of of old old._qdata[:, leg] refers to old ``old.legs[leg][b]``.
         # since new ``new.legs[leg][i] == old.legs[leg][p_qind[i]]``,
         # we have new ``new.legs[leg][reverse_sort_perm(p_qind)[b]] == old.legs[leg][b]``
@@ -2446,7 +2453,8 @@ class Array:
     def _combine_legs_make_pipes(self, combine_legs, pipes, qconj):
         """Argument parsing for :meth:`combine_legs`: make missing pipes.
 
-        Generates missing pipes & checks compatibility for provided pipes."""
+        Generates missing pipes & checks compatibility for provided pipes.
+        """
         npipes = len(combine_legs)
         # default arguments for pipes and qconj
         if pipes is None:
@@ -2585,7 +2593,8 @@ class Array:
         """Make each of the blocks c-style contigous in memory.
 
         Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
-        (No need to call it manually: it's called from tensordot & co anyways!)"""
+        (No need to call it manually: it's called from tensordot & co anyways!)
+        """
         self._data = [np.ascontiguousarray(t) for t in self._data]
         return self
 
@@ -2598,8 +2607,9 @@ class Array:
 def zeros(legcharges, dtype=np.float64, qtotal=None):
     """Create a npc array full of zeros (with no _data).
 
-    This is just a wrapper around ``Array(...)``,
-    detailed documentation can be found in the class doc-string of :class:`Array`."""
+    This is just a wrapper around ``Array(...)``, detailed documentation can be found in the class
+    doc-string of :class:`Array`.
+    """
     return Array(legcharges, dtype, qtotal)
 
 
@@ -4268,7 +4278,10 @@ def _tensordot_worker(a, b, axes):
 
 
 def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, inner_qconj):
-    """Main work of svd. Assumes that `a` is 2D and completely blocked."""
+    """Main work of svd.
+
+    Assumes that `a` is 2D and completely blocked.
+    """
     chinfo = a.chinfo
     qtotal_L, qtotal_R = qtotal_LR
     at = 0  # will be gradually increased, counting the number of singular values
@@ -4414,7 +4427,7 @@ def _eigvals_worker(hermitian, a, sort, UPLO='L'):
 
 
 def __pyx_unpickle_Array(type_, checksum, state):
-    """Allow to unpickle Arrays created with Cython-compiled TenPy version 0.3.0"""
+    """Allow to unpickle Arrays created with Cython-compiled TenPy version 0.3.0."""
     res = Array.__new__(Array)
     if state is not None:  # doesn't happen on my computer...
         res.__setstate__(state)

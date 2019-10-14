@@ -1,3 +1,6 @@
+"""To be used in the `-m` argument of benchmark.py."""
+# Copyright 2019 TeNPy Developers, GNU GPLv3
+
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 
@@ -6,14 +9,14 @@ import itertools as it
 
 
 def rand_permutation(n):
-    """return a random permutation of length n"""
+    """return a random permutation of length n."""
     perm = list(range(n))
     np.random.shuffle(perm)
     return perm
 
 
 def rand_distinct_int(a, b, n):
-    """ returns n distinct integers from a to b inclusive"""
+    """returns n distinct integers from a to b inclusive."""
     if n < 0:
         raise ValueError
     if n > b - a + 1:
@@ -31,7 +34,9 @@ def rand_partitions(a, b, n):
 
 def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
     """return a random (unsorted) LegCharge with a given number of charge sectors.
-    `nqsector` gives the (desired) number of sectors for each of the charges."""
+
+    `nqsector` gives the (desired) number of sectors for each of the charges.
+    """
     if np.isscalar(n_qsector):
         n_qsector = [n_qsector] * chinfo.qnumber
     n_qsector = np.asarray(n_qsector, dtype=np.intp)

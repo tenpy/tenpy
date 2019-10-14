@@ -8,7 +8,7 @@ functions/classes defined here to overwrite those written in pure Python wheneve
 decorator ``@use_cython`` is used in other python files of tenpy.
 If this module was not compiled and could not be imported, a warning is issued.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
 
@@ -641,7 +641,7 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
 
 @cython.binding(True)
 def Array_itranspose(self, axes=None):
-    """Transpose axes like `np.transpose`. In place.
+    """Transpose axes like `np.transpose`; in place.
 
     Parameters
     ----------

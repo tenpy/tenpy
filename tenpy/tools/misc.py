@@ -1,8 +1,9 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from .optimization import bottleneck
+from .process import omp_set_nthreads
 import random
 import os
 import itertools
@@ -10,9 +11,9 @@ import argparse
 import warnings
 
 __all__ = [
-    'to_iterable', 'to_array', 'anynan', 'argsort', 'inverse_permutation', 'list_to_dict_list',
-    'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad', 'any_nonzero',
-    'add_with_None_0', 'chi_list', 'build_initial_state', 'setup_executable'
+    'to_iterable', 'to_array', 'anynan', 'argsort', 'lexsort', 'inverse_permutation',
+    'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad',
+    'any_nonzero', 'add_with_None_0', 'chi_list', 'build_initial_state', 'setup_executable'
 ]
 
 
@@ -72,7 +73,7 @@ if bottleneck is not None:
 else:
 
     def anynan(a):
-        """check whether any entry of a ndarray `a` is 'NaN'"""
+        """check whether any entry of a ndarray `a` is 'NaN'."""
         return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
 
 
@@ -206,7 +207,6 @@ def atleast_2d_pad(a, pad_item=0):
     >>> atleast_2d_pad([[3, 4],[1, 6, 7]])
     array([[ 3.,  4.,  0.],
            [ 1.,  6.,  7.]])
-
     """
     iter(a)  # check that a is at least 1D iterable
     if len(a) == 0:
@@ -399,28 +399,28 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 def setup_executable(mod, run_defaults, identifier_list=None):
     """Read command line arguments and turn into useable dicts.
 
-        Uses default values defined at:
-        - model class for model_par
-        - here for sim_par
-        - executable file for run_par
-        Alternatively, a model_defaults dictionary and identifier_list can be supplied without the model
+    Uses default values defined at:
+    - model class for model_par
+    - here for sim_par
+    - executable file for run_par
+    Alternatively, a model_defaults dictionary and identifier_list can be supplied without the model
 
-        NB: for setup_executable to work with a model class, the model class needs to define two things:
-                - defaults, a static (class level) dictionary with (key, value) pairs that have the name
-                  of the parameter (as string) as key, and the default value as value.
-                - identifier, a static (class level) list or other iterable with the names of the parameters
-                  to be used in filename identifiers.
+    NB: for setup_executable to work with a model class, the model class needs to define two things:
+            - defaults, a static (class level) dictionary with (key, value) pairs that have the name
+              of the parameter (as string) as key, and the default value as value.
+            - identifier, a static (class level) list or other iterable with the names of the parameters
+              to be used in filename identifiers.
 
-        Args:
-            mod (model | dict): Model class (or instance) OR a dictionary containing model defaults
-            run_defaults (dict): default values for executable file parameters
-            identifier_list (ieterable, optional) | Used only if mod is a dict. Contains the identifier
-                                                                                        variables
+    Args:
+        mod (model | dict): Model class (or instance) OR a dictionary containing model defaults
+        run_defaults (dict): default values for executable file parameters
+        identifier_list (ieterable, optional) | Used only if mod is a dict. Contains the identifier
+                                                                                    variables
 
-        Returns:
-            model_par, sim_par, run_par (dicts) : containing all parameters.
-            args | namespace with raw arguments for some backwards compatibility with executables.
-        """
+    Returns:
+        model_par, sim_par, run_par (dicts) : containing all parameters.
+        args | namespace with raw arguments for some backwards compatibility with executables.
+    """
     warnings.warn(
         "Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
         category=FutureWarning,
@@ -523,7 +523,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         }
 
     # Having set up all dictionaries, we can now do some other setting up
-    #omp.set_num_threads(args.ncores)
+    omp_set_nthreads(args.ncores)
     if not args.dir == None:
         os.chdir(args.dir)
     import matplotlib

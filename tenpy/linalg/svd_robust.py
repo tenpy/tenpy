@@ -34,7 +34,7 @@ The idea is that you just import the `svd` from this module and use it as replac
 >>> from svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., [1.]])
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy
@@ -248,9 +248,11 @@ def _load_lapack(libs=[
 
 def _set_CLAPACK_callsignatures(lapack_lib):
     """define the call signature of the CLAPACK functions which we need.
+
     See http://www.netlib.org/lapack/explore-html/d8/d70/group__lapack.html
     for the (fortran) signature.
-    In the C version, all arguments must be given as pointers of the corresponding C types."""
+    In the C version, all arguments must be given as pointers of the corresponding C types.
+    """
     # Shorthand data type for the arrays.
     # s/d/c/z = fortran single/double/complex_single/complex_double
     s_arr = np.ctypeslib.ndpointer(dtype=np.float32, ndim=1)

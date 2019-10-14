@@ -1,9 +1,9 @@
 """Example illustrating the use of TEBD in tenpy.
 
-The example functions in this class do the same as the ones in `toycodes/c_tebd.py`,
-but make use of the classes defined in tenpy.
+The example functions in this class do the same as the ones in `toycodes/c_tebd.py`, but make use
+of the classes defined in tenpy.
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

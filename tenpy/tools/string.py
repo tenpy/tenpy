@@ -1,6 +1,6 @@
 """Tools for handling strings."""
 
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 __all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists']
 
@@ -79,7 +79,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
 
 
 def to_mathematica_lists(a):
-    """convert nested `a` to string readable by mathematica using curly brackets '{...}'"""
+    """convert nested `a` to string readable by mathematica using curly brackets '{...}'."""
     if isinstance(a, str):
         return '"' + str(a) + '"'
     try:

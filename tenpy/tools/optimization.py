@@ -63,15 +63,15 @@ knobs you can turn to tweak the most out of this library, explained in the follo
        help that much; in the crucial parts of the cython code, these optimizations are already
        applied. We do *not* recommend using this!
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from enum import IntEnum
 import warnings
 import os
 
 __all__ = [
-    'bottleneck', 'OptimizationFlag', 'temporary_level', 'set_level', 'get_level', 'optimize',
-    'use_cython', 'have_cython_functions'
+    'bottleneck', 'have_cython_functions', 'OptimizationFlag', 'temporary_level',
+    'to_OptimizationFlag', 'set_level', 'get_level', 'optimize', 'use_cython'
 ]
 
 try:
@@ -88,23 +88,23 @@ class OptimizationFlag(IntEnum):
     Whether we optimize dynamically is decided by comparison of the global "optimization level"
     with one of the following flags. A higher level *includes* all the previous optimizations.
 
-    ===== ================ ========================================================================
+    ===== ================ =======================================================================
     Level Flag             Description
-    ===== ================ ========================================================================
+    ===== ================ =======================================================================
     0     none             Don't do any optimizations, i.e., run many sanity checks.
                            Used for testing.
-    ----- ---------------- ------------------------------------------------------------------------
+    ----- ---------------- -----------------------------------------------------------------------
     1     default          Skip really unnecessary sanity checks, but also don't try any
                            optional optimizations if they might give an overhead.
-    ----- ---------------- ------------------------------------------------------------------------
+    ----- ---------------- -----------------------------------------------------------------------
     2     safe             Activate safe optimizations in algorithms, even if they might
                            give a small overhead.
                            Example: Try to compress the MPO representing the hamiltonian.
-    ----- ---------------- ------------------------------------------------------------------------
+    ----- ---------------- -----------------------------------------------------------------------
     3     skip_arg_checks  Unsafe! Skip (some) class sanity tests and (function) argument checks.
-    ===== ================ ========================================================================
+    ===== ================ =======================================================================
 
-   .. warning ::
+    .. warning ::
         When unsafe optimizations are enabled, errors will not be detected that easily,
         debugging is much harder, and you might even get segmentation faults in the compiled parts.
         Use this kind of optimization only for code which you succesfully ran before
@@ -151,18 +151,21 @@ class temporary_level:
         self.temporary_level = temporary_level
 
     def __enter__(self):
-        "enter the context manager"
+        """enter the context manager."""
         self._old_level = get_level()
         if self.temporary_level is not None:
             set_level(self.temporary_level)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        "exit the context manager"
+        """exit the context manager."""
         set_level(self._old_level)
 
 
 def to_OptimizationFlag(level):
-    "Convert strings and int to a valid OptimizationFlag. ``None`` defaults to the current level."
+    """Convert strings and int to a valid OptimizationFlag.
+
+    ``None`` defaults to the current level.
+    """
     if level is None:
         return get_level()
     if isinstance(level, str):

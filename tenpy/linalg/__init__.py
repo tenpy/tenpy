@@ -21,7 +21,7 @@ so you propably won't need to import `charges` directly.
     lanczos
 
 """
-# Copyright 2018 TeNPy Developers
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
 

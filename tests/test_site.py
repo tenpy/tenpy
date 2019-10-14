@@ -1,5 +1,5 @@
-"""A collection of tests for :mod:`tenpy.models.site`.  """
-# Copyright 2018 TeNPy Developers
+"""A collection of tests for :mod:`tenpy.models.site`."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -24,8 +24,8 @@ def anticommutator(A, B):
 def get_site_op_flat(site, op):
     """Like ``site.get_op(op)``, but return a flat numpy array and revert permutation from charges.
 
-    site.perm should store the permutation compared to "conserve=None", so we can use that
-    to convert to the "standard" flat form with conserve=None.
+    site.perm should store the permutation compared to "conserve=None", so we can use that to
+    convert to the "standard" flat form with conserve=None.
     """
     op = site.get_op(op).to_ndarray()
     iperm = inverse_permutation(site.perm)
@@ -83,9 +83,8 @@ def test_double_site():
 def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
     """Test whether the spins operators behave as expected.
 
-    `S` should be a :class:`site.Site`.
-    Set `SxSy` to `None` to ignore Sx and Sy
-    (if they don't exist as npc.Array due to conservation).
+    `S` should be a :class:`site.Site`. Set `SxSy` to `None` to ignore Sx and Sy (if they don't
+    exist as npc.Array due to conservation).
     """
     Sp, Sm, Sz = SpSmSz
     Sp, Sm, Sz = S.get_op(Sp).to_ndarray(), S.get_op(Sm).to_ndarray(), S.get_op(Sz).to_ndarray()
@@ -106,7 +105,7 @@ def check_spin_site(S, SpSmSz=['Sp', 'Sm', 'Sz'], SxSy=['Sx', 'Sy']):
 
 
 def check_same_operators(sites):
-    """check that the given sites have the same onsite-operator using get_site_op_flat"""
+    """check that the given sites have the same onsite-operator using get_site_op_flat."""
     ops = {}
     for s in sites:
         for op_name in s.opnames:

@@ -1,7 +1,5 @@
-"""A collection of tests for :module:`tenpy.networks.mps`.
-
-"""
-# Copyright 2018 TeNPy Developers
+"""A collection of tests for :module:`tenpy.networks.mps`."""
+# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
