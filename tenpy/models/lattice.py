@@ -441,12 +441,12 @@ class Lattice:
         return mps_idx, self.order[mps_idx, :-1]
 
     def mps2lat_values(self, A, axes=0, u=None):
-        """reshape/reorder A to replace an MPS index by lattice indices.
+        """Reshape/reorder `A` to replace an MPS index by lattice indices.
 
         Parameters
         ----------
         A : ndarray
-            some values. Must have ``A.shape[axes] = self.N_sites`` if `u` is ``None``, or
+            Some values. Must have ``A.shape[axes] = self.N_sites`` if `u` is ``None``, or
             ``A.shape[axes] = self.N_cells`` if `u` is an int.
         axes : (iterable of) int
             chooses the axis which should be replaced.
@@ -458,7 +458,7 @@ class Lattice:
         Returns
         -------
         res_A : ndarray
-            reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
+            Reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
             ``res_A[..., self.order, ...] = A[..., np.arange(self.N_sites), ...]``
 
         Examples
@@ -485,7 +485,7 @@ class Lattice:
         If the unit cell consists of different physical sites, an onsite operator might be defined
         only on one of the sites in the unit cell. Then you can use :meth:`mps_idx_fix_u` to get
         the indices of sites it is defined on, measure the operator on these sites, and use
-        the argument `u` of this function. say y
+        the argument `u` of this function.
 
         >>> u = 0
         >>> idx_subset = lat.mps_idx_fix_u(u)
@@ -1055,6 +1055,43 @@ class Chain(SimpleLattice):
         ]))])
         # and otherwise default values.
         SimpleLattice.__init__(self, [L], site, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+
+        ================== ============================================================
+        `order`            Resulting order
+        ================== ============================================================
+        ``'default'``      ``0, 1, 2, 3, 4, ... ,L-1``
+        ------------------ ------------------------------------------------------------
+        ``'folded'``       ``0, L-1, 1, L-2, ... , L//2``.
+                           This order might be usefull if you want to consider a
+                           ring with periodic boundary conditions with a finite MPS:
+                           It avoids the ultra-long range of the coupling from site
+                           0 to L present in the default order.
+        ================== ============================================================
+        """
+        if isinstance(order, str) and order == 'default' or order == 'folded':
+            (L, u) = self.shape
+            assert u == 1
+            ordering = np.zeros([L, 2], dtype=np.intp)
+            if order == 'default':
+                ordering[:, 0] = np.arange(L, dtype=np.intp)
+            elif order == 'folded':
+                order = []
+                for i in range(L // 2):
+                    order.append(i)
+                    order.append(L - i - 1)
+                if L % 2 == 1:
+                    order.append(L // 2)
+                assert len(order) == L
+                ordering[:, 0] = np.array(order, dtype=np.intp)
+            else:
+                assert (False)  # should not be possible
+            return ordering
+        return super().ordering(order)
 
 
 class Ladder(Lattice):
