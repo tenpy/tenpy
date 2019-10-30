@@ -25,7 +25,6 @@ __all__ = [
 ]
 
 _omp_lib = None
-_mkl_lib = None
 
 
 def memory_usage():

@@ -1257,6 +1257,11 @@ class MPS:
             Reduced density matrix of the segment sites.
             Labels ``'p0', 'p1', ..., 'pk', 'p0*', 'p1*', ..., 'pk*'`` with ``k=len(segment)``.
         """
+        if len(segment) > 12:
+            warnings.warn("{0:d} sites in the segment, that's much!".format(len(segment)),
+                          stacklevel=2)
+        if len(segment) > 20:
+            raise ValueError("too large segment; this is exponentially expensive!")
         segment = np.sort(segment)
         if np.all(segment[1:] == segment[:-1] + 1):  # consecutive
             theta = self.get_theta(segment[0], segment[-1] - segment[0] + 1)
@@ -1276,7 +1281,7 @@ class MPS:
             else:
                 rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
                 rho = npc.tensordot(rho, B.conj(), axes=contract_axes)
-        B = self.get_B(segment[-1])
+        B = self._replace_p_label(self.get_B(segment[-1]), str(k))
         rho = npc.tensordot(rho, B, axes=('vR', 'vL'))
         rho = npc.tensordot(rho, B.conj(), axes=(['vR*', 'vR'], ['vL*', 'vR*']))
         return rho
