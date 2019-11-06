@@ -1,13 +1,101 @@
-Installation instructions: from source
-======================================
+Installation instructions
+=========================
+
+Installation from packages
+--------------------------
+
+If you have the conda package manager from `anaconda <https://www.continuum.io/downloads>`_, you can simply download the ``environment.yml`` file and create a new environment for tenpy with all the required packages::
+
+    conda env create -f environment.yml
+    conda activate tenpy
+
+This will also install `pip <https://pip.pypa.io/en/stable/>`_. Alternatively, if you only have `pip`, install the
+required packages with::
+
+    pip install -r requirements.txt
+
+.. note ::
+    
+    Make sure that the `pip` you call corresponds to the python version
+    you want to use. (e.g. by using ``python -m pip`` instead of a simple ``pip``
+    Also, you might need to use the arguement ``--user`` to install the packages to your home directory, 
+    if you don't have ``sudo`` rights.
+
+.. warning ::
+    
+    It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
+    the python distribution of anaconda. 
+    If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
+
+
+After that, you can install the latest *stable* TeNPy package (without downloading the source) from `PyPi
+<https://pypi.org>` with::
+
+    pip install physics-tenpy # note the different package name - 'tenpy' was taken!
+
+.. note ::
+    
+    When the installation fails, don't give up yet. In the minimal version, tenpy requires only pure Python with
+    somewhat up-to-date NumPy and SciPy. See the section `Installation from source`_ below.
+
+To get the latest development version from the github master branch, you can use::
+
+    pip install git+git://github.com/tenpy/tenpy.git
+
+Finally, if you downloaded the source and want to **modify parts of the source**, you should install tenpy in
+development version with ``-e``::
+
+    cd $HOME/TeNPy # after downloading the source
+    pip install --editable .
+
+In all cases, you can uninstall tenpy with::
+
+    pip uninstall physics-tenpy  # note the longer name!
+
+
+Updating to a new version
+-------------------------
+
+**Before** you update, take a look at the :doc:`/changelog`, which lists the changes, fixes, and new stuff. 
+Most importantly, it has a section on *backwards incompatible changes* (i.e., changes which may break your
+existing code) along with information how to fix it. Of course, we try to avoid introducing such incompatible changes,
+but sometimes, there's no way around them.
+
+How to update depends a little bit on the way you installed TeNPy. Of course, you have always the option to just remove
+the tenpy files and download the newest version, following the instructions above.
+
+Alternatively, if you used ``git clone ...`` to download the repository, you can update to the newest version using `Git`.
+First, briefly check that you didn't change anything you need to keep with ``git status``.
+Then, do a ``git pull`` to download (and possibly merge) the newest commit from the repository.
+
+.. note ::
+    
+    If some Cython file (ending in ``.pyx``) got renamed/removed (e.g., when updating from v0.3.0 to v0.4.0), 
+    you first need to remove the corresponding binary files. 
+    You can do so with the command ``bash cleanup.sh``.
+    
+    Furthermore, whenever one of the cython files (ending in ``.pyx``) changed, you need to re-compile it.
+    To do that, simply call the command ``bash ./compile`` again.
+    If you are unsure whether a cython file changed, compiling again doesn't hurt.
+
+To summarize, you need to execute the following bash commands in the repository::
+
+    # 0) make a backup of the whole folder
+    git status   # check the output whether you modified some files
+    git pull
+    bash ./cleanup.sh  # (confirm with 'y')
+    bash ./compile.sh
+
+Installation from source
+------------------------
 
 Minimal Requirements
---------------------
+^^^^^^^^^^^^^^^^^^^^
 This code works with a minimal requirement of pure Python>=3.5 
 and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
 
 Getting the source
-------------------
+^^^^^^^^^^^^^^^^^^
 
 The following instructions are for (some kind of) Linux, and tested on Ubuntu. 
 However, the code itself should work on other operating systems as well (in particular MacOS and Windows).
@@ -26,14 +114,14 @@ Optionally, if you don't want to contribute, you can checkout the latest stable 
     git checkout v0.3.0  # or whatever is the lastest stable version
 
 .. note ::
-
+    
     In case you don't have Git, you can download the repository as a ZIP archive.
     You can find it under `releases <https://github.com/tenpy/tenpy/releases>`_,
     or the `latest development version <https://github.com/tenpy/tenpy/archive/master.zip>`_.
 
 
 Minimal installation: Including tenpy into PYTHONPATH
------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The python source is in the directory `tenpy/` of the repository.
 This folder `tenpy/` should be placed in (one of the folders of) the environment variable 
 `PYTHONPATH <http://docs.python.org/2/using/cmdline.html#envvar-PYTHONPATH>`_.
@@ -66,7 +154,7 @@ If you got a similar output as above: congratulations! You can now run the codes
 
 
 MKL and further packages
-------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^
 If you want to run larger simulations, we recommend the use of Intel's MKL.
 It ships with a Lapack library, and uses optimization for Intel CPUs.
 Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execution much faster.
@@ -92,7 +180,7 @@ packages::
     conda activate tenpy
 
 .. note ::
-
+    
     MKL uses different threads to parallelize various BLAS and LAPACK routines.
     If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
@@ -104,7 +192,7 @@ However, having matplotlib is not necessary for running any of the algorithms: t
 Further optional requirements are listed in the ``requirements*.txt`` files in the source repository.
 
 Compilation of np_conserved
----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 At the heart of the TeNPy library is the module :mod:`tenpy.linalg.np_conseved`, which provides an Array class to exploit the
 conservation of abelian charges. The data model of python is not ideal for the required book-keeping, thus
 we have implemented the same np_conserved module in `Cython <http://cython.org>`_.
@@ -141,11 +229,11 @@ After a successful compilation, the warning that TeNPy was not compiled should g
     numpy 1.16.3, scipy 1.2.1
 
 .. note ::
-
+    
     For further optimization options, look at :mod:`tenpy.tools.optimization`.
 
 Checking the installation
--------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 As a first check of the installation you can try to run (one of) the python files in the `examples/` subfolder;
 hopefully all of them should run without error.
 
@@ -161,81 +249,3 @@ If you can run the examples but not the tests, check whether `pytest` actually u
 
 The test suite is also run automatically with `travis-ci <https://travis-ci.org>`_, results can be inspected at `here <https://travis-ci.org/tenpy/tenpy>`_.
 
-Installation instructions: from packages
-========================================
-
-If you have the conda package manager, you can simply download the ``environment.yml`` file and create a new environment for tenpy with all the require packages::
-
-    conda env create -f environment.yml
-    conda activate tenpy
-    
-This will also install `pip <https://pip.pypa.io/en/stable/>`_. Alternatively, if you only have `pip`, install the
-required packages with::
-    
-    pip install -r requirements.txt
-
-.. note ::
-
-    Make sure that the `pip` you call corresponds to the python version
-    you want to use. (e.g. by using ``python -m pip`` instead of a simple ``pip``
-    Also, you might need to use the arguement ``--user`` to install the packages to your home directory, 
-    if you don't have ``sudo`` rights.
-
-.. warning ::
-    
-    It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
-    the python distribution of anaconda. 
-    If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
-
-
-After that, you can install the latest *stable* TeNPy package (without downloading the source) from `PyPi
-<https://pypi.org>` with::
-
-    pip install physics-tenpy # note the different package name - 'tenpy' was taken!
-
-To get the latest development version from the github master branch, you can use::
-
-    pip install git+git://github.com/tenpy/tenpy.git
-
-Finally, if you downloaded the source and want to **modify parts of the source**, you should install tenpy in
-development version with ``-e``::
-
-    cd $HOME/TeNPy # after downloading the source
-    pip install --editable .
-
-In all cases, you can uninstall tenpy with::
-
-    pip uninstall physics-tenpy  # note the longer name!
-   
-
-Updating to a new version
-=========================
-**Before** you update, take a look at the :doc:`/changelog`, which lists the changes, fixes, and new stuff. 
-Most importantly, it has a section on *backwards incompatible changes* (i.e., changes which may break your
-existing code) along with information how to fix it. Of course, we try to avoid introducing such incompatible changes,
-but sometimes, there's no way around them.
-
-How to update depends a little bit on the way you installed TeNPy. Of course, you have always the option to just remove
-the tenpy files and download the newest version, following the instructions above.
-
-Alternatively, if you used ``git clone ...`` to download the repository, you can update to the newest version using `Git`.
-First, briefly check that you didn't change anything you need to keep with ``git status``.
-Then, do a ``git pull`` to download (and possibly merge) the newest commit from the repository.
-
-.. note ::
-
-    If some Cython file (ending in ``.pyx``) got renamed/removed (e.g., when updating from v0.3.0 to v0.4.0), 
-    you first need to remove the corresponding binary files. 
-    You can do so with the command ``bash cleanup.sh``.
-
-    Furthermore, whenever one of the cython files (ending in ``.pyx``) changed, you need to re-compile it.
-    To do that, simply call the command ``bash ./compile`` again.
-    If you are unsure whether a cython file changed, compiling again doesn't hurt.
-
-To summarize, you need to execute the following bash commands in the repository::
-
-    # 0) make a backup of the whole folder
-    git status   # check the output whether you modified some files
-    git pull 
-    bash ./cleanup.sh  # (confirm with 'y')
-    bash ./compile.sh
