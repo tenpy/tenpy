@@ -77,4 +77,4 @@ TeNPy References
 .. [TeNPyDoc] Online documentation, https://tenpy.github.io/
 .. [TeNPyForum] Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
 .. [TeNPyNotes] Lecture notes introducing TeNPy, J. Hauschild, F. Pollmann, SciPost Phys. Lect. Notes 5 (2018),
-     :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`.
+     https://arxiv.org/abs/1805.00055 https://dx.doi.org/10.21468/SciPostPhysLectNotes.5
