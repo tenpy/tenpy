@@ -4,11 +4,22 @@ Literature
 This is a (by far non-exhaustive) list of some references for the various ideas behind the code, sorted by year and author.
 They can be cited from the python doc-strings using the format ``[Author####]_``.
 
+TeNPy related sources
+---------------------
+
+.. [TeNPyNotes] 
+    "Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)"
+    J. Hauschild, F. Pollmann, SciPost Phys. Lect. Notes 5 (2018), :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`
+.. [TeNPySource] 
+    Source code available for download from GitHub, https://github.com/tenpy/tenpy
+.. [TeNPyDoc] 
+    Online documentation, https://tenpy.github.io/
+.. [TeNPyForum] 
+    Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
+
+
 General reading
 ---------------
-
-If you're looking for introductory notes, don't forget the 'official' [TeNPyNotes]_.
-One of the classic introductions is:
 
 .. [Schollwoeck2011] 
     "The density-matrix renormalization group in the age of matrix product states"
