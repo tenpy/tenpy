@@ -28,8 +28,8 @@ required packages with::
     If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
 
 
-After that, you can install the latest *stable* TeNPy package (without downloading the source) from `PyPi
-<https://pypi.org>` with::
+After that, you can **install the latest *stable* TeNPy package** (without downloading the source) from 
+`PyPi <https://pypi.org>`_ with::
 
     pip install physics-tenpy # note the different package name - 'tenpy' was taken!
 
