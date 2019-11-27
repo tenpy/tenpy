@@ -134,7 +134,7 @@ def truncate(S, trunc_par):
     Parameters
     ----------
     S : 1D array
-        Schmidt values (as returned by an SVD).
+        Schmidt values (as returned by an SVD), not necessarily sorted.
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.

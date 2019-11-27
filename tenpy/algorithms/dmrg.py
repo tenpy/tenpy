@@ -47,7 +47,7 @@ from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Engine', 'EngineCombine',
+    'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
     'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list'
 ]
 
@@ -236,14 +236,52 @@ class DMRGEngine(Sweep):
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
         terminate with `shelve = True`.
-    sweep_stats : dict
-        Statistics at sweep-level.
     sweeps : int
         The number of sweeps already performed. (Useful for re-start).
     time0 : float
         Time marker for the start of the run.
     update_stats : dict
-        Statistics at local update-level.
+        A dictionary with detailed statistics of the convergence at local update-level.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`DMRGEngine.update_bond` is called.
+
+        =========== ===================================================================
+        key         description
+        =========== ===================================================================
+        i0          An update was performed on sites ``i0, i0+1``.
+        ----------- -------------------------------------------------------------------
+        age         The number of physical sites involved in the simulation.
+        ----------- -------------------------------------------------------------------
+        E_total     The total energy before truncation.
+        ----------- -------------------------------------------------------------------
+        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
+        =========== ===================================================================
+    sweep_stats : dict
+        A dictionary with detailed statistics at the sweep level.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy *before* truncation (as calculated by Lanczos).
+        ------------- -------------------------------------------------------------------
+        S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
+        max_trunc_err The maximum truncation error in the last sweep
+        ------------- -------------------------------------------------------------------
+        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
     """
 
     def run(self):
@@ -534,7 +572,7 @@ class DMRGEngine(Sweep):
         kwargs.setdefault('linestyle', '-')
 
         E = np.array(stats['E_total'])
-        schedule, _ = self._get_sweep_schedule()
+        schedule = list(self.get_sweep_schedule())
         N = len(schedule)  # bond updates per sweep
         if xaxis is None or xaxis == 'index':
             xaxis = 'index'
@@ -1272,115 +1310,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 self.env.get_RP(i0 - 1, store=True)
 
 
-class Engine(NpcLinearOperator):
-    """Prototype for an DMRG 'Engine'.
-
-    This class is deprecated with the arrival of the new `Sweep`-based classes.
-
-    The old docstring:
-
-    This class is the working horse of DMRG. It implements the :meth:`sweep` and large
-    parts of the (two-site) optimization.
-    During the diagonalization (i.e. after calling :meth:`prepare_diag`), the class represents
-    the effective two-site Hamiltonian, which looks like this::
-
-        |        .---            ----.
-        |        |     |      |      |
-        |        LP----W[i0]--W[i1]--RP
-        |        |     |      |      |
-        |        .---            ----.
-
-    `LP` and `RP` are left and right parts of the :class:`~tenpy.networks.mpo.MPOEnvironment`,
-    `W[i0]` and `W[i1]` are the MPO matrices of the Hamiltonian at the two sites ``i0, i1=i0+1``.
-    How this network is then actually contracted in detail is left to derived classes.
-
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial guess for the ground state, which is to be optimized in-place.
-    model : :class:`~tenpy.models.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    DMRG_params : dict
-        Further optional parameters. See :func:`run` for more details.
-
-    Attributes
-    ----------
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
-    psi : :class:`~tenpy.networks.mps.MPS`
-        The MPS to be optimized. After :meth:`run`, this should be (close to) the ground state.
-    sweeps : int
-        The number of performed sweeps (with ``optimize=True``, i.e. not counting the
-        environment updates).
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Environment for contraction ``<psi|H|psi>``.
-    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-        Environments of the form ``<psi|orhto>`` for states `ortho` of the `orthogonal_to`
-        parameter; needed to find excited states.
-    mixer : :class:`Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
-    DMRG_params : dict
-        Parameters used for the DMRG. See :func:`run` for more details.
-    lanczos_params : dict
-        Parameters for :func:`~tenpy.linalg.lanczos.lanczos`.
-    trunc_params : dict
-        Parameters for :func:`~tenpy.algorithms.truncation.truncate`.
-    finite : bool
-        Wheter we perform DMRG for an MPS with finite/segment (True) or infinite boundary
-        conditions; same as `psi.finite`.
-    shelve : bool
-        True when the DMRG stopped due to the time limit set by `max_hours`, otherwise `False`.
-    chi_list : dict | None
-        See DMRG_params `chi_list`. ``None`` (default) disables this feature.
-    update_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.update_bond` is called.
-
-        =========== ===================================================================
-        key         description
-        =========== ===================================================================
-        i0          An update was performed on sites ``i0, i0+1``.
-        ----------- -------------------------------------------------------------------
-        age         The number of physical sites involved in the simulation.
-        ----------- -------------------------------------------------------------------
-        E_total     The total energy before truncation.
-        ----------- -------------------------------------------------------------------
-        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
-        ----------- -------------------------------------------------------------------
-        time        Wallclock time evolved since :attr:`time0` (in seconds).
-        =========== ===================================================================
-
-    sweep_stats : dict
-        A dictionary with detailed statistics of the convergence.
-        For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
-
-        ============= ===================================================================
-        key           description
-        ============= ===================================================================
-        sweep         Number of sweeps performed so far.
-        ------------- -------------------------------------------------------------------
-        E             The energy *before* truncation (as calculated by Lanczos).
-        ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
-        ------------- -------------------------------------------------------------------
-        time          Wallclock time evolved since :attr:`time0` (in seconds).
-        ------------- -------------------------------------------------------------------
-        max_trunc_err The maximum truncation error in the last sweep
-        ------------- -------------------------------------------------------------------
-        max_E_trunc   Maximum change or Energy due to truncation in the last sweep.
-        ------------- -------------------------------------------------------------------
-        max_chi       Maximum bond dimension used.
-        ------------- -------------------------------------------------------------------
-        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
-        ============= ===================================================================
-
-    time0 : float
-        Start time of the simulation, set in :meth:`reset_stats`.
-    """
-
-
 class EngineCombine(TwoSiteDMRGEngine):
     r"""Engine which combines legs into pipes as far as possible.
 
@@ -1407,7 +1336,7 @@ class EngineCombine(TwoSiteDMRGEngine):
         super().__init__(psi, model, DMRG_params)
 
 
-class EngineFracture(Engine):
+class EngineFracture(TwoSiteDMRGEngine):
     r"""Engine which keeps the legs separate.
 
     Due to a different contraction order in :meth:`matvec`, this engine might be faster than
