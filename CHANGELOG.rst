@@ -34,6 +34,8 @@ Fixed
 - MPO :meth:`~tenpy.networks.mpo.MPO.expectation_value` did not work for finite systems.
 - Calling :meth:`~tenpy.networks.mps.MPS.compute_K` repeatedly with default parameters but on states with different
   `chi` would use the `chi` of the very first call for the truncation parameters.
+- allow :class:`~tenpy.network.mps.MPSEnvironment` and :class:`~tenpy.network.mpo.MPOEnvironment` to have MPS/MPO with
+  different length
 
 
 [0.4.1] - 2019-08-14

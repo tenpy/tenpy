@@ -46,6 +46,7 @@ from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
+from ..tools.math import lcm
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -1027,8 +1028,8 @@ class MPOEnvironment(MPSEnvironment):
         self.bra = bra
         self.ket = ket
         self.H = H
-        self.L = L = bra.L
-        self.finite = bra.finite
+        self.L = L = lcm(lcm(bra.L, ket.L), H.L)
+        self._finite = bra.finite
         self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
         self._LP = [None] * L
         self._RP = [None] * L
@@ -1044,8 +1045,7 @@ class MPOEnvironment(MPSEnvironment):
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.L == self.ket.L == self.H.L)
-        assert (self.bra.finite == self.ket.finite == self.H.finite)
+        assert (self.bra.finite == self.ket.finite == self.H.finite == self._finite)
         # check that the network is contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)

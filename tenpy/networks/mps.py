@@ -2789,11 +2789,14 @@ class MPSEnvironment:
     Attributes
     ----------
     L : int
-        Number of physical sites. For iMPS the len of the MPS unit cell.
+        Number of physical sites involved into the Environment, i.e. the least common multiple
+        of ``bra.L`` and ``ket.L``.
     bra, ket : :class:`~tenpy.networks.mps.MPS`
         The two MPS for the contraction.
     dtype : type
         The data type.
+    _finite : bool
+        Whether the boundary conditions of the MPS are finite.
     _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
@@ -2820,12 +2823,13 @@ class MPSEnvironment:
         self.bra = bra
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
-        self.L = L = bra.L
-        self.finite = bra.finite
+        self.L = L = lcm(bra.L, ket.L)
+        self._finite = bra.finite
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
+        self._finite = self.ket.finite  # just for _to_valid_index
         if init_LP is None:
             init_LP = self.init_LP(0)
         self.set_LP(0, init_LP, age=age_LP)
@@ -2836,10 +2840,11 @@ class MPSEnvironment:
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.L == self.ket.L)
-        assert (self.bra.finite == self.ket.finite)
+        assert (self.bra.finite == self.ket.finite == self._finite)
         # check that the network is contractable
-        for b_s, k_s in zip(self.bra.sites, self.ket.sites):
+        for i in range(self.L):
+            b_s = self.bra.sites[i % self.bra.L]
+            k_s = self.ket.sites[i % self.ket.L]
             b_s.leg.test_equal(k_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
@@ -3139,8 +3144,14 @@ class MPSEnvironment:
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `ket.bc`)."""
-        return self.ket._to_valid_index(i)
+        """Make sure `i` is a valid index (depending on `finite`)."""
+        if not self._finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for MPSEnvironment".format(i))
+        return i
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
