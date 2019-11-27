@@ -9,7 +9,7 @@ Tensor Network Python (TeNPy)
     :target: https://travis-ci.org/tenpy/tenpy
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
-    :target: https://github.com/tenpy/tenpy
+    :target: https://github.com/tenpy/tenpy/issues
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
