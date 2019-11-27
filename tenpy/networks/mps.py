@@ -809,74 +809,6 @@ class MPS:
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
-    def init_LP(self, i, bra=None, mpo=None):
-        """Build initial left part ``LP`` for an MPS/MPOEnvironment.
-
-        Parameters
-        ----------
-        i : int
-            Build ``LP`` left of site `i`.
-        bra : :class:`MPS`
-            Check leg compatiblity with a `bra`. Note that the returned `init_LP` will
-            only be the contraction for the ``LP`` of  ``<bra|self>`` on the left most site `i` = 0
-            of a finite MPS.
-        mpo : None | :class:`~tenpy.networks.mpo.MPO`
-            If given, add a leg for the MPO. Requires the `MPO.IdL` on site `i` to be set.
-
-        Returns
-        -------
-        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vL` leg of ``self.get_B(i)``, labels ``'vR*', 'vR'``.
-            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdL[i]``,
-            with labels ``'vR*', 'wR', 'vR'``.
-        """
-        i0 = self._to_valid_index(i)
-        leg_ket = self._B[i0].get_leg('vL')
-        if bra is not None:
-            leg_bra = bra._B[i0].get_leg('vL')
-            leg_ket.test_equal(leg_bra)
-        init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_LP.iset_leg_labels(['vR*', 'vR'])
-        if mpo is not None:
-            leg_mpo = mpo.get_W(i).get_leg('wL').conj()
-            IdL = mpo.get_IdL(i)
-            init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
-        return init_LP
-
-    def init_RP(self, i, bra=None, mpo=None):
-        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
-
-        Parameters
-        ----------
-        i : int
-            Build ``RP`` right of site `i`.
-        bra : :class:`MPS`
-            Check leg compatiblity with a `bra`. Note that the returned `init_RP` will
-            only be the contraction for the ``RP`` of  ``<bra|self>`` on the right most site
-            `i` = L - 1 of a finite MPS.
-        mpo : None | :class:`~tenpy.networks.mpo.MPO`
-            If given, add a leg for the MPO. Requires the `MPO.IdR` on site `i` to be set.
-
-        Returns
-        -------
-        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vR` leg of ``self.get_B(i)``, labels ``'vL*', 'vL'``.
-            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdR[i]``,
-            with labels ``'vL*', 'wL', 'vL'``.
-        """
-        i0 = self._to_valid_index(i)
-        leg_ket = self._B[i0].get_leg('vR')
-        if bra is not None:
-            leg_bra = bra._B[i0].get_leg('vR')
-            leg_ket.test_equal(leg_bra)
-        init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_RP.iset_leg_labels(['vL*', 'vL'])
-        if mpo is not None:
-            leg_mpo = mpo.get_W(i).get_leg('wR').conj()
-            IdR = mpo.get_IdR(i)
-            init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
-        return init_RP
-
     def increase_L(self, new_L=None):
         """Modify `self` inplace to enlarge the unit cell.
 
@@ -2846,9 +2778,9 @@ class MPSEnvironment:
         Stored in place, without making copies.
         If ``None``, use `bra`.
     init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part ``LP``. If ``None``, build trivial one.
+        Initial very left part ``LP``. If ``None``, build trivial one with :meth:`init_LP`.
     init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part ``RP``. If ``None``, build trivial one.
+        Initial very right part ``RP``. If ``None``, build trivial one with :meth:`init_RP`.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -2895,10 +2827,10 @@ class MPSEnvironment:
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if init_LP is None:
-            init_LP = self.ket.init_LP(0, bra)
+            init_LP = self.init_LP(0)
         self.set_LP(0, init_LP, age=age_LP)
         if init_RP is None:
-            init_RP = self.ket.init_RP(L - 1, bra)
+            init_RP = self.init_RP(L - 1)
         self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
@@ -2911,6 +2843,46 @@ class MPSEnvironment:
             b_s.leg.test_equal(k_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
+
+    def init_LP(self, i):
+        """Build initial left part ``LP``.
+
+        Parameters
+        ----------
+        i : int
+            Build ``LP`` left of site `i`.
+
+        Returns
+        -------
+        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
+        """
+        leg_ket = self.ket.get_B(i, None).get_leg('vL')
+        leg_bra = self.bra.get_B(i, None).get_leg('vL')
+        leg_ket.test_equal(leg_bra)
+        init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
+        init_LP.iset_leg_labels(['vR*', 'vR'])
+        return init_LP
+
+    def init_RP(self, i):
+        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``RP`` right of site `i`.
+
+        Returns
+        -------
+        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
+        """
+        leg_ket = self.ket.get_B(i, None).get_leg('vR')
+        leg_bra = self.bra.get_B(i, None).get_leg('vR')
+        leg_ket.test_equal(leg_bra)
+        init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
+        init_RP.iset_leg_labels(['vL*', 'vL'])
+        return init_RP
 
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).

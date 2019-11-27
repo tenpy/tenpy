@@ -363,8 +363,9 @@ class MPO:
         """
         if psi.finite:
             return MPOEnvironment(psi, self, psi).full_contraction(0)
+        env = MPOEnvironment(psi, self, psi)
         L = self.L
-        LP0 = psi.init_LP(0, mpo=self)
+        LP0 = env.init_LP(0)
         masks_L_no_IdL = []
         masks_R_no_IdRL = []
         for i, W in enumerate(self._W):
@@ -396,7 +397,7 @@ class MPO:
             LP = npc.tensordot(LP, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
 
             if i >= L:
-                RP = psi.init_RP(i, mpo=self)
+                RP = env.init_RP(i)
                 current_value = npc.inner(LP,
                                           RP,
                                           axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']],
@@ -1003,10 +1004,10 @@ class MPOEnvironment(MPSEnvironment):
         The MPS on which `H` acts. May be identical with `bra`.
     init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very left part ``LP``. If ``None``, build trivial one with
-        :meth:`~tenpy.networks.mps.MPS.init_LP`.
+        :meth`init_LP`.
     init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very right part ``RP``. If ``None``, build trivial one with
-        :meth:`~tenpy.networks.mps.MPS.init_RP`.
+        :meth:`init_RP`.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -1034,10 +1035,10 @@ class MPOEnvironment(MPSEnvironment):
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if init_LP is None:
-            init_LP = self.ket.init_LP(0, bra, H)
+            init_LP = self.init_LP(0)
         self.set_LP(0, init_LP, age=age_LP)
         if init_RP is None:
-            init_RP = self.ket.init_RP(L - 1, bra, H)
+            init_RP = self.init_RP(L - 1)
         self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
@@ -1051,6 +1052,48 @@ class MPOEnvironment(MPSEnvironment):
             b_s.leg.test_equal(H_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
+
+    def init_LP(self, i):
+        """Build initial left part ``LP``.
+
+        Parameters
+        ----------
+        i : int
+            Build ``LP`` left of site `i`.
+
+        Returns
+        -------
+        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vL` leg of ``.ket.get_B(i)``,
+            multiplied with a unit vector nonzero in ``H.IdL[i]``,
+            with labels ``'vR*', 'wR', 'vR'``.
+        """
+        init_LP = super().init_LP(i)
+        leg_mpo = self.H.get_W(i).get_leg('wL').conj()
+        IdL = self.H.get_IdL(i)
+        init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
+        return init_LP
+
+    def init_RP(self, i):
+        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``RP`` right of site `i`.
+
+        Returns
+        -------
+        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vR` leg of ``self.get_B(i)``,
+            multiplied with a unit vector nonzero in ``H.IdR[i]``,
+            with labels ``'vL*', 'wL', 'vL'``.
+        """
+        init_RP = super().init_RP(i)
+        leg_mpo = self.H.get_W(i).get_leg('wR').conj()
+        IdR = self.H.get_IdR(i)
+        init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
+        return init_RP
 
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).

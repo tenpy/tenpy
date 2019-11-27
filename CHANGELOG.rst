@@ -15,6 +15,8 @@ Backwards incompatible changes
   The :class:`~tenpy.algorithms.dmrg.run` function works as befo
   In case you have directly used the :class:`~tenpy.algorithms.dmrg.EngineCombine` or :class:`~tenpy.algorithms.dmrg.EngineFracture`,
   you should update your code and use the :class:`~tenpy.algorithms.dmrg.TwoSiteEngine` instead.
+- Moved ``init_LP`` and ``init_RP`` method from :class:`~tenpy.networks.mps.MPS` into
+  :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment`.
 
 
 Added
