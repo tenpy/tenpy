@@ -1020,7 +1020,7 @@ class SimpleLattice(Lattice):
 
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        super().mps2lat_values(A, axes, 0)
+        return super().mps2lat_values(A, axes, 0)
 
 
 class Chain(SimpleLattice):
