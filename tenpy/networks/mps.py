@@ -2686,7 +2686,7 @@ class MPS:
         sqrt_Wr = np.sqrt(Wr)
         Gl.itranspose(['vR*', 'vR'])
         rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
-        S2, YH = npc.eigh(rhor)  # YH has legs 'vR*', 'vR'
+        S2, YH = npc.eigh(rhor, sort='>')  # YH has legs 'vR*', 'vR'
         S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
         s_norm = 1.
         # discard small values on order of machine precision
