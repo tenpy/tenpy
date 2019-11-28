@@ -18,6 +18,10 @@ Backwards incompatible changes
 - Moved ``init_LP`` and ``init_RP`` method from :class:`~tenpy.networks.mps.MPS` into
   :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment`.
 
+Changed
+^^^^^^^
+- Addition/subtraction of :class:`~tenpy.linalg.np_conserved.Array`: check whether the both arrays have the same labels
+  in differnt order, and in that case raise a warning that we will transpose in the future.
 
 Added
 ^^^^^

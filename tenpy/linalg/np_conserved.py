@@ -1934,17 +1934,31 @@ class Array:
         ``self._data`` and ``other._data``, storing result in place.
         Assumes that `other` is an :class:`Array` as well, with the same shape
         and compatible legs.
+        If leg labels of `other` and `self` are same up to permutations,
+        `other` gets transposed accordingly before the action.
 
         .. note ::
             Assumes implicitly that
             ``func(np.zeros(...), np.zeros(...), *args, **kwargs)`` gives 0,
             since we don't let `func` act on zero blocks!
 
+        Parameters
+        ----------
+        func : function
+            Binary function, called as
+            ``new_block = func(block_self, block_other, *args, **kwargs)``
+            for blocks (=Numpy arrays) of equal shape.
+        other : :class:`Array`
+            Other Array from which to the blocks.
+        *args, **kwargs:
+            Extra (keyword) arguments given to `func`.
+
         Examples
         --------
         >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
         >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
         """
+        other = other._transpose_same_labels(self._labels)
         if len(args) > 0 or len(kwargs) > 0:
             return self.ibinary_blockwise(lambda a, b: func(a, b, *args, **kwargs), other)
         if not optimize(OptimizationFlag.skip_arg_checks):
@@ -2020,6 +2034,8 @@ class Array:
         """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
 
         Note that we allow the type of `self` to change if necessary.
+        Moreover, if `self` and `other` have the same labels in different order,
+        other gets **transposed** before the action.
         """
         if not isinstance(other, Array) or not np.isscalar(prefactor):
             raise ValueError("wrong argument types: {0!r}, {1!r}".format(
@@ -2597,6 +2613,28 @@ class Array:
         """
         self._data = [np.ascontiguousarray(t) for t in self._data]
         return self
+
+    def _transpose_same_labels(self, other_labels):
+        """Return `self.transpose(other_labels)` if the labels are the same but shuffled."""
+        self_labels = self._labels
+        if self_labels == other_labels:
+            return self  # fits
+        if None in self_labels or None in other_labels:
+            if set(self_labels) == set(other_labels) != set([None]):
+                warnings.warn("Not all legs labeled, so no transpose for Array addition. "
+                              "Did you intend to transpose?")
+            return self  # not all legs labeled
+        if set(self_labels) != set(other_labels):
+            return self  # different labels
+        # now: same labels, different order.
+        # TODO to keep backwards compatibility, just warn for now
+        warnings.warn("Arrays with same labels in different order. Transpose intended?"
+                      " We will transpose in the future!",
+                      category=FutureWarning, stacklevel=3)
+        return self
+        # TODO: do this for the next release
+        return self.transpose(other_labels)
+
 
 
 # ##################################
