@@ -21,7 +21,7 @@ For good readability, we include an extensive documentation next to the code, bo
 
 How do I get set up?
 --------------------
-Follow the instructions in the file ``doc/INSTALL.rst``, online `here <https://tenpy.github.io/INSTALL.html>`_.
+Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.github.io/INSTALL.html.
 The latest version of the source code can be obtained from https://github.com/tenpy/tenpy.
 
 How to read the documentation
@@ -36,7 +36,7 @@ which means it is quite readable in the source plain text, but can also be conve
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
 Moreover, the documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and made available online at https://tenpy.github.io/.
 The big advantages of the (online) HTML documentation are a lot of cross-links between different functions, and even a search function.
-If you prefer yet another format, you can try to build the documentation yourself, as described in :doc:`doc/contributing.rst <contributing>`.
+If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contributing.rst``, online at https://tenpy.github.io/contributing.html.
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
