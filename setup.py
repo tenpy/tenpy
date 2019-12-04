@@ -23,7 +23,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      # update CHANGELOG.rst
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
-#      git tag -a "v0.1.2"
+#      git tag -s "v0.1.2"  # (sign: requires GPG key)
 #      bash ./compile.sh
 #      python setup.py sdist  # create source package for PyPI
 #      python setup.py test # run tests!
@@ -32,6 +32,8 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      git push
 #      git push origin v0.1.2 # also push the tag
 #      python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
+
+# or   python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
 
 
 def get_git_revision():

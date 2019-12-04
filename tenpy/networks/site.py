@@ -303,9 +303,13 @@ class Site:
             If name already was an npc Array, it's directly returned.
         """
         names = name.split(' ')
-        op = getattr(self, names[0])
+        op = getattr(self, names[0], None)
+        if op is None:
+            raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, names[0]))
         for name2 in names[1:]:
-            op2 = getattr(self, name2)
+            op2 = getattr(self, name2, None)
+            if op2 is None:
+                raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, name2))
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
 
@@ -420,6 +424,7 @@ class GroupedSite(Site):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
         self.labels = labels
+        self.charges = charges
         assert n_sites > 0
         if labels is None:
             labels = [str(i) for i in range(n_sites)]
@@ -505,6 +510,12 @@ class GroupedSite(Site):
         pipe = self.leg
         op = op.combine_legs(combine, pipes=[pipe, pipe.conj()])
         return op.iset_leg_labels(['p', 'p*'])
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return "GroupedSite({sites!r}, {labels!r}, {charges!r})".format(sites=self.sites,
+                                                                        labels=self.labels,
+                                                                        charges=self.charges)
 
 
 def group_sites(sites, n=2, labels=None, charges='same'):

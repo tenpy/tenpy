@@ -15,7 +15,13 @@ Backwards incompatible changes
   The :class:`~tenpy.algorithms.dmrg.run` function works as befo
   In case you have directly used the :class:`~tenpy.algorithms.dmrg.EngineCombine` or :class:`~tenpy.algorithms.dmrg.EngineFracture`,
   you should update your code and use the :class:`~tenpy.algorithms.dmrg.TwoSiteEngine` instead.
+- Moved ``init_LP`` and ``init_RP`` method from :class:`~tenpy.networks.mps.MPS` into
+  :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment`.
 
+Changed
+^^^^^^^
+- Addition/subtraction of :class:`~tenpy.linalg.np_conserved.Array`: check whether the both arrays have the same labels
+  in differnt order, and in that case raise a warning that we will transpose in the future.
 
 Added
 ^^^^^
@@ -25,12 +31,15 @@ Added
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
 - Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
 - :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
+- Additional option ``order='folded'`` for the :class:`~tenpy.models.lattice.Chain`.
 
 Fixed
 ^^^^^
 - MPO :meth:`~tenpy.networks.mpo.MPO.expectation_value` did not work for finite systems.
 - Calling :meth:`~tenpy.networks.mps.MPS.compute_K` repeatedly with default parameters but on states with different
   `chi` would use the `chi` of the very first call for the truncation parameters.
+- allow :class:`~tenpy.network.mps.MPSEnvironment` and :class:`~tenpy.network.mpo.MPOEnvironment` to have MPS/MPO with
+  different length
 
 
 [0.4.1] - 2019-08-14

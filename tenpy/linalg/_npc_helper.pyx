@@ -691,6 +691,8 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
 
     Note that we allow the type of `self` to change if necessary.
+    Moreover, if `self` and `other` have the same labels in different order,
+    other gets **transposed** before the action.
     """
     if not optimize(OptimizationFlag.skip_arg_checks):
         if self.rank != other.rank:
@@ -703,6 +705,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
         return self # nothing to do
     self.isort_qdata()
     other.isort_qdata()
+    other = other._transpose_same_labels(self._labels)
     # convert to equal types
     calc_dtype = np.find_common_type([self.dtype, other.dtype], [type(prefactor)])
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128

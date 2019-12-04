@@ -105,6 +105,15 @@ def test_number_nn():
 def test_lattice_order():
     s = site.SpinHalfSite('Sz')
     # yapf: disable
+    chain = lattice.Chain(4, s)
+    order_default = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
+    npt.assert_equal(chain.order, order_default)
+    chain = lattice.Chain(4, s, order='folded')
+    order_folded = np.array([[0, 0], [3, 0], [1, 0], [2, 0]])
+    npt.assert_equal(chain.order, order_folded)
+    chain = lattice.Chain(5, s, order='folded')
+    order_folded = np.array([[0, 0], [4, 0], [1, 0], [3, 0], [2, 0]])
+    npt.assert_equal(chain.order, order_folded)
     square = lattice.Square(2, 2, s, order='default')
     order_default = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
     npt.assert_equal(square.order, order_default)

@@ -18,7 +18,7 @@ import warnings
 import collections
 from ..linalg import np_conserved as npc
 
-__all__ = ['outer_product', 'contract']
+__all__ = ['outer_product', 'contract', 'ncon']
 
 outer_product = -66666666  # a constant that represents an outer product in the sequence of ncon
 
@@ -74,7 +74,7 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
     if sequence is None:
         sequence = list(range(len(leg_contractions)))
 
-    # translate leg_contractions and open_legs to a leg_links list as used by _ncon
+    # translate leg_contractions and open_legs to a leg_links list as used by ncon
     # initialise leg_links
     leg_links = []
     for tensor in tensor_list:
@@ -113,20 +113,20 @@ def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=No
         open_leg_counter = open_leg_counter - 1
         final_labels.append(entry[2])
 
-    # call _ncon and relabel the results' legs
-    res = _ncon(tensor_list, leg_links, new_sequence)
+    # call ncon and relabel the results' legs
+    res = ncon(tensor_list, leg_links, new_sequence)
     if len(final_labels) > 0:
         res.iset_leg_labels(final_labels)
 
     return res
 
 
-def _ncon(tensor_list, leg_links, sequence):
-    """Helper function for contract.
+def ncon(tensor_list, leg_links, sequence):
+    """Implementation of ``ncon.m`` for TeNPy Arrays.
 
     This function is a python implementation of ``ncon.m`` (:arxiv:`1304.6112`) for tenpy
     :class:`~tenpy.linalg.np_conserved.Array`.
-    ncon is a wrapper that translates from a more python/tenpy input style
+    :func:`contract` is a wrapper that translates from a more python/tenpy input style
 
     Parameters
     ----------
@@ -245,7 +245,7 @@ def _ncon(tensor_list, leg_links, sequence):
 
 
 def _find_in_sequence(indices, sequence):
-    """Helper function for _ncon.
+    """Helper function for ncon.
 
     check if the supplied indices appear at the beginning of sequence
 
@@ -269,7 +269,7 @@ def _find_in_sequence(indices, sequence):
 
 
 def _do_trace(a, leg_link, traced_indices):
-    """Helper function for _ncon.
+    """Helper function for ncon.
 
     Trace over pair(s) of legs on a given tensor
     Update the leg_link entry
@@ -316,7 +316,7 @@ def _do_trace(a, leg_link, traced_indices):
 
 
 def _tcontract(t1, t2, links1, links2, contract_legs):
-    """Helper function for _ncon.
+    """Helper function for ncon.
 
     Contract two tensors along one or multiple axis
 
@@ -366,7 +366,7 @@ def _tcontract(t1, t2, links1, links2, contract_legs):
 
 
 def _outer_product(tensor_list, leg_links, sequence):
-    """Helper function for _ncon.
+    """Helper function for ncon.
 
     Perform an outer product of multiple tensors and optionally contract all their legs with one single tensor.
     This can be caused a value OP in the sequence or if there are more than one tensors
@@ -377,11 +377,11 @@ def _outer_product(tensor_list, leg_links, sequence):
     Parameters
     ----------
     tensor_list : list of :class:'Array'
-        the whole list of tensors currently processed by _ncon
+        the whole list of tensors currently processed by ncon
     leg_links : list of list of int
-        the whole leg_links currently processed by _ncon
+        the whole leg_links currently processed by ncon
     sequence :
-     the remaining sequence currently processe by _ncon
+     the remaining sequence currently processed by ncon
 
     Returns
     -------

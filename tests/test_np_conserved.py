@@ -7,6 +7,7 @@ import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
 import warnings
+import pytest
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -483,6 +484,21 @@ def test_npc_Array_ops():
         aflat2 = op(aflat, s)
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
+
+def test_npc_addition_transpose():
+    # addition with labels and transposed axes
+    a1 = np.random.random([3, 3, 4])
+    a2 = np.swapaxes(a1, 0, 1)
+    t1 = npc.Array.from_ndarray_trivial(a1)
+    t1.iset_leg_labels(['a', 'b', 'c'])
+    t2 = npc.Array.from_ndarray_trivial(a2)
+    t2.iset_leg_labels(['b', 'a', 'c'])
+    # TODO: for now warning
+    with pytest.warns(FutureWarning):
+        diff = npc.norm(t1 - t2)
+    # TODO: when the behaviour is changed do
+    #  diff = npc.norm(t1 - t2)
+    #  assert diff < 1.e-10
 
 
 def test_npc_tensordot():
