@@ -101,7 +101,6 @@ class LanczosGroundState:
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
     """
-
     def __init__(self, H, psi0, params, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
@@ -289,7 +288,6 @@ class LanczosEvolution(LanczosGroundState):
     _result_norm : float
         Norm of the resulting vector.
     """
-
     def __init__(self, H, psi0, params):
         super().__init__(H, psi0, params)
         self.delta = None

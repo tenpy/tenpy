@@ -160,7 +160,6 @@ class HofstadterFermions(CouplingMPOModel):
         Choice of the gauge used for the magnetic field. This changes the
         magnetic unit cell. See :func:`gauge_hopping` for details.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -259,7 +258,6 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Choice of the gauge used for the magnetic field. This changes the
         magnetic unit cell.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 

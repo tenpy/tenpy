@@ -146,7 +146,6 @@ class temporary_level:
             do_some_really_heavy_stuff()
         # here we are back to the optimization level as before the ``with ...`` statement
     """
-
     def __init__(self, temporary_level):
         self.temporary_level = temporary_level
 

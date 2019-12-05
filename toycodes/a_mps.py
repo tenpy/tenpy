@@ -34,7 +34,6 @@ class SimpleMPS:
     nbonds : int
         Number of (non-trivial) bonds: L-1 for 'finite' boundary conditions
     """
-
     def __init__(self, Bs, Ss, bc='finite'):
         assert bc in ['finite', 'infinite']
         self.Bs = Bs

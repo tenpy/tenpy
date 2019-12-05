@@ -20,7 +20,6 @@ class SimpleHeff(scipy.sparse.linalg.LinearOperator):
         |       i     j       |
         .--vL             vR--.
     """
-
     def __init__(self, LP, RP, W1, W2):
         self.LP = LP  # vL wL* vL*
         self.RP = RP  # vR* wR* vR
@@ -68,7 +67,6 @@ class SimpleDMRGEngine:
         and similar ``RPs[i]`` for all parts right of site `i`.
         Each ``LPs[i]`` has legs ``vL wL* vL*``, ``RPS[i]`` has legs ``vR* wR* vR``
     """
-
     def __init__(self, psi, model, chi_max, eps):
         assert psi.L == model.L and psi.bc == model.bc  # ensure compatibility
         self.H_mpo = model.H_mpo

@@ -22,7 +22,6 @@ class NpcLinearOperator:
     Note that an :class:`~tenpy.linalg.np_conserved.Array` implements a matvec function. Thus you
     can use any (square) npc Array as an NpcLinearOperator.
     """
-
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
 
@@ -76,7 +75,6 @@ class FlatLinearOperator(ScipyLinearOperator):
     _mask : ndarray[ndim=1, bool]
         The indices of `leg` corresponding to the `charge_sector` to be diagonalized.
     """
-
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None):
         self.npc_matvec = npc_matvec
         self.leg = leg
@@ -209,6 +207,5 @@ class FlatHermitianOperator(FlatLinearOperator):
     Note that we don't check :meth:`matvec` to return a hermitian result, we only define an adjoint
     to be `self`.
     """
-
     def _adjoint(self):
         return self

@@ -50,7 +50,6 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     """
-
     def __init__(self, model_param):
         # model parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)

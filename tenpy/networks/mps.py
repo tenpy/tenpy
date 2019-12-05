@@ -2834,7 +2834,6 @@ class MPSEnvironment:
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
-
     def __init__(self, bra, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
@@ -3247,7 +3246,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
     _contract_legs : int
         Number of physical legs per site + 1.
     """
-
     def __init__(self,
                  bra,
                  ket,

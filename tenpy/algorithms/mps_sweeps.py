@@ -98,7 +98,6 @@ class Sweep:
     verbose : bool | int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
-
     def __init__(self, psi, model, engine_params):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")

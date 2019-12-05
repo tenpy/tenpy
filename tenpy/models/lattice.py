@@ -141,7 +141,6 @@ class Lattice:
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
-
     def __init__(self,
                  Ls,
                  unit_cell,
@@ -941,7 +940,6 @@ class TrivialLattice(Lattice):
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
     """
-
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
@@ -952,7 +950,6 @@ class IrregularLattice(Lattice):
     .. todo ::
         - this doesn't fully work yet...
     """
-
     def __init__(self, mps_sites, based_on, order=None):
         self.based_on = based_on
         self._mps_sites = mps_sites
@@ -1005,7 +1002,6 @@ class SimpleLattice(Lattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
-
     def __init__(self, Ls, site, **kwargs):
         if 'positions' in kwargs:
             Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)

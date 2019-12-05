@@ -72,7 +72,6 @@ class ChargeInfo:
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
-
     def __init__(self, mod=[], names=None):
         mod = np.array(mod, dtype=QTYPE)
         assert mod.ndim == 1
@@ -296,7 +295,6 @@ class LegCharge:
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
     """
-
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=np.intp)
@@ -1002,7 +1000,6 @@ class LegPipe(LegCharge):
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
     """
-
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs

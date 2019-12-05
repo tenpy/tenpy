@@ -50,7 +50,6 @@ class PurificationTEBD(tebd.Engine):
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
-
     def __init__(self, psi, model, TEBD_params):
         super().__init__(psi, model, TEBD_params)
         self._disent_iterations = np.zeros(psi.L)
@@ -391,7 +390,6 @@ class PurificationTEBD2(PurificationTEBD):
     for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag` does for
     imaginary time evolution).
     """
-
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
 
@@ -486,7 +484,6 @@ class Disentangler:
     parent : :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
     """
-
     def __init__(self, parent):
         self.parent = parent
 
@@ -524,7 +521,6 @@ class BackwardDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __call__(self, theta):
         eng = self.parent
         if eng._U_param['type_evo'] == 'imag':
@@ -554,7 +550,6 @@ class RenyiDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -669,7 +664,6 @@ class NormDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -762,7 +756,6 @@ class GradientDescentDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -871,7 +864,6 @@ class NoiseDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __init__(self, parent):
         self.a = get_parameter(parent.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
 
@@ -893,7 +885,6 @@ class LastDisentangler(Disentangler):
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler.
     """
-
     def __call__(self, theta):
         # result was saved in :meth:`PurificationTEBD.disentangle`
         U = None
@@ -915,7 +906,6 @@ class DiagonalizeDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __call__(self, theta):
         rho = npc.tensordot(theta,
                             theta.conj(),
@@ -951,7 +941,6 @@ class CompositeDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
-
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
 
@@ -987,7 +976,6 @@ class MinDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
-
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
         self.n = get_parameter(parent.TEBD_params, 'disent_min_n', 1., 'PurificationTEBD')

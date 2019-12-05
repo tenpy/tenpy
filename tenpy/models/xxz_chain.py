@@ -38,7 +38,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
-
     def __init__(self, model_params):
         # 0) read out/set default parameters
         name = "XXZChain"
@@ -87,7 +86,6 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
     based on the :class:`~tenpy.models.model.CouplingMPOModel`.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

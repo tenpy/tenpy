@@ -49,7 +49,6 @@ class TermList:
     strengths : 1D ndarray
         For each term in `terms` an associated prefactor or strength (e.g. expectation value).
     """
-
     def __init__(self, terms, strength):
         self.terms = list(terms)
         self.strength = np.array(strength)
@@ -210,7 +209,6 @@ class OnsiteTerms:
         Filled by meth:`add_onsite_term`.
         For each index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
     """
-
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -386,7 +384,6 @@ class CouplingTerms:
         ``bc_MPS == 'infinite'``, in which case they indicate couplings between different
         iMPS unit cells.
     """
-
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -754,7 +751,6 @@ class MultiCouplingTerms(CouplingTerms):
         are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
         between different iMPS unit cells.
     """
-
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id"):
         """Add a multi-site coupling term.
 

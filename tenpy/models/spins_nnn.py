@@ -59,7 +59,6 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
@@ -177,7 +176,6 @@ class SpinChainNNN2(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 

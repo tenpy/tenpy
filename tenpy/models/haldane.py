@@ -56,7 +56,6 @@ class BosonicHaldaneModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
         CouplingMPOModel.__init__(self, model_params)
@@ -145,7 +144,6 @@ class FermionicHaldaneModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
         CouplingMPOModel.__init__(self, model_params)

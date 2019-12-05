@@ -34,7 +34,6 @@ class DualSquare(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
     """
-
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
@@ -78,7 +77,6 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     order : str
         The order of the lattice sites in the lattice, see :class:`DualSquare`.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 

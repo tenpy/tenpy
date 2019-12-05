@@ -62,7 +62,6 @@ class SpinModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -121,7 +120,6 @@ class SpinChain(SpinModel, NearestNeighborModel):
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

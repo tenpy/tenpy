@@ -95,7 +95,6 @@ class Engine:
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
-
     def __init__(self, psi, model, TEBD_params):
         self.verbose = get_parameter(TEBD_params, 'verbose', 1, 'TEBD')
         self.TEBD_params = TEBD_params
@@ -699,7 +698,6 @@ class RandomUnitaryEvolution(Engine):
     >>> print(psi2.chi)  # still a product state, not really random!!!
     [1, 1, 1, 1, 1, 1, 1]
     """
-
     def __init__(self, psi, TEBD_params):
         Engine.__init__(self, psi, None, TEBD_params)
 

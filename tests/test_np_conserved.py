@@ -485,6 +485,7 @@ def test_npc_Array_ops():
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
 
+
 def test_npc_addition_transpose():
     # addition with labels and transposed axes
     a1 = np.random.random([3, 3, 4])

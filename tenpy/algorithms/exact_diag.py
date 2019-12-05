@@ -67,7 +67,6 @@ class ExactDiag:
     _mask : 1D bool ndarray | ``None``
         Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
     """
-
     def __init__(self, model, charge_sector=None, sparse=False):
         if model.lat.bc_MPS != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")

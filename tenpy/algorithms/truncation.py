@@ -84,7 +84,6 @@ class TruncationError:
     >>> TE += tebd.time_evolution(...)
 
     """
-
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
         self.ov = ov

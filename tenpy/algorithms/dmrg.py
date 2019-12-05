@@ -283,7 +283,6 @@ class DMRGEngine(Sweep):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def run(self):
         """Run the DMRG simulation to find the ground state.
 
@@ -713,7 +712,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def __init__(self, psi, model, engine_params):
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
@@ -1021,7 +1019,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def __init__(self, psi, model, engine_params):
         self.EffectiveH = OneSiteH
         super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
@@ -1326,7 +1323,6 @@ class EngineCombine(TwoSiteDMRGEngine):
         Right part of the effective Hamiltonian.
         Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
-
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
                "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
@@ -1353,7 +1349,6 @@ class EngineFracture(TwoSiteDMRGEngine):
         MPO on the two sites to be optimized.
         Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
-
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
                "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
@@ -1412,7 +1407,6 @@ class Mixer:
     verbose : int
         Level of output vebosity.
     """
-
     def __init__(self, mixer_params):
         self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-5, 'Mixer')
         assert self.amplitude <= 1.
@@ -1481,7 +1475,6 @@ class SingleSiteMixer(Mixer):
 
     Performs a subspace expansion following [Hubig2015]_.
     """
-
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1587,7 +1580,6 @@ class TwoSiteMixer(SingleSiteMixer):
         Works only with :class:`TwoSiteDMRGEngine`.
         Has not been ported to `Sweep`-based setup yet. Do we need to?
     """
-
     def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1636,7 +1628,6 @@ class DensityMatrixMixer(Mixer):
 
     This mixer constructs density matrices as described in the original paper [White2005]_.
     """
-
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
 

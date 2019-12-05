@@ -72,7 +72,6 @@ class Engine:
     environment : :class:`~tenpy.networks.mpo.MPOEnvironment`
         The environment, storing the `LP` and `RP` to avoid recalculations.
     """
-
     def __init__(self, psi, model, TDVP_params, environment=None):
         self.verbose = get_parameter(TDVP_params, 'verbose', 1, 'TDVP')
         self.TDVP_params = TDVP_params
@@ -449,7 +448,6 @@ class H0_mixed:
     Rp : :class:`tenpy.linalg.np_conserved.Array`
         right part of the environment
     """
-
     def __init__(self, Lp, Rp):
         self.Lp = Lp
         self.Rp = Rp
@@ -486,7 +484,6 @@ class H1_mixed:
     W : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p0' leg of theta
     """
-
     def __init__(self, Lp, Rp, W):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -529,7 +526,6 @@ class H2_mixed:
     W1 : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p1' leg of theta
     """
-
     def __init__(self, Lp, Rp, W0, W1):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n

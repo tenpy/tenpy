@@ -675,7 +675,6 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -1019,7 +1018,6 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-
     def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
