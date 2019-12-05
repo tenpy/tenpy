@@ -266,16 +266,35 @@ class MPS:
 
         Examples
         --------
-        To get a Neel state:
+        Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TIChain`:
 
-        >>> M = SpinChain(model_params)
-        >>> p_state = ["up", "down"]*(L//2)  # repeats entries L/2 times
+        >>> M = TFIChain({'L': 10})
+        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
         >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
 
-        For Spin S=1/2, you could get a state with all sites pointing in negative x-direction with:
+        The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
+        in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
 
-        >>> neg_x_state = np.array([1., -1.])
-        >>> p_state = [neg_x_state/np.linalg.norm(neg_x_state)]*L  # other parameters as above
+        Extending the example, we can replace the spin in the center with one with arbitrary
+        angles ``theta, phi`` in the bloch sphere:
+
+        >>> M = TFIChain({'L': 8, 'conserve': None})
+        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
+        >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
+        >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
+        >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, dtype=np.complex)
+
+        Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
+        the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
+        (when we keep the the north-pole of the bloch sphere being the up-state).
+        The reason is that the `SpinChain` uses the general :class:`~tenpy.networks.site.SpinSite`,
+        where the states are orderd ascending from ``'down'`` to ``'up'``.
+        The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
+        ``'up', 'down'`` where that the Pauli matrices look as usual.
+
+        Moreover, note that you can not write this bloch state (for ``theta != 0, pi``) when
+        conserving symmetries, as the two physical basis states correspond to different symmetry
+        sectors.
         """
         sites = list(sites)
         L = len(sites)
@@ -293,13 +312,14 @@ class MPS:
                 perm = False
             try:
                 iter(p_st)
-                if len(p_st) != site.dim:
-                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
-                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             except TypeError:
                 # just an int for p_st
                 B = np.zeros((site.dim, 1, 1), dtype)
                 B[p_st, 0, 0] = 1.0
+            else:  # iter works
+                if len(p_st) != site.dim:
+                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
+                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             if perm:
                 B = B[site.perm, :, :]
             Bs.append(B)

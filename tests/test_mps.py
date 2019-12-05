@@ -38,6 +38,17 @@ def test_mps():
         npt.assert_array_almost_equal_nulp(C, np.outer(E, E), 100)
         norm_err = psi.norm_test()
         assert (np.linalg.norm(norm_err) < 1.e-13)
+    # example of doc in `from_product_state`
+    L = 8
+    theta, phi = np.pi/3, np.pi/6
+    p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
+    bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
+    p_state[L//2] = bloch_sphere_state   # replace one spin in center
+    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=np.complex)
+    eval_z = psi.expectation_value("Sigmaz")
+    eval_x = psi.expectation_value("Sigmax")
+    assert (eval_z[L//2] - np.cos(theta)) < 1.e-12
+    assert (eval_x[L//2] - np.sin(theta)*np.cos(phi)) < 1.e-12
 
 
 def test_mps_add():
