@@ -699,7 +699,7 @@ class Array:
     def sparse_stats(self):
         """Returns a string detailing the sparse statistics."""
         total = np.prod(self.shape)
-        if total is 0:
+        if total == 0:
             return "Array without entries, one axis is empty."
         nblocks = self.stored_blocks
         stored = self.size

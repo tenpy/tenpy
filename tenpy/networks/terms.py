@@ -472,7 +472,7 @@ class CouplingTerms:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
                 op_string = 'Id'
-        if op_string is 'JW':
+        if op_string == 'JW':
             op_i = site_i.multiply_op_names([op_i, op_string])
         return strength, i, j, op_i, op_j, op_string
 
