@@ -10,7 +10,7 @@ Hamiltonian to perform the local updates. The most prominent example of this is
 probably DMRG, where the local MPS object is optimized with respect to the rest
 of the MPS-MPO-MPS network, the latter forming the effective Hamiltonian.
 
-the :class:`Sweep` class attempts to generalize as many aspects of 'sweeping'
+The :class:`Sweep` class attempts to generalize as many aspects of 'sweeping'
 algorithms as possible. :class:`EffectiveH` and its subclasses implement the
 effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 1-site and 2-site optimization are implemented.
@@ -221,11 +221,6 @@ class Sweep:
         ----------
         N_sweeps : int
             Number of sweeps to run without optimization
-
-        Returns
-        -------
-        None
-            Only if asked for <=0 sweeps.
         """
         if N_sweeps <= 0:
             return

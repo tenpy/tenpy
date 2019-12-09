@@ -1313,15 +1313,6 @@ class EngineCombine(TwoSiteDMRGEngine):
     This engine combines the virtual and physical leg for the left site and right site into pipes.
     This reduces the overhead of calculating charge combinations in the contractions,
     but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-
-    Attributes
-    ----------
-    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Left part of the effective Hamiltonian.
-        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
-    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Right part of the effective Hamiltonian.
-        Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
     """
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
@@ -1341,13 +1332,6 @@ class EngineFracture(TwoSiteDMRGEngine):
 
     Attributes
     ----------
-    LP : :class:`~tenpy.linalg.np_conserved.Array`
-        Left part of the effective Hamiltonian. Labels ``'vR*', 'wR', 'vR'``.
-    RP : :class:`~tenpy.linalg.np_conserved.Array`
-        Right part of the effective Hamiltonian. Labels ``'vL*', 'wL', 'vL'``.
-    H0, H1 : :class:`~tenpy.linalg.np_conserved.Array`
-        MPO on the two sites to be optimized.
-        Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
     """
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"

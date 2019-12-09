@@ -21,7 +21,7 @@ class LanczosGroundState:
 
     Parameters
     ----------
-    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
         A hermitian linear operator. Must implement the method `matvec` acting on a
         :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
         The result has to have the same legs as the argument.
@@ -74,7 +74,7 @@ class LanczosGroundState:
 
     Attributes
     ----------
-    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
         The hermitian linear operator.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector.
@@ -258,7 +258,7 @@ class LanczosGroundState:
     def _converged(self, k):
         v0 = self._result_krylov
         E = self.Es[k, :]  # current energies
-        RitzRes = np.abs(v0[k - 1] * self._T[k, k + 1])
+        RitzRes = abs(v0[k - 1]) * self._T[k, k + 1]
         gap = max(E[1] - E[0], self.min_gap)
         P_err = (RitzRes / gap)**2
         Delta_E0 = self.Es[k - 1, 0] - E[0]

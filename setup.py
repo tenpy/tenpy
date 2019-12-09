@@ -34,6 +34,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
 
 # or   python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
+# TODO: set up a github action for build/upload to pypi
 
 
 def get_git_revision():
