@@ -260,33 +260,38 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
 
 
 def test_CouplingMPOModel_group():
-    m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    assert m.H_MPO.max_range == 1
-    # test grouping sites
-    ED = ExactDiag(m)
-    #  ED.build_full_H_from_mpo()
-    ED.build_full_H_from_bonds()
-    m.group_sites(n=2)
-    assert m.H_MPO.max_range == 1
-    ED_gr = ExactDiag(m)
-    ED_gr.build_full_H_from_mpo()
-    H = ED.full_H.split_legs().to_ndarray()
-    Hgr = ED_gr.full_H.split_legs()
-    Hgr.idrop_labels()
-    Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H - Hgr) == 0
-    ED_gr.full_H = None
-    ED_gr.build_full_H_from_bonds()
-    Hgr = ED_gr.full_H.split_legs()
-    Hgr.idrop_labels()
-    Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H - Hgr) == 0
+    m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
+    m2 = XXZChain(model_params)
+    for m in [m1, m2]:
+        print("model = ", m)
+        assert m.H_MPO.max_range == 1
+        # test grouping sites
+        ED = ExactDiag(m)
+        #  ED.build_full_H_from_mpo()
+        ED.build_full_H_from_bonds()
+        m.group_sites(n=2)
+        assert m.H_MPO.max_range == 1
+        ED_gr = ExactDiag(m)
+        ED_gr.build_full_H_from_mpo()
+        H = ED.full_H.split_legs().to_ndarray()
+        Hgr = ED_gr.full_H.split_legs()
+        Hgr.idrop_labels()
+        Hgr = Hgr.split_legs().to_ndarray()
+        assert np.linalg.norm(H - Hgr) < 1.e-14
+        ED_gr.full_H = None
+        ED_gr.build_full_H_from_bonds()
+        Hgr = ED_gr.full_H.split_legs()
+        Hgr.idrop_labels()
+        Hgr = Hgr.split_legs().to_ndarray()
+        assert np.linalg.norm(H - Hgr) < 1.e-14
 
 
 def test_model_H_conversion(L=6):
     bc = 'finite'
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
     m = XXZChain(model_params)
+
     # can we run the conversion?
     # conversion from bond to MPO in NearestNeighborModel
     H_MPO = m.calc_H_MPO_from_bond()

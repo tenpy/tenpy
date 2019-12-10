@@ -238,42 +238,30 @@ class NearestNeighborModel(Model):
         old_L = len(self.H_bond)
         new_L = len(grouped_sites)
         finite = self.H_bond[0] is None
-        H_bond = [None] * (new_L + 1)
+        H_bond = [None] * new_L
         i = 0  # old index
         for k, gs in enumerate(grouped_sites):
             # calculate new_Hb on bond (k, k+1)
-            next_gs = grouped_sites[(k + 1) % new_L]
+            k2 = (k + 1) % new_L
+            next_gs = grouped_sites[k2]
             new_H_onsite = None  # collect old H_bond terms inside `gs`
-            if gs.n_sites > 1:
-                for j in range(1, gs.n_sites):
-                    old_Hb = self.H_bond[(i + j) % old_L]
-                    add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
-                    if new_H_onsite is None:
-                        new_H_onsite = add_H_onsite
-                    else:
-                        new_H_onsite = new_H_onsite + add_H_onsite
+            for j in range(1, gs.n_sites):
+                old_Hb = self.H_bond[(i + j) % old_L]
+                add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
+                new_H_onsite = add_with_None_0(new_H_onsite, add_H_onsite)
             old_Hb = self.H_bond[(i + gs.n_sites) % old_L]
             new_Hb = self._group_sites_Hb_to_bond(gs, next_gs, old_Hb)
             if new_H_onsite is not None:
                 if k + 1 != new_L or not finite:
                     # infinite or in the bulk: add new_H_onsite to new_Hb
                     add_Hb = npc.outer(new_H_onsite, next_gs.Id.transpose(['p', 'p*']))
-                    if new_Hb is None:
-                        new_Hb = add_Hb
-                    else:
-                        new_Hb = new_Hb + add_Hb
+                    new_Hb = add_with_None_0(new_Hb, add_Hb)
                 else:  # finite and k = new_L - 1
                     # the new_H_onsite needs to be added to the right-most Hb
+                    prev_gs = grouped_sites[k - 1]
                     add_Hb = npc.outer(prev_gs.Id.transpose(['p', 'p*']), new_H_onsite)
-                    if H_bond[-1] is None:
-                        H_bond[-1] = add_Hb
-                    else:
-                        H_bond[-1] = new_Hb + add_Hb
-            k2 = (k + 1) % new_L
-            if H_bond[k2] is None:
-                H_bond[k2] = new_Hb
-            else:
-                H_bond[k2] = H_bond[k2] + new_Hb
+                    H_bond[-1] = add_with_None_0(H_bond[-1], add_Hb)
+            H_bond[k2] = add_with_None_0(H_bond[k2], new_Hb)
             i += gs.n_sites
         for Hb in H_bond:
             if Hb is None:

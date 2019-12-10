@@ -279,8 +279,8 @@ class MPO:
         else:
             assert grouped_sites[0].n_sites == n
         if self.max_range is not None:
-            min_n = min([gs.n_sites for gs in grouped_sites])
-            self.max_range = int(np.ceil(self.max_range // min_n))
+            min_n = max(min([gs.n_sites for gs in grouped_sites]), 1)
+            self.max_range = int(np.ceil(self.max_range / min_n))
         Ws = []
         IdL = []
         IdR = [self.IdR[0]]
