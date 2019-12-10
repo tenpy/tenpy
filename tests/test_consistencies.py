@@ -58,7 +58,8 @@ def get_python_files(top):
         if '__pycache__' in dirnames:
             del dirnames[dirnames.index('__pycache__')]
         for fn in filenames:
-            if fn.endswith('.py'):
+            if fn.endswith('.py') and fn != '_npc_helper.py':
+                # exlude _npc_helper.py generated in the egg by ``python setup.py install``
                 python_files.append(os.path.join(dirpath, fn))
     return python_files
 
