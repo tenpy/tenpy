@@ -36,6 +36,8 @@ Added
   :meth:`tenpy.networks.mpo.MPO.get_full_hamiltonian` and :meth:`tenpy.networks.mpo.MPO.get_grouped_mpo`.
   The latter are now deprecated.
 - Argument `max_size` to limit the matrix dimension in :class:`~tenpy.algorithms.exact_diag.ExactDiag`.
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.from_guess_with_pipe` to allow quickly converting 
+  `matvec` functions acting on multi-dimensional arrays to a `FlatLinearOperator` by combining the legs into a LegPipe.
 
 Fixed
 ^^^^^

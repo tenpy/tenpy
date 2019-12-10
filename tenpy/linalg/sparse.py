@@ -74,6 +74,13 @@ class FlatLinearOperator(ScipyLinearOperator):
         The number of times `npc_matvec` was called.
     _mask : ndarray[ndim=1, bool]
         The indices of `leg` corresponding to the `charge_sector` to be diagonalized.
+    _npc_matvec_multileg : function | None
+        Only set if initalized with :meth:`from_guess_with_pipe`.
+        The `npc_matvec` function to be wrapped around. Takes the npc Array in multidimensional
+        form and returns it that way.
+    _labels_split : list of str
+        Only set if initalized with :meth:`from_guess_with_pipe`.
+        Labels of the guess before combining them into a pipe (stored as `leg`).
     """
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None):
         self.npc_matvec = npc_matvec
@@ -86,11 +93,13 @@ class FlatLinearOperator(ScipyLinearOperator):
         self._charge_sector = None
         self._mask = None
         self.charge_sector = charge_sector  # uses the setter
+        self._npc_matvec_multileg = None
+        self._labels_split = None
         ScipyLinearOperator.__init__(self, self.dtype, self.shape)
 
     @classmethod
     def from_NpcArray(cls, mat, charge_sector=0):
-        """Create an FlatLinearOperator from an square :class:`~tenpy.linalg.np_conserved.Array`.
+        """Create a `FlatLinearOperator` from a square :class:`~tenpy.linalg.np_conserved.Array`.
 
         Parameters
         ----------
@@ -105,6 +114,52 @@ class FlatLinearOperator(ScipyLinearOperator):
             raise ValueError("Works only for square matrices")
         mat.legs[1].test_contractible(mat.legs[0])
         return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector)
+
+    @classmethod
+    def from_guess_with_pipe(cls, npc_matvec, v0_guess, labels_split=None, dtype=None):
+        """Create a `FlatLinearOperator`` from a `matvec` function acting on multiple legs.
+
+        This function creates a wrapper `matvec` function to allow acting on a "vector" with
+        multiple legs. The wrapper combines the legs into a :class:`~tenpy.linalg.charges.LegPipe`
+        before calling the actual `matvec` function, and splits them again in the end.
+
+        Parameters
+        ----------
+        npc_matvec : function
+            Function to calculate the action of the linear operator on an npc vector
+            with the given split labels `labels_split`.
+            Has to return an npc vector with the same legs.
+        v0_guess : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess/starting vector which can be applied to `npc_matvec`.
+        labels_split : None | list of str
+            Labels of v0_guess in the order in which they are to be combined into a
+            :class:`~tenpy.linalg.charges.LegPipe`. ``None`` defaults to
+            ``v0_guess.get_leg_labels()``.
+        dtype : np.dtype | None
+            The data type of the arrays. ``None`` defaults to dtype of `v0_guess` (!).
+
+        Returns
+        -------
+        lin_op : cls
+            Instance of the class to be used as linear operator
+        guess_flat : np.ndarray
+            Numpy vector representing the guess `v0_guess`.
+        """
+        if dtype is None:
+            dtype = v0_guess.dtype
+        if labels_split is None:
+            labels_split = v0_guess.get_leg_labels()
+        v0_combined = v0_guess.combine_legs(labels_split)
+        if v0_combined.rank != 1:
+            raise ValueError("`labels_split` must contain all the legs of `v0_guess`")
+        pipe = v0_combined.legs[0]
+        pipe_label = v0_combined.get_leg_labels()[0]
+        res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label)
+        res._labels_split = labels_split
+        res._npc_matvec_multileg = npc_matvec
+        res.npc_matvec = res._npc_matvec_wrapper  # activate the wrapper
+        guess_flat = res.npc_to_flat(v0_combined)
+        return res, guess_flat
 
     @property
     def charge_sector(self):
@@ -153,7 +208,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             # iterator over all charge sectors
             for sector in self.possible_charge_sectors:
                 self.charge_sector = sector
-                assert self._charges_sector is not None
+                assert self._charge_sector is not None
                 npc_vec = self.flat_to_npc(vec[self._mask])  # convert into npc Array
                 npc_vec = self.npc_matvec(npc_vec)  # apply the transfer matrix
                 self.matvec_count += 1
@@ -187,18 +242,52 @@ class FlatLinearOperator(ScipyLinearOperator):
         Parameters
         ----------
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Npc Array to be converted. Should only have the entries only in self.charge_sector.
+            Npc Array to be converted. Should only have entries in `self.charge_sector`.
 
         Returns
         -------
         vec : 1D ndarray
-            Same as `npc_vec`, but converted into a flat array.
+            Same as `npc_vec`, but converted into a flat Numpy array.
         """
         if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
             raise ValueError("npc_vec.qtotal and charge sector don't match!")
         if isinstance(npc_vec.legs[0], npc.LegPipe):
             npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
         return npc_vec[self._mask].to_ndarray()
+
+    def _npc_matvec_wrapper(self, vec):
+        """Wrapper around ``self._npc_matvec_multileg`` acting on a LegPipe.
+
+        Used when the class was generated with :meth:`from_guess_with_pipe`.
+
+        ``self._npc_matvec_multileg`` is a function which can act on a multi-dimensional npc Array
+        and returns it with the same legs (with labels ``self._labels_split``).
+        This function can act on a vector where these legs are combined into a LegPipe
+        (the pipe is stored as ``self.leg``).
+
+        Parameters
+        ----------
+        vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Npc Array to act on. Can have multiple legs (as necessary for
+            ``self._npc_matvec_multileg``), or have the legs combined in the LegPipe stored as
+            ``self.leg``.
+
+        Returns
+        -------
+        matvec_vec : np.ndarray
+            The result of acting the represented LinearOperator (`self`) on `vec`,
+            i.e., the result of applying `npc_matvec` to an npc Array generated from `vec`.
+            Has the same leg structure as `vec`.
+        """
+        legs_initially_combined = (vec.rank == 1)
+        if legs_initially_combined:
+            vec = vec.split_legs(0)
+        vec.itranspose(self._labels_split)  # ensure correct leg/label structure
+        vec = self._npc_matvec_multileg(vec)  # apply matvec acting on multi-leg Array
+        vec.itranspose(self._labels_split)
+        if legs_initially_combined:
+            vec = vec.combine_legs(self._labels_split, pipes=self.leg)
+        return vec
 
 
 class FlatHermitianOperator(FlatLinearOperator):
