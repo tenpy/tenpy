@@ -39,3 +39,7 @@ def test_ED():
     ov = npc.inner(psi3, psi2, do_conj=True)
     print("overlab <psi2 | psi3> = 1. -", 1. - ov)
     assert (abs(abs(ov) - 1.) < 1.e-15)
+
+    ED3 = ExactDiag.from_H_mpo(M.H_MPO)
+    ED3.build_full_H_from_mpo()
+    assert npc.norm(ED3.full_H - H, np.inf) < 1.e-14

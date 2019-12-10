@@ -32,6 +32,10 @@ Added
 - Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
 - :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
 - Additional option ``order='folded'`` for the :class:`~tenpy.models.lattice.Chain`.
+- :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` wrapper as replacement for 
+  :meth:`tenpy.networks.mpo.MPO.get_full_hamiltonian` and :meth:`tenpy.networks.mpo.MPO.get_grouped_mpo`.
+  The latter are now deprecated.
+- Argument `max_size` to limit the matrix dimension in :class:`~tenpy.algorithms.exact_diag.ExactDiag`.
 
 Fixed
 ^^^^^

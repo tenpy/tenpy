@@ -512,16 +512,23 @@ class MPO:
     def get_grouped_mpo(self, blocklen):
         """Contract `blocklen` subsequent tensors into a single one and return result as a new MPO
         object."""
-        groupedMPO = copy.deepcopy(self)
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, DeprecationWarning, 2)
+        from copy import deepcopy
+        groupedMPO = deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
         return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a d**L x d**L matrix."""
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, DeprecationWarning, 2)
         if (self.dim[0]**(2 * self.L) > maxsize):
             print('Matrix dimension exceeds maxsize')
             return np.zeros(1)
         singlesitempo = self.get_grouped_mpo(self.L)
+        # Note: the trace works only for 'finite' boundary conditions
+        # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
     def __add__(self, other):

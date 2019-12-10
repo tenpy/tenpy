@@ -37,6 +37,9 @@ class ExactDiag:
         If ``True``, don't sort/bunch the LegPipe used to combine the physical legs.
         This results in array `blocks` with just one entry, requires much more charge data,
         and is not what `np_conserved` was designed for, so it's not recommended.
+    max_size : int
+        The `build_H_*` functions will do nothing (but emit a warning) if the total size of the
+        Hamiltonian would be larger than this.
 
     Attributes
     ----------
@@ -46,9 +49,14 @@ class ExactDiag:
         The nature of the charge (which is the same for all sites).
     charge_sector : ``None`` | charges
         If not ``None``, we project onto the given charge sector.
+    max_size : int
+        The ``build_H_*`` functions will do nothing (but emit a warning) if the total size of the
+        Hamiltonian would be larger than this.
     full_H : :class:`~tenpy.linalg.np_conserved.Array` | ``None``
         The full Hamiltonian to be diagonalized
-        with legs ``'(p0.p1....)', '(p0*,p1*...)'`` (in that order)
+        with legs ``'(p0.p1....)', '(p0*,p1*...)'`` (in that order).
+        ``None`` if the ``build_H_*`` functions haven't been called yet, or if `max_size` would
+        have been exceeded.
     E : ndarray | ``None``
         1D array of eigenvalues.
     V : :class:`~tenpy.linalg.np_conserved.Array` | ``None``
@@ -67,7 +75,7 @@ class ExactDiag:
     _mask : 1D bool ndarray | ``None``
         Bool mask, which of the indices of the pipe are in the desired `charge_sector`.
     """
-    def __init__(self, model, charge_sector=None, sparse=False):
+    def __init__(self, model, charge_sector=None, sparse=False, max_size=1e6):
         if model.lat.bc_MPS != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")
         self.model = model
@@ -75,6 +83,7 @@ class ExactDiag:
         self.full_H = None
         self.E = None
         self.V = None
+        self.max_size = max_size
         self._labels_p = ['p' + str(i) for i in range(model.lat.N_sites)]
         self._labels_pconj = [l + '*' for l in self._labels_p]
         self._sites = model.lat.mps_sites()
@@ -90,8 +99,27 @@ class ExactDiag:
             self.charge_sector = None
             self._mask = None
 
+    @classmethod
+    def from_H_mpo(cls, H_MPO, *args, **kwargs):
+        """Wrapper taking directly an MPO instead of a Model.
+
+        Parameters
+        ----------
+        H_MPO : :class:`~tenpy.networks.mpo.MPO`
+            The MPO representing the Hamiltonian.
+        *args, **kwargs :
+            Other arguments as for the ``__init__`` of the class.
+        """
+        from ..models.model import MPOModel
+        from ..models.lattice import TrivialLattice
+        assert H_MPO.bc == 'finite'
+        M = MPOModel(TrivialLattice(H_MPO.sites), H_MPO)
+        return cls(M, *args, **kwargs)
+
     def build_full_H_from_mpo(self):
         """Calculate self.full_H from self.mpo."""
+        if self._exceeds_max_size():
+            return
         mpo = self.model.H_MPO
         full_H = mpo.get_W(0).take_slice(mpo.get_IdL(0), 'wL')
         full_H.ireplace_labels(['p', 'p*'], [self._labels_p[0], self._labels_pconj[0]])
@@ -108,6 +136,8 @@ class ExactDiag:
 
     def build_full_H_from_bonds(self):
         """Calculate self.full_H from self.mpo."""
+        if self._exceeds_max_size():
+            return
         sites = self.model.lat.mps_sites()
         H_bond = self.model.H_bond
         L = len(sites)
@@ -234,3 +264,11 @@ class ExactDiag:
             full_H.legs = [l.to_LegCharge() for l in full_H.legs]  # avoids warnings of project
             full_H = full_H[self._mask, self._mask]
         self.full_H = full_H
+
+    def _exceeds_max_size(self):
+        size = np.prod([float(s.dim) for s in self._sites])**2  # use float to avoid overflow!
+        if size > self.max_size:
+            msg = "size {0:.2e} exceeds max_size {1:.2e}".format(size, self.max_size)
+            warnings.warn(msg, stacklevel=2)
+            return True
+        return False
