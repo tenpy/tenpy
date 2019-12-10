@@ -257,6 +257,10 @@ class DMRGEngine(Sweep):
         N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
         ----------- -------------------------------------------------------------------
         time        Wallclock time evolved since :attr:`time0` (in seconds).
+        ----------- -------------------------------------------------------------------
+        ov_change   ``1. - abs(<theta_guess|theta_diag>)``, where ``|theta_guess>`` is
+                    the initial guess for the wave function and ``|theta_diag>`` is the
+                    *untruncated* wave function returned by :meth:`diag`.
         =========== ===================================================================
     sweep_stats : dict
         A dictionary with detailed statistics at the sweep level.
@@ -455,7 +459,8 @@ class DMRGEngine(Sweep):
             'N_lanczos': [],
             'time': [],
             'err': [],
-            'E_trunc': []
+            'E_trunc': [],
+            'ov_change': []
         }
         self.sweep_stats = {
             'sweep': [],
@@ -515,6 +520,7 @@ class DMRGEngine(Sweep):
         self.update_stats['E_total'].append(E0)
         self.update_stats['E_trunc'].append(E_trunc)
         self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['ov_change'].append(update_data['ov_change'])
         self.update_stats['err'].append(update_data['err'])
         self.update_stats['time'].append(time.time() - self.time0)
         self.trunc_err_list.append(update_data['err'].eps)
@@ -538,9 +544,12 @@ class DMRGEngine(Sweep):
             Ground state of the effective Hamiltonian.
         N : int
             Number of Lanczos iterations used.
+        ov_change : float
+            Change in the wave function ``1. - abs(<theta_guess|theta_diag>)``
         """
         E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
-        return E, theta, N
+        ov_change = 1. - abs(npc.inner(theta_guess, theta, do_conj=True))
+        return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
         """Plot :attr:`update_stats` to display the convergence during the sweeps.
@@ -759,38 +768,38 @@ class TwoSiteDMRGEngine(DMRGEngine):
             Initial guess for the ground state of the effective Hamiltonian.
         theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
             States to orthogonalize against, with same tensor structure as `theta`.
-        optimize : bool, optional
+        optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        meas_E_trunc : bool, optional
+        meas_E_trunc : bool
             Wheter to measure the energy after truncation.
 
         Returns
         -------
         update_data : dict
-            Data computed during the local update, as described in the following list.
+            Data computed during the local update, as described in the following:
 
-            E_total : float
+            E0 : float
                 Total energy, obtained *before* truncation (if ``optimize=True``),
                 or *after* truncation (if ``optimize=False``) (but never ``None``).
-            E_trunc : float | ``None``
-                The energy difference of the total energy after minus before truncation,
-                ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-            err : :class:`~tenpy.algorithms.truncation.TruncationError`
-                The truncation error introduced after bond optimization.
-            N_lanczos : int
+            N : int
                 Dimension of the Krylov space used for optimization in the lanczos algorithm.
                 0 if ``optimize=False``.
             age : int
                 Current size of the DMRG simulation: number of physical sites involved
                 into the contraction.
+            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+                `U` and `VH` returned by :meth:`mixed_svd`.
+            ov_change: float
+                Change in the wave function ``1. - abs(<theta_guess|theta>)``
+                induced by :meth:`diag`, *not* including the truncation!
         """
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta, theta_ortho)
         else:
-            E0, N = None, 0
+            E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         U, S, VH, err = self.mixed_svd(theta)
         self.set_B(U, S, VH)
@@ -801,6 +810,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             'age': age,
             'U': U,
             'VH': VH,
+            'ov_change': ov_change
         }
         return update_data
 
@@ -1081,27 +1091,30 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         Returns
         -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
+        update_data : dict
+            Data computed during the local update, as described in the following:
+
+            E0 : float
+                Total energy, obtained *before* truncation (if ``optimize=True``),
+                or *after* truncation (if ``optimize=False``) (but never ``None``).
+            N : int
+                Dimension of the Krylov space used for optimization in the lanczos algorithm.
+                0 if ``optimize=False``.
+            age : int
+                Current size of the DMRG simulation: number of physical sites involved
+                into the contraction.
+            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+                `U` and `VH` returned by :meth:`mixed_svd`.
+            ov_change: float
+                Change in the wave function ``1. - abs(<theta_guess|theta>)``
+                induced by :meth:`diag`, *not* including the truncation!
         """
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
         if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta, theta_ortho)
         else:
-            E0, N = None, 0
+            E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         if self.move_right:
             next_B = self.env.bra.get_B(i0 + 1, form='B')
@@ -1109,7 +1122,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
             next_B = self.env.bra.get_B(i0 - 1, form='A')
         U, S, VH, err = self.mixed_svd(theta, next_B)
         self.set_B(U, S, VH)
-
         update_data = {
             'E0': E0,
             'err': err,
@@ -1117,8 +1129,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
             'age': age,
             'U': U,
             'VH': VH,
+            'ov_change': ov_change
         }
-
         return update_data
 
     def prepare_svd(self, theta):
