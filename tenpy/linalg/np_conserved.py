@@ -602,7 +602,7 @@ class Array:
         get_leg: translate the labels to indices.
         """
         if len(labels) != self.rank:
-            raise ValueError("Need one leg label for each of the legs.")
+            raise ValueError("Need one leg label for each of the legs, got: " + str(list(labels)))
         for i, l in enumerate(labels):
             if l is None:
                 continue

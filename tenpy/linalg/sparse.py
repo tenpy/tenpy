@@ -149,7 +149,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             dtype = v0_guess.dtype
         if labels_split is None:
             labels_split = v0_guess.get_leg_labels()
-        v0_combined = v0_guess.combine_legs(labels_split)
+        v0_combined = v0_guess.combine_legs(labels_split, qconj=+1)
         if v0_combined.rank != 1:
             raise ValueError("`labels_split` must contain all the legs of `v0_guess`")
         pipe = v0_combined.legs[0]
@@ -252,6 +252,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
             raise ValueError("npc_vec.qtotal and charge sector don't match!")
         if isinstance(npc_vec.legs[0], npc.LegPipe):
+            npc_vec = npc_vec.copy(deep=False)
             npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
         return npc_vec[self._mask].to_ndarray()
 
