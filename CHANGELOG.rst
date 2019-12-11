@@ -38,6 +38,8 @@ Added
 - Argument `max_size` to limit the matrix dimension in :class:`~tenpy.algorithms.exact_diag.ExactDiag`.
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.from_guess_with_pipe` to allow quickly converting 
   `matvec` functions acting on multi-dimensional arrays to a `FlatLinearOperator` by combining the legs into a LegPipe.
+- :meth:`tenpy.tools.math.speigsh` for hermitian variant of :meth:`~tenpy.tools.math.speigs`
+- Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
 
 Fixed
 ^^^^^

@@ -87,17 +87,17 @@ def argsort(a, sort=None, **kwargs):
     sort : ``'m>', 'm<', '>', '<', None``
         Specify how the arguments should be sorted.
 
-        ================ ===========================
-        `sort`           order
-        ================ ===========================
-        ``'m>', 'LM'``   Largest magnitude first
-        ``'m<', 'SM'``   Smallest magnitude first
-        ``'>', 'LR'``    Largest real part first
-        ``'<', 'SR'``    Smallest real part first
-        ``'LI'``         Largest imaginary part first
-        ``'Si'``         Smallest imaginary part first
-        ``None``         numpy default: same as '<'
-        ================ ===========================
+        ==================== =============================
+        `sort`               order
+        ==================== =============================
+        ``'m>', 'LM'``       Largest magnitude first
+        ``'m<', 'SM'``       Smallest magnitude first
+        ``'>', 'LR', 'LA'``  Largest real part first
+        ``'<', 'SR', 'SA'``  Smallest real part first
+        ``'LI'``             Largest imaginary part first
+        ``'Si'``             Smallest imaginary part first
+        ``None``             numpy default: same as '<'
+        ==================== ==============================
     **kwargs :
         further keyword arguments given directly to :func:`numpy.argsort`.
 
@@ -111,9 +111,9 @@ def argsort(a, sort=None, **kwargs):
             a = np.abs(a)
         elif sort == 'm>' or sort == 'LM':
             a = -np.abs(a)
-        elif sort == '<' or sort == 'SR':
+        elif sort == '<' or sort == 'SR' or sort == 'SA':
             a = np.real(a)
-        elif sort == '>' or sort == 'LR':
+        elif sort == '>' or sort == 'LR' or sort == 'LA':
             a = -np.real(a)
         elif sort == 'SI':
             a = np.imag(a)
