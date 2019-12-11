@@ -40,6 +40,7 @@ Added
   `matvec` functions acting on multi-dimensional arrays to a `FlatLinearOperator` by combining the legs into a LegPipe.
 - :meth:`tenpy.tools.math.speigsh` for hermitian variant of :meth:`~tenpy.tools.math.speigs`
 - Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
+- dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 
 Fixed
 ^^^^^

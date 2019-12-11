@@ -418,6 +418,8 @@ class EffectiveH(NpcLinearOperator):
     ----------
     length : int
         Number of (MPS) sites the effective hamiltonian covers. NB: Class attribute.
+    dtype : np.dtype
+        The data type of the involved arrays.
     """
     length = None
 
@@ -498,6 +500,7 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W = env.H.get_W(i0)
+        self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
         if combine:
@@ -621,6 +624,7 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p0', 'p0*'
         self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
         # 'wL', 'wR', 'p1', 'p1*'
+        self.dtype = env.H.dtype
         self.combine = combine
         if combine:
             self.combine_Heff()
