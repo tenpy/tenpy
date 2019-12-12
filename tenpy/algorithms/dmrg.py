@@ -273,7 +273,9 @@ class DMRGEngine(Sweep):
         ============= ===================================================================
         key           description
         ============= ===================================================================
-        sweep         Number of sweeps performed so far.
+        sweep         Number of sweeps (excluding environment sweeps) performed so far.
+        ------------- -------------------------------------------------------------------
+        N_updates     Number of updates (including environment sweeps) performed so far.
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
@@ -387,6 +389,7 @@ class DMRGEngine(Sweep):
 
             # update statistics
             self.sweep_stats['sweep'].append(self.sweeps)
+            self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
             self.sweep_stats['E'].append(E)
             self.sweep_stats['S'].append(S)
             self.sweep_stats['time'].append(time.time() - start_time)
@@ -468,6 +471,7 @@ class DMRGEngine(Sweep):
         }
         self.sweep_stats = {
             'sweep': [],
+            'N_updates': [],
             'E': [],
             'S': [],
             'time': [],
@@ -582,9 +586,9 @@ class DMRGEngine(Sweep):
         ----------
         axes : :class:`matplotlib.axes.Axes`
             The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
-        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
+        xaxis : ``'N_updates' | 'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            ``'index'`` is just enumerating the number of bond updates,
+            ``'N_updates'`` is just enumerating the number of bond updates,
             and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
         yaxis : ``'E'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the y-axisof the plots.
@@ -606,8 +610,8 @@ class DMRGEngine(Sweep):
         E = np.array(stats['E_total'])
         schedule = list(self.get_sweep_schedule())
         N = len(schedule)  # bond updates per sweep
-        if xaxis is None or xaxis == 'index':
-            xaxis = 'index'
+        if xaxis is None or xaxis == 'N_updates' or xaxis == 'index':
+            xaxis = 'N_updates'
             x = np.arange(len(E))
         elif xaxis == 'sweep':
             x = np.arange(1, len(E) + 1) / N

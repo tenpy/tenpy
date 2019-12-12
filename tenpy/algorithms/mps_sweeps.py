@@ -605,7 +605,7 @@ class TwoSiteH(EffectiveH):
         Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
     RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Right part of the effective Hamiltonian.
-        Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
+        Labels ``'(p1*.vL)', 'wL', '(p1.vL*)'`` for ket, MPO, bra.
     LP : :class:`~tenpy.linalg.np_conserved.Array`
         Left part of the environment.
     RP : :class:`~tenpy.linalg.np_conserved.Array`
@@ -672,4 +672,4 @@ class TwoSiteH(EffectiveH):
         self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[2, 0])
+                                        new_axes=[2, 1])

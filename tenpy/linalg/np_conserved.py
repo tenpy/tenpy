@@ -1314,7 +1314,7 @@ class Array:
         >>> c3 = oldarray.combine_legs([['a', 'd'], ['e', 'b']], new_axes=[2, 1],
         >>>                            pipes=[c2.legs[0], c2.legs[2]])
         >>> c3.get_leg_labels()
-        ['b', '(e.b)', '(a.d)']
+        ['c', '(e.b)', '(a.d)']
         """
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
