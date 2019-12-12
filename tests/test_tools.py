@@ -48,6 +48,22 @@ def test_speigs():
             npt.assert_array_almost_equal_nulp(W, x_SM[:k], tol_NULP)
 
 
+def test_matvec_to_array():
+    A_orig = np.random.random([5, 5]) + 1.j * np.random.random([5, 5])
+
+    class A_matvec:
+        def __init__(self, A):
+            self.A = A
+            self.shape = A.shape
+            self.dtype = A.dtype
+
+        def matvec(self, v):
+            return np.dot(self.A, v)
+
+    A_reg = tools.math.matvec_to_array(A_matvec(A_orig))
+    npt.assert_array_almost_equal(A_orig, A_reg, 14)
+
+
 def test_perm_sign():
     res = [tools.math.perm_sign(u) for u in it.permutations(range(4))]
     check = [1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1]

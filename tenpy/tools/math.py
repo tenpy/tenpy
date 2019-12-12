@@ -23,7 +23,7 @@ def matvec_to_array(H):
     Parameters
     ----------
     H : linear operator
-        should have `dim`, `dtype` attributes and a `matvec` method.
+        should have `shape`, `dtype` attributes and a `matvec` method.
 
     Returns
     -------
@@ -36,7 +36,7 @@ def matvec_to_array(H):
     v = np.zeros((dim), H.dtype)
     for i in range(dim):
         v[i] = 1
-        X[i] = H.matvec(v)
+        X[:, i] = H.matvec(v)
         v[i] = 0
     return X
 

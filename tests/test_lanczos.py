@@ -29,7 +29,7 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
 
 
 @pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
-def test_lanczos_gs(n, N_cache, tol=5.e-15):
+def test_lanczos_gs(n, N_cache, tol=5.e-14):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg)
@@ -69,7 +69,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
     # -> should give second eigenvector psi1 in the same charge sector
     for i in range(1, len(E_flat)):
         E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
-        qtotal = npc.detect_qtotal(psi1_flat, psi0.legs)
+        qtotal = npc.detect_qtotal(psi1_flat, psi0.legs, cutoff=1.e-10)
         if np.all(qtotal == psi0.qtotal) and E1_flat < -0.01:
             break  # found psi1 in same charge sector
     else:
@@ -98,7 +98,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
 
 
 @pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
-def test_lanczos_evolve(n, N_cache, tol=5.e-15):
+def test_lanczos_evolve(n, N_cache, tol=5.e-14):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg) - npc.diag(1., leg)

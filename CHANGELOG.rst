@@ -51,6 +51,7 @@ Fixed
 - allow :class:`~tenpy.network.mps.MPSEnvironment` and :class:`~tenpy.network.mpo.MPOEnvironment` to have MPS/MPO with
   different length
 - :meth:`~tenpy.models.model.NearestNeighborModel.group_sites` didn't work correctly in some situations.
+- :func:`~tenpy.tools.math.matvec_to_array` returned the transposed of A.
 
 
 [0.4.1] - 2019-08-14
