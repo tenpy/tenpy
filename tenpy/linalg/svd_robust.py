@@ -243,6 +243,7 @@ def _load_lapack(libs=[
     if _lapack_lib is None:
         msg = "Couldn't find LAPACK library for 'gesvd' workaround.\nTried: " + str(libs)
         raise EnvironmentError(msg)
+    warnings.warn("Old Scipy version. We will drop the support!", DeprecationWarning)
     return _lapack_lib
 
 
