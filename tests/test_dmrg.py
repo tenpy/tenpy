@@ -103,7 +103,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
         assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.e-10, np.max(psi.norm_test()))
 
 
-def test_dmrg_rerun(L=2):
+@pytest.mark.slow
+def test_dmrg_rerun(L=3):
     bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
@@ -117,6 +118,7 @@ def test_dmrg_rerun(L=2):
     del eng.engine_params['chi_list']
     new_chi = 15
     eng.engine_params['trunc_params']['chi_max'] = new_chi
+    eng.engine_params['diag_method'] = 'arpack'  # slow, but test this as well...
     eng.init_env(M)
     E2, psi = eng.run()
     assert max(psi.chi) == new_chi

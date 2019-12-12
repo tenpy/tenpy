@@ -395,10 +395,9 @@ def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
         # TODO: write method to project out orthogonal states from a NpcLinearOperator
         raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
-    tol = get_parameter(lanczos_params, 'P_tol', 1.e-12, "Lanczos")
+    tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
     N_min = get_parameter(lanczos_params, 'N_min', None, "Lanczos")
-    N_max = get_parameter(lanczos_params, 'N_max', 20, "Lanczos")
-    Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min, maxiter=N_max)
+    Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
     psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
     psi0.itranspose(psi.get_leg_labels())
     return Es[0], psi0

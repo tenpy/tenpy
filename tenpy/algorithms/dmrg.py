@@ -39,7 +39,7 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.lanczos import lanczos
+from ..linalg.lanczos import lanczos, lanczos_arpack
 from ..linalg.sparse import NpcLinearOperator
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
@@ -114,6 +114,9 @@ def run(psi, model, DMRG_params):
         -------------- --------- ---------------------------------------------------------------
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
+        -------------- --------- ---------------------------------------------------------------
+        diag_method    str       Method to be used for diagonalzation, default ``'lanczos'``.
+                                 For possible arguments see :meth:`DMRGEngine.diag`.
         -------------- --------- ---------------------------------------------------------------
         N_sweeps_check int       Number of sweeps to perform between checking convergence
                                  criteria and giving a status update.
@@ -324,6 +327,7 @@ class DMRGEngine(Sweep):
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
         E_old, S_old = np.nan, np.nan  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
+        self.diag_method = get_parameter(DMRG_params, 'diag_method', 'lanczos', 'DMRG')
 
         self.mixer_activate()
         # loop over sweeps
@@ -529,6 +533,20 @@ class DMRGEngine(Sweep):
     def diag(self, theta_guess, theta_ortho):
         """Diagonalize the effective Hamiltonian represented by self.
 
+        The method used depends on the DMRG parameter `diag_method`.
+        ============  ================================================================
+        diag_method   Function, comment
+        ============  ================================================================
+        'lanczos'     :func:`~tenpy.linalg.lanczos.lanczos`
+                      Default, the Lanczos implementation of TeNPy
+        ------------  ----------------------------------------------------------------
+        'arpack'      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
+                      Based on :func:`scipy.linalg.sparse.eigsh`.
+                      Slow, since it needs to convert the npc arrays to numpy arrays
+                      during *each* matvec!
+        ============  ================================================================
+
+
         Parameters
         ----------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
@@ -543,11 +561,17 @@ class DMRGEngine(Sweep):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state of the effective Hamiltonian.
         N : int
-            Number of Lanczos iterations used.
+            Number of Lanczos iterations used. ``-1`` if unknown.
         ov_change : float
             Change in the wave function ``1. - abs(<theta_guess|theta_diag>)``
         """
-        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        N = -1  # (unknown)
+        if self.diag_method == 'lanczos':
+            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        elif self.diag_method == 'arpack':
+            E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        else:
+            raise ValueError("Unknown diagonalization method: " + repr(self.diag_method))
         ov_change = 1. - abs(npc.inner(theta_guess, theta, do_conj=True))
         return E, theta, N, ov_change
 
