@@ -54,6 +54,17 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
     print("|<psi0|psi0_flat>|=", abs(ov))
     assert (abs(1. - abs(ov)) < tol)
 
+    print("version with arpack")
+    E0a, psi0a = lanczos.lanczos_arpack(H_Op, psi_init, {'verbose': 1})
+    print("E0a = {E0a:.14f} vs exact {E0_flat:.14f}".format(E0a=E0a, E0_flat=E0_flat))
+    print("|E0a-E0_flat| / |E0_flat| =", abs((E0a - E0_flat) / E0_flat))
+    psi0a_H_psi0a = npc.inner(psi0a, npc.tensordot(H, psi0a, axes=[1, 0]), do_conj=True)
+    print("<psi0a|H|psi0a> / E0a = 1. + ", psi0a_H_psi0a / E0a - 1.)
+    assert (abs(psi0a_H_psi0a / E0a - 1.) < tol)
+    ov = np.inner(psi0a.to_ndarray().conj(), psi0_flat)
+    print("|<psi0a|psi0_flat>|=", abs(ov))
+    assert (abs(1. - abs(ov)) < tol)
+
     # now repeat, but keep orthogonal to original ground state
     # -> should give second eigenvector psi1 in the same charge sector
     for i in range(1, len(E_flat)):

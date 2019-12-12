@@ -5,9 +5,14 @@ from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
 from scipy.linalg import expm
+from .sparse import FlatHermitianOperator
+from ..tools.math import speigsh
 import warnings
 
-__all__ = ['LanczosGroundState', 'LanczosEvolution', 'lanczos', 'gram_schmidt', 'plot_stats']
+__all__ = [
+    'LanczosGroundState', 'LanczosEvolution', 'lanczos', 'lanczos_arpack', 'gram_schmidt',
+    'plot_stats'
+]
 
 
 class LanczosGroundState:
@@ -348,8 +353,55 @@ class LanczosEvolution(LanczosGroundState):
 
 
 def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
-    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``"""
+    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``
+
+    Parameters
+    ----------
+    H, psi, lanczos_params, orthogonal_to :
+        See :class:`LanczosGroundState`.
+
+    Returns
+    -------
+    E0, psi0, N :
+        See :meth:`LanczosGroundState.run`.
+    """
     return LanczosGroundState(H, psi, lanczos_params, orthogonal_to).run()
+
+
+def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
+    """Use :func:`scipy.sparse.linalg.eigsh` to find the ground state of `H`.
+
+    This function has the same call/return structure as :func:`lanczos`, but uses
+    the ARPACK package through the functions :func:`~tenpy.tools.math.speigsh` instead of the
+    custom lanczos implementation in :class:`LanczosGroundState`.
+    This function is mostly intended for debugging, since it requires to convert the vector
+    from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
+    and back during *each* `matvec`-operation!
+
+    Parameters
+    ----------
+    H, psi, lanczos_params, orthogonal_to :
+        See :class:`LanczosGroundState`.
+        `H` and `psi` should have/use labels.
+
+    Returns
+    -------
+    E0 : float
+        Ground state energy.
+    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+        Ground state vector.
+    """
+    if len(orthogonal_to) > 0:
+        # TODO: write method to project out orthogonal states from a NpcLinearOperator
+        raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
+    H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
+    tol = get_parameter(lanczos_params, 'P_tol', 1.e-12, "Lanczos")
+    N_min = get_parameter(lanczos_params, 'N_min', None, "Lanczos")
+    N_max = get_parameter(lanczos_params, 'N_max', 20, "Lanczos")
+    Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min, maxiter=N_max)
+    psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
+    psi0.itranspose(psi.get_leg_labels())
+    return Es[0], psi0
 
 
 def gram_schmidt(vecs, rcond=1.e-14, verbose=0):

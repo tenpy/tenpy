@@ -41,6 +41,7 @@ Added
 - :meth:`tenpy.tools.math.speigsh` for hermitian variant of :meth:`~tenpy.tools.math.speigs`
 - Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
 - dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
+- :func:`tenpy.linalg.lanczos.lanczos_arpack` as possiple replacement of the self-implemented `lanczos` function.
 
 Fixed
 ^^^^^
