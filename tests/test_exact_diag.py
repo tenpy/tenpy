@@ -19,12 +19,15 @@ def test_ED():
     H2 = ED.full_H
     assert (npc.norm(H - H2, np.inf) < 1.e-14)
     ED.full_diagonalization()
-    psi = ED.groundstate()
+    E, psi = ED.groundstate()
     print("select charge_sector =", psi.qtotal)
+    assert np.all(psi.qtotal == [0])
+    E_sec2, psi_sec2 = ED.groundstate([2])
+    assert np.all(psi_sec2.qtotal == [2])
     ED2 = ExactDiag(M, psi.qtotal)
     ED2.build_full_H_from_mpo()
     ED2.full_diagonalization()
-    psi2 = ED2.groundstate()
+    E2, psi2 = ED2.groundstate()
     full_psi2 = psi.zeros_like()
     full_psi2[ED2._mask] = psi2
     ov = npc.inner(psi, full_psi2, do_conj=True)

@@ -85,9 +85,9 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
         ED = ExactDiag(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
-        psi_ED = ED.groundstate()
+        E_ED, psi_ED = ED.groundstate()
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
-        print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=np.min(ED.E)))
+        print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=E_ED))
         print("compare with ED: overlap = ", abs(ov)**2)
         assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
     else:

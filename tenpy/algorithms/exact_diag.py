@@ -184,12 +184,35 @@ class ExactDiag:
         self.E = E
         self.V = V
 
-    def groundstate(self):
-        """Pick the ground state from self.V."""
+    def groundstate(self, charge_sector=None):
+        """Pick the ground state energy and ground state from ``self.V``.
+
+        Parameters
+        ----------
+        charge_sector : None | 1D ndarray
+            By default (``None``), consider all charge sectors.
+            Alternatively, give the `qtotal` which the returned state should have.
+
+        Returns
+        -------
+        E0 : float
+            Ground state energy (possibly in the given sector).
+        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state (possibly in the given sector).
+        """
         if self.E is None or self.V is None:
             raise ValueError("You need to call `full_diagonalization` first!")
-        i0 = np.argmin(self.E)
-        return self.V.take_slice(i0, axes='ps*')
+        if charge_sector is None:
+            i0 = np.argmin(self.E)
+        else:
+            if self.charge_sector is not None:
+                raise ValueError("``self.charge_sector`` was specified before.")
+            charge_sector = self.chinfo.make_valid(charge_sector)
+            mask = np.all(self._pipe.to_qflat() == charge_sector[np.newaxis, :], axis=1)
+            if np.sum(mask) == 0:
+                raise ValueError("The chosen charge sector is empty.")
+            i0 = np.argmin(np.where(mask, self.E, np.max(self.E) + 1.))
+        return self.E[i0], self.V.take_slice(i0, axes='ps*')
 
     def exp_H(self, dt):
         """Return ``U(dt) := exp(-i H dt)``."""

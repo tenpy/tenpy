@@ -9,10 +9,10 @@ The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Major rewriting of the DMRG Engines, see :issue:`39` and :issue:`85` for details.
+- **Major** rewriting of the DMRG Engines, see :issue:`39` and :issue:`85` for details.
   The :class:`~tenpy.algorithms.dmrg.EngineCombine` and :class:`~tenpy.algorithms.dmrg.EngineFracture`
   have been combined into a single :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` with an 
-  The :class:`~tenpy.algorithms.dmrg.run` function works as befo
+  The :class:`~tenpy.algorithms.dmrg.run` function works as before.
   In case you have directly used the :class:`~tenpy.algorithms.dmrg.EngineCombine` or :class:`~tenpy.algorithms.dmrg.EngineFracture`,
   you should update your code and use the :class:`~tenpy.algorithms.dmrg.TwoSiteEngine` instead.
 - Moved ``init_LP`` and ``init_RP`` method from :class:`~tenpy.networks.mps.MPS` into
@@ -23,6 +23,8 @@ Changed
 - Addition/subtraction of :class:`~tenpy.linalg.np_conserved.Array`: check whether the both arrays have the same labels
   in differnt order, and in that case raise a warning that we will transpose in the future.
 - Made :meth:`tenpy.linalg.np_conserved.Array.get_block` public (previously ``tenpy.linalg.np_conserved.Array._get_block``).
+- :meth:`~tenpy.algorithms.exact_diag.ExactDiag.groundstate` now returns a tuple ``(E0, psi0)`` instead of just ``psi0``.
+  Moreover, the argument `charge_sector` was added.
 
 Added
 ^^^^^

@@ -25,7 +25,7 @@ def example_exact_diagonalization(L, Jz):
     # ED.build_full_H_from_bonds()  # whatever you prefer
     print("start diagonalization")
     ED.full_diagonalization()  # the expensive part for large L
-    psi_ED = ED.groundstate()  # return the ground state
+    E0_ED, psi_ED = ED.groundstate()  # return the ground state
     print("psi_ED =", psi_ED)
 
     print("run DMRG")
