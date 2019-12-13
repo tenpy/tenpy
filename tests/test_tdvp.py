@@ -16,6 +16,7 @@ import tenpy.models.model as model
 import tenpy.models.lattice
 from tenpy.networks.mps import MPS
 from tenpy.tools.misc import inverse_permutation
+import pytest
 
 
 # TODO: no need to convert everything to numpy...
@@ -35,6 +36,7 @@ def overlap(mps1, mps2):
     return overlap
 
 
+@pytest.mark.slow
 def test_tdvp():
     L = 10
     J = 1
