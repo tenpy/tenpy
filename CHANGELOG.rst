@@ -43,6 +43,7 @@ Added
 - Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
 - dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - :func:`tenpy.linalg.lanczos.lanczos_arpack` as possiple replacement of the self-implemented `lanczos` function.
+- :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
 
 Fixed
 ^^^^^

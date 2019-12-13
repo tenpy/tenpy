@@ -13,7 +13,7 @@ implemented here.
 A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
 
 In this module, some functions have the python decorator ``@use_cython``.
-Functions with this decoartor are replaced by the ones written in Cython, implemented in
+Functions with this decorator are replaced by the ones written in Cython, implemented in
 the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
 """
@@ -655,9 +655,9 @@ class LegCharge:
         """Find qindex containing a flat index.
 
         Given a flat index, to find the corresponding entry in an Array, we need to determine the
-        block it is saved in. For example, if ``qind[:, 2] = [[0, 3], [3, 7], [7, 12]]``,
+        block it is saved in. For example, if ``slices = [[0, 3], [3, 7], [7, 12]]``,
         the flat index ``5`` corresponds to the second entry, ``qindex = 1`` (since 5 is in [3:7]),
-        and the index within the block would be ``5-3 =2``.
+        and the index within the block would be ``2 = 5 - 3``.
 
         Parameters
         ----------
@@ -681,6 +681,35 @@ class LegCharge:
                 flat_index, self.ind_len))
         qind = bisect.bisect(self.slices, flat_index) - 1
         return qind, flat_index - self.slices[qind]
+
+    def get_qindex_of_charges(self, charges):
+        """Return the slice selecting the block for given charge values.
+
+        Inverse function of :meth:`get_charge`.
+
+        Parameters
+        ----------
+        charges : 1D array_like
+            Charge values for which the slice of the block is to be determined.
+
+        Returns
+        -------
+        slice(i, j) : slice
+            Slice of the charge values for
+
+        Raises
+        ------
+        ValueError : if the answer is not unique (because `self` is not blocked).
+        """
+        charges = self.chinfo.make_valid(self.qconj * np.asarray(charges))
+        equal_rows = np.all(charges[np.newaxis, :] == self.charges, axis=1)
+        qinds = np.nonzero(equal_rows)[0]
+        if len(qinds) > 1:
+            raise ValueError("Non-unique answer: " + repr(qinds))
+        elif len(qinds) == 0:
+            raise ValueError("Charge block not found")
+        # else
+        return qinds[0]
 
     def get_charge(self, qindex):
         """Return charge ``self.charges[qindex] * self.qconj`` for a given `qindex`."""
