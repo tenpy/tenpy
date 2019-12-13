@@ -420,8 +420,13 @@ class EffectiveH(NpcLinearOperator):
         Number of (MPS) sites the effective hamiltonian covers. NB: Class attribute.
     dtype : np.dtype
         The data type of the involved arrays.
+    N : int
+        Contracting `self` with :meth:`as_matrix` will result in an `N`x`N` matrix .
+    acts_on : list of str
+        Labels of the state on which `self` acts.
     """
     length = None
+    acts_on = None
 
     def __init__(self, env, i0, combine=False, move_right=True):
         raise NotImplementedError("This function should be implemented in derived classes")
@@ -442,6 +447,10 @@ class EffectiveH(NpcLinearOperator):
         H_theta : :class:`~tenpy.linalg.np_conserved.Array`
             Result of applying the effective Hamiltonian to `theta`, :math:`H |\theta>`.
         """
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
         raise NotImplementedError("This function should be implemented in derived classes")
 
 
@@ -495,6 +504,7 @@ class OneSiteH(EffectiveH):
         MPO tensor, to be applied to the 'p' leg of theta
     """
     length = 1
+    acts_on = ['vL', 'p', 'vR']
 
     def __init__(self, env, i0, combine=False, move_right=True):
         self.LP = env.get_LP(i0)
@@ -503,6 +513,8 @@ class OneSiteH(EffectiveH):
         self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
+        self.N = (self.LP.get_leg('vR').ind_len * self.W.get_leg('p').ind_len *
+                  self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff()
 
@@ -557,6 +569,25 @@ class OneSiteH(EffectiveH):
         self.RHeff = RHeff.combine_legs([['p', 'vL*'], ['p*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[-1, 0])
+        if self.combine:
+            if self.move_right:
+                self.acts_on = ['(vL.p)', 'vR']
+            else:
+                self.acts_on = ['vL', '(p.vR)']
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        if self.combine:
+            if self.move_right:
+                contr = npc.tensordot(self.LHeff, self.RP, axes=['wR', 'wL'])
+                return contr.combine_legs([['(vR*.p)', 'vL*'], ['(vR.p*)', 'vL']], qconj=[+1, -1])
+            else:
+                contr = npc.tensordot(self.LP, self.RHeff, axes=['wR', 'wL'])
+                return contr.combine_legs([['vR*', '(p.vL*)'], ['vR', '(p*.vL)']], qconj=[+1, -1])
+        else:
+            contr = npc.tensordot(self.LP, self.W, axes=['wR', 'wL'])
+            contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
+            return contr.combine_legs([['vR*', 'p', 'vL*'], ['vR', 'p*', 'vL']], qconj=[+1, -1])
 
 
 class TwoSiteH(EffectiveH):
@@ -616,6 +647,7 @@ class TwoSiteH(EffectiveH):
         Right MPO tensor, applied to the 'p1' leg of theta
     """
     length = 2
+    acts_on = ['vL', 'p0', 'p1', 'vR']
 
     def __init__(self, env, i0, combine=False, move_right=None):
         self.LP = env.get_LP(i0)
@@ -626,6 +658,8 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p1', 'p1*'
         self.dtype = env.H.dtype
         self.combine = combine
+        self.N = (self.LP.get_leg('vR').ind_len * self.W1.get_leg('p0').ind_len *
+                  self.W2.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff()
 
@@ -673,3 +707,17 @@ class TwoSiteH(EffectiveH):
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[2, 1])
+        self.acts_on = ['(vL.p0)', '(p1.vR)']
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        if self.combine:
+            contr = npc.tensordot(self.LHeff, self.RHeff, axes=['wR', 'wL'])
+            return contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
+                                      qconj=[+1, -1])
+        else:
+            contr = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
+            contr = npc.tensordot(contr, self.W2, axes=['wR', 'wL'])
+            contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
+            return contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']],
+                                      qconj=[+1, -1])

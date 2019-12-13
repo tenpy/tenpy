@@ -44,6 +44,8 @@ Added
 - dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - :func:`tenpy.linalg.lanczos.lanczos_arpack` as possiple replacement of the self-implemented `lanczos` function.
 - :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
+- :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
+  metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.N`.
 
 Fixed
 ^^^^^

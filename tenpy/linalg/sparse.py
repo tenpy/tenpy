@@ -21,7 +21,16 @@ class NpcLinearOperator:
 
     Note that an :class:`~tenpy.linalg.np_conserved.Array` implements a matvec function. Thus you
     can use any (square) npc Array as an NpcLinearOperator.
+
+    Attributes
+    ----------
+    dtype : np.type
+        The data type of its action.
+    acts_on : list of str
+        Labels of the state on which the operator can act. NB: Class attribute.
     """
+    acts_on = None
+
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
 

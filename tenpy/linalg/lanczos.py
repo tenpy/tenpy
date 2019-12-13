@@ -33,6 +33,8 @@ class LanczosGroundState:
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
+        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
+        as vectors.
     params : dict
         Further optional parameters as described in the following table.
         Add a parameter ``verbose >=1`` to print the used parameters during runtime.
