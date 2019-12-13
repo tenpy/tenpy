@@ -125,12 +125,19 @@ def test_dmrg_rerun(L=2):
     assert abs(E2 - -1.50082324) < 1.e-6
 
 
+params = [('TwoSiteDMRGEngine', 'lanczos'), ('TwoSiteDMRGEngine', 'arpack'),
+          ('TwoSiteDMRGEngine', 'ED_block'), ('TwoSiteDMRGEngine', 'ED_all'),
+          ('SingleSiteDMRGEngine', 'ED_block')]
+
+
 @pytest.mark.slow
-def test_dmrg_diag_methods(tol=1.e-6):
+@pytest.mark.parametrize("engine, diag_method", params)
+def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     bc_MPS = 'finite'
     model_params = dict(L=6, S=0.5, bc_MPS=bc_MPS, conserve='Sz', verbose=0)
     M = SpinChain(model_params)
     # chose total Sz= 4, not 3=6/2, i.e. not the sector with lowest energy!
+    # make sure below that we stay in that sector, if we're supposed to.
     init_Sz_4 = ['up', 'down', 'up', 'up', 'up', 'down']
     psi_Sz_4 = mps.MPS.from_product_state(M.lat.mps_sites(), init_Sz_4, bc=bc_MPS)
     dmrg_pars = {
@@ -138,29 +145,27 @@ def test_dmrg_diag_methods(tol=1.e-6):
         'N_sweeps_check': 1,
         'combine': True,
         'max_sweeps': 5,
-        'diag_method': 'lanczos'
+        'diag_method': diag_method,
+        'mixer': True,
     }
-    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
-    E1, psi1 = eng.run()
-    print("E1 = {0:.15f}".format(E1))
+    ED = ExactDiag(M)
+    ED.build_full_H_from_mpo()
+    ED.full_diagonalization()
+    if diag_method == "ED_all":
+        charge_sector = None  # allow to change the sector
+    else:
+        charge_sector = [2]  # don't allow to change the sector
+    E_ED, psi_ED = ED.groundstate(charge_sector=charge_sector)
 
-    dmrg_pars['diag_method'] = 'arpack'
-    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
-    E2, psi2 = eng.run()
-    print("E2 = {0:.15f}".format(E2))
-    assert abs(E1 - E2) < tol
-
-    dmrg_pars['diag_method'] = 'ED_block'
-    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
-    E3, psi3 = eng.run()
-    print("E3 = {0:.15f}".format(E3))
-    assert abs(1. - abs(psi3.overlap(psi1))) < tol
-
-    dmrg_pars['diag_method'] = 'ED_all'
-    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
-    E4, psi4 = eng.run()
-    print("E4 = {0:.15f}".format(E4))
-    assert all(psi4.get_total_charge() == np.array([-2]))  # compared to psi3!
+    DMRGEng = dmrg.__dict__.get(engine)
+    print("DMRGEng = ", DMRGEng)
+    print("setting diag_method = ", dmrg_pars['diag_method'])
+    eng = DMRGEng(psi_Sz_4.copy(), M, dmrg_pars)
+    E0, psi0 = eng.run()
+    print("E0 = {0:.15f}".format(E0))
+    assert abs(E_ED - E0) < tol
+    ov = npc.inner(psi_ED, ED.mps_to_full(psi0), do_conj=True)
+    assert abs(abs(ov) - 1) < tol
 
 
 @pytest.mark.slow
