@@ -5,6 +5,7 @@ from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
 from scipy.linalg import expm
+import scipy.sparse
 from .sparse import FlatHermitianOperator
 from ..tools.math import speigsh
 import warnings
@@ -399,7 +400,14 @@ def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
     N_min = get_parameter(lanczos_params, 'N_min', None, "Lanczos")
-    Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    try:
+        Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    except scipy.sparse.linalg.ArpackNoConvergence:
+        # simply try again with larger "k", that often helps
+        new_k = min(6, H_flat.shape[1])
+        if new_k <= 1:
+            raise
+        Es, Vs = speigsh(H_flat, k=new_k, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
     psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
     psi0.itranspose(psi.get_leg_labels())
     return Es[0], psi0
