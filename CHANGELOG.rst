@@ -22,6 +22,7 @@ Changed
 ^^^^^^^
 - Addition/subtraction of :class:`~tenpy.linalg.np_conserved.Array`: check whether the both arrays have the same labels
   in differnt order, and in that case raise a warning that we will transpose in the future.
+- Made :meth:`tenpy.linalg.np_conserved.Array.get_block` public (previously ``tenpy.linalg.np_conserved.Array._get_block``).
 
 Added
 ^^^^^

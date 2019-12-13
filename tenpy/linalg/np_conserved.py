@@ -805,7 +805,10 @@ class Array:
         int_only, inds = self._pre_indexing(inds)
         if int_only:
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
-            block = self._get_block(pos[:, 0])
+            try:
+                block = self.get_block(pos[:, 0])
+            except IndexError:
+                return self.dtype.type(0)
             if block is None:
                 return self.dtype.type(0)
             else:
@@ -827,7 +830,7 @@ class Array:
         int_only, inds = self._pre_indexing(inds)
         if int_only:
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
-            block = self._get_block(pos[:, 0], insert=True, raise_incomp_q=True)
+            block = self.get_block(pos[:, 0], insert=True)
             block[tuple(pos[:, 1])] = other
             return
         # advanced indexing
@@ -840,6 +843,43 @@ class Array:
             like_other = like_other._advanced_getitem(inds)
             other = Array.from_ndarray(other, like_other.legs, self.dtype, like_other.qtotal)
         self._advanced_setitem_npc(inds, other)
+
+    def get_block(self, qindices, insert=False):
+        """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
+
+        Parameters
+        ----------
+        qindices : 1D array of np.intp
+            The qindices, for which we need to look in _qdata.
+        insert : bool
+            If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
+            Otherwise just return ``None``.
+
+        Returns
+        -------
+        block: ndarray | ``None``
+            The block in ``_data`` corresponding to qindices.
+            If `insert`=False and there is not block with qindices, return ``None``.
+
+        Raises
+        ------
+        IndexError
+            If `qindices` are incompatible with charge and `raise_incomp_q`.
+        """
+        if not np.all(self._get_block_charge(qindices) == self.qtotal):
+            raise IndexError("trying to get block for qindices incompatible with charges")
+        # find qindices in self._qdata
+        match = np.argwhere(np.all(self._qdata == qindices, axis=1))[:, 0]
+        if len(match) == 0:
+            if insert:
+                res = np.zeros(self._get_block_shape(qindices), dtype=self.dtype)
+                self._data.append(res)
+                self._qdata = np.append(self._qdata, [qindices], axis=0)
+                self._qdata_sorted = False
+                return res
+            else:
+                return None
+        return self._data[match[0]]
 
     def take_slice(self, indices, axes):
         """Return a copy of self fixing `indices` along one or multiple `axes`.
@@ -2163,47 +2203,6 @@ class Array:
         """Return shape for the block given by qindices."""
         return tuple([(l.slices[qi + 1] - l.slices[qi]) for l, qi in zip(self.legs, qindices)])
 
-    def _get_block(self, qindices, insert=False, raise_incomp_q=False):
-        """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
-
-        Parameters
-        ----------
-        qindices : 1D array of np.intp
-            The qindices, for which we need to look in _qdata.
-        insert : bool
-            If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
-            Else: just return ``None`` in that case.
-        raise_incomp_q : bool
-            Raise an IndexError if the charge is incompatible.
-
-        Returns
-        -------
-        block: ndarray
-            The block in ``_data`` corresponding to qindices.
-            If `insert`=False and there is not block with qindices, return ``False``.
-
-        Raises
-        ------
-        IndexError
-            If qindices are incompatible with charge and `raise_incomp_q`.
-        """
-        if not np.all(self._get_block_charge(qindices) == self.qtotal):
-            if raise_incomp_q:
-                raise IndexError("trying to get block for qindices incompatible with charges")
-            return None
-        # find qindices in self._qdata
-        match = np.argwhere(np.all(self._qdata == qindices, axis=1))[:, 0]
-        if len(match) == 0:
-            if insert:
-                res = np.zeros(self._get_block_shape(qindices), dtype=self.dtype)
-                self._data.append(res)
-                self._qdata = np.append(self._qdata, [qindices], axis=0)
-                self._qdata_sorted = False
-                return res
-            else:
-                return None
-        return self._data[match[0]]
-
     def _bunch(self, bunch_legs):
         """Return copy and bunch the qind for one or multiple legs.
 
@@ -2328,7 +2327,7 @@ class Array:
             Only returned if `calc_map_qind` is True.
             This function takes qindices from `res` as arguments
             and returns ``(qindices, block_mask)`` such that
-            ``res._get_block(part_qindices) = self._get_block(qindices)[block_mask]``.
+            ``res.get_block(part_qindices) = self.get_block(qindices)[block_mask]``.
             permutation are ignored for this.
         permutations : list((int, 1D array(int)))
             Only returned if `calc_map_qind` is True.
@@ -2407,7 +2406,7 @@ class Array:
         def part2self(part_qindices):
             """Given `part_qindices` of ``res = self[inds]``,
             return (`qindices`, `block_mask`) such that
-            ``res._get_block(part_qindices) == self._get_block(qindices)``.
+            ``res.get_block(part_qindices) == self.get_block(qindices)``.
             """
             qindices = map_qinds[:]  # copy
             block_mask = map_blocks[:]  # copy
@@ -2456,12 +2455,12 @@ class Array:
         # we first set self[inds] completely to zero
         for p_qindices in self_part._qdata:
             qindices, block_mask = map_part2self(p_qindices)
-            block = self._get_block(qindices)
+            block = self.get_block(qindices)
             block[block_mask] = 0.  # overwrite data in self
         # now we copy blocks from other
         for o_block, o_qindices in zip(other._data, other._qdata):
             qindices, block_mask = map_part2self(o_qindices)
-            block = self._get_block(qindices, insert=True)
+            block = self.get_block(qindices, insert=True)
             block[block_mask] = o_block  # overwrite data in self
         self.ipurge_zeros(0.)  # remove blocks identically zero
 
