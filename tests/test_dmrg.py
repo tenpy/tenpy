@@ -4,6 +4,7 @@
 import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
+from tenpy.models.spins import SpinChain
 from tenpy.algorithms import dmrg
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
@@ -104,7 +105,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
 
 
 @pytest.mark.slow
-def test_dmrg_rerun(L=3):
+def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
@@ -118,11 +119,48 @@ def test_dmrg_rerun(L=3):
     del eng.engine_params['chi_list']
     new_chi = 15
     eng.engine_params['trunc_params']['chi_max'] = new_chi
-    eng.engine_params['diag_method'] = 'arpack'  # slow, but test this as well...
     eng.init_env(M)
     E2, psi = eng.run()
     assert max(psi.chi) == new_chi
     assert abs(E2 - -1.50082324) < 1.e-6
+
+
+@pytest.mark.slow
+def test_dmrg_diag_methods(tol=1.e-6):
+    bc_MPS = 'finite'
+    model_params = dict(L=6, S=0.5, bc_MPS=bc_MPS, conserve='Sz', verbose=0)
+    M = SpinChain(model_params)
+    # chose total Sz= 4, not 3=6/2, i.e. not the sector with lowest energy!
+    init_Sz_4 = ['up', 'down', 'up', 'up', 'up', 'down']
+    psi_Sz_4 = mps.MPS.from_product_state(M.lat.mps_sites(), init_Sz_4, bc=bc_MPS)
+    dmrg_pars = {
+        'verbose': 1,
+        'N_sweeps_check': 1,
+        'combine': True,
+        'max_sweeps': 5,
+        'diag_method': 'lanczos'
+    }
+    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
+    E1, psi1 = eng.run()
+    print("E1 = {0:.15f}".format(E1))
+
+    dmrg_pars['diag_method'] = 'arpack'
+    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
+    E2, psi2 = eng.run()
+    print("E2 = {0:.15f}".format(E2))
+    assert abs(E1 - E2) < tol
+
+    dmrg_pars['diag_method'] = 'ED_block'
+    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
+    E3, psi3 = eng.run()
+    print("E3 = {0:.15f}".format(E3))
+    assert abs(1. - abs(psi3.overlap(psi1))) < tol
+
+    dmrg_pars['diag_method'] = 'ED_all'
+    eng = dmrg.TwoSiteDMRGEngine(psi_Sz_4.copy(), M, dmrg_pars)
+    E4, psi4 = eng.run()
+    print("E4 = {0:.15f}".format(E4))
+    assert all(psi4.get_total_charge() == np.array([-2]))  # compared to psi3!
 
 
 @pytest.mark.slow

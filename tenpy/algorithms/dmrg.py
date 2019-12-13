@@ -40,7 +40,6 @@ from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
-from ..linalg.sparse import NpcLinearOperator
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
@@ -48,7 +47,8 @@ from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
-    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list'
+    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list',
+    'full_diag_effH'
 ]
 
 
@@ -546,10 +546,25 @@ class DMRGEngine(Sweep):
         ------------  ----------------------------------------------------------------
         'arpack'      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
                       Based on :func:`scipy.linalg.sparse.eigsh`.
-                      Slow, since it needs to convert the npc arrays to numpy arrays
-                      during *each* matvec!
+                      Slower than 'lanczos', since it needs to convert the npc arrays
+                      to numpy arrays during *each* matvec, and possibly does many
+                      more iterations.
+        ------------  ----------------------------------------------------------------
+        'ED_block'    Contract the effective Hamiltonian to a (large!) matrix and
+                      diagonalize the block in the charge sector of the initial state.
+                      Preserves the charge sector of the explicitly conserved charges.
+                      However, if you don't preserve a charge explicitly, it can break
+                      it.
+                      For example if you use a ``SpinChain({'conserve': 'parity'})``,
+                      it could change the total "Sz", but not the parity of 'Sz'.
+        ------------  ----------------------------------------------------------------
+        'ED_all'      Contract the effective Hamiltonian to a (large!) matrix and
+                      diagonalize it completely.
+                      Allows to change the charge sector *even for explicitly
+                      conserved charges*.
+                      For example if you use a ``SpinChain({'conserve': 'Sz'})``,
+                      it **can** change the total "Sz".
         ============  ================================================================
-
 
         Parameters
         ----------
@@ -574,6 +589,10 @@ class DMRGEngine(Sweep):
             E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
         elif self.diag_method == 'arpack':
             E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+        elif self.diag_method == 'ED_block':
+            E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
+        elif self.diag_method == 'ED_all':
+            E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError("Unknown diagonalization method: " + repr(self.diag_method))
         ov_change = 1. - abs(npc.inner(theta_guess, theta, do_conj=True))
@@ -1941,3 +1960,39 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     if chi < chi_max:
         chi_list[nsweeps * (i + 1)] = chi_max
     return chi_list
+
+
+def full_diag_effH(effH, theta_guess, keep_sector=True):
+    """Perform an exact diagonalization of `effH`.
+
+    This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
+
+    Parameters
+    ----------
+    effH : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        The effective Hamiltonian.
+    theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+        Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.
+    """
+    theta_guess = theta_guess.combine_legs(effH.acts_on, qconj=+1)
+    fullH = effH.to_matrix()
+    if keep_sector:
+        # diagonalize only the block of the charge sector in which `theta_guess` is.
+        leg = theta_guess.legs[0]
+        qi = leg.get_qindex_of_charges(theta_guess.qtotal)
+        block = fullH.get_block(np.array([qi, qi], np.intp))
+        if block is None:
+            raise ValueError("H is zero in the given block?!")
+        E, V = np.linalg.eigh(block)
+        E0 = E[0]
+        theta = theta_guess.zeros_like()
+        theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+        theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
+        theta_block[:] = V[:, 0]  # copy data into theta
+    else:  # allow to change charge sector!
+        E, V = npc.eigh(fullH)
+        i0 = np.argmin(E)
+        E0 = E[i0]
+        theta = V.take_slice(i0, 1)
+    theta = theta.split_legs([0]).iset_leg_labels(effH.acts_on)
+    return E0, theta

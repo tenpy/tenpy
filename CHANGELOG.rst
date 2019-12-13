@@ -41,8 +41,12 @@ Added
   `matvec` functions acting on multi-dimensional arrays to a `FlatLinearOperator` by combining the legs into a LegPipe.
 - :meth:`tenpy.tools.math.speigsh` for hermitian variant of :meth:`~tenpy.tools.math.speigs`
 - Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
-- dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - :func:`tenpy.linalg.lanczos.lanczos_arpack` as possiple replacement of the self-implemented `lanczos` function.
+- :func:`tenpy.algorithms.dmrg.full_diag_effH` as another replacement of :func:`~tenpy.linalg.lanczos.lanczos`.
+- The new DMRG parameter ``'diag_method'`` allows to select a method for the diagonalization of the effective Hamiltonian.
+  See :meth:`tenpy.algorithms.dmrg.DMRGEngine.diag` for details.
+
+- dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
 - :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
   metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.N`.
