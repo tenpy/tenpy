@@ -461,12 +461,12 @@ class OneSiteH(EffectiveH):
 
             |        .---   ---.
             |        |    |    |
-            |       LP----W0---RP
+            |       LP----W----RP
             |        |    |    |
             |        .---   ---.
 
-    If `combine` is True, we define either `LHeff` as contraction of `LP` with `W0` (in the case
-    `move_right` is True) or `RHeff` as contraction of `RP` and `W0`.
+    If `combine` is True, we define either `LHeff` as contraction of `LP` with `W` (in the case
+    `move_right` is True) or `RHeff` as contraction of `RP` and `W`.
 
     .. todo ::
         orthogonal theta's? Johannes: agree, might be usefull to add that here.
@@ -601,8 +601,8 @@ class TwoSiteH(EffectiveH):
             |        |    |   |    |
             |        .---       ---.
 
-    This class defines `LHeff` and `RHeff`, which are the contractions of `LP` with `W0`, and `RP`
-    with `W1`, respectively.
+    If `combine` is True, we define `LHeff` and `RHeff`, which are the contractions of `LP` with
+    `W0`, and `RP` with `W1`, respectively.
 
     .. todo ::
         orthogonal theta's.
@@ -641,9 +641,9 @@ class TwoSiteH(EffectiveH):
         Left part of the environment.
     RP : :class:`~tenpy.linalg.np_conserved.Array`
         Right part of the environment
-    W1 : :class:`~tenpy.linalg.np_conserved.Array`
+    W0 : :class:`~tenpy.linalg.np_conserved.Array`
         Left MPO tensor, applied to the 'p0' leg of theta
-    W2 : :class:`~tenpy.linalg.np_conserved.Array`
+    W1 : :class:`~tenpy.linalg.np_conserved.Array`
         Right MPO tensor, applied to the 'p1' leg of theta
     """
     length = 2
@@ -652,14 +652,14 @@ class TwoSiteH(EffectiveH):
     def __init__(self, env, i0, combine=False, move_right=None):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
-        self.W1 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
         # 'wL', 'wR', 'p0', 'p0*'
-        self.W2 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+        self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
         # 'wL', 'wR', 'p1', 'p1*'
         self.dtype = env.H.dtype
         self.combine = combine
-        self.N = (self.LP.get_leg('vR').ind_len * self.W1.get_leg('p0').ind_len *
-                  self.W2.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
+        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                  self.W1.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff()
 
@@ -683,8 +683,8 @@ class TwoSiteH(EffectiveH):
             theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
-            theta = npc.tensordot(self.W1, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
-            theta = npc.tensordot(theta, self.W2, axes=[['wR', 'p1'], ['wL', 'p1*']])
+            theta = npc.tensordot(self.W0, theta, axes=[['wL', 'p0*'], ['wR', 'p0']])
+            theta = npc.tensordot(theta, self.W1, axes=[['wR', 'p1'], ['wL', 'p1*']])
             theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
         theta.itranspose(labels)  # if necessary, transpose
@@ -694,15 +694,15 @@ class TwoSiteH(EffectiveH):
     def combine_Heff(self):
         """Combine LP and RP with W to form LHeff and RHeff.
 
-        Combine LP with W1 and RP with W2 to get the effective parts of the Hamiltonian with piped
+        Combine LP with W0 and RP with W1 to get the effective parts of the Hamiltonian with piped
         legs.
         """
-        LHeff = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
+        LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
         self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
         self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
                                         pipes=[pipeL, pipeL.conj()],
                                         new_axes=[0, 2])
-        RHeff = npc.tensordot(self.RP, self.W2, axes=['wL', 'wR'])
+        RHeff = npc.tensordot(self.RP, self.W1, axes=['wL', 'wR'])
         self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
         self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
                                         pipes=[pipeR, pipeR.conj()],
@@ -716,8 +716,8 @@ class TwoSiteH(EffectiveH):
             return contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
                                       qconj=[+1, -1])
         else:
-            contr = npc.tensordot(self.LP, self.W1, axes=['wR', 'wL'])
-            contr = npc.tensordot(contr, self.W2, axes=['wR', 'wL'])
+            contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
+            contr = npc.tensordot(contr, self.W1, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
             return contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']],
                                       qconj=[+1, -1])
