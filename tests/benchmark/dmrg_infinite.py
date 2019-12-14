@@ -9,7 +9,7 @@ from tenpy.algorithms import dmrg
 from tenpy.tools import optimization
 
 
-def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
+def setup_benchmark(mod_q=[1], legs=10, size=20, diag_method='lanczos', **kwargs):
     """Setup DMRG benchmark.
 
     Mapping of parameters:
@@ -46,6 +46,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         'verbose': 0.,
     }
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
+    eng.diag_method = diag_method
     eng.verbose = 0.02
     for i in range(100):
         eng.sweep(meas_E_trunc=False)
