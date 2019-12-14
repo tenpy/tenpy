@@ -168,6 +168,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     assert abs(abs(ov) - 1) < tol
 
 
+@pytest.mark.debug
 @pytest.mark.slow
 def test_dmrg_excited(eps=1.e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
@@ -182,38 +183,45 @@ def test_dmrg_excited(eps=1.e-12):
     ED.full_diagonalization()
     # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
     print("Exact diag: E[:5] = ", ED.E[:5])
+    print("Exact diag: (smalles E)[:10] = ", np.sort(ED.E)[:10])
+
+    psi_ED = [ED.V.take_slice(i, 'ps*') for i in range(5)]
+    print("charges : ", [psi.qtotal for psi in psi_ED])
+
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     dmrg_pars = {
-        'verbose': 1,
+        'verbose': 0,
         'N_sweeps_check': 1,
         'lanczos_params': {
             'reortho': False
         },
+        'diag_method': 'lanczos',
         'combine': True
     }
     eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
-    ov = npc.inner(ED.V.take_slice(0, 'ps*'), ED.mps_to_full(psi0), do_conj=True)
+    ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
+    dmrg_pars['verbose'] = 1.
     dmrg_pars['orthogonal_to'] = [psi0]
     psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars)
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
-    ov = npc.inner(ED.V.take_slice(1, 'ps*'), ED.mps_to_full(psi1), do_conj=True)
+    ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
-    psi2 = mps.MPS.from_product_state(M.lat.mps_sites(), [0, 1] * (L // 2), bc=bc)
+    psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc)
     eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars)
     E2, psi2 = eng2.run()
     print(E2)
     assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
-    ov = npc.inner(ED.V.take_slice(2, 'ps*'), ED.mps_to_full(psi2), do_conj=True)
+    ov = npc.inner(psi_ED[2], ED.mps_to_full(psi2), do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
 
 

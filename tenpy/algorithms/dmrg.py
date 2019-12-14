@@ -534,7 +534,7 @@ class DMRGEngine(Sweep):
         self.trunc_err_list.append(update_data['err'].eps)
         self.E_trunc_list.append(E_trunc)
 
-    def diag(self, theta_guess, theta_ortho):
+    def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
 
         The method used depends on the DMRG parameter `diag_method`.
@@ -570,8 +570,6 @@ class DMRGEngine(Sweep):
         ----------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta_guess`.
 
         Returns
         -------
@@ -586,9 +584,9 @@ class DMRGEngine(Sweep):
         """
         N = -1  # (unknown)
         if self.diag_method == 'lanczos':
-            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
         elif self.diag_method == 'arpack':
-            E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
+            E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
         elif self.diag_method == 'ED_block':
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
         elif self.diag_method == 'ED_all':
@@ -780,41 +778,25 @@ class TwoSiteDMRGEngine(DMRGEngine):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
         """
-        EffectiveH = self.EffectiveH
-        env = self.env
-        eff_H = EffectiveH(env, self.i0, self.combine)  # eff_H has attributes LP, RP, W1, W2.
-        self.eff_H = eff_H
+        # get instance of the effective Hamiltonian
+        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
+                                     self.ortho_to_envs)
+        # eff_H has attributes LP, RP, W0, W1
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta_ortho = self.get_theta_ortho()
-        if self.combine:
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
-                                       pipes=[eff_H.pipeL, eff_H.pipeR])
-            theta_ortho = [
-                th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
-                for th_o in theta_ortho
-            ]
-        else:
-            theta.itranspose(['vL', 'p0', 'p1', 'vR'])
-            for th_o in theta_ortho:
-                th_o.itranspose(['vL', 'p0', 'p1', 'vR'])
-        return theta, theta_ortho
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
-    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, optimize=True, meas_E_trunc=False):
         """Perform bond-update on the sites ``(i0, i0+1)``.
 
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta`.
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -844,7 +826,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
-            E0, theta, N, ov_change = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta)
         else:
             E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
@@ -1088,48 +1070,26 @@ class SingleSiteDMRGEngine(DMRGEngine):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            see :meth:`get_theta_ortho`.
         """
-        EffectiveH = self.EffectiveH
-        env = self.env
-        self.eff_H = eff_H = EffectiveH(env, self.i0, self.combine, self.move_right)
+        # get instance of the effective Hamiltonian
+        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
+                                     self.ortho_to_envs)
         # eff_H has attributes LP, RP, W.
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff).replace_label('p0', 'p')
         # 'vL', 'p', 'vR'
-        theta_ortho = self.get_theta_ortho()
-        for th_o in theta_ortho:
-            th_o.ireplace_label('p0', 'p')
-        if self.combine:
-            if self.move_right:
-                theta = theta.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
-                theta_ortho = [
-                    th_o.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL]) for th_o in theta_ortho
-                ]
-            else:
-                theta = theta.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
-                theta_ortho = [
-                    th_o.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR]) for th_o in theta_ortho
-                ]
-        else:
-            theta.itranspose(['vL', 'p', 'vR'])
-            for th_o in theta_ortho:
-                th_o.ireplace_label('p0', 'p').itranspose(['vL', 'p', 'vR'])
-        return theta, theta_ortho
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
-    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, optimize=True, meas_E_trunc=False):
         """Perform site-update on the site ``i0``.
 
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta`.
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -1159,7 +1119,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
         if optimize:
-            E0, theta, N, ov_change = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta)
         else:
             E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
