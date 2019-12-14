@@ -1069,7 +1069,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
+            Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
         """
         # get instance of the effective Hamiltonian
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
@@ -1078,8 +1078,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff).replace_label('p0', 'p')
-        # 'vL', 'p', 'vR'
+        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'
         theta = self.eff_H.combine_theta(theta)
         return theta
 
@@ -1148,14 +1147,14 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         if self.combine:
             if self.move_right:
-                theta.itranspose(['(vL.p)', 'vR'])  # ensure the order.
+                theta.itranspose(['(vL.p0)', 'vR'])  # ensure the order.
             else:
-                theta.itranspose(['vL', '(p.vR)'])  # ensure the order.
+                theta.itranspose(['vL', '(p0.vR)'])  # ensure the order.
         else:
             if self.move_right:
-                theta = theta.combine_legs(['vL', 'p'], qconj=+1, new_axes=0)
+                theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
             else:
-                theta = theta.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
+                theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         return theta
 
     def mixed_svd(self, theta, next_B):
@@ -1190,12 +1189,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
         Returns
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singluar values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p0.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -1224,7 +1223,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = U.combine_legs(['vL', 'p'], qconj=+1)
                 U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
                 U = U.split_legs(['(vL.p)'])
-                S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
+                S = VH_U.iscale_axis(S_U, 'vL').iscale_axis(S, 'vR')
             return U, S, VH, err
 
     def set_B(self, U, S, VH):
@@ -1240,7 +1239,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.move_right:
-            B0 = U.split_legs(['(vL.p)'])
+            B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
             self.psi.set_B(i0, B0, form='A')  # left-canonical
             self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
             self.psi.set_SR(i0, S)
@@ -1250,11 +1249,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_LP(i0 + 1)
             self.env.del_RP(i0)
         else:
-            B1 = VH.split_legs(['(p.vR)'])
+            B1 = VH.split_legs(['(p0.vR)']).replace_label('p0', 'p')
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
             self.psi.set_SL(i0, S)
-            for o_env in self.ortho_to_envs:  # TODO indexing here
+            for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
                 o_env.del_RP(i0 - 1)
             self.env.del_LP(i0)
@@ -1288,12 +1287,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ----------
         U : :class:`~tenpy.linalg.np_conserved.Array`
             The U as returned by SVD, with combined legs,
-            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+            labels ``'(vL.p0)', 'vR'`` if self.move_right, else ``'vL', '(p0.vR)'``.
         """
         i0 = self.i0
         if self.combine and self.move_right:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
+            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
         else:  # as implemented directly in the environment
             if self.move_right:
@@ -1312,12 +1311,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ----------
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             The VH as returned by SVD, with combined legs,
-            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+            labels ``'(vL.p0)', 'vR'`` if self.move_right, else ``'vL', '(p0.vR)'``.
         """
         i0 = self.i0
         if self.combine and not self.move_right:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
+            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
             self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
         else:  # as implemented directly in the environment
             if self.move_right:
@@ -1555,16 +1554,16 @@ class SingleSiteMixer(Mixer):
         if not engine.combine:  # Need to get Heff's even if combine=False
             engine.eff_H.combine_Heff()
 
-        if move_right:  # theta has legs (vL.p), vR
+        if move_right:  # theta has legs (vL.p0), vR
             LHeff = engine.eff_H.LHeff
-            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
+            expand = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
             expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
-        else:  # theta has legs vL, (p.vR)
+        else:  # theta has legs vL, (p0.vR)
             RHeff = engine.eff_H.RHeff
-            expand = npc.tensordot(theta, RHeff, axes=['(p.vR)', '(p*.vL)'])
+            expand = npc.tensordot(theta, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
             expand = expand.combine_legs(['vL', 'wL'], qconj=+1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=0, copy=False)
@@ -1742,6 +1741,7 @@ class DensityMatrixMixer(Mixer):
         try:
             LHeff = engine.LHeff
         except AttributeError:
+            # TODO: needed?
             H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
             LP = engine.env.get_LP(i0, store=False)
             LHeff = npc.tensordot(LP, H0, axes=['wR', 'wL'])
