@@ -1117,7 +1117,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 induced by :meth:`diag`, *not* including the truncation!
         """
         i0 = self.i0
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
+        age = self.env.get_LP_age(i0) + 1 + self.env.get_RP_age(i0)
         if optimize:
             E0, theta, N, ov_change = self.diag(theta)
         else:

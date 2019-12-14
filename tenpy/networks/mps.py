@@ -2995,7 +2995,7 @@ class MPSEnvironment:
         return self._LP_age[self._to_valid_index(i)]
 
     def get_RP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i).
+        """Return number of physical sites in the contractions of get_RP(i).
 
         Might be ``None``.
         """

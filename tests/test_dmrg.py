@@ -168,7 +168,6 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     assert abs(abs(ov) - 1) < tol
 
 
-@pytest.mark.debug
 @pytest.mark.slow
 def test_dmrg_excited(eps=1.e-12):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
