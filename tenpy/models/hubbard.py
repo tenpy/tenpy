@@ -81,7 +81,7 @@ class BoseHubbardModel(CouplingMPOModel):
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Bd', u2, 'B', dx)
             self.add_coupling(-np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
@@ -170,7 +170,7 @@ class FermiHubbardModel(CouplingMPOModel):
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
             self.add_onsite(U, u, 'NuNd')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx)
             self.add_coupling(-np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
             self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx)

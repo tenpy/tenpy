@@ -78,7 +78,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
             self.add_onsite(mu, 0, 'N', category='mu N')
             self.add_onsite(-mu, 1, 'N', category='mu N')
 
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j')
             self.add_coupling(np.conj(t1_phi), u2, 'Bd', u1, 'B', -dx,
@@ -167,7 +167,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
             self.add_onsite(mu, 0, 'N', category='mu N')
             self.add_onsite(-mu, 1, 'N', category='mu N')
 
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
             self.add_coupling(np.conj(t1_phi),

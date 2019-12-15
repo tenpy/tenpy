@@ -104,7 +104,7 @@ class SpinModel(CouplingMPOModel):
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
             self.add_coupling(np.conj((Jx + Jy) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)

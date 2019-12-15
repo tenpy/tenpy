@@ -215,13 +215,13 @@ class SpinChainNNN2(CouplingMPOModel):
         # Sp = Sx + i Sy, Sm = Sx - i Sy,  Sx = (Sp+Sm)/2, Sy = (Sp-Sm)/2i
         # Sx.Sx = 0.25 ( Sp.Sm + Sm.Sp + Sp.Sp + Sm.Sm )
         # Sy.Sy = 0.25 ( Sp.Sm + Sm.Sp - Sp.Sp - Sm.Sm )
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling((Jx + Jy) / 4., u1, 'Sp', u2, 'Sm', dx)
             self.add_coupling(np.conj((Jx + Jy) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jx - Jy) / 4., u1, 'Sp', u2, 'Sp', dx)
             self.add_coupling(np.conj((Jx - Jy) / 4.), u2, 'Sm', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
-        for u1, u2, dx in self.lat.next_nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
             self.add_coupling((Jxp + Jyp) / 4., u1, 'Sp', u2, 'Sm', dx)
             self.add_coupling(np.conj((Jxp + Jyp) / 4.), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling((Jxp - Jyp) / 4., u1, 'Sp', u2, 'Sp', dx)

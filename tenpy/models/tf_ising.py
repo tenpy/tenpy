@@ -76,7 +76,7 @@ class TFIModel(CouplingMPOModel):
         g = get_parameter(model_params, 'g', 1., self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
         # done
 

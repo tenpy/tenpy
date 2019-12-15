@@ -101,7 +101,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         # add terms
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hz, u, 'Sz')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx)
             self.add_coupling(np.conj(Jxx * 0.5), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
