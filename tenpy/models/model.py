@@ -725,7 +725,7 @@ class CouplingModel(Model):
         on all nearest-neighbor bonds of the lattice like this:
 
         >>> J = 1.  # the strength
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         The strength can be an array, which get's tiled to the correct shape.
@@ -741,13 +741,13 @@ class CouplingModel(Model):
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
 
         >>> t = 1.  # hopping strength
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
 
         With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
 
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
         ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
@@ -979,7 +979,7 @@ class CouplingModel(Model):
         >>> strength = 1. # hopping strength without external flux
         >>> phi = np.pi/4 # determines the external flux strength
         >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """

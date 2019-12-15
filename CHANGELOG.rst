@@ -25,6 +25,11 @@ Changed
 - Made :meth:`tenpy.linalg.np_conserved.Array.get_block` public (previously ``tenpy.linalg.np_conserved.Array._get_block``).
 - :meth:`~tenpy.algorithms.exact_diag.ExactDiag.groundstate` now returns a tuple ``(E0, psi0)`` instead of just ``psi0``.
   Moreover, the argument `charge_sector` was added.
+- Simplification in the :class:`~tenpy.models.lattice.Lattice`: 
+  Instead of having separate arguments/attributes/functions for 
+  ``'nearest_neighbors', 'next_nearest_neighbors', 'next_next_nearest_neighbors'`` and possibly (Honeycomb) even
+  ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``, collect them in a dictionary called `pairs`.
+  Old call structures still allowed, but deprecated.
 
 Added
 ^^^^^

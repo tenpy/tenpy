@@ -44,9 +44,10 @@ class DualSquare(Lattice):
               (1, 0, np.array([0, 1]))]
         nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
         nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         super().__init__([Lx, Ly], sites, **kwargs)
 
 
