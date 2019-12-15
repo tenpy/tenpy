@@ -513,7 +513,7 @@ class MPO:
         """Contract `blocklen` subsequent tensors into a single one and return result as a new MPO
         object."""
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
-        warnings.warn(msg, DeprecationWarning, 2)
+        warnings.warn(msg, FutureWarning, 2)
         from copy import deepcopy
         groupedMPO = deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
@@ -522,7 +522,7 @@ class MPO:
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a d**L x d**L matrix."""
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
-        warnings.warn(msg, DeprecationWarning, 2)
+        warnings.warn(msg, FutureWarning, 2)
         if (self.dim[0]**(2 * self.L) > maxsize):
             print('Matrix dimension exceeds maxsize')
             return np.zeros(1)

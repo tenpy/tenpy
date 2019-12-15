@@ -180,7 +180,7 @@ class Lattice:
                 continue  # no value set
             msg = "Lattice.__init__() got argument `{0!s}`.\nSet as `neighbors['{0!s}'] instead!"
             msg = msg.format(name)
-            warnings.warn(msg, DeprecationWarning)
+            warnings.warn(msg, FutureWarning)
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
@@ -547,13 +547,13 @@ class Lattice:
     def number_nearest_neighbors(self, u=0):
         """Deprecated. Use :meth:`count_neighbors` instead."""
         msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.count_neighbors(u, 'nearest_neighbors')
 
     def number_next_nearest_neighbors(self, u=0):
         """Deprecated. Use :meth:`count_neighbors` instead."""
         msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.count_neighbors(u, 'next_nearest_neighbors')
 
     def possible_couplings(self, u1, u2, dx):
@@ -922,21 +922,21 @@ class Lattice:
     def nearest_neighbors(self):
         msg = ("Deprecated access with ``lattice.nearest_neighbors``.\n"
                "Use ``lattice.pairs['nearest_neighbors']`` instead.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.pairs['nearest_neighbors']
 
     @property
     def next_nearest_neighbors(self):
         msg = ("Deprecated access with ``lattice.next_nearest_neighbors``.\n"
                "Use ``lattice.pairs['next_nearest_neighbors']`` instead.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.pairs['next_nearest_neighbors']
 
     @property
     def next_next_nearest_neighbors(self):
         msg = ("Deprecated access with ``lattice.next_next_nearest_neighbors``.\n"
                "Use ``lattice.pairs['next_next_nearest_neighbors']`` instead.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.pairs['next_next_nearest_neighbors']
 
 
@@ -1264,14 +1264,14 @@ class Honeycomb(Lattice):
     def fourth_nearest_neighbors(self):
         msg = ("Deprecated access with ``lattice.fourth_nearest_neighbors``.\n"
                "Use ``lattice.pairs['fourth_nearest_neighbors']`` instead.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.pairs['fourth_nearest_neighbors']
 
     @property
     def fifth_nearest_neighbors(self):
         msg = ("Deprecated access with ``lattice.fifth_nearest_neighbors``.\n"
                "Use ``lattice.pairs['fifth_nearest_neighbors']`` instead.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(msg, FutureWarning)
         return self.pairs['fifth_nearest_neighbors']
 
 
