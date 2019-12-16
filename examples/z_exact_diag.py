@@ -18,9 +18,9 @@ def example_exact_diagonalization(L, Jz):
 
     product_state = ["up", "down"] * (xxz_pars['L'] // 2)  # this selects a charge sector!
     psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state)
-    charge_sector = psi_DMRG.get_total_charge()  # the ED charge sector should match that of the MPS
+    charge_sector = psi_DMRG.get_total_charge(True)  # ED charge sector should match
 
-    ED = ExactDiag(M, charge_sector=charge_sector)
+    ED = ExactDiag(M, charge_sector=charge_sector, max_size=2.e6)
     ED.build_full_H_from_mpo()
     # ED.build_full_H_from_bonds()  # whatever you prefer
     print("start diagonalization")
