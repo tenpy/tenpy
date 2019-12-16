@@ -3166,11 +3166,16 @@ def inner(a, b, axes=None, do_conj=False):
     a, b : class:`Array`
         The arrays for which to calculate the product.
         Must have same rank, and compatible LegCharges.
-    axes : ``(axes_a, axes_b)`` | ``None``
-        ``None`` is equivalent to ``(range(rank), range(rank))``.
-        Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
+    axes : ``(axes_a, axes_b)`` | ``'range'``, ``'labels'``
+        `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
-        Contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+        We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+        ``'order'`` is equivalent to ``(range(rank), range(rank))``.
+        ``'labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        for ``do_conj=True``,
+        or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
+        In other words, ``'labels'`` requires `a` and `b` to have the same/conjugated labels up
+        to a possible transposition, which is then reverted.
     do_conj : bool
         If ``False`` (Default), ignore it.
         if ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``
@@ -3182,7 +3187,19 @@ def inner(a, b, axes=None, do_conj=False):
     """
     if a.rank != b.rank:
         raise ValueError("different rank!")
-    if axes is not None:
+    if axes is None or axes == 'range':
+        if axes is None:
+            msg = "inner(): `axes` currently defaults to 'range', will change to 'labels'"
+            warnings.warn(msg, FutureWarning, stacklevel=2)
+        transp = False
+    else:
+        if axes == 'labels':
+            a_labels = a.get_leg_labels()
+            if do_conj:
+                axes = (a_labels, a_labels)
+            else:
+                a_conj_labels = [Array._conj_leg_label(lbl) for lbl in a_labels]
+                axes = (a_labels, a_conj_labels)
         axes_a, axes_b = axes
         axes_a = a.get_leg_indices(to_iterable(axes_a))
         axes_b = b.get_leg_indices(to_iterable(axes_b))
@@ -3192,8 +3209,6 @@ def inner(a, b, axes=None, do_conj=False):
         sort_axes_b = np.argsort(axes_b)
         axes_a = [axes_a[i] for i in sort_axes_b]
         transp = (tuple(axes_a) != tuple(range(a.rank)))
-    else:
-        transp = False
     if transp:
         a = a.copy(deep=False)
         a.itranspose(axes_a)

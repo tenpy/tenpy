@@ -174,13 +174,13 @@ class LanczosGroundState:
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
             w = self._apply_H(w)
-            alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
+            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
+                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
                 w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = npc.norm(w)
@@ -214,7 +214,7 @@ class LanczosGroundState:
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
+                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
             elif k > 0:
                 w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = T[k, k + 1]  # = norm(w)
@@ -245,10 +245,10 @@ class LanczosGroundState:
         if len(self.orthogonal_to) > 0:
             w = w.copy()
             for o in self.orthogonal_to:  # Project out
-                w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
+                w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
         w = self.H.matvec(w)
         for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
+            w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
         return w
 
     def _calc_result_krylov(self, k):
@@ -419,8 +419,9 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     Parameters
     ----------
     vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The vectors which should be orthogonalized. Entries are modified *in place*.
-        if a norm < rcond, they entry is set to `None`
+        The vectors which should be orthogonalized.
+        All with the same *order* of the legs. Entries are modified *in place*.
+        if a norm < rcond, the entry is set to `None`.
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
     verbose : int
@@ -431,7 +432,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
     ov : 2D Array
-        For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], do_conj=True)``
+        For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)``
         (where vecs[j] was orthogonalized to all ``vecs[k], k < i``).
     """
     k = len(vecs)
@@ -441,7 +442,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         if n > rcond:
             vecs[j].iscale_prefactor(1. / n)
             for i in range(j + 1, k):
-                ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
+                ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)
                 vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
         else:
             if verbose >= 1:
@@ -453,7 +454,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         G = np.empty((k, k), dtype=vecs[0].dtype)
         for i, v in enumerate(vecs):
             for j, w in enumerate(vecs):
-                G[i, j] = npc.inner(v, w, do_conj=True)
+                G[i, j] = npc.inner(v, w, 'range', do_conj=True)
         print("GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k)))
     return vecs, ov
 

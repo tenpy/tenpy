@@ -86,7 +86,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         E_ED, psi_ED = ED.groundstate()
-        ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
+        ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=E_ED))
         print("compare with ED: overlap = ", abs(ov)**2)
         assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
@@ -164,7 +164,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     E0, psi0 = eng.run()
     print("E0 = {0:.15f}".format(E0))
     assert abs(E_ED - E0) < tol
-    ov = npc.inner(psi_ED, ED.mps_to_full(psi0), do_conj=True)
+    ov = npc.inner(psi_ED, ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1) < tol
 
 
@@ -201,7 +201,7 @@ def test_dmrg_excited(eps=1.e-12):
     eng0 = dmrg.TwoSiteDMRGEngine(psi0, M, dmrg_pars)
     E0, psi0 = eng0.run()
     assert abs((E0 - ED.E[0]) / ED.E[0]) < eps
-    ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), do_conj=True)
+    ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
     dmrg_pars['verbose'] = 1.
@@ -210,7 +210,7 @@ def test_dmrg_excited(eps=1.e-12):
     eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars)
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
-    ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), do_conj=True)
+    ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
     dmrg_pars['orthogonal_to'] = [psi0, psi1]
@@ -220,7 +220,7 @@ def test_dmrg_excited(eps=1.e-12):
     E2, psi2 = eng2.run()
     print(E2)
     assert abs((E2 - ED.E[2]) / ED.E[2]) < eps
-    ov = npc.inner(psi_ED[2], ED.mps_to_full(psi2), do_conj=True)
+    ov = npc.inner(psi_ED[2], ED.mps_to_full(psi2), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
 
 

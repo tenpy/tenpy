@@ -30,7 +30,7 @@ def test_ED():
     E2, psi2 = ED2.groundstate()
     full_psi2 = psi.zeros_like()
     full_psi2[ED2._mask] = psi2
-    ov = npc.inner(psi, full_psi2, do_conj=True)
+    ov = npc.inner(psi, full_psi2, 'range', do_conj=True)
     print("overlab <psi | psi2> = 1. -", 1. - ov)
     assert (abs(abs(ov) - 1.) < 1.e-15)
     # starting from a random guess in the correct charge sector,
@@ -39,7 +39,7 @@ def test_ED():
     psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
     E0, psi3, N = lanczos(ED2, psi3)
     print("Lanczos E0 =", E0)
-    ov = npc.inner(psi3, psi2, do_conj=True)
+    ov = npc.inner(psi3, psi2, 'range', do_conj=True)
     print("overlab <psi2 | psi3> = 1. -", 1. - ov)
     assert (abs(abs(ov) - 1.) < 1.e-15)
 

@@ -593,7 +593,7 @@ class DMRGEngine(Sweep):
             E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
         else:
             raise ValueError("Unknown diagonalization method: " + repr(self.diag_method))
-        ov_change = 1. - abs(npc.inner(theta_guess, theta, do_conj=True))
+        ov_change = 1. - abs(npc.inner(theta_guess, theta, 'labels', do_conj=True))
         return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):

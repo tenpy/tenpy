@@ -61,7 +61,7 @@ def test_tebd(bc_MPS, g=0.5):
         Etebd = np.sum(M.bond_energies(psi))
         print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=E_ED))
         assert (abs((Etebd - E_ED) / E_ED) < 1.e-7)
-        ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
+        ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print("compare with ED: overlap = ", abs(ov)**2)
         assert (abs(abs(ov) - 1.) < 1.e-7)
 

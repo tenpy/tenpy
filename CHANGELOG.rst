@@ -30,6 +30,8 @@ Changed
   ``'nearest_neighbors', 'next_nearest_neighbors', 'next_next_nearest_neighbors'`` and possibly (Honeycomb) even
   ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``, collect them in a dictionary called `pairs`.
   Old call structures still allowed, but deprecated.
+- :issue:`94`: Array addition and :func:`~tenpy.linalg.np_conserved.inner` should reflect the order of the labels, if they coincided.
+  Will change the default behaviour in the future, raising `FutureWarning` for now.
 
 Added
 ^^^^^

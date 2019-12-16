@@ -1492,7 +1492,7 @@ class MPS:
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()] * 2, do_conj=True))
+            E.append(npc.inner(theta, C, axes='labels', do_conj=True))
         return np.real_if_close(np.array(E))
 
     def expectation_value_term(self, term, autoJW=True):
@@ -3137,13 +3137,12 @@ class MPSEnvironment:
             op = self.ket.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             C = self.ket.get_theta(i, n)
-            th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
             C = npc.tensordot(op, C, axes=[ax_pstar, ax_p])  # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self.bra.get_theta(i, n)
-            E.append(npc.inner(theta_bra, C, axes=[th_labels] * 2, do_conj=True))
+            E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
         return np.real_if_close(np.array(E)) * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):

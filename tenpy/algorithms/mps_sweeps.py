@@ -496,10 +496,10 @@ class EffectiveH(NpcLinearOperator):
         # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
         theta = theta.copy()
         for o in self.theta_ortho:  # Project out
-            theta.iadd_prefactor_other(-npc.inner(o, theta, do_conj=True), o)
+            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
         theta = self._matvec_without_theta_ortho(theta)
         for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
-            theta.iadd_prefactor_other(-npc.inner(o, theta, do_conj=True), o)
+            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
         return theta
 
     def _make_matrix_orthogonal(self, matrix):

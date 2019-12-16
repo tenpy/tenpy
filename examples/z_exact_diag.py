@@ -33,7 +33,7 @@ def example_exact_diagonalization(L, Jz):
     # first way to compare ED with DMRG: convert MPS to ED vector
     psi_DMRG_full = ED.mps_to_full(psi_DMRG)
     print("psi_DMRG_full =", psi_DMRG_full)
-    ov = npc.inner(psi_ED, psi_DMRG_full, do_conj=True)
+    ov = npc.inner(psi_ED, psi_DMRG_full, axes='range', do_conj=True)
     print("<psi_ED|psi_DMRG_full> =", ov)
     assert (abs(abs(ov) - 1.) < 1.e-13)
 
