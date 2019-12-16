@@ -986,8 +986,16 @@ class MPS:
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
-    def get_total_charge(self):
+    def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
+
+        Parameters
+        ----------
+        only_physical_legs : bool
+            For ``'finite'`` boundary conditions, the total charge can be gauged away
+            by changing the LegCharge of the trivial legs on the left and right of the MPS.
+            This option allows to project out the trivial legs to get the actual "physical"
+            total charge.
 
         Returns
         -------
@@ -995,6 +1003,11 @@ class MPS:
             The sum of the `qtotal` of the individual `B` tensors.
         """
         qtotal = np.sum([B.qtotal for B in self._B], axis=0)
+        if only_physical_legs:
+            if self.bc != 'finite':
+                raise ValueError("`only_physical_legs` not supported for bc=" + repr(self.bc))
+            qtotal += self._B[0].get_leg('vL').get_charge(0)
+            qtotal += self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):

@@ -54,11 +54,11 @@ Added
 - :func:`tenpy.algorithms.dmrg.full_diag_effH` as another replacement of :func:`~tenpy.linalg.lanczos.lanczos`.
 - The new DMRG parameter ``'diag_method'`` allows to select a method for the diagonalization of the effective Hamiltonian.
   See :meth:`tenpy.algorithms.dmrg.DMRGEngine.diag` for details.
-
 - dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
 - :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
   metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.N`.
+- argument `only_physical_legs` in :meth:`tenpy.networks.mps.MPS.get_total_charge`
 
 Fixed
 ^^^^^
