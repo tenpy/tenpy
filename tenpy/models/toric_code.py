@@ -52,7 +52,7 @@ class DualSquare(Lattice):
 
 
 class ToricCode(CouplingMPOModel, MultiCouplingModel):
-    r"""Spin-S sites coupled by nearest neighbour interactions.
+    r"""Toric code model.
 
     The Hamiltonian reads:
 
