@@ -69,6 +69,7 @@ Fixed
   different length
 - :meth:`~tenpy.models.model.NearestNeighborModel.group_sites` didn't work correctly in some situations.
 - :func:`~tenpy.tools.math.matvec_to_array` returned the transposed of A.
+- :meth:`tenpy.networks.mps.MPS.from_full` messed up the form of the first array.
 
 
 [0.4.1] - 2019-08-14

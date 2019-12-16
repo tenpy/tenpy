@@ -475,7 +475,8 @@ class MPS:
             psi = psi.combine_legs([labels[i + 1], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
-            psi.iscale_axis(S, 1)
+            if i > 1:
+                psi.iscale_axis(S, 1)
             B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
             S_list[i] = S
             psi = psi.split_legs(0)
