@@ -70,6 +70,10 @@ Fixed
 - :meth:`~tenpy.models.model.NearestNeighborModel.group_sites` didn't work correctly in some situations.
 - :func:`~tenpy.tools.math.matvec_to_array` returned the transposed of A.
 - :meth:`tenpy.networks.mps.MPS.from_full` messed up the form of the first array.
+- :issue:`95`: blowup of errors in DMRG with `update_env > 0`.
+  Turns out to be a problem in the precision of the truncation error:
+  `TruncationError.eps` was set to 0 if it would be smaller than machine precision.
+  To fix it, I added :meth:`~tenpy.algorithms.truncation.TruncationError.from_S`.
 
 
 [0.4.1] - 2019-08-14

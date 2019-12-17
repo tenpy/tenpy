@@ -2,7 +2,7 @@ r"""Truncation of Schmidt values.
 
 Often, it is necessary to truncate the number of states on a virtual bond of an MPS,
 keeping only the state with the largest Schmidt values.
-The function :func:`truncation` picks exactly those from a given Schmidt spectrum
+The function :func:`truncate` picks exactly those from a given Schmidt spectrum
 :math:`\lambda_a`, depending on some parameters explained in the doc-string of the function.
 
 Further, we provide :class:`TruncationError` for a simple way to keep track of the
@@ -13,11 +13,11 @@ The SVD on a virtual bond of an MPS actually gives a Schmidt decomposition
 where :math:`|L_a\rangle` and :math:`|R_a\rangle` form orthonormal bases of the parts
 left and right of the virtual bond.
 Let us assume that the state is properly normalized,
-:math:`\langle\psi | \psi\rangle = \sum_{a} \lambda^2 = 1`.
+:math:`\langle\psi | \psi\rangle = \sum_{a} \lambda^2_a = 1`.
 Assume that the singular values are ordered descending, and that we keep the first :math:`\chi_c`
 of the initially :math:`\chi` Schmidt values.
 
-Then we decompose the untuncated state as
+Then we decompose the untruncated state as
 :math:`|\psi\rangle = \sqrt{1-\epsilon}|\psi_{tr}\rangle + \sqrt{\epsilon}|\psi_{tr}^\perp\rangle`
 where
 :math:`|\psi_{tr}\rangle =
@@ -40,15 +40,6 @@ is the discarded part (orthogonal to the kept part) and the
     This module takes only track of the errors coming from the truncation of Schmidt values.
     There might be other sources of error as well, for example TEBD has also an discretisation
     error depending on the chosen time step.
-
-.. todo ::
-    The `TEBD wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`_
-    (in the section 'Errors coming from the truncation of the Hilbert space')
-    claims that there is a second more subtle error, which stems from the change of the Schmidt
-    basis :math:`|R_a\rangle` on bond i-1 if we truncate bond i.
-    In the end, that leads just to a factor of 2 in TruncationError.__init__ ???
-    (I couldn't follow the argument completely,
-    and the factor was definetly not included in the old TenPy.)
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -68,21 +59,30 @@ class TruncationError:
     .. warning ::
         For imaginary time evolution, this is *not* the error you are interested in!
 
+    Parameters
+    ----------
+    eps, ov : float
+        See below.
+
+
     Attributes
     ----------
     ov_err
     eps : float
         The total sum of all discared Schmidt values squared.
+        Note that if you keep singular values up to 1.e-14 (= a bit more than machine precision
+        for 64bit floats), `eps` is on the order of 1.e-28 (due to the square)!
     ov : float
         A lower bound for the overlap :math:`|\langle \psi_{trunc} | \psi_{correct} \rangle|^2`
         (assuming normalization of both states).
         This is probably the quantity you are actually interested in.
+        Takes into account the factor 2 explained in the section on Errors in the
+        `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
 
     Examples
     --------
     >>> TE = TruncationError()
-    >>> TE += tebd.time_evolution(...)
-
+    >>> TE += tebd.time_evolution(...)  # add `eps`, multiply `ov`
     """
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
@@ -104,10 +104,25 @@ class TruncationError:
         norm_old : float
             Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
         """
-        res = cls()
-        res.eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
-        res.ov = 1. - 2. * res.eps  # TODO: include factor of 2? See above link to wikipedia
-        return res
+        eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
+        return cls(eps, 1. - 2. * eps)
+
+    @classmethod
+    def from_S(cls, S_discarded, norm_old=None):
+        r"""Construct TruncationError from discarded singular values.
+
+        Parameters
+        ----------
+        S_discarded : 1D numpy array
+            The singular values discarded.
+        norm_old : float
+            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+            Default (``None``) is 1.
+        """
+        eps = np.sum(np.square(S_discarded))
+        if norm_old:
+            eps /= norm_old * norm_old
+        return cls(eps, 1. - 2. * eps)
 
     def __add__(self, other):
         res = TruncationError()
@@ -128,12 +143,13 @@ class TruncationError:
 
 
 def truncate(S, trunc_par):
-    """Given a Schmidt spectrum Y, determine which values to keep.
+    """Given a Schmidt spectrum `S`, determine which values to keep.
 
     Parameters
     ----------
     S : 1D array
         Schmidt values (as returned by an SVD), not necessarily sorted.
+        Should be normalized to ``np.sum(S*S) == 1.``.
     trunc_par: dict
         Parameters giving constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
@@ -223,7 +239,7 @@ def truncate(S, trunc_par):
     mask = np.zeros(len(S), dtype=np.bool)
     np.put(mask, piv[cut:], True)
     norm_new = np.linalg.norm(S[mask])
-    return mask, norm_new, TruncationError.from_norm(norm_new, np.linalg.norm(S)),
+    return mask, norm_new, TruncationError.from_S(S[np.logical_not(mask)]),
 
 
 def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL']):
