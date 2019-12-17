@@ -359,9 +359,15 @@ class DMRGEngine(Sweep):
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
                 self.lanczos_params['P_tol'] = max(p_tol_min,
                                                    min(p_tol_max, max_trunc_err * p_tol_to_trunc))
+                if self.verbose > 3:
+                    print("set lanczos_params['P_tol'] = {0:.2e}".format(
+                        self.lanczos_params['P_tol']))
             if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
                 self.lanczos_params['E_tol'] = max(e_tol_min,
                                                    min(e_tol_max, max_E_trunc * e_tol_to_trunc))
+                if self.verbose > 3:
+                    print("set lanczos_parmas['E_tol'] = {0:.2e}".format(
+                        self.lanczos_params['P_tol']))
             # update environment
             if not self.finite:
                 self.environment_sweeps(update_env)
