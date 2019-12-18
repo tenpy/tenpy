@@ -265,6 +265,7 @@ class DMRGEngine(Sweep):
                     the initial guess for the wave function and ``|theta_diag>`` is the
                     *untruncated* wave function returned by :meth:`diag`.
         =========== ===================================================================
+
     sweep_stats : dict
         A dictionary with detailed statistics at the sweep level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -291,6 +292,7 @@ class DMRGEngine(Sweep):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
+
     """
     def run(self):
         """Run the DMRG simulation to find the ground state.
@@ -547,6 +549,7 @@ class DMRGEngine(Sweep):
         """Diagonalize the effective Hamiltonian represented by self.
 
         The method used depends on the DMRG parameter `diag_method`.
+
         ============  ================================================================
         diag_method   Function, comment
         ============  ================================================================
@@ -559,7 +562,8 @@ class DMRGEngine(Sweep):
                       to numpy arrays during *each* matvec, and possibly does many
                       more iterations.
         ------------  ----------------------------------------------------------------
-        'ED_block'    Contract the effective Hamiltonian to a (large!) matrix and
+        'ED_block'    :func:`full_diag_effH`
+                      Contract the effective Hamiltonian to a (large!) matrix and
                       diagonalize the block in the charge sector of the initial state.
                       Preserves the charge sector of the explicitly conserved charges.
                       However, if you don't preserve a charge explicitly, it can break
@@ -567,7 +571,8 @@ class DMRGEngine(Sweep):
                       For example if you use a ``SpinChain({'conserve': 'parity'})``,
                       it could change the total "Sz", but not the parity of 'Sz'.
         ------------  ----------------------------------------------------------------
-        'ED_all'      Contract the effective Hamiltonian to a (large!) matrix and
+        'ED_all'      :func:`full_diag_effH`
+                      Contract the effective Hamiltonian to a (large!) matrix and
                       diagonalize it completely.
                       Allows to change the charge sector *even for explicitly
                       conserved charges*.

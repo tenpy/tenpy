@@ -91,13 +91,19 @@ def argsort(a, sort=None, **kwargs):
         `sort`               order
         ==================== =============================
         ``'m>', 'LM'``       Largest magnitude first
+        -------------------- -----------------------------
         ``'m<', 'SM'``       Smallest magnitude first
+        -------------------- -----------------------------
         ``'>', 'LR', 'LA'``  Largest real part first
+        -------------------- -----------------------------
         ``'<', 'SR', 'SA'``  Smallest real part first
+        -------------------- -----------------------------
         ``'LI'``             Largest imaginary part first
+        -------------------- -----------------------------
         ``'Si'``             Smallest imaginary part first
+        -------------------- -----------------------------
         ``None``             numpy default: same as '<'
-        ==================== ==============================
+        ==================== =============================
     **kwargs :
         further keyword arguments given directly to :func:`numpy.argsort`.
 
