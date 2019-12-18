@@ -95,12 +95,6 @@ def read_requ_file(filename):
 
 
 def read_requirements():
-    extra_requ = {
-        'doc': read_requ_file('requirements-doc.txt'),
-        'plot': read_requ_file('requirements-plot.txt'),
-        'test': read_requ_file('requirements-test.txt'),
-    }
-    extra_requ['all'] = [r for requ in extra_requ.values() for r in requ]
     return extra_requ
 
 
@@ -153,16 +147,18 @@ def setup_package():
 
     ext_modules = setup_cython_extension()
 
-    extras_require = read_requirements()
-
-    setup_requires = ['setuptools>=30.3.0', 'pytest-runner', 'Cython>=0.27', 'numpy>=1.13']
+    extras_require = {
+        'doc': read_requ_file('doc/requirements.txt'),
+        'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
+        'plot': ['matplotlib>=2.0'],
+        'test': ['pytest'],
+    }
+    extras_require['all'] = [r for requ in extras_require.values() for r in requ]
 
     setup(version=full_version,
           ext_modules=ext_modules,
-          setup_requires=setup_requires,
           install_requires=read_requ_file('requirements.txt'),
-          extras_require=extras_require,
-          tests_require=extras_require['test'])
+          extras_require=extras_require)
 
 
 if __name__ == "__main__":

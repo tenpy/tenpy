@@ -1,3 +1,2 @@
 Sphinx>=2
 numpydoc
-yapf
