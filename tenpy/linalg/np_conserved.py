@@ -3170,12 +3170,12 @@ def inner(a, b, axes=None, do_conj=False):
         `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
         We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
-        ``'order'`` is equivalent to ``(range(rank), range(rank))``.
-        ``'labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        The default ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
+        ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
         for ``do_conj=True``,
         or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
-        In other words, ``'labels'`` requires `a` and `b` to have the same/conjugated labels up
-        to a possible transposition, which is then reverted.
+        In other words, ``axes='labels'`` requires `a` and `b` to have the same/conjugated labels
+        up to a possible transposition, which is then reverted.
     do_conj : bool
         If ``False`` (Default), ignore it.
         if ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``
