@@ -292,7 +292,6 @@ class DMRGEngine(Sweep):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
-
     """
     def run(self):
         """Run the DMRG simulation to find the ground state.

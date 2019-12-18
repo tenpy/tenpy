@@ -545,13 +545,19 @@ class Lattice:
         return count
 
     def number_nearest_neighbors(self, u=0):
-        """Deprecated. Use :meth:`count_neighbors` instead."""
+        """Deprecated.
+
+        Use :meth:`count_neighbors` instead.
+        """
         msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
         warnings.warn(msg, FutureWarning)
         return self.count_neighbors(u, 'nearest_neighbors')
 
     def number_next_nearest_neighbors(self, u=0):
-        """Deprecated. Use :meth:`count_neighbors` instead."""
+        """Deprecated.
+
+        Use :meth:`count_neighbors` instead.
+        """
         msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
         warnings.warn(msg, FutureWarning)
         return self.count_neighbors(u, 'next_nearest_neighbors')
