@@ -50,11 +50,23 @@ def get_git_revision():
     return rev
 
 
+def get_git_description():
+    """Get number of commits since last git tag. If unknown, return 0"""
+    if not os.path.exists('.git'):
+        return 0
+    try:
+        descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
+                                        stderr=subprocess.STDOUT).decode().strip()
+    except:
+        return 0
+    return int(descr.split('-')[1])
+
+
 def get_version_info():
     full_version = VERSION
     git_rev = get_git_revision()
     if not RELEASED:
-        full_version += '.dev0+' + git_rev[:7]
+        full_version += '.dev{0:d}+{1!s}'.format(get_git_description(), git_rev[:7])
     return full_version, git_rev
 
 
