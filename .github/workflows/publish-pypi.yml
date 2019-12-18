@@ -1,4 +1,4 @@
-name: Upload Python Package to PyPi
+name: Upload Python Package to PyPI
 
 on: [push]
 
@@ -17,9 +17,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: build sdist
-      python setup.py sdist
+      run: |
+          python setup.py sdist
     - name: install for test
-      python setup.py install
+      run: |
+          python setup.py install
     - name: quicktest
       run: |
         pip install pytest
