@@ -65,7 +65,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
             'amplitude': 1.e-5
         },
         'trunc_params': {
-            'svd_min': 1.e-10,
+            'svd_min': 1.e-8,
         },
         'lanczos_params': {
             'reortho': True,

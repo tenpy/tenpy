@@ -309,7 +309,10 @@ class DMRGEngine(Sweep):
         # parameters for lanczos
         p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
         if p_tol_to_trunc is not None:
-            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', 5.e-16, 'DMRG')
+            p_tol_min = max(1.e-30,
+                            self.lanczos_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
+                            self.lanczos_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
+            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', p_tol_min, 'DMRG')
             p_tol_max = get_parameter(DMRG_params, 'P_tol_max', 1.e-4, 'DMRG')
         e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
         if e_tol_to_trunc is not None:

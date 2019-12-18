@@ -32,6 +32,8 @@ Changed
   Old call structures still allowed, but deprecated.
 - :issue:`94`: Array addition and :func:`~tenpy.linalg.np_conserved.inner` should reflect the order of the labels, if they coincided.
   Will change the default behaviour in the future, raising `FutureWarning` for now.
+- **Default parameter** for DMRG params: increased precision by setting `P_tol_min` 
+  down to the maximum of ``1.e-30, lanczos_params['svd_min']**2 * P_tol_to_trunc, lanczos_params['trunc_cut']**2 * P_tol_to_trunc`` by default.
 
 Added
 ^^^^^
