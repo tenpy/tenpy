@@ -15,10 +15,10 @@ __all__ = [
 
 # hard-coded version for people without git...
 # current release version
-version = '0.4.1'
+version = '0.5.0'
 
 # whether this is a released version or modified
-released = False
+released = True
 
 # short version
 short_version = 'v' + version

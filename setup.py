@@ -13,9 +13,9 @@ if not sys.version_info >= (3, 5):
 # hardcode version for people without git
 
 MAJOR = 0
-MINOR = 4
-MICRO = 1
-RELEASED = False
+MINOR = 5
+MICRO = 0
+RELEASED = True
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
@@ -33,7 +33,6 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      git push origin v0.1.2 # also push the tag
 #      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
-# TODO: set up a github action for build/upload to pypi
 
 
 def get_git_revision():
