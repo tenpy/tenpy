@@ -78,10 +78,6 @@ class Engine:
         The model defining the Hamiltonian.
     TEBD_params: dict
         Optional parameters, see :func:`run` and :func:`run_GS` for more details.
-    _bond_eig_vals : list of 1D ndarray
-        Eigenvalues for each of `model.H_bond`; necessary to calculate `_U`.
-    _bond_eig_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Eigenvectors for each of `model.H_bond`; necessary to calculate `_U`.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
         Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,
@@ -104,7 +100,6 @@ class Engine:
         self.model = model
         self.evolved_time = get_parameter(TEBD_params, 'start_time', 0., 'TEBD')
         self.trunc_err = get_parameter(TEBD_params, 'start_trunc_err', TruncationError(), 'TEBD')
-        self._calc_bond_eig()  # calculates `self._bond_eig_vals`, `self._bond_eig_vecs`.
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
@@ -609,44 +604,25 @@ class Engine:
         self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
-    def _calc_bond_eig(self):
-        """Calculate ``self._bond_eig_{vals,vecs}`` from ``self.model.H_bond``.
-
-        Raises ValueError is 2-site Hamiltonian could not be diagonalized.
-        """
-        self._bond_eig_vals = []
-        self._bond_eig_vecs = []
-        for h in self.model.H_bond:
-            if h is None:
-                w = v = None
-            else:
-                H2 = h.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
-                w, v = npc.eigh(H2)
-            self._bond_eig_vals.append(w)
-            self._bond_eig_vecs.append(v)
-        # done
-
     def _calc_U_bond(self, i_bond, dt, type_evo, E_offset):
         """Calculate exponential of a bond Hamitonian.
 
         * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
         * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
         """
-        V = self._bond_eig_vecs[i_bond]
-        E = self._bond_eig_vals[i_bond]
-        if V is None:
+        h = self.model.H_bond[i_bond]
+        if h is None:
             return None  # don't calculate exp(i H t), if `H` is None
+        H2 = h.combine_legs([('p0', 'p1'), ('p0*', 'p1*')], qconj=[+1, -1])
         if type_evo == 'imag':
-            diag = np.exp(-dt * E)
+            H2 = (-dt) * H2
         elif type_evo == 'real':
             if E_offset is not None:
-                E = E - E_offset[i_bond]
-            diag = np.exp(-1.j * dt * E)
+                H2 = H2 - npc.diag(E_offset[i_bond], H2.legs[0])
+            H2 = (-1.j * dt) * H2
         else:
             raise ValueError("Expect either 'real' or 'imag'inary time, got " + repr(type_evo))
-        # U = V s V^dag, s = e^(- tau E )
-        U = V.scale_axis(diag, axis=1)
-        U = npc.tensordot(U, V.conj(), axes=(1, 1))
+        U = npc.expm(H2)
         assert (tuple(U.get_leg_labels()) == ('(p0.p1)', '(p0*.p1*)'))
         return U.split_legs()
 
