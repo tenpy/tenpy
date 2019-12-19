@@ -1,8 +1,8 @@
 r"""Compression of a MPS.
 
 .. todo ::
-    This is still a beta version, use with care.
-    The interface might still change!
+    This is still a beta version, use with care!
+    The interface will probably still change!
 """
 
 # Copyright 2019 TeNPy Developers, GNU GPLv3

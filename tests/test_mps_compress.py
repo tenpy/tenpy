@@ -41,7 +41,7 @@ def test_apply_mpo(bc_MPS):
     M = SpinChain(model_pars)
     state = ([[1/np.sqrt(2), -1/np.sqrt(2)]] * L)  # pointing in (-x)-direction
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
-    H=M.calc_H_MPO()
+    H = M.H_MPO
     Eexp=H.expectation_value(psi)
     psi2=apply_mpo(psi, H, {})
     Eapply=psi2.overlap(psi)
@@ -52,7 +52,7 @@ def test_apply_mpo(bc_MPS):
 
 
 @pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
-def test_UI(bc_MPS, g=0.5):
+def test_U_I(bc_MPS, g=0.5):
     # Test a time evolution against exact diagonalization for finite bc
     L=10
     dt=0.01
@@ -66,13 +66,13 @@ def test_UI(bc_MPS, g=0.5):
 
     U=make_U(M.calc_H_MPO(), dt*1j, which='I')
 
-    if bc_MPS=='finite': 
+    if bc_MPS=='finite':
         ED=tenpy.algorithms.exact_diag.ExactDiag(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
         psiED=ED.mps_to_full(psi)
         psiED/=psiED.norm()
-    
+
         UED=ED.exp_H(dt)
         for i in range(30):
             psi=apply_mpo(psi, U, {})
@@ -80,7 +80,7 @@ def test_UI(bc_MPS, g=0.5):
             assert(np.abs(np.abs(npc.inner(psiED, ED.mps_to_full(psi)))-1)<1e-2)
 
     if bc_MPS=='infinite':
-        psiTEBD=psi.copy() 
+        psiTEBD=psi.copy()
         TEBD_params={'dt':dt, 'N_steps':1}
         EngTEBD=tenpy.algorithms.tebd.Engine(psiTEBD, M, TEBD_params)
         for i in range(30):
