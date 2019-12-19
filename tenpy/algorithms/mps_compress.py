@@ -1,8 +1,8 @@
 r"""Compression of a MPS.
 
-..todo::
+.. todo ::
     This is still a beta version, use with care.
-    The interface might still change.
+    The interface might still change!
 """
 
 # Copyright 2019 TeNPy Developers, GNU GPLv3
@@ -14,7 +14,7 @@ from .truncation  import svd_theta
 from ..networks import mps, mpo
 
 __all__ = [
-    'make_U', 'make_UI', 'make_UII', 'make_WII', 'mps_compress', 'svd_two_site', 'apply_mpo'
+    'make_U', 'make_U_I', 'make_U_II', 'make_W_II', 'mps_compress', 'svd_two_site', 'apply_mpo'
 ]
 
 def make_U(H, dt, which='II'):
@@ -27,7 +27,7 @@ def make_U(H, dt, which='II'):
     dt : float|complex
         The time step per application of the propagator. Should be imaginary for real time evolution!
     which : 'I'|'II'
-        selects the approximation made by choosing :func:`make_UI` (``'I'``) or :func:`make_UII` (``'II'``)
+        selects the approximation made by choosing :func:`make_U_I` (``'I'``) or :func:`make_U_II` (``'II'``)
 
     Returns
     -------
@@ -35,13 +35,13 @@ def make_U(H, dt, which='II'):
         The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
     """
     if which=='II':
-        return make_UII(H, dt)
+        return make_U_II(H, dt)
     if which=='I':
-        return make_UI(H, dt)
-    raise ValueError("'%s' not implemented"%which)
+        return make_U_I(H, dt)
+    raise ValueError(repr(which) + " not implemented")
 
-def make_UI(H, dt):
-    r"""Creates the UI propagator for a given Hamiltonian.
+def make_U_I(H, dt):
+    r"""Creates the :math:`U_I` propagator for a given Hamiltonian.
 
     Parameters
     ----------
@@ -53,7 +53,7 @@ def make_UI(H, dt):
     Returns
     -------
     UI : :class:`~tenpy.networks.mpo.MPO`
-        The propagator, i.e. approximation :math:`UI ~= exp(H*dt)`
+        The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
 
     """
 
@@ -93,7 +93,7 @@ def make_UI(H, dt):
     return mpo.MPO(H.sites, U, H.bc, IdLR, IdLR, np.inf)
 
 
-def make_UII(H, dt):
+def make_U_II(H, dt):
     r"""Creates the UII propagator for a given Hamiltonian.
 
     Parameters
@@ -114,41 +114,39 @@ def make_UII(H, dt):
     IdR=H.IdR
     v = np.empty_like(IdL)
 
-    c0 = np.zeros((1, H[0].num_q), dtype=np.int) #TODO 
+    c0 = np.zeros((1, H[0].num_q), dtype=np.int) #TODO
     U = []
     for i in xrange(0, self.L):
             W = H.get_W(i).itranspose(['wL','wR', 'p', 'p*'])
             W = W.to_ndarray()
             proj_L = range(W.shape[0]); proj_L.remove(IdL[i]); proj_L.remove(IdR[i]);
             proj_R = range(W.shape[1]); proj_R.remove(IdL[i+1]); proj_R.remove(IdR[i+1])
-            
+
             #Extract (A, B, C, D)
             D = W[IdL[i] , IdR[i+1], :, : ]
             C = W[IdL[i], proj_R, :, :]
             B = W[proj_L, IdR[i+1], :, :]
             A = W[proj_L, aR, :, :]
-    
-            WII = make_WII(dt, A, B, C, D)
+
+            W_II = make_W_II(dt, A, B, C, D)
             #TODO from here on
             qL_flat = npc.q_flat_from_q_ind(H[i].q_ind[0])[proj_L, :]
             qL_flat = np.vstack( (c0, qL_flat))
             qR_flat = npc.q_flat_from_q_ind(H[i].q_ind[1])[proj_R, :]
             qR_flat = np.vstack( (c0, qR_flat))
             qp_flat = npc.q_flat_from_q_ind(H[i].q_ind[2])
-            
-            
-            perm, WII = npc.Array.from_ndarray(WII, [qL_flat, qR_flat, qp_flat, qp_flat], q_conj = H[i].q_conj, mod_q = H[i].mod_q, cutoff=1e-16)
+
+
+            perm, W_II = npc.Array.from_ndarray(W_II, [qL_flat, qR_flat, qp_flat, qp_flat], q_conj = H[i].q_conj, mod_q = H[i].mod_q, cutoff=1e-16)
 
             v[i-1] = np.argsort(perm[0])[0]
             v[i] = np.argsort(perm[1])[0]
             U.append(WII)
-            
+
     return mpo.MPO(H.sites, U, H.bc, v, v.copy()) #  translate_Q1_data = self.translate_Q1_data ??
 
 
-
-
-def make_WII(t, A, B, C, D):
+def make_W_II(t, A, B, C, D):
     r""" WII approx to exp(t H) from sys (A, B, C, D)
 
     Parameters
@@ -158,7 +156,7 @@ def make_WII(t, A, B, C, D):
     A, B, C, D :  :class:`numpy.ndarray`
         Blocks of the MPO tensor to be exponentiated, as defined in :arxiv:`1407.1832`.
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
-    
+
     """
     ### Algorithm
     #
@@ -166,11 +164,11 @@ def make_WII(t, A, B, C, D):
     # To implement this, we temporarily extend the virtual Hilbert space with two hard-core bosons "br, bl"
     # The components of Eqn (11) can be computed for each index of the virtual row / column independently
     # The matrix exponential is done in the hard-core extended Hilbert space
-    
+
     tB = t/np.sqrt(np.abs(t)) #spread time step across B, C
     tC = np.sqrt(np.abs(t))
     d = D.shape[0]
-    
+
     #The virtual size of W is  (1+Nr, 1+Nc)
     Nr = A.shape[0]
     Nc = A.shape[1]
@@ -297,13 +295,14 @@ def apply_mpo(psi, U_mpo, trunc_par):
     psi : :class:`~tenpy.networks.mps.MPS`
         MPS to apply operator on
     U_mpo : :class:`~tenpy.networks.mpo.MPO`
-        MPO to apply. Usually one of make_UI() or make_UII(). The approximation being made are uncontrolled for other mpos and infinite bc.
+        MPO to apply. Usually one of :func:`make_U_I` or :func:`make_U_II()`.
+        The approximation being made are uncontrolled for other mpos and infinite bc.
     trunc_par : dict
         Truncation parameters. See :func:`~tenpy.algorithms.truncation.truncate`
 
     Returns
     -------
-    new_psi : :class:`~tenpy.networks.mps.MPS` 
+    new_psi : :class:`~tenpy.networks.mps.MPS`
         Resulting new MPS representing `Ù_mpo |psi>`
     """
     bc=psi.bc
@@ -342,7 +341,7 @@ def apply_mpo(psi, U_mpo, trunc_par):
     #Wrong S values but will be calculated in mps_compress
     for i in range(psi.L):
         S.append(np.ones(Bs[i].get_leg('vR').ind_len))
-        
+
     forms=['B' for i in range(psi.L)]
     if bc=='finite':
         forms[0]='Th'
