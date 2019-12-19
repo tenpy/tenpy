@@ -4,6 +4,27 @@ CHANGELOG
 All notable changes to the project will be documented in this file.
 The project adheres `semantic versioning <http://semver.org/spec/v2.0.0.html>`_
 
+
+[Unreleased]
+------------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- nothing yet
+
+Fixed
+^^^^^
+- nothing yet
+
+
 [0.5.0] - 2019-12-18
 --------------------
 
