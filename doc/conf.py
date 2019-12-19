@@ -132,6 +132,15 @@ todo_include_todos = True
 # a list of builtin themes.
 html_theme = 'default'
 
+# used by tenpy.readthedocs.io
+html_context = {
+    "display_github": True,  # Integrate GitHub
+    "github_user": "tenpy",  # Username
+    "github_repo": "tenpy",  # Repo name
+    "github_version": "master",  # Version
+    "conf_py_path": "/doc/",  # Path in the checkout to the docs root
+}
+
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
