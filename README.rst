@@ -4,6 +4,9 @@ Tensor Network Python (TeNPy)
 .. image:: https://img.shields.io/github/last-commit/tenpy/tenpy
     :alt: GitHub last commit
     :target: https://github.com/tenpy/tenpy
+.. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
+    :alt: Documentation Status
+    :target: https://tenpy.readthedocs.io/en/latest/?badge=latest
 .. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
     :alt: Build
     :target: https://travis-ci.org/tenpy/tenpy
