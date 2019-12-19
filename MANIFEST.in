@@ -4,7 +4,7 @@ recursive-include tenpy *.cpp
 
 include setup.py
 include setup.cfg
-include requirements*.txt
+include requirements.txt
 include environment.yml
 include AUTHORS.txt
 include LICENSE

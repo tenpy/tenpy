@@ -31,6 +31,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      git commit -m "reset released=False" setup.py
 #      git push
 #      git push origin v0.1.2 # also push the tag
+#      create release with release-notes on github
 #      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
 
@@ -158,7 +159,6 @@ def setup_package():
     ext_modules = setup_cython_extension()
 
     extras_require = {
-        'doc': read_requ_file('doc/requirements.txt'),
         'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
         'plot': ['matplotlib>=2.0'],
         'test': ['pytest'],
