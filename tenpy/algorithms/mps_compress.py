@@ -245,6 +245,7 @@ def mps_compress(psi, trunc_par):
     bc = psi.bc
     L = psi.L
     if bc == 'finite':
+        # TODO: could we simply replace this with MPS.canonical_form_finite()?
         # Do QR starting from the left
         B = psi.get_B(0, form='Th')
         for i in range(psi.L - 1):
@@ -351,7 +352,7 @@ def apply_mpo(U_mpo, psi, trunc_par):
         weight = np.ones(U_mpo.get_W(0).shape[U_mpo.get_W(0).get_leg_index('wL')]) * 0.05
         weight[U_mpo.get_IdL(0)] = 1
         weight = weight / np.linalg.norm(weight)
-        S = [np.kron(weight, psi.get_SL(0))]  # TODO Is the order correct?
+        S = [np.kron(weight, psi.get_SL(0))]  # order dictated by '(wL,vL)'
     else:
         S = [np.ones(Bs[0].get_leg('vL').ind_len)]
     #Wrong S values but will be calculated in mps_compress
@@ -361,6 +362,6 @@ def apply_mpo(U_mpo, psi, trunc_par):
     forms = ['B' for i in range(psi.L)]
     if bc == 'finite':
         forms[0] = 'Th'
-    new_mps = mps.MPS(psi.sites, Bs, S, form=forms, bc=psi.bc)  # form='B' is not true but works
+    new_mps = mps.MPS(psi.sites, Bs, S, form=forms, bc=psi.bc)
     mps_compress(new_mps, trunc_par)
     return new_mps
