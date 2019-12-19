@@ -47,7 +47,7 @@ def test_apply_mpo(bc_MPS):
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     H = M.H_MPO
     Eexp = H.expectation_value(psi)
-    psi2 = apply_mpo(psi, H, {})
+    psi2 = apply_mpo(H, psi, {})
     Eapply = psi2.overlap(psi)
     #The following norm is false. Don't know how to avoid this due to guessed Svalues
     print(psi2.norm)
@@ -79,9 +79,9 @@ def test_U_I(bc_MPS, g=0.5):
 
         UED = ED.exp_H(dt)
         for i in range(30):
-            psi = apply_mpo(psi, U, {})
+            psi = apply_mpo(U, psi, {})
             psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
-            assert (np.abs(np.abs(npc.inner(psiED, ED.mps_to_full(psi))) - 1) < 1e-2)
+            assert (abs(abs(npc.inner(psiED, ED.mps_to_full(psi))) - 1) < 1e-2)
 
     if bc_MPS == 'infinite':
         psiTEBD = psi.copy()
@@ -89,8 +89,8 @@ def test_U_I(bc_MPS, g=0.5):
         EngTEBD = tenpy.algorithms.tebd.Engine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
-            psi = apply_mpo(psi, U, {})
+            psi = apply_mpo(U, psi, {})
             print(np.abs(psi.overlap(psiTEBD) - 1))
             print(psi.norm)
             #This test fails
-            assert (np.abs(np.abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
+            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)

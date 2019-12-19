@@ -171,7 +171,7 @@ def make_W_II(t, A, B, C, D):
     """
     ### Algorithm
     #
-    # In the paper :arxiv:1407.1832, we have two formal parameter "phi_{r/c}" which satisfies phi_r^2 = phi_c^2 = 0
+    # In the paper :arxiv:`1407.1832`, we have two formal parameter "phi_{r/c}" which satisfies phi_r^2 = phi_c^2 = 0
     # To implement this, we temporarily extend the virtual Hilbert space with two hard-core bosons "br, bl"
     # The components of Eqn (11) can be computed for each index of the virtual row / column independently
     # The matrix exponential is done in the hard-core extended Hilbert space
@@ -300,23 +300,23 @@ def svd_two_site(i, mps, trunc_par=None):
     mps.set_SR(i, s)
 
 
-def apply_mpo(psi, U_mpo, trunc_par):
+def apply_mpo(U_mpo, psi, trunc_par):
     """Applies an mpo and truncates the resulting MPS using SVD.
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        MPS to apply operator on
     U_mpo : :class:`~tenpy.networks.mpo.MPO`
         MPO to apply. Usually one of :func:`make_U_I` or :func:`make_U_II()`.
         The approximation being made are uncontrolled for other mpos and infinite bc.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        MPS to apply operator on
     trunc_par : dict
         Truncation parameters. See :func:`~tenpy.algorithms.truncation.truncate`
 
     Returns
     -------
     new_psi : :class:`~tenpy.networks.mps.MPS`
-        Resulting new MPS representing `Ù_mpo |psi>`
+        Resulting new MPS representing `U_mpo |psi>`
     """
     bc = psi.bc
     if bc != U_mpo.bc:
