@@ -50,7 +50,10 @@ def get_git_revision():
 
 
 def get_git_description():
-    """Get number of commits since last git tag. If unknown, return 0"""
+    """Get number of commits since last git tag.
+
+    If unknown, return 0
+    """
     if not os.path.exists('.git'):
         return 0
     try:

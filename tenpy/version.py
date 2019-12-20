@@ -36,7 +36,10 @@ def _get_git_revision():
 
 
 def _get_git_description():
-    """Get number of commits since last git tag. If unknown, return 0"""
+    """Get number of commits since last git tag.
+
+    If unknown, return 0
+    """
     try:
         descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
                                         cwd=os.path.dirname(os.path.abspath(__file__)),
