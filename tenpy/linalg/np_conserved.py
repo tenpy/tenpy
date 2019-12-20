@@ -1988,9 +1988,11 @@ class Array:
             ``new_block = func(block_self, block_other, *args, **kwargs)``
             for blocks (=Numpy arrays) of equal shape.
         other : :class:`Array`
-            Other Array from which to the blocks.
-        *args, **kwargs:
-            Extra (keyword) arguments given to `func`.
+            Other Array from which to take blocks. Should have the same leg structure as self.
+        *args :
+            Extra arguments given to `func`.
+        **kwargs :
+            Extra keyword arguments given to `func`.
 
         Examples
         --------
@@ -3590,8 +3592,10 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     k : int
         How many eigenvalues/vectors should be calculated.
         If the block of `charge_sector` is smaller than `k`, `k` may be reduced accordingly.
-    *args, **kwargs :
+    *args :
         Additional arguments given to `scipy.sparse.linalg.eigs`.
+    **kwargs :
+        Additional keyword arguments given to `scipy.sparse.linalg.eigs`.
 
     Returns
     -------

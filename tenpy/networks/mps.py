@@ -3392,7 +3392,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         which : str
             Which eigenvalues to look for, see `scipy.sparse.linalg.speigs`.
         **kwargs :
-            Further keyword arguments are given to :func:`~tenpy.tools.math.speigs`.
+            Further keyword arguments given to :func:`~tenpy.tools.math.speigs`.
 
         Returns
         -------

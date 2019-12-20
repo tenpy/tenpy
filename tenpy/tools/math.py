@@ -115,8 +115,10 @@ def speigs(A, k, *args, **kwargs):
         the (square) linear operator for which the eigenvalues should be computed.
     k : int
         the number of eigenvalues to be computed.
-    *args, **kwargs :
-        further arguments are directly given to :func:`scipy.sparse.linalg.eigs`
+    *args:
+        Further arguments directly given to :func:`scipy.sparse.linalg.eigs`
+    **kwargs :
+        Further keyword arguments directly given to :func:`scipy.sparse.linalg.eigs`
 
     Returns
     -------
@@ -160,8 +162,10 @@ def speigsh(A, k, *args, **kwargs):
         The (square) hermitian linear operator for which the eigenvalues should be computed.
     k : int
         The number of eigenvalues to be computed.
-    *args, **kwargs :
-        Further arguments are directly given to :func:`scipy.sparse.linalg.eigs`.
+    *args
+        Further arguments directly given to :func:`scipy.sparse.linalg.eigsh`.
+    **kwargs :
+        Further keyword arguments directly given to :func:`scipy.sparse.linalg.eigsh`.
 
     Returns
     -------

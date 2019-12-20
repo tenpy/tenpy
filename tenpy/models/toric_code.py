@@ -32,7 +32,7 @@ class DualSquare(Lattice):
         The sites for the horizontal (first entry) and vertical (second entry) bonds.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)

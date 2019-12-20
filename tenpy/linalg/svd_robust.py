@@ -88,6 +88,8 @@ def svd(a,
     Tries to avoid raising an LinAlgError by using using the lapack_driver `gesvd`,
     if `gesdd` failed.
 
+    Parameters not described below are as in :func:`scipy.linalg.svd`
+
     Parameters
     ----------
     overwrite_a : bool
@@ -100,14 +102,13 @@ def svd(a,
         Default is ``'gesdd'``.
         If ``'gesdd'`` fails, ``'gesvd'`` is used as backup.
     warn : bool
-        whether to create a warning when the SVD failed.
+        Whether to create a warning when the SVD failed.
 
-    Other parameters as described in doc-string of :func:`scipy.linalg.svd`
 
     Returns
     -------
     U, S, Vh : ndarray
-        As described in doc-string of :func:`scipy.linalg.svd`
+        As described in doc-string of :func:`scipy.linalg.svd`.
     """
     if lapack_driver == 'gesdd':
         try:

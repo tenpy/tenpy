@@ -83,7 +83,7 @@ def argsort(a, sort=None, **kwargs):
     Parameters
     ----------
     a : array_like
-        the array to sort
+        The array to sort.
     sort : ``'m>', 'm<', '>', '<', None``
         Specify how the arguments should be sorted.
 
@@ -104,13 +104,14 @@ def argsort(a, sort=None, **kwargs):
         -------------------- -----------------------------
         ``None``             numpy default: same as '<'
         ==================== =============================
+
     **kwargs :
-        further keyword arguments given directly to :func:`numpy.argsort`.
+        Further keyword arguments given directly to :func:`numpy.argsort`.
 
     Returns
     -------
     index_array : ndarray, int
-        same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
+        Same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
     """
     if sort is not None:
         if sort == 'm<' or sort == 'SM':

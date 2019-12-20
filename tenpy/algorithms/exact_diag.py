@@ -107,8 +107,10 @@ class ExactDiag:
         ----------
         H_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO representing the Hamiltonian.
-        *args, **kwargs :
-            Other arguments as for the ``__init__`` of the class.
+        *args :
+            Further keyword arguments as for the ``__init__`` of the class.
+        **kwargs :
+            Further keyword arguments as for the ``__init__`` of the class.
         """
         from ..models.model import MPOModel
         from ..models.lattice import TrivialLattice

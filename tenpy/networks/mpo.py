@@ -701,7 +701,7 @@ class MPOGraph:
         ----------
         onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
             Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
+        coupling_terms : :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
             Coupling terms to be added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
@@ -715,7 +715,9 @@ class MPOGraph:
 
         See also
         --------
-        from_term_list : equivalent for other representation terms.
+        from_term_list :
+            equivalent for other representation terms.
+
         """
         graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)

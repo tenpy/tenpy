@@ -1115,7 +1115,7 @@ class Ladder(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
     dim = 1
 
@@ -1148,8 +1148,8 @@ class Square(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `[[next_]next_]nearest_neighbors` are set accordingly.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        `pairs` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
@@ -1179,7 +1179,7 @@ class Triangular(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `[[next_]next_]nearest_neighbors` are set accordingly.
+        `pairs` are set accordingly.
         If `order` is specified in the form ``('standard', snake_windingi, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
@@ -1214,7 +1214,7 @@ class Honeycomb(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
         For the Honeycomb lattice ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``
         are set in :attr:`pairs`.
     """
@@ -1295,7 +1295,7 @@ class Kagome(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
     dim = 2
 
@@ -1329,13 +1329,11 @@ def get_lattice(lattice_name):
     lattice_name : str
         Name of a :class:`Lattice` class defined in the module :mod:`~tenpy.models.lattice`,
         for example ``"Chain", "Square", "Honeycomb", ...``.
-    *args, **kwargs
-        Arguments and keyword-arguments for the initialization of the specified lattice class.
 
     Returns
     -------
-    LatticeClass : (subclass of) :class:`Lattice`
-        An instance of the lattice class specified by `lattice_name`.
+    LatticeClass : :class:`Lattice`
+        The lattice class (type, not instance) specified by `lattice_name`.
     """
     LatticeClass = globals()[lattice_name]
     assert issubclass(LatticeClass, Lattice)
