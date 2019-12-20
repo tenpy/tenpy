@@ -621,14 +621,13 @@ class CouplingTerms:
             H = H_bond[j]
             for (op1, op_str), d2 in d1.items():
                 for j2, d3 in d2.items():
-                    if isinstance(j2, tuple):
-                        # This should only happen in a MultiSiteCoupling model
-                        raise ValueError("MultiCouplingTerms: can't generate H_bond")
                     # i, j in coupling_terms are defined such that we expect j2 = i + 1
                     if j2 != i + 1:
                         msg = "Can't give nearest neighbor H_bond for long-range {i:d}-{j:d}"
                         raise ValueError(msg.format(i=i, j=j2))
                     for op2, strength in d3.items():
+                        if isinstance(op2, tuple):
+                            raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
                         H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
                         H = add_with_None_0(H, H_add)
             if H is not None:
