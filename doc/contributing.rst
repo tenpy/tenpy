@@ -19,10 +19,14 @@ To keep consistency, we ask you to comply with the following guidelines for cont
   Since no tool is perfect, you can format some regions of code manually and enclose them 
   with the special comments ``# yapf: disable`` and ``# yapf: enable``.
 
-- Every function/class/module should be documented by its doc-string (c.f. :pep:`257`),
-  additional documentation is in ``doc/``.
-  The documentation uses `reStructuredText`. If you're new to `reStructuredText`, read this `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
-  We use the `numpydoc` extension to sphinx, so please read and follow these `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
+- Every function/class/module should be documented by its doc-string, see :pep:`257`.
+  We auto-format the doc-strings with `docformatter <https://github.com/myint/docformatter>`_ on a regular basis.
+
+  Additional documentation for the user guide is in the folder ``doc/``.
+
+  The documentation uses `reStructuredText`. If you are new to `reStructuredText`, read this `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
+  We use the `numpy` style for doc-strings (with the `napoleon <https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html>`_ extension to sphinx).
+  You can read abouth them in these `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
   In addition, you can take a look at the following `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
   Helpful hints on top of that::
 
@@ -53,6 +57,7 @@ To keep consistency, we ask you to comply with the following guidelines for cont
            This block can describe things which need to be done and is automatically included in a section of :doc:`todo`.
         """
 
+
 - Use relative imports within TeNPy. Example::
 
       from ..linalg import np_conserved as npc
@@ -62,13 +67,16 @@ To keep consistency, we ask you to comply with the following guidelines for cont
   You should make sure that all tests run through, before you ``git push`` back into the public repo.
   Long-running tests are marked with the attribute `slow`; for a quick check you can also run
   ``pytest -m "not slow"``.
+  
+  We have set up github actions to automatically run the tests.
+
 - Reversely, if you write new functions, please also include suitable tests!
 - During development, you might introduce ``# TODO`` comments.  But also try to remove them again later!
   If you're not 100% sure that you will remove it soon, please add a doc-string with a 
-  ``.. todo ::`` block, such that we can keep track of it as explained in the previous point.
+  ``.. todo ::`` block, such that we can keep track of it.
 
   Unfinished functions should ``raise NotImplementedError()``.
-- if you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
+- If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 
 **Thank You** for helping with the development!
 
@@ -77,9 +85,9 @@ Bulding the documentation
 -------------------------
 You can use `Sphinx <http://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats (including HTML or PDF) yourself, as described in the following.
-First, install `Sphinx`_ and the extension `numpydoc <http://pypi.python.org/pypi/numpydoc>`_ with::
+First, install the extra requirements, i.e., `Sphinx`_, with::
 
-    pip install --upgrade sphinx numpydoc
+    pip install -r doc/requirements.txt
 
 Afterwards, simply go to the folder `doc/` and run the following command::
 
