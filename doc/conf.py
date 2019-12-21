@@ -116,6 +116,11 @@ autosummary_generate = True
 # show todo-boxes in output
 todo_include_todos = True
 
+# -- Options for napoleon
+
+napoleon_use_admonition_for_examples = True
+napoleon_use_ivar = True
+
 # -- Options for HTML output ----------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
