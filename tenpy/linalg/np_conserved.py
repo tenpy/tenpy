@@ -14,6 +14,10 @@ All possible operations (e.g. tensordot, svd, ...) on such arrays preserve the t
 structure. In addition, these operations make use of the charges to figure out which of the blocks
 it has to use/combine - this is the basis for the speed-up.
 
+.. autodata:: QCUTOFF
+.. autodata:: QTYPE
+
+
 Overview
 ^^^^^^^^
 
@@ -107,7 +111,7 @@ __all__ = [
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
 
-# the type used for charges
+#: the type used for charges
 QTYPE = charges.QTYPE
 
 # ##################################

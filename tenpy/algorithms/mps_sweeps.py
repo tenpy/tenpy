@@ -548,6 +548,9 @@ class OneSiteH(EffectiveH):
     ----------
     length : int
         Number of (MPS) sites the effective hamiltonian covers.
+    acts_on : list of str
+        Labels of the state on which `self` acts. NB: class attribute.
+        Overwritten by normal attribute, if `combine`.
     combine, move_right : bool
         See above.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
@@ -705,6 +708,9 @@ class TwoSiteH(EffectiveH):
         but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
     length : int
         Number of (MPS) sites the effective hamiltonian covers.
+    acts_on : list of str
+        Labels of the state on which `self` acts. NB: class attribute.
+        Overwritten by normal attribute, if `combine`.
     LHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Left part of the effective Hamiltonian.
         Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.

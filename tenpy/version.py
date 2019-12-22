@@ -2,6 +2,13 @@
 
 The version is provided in the standard python format ``major.minor.revision`` as string. Use
 ``pkg_resources.parse_version`` before comparing versions.
+
+.. autodata :: version
+.. autodata :: released
+.. autodata :: short_version
+.. autodata :: git_revision
+.. autodata :: full_version
+.. autodata :: version_summary
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -14,13 +21,13 @@ __all__ = [
 ]
 
 # hard-coded version for people without git...
-# current release version
+#: current release version as a string
 version = '0.5.0'
 
-# whether this is a released version or modified
+#: whether this is a released version or modified
 released = False
 
-# short version
+#: same as version, but with 'v' in front
 short_version = 'v' + version
 
 
@@ -49,7 +56,7 @@ def _get_git_description():
     return int(descr.split('-')[1])
 
 
-# the current git revision (if available)
+#: the hash of the last git commit (if available)
 git_revision = _get_git_revision()
 
 
@@ -61,7 +68,7 @@ def _get_full_version():
     return full_version
 
 
-# full version string including a begin of git revision hash
+#: if not released additional info with part of git revision
 full_version = _get_full_version()
 
 
@@ -103,5 +110,5 @@ def _get_version_summary():
     return summary
 
 
-# summary of the versions as sting
+#: summary of the tenpy, python, numpy and scipy versions used
 version_summary = _get_version_summary()

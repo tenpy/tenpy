@@ -62,6 +62,9 @@ knobs you can turn to tweak the most out of this library, explained in the follo
        This increases the probability of getting segmentation faults and anyway might not
        help that much; in the crucial parts of the cython code, these optimizations are already
        applied. We do *not* recommend using this!
+
+.. autodata:: bottleneck
+.. autodata:: have_cython_functions
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -78,8 +81,13 @@ try:
     import bottleneck
 except:
     bottleneck = None
-"""bool whether the import of the cython file tenpy/linalg/_npc_helper.pyx succeeded"""
-have_cython_functions = None  # set to True or False in the first call of `use_cython`
+    #: None, or the `bottleneck` module, if installed.
+
+have_cython_functions = None
+"""bool whether the import of the cython file ``tenpy/linalg/_npc_helper.pyx`` succeeded.
+
+The value is set in the first call of :func:`use_cython`.
+"""
 
 
 class OptimizationFlag(IntEnum):

@@ -3,6 +3,8 @@ r"""Time evolving block decimation (TEBD) for MPS of purification.
 See introduction in :mod:`~tenpy.networks.purification_mps`.
 Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
+
+.. autodata:: disentanglers_atom_parse_dict
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -999,12 +1001,6 @@ class MinDisentangler(Disentangler):
         return entropy(S**2, self.n)
 
 
-"""Dictionary to translate the 'disentangle' TEBD parameter into a :class:`Disentangler`.
-
-If you define your own disentanglers, you can dynamically append them to this dictionary.
-CompositeDisentangler and MinDisentangler separate: they have non-default constructor and
-special syntax.
-"""
 disentanglers_atom_parse_dict = {
     'None': Disentangler,
     'backwards': BackwardDisentangler,
@@ -1015,6 +1011,12 @@ disentanglers_atom_parse_dict = {
     'last': LastDisentangler,
     'diag': DiagonalizeDisentangler
 }
+"""Dictionary to translate the 'disentangle' TEBD parameter into a :class:`Disentangler`.
+
+If you define your own disentanglers, you can dynamically append them to this dictionary.
+CompositeDisentangler and MinDisentangler separate: they have non-default constructor and
+special syntax.
+"""
 
 
 def get_disentangler(method, parent):

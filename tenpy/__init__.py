@@ -18,14 +18,18 @@ from . import tools
 
 from . import version
 
-# hard-coded tuple of versions
+#: hard-coded version string
 __version__ = version.version
-# full version from git description, and numpy/scipy/python versions
+
+#: full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
 __all__ = ["algorithms", "linalg", "models", "networks", "tools", "version", "show_config"]
 
 
 def show_config():
-    """Print information about the version of tenpy and used libraries."""
+    """Print information about the version of tenpy and used libraries.
+
+    The information printed is :attr:`tenpy.version.version_summary`.
+    """
     print(version.version_summary)

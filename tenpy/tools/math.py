@@ -1,4 +1,7 @@
-"""Different math functions needed at some point in the library."""
+"""Different math functions needed at some point in the library.
+
+.. autodata:: LeviCivita3
+"""
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
 import numpy as np
@@ -8,13 +11,16 @@ from . import misc
 import scipy.linalg
 import scipy.sparse.linalg
 
-int_I3 = np.eye(3, dtype=int)
-LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
-
 __all__ = [
-    'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'speigsh', 'perm_sign',
-    'qr_li', 'rq_li'
+    'LeviCivita3', 'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'speigsh',
+    'perm_sign', 'qr_li', 'rq_li'
 ]
+
+#: 3-dim identity matrix of type int
+_eye_I3 = np.eye(3, dtype=np.int_)
+
+#: Levi-Civita Symbol of int type
+LeviCivita3 = np.array([[np.cross(b, a) for a in _eye_I3] for b in _eye_I3])
 
 
 def matvec_to_array(H):

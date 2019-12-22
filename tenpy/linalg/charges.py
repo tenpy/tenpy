@@ -16,6 +16,8 @@ In this module, some functions have the python decorator ``@use_cython``.
 Functions with this decorator are replaced by the ones written in Cython, implemented in
 the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
+
+.. autodata:: QTYPE
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -30,7 +32,7 @@ from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
-QTYPE = np.int_  # numpy dtype for the charges
+QTYPE = np.int_
 """Numpy data type for the charges."""
 
 
