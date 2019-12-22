@@ -32,6 +32,7 @@
     models
     networks
     tools
+    version
 
 
 Indices and tables

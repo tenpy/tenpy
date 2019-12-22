@@ -15,17 +15,14 @@ Tenpy main module
     models
     networks
     tools
-
-.. rubric:: Version info
-.. autosummary::
-    :toctree: reference
-
     version
-    show_config
-    __version__
-    __full_version__
 
 .. rubric:: Module description
 .. automodule:: tenpy
     :show-inheritance:
 
+.. autodata:: __version__
+
+.. autodata:: __full_version__
+
+.. autofunction:: show_config
