@@ -4,7 +4,9 @@ Installation instructions
 Installation from packages
 --------------------------
 
-If you have the conda package manager from `anaconda <https://www.continuum.io/downloads>`_, you can simply download the ``environment.yml`` file and create a new environment for tenpy with all the required packages::
+If you have the conda package manager from `anaconda <https://www.continuum.io/downloads>`_, you can just download the 
+`environment.yml <https://raw.githubusercontent.com/tenpy/tenpy/master/environment.yml>`_ file out of the repository
+and create a new environment for tenpy with all the required packages::
 
     conda env create -f environment.yml
     conda activate tenpy
