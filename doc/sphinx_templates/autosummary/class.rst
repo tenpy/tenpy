@@ -4,12 +4,19 @@
 - parent module: :mod:`{{ module }}`
 - type: {{ objtype }}
 
+.. currentmodule:: {{ module }}
+
+.. rubric:: Inheritance Diagram
+
+.. inheritance-diagram:: {{ fullname }}
+    :parts: 1
+
 {% if methods %}
 .. rubric:: Methods
 
 .. autosummary::
 {% for item in methods %}
-    ~{{ fullname }}.{{ item }}
+    {{ name }}.{{ item }}
 {%- endfor %}
 {% endif %}
 {% if attributes %}
@@ -17,11 +24,10 @@
 
 .. autosummary::
 {% for item in attributes %}
-    ~{{ fullname }}.{{ item }}
+    {{ name }}.{{ item }}
 {%- endfor %}
 {% endif %}
 
-.. currentmodule:: {{ module }}
 
 .. autoclass:: {{ fullname }}
     :members:

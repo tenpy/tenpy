@@ -53,6 +53,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx.ext.napoleon',
+    'sphinx.ext.graphviz',
+    'sphinx.ext.inheritance_diagram',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -120,6 +122,14 @@ todo_include_todos = True
 
 napoleon_use_admonition_for_examples = True
 napoleon_use_ivar = True
+
+# -- Options for inheritance_diagram
+
+inheritance_graph_attrs = {
+    'rankdir': "TB",  # top-to-bottom
+    'fontsize': 14,
+    'ratio': 'compress',
+}
 
 # -- Options for HTML output ----------------------------------------------
 
