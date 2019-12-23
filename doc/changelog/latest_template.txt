@@ -1,0 +1,25 @@
+[latest]
+========
+
+Release Notes
+-------------
+TODO: Summarize the most important changes
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- nothing yet
+
+Fixed
+^^^^^
+- nothing yet

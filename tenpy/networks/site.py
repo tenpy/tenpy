@@ -389,7 +389,7 @@ class GroupedSite(Site):
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
-    expected commutation relations. See also :doc:`/intro_JordanWigner`.
+    expected commutation relations. See also :doc:`/intro/JordanWigner`.
 
     Parameters
     ----------
@@ -809,7 +809,7 @@ class FermionSite(Site):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
-        Further details in :doc:`/intro_JordanWigner`.
+        Further details in :doc:`/intro/JordanWigner`.
 
     ==============  ===================================================================
     operator        description

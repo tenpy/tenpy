@@ -1,0 +1,5 @@
+[0.2.0] - 2017-02-24
+--------------------
+- Compatible with python2 and python3 (using the 2to3 tool).
+- Development version.
+- Includes TEBD and DMRG.

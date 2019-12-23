@@ -1,0 +1,72 @@
+[0.5.0] - 2019-12-18
+--------------------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- **Major** rewriting of the DMRG Engines, see :issue:`39` and :issue:`85` for details.
+  The :class:`~tenpy.algorithms.dmrg.EngineCombine` and :class:`~tenpy.algorithms.dmrg.EngineFracture`
+  have been combined into a single :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` with an 
+  The :class:`~tenpy.algorithms.dmrg.run` function works as before.
+  In case you have directly used the :class:`~tenpy.algorithms.dmrg.EngineCombine` or :class:`~tenpy.algorithms.dmrg.EngineFracture`,
+  you should update your code and use the :class:`~tenpy.algorithms.dmrg.TwoSiteEngine` instead.
+- Moved ``init_LP`` and ``init_RP`` method from :class:`~tenpy.networks.mps.MPS` into
+  :class:`~tenpy.networks.mps.MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment`.
+
+Changed
+^^^^^^^
+- Addition/subtraction of :class:`~tenpy.linalg.np_conserved.Array`: check whether the both arrays have the same labels
+  in differnt order, and in that case raise a warning that we will transpose in the future.
+- Made :meth:`tenpy.linalg.np_conserved.Array.get_block` public (previously ``tenpy.linalg.np_conserved.Array._get_block``).
+- :meth:`~tenpy.algorithms.exact_diag.ExactDiag.groundstate` now returns a tuple ``(E0, psi0)`` instead of just ``psi0``.
+  Moreover, the argument `charge_sector` was added.
+- Simplification in the :class:`~tenpy.models.lattice.Lattice`: 
+  Instead of having separate arguments/attributes/functions for 
+  ``'nearest_neighbors', 'next_nearest_neighbors', 'next_next_nearest_neighbors'`` and possibly (Honeycomb) even
+  ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``, collect them in a dictionary called `pairs`.
+  Old call structures still allowed, but deprecated.
+- :issue:`94`: Array addition and :func:`~tenpy.linalg.np_conserved.inner` should reflect the order of the labels, if they coincided.
+  Will change the default behaviour in the future, raising `FutureWarning` for now.
+- **Default parameter** for DMRG params: increased precision by setting `P_tol_min` 
+  down to the maximum of ``1.e-30, lanczos_params['svd_min']**2 * P_tol_to_trunc, lanczos_params['trunc_cut']**2 * P_tol_to_trunc`` by default.
+
+Added
+^^^^^
+- :mod:`tenpy.algorithms.mps_sweeps` with the :class:`~tenpy.algorithms.mps_sweeps.Sweep` class and 
+  :class:`~tenpy.algorithms.mps_sweeps.EffectiveH` to be a 
+  :class:`~tenpy.algorithms.mps_sweeps.OneSiteH` or  :class:`~tenpy.algorithms.mps_sweeps.TwoSiteH`.
+- Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
+- Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
+- :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
+- Additional option ``order='folded'`` for the :class:`~tenpy.models.lattice.Chain`.
+- :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` wrapper as replacement for 
+  :meth:`tenpy.networks.mpo.MPO.get_full_hamiltonian` and :meth:`tenpy.networks.mpo.MPO.get_grouped_mpo`.
+  The latter are now deprecated.
+- Argument `max_size` to limit the matrix dimension in :class:`~tenpy.algorithms.exact_diag.ExactDiag`.
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.from_guess_with_pipe` to allow quickly converting 
+  `matvec` functions acting on multi-dimensional arrays to a `FlatLinearOperator` by combining the legs into a LegPipe.
+- :meth:`tenpy.tools.math.speigsh` for hermitian variant of :meth:`~tenpy.tools.math.speigs`
+- Allow for arguments ``'LA', 'SA'`` in :func:`~tenpy.tools.misc.argsort`.
+- :func:`tenpy.linalg.lanczos.lanczos_arpack` as possiple replacement of the self-implemented `lanczos` function.
+- :func:`tenpy.algorithms.dmrg.full_diag_effH` as another replacement of :func:`~tenpy.linalg.lanczos.lanczos`.
+- The new DMRG parameter ``'diag_method'`` allows to select a method for the diagonalization of the effective Hamiltonian.
+  See :meth:`tenpy.algorithms.dmrg.DMRGEngine.diag` for details.
+- dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
+- :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
+- :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
+  metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.N`.
+- argument `only_physical_legs` in :meth:`tenpy.networks.mps.MPS.get_total_charge`
+
+Fixed
+^^^^^
+- MPO :meth:`~tenpy.networks.mpo.MPO.expectation_value` did not work for finite systems.
+- Calling :meth:`~tenpy.networks.mps.MPS.compute_K` repeatedly with default parameters but on states with different
+  `chi` would use the `chi` of the very first call for the truncation parameters.
+- allow :class:`~tenpy.network.mps.MPSEnvironment` and :class:`~tenpy.network.mpo.MPOEnvironment` to have MPS/MPO with
+  different length
+- :meth:`~tenpy.models.model.NearestNeighborModel.group_sites` didn't work correctly in some situations.
+- :func:`~tenpy.tools.math.matvec_to_array` returned the transposed of A.
+- :meth:`tenpy.networks.mps.MPS.from_full` messed up the form of the first array.
+- :issue:`95`: blowup of errors in DMRG with `update_env > 0`.
+  Turns out to be a problem in the precision of the truncation error:
+  `TruncationError.eps` was set to 0 if it would be smaller than machine precision.
+  To fix it, I added :meth:`~tenpy.algorithms.truncation.TruncationError.from_S`.

@@ -7,7 +7,7 @@ Further, we have some predefined lattices, namely
 :class:`Chain`, :class:`Ladder` in 1D and
 :class:`Square`, :class:`Triangular`, :class:`Honeycomb`, and :class:`Kagome` in 2D.
 
-See also the :doc:`/intro_model`.
+See also the :doc:`/intro/model`.
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 

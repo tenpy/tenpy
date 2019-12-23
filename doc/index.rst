@@ -2,18 +2,13 @@
 
 .. toctree::
     :caption: User guide
-    :maxdepth: 1
+    :maxdepth: 2
 
     INSTALL
-    overview
+    releases
+    introductions
     literature
-    intro_npc
-    intro_model
-    intro_JordanWigner
     contributing
-    todo
-    changelog
-    license
 
 .. toctree::
     :caption: Reference

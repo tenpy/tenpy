@@ -116,7 +116,7 @@ class FermiHubbardModel(CouplingMPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`/intro_JordanWigner` for details.
+        See :doc:`/intro/JordanWigner` for details.
 
     Parameters
     ----------

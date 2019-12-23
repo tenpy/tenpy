@@ -1,6 +1,6 @@
 """Definition of the various models.
 
-For an introduction to models see :doc:`/intro_model`.
+For an introduction to models see :doc:`/intro/model`.
 
 The module :mod:`tenpy.models.model` contains base classes for models.
 The module :mod:`tenpy.models.lattice` contains base classes and implementations of lattices.

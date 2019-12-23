@@ -51,7 +51,7 @@ Most basic level: linear algebra
 
 .. note ::
     
-    See :doc:`intro_npc` for more information on defining charges for arrays.
+    See :doc:`/intro/npc` for more information on defining charges for arrays.
 
 The most basic layer is given by in the :mod:`~tenpy.linalg` module, which provides basic features of linear algebra.
 In particular, the :mod:`~tenpy.linalg.np_conserved` submodule implements an :class:`~tenpy.linalg.np_conserved.Array` class which is used to represent
@@ -59,7 +59,7 @@ the tensors. The basic interface of :mod:`~tenpy.linalg.np_conserved` is very si
 However, the :class:`~tenpy.linalg.np_conserved.Array` class implements abelian charge conservation.
 If no charges are to be used, one can use 'trivial' arrays, as shown in the following example code.
 
-.. literalinclude:: ../examples/userguide/a_npc_arrays_triv.py
+.. literalinclude:: /../examples/userguide/a_npc_arrays_triv.py
 
 
 The number and types of symmetries are specified in a :class:`~tenpy.linalg.charges.ChargeInfo` class.
@@ -73,7 +73,7 @@ The following code explicitly defines the spin-1/2 :math:`S^+, S^-, S^z` operato
 uses them to generate and diagonalize the two-site Hamiltonian :math:`H = \vec{S} \cdot \vec{S}`.
 It prints the charge values (by default sorted ascending) and the eigenvalues of H.
 
-.. literalinclude:: ../examples/userguide/b_npc_arrays.py
+.. literalinclude:: /../examples/userguide/b_npc_arrays.py
 
 
 Sites for the local Hilbert space and tensor networks
@@ -95,14 +95,14 @@ The tensor network classes also use :class:`~tenpy.linalg.np_conserved.Array` in
 The following example illustrates the initialization of a spin-1/2 site, an :class:`~tenpy.networks.mps.MPS` representing the Neel state, and
 an :class:`~tenpy.networks.mpo.MPO` representing the Heisenberg model by explicitly defining the `W` tensor.
 
-.. literalinclude:: ../examples/userguide/c_mps_mpo.py
+.. literalinclude:: /../examples/userguide/c_mps_mpo.py
 
 Models
 ^^^^^^
 
 .. note ::
     
-    See :doc:`intro_model` for more information on sites and how to define and extend models on your own.
+    See :doc:`/intro/model` for more information on sites and how to define and extend models on your own.
 
 Technically, the explicit definition of an :class:`~tenpy.networks.mpo.MPO` is already enough to call an algorithm like DMRG in :mod:`~tenpy.algorithms.dmrg`.
 However, writing down the `W` tensors is cumbersome especially for more complicated models.
@@ -111,7 +111,7 @@ Different kinds of algorithms require different representations of the Hamiltoni
 Therefore, the library offers to specify the model abstractly by the individual onsite terms and coupling terms of the Hamiltonian.
 The following example illustrates this, again for the Heisenberg model.
 
-.. literalinclude:: ../examples/userguide/d_model_1D.py
+.. literalinclude:: /../examples/userguide/d_model_1D.py
 
 While this generates the same MPO as in the previous code, this example can easily be adjusted and generalized, for
 example to a higher dimensional lattice by just specifying a different lattice.
@@ -125,7 +125,7 @@ Of course, many commonly studied models are also predefined.
 For example, the following code initializes the Heisenberg model on a kagome lattice;
 the spin liquid nature of the ground state of this model is highly debated in the current literature.
 
-.. literalinclude:: ../examples/userguide/e_model_2D.py
+.. literalinclude:: /../examples/userguide/e_model_2D.py
 
 Algorithms
 ^^^^^^^^^^
@@ -134,16 +134,16 @@ The highest level in TeNPy is given by algorithms like DMRG and TEBD.
 Using the previous concepts, setting up a simulation running those algorithms is a matter of just a few lines of code.
 The following example runs a DMRG simulation, see :mod:`~tenpy.algorithms.dmrg`, exemplary for the transverse field Ising model at the critical point.
 
-.. literalinclude:: ../examples/userguide/f_dmrg_finite.py
+.. literalinclude:: /../examples/userguide/f_dmrg_finite.py
 
 The switch from DMRG to \gls{iDMRG} in TeNPy is simply accomplished by a change of the parameter
 ``"bc_MPS"`` from ``"finite"`` to ``"infinite"``, both for the model and the state.
 The returned ``E`` is then the energy density per site. 
 Due to the translation invariance, one can also evaluate the correlation length, here slightly away from the critical point.
 
-.. literalinclude:: ../examples/userguide/g_dmrg_infinite.py
+.. literalinclude:: /../examples/userguide/g_dmrg_infinite.py
 
 Running time evolution with TEBD requires an additional loop, during which the desired observables have to be measured.
 The following code shows this directly for the infinite version of TEBD.
 
-.. literalinclude:: ../examples/userguide/h_tebd_infinite.py
+.. literalinclude:: /../examples/userguide/h_tebd_infinite.py

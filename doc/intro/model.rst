@@ -1,5 +1,5 @@
-Introduction to models
-======================
+Models
+======
 
 What is a model?
 ----------------
@@ -65,7 +65,7 @@ Another use case of this function would be a model with a $U(1)$ symmetry involv
     you can set ``conserve=None`` in the existing sites or use
     ``leg = tenpy.linalg.np_conserved.LegCharge.from_trivial(d)`` for an implementation of your custom site,
     where `d` is the dimension of the local Hilbert space.
-    Alternatively, you can find some introduction to the charges in the :doc:`/intro_npc`.
+    Alternatively, you can find some introduction to the charges in the :doc:`/intro/npc`.
 
 
 The geometry : lattices
@@ -100,7 +100,7 @@ For example, the following small script can generate the image of the Kagome lat
     ax.get_yaxis().set_visible(False)
     plt.show()
 
-.. image :: images/lattices/Kagome.*
+.. image :: /images/lattices/Kagome.*
 
 The lattice contains also the **boundary conditions** `bc` in each direction. It can be one of the usual ``'open'`` or
 ``'periodic'`` in each direcetion. Instead of just saying "periodic", you can also specify a `shift` (except in the
@@ -108,7 +108,7 @@ first direction). This is easiest to understand at its standard usecase: DMRG on
 Going around the cylinder, you have a degree of freedom which sites to connect.
 The orange markers in the following figures illustrates sites identified for a Square lattice with ``bc=['periodic', shift]`` (see :meth:`~tenpy.models.lattice.Lattice.plot_bc_shift`):
 
-.. image :: images/lattices/square_bc_shift.*
+.. image :: /images/lattices/square_bc_shift.*
 
 Note that the "cylinder" axis (and direction for :math:`k_x`) is perpendicular to the orange line connecting these
 sites. The line where the cylinder is "cut open" therefore winds around the the cylinder for a non-zero `shift` (or
@@ -266,7 +266,7 @@ The :class:`~tenpy.models.xxz_chain.XXZChain2` implements the very same model, b
 :class:`~tenpy.models.model.CouplingMPOModel` explained in the next section.
 
 
-.. literalinclude:: ../tenpy/models/xxz_chain.py
+.. literalinclude:: /../tenpy/models/xxz_chain.py
 
 The easy easy way: the CouplingMPOModel
 ---------------------------------------
@@ -319,7 +319,7 @@ The :class:`~tenpy.models.tf_ising.TFIModel` works for arbitrary 1D or 2D lattic
 The :class:`~tenpy.models.tf_ising.TFIChain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
 which only works for the 1D chain.
 
-.. literalinclude:: ../tenpy/models/tf_ising.py
+.. literalinclude:: /../tenpy/models/tf_ising.py
 
 
 Some final remarks
@@ -331,7 +331,7 @@ Some final remarks
   or :class:`~tenpy.models.model.CouplingMPOModel`.
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
 
-- If the model of your interest contains Fermions, you should read the :doc:`/intro_JordanWigner`.
+- If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
 
 - We suggest writing the model to take a single parameter dicitionary for the initialization, which is to be read out
   inside the class with :func:`~tenpy.tools.params.get_parameter`.

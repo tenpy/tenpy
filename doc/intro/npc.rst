@@ -1,5 +1,5 @@
-Introduction to np_conserved
-============================
+Charge conservation with np_conserved
+=====================================
 
 The basic idea is quickly summarized:
 By inspecting the Hamiltonian, you can identify symmetries, which correspond to conserved quantities, called **charges**.
@@ -584,4 +584,4 @@ A full example code for spin-1/2
 Below follows a full example demonstrating the creation and contraction of Arrays.
 (It's the file `a_np_conserved.py` in the examples folder of the tenpy source.)
 
-.. literalinclude:: ../examples/a_np_conserved.py
+.. literalinclude:: /../examples/a_np_conserved.py

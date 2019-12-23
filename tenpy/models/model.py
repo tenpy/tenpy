@@ -29,7 +29,7 @@ involving couplings between multiple sites.
 The :class:`CouplingMPOModel` aims at structuring the initialization for most models and is used
 as base class in (most of) the predefined models in TeNPy.
 
-See also the introduction in :doc:`/intro_model`.
+See also the introduction in :doc:`/intro/model`.
 """
 # Copyright 2018-2019 TeNPy Developers, GNU GPLv3
 
@@ -1164,7 +1164,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     and :mod:`~tenpy.models.tf_ising`.
 
     The ``__init__`` of this function performs the standard initialization explained
-    in :doc:`/intro_model`, by calling the methods :meth:`init_lattice` (step 1-4)
+    in :doc:`/intro/model`, by calling the methods :meth:`init_lattice` (step 1-4)
     to initialize a lattice (which in turn calls :meth:`init_sites`) and
     :meth:`init_terms`. The latter should be overwritten by subclasses to add the
     desired terms.
@@ -1202,7 +1202,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # In the best case, this would just rescale the energy;
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
-            # To fix this problem, follow the instructions for subclassing in :doc:`/intro_model`.
+            # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
