@@ -74,3 +74,4 @@ However, these are just guidelines - it still helps if you contribute something,
   Unfinished functions should ``raise NotImplementedError()``.
 - Summarize the changes you have made in the Changelog under :doc:`/changelog/latest`.
 - If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
+- If you add a new toycode or example: add a reference to include it in the documentation.

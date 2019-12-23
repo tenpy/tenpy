@@ -3,7 +3,7 @@
 
 import numpy as np
 from scipy.linalg import svd
-# if you get an error message LinAlgError: SVD did not converge,
+# if you get an error message "LinAlgError: SVD did not converge",
 # uncomment the following line. (This requires TeNPy to be installed.)
 #  from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
 
