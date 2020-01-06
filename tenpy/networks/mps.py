@@ -3170,9 +3170,9 @@ class MPSEnvironment:
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('*') + ['vR*'], self.ket._p_label + ['vL*'])
-        # for a ususal MPS, axes = (['p*', 'vR*'], ['p', 'vL*'])
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP, axes=axes)
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):

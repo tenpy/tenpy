@@ -1203,10 +1203,10 @@ class MPOEnvironment(MPSEnvironment):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(),
-                           RP,
-                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
+        RP = npc.tensordot(RP,
+                           self.bra.get_B(i, form='B').conj(),
+                           axes=(['p', 'vL*'], ['p*', 'vR*']))
         return RP  # labels 'vL', 'wL', 'vL*'
 
 
