@@ -19,7 +19,7 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
     Rebuild TDVP engine as subclasses of sweep
     Do testing
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time

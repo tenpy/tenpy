@@ -6,7 +6,7 @@ This can be used to obtain correlation functions in time.
 
 .. autodata:: disentanglers_atom_parse_dict
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import tebd
 from ..linalg import np_conserved as npc

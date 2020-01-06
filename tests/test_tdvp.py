@@ -1,5 +1,5 @@
 #!/usr/bin/python2
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 import numpy as np
 import copy
 import pickle

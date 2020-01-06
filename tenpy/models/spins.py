@@ -2,7 +2,7 @@
 
 Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
