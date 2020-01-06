@@ -115,8 +115,12 @@ def run(psi, model, DMRG_params):
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
         -------------- --------- ---------------------------------------------------------------
-        diag_method    str       Method to be used for diagonalzation, default ``'lanczos'``.
+        diag_method    str       Method to be used for diagonalzation, default ``'default'``.
                                  For possible arguments see :meth:`DMRGEngine.diag`.
+        -------------- --------- ---------------------------------------------------------------
+        max_N_for_ED   int       Maximum matrix dimension of the effective hamiltonian
+                                 up to which the ``'default'`` `diag_method` uses ED instead of
+                                 Lanczos.
         -------------- --------- ---------------------------------------------------------------
         N_sweeps_check int       Number of sweeps to perform between checking convergence
                                  criteria and giving a status update.
@@ -333,7 +337,7 @@ class DMRGEngine(Sweep):
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
         E_old, S_old = np.nan, np.nan  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
-        self.diag_method = get_parameter(DMRG_params, 'diag_method', 'lanczos', 'DMRG')
+        self.diag_method = get_parameter(DMRG_params, 'diag_method', 'default', 'DMRG')
 
         self.mixer_activate()
         # loop over sweeps
@@ -370,7 +374,7 @@ class DMRGEngine(Sweep):
                 self.lanczos_params['E_tol'] = max(e_tol_min,
                                                    min(e_tol_max, max_E_trunc * e_tol_to_trunc))
                 if self.verbose > 3:
-                    print("set lanczos_parmas['E_tol'] = {0:.2e}".format(
+                    print("set lanczos_params['E_tol'] = {0:.2e}".format(
                         self.lanczos_params['P_tol']))
             # update environment
             if not self.finite:
@@ -552,8 +556,12 @@ class DMRGEngine(Sweep):
         ============  ================================================================
         diag_method   Function, comment
         ============  ================================================================
+        'default'     Same as ``'lanczos'`` for large bond dimensions, but if the
+                      total dimension of the effective Hamiltonian does not exceed
+                      the DMRG parameter ``'max_N_for_ED'`` it uses ``'ED_block'``.
+        ------------  ----------------------------------------------------------------
         'lanczos'     :func:`~tenpy.linalg.lanczos.lanczos`
-                      Default, the Lanczos implementation of TeNPy
+                      Default, the Lanczos implementation in TeNPy.
         ------------  ----------------------------------------------------------------
         'arpack'      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
                       Based on :func:`scipy.linalg.sparse.eigsh`.
@@ -596,7 +604,15 @@ class DMRGEngine(Sweep):
             Change in the wave function ``1. - abs(<theta_guess|theta_diag>)``
         """
         N = -1  # (unknown)
-        if self.diag_method == 'lanczos':
+
+        if self.diag_method == 'default':
+            # use ED for small matrix dimensions, but lanczos by default
+            max_N = get_parameter(self.engine_params, 'max_N_for_ED', 200, 'DMRG')
+            if self.eff_H.N < max_N:
+                E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
+            else:
+                E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+        elif self.diag_method == 'lanczos':
             E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
         elif self.diag_method == 'arpack':
             E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
@@ -1087,7 +1103,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         # get instance of the effective Hamiltonian
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
                                      self.ortho_to_envs)
-        # eff_H has attributes LP, RP, W.
+        # eff_H has attributes LP, RP, W0
 
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8

@@ -44,7 +44,8 @@ params = [
 
 @pytest.mark.parametrize("bc_MPS, combine, mixer, n", params)
 @pytest.mark.slow
-def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
+def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
+    L = 2 if bc_MPS == 'infinite' else 8
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
@@ -65,12 +66,9 @@ def test_dmrg(bc_MPS, combine, mixer, n, L=4, g=1.5):
             'amplitude': 1.e-5
         },
         'trunc_params': {
-            'svd_min': 1.e-8,
+            'svd_min': 1.e-10,
         },
-        'lanczos_params': {
-            'reortho': True,
-            'N_cache': 20
-        },
+        'max_N_for_ED': 20,  # small enough that we test both diag_method=lanczos and ED_block!
         'max_sweeps': 40,
         'active_sites': n,
     }
