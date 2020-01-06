@@ -24,4 +24,4 @@ Added
 
 Fixed
 ^^^^^
-- nothing yet
+- Adjust the default DMRG parameter `min_sweeps` if `chi_list` is set.

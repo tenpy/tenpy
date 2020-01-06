@@ -326,7 +326,10 @@ class DMRGEngine(Sweep):
 
         # parameters for DMRG convergence criteria
         N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
-        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
+        min_sweeps = int(1.5 * N_sweeps_check)
+        if self.chi_list is not None:
+            min_sweeps = max(max(self.chi_list.keys()), min_sweeps)
+        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', min_sweeps, 'DMRG')
         max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
         max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-8, 'DMRG')
         max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-5, 'DMRG')
