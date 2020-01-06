@@ -607,7 +607,7 @@ class DMRGEngine(Sweep):
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
-            max_N = get_parameter(self.engine_params, 'max_N_for_ED', 200, 'DMRG')
+            max_N = get_parameter(self.engine_params, 'max_N_for_ED', 400, 'DMRG')
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
