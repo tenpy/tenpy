@@ -20,7 +20,7 @@ Changed
 
 Added
 ^^^^^
-- nothing yet
+- :mod:`tenpy.tools.io` for easier input and output to pickle.
 
 Fixed
 ^^^^^

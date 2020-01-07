@@ -9,6 +9,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
 .. autosummary::
     :toctree: .
 
+    io
     params
     misc
     math

@@ -292,7 +292,7 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
         the value to be inserted before `a`
     w_r : int
         the width to be padded after the last index
-    v_l : dtype
+    v_r : dtype
         the value to be inserted after `a`
     axis : int
         the axis along which to pad
