@@ -1,6 +1,7 @@
 """The contents of this module have been moved to :mod:`tenpy.models.hubbard`.
 
-This module is just around for backwards compatibility.
+.. deprecated : 0.4.1
+    This module is just around for backwards compatibility.
 """
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 

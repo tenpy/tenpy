@@ -1302,7 +1302,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
                            'for Sweep parameter "mixer"')
                     warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"  # TODO not for 1-site.
+                    Mixer = "SingleSiteMixer"
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
@@ -1363,6 +1363,9 @@ class EngineCombine(TwoSiteDMRGEngine):
     This engine combines the virtual and physical leg for the left site and right site into pipes.
     This reduces the overhead of calculating charge combinations in the contractions,
     but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
+
+    .. deprecated : 0.5.0
+       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
     """
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
@@ -1380,8 +1383,8 @@ class EngineFracture(TwoSiteDMRGEngine):
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
     One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
 
-    Attributes
-    ----------
+    .. deprecated : 0.5.0
+       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
     """
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"

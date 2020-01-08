@@ -51,6 +51,11 @@ class Lattice:
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
 
+    .. deprecated : 0.5.0
+        The parameters and attributes `nearest_neighbors`, `next_nearest_neighbors` and
+        `next_next_nearest_neighbors` are deprecated. Instead, we use a dictionary `pairs`
+        with those names as keys and the corresponding values as specified before.
+
     Parameters
     ----------
     Ls : list of int
@@ -87,7 +92,7 @@ class Lattice:
         Typical keys are ``'nearest_neighbors', 'next_nearest_neighbors'``.
         For each of them, it specifies a list of tuples ``(u1, u2, dx)`` which can
         be used as parameters for :meth:`~tenpy.models.model.CouplingModel.add_coupling`
-        to generate couplings over each pair of e.g. ``'nearest_neighbors'``.
+        to generate couplings over each pair of ,e.g., ``'nearest_neighbors'``.
         Note that this adds couplings for each pair *only in one direction*!
 
     Attributes
@@ -547,7 +552,8 @@ class Lattice:
     def number_nearest_neighbors(self, u=0):
         """Deprecated.
 
-        Use :meth:`count_neighbors` instead.
+        .. deprecated : 0.5.0
+            Use :meth:`count_neighbors` instead.
         """
         msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
         warnings.warn(msg, FutureWarning)
@@ -556,7 +562,8 @@ class Lattice:
     def number_next_nearest_neighbors(self, u=0):
         """Deprecated.
 
-        Use :meth:`count_neighbors` instead.
+        .. deprecated : 0.5.0
+            Use :meth:`count_neighbors` instead.
         """
         msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
         warnings.warn(msg, FutureWarning)
