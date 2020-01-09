@@ -19,7 +19,17 @@ import numpy as np
 import os
 import tenpy
 import tenpy.linalg.np_conserved as npc
-from packaging.version import parse as parse_version  # part of setuptools
+
+try:
+    from packaging.version import parse as parse_version  # part of setuptools
+except ImportError:
+
+    def parse_version(version_str):
+        """Hack to allow very basic version comparison.
+
+        (This does not handle correctly cases of alpha, beta, pre and development releases.)"""
+        return version_str.split('.')
+
 
 __all__ = [
     'datadir', 'datadir_files', 'gen_example_data', 'assert_equal_data', 'get_datadir_filename'
