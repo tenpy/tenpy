@@ -242,6 +242,7 @@ intersphinx_mapping = {
     'numpy': ('https://docs.scipy.org/doc/numpy', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'matplotlib': ('https://matplotlib.org', None),
+    'h5py': ('https://docs.h5py.org/en/stable/', None),
 }
 
 # extlinks

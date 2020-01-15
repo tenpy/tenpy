@@ -20,6 +20,6 @@ Common to all tools is that they are not just useful for a single algorithm but 
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
-from . import fit, math, misc, params, process, string, optimization
+from . import fit, math, misc, io, params, process, string, optimization
 
-__all__ = ['fit', 'math', 'misc', 'params', 'process', 'string', 'optimization']
+__all__ = ['fit', 'math', 'misc', 'io', 'params', 'process', 'string', 'optimization']

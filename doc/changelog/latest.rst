@@ -4,6 +4,8 @@
 Release Notes
 -------------
 This release contains a major update of the documenation.
+Apart from that, it introduces a format how to save and load data (in particular TeNPy classes) to HDF5 files.
+See :doc:`/intro/input_output` for more details.
 
 Changelog
 ---------
@@ -20,7 +22,8 @@ Changed
 
 Added
 ^^^^^
-- :mod:`tenpy.tools.io` for easier input and output to pickle.
+- :mod:`tenpy.tools.io` with convenience functions for import and output with pickle, as well as an implementation 
+  allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 
 Fixed
 ^^^^^

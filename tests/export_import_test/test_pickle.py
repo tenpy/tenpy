@@ -11,7 +11,7 @@ datadir_pkl = [f for f in io_test.datadir_files if f.endswith('.pkl')]
 
 
 def export_to_datadir():
-    filename = io_test.get_datadir_filename("pickled_from_tenpy_{0}.pkl")
+    filename = io_test.get_datadir_filename("exported_from_tenpy_{0}.pkl")
     data = io_test.gen_example_data()
     with open(filename, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)

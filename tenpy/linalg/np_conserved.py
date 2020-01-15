@@ -29,7 +29,7 @@ Overview
     ~tenpy.linalg.charges.LegCharge
     ~tenpy.linalg.charges.LegPipe
 
-.. rubric :: Array creation
+.. rubric:: Array creation
 
 .. autosummary::
     Array.from_ndarray_trivial
