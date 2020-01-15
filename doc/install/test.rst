@@ -18,14 +18,14 @@ As a further check of the installation you can try to run (one of) the python fi
 hopefully all of them should run without error.
 
 You can also run the automated testsuite with `pytest <http://pytest.org>`_ to make sure everything works fine.
-Go to the `tests` folder of the repository, and run the tests with ``pytest``::
+If you have ``pytest`` installed, you can go to the `tests` folder of the repository, and run the tests with::
 
     cd tests
     pytest
 
-This should run some tests. In case of errors or failures it gives a detailed traceback and possibly some output of the test.
+In case of errors or failures it gives a detailed traceback and possibly some output of the test.
 At least the stable releases should run these tests without any failures.
 
 If you can run the examples but not the tests, check whether `pytest` actually uses the correct python version.
 
-The test suite is also run automatically by github actions and with `travis-ci <https://travis-ci.org>`_, results can be inspected at `here <https://travis-ci.org/tenpy/tenpy>`_.
+The test suite is also run automatically by github actions and with `travis-ci <https://travis-ci.org>`_, results can be inspected `here <https://travis-ci.org/tenpy/tenpy>`_.

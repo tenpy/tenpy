@@ -134,3 +134,30 @@ The following are referenced from somewhere in the algorithms.
 .. [Grushin2015]
     "Characterization and stability of a fermionic ν=1/3 fractional Chern insulator"
     Adolfo G. Grushin, Johannes Motruk, Michael P. Zaletel, and Frank Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
+
+
+Software-related
+----------------
+The following are not physics-related, but are good to know if you want to work with TeNPy (or more generally Python).
+
+.. [git]
+    "git version control system", https://git-scm.com
+    A software which we use to keep track of changes in the source code.
+
+.. [conda]
+    "conda package manger", https://docs.conda.io/en/latest/
+    A package and environment management system that allows to easily install (multiple version of) various software.
+
+.. [pip]
+    "pip - the Python Package installer", https://pip.pypa.io/en/stable/
+    Traditional way to handle installed python packages with ``pip install ...`` and ``pip uninstall ...`` on the command line.
+
+.. [matplotlib]
+    "Matplotlib", https://matplotlib.org/
+    A Python 2D plotting library. Some TeNPy functions expect :class:`matplotlib.axes.Axes` as arguments to plot into.
+
+.. [HDF5]
+    "Hierarchical Data Format 5 (R)", https://portal.hdfgroup.org/display/HDF5/HDF5
+    A file format and library for saving data (including metadata).
+    We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`, see :doc:`/intro/input_output`.
+

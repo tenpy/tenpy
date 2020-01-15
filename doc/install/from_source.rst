@@ -13,12 +13,14 @@ The following instructions are for (some kind of) Linux, and tested on Ubuntu.
 However, the code itself should work on other operating systems as well (in particular MacOS and Windows).
 
 The offical repository is at https://github.com/tenpy/tenpy.git.
-To get the latest version of the code, you can clone it with `Git <https://git-scm.com/>`_ using the following commands::
+To get the latest version of the code, you can clone it with [git]_ using the following commands::
 
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy
     cd $HOME/TeNPy
 
-Adjust ``$HOME/TeNPy`` to the path wherever you want to save the library.
+.. note ::
+
+    Adjust ``$HOME/TeNPy`` to the path wherever you want to save the library.
 
 Optionally, if you don't want to contribute, you can checkout the latest stable release::
 
@@ -27,7 +29,7 @@ Optionally, if you don't want to contribute, you can checkout the latest stable 
 
 .. note ::
     
-    In case you don't have Git, you can download the repository as a ZIP archive.
+    In case you don't have [git]_ installed, you can download the repository as a ZIP archive.
     You can find it under `releases <https://github.com/tenpy/tenpy/releases>`_,
     or the `latest development version <https://github.com/tenpy/tenpy/archive/master.zip>`_.
 
@@ -64,44 +66,6 @@ which might be different on your computer. It is a good idea to save this data (
 
 If you got a similar output as above: congratulations! You can now run the codes :)
 
-
-MKL and further packages
-^^^^^^^^^^^^^^^^^^^^^^^^
-If you want to run larger simulations, we recommend the use of Intel's MKL.
-It ships with a Lapack library, and uses optimization for Intel CPUs.
-Moreover, it uses parallelization of the LAPACK/BLAS routines, which makes execution much faster.
-As of now, the library itself supports no other way of parallelization.
-
-If you don't have a python version which is built against MKL, 
-we recommend using the `anaconda <https://www.anaconda.com/distribution>`_ distribution, which ships with Intel MKL,
-or directly `intelpython <https://software.intel.com/en-us/distribution-for-python/get-started>`_.
-Conda has the advantage that it allows to use different environments for different projects.
-Both are available for Linux, Mac and Windows; note that you don't even need administrator rights to install it on linux.
-Simply follow the (straight-forward) instructions of the web page for the installation.
-After a successfull installation, if you run ``python`` interactively, the first output line should 
-state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
-
-If you have a working conda package manager, you can install the numpy build against mkl with::
-
-    conda install mkl numpy scipy
-
-If you prefer using a separete conda environment, you can also use the following code to install all the recommended
-packages::
-
-    conda env create -f environment.yml
-    conda activate tenpy
-
-.. note ::
-    
-    MKL uses different threads to parallelize various BLAS and LAPACK routines.
-    If you run the code on a cluster, make sure that you specify the number of used cores/threads correctly.
-    By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
-    cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
-    For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
-
-Some code uses `MatPlotLib <http://www.matplotlib.org>`_ for plotting, e.g., to visualize a lattice.
-However, having matplotlib is not necessary for running any of the algorithms: tenpy does not ``import matplotlib`` by default.
-Further optional requirements are listed in the ``requirements*.txt`` files in the source repository.
 
 Compilation of np_conserved
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

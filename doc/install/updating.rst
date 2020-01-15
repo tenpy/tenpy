@@ -7,12 +7,23 @@ existing code) along with information how to fix it. Of course, we try to avoid 
 but sometimes, there's no way around them. If you skip some intermediate version(s) for the update, read also the release
 notes of those!
 
-How to update depends a little bit on the way you installed TeNPy. Of course, you have always the option to just remove
-the tenpy files and download the newest version, following the instructions above.
+How to update depends a little bit on the way you installed TeNPy. 
+Of course, you have always the option to just remove the TeNPy files (possibly with a ``pip uninstall physics-tenpy``),
+and to start over with downloading and installing the newest version.
 
-Alternatively, if you used ``git clone ...`` to download the repository, you can update to the newest version using `Git`.
+When installed with `pip`
+-------------------------
+When you installed TeNPy with [pip]_, you just need to do a ::
+    
+    pip install --upgrade physics-tenpy
+
+When installed from source
+--------------------------
+
+If you used ``git clone ...`` to download the repository, you can update to the newest version using [git]_.
 First, briefly check that you didn't change anything you need to keep with ``git status``.
 Then, do a ``git pull`` to download (and possibly merge) the newest commit from the repository.
+
 
 .. note ::
     
@@ -31,4 +42,3 @@ To summarize, you need to execute the following bash commands in the repository:
     git pull
     bash ./cleanup.sh  # (confirm with 'y')
     bash ./compile.sh
-

@@ -163,6 +163,7 @@ def setup_package():
 
     extras_require = {
         'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
+        'hdf5': ['h5py'],
         'plot': ['matplotlib>=2.0'],
         'test': ['pytest'],
     }
