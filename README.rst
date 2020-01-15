@@ -39,7 +39,7 @@ which means it is quite readable in the source plain text, but can also be conve
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
 Moreover, the documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and made available online at https://tenpy.github.io/.
 The big advantages of the (online) HTML documentation are a lot of cross-links between different functions, and even a search function.
-If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contributing.rst``, online at https://tenpy.github.io/contributing.html.
+If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contr/build_doc.rst``, online at https://tenpy.github.io/contr/build_doc.html.
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
@@ -81,4 +81,4 @@ If you are not sure whether your problem is a bug or a feature, you can also ask
 License
 -------
 The code is licensed under GPL-v3.0 given in the file ``LICENSE`` of the repository, 
-in the online documentation readable at https://tenpy.github.io/license.html.
+in the online documentation readable at https://tenpy.github.io/install/license.html.
