@@ -13,7 +13,7 @@ datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
 
 try:
     import h5py
-except ModuleNotFoundError:
+except ImportError:
     h5py = None
 
 
