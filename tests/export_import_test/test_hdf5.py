@@ -27,26 +27,7 @@ def export_to_datadir():
 @pytest.mark.skipif(h5py is None, reason="h5py not available")
 def test_hdf5_export_import():
     """Try subsequent export and import to pickle."""
-    data = {
-        'None': None,
-        'scalars': [0, np.int64(1), 2., np.float64(3.), 4.j, 'five'],
-        'arrays': [np.array([6, 66]), np.array([]), np.zeros([])],
-        'iterables': [[], [11, 12],
-                      tuple([]),
-                      tuple([1, 2, 3]),
-                      set([]), set([1, 2, 3])],
-        'recursive': [0, None, 2, [3, None, 5]],
-        'dict_complicated': {
-            0: 1,
-            'asdf': 2,
-            (1, 2): '3'
-        },
-        'exportable': io.Hdf5Exportable(),
-        'range': range(2, 8, 3),
-        'dtypes': [np.dtype("int64"),
-                   np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
-    }
-    data['recursive'][3][1] = data['recursive'][1] = data['recursive']
+    data = io_test.gen_example_data()
     with tempfile.TemporaryFile() as tf:
         with h5py.File(tf, 'w') as f:
             io.dump_to_hdf5(f, data)

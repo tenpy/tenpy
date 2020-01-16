@@ -80,7 +80,7 @@ Guidelines of the format:
 2. Allow to dump (nested) python lists, tuples and dictionaries with values (and keys) which can be dumped.
 3. Allow user-defined classes to implement an interface extending what data can be saved.
    An instance of a class supporting the interface gets saved as an HDF5 :class:`Group`.
-   Class attributes are stored as entries of the group, metadata like the type should be stored in HDF5 :doc:`Attributes`.
+   Class attributes are stored as entries of the group, metadata like the type should be stored in HDF5 attributes, see h5py :class:`AttributeManager`.
 4. Simple and intuitive, human-readable structure for the HDF5 paths.
    For example, dumping a simple dictionary ``{'a': np.arange(10), 'b': 123.45}`` should result in an
    HDF5 file with just the two data sets ``/a`` and ``/b``. 
@@ -131,10 +131,11 @@ The full format specification is given by the what the code does. Since this is 
   (but with the same object entries).
 
 Finally, we have to mention that many TeNPy classes are :class:`~tenpy.tools.io.Hdf5Exportable`.
-In particular, the :class:`Array` supports this. To see what the exact format for those classes is,
-look at the `save_hdf5` and `from_hdf5` methods of those classes.
+In particular, the :class:`~tenpy.linalg.np_conserved.Array` supports this. 
+To see what the exact format for those classes is, look at the `save_hdf5` and `from_hdf5` methods of those classes.
 
 .. note ::
-    There can be multiple possible formats to reconstruct the same object.
+    There can be multiple possible output formats for the same object.
     The dictionary -- with the format for simple keys or general keys -- is such an example, 
     but userdefined classes can use the same technique in their `from_hdf5` method.
+    The user might also explicitly choose a "lossy" output format (e.g. "flat" for np_conserved Arrays and LegCharges).

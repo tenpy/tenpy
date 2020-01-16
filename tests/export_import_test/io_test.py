@@ -53,8 +53,29 @@ def gen_example_data(version=tenpy.version.full_version):
             'SpinHalfSite': s,
             'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
             'Sz': s.Sz,
-            'version': version
+            'version': version,
+            'None': None,
+            'scalars': [0, np.int64(1), 2., np.float64(3.), 4.j, 'five'],
+            'arrays': [np.array([6, 66]), np.array([]),
+                       np.zeros([])],
+            'iterables': [[], [11, 12],
+                          tuple([]),
+                          tuple([1, 2, 3]),
+                          set([]),
+                          set([1, 2, 3])],
+            'recursive': [0, None, 2, [3, None, 5]],
+            'dict_complicated': {
+                0: 1,
+                'asdf': 2,
+                (1, 2): '3'
+            },
+            'exportable': tenpy.tools.io.Hdf5Exportable(),
+            'range': range(2, 8, 3),
+            'dtypes': [np.dtype("int64"),
+                       np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
         }
+        data['recursive'][3][1] = data['recursive'][1] = data['recursive']
+        data['exportable'].some_attr = "something"
     return data
 
 

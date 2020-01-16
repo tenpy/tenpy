@@ -242,6 +242,65 @@ class Array:
         else:
             raise ValueError("setstate with incompatible type of state")
 
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        .. todo : what to save?
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.dump(self.chinfo, subpath + "chinfo")
+        hdf5_saver.dump(self.legs, subpath + "legs")
+        hdf5_saver.dump(self.dtype, subpath + "dtype")
+        hdf5_saver.dump(self.qtotal, subpath + "qtotal")
+        hdf5_saver.dump(self._labels, subpath + "labels")
+        hdf5_saver.dump(self._data, subpath + "blocks")
+        hdf5_saver.dump(self._qdata, subpath + "block_inds")
+        h5gr.attrs['qdata_sorted'] = self._qdata_sorted
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize(h5gr, obj)
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj.legs = hdf5_loader.load(subpath + "legs")
+        obj.dtype = hdf5_loader.load(subpath + "dtype")
+        obj.qtotal = hdf5_loader.load(subpath + "qtotal")
+        obj._labels = hdf5_loader.load(subpath + "labels")
+        obj._data = hdf5_loader.load(subpath + "blocks")
+        obj._qdata = hdf5_loader.load(subpath + "block_inds")
+        obj._qdata_sorted = hdf5_loader.get_attr(h5gr, 'qdata_sorted')
+        obj._set_shape()
+        obj.test_sanity()
+        return obj
+
     @classmethod
     def from_ndarray_trivial(cls, data_flat, dtype=None):
         """convert a flat numpy ndarray to an Array with trivial charge conservation.

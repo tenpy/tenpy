@@ -63,7 +63,7 @@ class ChargeInfo:
         1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
-    _mask_mod1 : 1D array bool
+    _mask : 1D array bool
         mask ``(mod == 1)``, to speed up `make_valid` in pure python.
     _mod_masked : 1D array QTYPE
         Equivalent to ``self.mod[self._maks_mod1]``
@@ -82,6 +82,75 @@ class ChargeInfo:
         names = [str(n) for n in names]
         self.__setstate__((len(mod), mod, names))
         self.test_sanity()  # checks for invalid arguments
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        return (self._qnumber, self._mod, self.names)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        qnumber, mod, names = state
+        self._mod = mod
+        self._qnumber = mod.shape[0]
+        assert qnumber == self._qnumber
+        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
+        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
+        self.names = names
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        It stores the :attr:`names` under the path ``"names"``, and
+        :attr:`mod` as dataset ``"U1_ZN"``.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.dump(self._mod, subpath + "U1_ZN")
+        hdf5_saver.dump(self.names, subpath + "names")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        The ``"U1_ZN"`` dataset is mandatory, ``'names'`` are optional.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize(h5gr, obj)
+        qmod = hdf5_loader.load(subpath + "U1_ZN")
+        qmod = np.asarray(qmod, dtype=QTYPE)
+        qnumber = len(qmod)
+        if "names" in h5gr:
+            names = hdf5_loader.load(subpath + "names")
+        else:
+            names = [''] * qnumber
+        obj.__setstate__((qnumber, qmod, names))
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def add(cls, chinfos):
@@ -174,6 +243,7 @@ class ChargeInfo:
 
         1 for a U(1) charge, i.e., mod 1 -> mod infinity.
         """
+        # The property makes `mod` readonly.
         return self._mod
 
     @use_cython(replacement='ChargeInfo_make_valid')
@@ -232,20 +302,6 @@ class ChargeInfo:
     def __ne__(self, other):
         r"""Define `self != other` as `not (self == other)`"""
         return not self.__eq__(other)
-
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        return (self._qnumber, self._mod, self.names)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        qnumber, mod, names = state
-        self._mod = mod
-        self._qnumber = mod.shape[0]
-        assert qnumber == self._qnumber
-        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
-        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
-        self.names = names
 
 
 class LegCharge:
@@ -317,6 +373,130 @@ class LegCharge:
         res = LegCharge.__new__(LegCharge)
         res.__setstate__(self.__getstate__())
         return res
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
+                self.qconj, self.sorted, self.bunched)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
+        self.ind_len = ind_len
+        self.block_number = block_number
+        self.chinfo = chinfo
+        self.slices = slices
+        self.charges = charges
+        self.qconj = qconj
+        self.sorted = sorted
+        self.bunched = bunched
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Checks :class:`~tenpy.tools.io.Hdf5Saver.format` for an ouput format key ``"LegCharge"``.
+        Possible choices are:
+
+        ``"blocks"`` (default)
+            Store :attr:`slices` and :attr:`charges` directly as datasets,
+            and :attr:`block_number`, :attr:`sorted`, :attr:`bunched` as further attributes.
+        ``"compact"``
+            A single array ``np.hstack([self.slices[:-1], self.slices[1:], self.charges])``
+            as dataset ``"blockcharges"``,
+            and :attr:`block_number`, :attr:`sorted`, :attr:`bunched` as further attributes.
+        ``"flat"``
+            Insufficient (!) to recover the exact blocks; saves only the array
+            returned by :meth:`to_flat` as dataset ``'charges'``.
+
+        The :attr:`ind_len`, :attr:`qconj`, and the `format` parameter are saved as group
+        attributes under the same names. :attr:`chinfo` is always saved as subgroup.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        format = hdf5_saver.format_selection.get("LegCharge", "blocks")
+        h5gr.attrs["format"] = format
+        h5gr.attrs["ind_len"] = self.ind_len
+        h5gr.attrs["qconj"] = self.qconj
+        hdf5_saver.dump(self.chinfo, subpath + "chinfo")
+        if format == "blocks":
+            h5gr.attrs["block_number"] = self.block_number
+            h5gr.attrs["sorted"] = self.sorted
+            h5gr.attrs["bunched"] = self.bunched
+            hdf5_saver.dump(self.slices, subpath + "slices")
+            hdf5_saver.dump(self.charges, subpath + "charges")
+        elif format == "compact":
+            h5gr.attrs["block_number"] = self.block_number
+            h5gr.attrs["sorted"] = self.sorted
+            h5gr.attrs["bunched"] = self.bunched
+            blockcharges = np.hstack(
+                [self.slices[:-1, np.newaxis], self.slices[1:, np.newaxis], self.charges])
+            hdf5_saver.dump(blockcharges, subpath + "blockcharges")
+        elif format == "flat":
+            qflat = self.to_qflat()
+            hdf5_saver.dump(qflat, subpath + "charges")
+        else:
+            raise ValueError("Unknown format")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)
+        hdf5_loader.memorize(h5gr, obj)
+        format = hdf5_loader.get_attr(h5gr, "format")
+        obj.ind_len = hdf5_loader.get_attr(h5gr, "ind_len")
+        obj.qconj = hdf5_loader.get_attr(h5gr, "qconj")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        if format == "blocks":
+            obj.block_number = hdf5_loader.get_attr(h5gr, "block_number")
+            obj.sorted = hdf5_loader.get_attr(h5gr, "sorted")
+            obj.bunched = hdf5_loader.get_attr(h5gr, "bunched")
+            obj.slices = hdf5_loader.load(subpath + "slices")
+            obj.charges = hdf5_loader.load(subpath + "charges")
+        elif format == "compact":
+            obj.block_number = hdf5_loader.get_attr(h5gr, "block_number")
+            obj.sorted = hdf5_loader.get_attr(h5gr, "sorted")
+            obj.bunched = hdf5_loader.get_attr(h5gr, "bunched")
+            blockcharges = hdf5_loader.load(subpath + "blockcharges")
+            obj.slices = slices = np.zeros(obj.block_number + 1, dtype=np.intp)
+            slices[:-1] = blockcharges[:, 0]
+            slices[-1] = blockcharges[-1, 1]
+            obj.charges = np.asarray(blockcharges[:, 2:], dtype=QTYPE, order='C')
+        elif format == "flat":
+            obj.block_number = obj.ind_len
+            obj.slices = np.arange(obj.ind_len + 1)
+            obj.charges = hdf5_loader.load(subpath + "charges")
+            obj.bunched = obj.is_bunched()
+            obj.sorted = obj.is_sorted()
+        else:
+            raise ValueError("Unknown format")
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
@@ -924,23 +1104,6 @@ class LegCharge:
             raise ValueError("Permutation mixes qind")
         return perm_qind
 
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
-                self.qconj, self.sorted, self.bunched)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
-        self.ind_len = ind_len
-        self.block_number = block_number
-        self.chinfo = chinfo
-        self.slices = slices
-        self.charges = charges
-        self.qconj = qconj
-        self.sorted = sorted
-        self.bunched = bunched
-
 
 class LegPipe(LegCharge):
     r"""A `LegPipe` combines multiple legs of a tensor to one.
@@ -1065,6 +1228,74 @@ class LegPipe(LegCharge):
         res = LegPipe.__new__(LegPipe)
         res.__setstate__(self.__getstate__())
         return res
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        super_state = LegCharge.__getstate__(self)
+        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
+                self.q_map_slices, self._perm, self._strides)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
+        self.nlegs = nlegs
+        self.legs = legs
+        self.subshape = subshape
+        self.subqshape = subqshape
+        self.q_map = q_map
+        self.q_map_slices = q_map_slices
+        self._perm = _perm
+        self._strides = _strides
+        LegCharge.__setstate__(self, super_state)
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        In addition to the data saved for the :class:`LegCharge`, it just
+        saves the :attr:`legs` as subgroup.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        super().save_hdf5(hdf5_saver, h5gr, subpath)
+        hdf5_saver.dump(self.legs, subpath + "legs")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        sorted = hdf5_loader.get_attr(h5gr, "sorted")
+        bunched = hdf5_loader.get_attr(h5gr, "bunched")
+        qconj = hdf5_loader.get_attr(h5gr, "qconj")
+        legs = hdf5_loader.load(subpath + "legs")
+        # just initialize a LegPipe -> don't need to save/reconstruct all the other attributes!
+        obj = cls(legs, qconj, sorted, bunched)
+        hdf5_loader.memorize(h5gr, obj)  # late, but okay: don't expect cyclic references.
+        return obj
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1291,25 +1522,6 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
-
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        super_state = LegCharge.__getstate__(self)
-        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
-                self.q_map_slices, self._perm, self._strides)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
-        self.nlegs = nlegs
-        self.legs = legs
-        self.subshape = subshape
-        self.subqshape = subqshape
-        self.q_map = q_map
-        self.q_map_slices = q_map_slices
-        self._perm = _perm
-        self._strides = _strides
-        LegCharge.__setstate__(self, super_state)
 
 
 # (in cython, but with different arguments)

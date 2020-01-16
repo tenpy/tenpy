@@ -10,6 +10,7 @@ import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
+from ..tools.io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 
-class Site:
+class Site(Hdf5Exportable):
     """Collects necessary information about a single local site of a lattice.
 
     This class defines what the local basis states are: it provides the :attr:`leg`
