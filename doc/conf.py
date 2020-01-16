@@ -16,6 +16,7 @@
 
 import sys
 import os
+import inspect
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -50,7 +51,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
+    'sphinx.ext.linkcode',
     'sphinx.ext.githubpages',
     'sphinx.ext.napoleon',
     'sphinx.ext.graphviz',
@@ -236,7 +237,9 @@ texinfo_documents = [
      'One line description of project.', 'Miscellaneous'),
 ]
 
-# cross links to other sphinx documentations
+# -- Options for extensions -----------------------------------------------
+
+# intersphinx: cross links to other sphinx documentations, make e.g. :class:`numpy.ndarray` work
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('https://docs.scipy.org/doc/numpy', None),
@@ -245,10 +248,59 @@ intersphinx_mapping = {
     'h5py': ('https://docs.h5py.org/en/stable/', None),
 }
 
-# extlinks
+# extlinks allows to use, e.g., :arxiv:`1805.00055`
 extlinks = {
     'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:'),
     'doi': ('https://dx.doi.org/%s', 'doi:'),
     'issue': ('https://github.com/tenpy/tenpy/issues/%s', 'issue #'),
     'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s', 'Community forum topic ')
 }
+
+
+# linkcode to put links to the github repository from the documentation
+def linkcode_resolve(domain, info):
+    """Determine the URL corresponding to Python object."""
+    # based on the corresponding linkcode_resolve in the `conf.py` of the numpy repository.
+    if domain != 'py':
+        return None
+    modname = info['module']
+    fullname = info['fullname']
+
+    submod = sys.modules.get(modname)
+    if submod is None:
+        return None
+
+    obj = submod
+    for part in fullname.split('.'):
+        try:
+            obj = getattr(obj, part)
+        except Exception:
+            return None
+    obj = inspect.unwrap(obj)  # strip decorators
+
+    try:
+        fn = inspect.getsourcefile(obj)
+    except Exception:
+        fn = None
+    if not fn:
+        return None
+
+    # find out the lines
+    try:
+        source, lineno = inspect.getsourcelines(obj)
+    except Exception:
+        lineno = None
+
+    if lineno:
+        linespec = "#L%d-L%d" % (lineno, lineno + len(source) - 1)
+    else:
+        linespec = ""
+    fn = os.path.relpath(fn, start=os.path.dirname(tenpy.__file__))
+    if fn.startswith('..'):
+        return None
+
+    if tenpy.version.released:
+        return "https://github.com/tenpy/tenpy/blob/v%s/tenpy/%s%s" % (tenpy.__version__, fn,
+                                                                       linespec)
+    else:
+        return "https://github.com/tenpy/tenpy/blob/master/tenpy/%s%s" % (fn, linespec)
