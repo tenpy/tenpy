@@ -6,14 +6,19 @@ By inspecting the Hamiltonian, you can identify symmetries, which correspond to 
 These charges divide the tensors into different sectors. This can be used to infer for example a block-diagonal structure
 of certain matrices, which in turn speeds up SVD or diagonalization a lot.
 Even for more general (non-square-matrix) tensors, charge conservation imposes restrictions which blocks of a tensor can
-be non-zero. Only those blocks need to be saved, and e.g. tensordot can be speeded up.
+be non-zero. Only those blocks need to be saved, which ultimately (= for large enough arrays) leads to a speedup of many routines, e.g., tensordot.
 
 This introduction covers our implementation of charges; explaining mathematical details of the underlying symmetry is beyond its scope.
-We refer you to Ref. [Singh2009]_ for the general idea, which is more nicely explained for the example of a :math:`U(1)` symmetry in [Singh2010]_.
+We refer you to the corresponding chapter in our [TeNPyNotes]_ for a more general introduction of the idea (also stating
+the "charge rule" introduced below).
+Ref. [Singh2009]_ explains why it works form a mathematical point of view, [Singh2010]_ has the focus on a :math:`U(1)` symmetry and might be easier to read.
 
 Notations
 ---------
-Lets fix the notation for this introduction and the doc-strings in :mod:`~tenpy.linalg.np_conserved`.
+Lets fix the notation of certain terms for this introduction and the doc-strings in :mod:`~tenpy.linalg.np_conserved`.
+This might be helpful if you know the basics from a different context.
+If you're new to the subject, keep reading even if you don't understand each detail,
+and come back to this section when you encounter the corresponding terms again.
 
 A :class:`~tenpy.linalg.np_conserved.Array` is a multi-dimensional array representing a **tensor** with the entries:
 
@@ -401,11 +406,11 @@ Each row corresponds to a non-zero subblock, and there are rank columns giving t
 Example: for a rank 3 tensor we might have::
 
     T._data = [t1, t2, t3, t4, ...]
-    T. _qdata = np.array([[3, 2, 1],
-                          [1, 1, 1],
-                          [4, 2, 2],
-                          [2, 1, 2],
-                          ...       ])
+    T._qdata = np.array([[3, 2, 1],
+                         [1, 1, 1],
+                         [4, 2, 2],
+                         [2, 1, 2],
+                         ...       ])
 
 The third subblock has an ndarray ``t3``, and qindices ``[4 2 2]`` for the three legs.
 
@@ -530,7 +535,7 @@ The rough usage idea is as follows:
 3) Once you performed the necessary operations, you can call :meth:`~tenpy.linalg.Array.split_legs`.
    This uses the information saved in the `LegPipe` to split the legs, recovering the original legs.
 
-For a LegPipe, :meth:`~tenpy.linalg.charges.LegPipe.conj`` changes ``qconj`` for the outgoing pipe *and* the incoming legs.
+For a LegPipe, :meth:`~tenpy.linalg.charges.LegPipe.conj` changes ``qconj`` for the outgoing pipe *and* the incoming legs.
 If you need a `LegPipe` with the same incoming ``qconj``, use :meth:`~tenpy.linalg.charges.LegPipe.outer_conj`.
 
 
@@ -555,7 +560,7 @@ So here is how it works:
   which will set up the labeling ``{'a': 0, 'b': 1, 'c': 3 ...}``.
 
 - (Where implemented) the specification of axes can use either the labels **or** the index positions.
-  For instance, the call ``tensordot(A, B, [ ['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
+  For instance, the call ``tensordot(A, B, [['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
   (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
   and 2 as 'the 2nd leg'. That's why we require labels to be strings!
 - Labels will be intelligently inherited through the various operations of `np_conserved`.
