@@ -43,6 +43,8 @@ def test_hdf5_export_import():
         },
         'exportable': io.Hdf5Exportable(),
         'range': range(2, 8, 3),
+        'dtypes': [np.dtype("int64"),
+                   np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
     }
     data['recursive'][3][1] = data['recursive'][1] = data['recursive']
     with tempfile.TemporaryFile() as tf:
