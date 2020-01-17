@@ -21,10 +21,12 @@ def export_to_datadir():
 def test_pickle():
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
-    with tempfile.TemporaryFile() as tf:
-        pickle.dump(data, tf)
-        tf.seek(0)  # reset pointer to beginning of file for reading
-        data_imported = pickle.load(tf)
+    with tempfile.TemporaryDirectory() as tdir:
+        filename = 'test.pkl'
+        with open(os.path.join(tdir, filename), 'wb') as f:
+            pickle.dump(data, f)
+        with open(os.path.join(tdir, filename), 'rb') as f:
+            data_imported = pickle.load(f)
     io_test.assert_equal_data(data_imported, data)
 
 
