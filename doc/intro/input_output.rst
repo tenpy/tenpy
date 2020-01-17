@@ -1,6 +1,8 @@
 Saving to disk: input/output
 ============================
 
+.. This file is maintained in the repository https://github.com/tenpy/hdf5_io.git
+
 Using pickle
 ------------
 
@@ -51,7 +53,7 @@ While :mod:`pickle` is great for simple input/output of python objects, it also 
 dramatic one is the limited portability: saving data on one PC and loading it on another one might fail!
 Even exporting data from Python 2 to load them in Python 3 on the same machine can give quite some troubles.
 Moreover, pickle requires to load the whole file at once, which might be unnecessary if you only need part of the data,
-or even lead to memory problems if you have more data on disk than in RAM.
+or even lead to memory problems if you have more data on disk than fits into RAM.
 
 Hence, we support saving to `HDF5 <https://portal.hdfgroup.org/display/HDF5/HDF5>`_ files as an alternative.
 The `h5py <http://docs.h5py.org>`_ package provides a dictionary-like interface for the file/group objects with
