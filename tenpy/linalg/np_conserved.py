@@ -261,11 +261,11 @@ class Array:
         hdf5_saver.dump(self.chinfo, subpath + "chinfo")
         hdf5_saver.dump(self.legs, subpath + "legs")
         hdf5_saver.dump(self.dtype, subpath + "dtype")
-        hdf5_saver.dump(self.qtotal, subpath + "qtotal")
+        hdf5_saver.dump(self.qtotal, subpath + "total_charge")
         hdf5_saver.dump(self._labels, subpath + "labels")
         hdf5_saver.dump(self._data, subpath + "blocks")
         hdf5_saver.dump(self._qdata, subpath + "block_inds")
-        h5gr.attrs['qdata_sorted'] = self._qdata_sorted
+        h5gr.attrs["block_inds_sorted"] = self._qdata_sorted
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -292,11 +292,11 @@ class Array:
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj.legs = hdf5_loader.load(subpath + "legs")
         obj.dtype = hdf5_loader.load(subpath + "dtype")
-        obj.qtotal = hdf5_loader.load(subpath + "qtotal")
+        obj.qtotal = hdf5_loader.load(subpath + "total_charge")
         obj._labels = hdf5_loader.load(subpath + "labels")
         obj._data = hdf5_loader.load(subpath + "blocks")
         obj._qdata = hdf5_loader.load(subpath + "block_inds")
-        obj._qdata_sorted = hdf5_loader.get_attr(h5gr, 'qdata_sorted')
+        obj._qdata_sorted = hdf5_loader.get_attr(h5gr, "block_inds_sorted")
         obj._set_shape()
         obj.test_sanity()
         return obj

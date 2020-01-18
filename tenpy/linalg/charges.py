@@ -114,6 +114,7 @@ class ChargeInfo:
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
         """
+        h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.dump(self._mod, subpath + "U1_ZN")
         hdf5_saver.dump(self.names, subpath + "names")
 
