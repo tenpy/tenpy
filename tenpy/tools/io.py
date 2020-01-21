@@ -40,8 +40,9 @@ import numpy as np
 import importlib
 
 __all__ = [
-    'dump', 'load', 'Hdf5FormatError', 'Hdf5ExportError', 'Hdf5ImportError', 'Hdf5Exportable',
-    'Hdf5Saver', 'Hdf5Loader', 'dump_to_hdf5', 'load_from_hdf5'
+    'dump', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
+    'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Saver', 'Hdf5Loader', 'dump_to_hdf5',
+    'load_from_hdf5'
 ]
 
 
