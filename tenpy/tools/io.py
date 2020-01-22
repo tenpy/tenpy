@@ -1,9 +1,9 @@
 """Tools to save and load data (from TeNPy) to disk.
 
 .. note ::
-    This file is maintained in the repository https://github.com/tenpy/hdf5_io.git
+    This module is maintained in the repository https://github.com/tenpy/hdf5_io.git
 
-The functions :func:`dump` and :func:`load` are convenience functions for saving and loading
+The functions :func:`save` and :func:`load` are convenience functions for saving and loading
 quite general python objects (like dictionaries) to/from files, guessing the file type
 (and hence protocol for reading/writing) from the file ending.
 
@@ -40,13 +40,13 @@ import numpy as np
 import importlib
 
 __all__ = [
-    'dump', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
-    'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Saver', 'Hdf5Loader', 'dump_to_hdf5',
+    'save', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
+    'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver', 'Hdf5Loader', 'save_to_hdf5',
     'load_from_hdf5'
 ]
 
 
-def dump(data, filename, mode='w'):
+def save(data, filename, mode='w'):
     """Save `data` to file with given `filename`.
 
     This function guesses the type of the file from the filename ending.
@@ -81,7 +81,7 @@ def dump(data, filename, mode='w'):
     elif filename.endswith('.hdf5'):
         import h5py
         with h5py.File(filename, mode) as f:
-            dump_to_hdf5(f, obj)
+            save_to_hdf5(f, obj)
     else:
         raise ValueError("Don't recognise file ending of " + repr(filename))
 
@@ -89,7 +89,7 @@ def dump(data, filename, mode='w'):
 def load(filename):
     """Load data from file with given `filename`.
 
-    Guess the type of the file from the filename ending, see :func:`dump` for possible endings.
+    Guess the type of the file from the filename ending, see :func:`save` for possible endings.
 
     Parameters
     ----------
@@ -142,6 +142,7 @@ REPR_SET = np.string_("set")  #: saved object represents a set
 REPR_DICT_GENERAL = np.string_("dict")  #: saved object represents a dict with complicated keys
 REPR_DICT_SIMPLE = np.string_("simple_dict")  #: saved object represents a dict with simple keys
 REPR_DTYPE = np.string_("dtype")  #: saved object represents a np.dtype
+REPR_IGNORED = np.string_("ignore")  #: ignore the object/dataset during loading and saving
 
 #: tuple of (type, type_repr) which h5py can save as datasets; one entry for each type.
 TYPES_FOR_HDF5_DATASETS = tuple([
@@ -190,7 +191,7 @@ class Hdf5ImportError(Hdf5FormatError):
 class Hdf5Exportable:
     """Interface specification for a class to be exportable to our HDF5 format.
 
-    To allow a class to be exported to HDF5 with :func:`dump_to_hdf5`,
+    To allow a class to be exported to HDF5 with :func:`save_to_hdf5`,
     it only needs to implement the :meth:`save_hdf5` method as documented below.
     To allow import, a class should implement the classmethod :meth:`from_hdf5`.
     During the import, the class already needs to be defined;
@@ -220,7 +221,7 @@ class Hdf5Exportable:
             The `name` of `h5gr` with a ``'/'`` in the end.
         """
         # for new implementations, use:
-        #   hdf5_saver.dump(data, subpath + "key")  # for big content/data
+        #   hdf5_saver.save(data, subpath + "key")  # for big content/data
         #   h5gr.attrs["name"] = info               # for metadata
 
         # here: assume all the data is given in self.__dict__
@@ -249,31 +250,52 @@ class Hdf5Exportable:
         """
         # for new implementations, use:
         #   obj = cls.__new__(cls)                     # create class instance, no __init__() call
-        #   hdf5_loader.memorize(h5gr, obj)            # call preferably before loading other data
+        #   hdf5_loader.memorize_load(h5gr, obj)       # call preferably before loading other data
         #   info = hdf5_loader.get_attr(h5gr, "name")  # for metadata
         #   data = hdf5_loader.load(subpath + "key")   # for big content/data
 
         dict_format = hdf5_loader.get_attr(h5gr, ATTR_FORMAT)
         obj = cls.__new__(cls)  # create class instance, no __init__() call
-        hdf5_loader.memorize(h5gr, obj)  # call preferably before loading other data
+        hdf5_loader.memorize_load(h5gr, obj)  # call preferably before loading other data
         data = hdf5_loader.load_dict(h5gr, dict_format, subpath)  # specialized loading
-        # (the `load_dict` did not overwrite the memo entry)
+        # (the `load_dict` did not overwrite the memo_load entry)
         obj.__dict__.update(data)  # store data in the object
         return obj
+
+
+class Hdf5Ignored:
+    """Placeholder for a dataset/group to be ignored during both loading and saving.
+
+    Objects of this type are not saved.
+    Moreover, if a saved dataset/group has the `type` attribute matching `REPR_IGNORED`,
+    instance of this class are returned instead of loading the data.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset during loading; just for reference.
+
+    Attributes
+    ----------
+    name : str
+        See above.
+    """
+    def __init__(self, name='unknown'):
+        self.name = name
 
 
 class Hdf5Saver:
     """Engine to save simple enough objects into a HDF5 file.
 
-    The intended use of this class is through :func:`dump_to_hdf5`, which is simply an alias
-    for ``Hdf5Saver(h5group).dump(obj, path)``.
+    The intended use of this class is through :func:`save_to_hdf5`, which is simply an alias
+    for ``Hdf5Saver(h5group).save(obj, path)``.
 
     It exports python objects to a HDF5 file such that they can be loaded with the
     :class:`Hdf5Loader`, or a call to :func:`load_from_hdf5`, respectively.
 
     The basic structure of this class is similar as the `Pickler` from :mod:`pickle`.
 
-    See :doc:`/intro/input_output` for a specification of what can be dumped and what the resulting
+    See :doc:`/intro/input_output` for a specification of what can be saved and what the resulting
     datastructure is.
 
     Parameters
@@ -289,17 +311,17 @@ class Hdf5Saver:
     ----------
     h5group : :class:`Group`
         The HDF5 group (or HDF5 :class:`File`) where to save the data.
-    dispatch : dict
+    dispatch_save : dict
         Mapping from a type `keytype` to methods `f` of this class.
         The method is called as ``f(self, obj, path, type_repr)``.
         The call to `f` should save the object `obj` in ``self.h5group[path]``,
-        call :meth:`memorize`, and set ``h5gr.attr[ATTR_TYPE] = type_repr``
+        call :meth:`memorize_save`, and set ``h5gr.attr[ATTR_TYPE] = type_repr``
         to a string `type_repr` in order to allow loading with the dispatcher
-        in ``Hdf5Loader.dispatch[type_repr]``.
-    memo : dict
+        in ``Hdf5Loader.dispatch_save[type_repr]``.
+    memo_save : dict
         A dictionary to remember all the objects which we already stored to :attr:`h5group`.
         The dictionary keys are object ids; the values are two-tuples of the hdf5 group or dataset
-        where an object was stored, and the object itself. See :meth:`memorize`.
+        where an object was stored, and the object itself. See :meth:`memorize_save`.
     format_selection : dict
         This dictionary allows to set a output format selection for user-defined
         :meth:`Hdf5Exportable.save_hdf5` implementations.
@@ -307,12 +329,12 @@ class Hdf5Saver:
     """
     def __init__(self, h5group, format_selection=None):
         self.h5group = h5group
-        self.memo = {}
+        self.memo_save = {}
         if format_selection is None:
             format_selection = {}
         self.format_selection = format_selection
 
-    def dump(self, obj, path='/'):
+    def save(self, obj, path='/'):
         """Save `obj` in ``self.h5group[path]``.
 
         Parameters
@@ -330,7 +352,7 @@ class Hdf5Saver:
             The h5py group or dataset in which `obj` was saved.
         """
         obj_id = id(obj)
-        in_memo = self.memo.get(obj_id)  # default=None
+        in_memo = self.memo_save.get(obj_id)  # default=None
         if in_memo is not None:  # saved the object before
             h5gr, _ = in_memo
             self.h5group[path] = h5gr  # create hdf5 hard link
@@ -338,14 +360,14 @@ class Hdf5Saver:
             # which we use in the loader to distinguish them
             return h5gr
 
-        disp = self.dispatch.get(type(obj))
+        disp = self.dispatch_save.get(type(obj))
         if disp is not None:
             f, type_repr = disp
             # `f` is a dispatcher function, which should
             # - save the `obj` in self.h5group['path'],
-            # - call :meth:`memorize`, and
+            # - call :meth:`memorize_save`, and
             # - set ``h5gr.attr[ATTR_TYPE] = type_repr`` to a string `type_repr`
-            #   to allow loading with the dispatcher ``Hdf5Loader.dispatch[type_repr]``
+            #   to allow loading with the dispatcher ``Hdf5Loader.dispatch_load[type_repr]``
             # call unbound method `f` with explicit self
             h5gr = f(self, obj, path, type_repr)
             return h5gr
@@ -363,13 +385,13 @@ class Hdf5Saver:
             return h5gr
 
         # unknown case
-        msg = "Don't know how to dump object of type {0!r}".format(type(obj))
+        msg = "Don't know how to save object of type {0!r}".format(type(obj))
         raise Hdf5ExportError(msg)
 
     def create_group_for_obj(self, path, obj):
         """Create an HDF5 group ``self.h5group[path]`` to store `obj`.
 
-        Also handle ending of path with ``'/'``, and memorize `obj` in the :attr:`memo`.
+        Also handle ending of path with ``'/'``, and memorize `obj` in :attr:`memo_save`.
 
         Parameters
         ----------
@@ -398,11 +420,11 @@ class Hdf5Saver:
         else:
             gr = self.h5group.create_group(path)  # raises ValueError if path already exists.
         subpath = path if path[-1] == '/' else (path + '/')
-        self.memorize(gr, obj)
+        self.memorize_save(gr, obj)
         return gr, subpath
 
-    def memorize(self, h5gr, obj):
-        """Store objects already saved in the :attr:`memo`.
+    def memorize_save(self, h5gr, obj):
+        """Store objects already saved in the :attr:`memo_save`.
 
         This allows to avoid copies, if the same python object appears multiple times in the
         data of `obj`. Examples can be shared :class:`~tenpy.linalg.charges.LegCharge` objects
@@ -418,10 +440,10 @@ class Hdf5Saver:
             The object saved.
         """
         obj_id = id(obj)
-        assert obj_id not in self.memo
-        self.memo[obj_id] = (h5gr, obj)
+        assert obj_id not in self.memo_save
+        self.memo_save[obj_id] = (h5gr, obj)
 
-    dispatch = {}
+    dispatch_save = {}
 
     # the methods below are used in the dispatch table
 
@@ -430,19 +452,21 @@ class Hdf5Saver:
         self.h5group[path] = REPR_NONE
         h5gr = self.h5group[path]
         h5gr.attrs[ATTR_TYPE] = REPR_NONE
+        self.memorize_save(h5gr, obj)
         return h5gr
 
-    dispatch[type(None)] = (save_none, REPR_NONE)
+    dispatch_save[type(None)] = (save_none, REPR_NONE)
 
     def save_dataset(self, obj, path, type_repr):
         """Save `obj` as a hdf5 dataset; in dispatch table."""
         self.h5group[path] = obj  # save as dataset
         h5gr = self.h5group[path]
         h5gr.attrs[ATTR_TYPE] = type_repr
+        self.memorize_save(h5gr, obj)
         return h5gr
 
     for _t, _type_repr in TYPES_FOR_HDF5_DATASETS:
-        dispatch[_t] = (save_dataset, _type_repr)
+        dispatch_save[_t] = (save_dataset, _type_repr)
 
     def save_iterable(self, obj, path, type_repr):
         """Save an iterable `obj` like a list, tuple or set; in dispatch table."""
@@ -451,9 +475,9 @@ class Hdf5Saver:
         self.save_iterable_content(obj, h5gr, subpath)
         return h5gr
 
-    dispatch[list] = (save_iterable, REPR_LIST)
-    dispatch[tuple] = (save_iterable, REPR_TUPLE)
-    dispatch[set] = (save_iterable, REPR_SET)
+    dispatch_save[list] = (save_iterable, REPR_LIST)
+    dispatch_save[tuple] = (save_iterable, REPR_TUPLE)
+    dispatch_save[set] = (save_iterable, REPR_SET)
 
     def save_iterable_content(self, obj, h5gr, subpath):
         """Save contents of an iterable `obj` in the existing `h5gr`.
@@ -469,7 +493,7 @@ class Hdf5Saver:
         """
         h5gr.attrs[ATTR_LEN] = len(obj)
         for i, elem in enumerate(obj):
-            self.dump(elem, subpath + str(i))
+            self.save(elem, subpath + str(i))
 
     def save_dict(self, obj, path, type_repr):
         """Save the dictionary `obj`; in dispatch table."""
@@ -478,7 +502,7 @@ class Hdf5Saver:
         h5gr.attrs[ATTR_TYPE] = type_repr
         return h5gr
 
-    dispatch[dict] = (save_dict, REPR_DICT_GENERAL)
+    dispatch_save[dict] = (save_dict, REPR_DICT_GENERAL)
 
     def save_dict_content(self, obj, h5gr, subpath):
         """Save contents of a dictionary `obj` in the existing `h5gr`.
@@ -512,7 +536,7 @@ class Hdf5Saver:
 
         if simple_keys:
             for k, v in obj.items():
-                self.dump(v, subpath + k)
+                self.save(v, subpath + k)
             return REPR_DICT_SIMPLE
         else:
             keys = obj.keys()
@@ -525,12 +549,12 @@ class Hdf5Saver:
         """Save a range object; in dispatch table."""
         h5gr, subpath = self.create_group_for_obj(path, obj)
         h5gr.attrs[ATTR_TYPE] = REPR_RANGE
-        self.dump(obj.start, subpath + 'start')
-        self.dump(obj.stop, subpath + 'stop')
-        self.dump(obj.step, subpath + 'step')
+        self.save(obj.start, subpath + 'start')
+        self.save(obj.stop, subpath + 'stop')
+        self.save(obj.step, subpath + 'step')
         return h5gr
 
-    dispatch[range] = (save_range, REPR_RANGE)
+    dispatch_save[range] = (save_range, REPR_RANGE)
 
     def save_dtype(self, obj, path, type_repr):
         """Save a :class:`~numpy.dtype` object; in dispatch table."""
@@ -538,10 +562,16 @@ class Hdf5Saver:
         h5gr.attrs[ATTR_TYPE] = REPR_DTYPE
         name = getattr(obj, "name", "void")
         h5gr.attrs["name"] = name
-        self.dump(obj.descr, subpath + 'descr')
+        self.save(obj.descr, subpath + 'descr')
         return h5gr
 
-    dispatch[np.dtype] = (save_dtype, REPR_DTYPE)
+    dispatch_save[np.dtype] = (save_dtype, REPR_DTYPE)
+
+    def save_ignored(self, obj, path, type_repr):
+        """Don't save the Hdf5Ignored object; just return None."""
+        return None
+
+    dispatch_save[Hdf5Ignored] = (save_ignored, REPR_IGNORED)
 
     # clean up temporary variables
     del _t
@@ -554,11 +584,11 @@ class Hdf5Loader:
     The intended use of this class is through :func:`load_from_hdf5`, which is simply an alias
     for ``Hdf5Loader(h5group).load(path)``.
 
-    It can load data exported with :func:`dump_to_hdf5` or the :class:`Hdf5Saver`, respectively.
+    It can load data exported with :func:`save_to_hdf5` or the :class:`Hdf5Saver`, respectively.
 
     The basic structure of this class is similar as the `Unpickler` from :mod:`pickle`.
 
-    See :doc:`/intro/input_output` for a specification of what can be dumped and what the resulting
+    See :doc:`/intro/input_output` for a specification of what can be saved and what the resulting
     datastructure is.
 
     Parameters
@@ -570,23 +600,23 @@ class Hdf5Loader:
     ----------
     h5group : :class:`Group`
         The HDF5 group (or HDF5 :class:`File`) where to save the data.
-    dispatch : dict
+    dispatch_load : dict
         Mapping from a :class:`np.string_`, which is one of the global ``REPR_*`` variables,
         to methods `f` of this class.
         The method is called as ``f(self, h5gr, type_info, subpath)``.
         The call to `f` should load and return an object `obj` from the h5py :class:`Group`
-        or :class:`Dataset` `h5gr`; and memorize the loaded `obj` with :meth:`memorize`.
+        or :class:`Dataset` `h5gr`; and memorize the loaded `obj` with :meth:`memorize_load`.
         `subpath` is just the name of `h5gr` with a guaranteed ``'/'`` in the end.
         `type_info` is often the ``REPR_*`` variable of the type or some other information about
-        the type, which allows to use a single dispatch function for different datatypes.
-    memo : dict
+        the type, which allows to use a single dispatch_load function for different datatypes.
+    memo_load : dict
         A dictionary to remember all the objects which we already loaded from :attr:`h5group`.
         The dictionary keys are h5py Group- or dataset ``id``;
-        the values are the loaded objects. See :meth:`memorize`.
+        the values are the loaded objects. See :meth:`memorize_load`.
     """
     def __init__(self, h5group):
         self.h5group = h5group
-        self.memo = {}
+        self.memo_load = {}
 
     def load(self, path=None):
         """Load a Python :class:`object` from the dataset.
@@ -611,14 +641,14 @@ class Hdf5Loader:
         else:
             h5gr = self.h5group[path]
         subpath = path if path[-1] == '/' else (path + '/')
-        # check memo
-        in_memo = self.memo.get(h5gr.id)  # default=None
+        # check memo_load
+        in_memo = self.memo_load.get(h5gr.id)  # default=None
         if in_memo is not None:  # loaded the object before
             return in_memo
 
         # determine type of object to be loaded.
         type_repr = np.string_(self.get_attr(h5gr, ATTR_TYPE))
-        disp = self.dispatch.get(type_repr)
+        disp = self.dispatch_load.get(type_repr)
         if disp is None:
             msg = "Unknown type {0!r} while loading hdf5 dataset {1!s}"
             raise Hdf5ImportError(msg.format(type_repr, h5gr.name))
@@ -626,15 +656,15 @@ class Hdf5Loader:
         # `f` is a dispatcher function, which should do the following
         # (preferably in this order, if `obj` is mutable):
         # - generate an object `obj` of the described type
-        # - call :meth:`memorize` for the generated `obj`,
+        # - call :meth:`memorize_load` for the generated `obj`,
         # - fill the object with the data from subgroups/subdatasets (everything under `subpath`)
         # - return the generated `obj`
         # call unbound method `f` with explicit self
         obj = f(self, h5gr, type_info, subpath)
         return obj
 
-    def memorize(self, h5gr, obj):
-        """Store objects already loaded in the :attr:`memo`.
+    def memorize_load(self, h5gr, obj):
+        """Store objects already loaded in the :attr:`memo_load`.
 
         This allows to avoid copies, if the same dataset appears multiple times in the
         hdf5 group of `obj`.
@@ -644,7 +674,7 @@ class Hdf5Loader:
         To handle cyclic references correctly, this function should be called *before* loading
         data from subgroups with new calls of :meth:`load`.
         """
-        self.memo.setdefault(h5gr.id, obj)  # don't overwrite existing entries!
+        self.memo_load.setdefault(h5gr.id, obj)  # don't overwrite existing entries!
 
     @staticmethod
     def get_attr(h5gr, attr_name):
@@ -678,17 +708,17 @@ class Hdf5Loader:
                     subpath, cls, classname)) from None
         return cls
 
-    dispatch = {}
+    dispatch_load = {}
 
     # the methods below are used in the dispatch table
 
     def load_none(self, h5gr, type_info, subpath):
         """Load the ``None`` object from a dataset."""
         obj = None
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         return obj
 
-    dispatch[REPR_NONE] = (load_none, None)
+    dispatch_load[REPR_NONE] = (load_none, None)
 
     def load_dataset(self, h5gr, type_info, subpath):
         """Load a h5py :class:`Dataset` and convert it into the desired type."""
@@ -698,41 +728,41 @@ class Hdf5Loader:
             obj = h5gr[()]  # load scalar from hdf5 Dataset
             # convert to desired type: type_info is simply the type
             obj = type_info(obj)
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         return obj
 
     for _t, _type_repr in TYPES_FOR_HDF5_DATASETS:
-        dispatch[_type_repr] = (load_dataset, _t)
+        dispatch_load[_type_repr] = (load_dataset, _t)
 
     def load_list(self, h5gr, type_info, subpath):
         """Load a list."""
         obj = []
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         length = self.get_attr(h5gr, ATTR_LEN)
         for i in range(length):
             sub_obj = self.load(subpath + str(i))
             obj.append(sub_obj)
         return obj
 
-    dispatch[REPR_LIST] = (load_list, REPR_LIST)
+    dispatch_load[REPR_LIST] = (load_list, REPR_LIST)
 
     def load_set(self, h5gr, type_info, subpath):
         """Load a set."""
         obj = set([])
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         length = self.get_attr(h5gr, ATTR_LEN)
         for i in range(length):
             sub_obj = self.load(subpath + str(i))
             obj.add(sub_obj)
         return obj
 
-    dispatch[REPR_SET] = (load_set, REPR_SET)
+    dispatch_load[REPR_SET] = (load_set, REPR_SET)
 
     def load_tuple(self, h5gr, type_info, subpath):
         """Load a tuple."""
         obj = []  # tuple is immutable: can't append to it
         # so we need to use a list during loading
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         # BUG: for recursive tuples, the memorized object is a list instead of a tuple.
         # but I don't know how to circumvent this.
         # It's hopefully not relevant for our applications.
@@ -742,10 +772,11 @@ class Hdf5Loader:
             obj.append(sub_obj)
         # now conjvert the list to tuple
         obj = tuple(obj)
-        self.memo[h5gr.id] = obj  # overwrite the memo entry to point to the tuple, not the list
+        self.memo_load[h5gr.id] = obj  # overwrite the memo entry to point to the tuple,
+        # not the list
         return obj
 
-    dispatch[REPR_TUPLE] = (load_tuple, REPR_TUPLE)
+    dispatch_load[REPR_TUPLE] = (load_tuple, REPR_TUPLE)
 
     def load_dict(self, h5gr, type_info, subpath):
         """Load a dictionary in the format according to `type_info`."""
@@ -758,24 +789,24 @@ class Hdf5Loader:
     def load_general_dict(self, h5gr, type_info, subpath):
         """Load a dictionary with general keys."""
         obj = {}
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         keys = self.load_list(h5gr['keys'], REPR_LIST, subpath + 'keys/')
         values = self.load_list(h5gr['values'], REPR_LIST, subpath + 'values/')
         obj.update(zip(keys, values))
         return obj
 
-    dispatch[REPR_DICT_GENERAL] = (load_general_dict, REPR_DICT_GENERAL)
+    dispatch_load[REPR_DICT_GENERAL] = (load_general_dict, REPR_DICT_GENERAL)
 
     def load_simple_dict(self, h5gr, type_info, subpath):
         """Load a dictionary with simple keys."""
         obj = {}
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         for k in h5gr.keys():
             v = self.load(subpath + k)
             obj[k] = v
         return obj
 
-    dispatch[REPR_DICT_SIMPLE] = (load_simple_dict, REPR_DICT_SIMPLE)
+    dispatch_load[REPR_DICT_SIMPLE] = (load_simple_dict, REPR_DICT_SIMPLE)
 
     def load_range(self, h5gr, type_info, subpath):
         """Load a range."""
@@ -783,10 +814,10 @@ class Hdf5Loader:
         stop = self.load(subpath + 'stop')
         step = self.load(subpath + 'step')
         obj = range(start, stop, step)
-        self.memorize(h5gr, obj)  # late, but subgroups should only be int's; no cyclic reference
+        self.memorize_load(h5gr, obj)  # late, but okay: no cyclic reference expected
         return obj
 
-    dispatch[REPR_RANGE] = (load_range, REPR_RANGE)
+    dispatch_load[REPR_RANGE] = (load_range, REPR_RANGE)
 
     def load_dtype(self, h5gr, type_info, subpath):
         """Load a :class:`numpy.dtype`."""
@@ -796,10 +827,10 @@ class Hdf5Loader:
             obj = np.dtype(descr)
         else:
             obj = np.dtype(name)
-        self.memorize(h5gr, obj)
+        self.memorize_load(h5gr, obj)
         return obj
 
-    dispatch[REPR_DTYPE] = (load_dtype, REPR_DTYPE)
+    dispatch_load[REPR_DTYPE] = (load_dtype, REPR_DTYPE)
 
     def load_hdf5exportable(self, h5gr, type_info, subpath):
         """Load an instance of a userdefined class."""
@@ -808,19 +839,25 @@ class Hdf5Loader:
         cls = self.find_class(modulename, classname)
         return cls.from_hdf5(self, h5gr, subpath)
 
-    dispatch[REPR_HDF5EXPORTABLE] = (load_hdf5exportable, REPR_HDF5EXPORTABLE)
+    dispatch_load[REPR_HDF5EXPORTABLE] = (load_hdf5exportable, REPR_HDF5EXPORTABLE)
+
+    def load_ignored(self, h5gr, type_info, subpath):
+        """Ignore the group to be loaded."""
+        return Hdf5Ignored(h5gr.name)
+
+    dispatch_load[REPR_IGNORED] = (load_ignored, REPR_IGNORED)
 
     # clean up temporary variables
     del _t
     del _type_repr
 
 
-def dump_to_hdf5(h5group, obj, path='/'):
+def save_to_hdf5(h5group, obj, path='/'):
     """Save an object `obj` into a hdf5 file or group.
 
     Roughly equivalent to ``h5group[path] = obj``, but handle different types of `obj`.
     For example, dictionaries are handled recursively.
-    See :doc:`/intro/input_output` for a specification of what can be dumped and what the resulting
+    See :doc:`/intro/input_output` for a specification of what can be saved and what the resulting
     datastructure is.
 
     Parameters
@@ -839,16 +876,16 @@ def dump_to_hdf5(h5group, obj, path='/'):
     h5obj : :class:`Group` | :class:`Dataset`
         The h5py group or dataset under which `obj` was saved.
     """
-    return Hdf5Saver(h5group).dump(obj, path)
+    return Hdf5Saver(h5group).save(obj, path)
 
 
 def load_from_hdf5(h5group, path=None):
     """Load an object from hdf5 file or group.
 
     Roughly equivalent to ``obj = h5group[path][...]``, but handle more complicated objects saved
-    as hdf5 groups and/or datasets with :func:`dump_to_hdf5`.
+    as hdf5 groups and/or datasets with :func:`save_to_hdf5`.
     For example, dictionaries are handled recursively.
-    See :doc:`/intro/input_output` for a specification of what can be dumped/loaded and what the
+    See :doc:`/intro/input_output` for a specification of what can be saved/loaded and what the
     corresponding datastructure is.
 
     Parameters

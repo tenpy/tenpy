@@ -258,13 +258,13 @@ class Array:
         subpath : str
             The `name` of `h5gr` with a ``'/'`` in the end.
         """
-        hdf5_saver.dump(self.chinfo, subpath + "chinfo")
-        hdf5_saver.dump(self.legs, subpath + "legs")
-        hdf5_saver.dump(self.dtype, subpath + "dtype")
-        hdf5_saver.dump(self.qtotal, subpath + "total_charge")
-        hdf5_saver.dump(self._labels, subpath + "labels")
-        hdf5_saver.dump(self._data, subpath + "blocks")
-        hdf5_saver.dump(self._qdata, subpath + "block_inds")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self.legs, subpath + "legs")
+        hdf5_saver.save(self.dtype, subpath + "dtype")
+        hdf5_saver.save(self.qtotal, subpath + "total_charge")
+        hdf5_saver.save(self._labels, subpath + "labels")
+        hdf5_saver.save(self._data, subpath + "blocks")
+        hdf5_saver.save(self._qdata, subpath + "block_inds")
         h5gr.attrs["block_inds_sorted"] = self._qdata_sorted
 
     @classmethod
@@ -288,7 +288,7 @@ class Array:
             Newly generated class instance containing the required data.
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
-        hdf5_loader.memorize(h5gr, obj)
+        hdf5_loader.memorize_load(h5gr, obj)
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj.legs = hdf5_loader.load(subpath + "legs")
         obj.dtype = hdf5_loader.load(subpath + "dtype")

@@ -21,7 +21,7 @@ def export_to_datadir():
     filename = io_test.get_datadir_filename("exported_from_tenpy_{0}.hdf5")
     data = io_test.gen_example_data()
     with h5py.File(filename, 'w') as f:
-        hdf5_io.dump_to_hdf5(f, data)
+        hdf5_io.save_to_hdf5(f, data)
 
 
 @pytest.mark.skipif(h5py is None, reason="h5py not available")
@@ -31,7 +31,7 @@ def test_hdf5_export_import():
     with tempfile.TemporaryDirectory() as tdir:
         filename = 'test.hdf5'
         with h5py.File(os.path.join(tdir, filename), 'w') as f:
-            hdf5_io.dump_to_hdf5(f, data)
+            hdf5_io.save_to_hdf5(f, data)
         with h5py.File(os.path.join(tdir, filename), 'r') as f:
             data_imported = hdf5_io.load_from_hdf5(f)
     io_test.assert_equal_data(data_imported, data)

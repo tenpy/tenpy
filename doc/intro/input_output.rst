@@ -70,21 +70,21 @@ Data format specification for saving to HDF5
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here, we define a simple format how we save data of TeNPy-defined classes.
-The goal is to have the :func:`~tenpy.tools.io.dump_to_hdf5` function for saving sufficiently simple enough python
+The goal is to have the :func:`~tenpy.tools.io.save_to_hdf5` function for saving sufficiently simple enough python
 objects (supported by the format) to disk in an HDF5 file, such that they can be reconstructed with the :func:`~tenpy.tools.io.load_from_hdf5` function.
 
 Guidelines of the format:
 
 0. Store enough data such that :func:`~tenpy.tools.io.load_from_hdf5` can reconstruct a copy of the object
-   (provided that the dump did not fail with an error).
+   (provided that the save did not fail with an error).
 1. Objects of a type supported by the HDF5 datasets (with the `h5py`_ interface) should be directly stored as h5py :class:`Dataset`.
    Such objects are for example numpy arrays (of non-object `dtype`), scalars and strings.
-2. Allow to dump (nested) python lists, tuples and dictionaries with values (and keys) which can be dumped.
+2. Allow to save (nested) python lists, tuples and dictionaries with values (and keys) which can be saved.
 3. Allow user-defined classes to implement an interface extending what data can be saved.
    An instance of a class supporting the interface gets saved as an HDF5 :class:`Group`.
    Class attributes are stored as entries of the group, metadata like the type should be stored in HDF5 attributes, see h5py :class:`AttributeManager`.
 4. Simple and intuitive, human-readable structure for the HDF5 paths.
-   For example, dumping a simple dictionary ``{'a': np.arange(10), 'b': 123.45}`` should result in an
+   For example, saving a simple dictionary ``{'a': np.arange(10), 'b': 123.45}`` should result in an
    HDF5 file with just the two data sets ``/a`` and ``/b``. 
 5. Allow loading only a subset of the data by specifying the `path` of the HDF5 group to be loaded.
    For the above example, specifying the path ``/b`` should result in loading the float ``123.45``, not the array.

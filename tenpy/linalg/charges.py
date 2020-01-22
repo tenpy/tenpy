@@ -115,8 +115,8 @@ class ChargeInfo:
             The `name` of `h5gr` with a ``'/'`` in the end.
         """
         h5gr.attrs['num_charges'] = self._qnumber
-        hdf5_saver.dump(self._mod, subpath + "U1_ZN")
-        hdf5_saver.dump(self.names, subpath + "names")
+        hdf5_saver.save(self._mod, subpath + "U1_ZN")
+        hdf5_saver.save(self.names, subpath + "names")
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -141,7 +141,7 @@ class ChargeInfo:
             Newly generated class instance containing the required data.
         """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
-        hdf5_loader.memorize(h5gr, obj)
+        hdf5_loader.memorize_load(h5gr, obj)
         qmod = hdf5_loader.load(subpath + "U1_ZN")
         qmod = np.asarray(qmod, dtype=QTYPE)
         qnumber = len(qmod)
@@ -427,23 +427,23 @@ class LegCharge:
         h5gr.attrs["format"] = format
         h5gr.attrs["ind_len"] = self.ind_len
         h5gr.attrs["qconj"] = self.qconj
-        hdf5_saver.dump(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
         if format == "blocks":
             h5gr.attrs["block_number"] = self.block_number
             h5gr.attrs["sorted"] = self.sorted
             h5gr.attrs["bunched"] = self.bunched
-            hdf5_saver.dump(self.slices, subpath + "slices")
-            hdf5_saver.dump(self.charges, subpath + "charges")
+            hdf5_saver.save(self.slices, subpath + "slices")
+            hdf5_saver.save(self.charges, subpath + "charges")
         elif format == "compact":
             h5gr.attrs["block_number"] = self.block_number
             h5gr.attrs["sorted"] = self.sorted
             h5gr.attrs["bunched"] = self.bunched
             blockcharges = np.hstack(
                 [self.slices[:-1, np.newaxis], self.slices[1:, np.newaxis], self.charges])
-            hdf5_saver.dump(blockcharges, subpath + "blockcharges")
+            hdf5_saver.save(blockcharges, subpath + "blockcharges")
         elif format == "flat":
             qflat = self.to_qflat()
-            hdf5_saver.dump(qflat, subpath + "charges")
+            hdf5_saver.save(qflat, subpath + "charges")
         else:
             raise ValueError("Unknown format")
 
@@ -468,7 +468,7 @@ class LegCharge:
             Newly generated class instance containing the required data.
         """
         obj = cls.__new__(cls)
-        hdf5_loader.memorize(h5gr, obj)
+        hdf5_loader.memorize_load(h5gr, obj)
         format = hdf5_loader.get_attr(h5gr, "format")
         obj.ind_len = hdf5_loader.get_attr(h5gr, "ind_len")
         obj.qconj = hdf5_loader.get_attr(h5gr, "qconj")
@@ -1267,7 +1267,7 @@ class LegPipe(LegCharge):
             The `name` of `h5gr` with a ``'/'`` in the end.
         """
         super().save_hdf5(hdf5_saver, h5gr, subpath)
-        hdf5_saver.dump(self.legs, subpath + "legs")
+        hdf5_saver.save(self.legs, subpath + "legs")
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -1295,7 +1295,7 @@ class LegPipe(LegCharge):
         legs = hdf5_loader.load(subpath + "legs")
         # just initialize a LegPipe -> don't need to save/reconstruct all the other attributes!
         obj = cls(legs, qconj, sorted, bunched)
-        hdf5_loader.memorize(h5gr, obj)  # late, but okay: don't expect cyclic references.
+        hdf5_loader.memorize_load(h5gr, obj)  # late, but okay: don't expect cyclic references.
         return obj
 
     def test_sanity(self):
