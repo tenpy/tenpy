@@ -266,6 +266,8 @@ class Array:
         hdf5_saver.save(self._data, subpath + "blocks")
         hdf5_saver.save(self._qdata, subpath + "block_inds")
         h5gr.attrs["block_inds_sorted"] = self._qdata_sorted
+        h5gr.attrs["rank"] = self.rank  # not needed for loading, but still usefull metadata
+        h5gr.attrs["shape"] = np.array(self.shape, np.intp)  # same
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
