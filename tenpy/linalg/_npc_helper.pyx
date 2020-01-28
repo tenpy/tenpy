@@ -466,6 +466,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
             a += 1
         for j in range(idx[idx.shape[0]-1], nblocks):
             q_map[j, 2] = a
+        self.bunched = True
     else:
         # trivial mapping for q_map[:, 2]
         for j in range(nblocks):

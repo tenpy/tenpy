@@ -29,3 +29,4 @@ Fixed
 ^^^^^
 - Adjust the default DMRG parameter `min_sweeps` if `chi_list` is set.
 - Avoid some unnecessary transpositions in MPO environments for MPS sweeps (e.g. in DMRG).
+- :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.

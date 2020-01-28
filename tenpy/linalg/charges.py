@@ -1491,6 +1491,7 @@ class LegPipe(LegCharge):
             q_map_Qi = np.zeros(len(q_map), dtype=np.intp)
             q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
             q_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
+            self.bunched = True
         else:
             q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=np.intp)
             idx = np.arange(len(q_map) + 1, dtype=np.intp)
