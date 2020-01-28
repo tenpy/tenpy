@@ -107,7 +107,7 @@ class ChargeInfo:
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.
@@ -128,7 +128,7 @@ class ChargeInfo:
 
         Parameters
         ----------
-        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
             Instance of the loading engine.
         h5gr : :class:`Group`
             HDF5 group which is represent the object to be constructed.
@@ -397,7 +397,7 @@ class LegCharge:
 
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
 
-        Checks :class:`~tenpy.tools.io.Hdf5Saver.format` for an ouput format key ``"LegCharge"``.
+        Checks :class:`~tenpy.tools.hdf5_io.Hdf5Saver.format` for an ouput format key ``"LegCharge"``.
         Possible choices are:
 
         ``"blocks"`` (default)
@@ -416,7 +416,7 @@ class LegCharge:
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.
@@ -455,7 +455,7 @@ class LegCharge:
 
         Parameters
         ----------
-        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
             Instance of the loading engine.
         h5gr : :class:`Group`
             HDF5 group which is represent the object to be constructed.
@@ -1259,7 +1259,7 @@ class LegPipe(LegCharge):
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.
@@ -1277,7 +1277,7 @@ class LegPipe(LegCharge):
 
         Parameters
         ----------
-        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
             Instance of the loading engine.
         h5gr : :class:`Group`
             HDF5 group which is represent the object to be constructed.

@@ -14,6 +14,7 @@ import numpy as np
 import os
 import tenpy
 import tenpy.linalg.np_conserved as npc
+import tenpy.models.tf_ising
 
 try:
     from packaging.version import parse as parse_version  # part of setuptools
@@ -51,6 +52,7 @@ def gen_example_data(version=tenpy.version.full_version):
         s = tenpy.networks.site.SpinHalfSite()
         psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)])
         psi.test_sanity()
+        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite', 'verbose': 0})
         data = {
             'SpinHalfSite': s,
             'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
@@ -76,6 +78,7 @@ def gen_example_data(version=tenpy.version.full_version):
             'dtypes': [np.dtype("int64"),
                        np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
             'psi': psi,
+            'H_MPO': M.H_MPO,
         }
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
         data['exportable'].some_attr = "something"

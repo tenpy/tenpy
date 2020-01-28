@@ -23,7 +23,8 @@ Added
   - :class:`~tenpy.linalg.charges.LegCharge`
   - :class:`~tenpy.linalg.charges.LegPipe`
   - :class:`~tenpy.linalg.np_conserved.Array`
-  - :class:`~tenpy.networks.MPS`
+  - :class:`~tenpy.networks.mps.MPS`
+  - :class:`~tenpy.networks.mpo.MPO`
 
 Changed
 ^^^^^^^

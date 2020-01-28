@@ -99,7 +99,7 @@ class MPO:
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
-        Valid boundary conditions. The same as for an MPS.
+        Class attribute. Valid boundary conditions; the same as for an MPS.
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
@@ -115,6 +115,78 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.test_sanity()
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo`,
+        :attr:`max_range` (under these names),
+        :attr:`_W` as ``"tensors"``,
+        :attr:`IdL` as ``"index_identity_left"``,
+        :attr:`IdR` as ``"index_identity_right"``, and
+        :attr:`bc` as ``"boundary_condition"``.
+        Moreover, it saves :attr:`L`, and :attr:`grouped` as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.sites, subpath + "sites")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self._W, subpath + "tensors")
+        hdf5_saver.save(self.IdL, subpath + "index_identity_left")
+        hdf5_saver.save(self.IdR, subpath + "index_identity_right")
+        h5gr.attrs["grouped"] = self.grouped
+        hdf5_saver.save(self.bc, subpath + "boundary_condition")
+        hdf5_saver.save(self.max_range, subpath + "max_range")
+
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.sites = hdf5_loader.load(subpath + "sites")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj._W = hdf5_loader.load(subpath + "tensors")
+        obj.dtype = np.find_common_type([W.dtype for W in obj._W], [])
+        obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
+        obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
+        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
+        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
+        obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def from_grids(cls,

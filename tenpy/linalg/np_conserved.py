@@ -304,7 +304,7 @@ class Array:
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.
@@ -330,7 +330,7 @@ class Array:
 
         Parameters
         ----------
-        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
             Instance of the loading engine.
         h5gr : :class:`Group`
             HDF5 group which is represent the object to be constructed.
