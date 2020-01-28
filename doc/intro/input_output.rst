@@ -70,12 +70,12 @@ Data format specification for saving to HDF5
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here, we define a simple format how we save data of TeNPy-defined classes.
-The goal is to have the :func:`~tenpy.tools.io.save_to_hdf5` function for saving sufficiently simple enough python
-objects (supported by the format) to disk in an HDF5 file, such that they can be reconstructed with the :func:`~tenpy.tools.io.load_from_hdf5` function.
+The goal is to have the :func:`~tenpy.tools.hdf5_io.save_to_hdf5` function for saving sufficiently simple enough python
+objects (supported by the format) to disk in an HDF5 file, such that they can be reconstructed with the :func:`~tenpy.tools.hdf5_io.load_from_hdf5` function.
 
 Guidelines of the format:
 
-0. Store enough data such that :func:`~tenpy.tools.io.load_from_hdf5` can reconstruct a copy of the object
+0. Store enough data such that :func:`~tenpy.tools.hdf5_io.load_from_hdf5` can reconstruct a copy of the object
    (provided that the save did not fail with an error).
 1. Objects of a type supported by the HDF5 datasets (with the `h5py`_ interface) should be directly stored as h5py :class:`Dataset`.
    Such objects are for example numpy arrays (of non-object `dtype`), scalars and strings.
@@ -103,22 +103,22 @@ Guidelines of the format:
         Also, loading a HDF5 file can import other python modules, so importing
         a manipulated file is not secure if you downloaded a malicious python file as well.
 
-An implementation along those guidelines is given inside TeNPy in the :mod:`tenpy.tools.io` module with the
-:class:`~tenpy.tools.io.Hdf5Saver` and :class:`~tenpy.tools.io.Hdf5Loader` classes.
+An implementation along those guidelines is given inside TeNPy in the :mod:`tenpy.tools.hdf5_io` module with the
+:class:`~tenpy.tools.hdf5_io.Hdf5Saver` and :class:`~tenpy.tools.hdf5_io.Hdf5Loader` classes.
 The full format specification is given by the what the code does. Since this is hard to read, let me summarize it here:
 
 - Following 1), simple scalars, strings and numpy arrays are saved as :class:`Dataset`. 
   Other objects are saved as a HDF5 :class:`Group`, with the actual data being saved as group members (as sub-groups and
   sub-datasets) or as attributes (for metadata or simple data).
 - The type of the object is stored in the attribute ``'type'``, which is one of the global ``REPR_*`` variables in
-  :mod:`tenpy.tools.io`. The type determines the format for saving/loading of builtin types (list, ...)
+  :mod:`tenpy.tools.hdf5_io`. The type determines the format for saving/loading of builtin types (list, ...)
 - Userdefined classes which should be possible to export/import need to implement methods ``save_hdf5`` and ``from_hdf5``
-  as specified in :class:`~tenpy.tools.io.Hdf5Exportable`.
+  as specified in :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`.
   When saving such a class, the attribute ``'type'`` is automatically set to ``'instance'``, and the class name and
   module are saved under the attributes ``'module'`` and ``'class'``. During loading, this information is used to 
   automatically import the module, get the class and call the classmethod ``from_hdf5`` for reconstruction.
   This can only work if the class definition already exists, i.e., you can only save class instances, not classes itself.
-- For most classes, simply subclassing :class:`~tenpy.tools.io.Hdf5Exportable` should work to make the class exportable.
+- For most classes, simply subclassing :class:`~tenpy.tools.hdf5_io.Hdf5Exportable` should work to make the class exportable.
   The latter saves the contents of :attr:`~object.__dict__`, with the extra attribute ``'format'`` specifying 
   whether the dictionary is "simple" (see below.).
 - The ``None`` object is saved as a group with the attribute ``'type'`` being ``'None'``.
@@ -127,12 +127,12 @@ The full format specification is given by the what the code does. Since this is 
 - The format for dictionaries depends on whether all keys are "simple", which we define as being strings which are valid
   python variable names. Following 4), the keys of a simple dictionary are directly used as names for group members (with
   the values being whatever the group member (which is a :class:`Dataset` or :class:`Group`) represents.
-- Partial loading along 5) is possible by directly specifying the subgroup or the path to :func:`~tenpy.tools.io.load_from_hdf5`.
+- Partial loading along 5) is possible by directly specifying the subgroup or the path to :func:`~tenpy.tools.hdf5_io.load_from_hdf5`.
 - Guidelines 6) is ensured as much as possible. However, there is a bug/exception: 
   tuples with cyclic references are not re-constructed correctly; the inner objects will be lists instead of tuples 
   (but with the same object entries).
 
-Finally, we have to mention that many TeNPy classes are :class:`~tenpy.tools.io.Hdf5Exportable`.
+Finally, we have to mention that many TeNPy classes are :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`.
 In particular, the :class:`~tenpy.linalg.np_conserved.Array` supports this. 
 To see what the exact format for those classes is, look at the `save_hdf5` and `from_hdf5` methods of those classes.
 

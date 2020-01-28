@@ -69,7 +69,7 @@ def gen_example_data(version=tenpy.version.full_version):
                 'asdf': 2,
                 (1, 2): '3'
             },
-            'exportable': tenpy.tools.io.Hdf5Exportable(),
+            'exportable': tenpy.tools.hdf5_io.Hdf5Exportable(),
             'range': range(2, 8, 3),
             'dtypes': [np.dtype("int64"),
                        np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],

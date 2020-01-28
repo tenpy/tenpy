@@ -6,7 +6,7 @@ import pickle
 import pytest
 import warnings
 import tempfile
-from tenpy.tools import io as hdf5_io
+from tenpy.tools import hdf5_io
 import numpy as np
 
 datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]

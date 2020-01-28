@@ -22,7 +22,7 @@ Changed
 
 Added
 ^^^^^
-- :mod:`tenpy.tools.io` with convenience functions for import and output with pickle, as well as an implementation 
+- :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 
 Fixed

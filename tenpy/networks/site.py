@@ -10,7 +10,7 @@ import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
-from ..tools.io import Hdf5Exportable
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
