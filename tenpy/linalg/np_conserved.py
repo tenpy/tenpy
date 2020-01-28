@@ -142,6 +142,8 @@ class Array:
         The data type of the array entries. Defaults to np.float64.
     qtotal : 1D array of QTYPE
         The total charge of the array. Defaults to 0.
+    labels : list of {str | None}
+        Labels associated to each leg, ``None`` for non-named labels.
 
     Attributes
     ----------
@@ -159,8 +161,8 @@ class Array:
         The total charge of the tensor.
     legs : list of :class:`~tenpy.linalg.charges.LegCharge`
         The leg charges for each of the legs.
-    labels : dict (string -> int)
-        Labels for the different legs.
+    _labels : list of { str | None }
+        Labels for the different legs, None for non-labeled legs.
     _data : list of arrays
         The actual entries of the tensor.
     _qdata : 2D array (len(_data), rank), dtype np.intp
@@ -170,7 +172,7 @@ class Array:
         but *must* be set to `False` by algorithms changing _qdata.
 
     """
-    def __init__(self, legcharges, dtype=np.float64, qtotal=None):
+    def __init__(self, legcharges, dtype=np.float64, qtotal=None, labels=None):
         """see help(self)"""
         self.legs = list(legcharges)
         if len(self.legs) == 0:
@@ -180,6 +182,8 @@ class Array:
         self.dtype = np.dtype(dtype)
         self.qtotal = self.chinfo.make_valid(qtotal)
         self._labels = [None] * len(self.legs)
+        if labels is not None:
+            self.iset_leg_labels(labels)
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp, order='C')
         self._qdata_sorted = True
@@ -223,7 +227,11 @@ class Array:
         block_q = self.chinfo.make_valid(block_q)
         if np.any(block_q != self.qtotal):
             raise ValueError("some row of _qdata is incompatible with total charge")
-        # TODO: check labels?
+        # test labels
+        assert len(self._labels) == self.rank
+        for lbl in self._labels:
+            if not isinstance(lbl, (type(None), str)):
+                raise ValueError("label not string: " + repr(self.labels))
 
     def copy(self, deep=True):
         """Return a (deep or shallow) copy of self.
@@ -342,7 +350,7 @@ class Array:
         return obj
 
     @classmethod
-    def from_ndarray_trivial(cls, data_flat, dtype=None):
+    def from_ndarray_trivial(cls, data_flat, dtype=None, labels=None):
         """convert a flat numpy ndarray to an Array with trivial charge conservation.
 
         Parameters
@@ -351,6 +359,8 @@ class Array:
             The data to be converted to a Array.
         dtype : ``np.dtype``
             The data type of the array entries. Defaults to dtype of `data_flat`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -363,7 +373,7 @@ class Array:
         data_flat = data_flat.astype(dtype, copy=False)
         chinfo = ChargeInfo()
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
-        res = cls(legs, dtype)
+        res = cls(legs, dtype, labels=labels)
         res._data = [data_flat]
         res._qdata = np.zeros((1, res.rank), np.intp)
         res._qdata_sorted = True
@@ -371,7 +381,8 @@ class Array:
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None):
+    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None,
+                     labels=None):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -388,6 +399,8 @@ class Array:
         cutoff : float
             Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
             Defaults to :data:`QCUTOFF`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -404,7 +417,7 @@ class Array:
         if dtype is None:
             dtype = data_flat.dtype
         data_flat = data_flat.astype(dtype, copy=False)
-        res = cls(legcharges, dtype, qtotal)  # without any data
+        res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
                 res.shape, data_flat.shape))
@@ -434,7 +447,8 @@ class Array:
                   qtotal=None,
                   func_args=(),
                   func_kwargs={},
-                  shape_kw=None):
+                  shape_kw=None,
+                  labels=None):
         """Create an Array from a numpy func.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -464,6 +478,8 @@ class Array:
             Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -481,7 +497,7 @@ class Array:
                 block = func(*func_args, **kws)
             block = np.asarray(block)
             dtype = block.dtype
-        res = cls(legcharges, dtype, qtotal)  # without any data yet.
+        res = cls(legcharges, dtype, qtotal, labels)  # without any data yet.
         data = []
         qdata = []
         # iterate over all qindices compatible with qtotal
@@ -506,7 +522,14 @@ class Array:
         return res
 
     @classmethod
-    def from_func_square(cls, func, leg, dtype=None, func_args=(), func_kwargs={}, shape_kw=None):
+    def from_func_square(cls,
+                         func,
+                         leg,
+                         dtype=None,
+                         func_args=(),
+                         func_kwargs={},
+                         shape_kw=None,
+                         labels=None):
         """Create an Array from a (numpy) function.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -536,6 +559,8 @@ class Array:
             Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -548,7 +573,7 @@ class Array:
             legs = [pipe, pipe.conj()]
         else:
             legs = [leg, leg.conj()]
-        res = Array.from_func(func, legs, dtype, None, func_args, func_kwargs, shape_kw)
+        res = Array.from_func(func, legs, dtype, None, func_args, func_kwargs, shape_kw, labels)
         if not blocked:
             return res.split_legs()
         return res
@@ -2706,22 +2731,22 @@ class Array:
 # ##################################
 
 
-def zeros(legcharges, dtype=np.float64, qtotal=None):
+def zeros(legcharges, dtype=np.float64, qtotal=None, labels=None):
     """Create a npc array full of zeros (with no _data).
 
     This is just a wrapper around ``Array(...)``, detailed documentation can be found in the class
     doc-string of :class:`Array`.
     """
-    return Array(legcharges, dtype, qtotal)
+    return Array(legcharges, dtype, qtotal, labels)
 
 
-def eye_like(a, axis=0):
+def eye_like(a, axis=0, labels=None):
     """Return an identity matrix contractible with the leg `axis` of the :class:`Array` `a`."""
     axis = a.get_leg_index(axis)
-    return diag(1., a.legs[axis])
+    return diag(1., a.legs[axis], labels=labels)
 
 
-def diag(s, leg, dtype=None):
+def diag(s, leg, dtype=None, labels=None):
     """Returns a square, diagonal matrix of entries `s`.
 
     The resulting matrix has legs ``(leg, leg.conj())`` and charge 0.
@@ -2734,6 +2759,8 @@ def diag(s, leg, dtype=None):
         The first leg of the resulting matrix.
     dtype : None | type
         The data type to be used for the result. By default, use dtype of `s`.
+    labels : list of {str | None}
+        Labels associated to each leg, ``None`` for non-named labels.
 
     Returns
     -------
@@ -2748,7 +2775,7 @@ def diag(s, leg, dtype=None):
     scalar = (s.ndim == 0)
     if not scalar and len(s) != leg.ind_len:
         raise ValueError("len(s)={0:d} not equal to leg.ind_len={1:d}".format(len(s), leg.ind_len))
-    res = Array((leg, leg.conj()), s.dtype)  # default charge is 0
+    res = Array((leg, leg.conj()), s.dtype, labels=labels)  # default charge is 0
     # qdata = [[0, 0], [1, 1], ....]
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
@@ -2903,7 +2930,7 @@ def grid_concat(grid, axes, copy=True):
     return _grid_concat_recursion(grid, axes, copy)
 
 
-def grid_outer(grid, grid_legs, qtotal=None):
+def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
     """Given an np.array of npc.Arrays, return the corresponding higher-dimensional Array.
 
     Parameters
@@ -2917,6 +2944,8 @@ def grid_outer(grid, grid_legs, qtotal=None):
     qtotal : charge
         The total charge of the Array.
         By default (``None``), derive it out from a non-trivial entry of the grid.
+    grid_labels : list of {str | None}
+        One label associated to each of the grid axes. ``None`` for non-named labels.
 
     Returns
     -------
@@ -2933,14 +2962,13 @@ def grid_outer(grid, grid_legs, qtotal=None):
     Examples
     --------
     A typical use-case for this function is the generation of an MPO.
-    Say you have npc.Arrays ``Splus, Sminus, Sz``, each with legs ``[phys.conj(), phys]``.
+    Say you have npc.Arrays ``Splus, Sminus, Sz, Id``, each with legs ``[phys.conj(), phys]``.
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
     Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
-    >>> Id = np.eye_like(Sz)
     >>> W_mpo = grid_outer([[Id, Splus, Sminus, Sz, None],
-    ...                     [None, None, None, None, J*Sminus],
-    ...                     [None, None, None, None, J*Splus],
+    ...                     [None, None, None, None, J*0.5*Sminus],
+    ...                     [None, None, None, None, J*0.5*Splus],
     ...                     [None, None, None, None, J*Sz],
     ...                     [None, None, None, None, Id]],
     ...                    leg_charges=[l_left, l_right])
@@ -2957,20 +2985,21 @@ def grid_outer(grid, grid_legs, qtotal=None):
     dtype = np.find_common_type([e.dtype for _, e in entries], [])
     legs = list(grid_legs) + entry.legs
     labels = entry._labels[:]
+    if grid_labels is None:
+        grid_labels = [None] * len(grid_shape)
+    labels = grid_labels + labels
     if qtotal is None:
         # figure out qtotal from first non-zero entry
         grid_charges = [l.get_charge(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
         qtotal = chinfo.make_valid(np.sum(grid_charges + [entry.qtotal], axis=0))
     else:
         qtotal = chinfo.make_valid(qtotal)
-    res = Array(legs, dtype, qtotal)
+    res = Array(legs, dtype, qtotal, labels)
     # main work: iterate over all non-trivial entries to fill `res`.
     for idx, entry in entries:
         res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
         if labels is not None and entry._labels != labels:
             labels = None
-    if labels is not None:
-        res.iset_leg_labels([None] * len(grid_shape) + labels)
     res.test_sanity()
     return res
 
