@@ -144,13 +144,20 @@ class MPS:
         We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
         takes proper care of the boundary conditions.
     _valid_forms : dict
+        Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
         ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
     _valid_bc : tuple of str
-        Valid boundary conditions.
+        Class attribute. Possible valid boundary conditions.
     _transfermatrix_keep : int
         How many states to keep at least when diagonalizing a :class:`TransferMatrix`.
         Important if the state develops a near-degeneracy.
+    _p_label, _B_labels : list of str
+        Class attribute. `_p_label` defines the physical legs of the B-tensors, `_B_labels` lists
+        all the labels of the B tensors. Used by methods like :meth:`get_theta` to avoid
+        the necessity of re-implementations for derived classes like the
+        :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
+        legs changed.
     """
     # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
     # For the canonical forms, ``nu[0] + nu[1] = 1``
@@ -167,7 +174,6 @@ class MPS:
     _valid_bc = ('finite', 'segment', 'infinite')
     # the "physical" labels for each B
     _p_label = ['p']
-    _p_label_star = ['p*']
     # All labels of each tensor in _B (order is used!)
     _B_labels = ['vL', 'p', 'vR']
 
