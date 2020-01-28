@@ -2278,8 +2278,7 @@ class MPS:
                 sign = np.real_if_close(np.exp(1.j * np.pi * sign.reshape([dL * dR])))
                 swap_op = np.diag(sign).reshape([dL, dR, dL, dR])
                 legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
-                swap_op = npc.Array.from_ndarray(swap_op, legs)
-                swap_op.iset_leg_labels(['p1', 'p0', 'p0*', 'p1*'])
+                swap_op = npc.Array.from_ndarray(swap_op, legs, labels=['p1', 'p0', 'p0*', 'p1*'])
             else:  # no sign necessary
                 swap_op = None  # continue with transposition as for Bosons
         theta = self.get_theta(i, n=2)
@@ -2904,8 +2903,7 @@ class MPSEnvironment:
         leg_ket = self.ket.get_B(i, None).get_leg('vL')
         leg_bra = self.bra.get_B(i, None).get_leg('vL')
         leg_ket.test_equal(leg_bra)
-        init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_LP.iset_leg_labels(['vR*', 'vR'])
+        init_LP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vR*', 'vR'])
         return init_LP
 
     def init_RP(self, i):
@@ -2924,8 +2922,7 @@ class MPSEnvironment:
         leg_ket = self.ket.get_B(i, None).get_leg('vR')
         leg_bra = self.bra.get_B(i, None).get_leg('vR')
         leg_ket.test_equal(leg_bra)
-        init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_RP.iset_leg_labels(['vL*', 'vL'])
+        init_RP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vL*', 'vL'])
         return init_RP
 
     def get_LP(self, i, store=True):
@@ -3371,7 +3368,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         mat : :class:`~tenpy.linalg.np_conserved.Array`
             A 2D array with `diag` on the diagonal such that :meth:`matvec` can act on it.
         """
-        return npc.diag(diag, self.pipe.legs[0]).iset_leg_labels(self.label_split)
+        return npc.diag(diag, self.pipe.legs[0], labels=self.label_split)
 
     def eigenvectors(self,
                      num_ev=1,

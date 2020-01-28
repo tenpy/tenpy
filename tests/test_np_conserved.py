@@ -490,10 +490,8 @@ def test_npc_addition_transpose():
     # addition with labels and transposed axes
     a1 = np.random.random([3, 3, 4])
     a2 = np.swapaxes(a1, 0, 1)
-    t1 = npc.Array.from_ndarray_trivial(a1)
-    t1.iset_leg_labels(['a', 'b', 'c'])
-    t2 = npc.Array.from_ndarray_trivial(a2)
-    t2.iset_leg_labels(['b', 'a', 'c'])
+    t1 = npc.Array.from_ndarray_trivial(a1, labels=['a', 'b', 'c'])
+    t2 = npc.Array.from_ndarray_trivial(a2, labels=['b', 'a', 'c'])
     # TODO: for now warning
     with pytest.warns(FutureWarning):
         diff = npc.norm(t1 - t2)

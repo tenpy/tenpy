@@ -561,9 +561,8 @@ class RenyiDisentangler(Disentangler):
     def __call__(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy."""
         U_idx_dt, i = self.parent._update_index
-        U = npc.outer(
-            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(npc.eye_like(theta, 'q0', labels=['q0', 'q0*']),
+                      npc.eye_like(theta, 'q1', labels=['q1', 'q1*']))
         Sold = np.inf
         S0 = None
         for j in range(self.max_iter):
@@ -680,9 +679,8 @@ class NormDisentangler(Disentangler):
 
     def __call__(self, theta):
         _, i = self.parent._update_index
-        U = npc.outer(
-            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(npc.eye_like(theta, 'q0', labels=['q0', 'q0*']),
+                      npc.eye_like(theta, 'q1', labels=['q1', 'q1*']))
         err = None
         trunc_par = self.trunc_par.copy()
         for chi_opt in self.chi_range:

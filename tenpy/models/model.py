@@ -379,7 +379,7 @@ class NearestNeighborModel(Model):
         for i in range(L):
             wL, wR = legs[i], legs[i + 1].conj()
             p = sites[i].leg
-            W = npc.zeros([wL, wR, p, p.conj()], dtype)
+            W = npc.zeros([wL, wR, p, p.conj()], dtype, labels=['wL', 'wR', 'p', 'p*'])
             W[0, 0, :, :] = sites[i].Id
             W[-1, -1, :, :] = sites[i].Id
             onsite = onsite_terms[i]
@@ -392,7 +392,6 @@ class NearestNeighborModel(Model):
             if bond_XYZ[j] is not None:
                 X, _ = bond_XYZ[j]
                 W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws[i] = W
         H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
         return H_MPO

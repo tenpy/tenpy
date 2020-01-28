@@ -41,13 +41,11 @@ p_leg = npc.LegCharge.from_qflat(chinfo, [[1], [-1]])  # charges for up, down
 v_leg_even = npc.LegCharge.from_qflat(chinfo, [[0]])
 v_leg_odd = npc.LegCharge.from_qflat(chinfo, [[1]])
 
-B_even = npc.zeros([v_leg_even, v_leg_odd.conj(), p_leg])
-B_odd = npc.zeros([v_leg_odd, v_leg_even.conj(), p_leg])
+B_even = npc.zeros([v_leg_even, v_leg_odd.conj(), p_leg],
+                   labels=['vL', 'vR', 'p'])  # virtual left/right, physical
+B_odd = npc.zeros([v_leg_odd, v_leg_even.conj(), p_leg], labels=['vL', 'vR', 'p'])
 B_even[0, 0, 0] = 1.  # up
 B_odd[0, 0, 1] = 1.  # down
-
-for B in [B_even, B_odd]:
-    B.iset_leg_labels(['vL', 'vR', 'p'])  # virtual left/right, physical
 
 Bs = [B_even, B_odd] * (L // 2) + [B_even] * (L % 2)  # (right-canonical)
 Ss = [np.ones(1)] * L  # Ss[i] are singular values between Bs[i-1] and Bs[i]
@@ -72,12 +70,10 @@ print("2) create an MPO representing the AFM Heisenberg Hamiltonian")
 #         p
 
 # create physical spin-1/2 operators Sz, S+, S-
-Sz = npc.Array.from_ndarray([[0.5, 0.], [0., -0.5]], [p_leg, p_leg.conj()])
-Sp = npc.Array.from_ndarray([[0., 1.], [0., 0.]], [p_leg, p_leg.conj()])
-Sm = npc.Array.from_ndarray([[0., 0.], [1., 0.]], [p_leg, p_leg.conj()])
-Id = npc.eye_like(Sz)  # identity
-for op in [Sz, Sp, Sm, Id]:
-    op.iset_leg_labels(['p', 'p*'])  # physical in, physical out
+Sz = npc.Array.from_ndarray([[0.5, 0.], [0., -0.5]], [p_leg, p_leg.conj()], labels=['p', 'p*'])
+Sp = npc.Array.from_ndarray([[0., 1.], [0., 0.]], [p_leg, p_leg.conj()], labels=['p', 'p*'])
+Sm = npc.Array.from_ndarray([[0., 0.], [1., 0.]], [p_leg, p_leg.conj()], labels=['p', 'p*'])
+Id = npc.eye_like(Sz, labels=Sz.get_leg_labels())  # identity
 
 mpo_leg = npc.LegCharge.from_qflat(chinfo, [[0], [2], [-2], [0], [0]])
 
@@ -87,8 +83,8 @@ W_grid = [[Id,   Sp,   Sm,   Sz,   None          ],
           [None, None, None, None, Jz * Sz       ],
           [None, None, None, None, Id            ]]  # yapf:disable
 
-W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()])
-W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])  # wL/wR = virtual left/right of the MPO
+W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()], grid_labels=['wL', 'wR'])
+# wL/wR = virtual left/right of the MPO
 Ws = [W] * L
 
 print("3) define 'environments' left and right")
@@ -99,11 +95,11 @@ print("3) define 'environments' left and right")
 #  |                       |
 #  .---->- vR*    vL*->----.
 
-envL = npc.zeros([W.get_leg('wL').conj(), Bs[0].get_leg('vL').conj(), Bs[0].get_leg('vL')])
-envL.iset_leg_labels(['wR', 'vR', 'vR*'])
+envL = npc.zeros([W.get_leg('wL').conj(), Bs[0].get_leg('vL').conj(), Bs[0].get_leg('vL')],
+                 labels=['wR', 'vR', 'vR*'])
 envL[0, :, :] = npc.diag(1., envL.legs[1])
-envR = npc.zeros([W.get_leg('wR').conj(), Bs[-1].get_leg('vR').conj(), Bs[-1].get_leg('vR')])
-envR.iset_leg_labels(['wL', 'vL', 'vL*'])
+envR = npc.zeros([W.get_leg('wR').conj(), Bs[-1].get_leg('vR').conj(), Bs[-1].get_leg('vR')],
+                 labels=['wL', 'vL', 'vL*'])
 envR[-1, :, :] = npc.diag(1., envR.legs[1])
 
 print("4) contract MPS and MPO to calculate the energy <psi|H|psi>")

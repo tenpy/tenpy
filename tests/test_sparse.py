@@ -40,17 +40,15 @@ def test_FlatHermitianOperator(n=30, k=5, tol=1.e-14):
     leg = gen_random_legcharge(ch, n // 2)
     leg2 = gen_random_legcharge(ch, 2)
     pipe = npc.LegPipe([leg, leg2], qconj=+1)
-    H = npc.Array.from_func_square(rmat.GUE, pipe)
-    H.iset_leg_labels(["(a.b)", "(a*.b*)"])
+    H = npc.Array.from_func_square(rmat.GUE, pipe, labels=["(a.b)", "(a*.b*)"])
     H_flat = H.to_ndarray()
     E_flat, psi_flat = np.linalg.eigh(H_flat)
     E0_flat, psi0_flat = E_flat[0], psi_flat[:, 0]
     qtotal = npc.detect_qtotal(psi0_flat, [pipe])
 
     H_sparse = sparse.FlatHermitianOperator.from_NpcArray(H, charge_sector=qtotal)
-    psi_init = npc.Array.from_func(np.random.random, [pipe], qtotal=qtotal)
+    psi_init = npc.Array.from_func(np.random.random, [pipe], qtotal=qtotal, labels=["(a.b)"])
     psi_init /= npc.norm(psi_init)
-    psi_init.iset_leg_labels(["(a.b)"])
     psi_init_flat = H_sparse.npc_to_flat(psi_init)
 
     # check diagonalization

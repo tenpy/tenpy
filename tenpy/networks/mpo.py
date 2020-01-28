@@ -187,8 +187,7 @@ class MPO:
         assert len(legs) == L + 1
         Ws = []
         for i in range(L):
-            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
         return cls(sites, Ws, bc, IdL, IdR, max_range)
 

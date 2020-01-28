@@ -1887,8 +1887,7 @@ class DensityMatrixMixer(Mixer):
             x[Id_L] = 1.
         if Id_R is not None:
             x[Id_R] = 0.
-        x = npc.diag(x, wR_leg)
-        x.iset_leg_labels(['wL*', 'wL'])
+        x = npc.diag(x, wR_leg, labels=['wL*', 'wL'])
         return x, separate_Id
 
     def get_xL(self, wL_leg, Id_L, Id_R):
@@ -1918,8 +1917,7 @@ class DensityMatrixMixer(Mixer):
             x[Id_R] = 1.
         if Id_L is not None:
             x[Id_L] = 0.
-        x = npc.diag(x, wL_leg)
-        x.iset_leg_labels(['wR*', 'wR'])
+        x = npc.diag(x, wL_leg, labels=['wR*', 'wR'])
         return x, separate_Id
 
 
