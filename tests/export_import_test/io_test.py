@@ -49,6 +49,8 @@ def gen_example_data(version=tenpy.version.full_version):
         }
     else:
         s = tenpy.networks.site.SpinHalfSite()
+        psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)])
+        psi.test_sanity()
         data = {
             'SpinHalfSite': s,
             'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
@@ -73,6 +75,7 @@ def gen_example_data(version=tenpy.version.full_version):
             'range': range(2, 8, 3),
             'dtypes': [np.dtype("int64"),
                        np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
+            'psi': psi,
         }
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
         data['exportable'].some_attr = "something"

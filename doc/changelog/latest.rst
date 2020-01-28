@@ -14,16 +14,26 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - nothing yet
 
+Added
+^^^^^
+- :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
+  allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
+- `save_hdf5` and `load_hdf5` methods to support saving/loading to HDF5 for the following classes:
+  - :class:`~tenpy.linalg.charges.ChargeInfo`
+  - :class:`~tenpy.linalg.charges.LegCharge`
+  - :class:`~tenpy.linalg.charges.LegPipe`
+  - :class:`~tenpy.linalg.np_conserved.Array`
+  - :class:`~tenpy.networks.MPS`
+
 Changed
 ^^^^^^^
 - DEFAULT DMRG paramter ``'diag_method'`` from ``'lanczos'`` to ``'default'``, which is the same for large bond
   dimensions, but performs a full exact diagonalization if the effective Hamiltonian has small dimensions.
   The threshold introduced is the new DMRG parameter ``'max_N_for_ED'``.
+- Derive the following classes from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable` to support saving
+  of sites to HDF5:
+  - :class:`~tenpy.networks.site.Site`
 
-Added
-^^^^^
-- :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
-  allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 
 Fixed
 ^^^^^

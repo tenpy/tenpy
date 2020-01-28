@@ -12,12 +12,12 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - nothing yet
 
-Changed
-^^^^^^^
-- nothing yet
-
 Added
 ^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
 - nothing yet
 
 Fixed

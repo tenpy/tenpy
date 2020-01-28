@@ -240,6 +240,81 @@ class MPS:
         cp._transfermatrix_keep = self._transfermatrix_keep
         return cp
 
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo` (under these names),
+        :attr:`_B` as ``"tensors"``,
+        :attr:`_S` as ``"singular_values"``,
+        :attr:`bc` as ``"boundary_condition"``, and
+        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``,
+        Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
+        :attr:`_transfermatrix_keep` as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.sites, subpath + "sites")
+        hdf5_saver.save(self._B, subpath + "tensors")
+        hdf5_saver.save(self._S, subpath + "singular_values")
+        hdf5_saver.save(self.bc, subpath + "boundary_condition")
+        hdf5_saver.save(np.array(self.form), subpath + "canonical_form")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        h5gr.attrs["norm"] = self.norm
+        h5gr.attrs["grouped"] = self.grouped
+        h5gr.attrs["_transfermatrix_keep"] = self._transfermatrix_keep
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.sites = hdf5_loader.load(subpath + "sites")
+        obj._B = hdf5_loader.load(subpath + "tensors")
+        obj._S = hdf5_loader.load(subpath + "singular_values")
+        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
+        form = hdf5_loader.load(subpath + "canonical_form")
+        obj.form = [tuple(f) for f in form]
+        obj.norm = hdf5_loader.get_attr(h5gr, "norm")
+
+        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
+        obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "_transfermatrix_keep")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj.dtype = np.find_common_type([B.dtype for B in obj._B], [])
+        obj.test_sanity()
+        return obj
+
     @classmethod
     def from_product_state(cls,
                            sites,

@@ -295,6 +295,13 @@ class Array:
 
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
 
+        Specifically, it saves :attr:`chinfo`, :attr:`legs`, :attr:`dtype` under these names,
+        :attr:`qtotal` as ``"total_charge"``,
+        :attr:`_data` as ``"blocks"``, :attr:`_qdata` as ``:block_inds"``,
+        the :attr:`labels` in the list-form (as returned by :meth:`get_leg_labels`).
+        Moreover, it saves :attr:`rank`, :attr:`shape` and
+        :attr:`_qdata_sorted` (under the name ``"block_inds_sorted"``) as HDF5 attributes.
+
         Parameters
         ----------
         hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
