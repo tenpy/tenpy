@@ -185,6 +185,46 @@ class Array:
         self._qdata_sorted = True
         self.test_sanity()
 
+    def test_sanity(self):
+        """Sanity check.
+
+        Raises ValueErrors, if something is wrong.
+        """
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
+        if len(self.legs) == 0:
+            raise ValueError("We don't allow rank-0 tensors without legs")
+        for l in self.legs:
+            if l.chinfo != self.chinfo:
+                raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
+                    l.chinfo, self.chinfo))
+        if self.shape != tuple([lc.ind_len for lc in self.legs]):
+            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
+                self.shape, tuple([lc.ind_len for lc in self.legs])))
+        for l in self.legs:
+            l.test_sanity()
+        if any([self.dtype != d.dtype for d in self._data]):
+            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
+                self.dtype, [self.dtype != d.dtype for d in self._data]))
+        if self._qdata.shape != (self.stored_blocks, self.rank):
+            raise ValueError("_qdata shape wrong")
+        if self._qdata.dtype != np.intp:
+            raise ValueError("wront dtype of _qdata")
+        if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
+            raise ValueError("invalid qind in _qdata")
+        if not self._qdata.flags['C_CONTIGUOUS']:
+            raise ValueError("qdata is not C-contiguous")
+        if self._qdata_sorted:
+            perm = np.lexsort(self._qdata.T)
+            if np.any(perm != np.arange(len(perm))):
+                raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
+        # check total charge
+        block_q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, self._qdata.T)], axis=0)
+        block_q = self.chinfo.make_valid(block_q)
+        if np.any(block_q != self.qtotal):
+            raise ValueError("some row of _qdata is incompatible with total charge")
+        # TODO: check labels?
+
     def copy(self, deep=True):
         """Return a (deep or shallow) copy of self.
 
@@ -246,8 +286,6 @@ class Array:
         """Export `self` into a HDF5 file.
 
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
-
-        .. todo : what to save?
 
         Parameters
         ----------
@@ -522,46 +560,6 @@ class Array:
         res._qdata = np.empty((0, res.rank), dtype=np.intp)
         res._qdata_sorted = True
         return res
-
-    def test_sanity(self):
-        """Sanity check.
-
-        Raises ValueErrors, if something is wrong.
-        """
-        if optimize(OptimizationFlag.skip_arg_checks):
-            return
-        if len(self.legs) == 0:
-            raise ValueError("We don't allow rank-0 tensors without legs")
-        for l in self.legs:
-            if l.chinfo != self.chinfo:
-                raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
-                    l.chinfo, self.chinfo))
-        if self.shape != tuple([lc.ind_len for lc in self.legs]):
-            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
-                self.shape, tuple([lc.ind_len for lc in self.legs])))
-        for l in self.legs:
-            l.test_sanity()
-        if any([self.dtype != d.dtype for d in self._data]):
-            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
-                self.dtype, [self.dtype != d.dtype for d in self._data]))
-        if self._qdata.shape != (self.stored_blocks, self.rank):
-            raise ValueError("_qdata shape wrong")
-        if self._qdata.dtype != np.intp:
-            raise ValueError("wront dtype of _qdata")
-        if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
-            raise ValueError("invalid qind in _qdata")
-        if not self._qdata.flags['C_CONTIGUOUS']:
-            raise ValueError("qdata is not C-contiguous")
-        if self._qdata_sorted:
-            perm = np.lexsort(self._qdata.T)
-            if np.any(perm != np.arange(len(perm))):
-                raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
-        # check total charge
-        block_q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, self._qdata.T)], axis=0)
-        block_q = self.chinfo.make_valid(block_q)
-        if np.any(block_q != self.qtotal):
-            raise ValueError("some row of _qdata is incompatible with total charge")
-        # TODO: check labels?
 
     # properties ==============================================================
 

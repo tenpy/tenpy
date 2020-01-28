@@ -228,6 +228,18 @@ class MPS:
                 assert isinstance(f, tuple)
                 assert len(f) == 2
 
+    def copy(self):
+        """Returns a copy of `self`.
+
+        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
+        B and S are deeply copied.
+        """
+        # __init__ makes deep copies of B, S
+        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm)
+        cp.grouped = self.grouped
+        cp._transfermatrix_keep = self._transfermatrix_keep
+        return cp
+
     @classmethod
     def from_product_state(cls,
                            sites,
@@ -611,18 +623,6 @@ class MPS:
             Ts = next_Ts
             labels_L = labels_R
         return cls([site] * L, Bs, Ss, bc=bc, form=forms)
-
-    def copy(self):
-        """Returns a copy of `self`.
-
-        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
-        B and S are deeply copied.
-        """
-        # __init__ makes deep copies of B, S
-        cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
-        cp.grouped = self.grouped
-        cp._transfermatrix_keep = self._transfermatrix_keep
-        return cp
 
     @property
     def L(self):
