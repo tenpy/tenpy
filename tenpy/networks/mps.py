@@ -253,8 +253,8 @@ class MPS:
         :attr:`bc` as ``"boundary_condition"``, and
         :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``,
         Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
-        :attr:`_transfermatrix_keep` as HDF5 attributes, as well as
-        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+        :attr:`_transfermatrix_keep` (as "transfermatrix_keep") as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name "max_bond_dimension".
 
         Parameters
         ----------
@@ -273,7 +273,7 @@ class MPS:
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
         h5gr.attrs["norm"] = self.norm
         h5gr.attrs["grouped"] = self.grouped
-        h5gr.attrs["_transfermatrix_keep"] = self._transfermatrix_keep
+        h5gr.attrs["transfermatrix_keep"] = self._transfermatrix_keep
         h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
@@ -309,7 +309,7 @@ class MPS:
         obj.norm = hdf5_loader.get_attr(h5gr, "norm")
 
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
-        obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "_transfermatrix_keep")
+        obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj.dtype = np.find_common_type([B.dtype for B in obj._B], [])
         obj.test_sanity()
