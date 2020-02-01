@@ -655,7 +655,7 @@ def Array_itranspose(self, axes=None):
         axes =self.get_leg_indices(axes)
         if len(axes) != self.rank or len(set(axes)) != self.rank:
             raise ValueError("axes has wrong length: " + str(axes))
-        if axes == range(self.rank):
+        if axes == list(range(self.rank)):
             return self  # nothing to do
         axes = np.array(axes, dtype=np.intp)
     Array_itranspose_fast(self, axes)

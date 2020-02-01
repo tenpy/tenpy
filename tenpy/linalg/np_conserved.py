@@ -1876,10 +1876,10 @@ class Array:
         if axes is None:
             axes = tuple(reversed(range(self.rank)))
         else:
-            axes = tuple(self.get_leg_indices(axes))
+            axes = self.get_leg_indices(axes)
             if len(axes) != self.rank or len(set(axes)) != self.rank:
                 raise ValueError("axes has wrong length: " + str(axes))
-            if axes == tuple(range(self.rank)):
+            if axes == list(range(self.rank)):
                 return self  # nothing to do
         axes_arr = np.array(axes)
         self.legs = [self.legs[a] for a in axes]
