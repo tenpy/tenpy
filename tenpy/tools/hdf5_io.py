@@ -22,12 +22,27 @@ Names of HDF5 attributes:
 Names for the ``ATTR_TYPE`` attribute:
 
 .. autodata:: REPR_HDF5EXPORTABLE
+
+.. autodata:: REPR_ARRAY
+.. autodata:: REPR_INT
+.. autodata:: REPR_FLOAT
+.. autodata:: REPR_STR
+.. autodata:: REPR_COMPLEX
+.. autodata:: REPR_INT64
+.. autodata:: REPR_FLOAT64
+.. autodata:: REPR_INT32
+.. autodata:: REPR_FLOAT32
+.. autodata:: REPR_BOOL
+
 .. autodata:: REPR_NONE
+.. autodata:: REPR_RANGE
 .. autodata:: REPR_LIST
-.. autodata:: REPR_SET
 .. autodata:: REPR_TUPLE
+.. autodata:: REPR_SET
 .. autodata:: REPR_DICT_GENERAL
 .. autodata:: REPR_DICT_SIMPLE
+.. autodata:: REPR_DTYPE
+.. autodata:: REPR_IGNORED
 
 .. autodata:: TYPES_FOR_HDF5_DATASETS
 
@@ -138,6 +153,7 @@ REPR_INT64 = np.string_("np.int64")  #: saved object represents a np.int64
 REPR_FLOAT64 = np.string_("np.float64")  #: saved object represents a np.float64
 REPR_INT32 = np.string_("np.int32")  #: saved object represents a np.int32
 REPR_FLOAT32 = np.string_("np.float32")  #: saved object represents a np.float32
+REPR_BOOL = np.string_("bool")  #: saved object represents a boolean
 
 REPR_NONE = np.string_("None")  #: saved object is ``None``
 REPR_RANGE = np.string_("range")  #: saved object is a range
@@ -160,6 +176,8 @@ TYPES_FOR_HDF5_DATASETS = tuple([
     (np.float64, REPR_FLOAT64),
     (np.int32, REPR_INT32),
     (np.float32, REPR_FLOAT32),
+    (np.bool_, REPR_BOOL),
+    (bool, REPR_BOOL),
 ])
 
 ATTR_TYPE = "type"  #: Attribute name for type of the saved object, should be one of the ``REPR_*``
@@ -213,12 +231,12 @@ class Hdf5Exportable:
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
 
         This implementation saves the content of :attr:`~object.__dict__` with
-        :meth:`~tenpy.tools.hdf5_io.Hdf5Saver.save_dict_content`,
+        :meth:`~tenpy.tools.io.Hdf5Saver.save_dict_content`,
         storing the format under the attribute ``'format'``.
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.
@@ -241,7 +259,7 @@ class Hdf5Exportable:
 
         Parameters
         ----------
-        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
             Instance of the loading engine.
         h5gr : :class:`Group`
             HDF5 group which is represent the object to be constructed.
