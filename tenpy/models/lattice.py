@@ -99,6 +99,11 @@ class Lattice:
     ----------
     dim : int
     order : ndarray (N_sites, dim+1)
+    boundary_conditions
+    Ls : tuple of int
+        the length in each direction.
+    shape : tuple of int
+        the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     N_cells : int
         the number of unit cells in the lattice, ``np.prod(self.Ls)``.
     N_sites : int
@@ -107,12 +112,8 @@ class Lattice:
         Defined as ``N_sites / Ls[0]``, for an infinite system the number of cites per "ring".
     N_rings : int
         Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
-    Ls : tuple of int
-        the length in each direction.
-    shape : tuple of int
-        the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     unit_cell : list of :class:`~tenpy.networks.site.Site`
-        the lattice sites making up a unit cell of the lattice.
+        the sites making up a unit cell of the lattice.
     bc : bool ndarray
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `bc_choices`.
@@ -154,29 +155,19 @@ class Lattice:
                  next_nearest_neighbors=None,
                  next_next_nearest_neighbors=None,
                  pairs=None):
-        self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
-        self.N_cells = int(np.prod(self.Ls))
-        self.shape = self.Ls + (len(unit_cell), )
-        self.N_sites = int(np.prod(self.shape))
-        self.N_rings = self.Ls[0]
-        self.N_sites_per_ring = int(self.N_sites // self.N_rings)
+        self._set_Ls(Ls)
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
             basis = np.eye(self.dim)
         self.unit_cell_positions = np.array(positions)
         self.basis = np.array(basis)
-        self._set_bc(bc)
+        self.boundary_conditions = bc  # property setter for self.bc and self.bc_shift
         self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
         # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
-        # calculate _strides
-        strides = [1]
-        for L in self.Ls:
-            strides.append(strides[-1] * L)
-        self._strides = np.array(strides, np.intp)
         self.pairs = pairs if pairs is not None else {}
         for name, NN in [('nearest_neighbors', nearest_neighbors),
                          ('next_nearest_neighbors', next_nearest_neighbors),
@@ -326,6 +317,45 @@ class Lattice:
             else:
                 raise ValueError("unknown ordering " + repr(order))
         return get_order(self.shape, snake_winding, priority)
+
+    @property
+    def boundary_conditions(self):
+        """Human-readable list of boundary conditions from :attr:`bc` and :attr:`bc_shift`.
+
+        Returns
+        -------
+        boundary_conditions : list of str
+            List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
+        """
+        global bc_choices
+        bc_choices_reverse = dict([(v, k) for k, v in bc_choices])
+        bc = [bc_choices_reverse[bc] for bc in self.bc]
+        if self.bc_shift is not None:
+            for i, shift in enumerate(self.bc_shift):
+                assert bc[i + 1] == "periodic"
+                bc[i + 1] = shift
+        return bc
+
+    @boundary_conditions.setter
+    def boundary_conditions(self, bc):
+        global bc_choices
+        if bc in list(bc_choices.keys()):
+            bc = [bc_choices[bc]] * self.dim
+            self.bc_shift = None
+        else:
+            bc = list(bc)  # we modify entries...
+            self.bc_shift = np.zeros(self.dim - 1, np.int_)
+            for i, bc_i in enumerate(bc):
+                if isinstance(bc_i, int):
+                    if i == 0:
+                        raise ValueError("Invalid bc: first entry can't be a shift")
+                    self.bc_shift[i - 1] = bc_i
+                    bc[i] = bc_choices['periodic']
+                else:
+                    bc[i] = bc_choices[bc_i]
+            if not np.any(self.bc_shift != 0):
+                self.bc_shift = None
+        self.bc = np.array(bc)
 
     def position(self, lat_idx):
         """return 'space' position of one or multiple sites.
@@ -911,25 +941,17 @@ class Lattice:
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
         return lat_idx
 
-    def _set_bc(self, bc):
-        global bc_choices
-        if bc in list(bc_choices.keys()):
-            bc = [bc_choices[bc]] * self.dim
-            self.bc_shift = None
-        else:
-            bc = list(bc)  # we modify entries...
-            self.bc_shift = np.zeros(self.dim - 1, np.int_)
-            for i, bc_i in enumerate(bc):
-                if isinstance(bc_i, int):
-                    if i == 0:
-                        raise ValueError("Invalid bc: first entry can't be a shift")
-                    self.bc_shift[i - 1] = bc_i
-                    bc[i] = bc_choices['periodic']
-                else:
-                    bc[i] = bc_choices[bc_i]
-            if not np.any(self.bc_shift != 0):
-                self.bc_shift = None
-        self.bc = np.array(bc)
+    def _set_Ls(self, Ls):
+        self.Ls = tuple([int(L) for L in Ls])
+        self.N_cells = int(np.prod(self.Ls))
+        self.shape = self.Ls + (len(self.unit_cell), )
+        self.N_sites = int(np.prod(self.shape))
+        self.N_rings = self.Ls[0]
+        self.N_sites_per_ring = int(self.N_sites // self.N_rings)
+        strides = [1]
+        for L in self.Ls:
+            strides.append(strides[-1] * L)
+        self._strides = np.array(strides, np.intp)
 
     @property
     def nearest_neighbors(self):

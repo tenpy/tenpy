@@ -18,6 +18,7 @@ Added
 ^^^^^
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
+- human-readable `boundary_conditions` property in :class:`~tenpy.models.lattice.Lattice`.
 - `save_hdf5` and `load_hdf5` methods to support saving/loading to HDF5 for the following classes:
   - :class:`~tenpy.linalg.charges.ChargeInfo`
   - :class:`~tenpy.linalg.charges.LegCharge`
