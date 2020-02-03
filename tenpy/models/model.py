@@ -929,8 +929,8 @@ class CouplingModel(Model):
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
 
-        self.H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
-        H_MPO = self.H_MPO_graph.build_MPO()
+        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         return H_MPO
 
