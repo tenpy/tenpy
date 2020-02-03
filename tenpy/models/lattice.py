@@ -156,7 +156,7 @@ class Lattice:
                  next_next_nearest_neighbors=None,
                  pairs=None):
         self.unit_cell = list(unit_cell)
-        self._set_Ls(Ls)
+        self._set_Ls(Ls)  # after setting unit_cell
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
@@ -220,6 +220,75 @@ class Lattice:
         if self.bc[0] and self.bc_MPS == 'infinite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`unit_cell`, :attr:`Ls`, :attr:`unit_cell_positions`, :attr:`basis`,
+        :attr:`boundary_conditions`, :attr:`pairs` under their name,
+        :attr:`bc_MPS` as ``"boundary_conditions_MPS"``, and
+        :attr:`bc_MPS` as ``"order_for_MPS"``.
+        Moreover, it saves :attr:`dim` and :attr:`N_sites` as HDF5 attributes.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.unit_cell, subpath + "unit_cell")
+        hdf5_saver.save(np.array(self.Ls, int), subpath + "lengths")
+        hdf5_saver.save(self.unit_cell_positions, subpath + "unit_cell_positions")
+        hdf5_saver.save(self.basis, subpath + "basis")
+        hdf5_saver.save(self.boundary_conditions, subpath + "boundary_conditions")
+        hdf5_saver.save(self.bc_MPS, subpath + "boundary_condition_MPS")
+        hdf5_saver.save(self.order, subpath + "order_for_MPS")
+        hdf5_saver.save(self.pairs, subpath + "pairs")
+        # not necessary for loading, but still usefull
+        h5gr.attrs["dim"] = self.dim
+        h5gr.attrs["N_sites"] = self.N_sites
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.unit_cell = hdf5_loader.load(subpath + "unit_cell")
+        Ls = hdf5_loader.load(subpath + "lengths")
+        obj._set_Ls(Ls)
+        obj.unit_cell_positions = hdf5_loader.load(subpath + "unit_cell_positions")
+        obj.basis = hdf5_loader.load(subpath + "basis")
+        obj.boundary_conditions = hdf5_loader.load(subpath + "boundary_conditions")
+        obj.bc_MPS = hdf5_loader.load(subpath + "boundary_condition_MPS")
+        obj.order = hdf5_loader.load(subpath + "order_for_MPS")
+        obj.pairs = hdf5_loader.load(subpath + "pairs")
+
+        obj.test_sanity()
+        return obj
 
     @property
     def dim(self):
@@ -328,7 +397,7 @@ class Lattice:
             List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
         """
         global bc_choices
-        bc_choices_reverse = dict([(v, k) for k, v in bc_choices])
+        bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
             for i, shift in enumerate(self.bc_shift):

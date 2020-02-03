@@ -26,6 +26,7 @@ Added
   - :class:`~tenpy.linalg.np_conserved.Array`
   - :class:`~tenpy.networks.mps.MPS`
   - :class:`~tenpy.networks.mpo.MPO`
+  - :class:`~tenpy.models.lattice.Lattice`
 
 Changed
 ^^^^^^^
