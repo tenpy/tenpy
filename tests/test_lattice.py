@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -75,31 +75,26 @@ def test_TrivialLattice():
 def test_number_nn():
     s = site.SpinHalfSite('Sz')
     chain = lattice.Chain(2, s)
-    assert chain.number_nearest_neighbors() == 2
-    assert chain.number_next_nearest_neighbors() == 2
+    assert chain.count_neighbors() == 2
+    assert chain.count_neighbors(key='next_nearest_neighbors') == 2
     ladd = lattice.Ladder(2, s)
-    assert ladd.number_nearest_neighbors(0) == 3
-    assert ladd.number_nearest_neighbors(1) == 3
-    assert ladd.number_next_nearest_neighbors(0) == 2
-    assert ladd.number_next_nearest_neighbors(1) == 2
+    for u in [0, 1]:
+        assert ladd.count_neighbors(u) == 3
+        assert ladd.count_neighbors(u, key='next_nearest_neighbors') == 2
     square = lattice.Square(2, 2, s)
-    assert square.number_nearest_neighbors() == 4
-    assert square.number_next_nearest_neighbors() == 4
+    assert square.count_neighbors() == 4
+    assert square.count_neighbors(key='next_nearest_neighbors') == 4
     triang = lattice.Triangular(2, 2, s)
-    assert triang.number_nearest_neighbors() == 6
-    assert triang.number_next_nearest_neighbors() == 6
+    assert triang.count_neighbors() == 6
+    assert triang.count_neighbors(key='next_nearest_neighbors') == 6
     hc = lattice.Honeycomb(2, 2, s)
-    assert hc.number_nearest_neighbors(0) == 3
-    assert hc.number_nearest_neighbors(1) == 3
-    assert hc.number_next_nearest_neighbors(0) == 6
-    assert hc.number_next_nearest_neighbors(1) == 6
+    for u in [0, 1]:
+        assert hc.count_neighbors(u) == 3
+        assert hc.count_neighbors(u, key='next_nearest_neighbors') == 6
     kag = lattice.Kagome(2, 2, s)
-    assert kag.number_nearest_neighbors(0) == 4
-    assert kag.number_nearest_neighbors(1) == 4
-    assert kag.number_nearest_neighbors(2) == 4
-    assert kag.number_next_nearest_neighbors(0) == 4
-    assert kag.number_next_nearest_neighbors(1) == 4
-    assert kag.number_next_nearest_neighbors(2) == 4
+    for u in [0, 1, 2]:
+        assert kag.count_neighbors(u) == 4
+        assert kag.count_neighbors(u, key='next_nearest_neighbors') == 4
 
 
 def test_lattice_order():

@@ -1,9 +1,9 @@
 """Spinless fermions with hopping and interaction.
 
 .. todo ::
-    -add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
+    add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -31,7 +31,7 @@ class FermionModel(CouplingMPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`/intro_JordanWigner` for details.
+        See :doc:`/intro/JordanWigner` for details.
 
     Parameters
     ----------
@@ -64,7 +64,6 @@ class FermionModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -83,7 +82,7 @@ class FermionModel(CouplingMPOModel):
         mu = get_parameter(model_params, 'mu', 0., self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-J, u1, 'Cd', u2, 'C', dx)
             self.add_coupling(np.conj(-J), u2, 'Cd', u1, 'C', -dx)  # h.c.
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
@@ -94,7 +93,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

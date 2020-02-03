@@ -34,7 +34,7 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -47,6 +47,7 @@ from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
+from ..tools.math import lcm
 
 __all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -99,7 +100,7 @@ class MPO:
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
-        Valid boundary conditions. The same as for an MPS.
+        Class attribute. Valid boundary conditions; the same as for an MPS.
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
@@ -115,6 +116,78 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.test_sanity()
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo`,
+        :attr:`max_range` (under these names),
+        :attr:`_W` as ``"tensors"``,
+        :attr:`IdL` as ``"index_identity_left"``,
+        :attr:`IdR` as ``"index_identity_right"``, and
+        :attr:`bc` as ``"boundary_condition"``.
+        Moreover, it saves :attr:`L`, and :attr:`grouped` as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.sites, subpath + "sites")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self._W, subpath + "tensors")
+        hdf5_saver.save(self.IdL, subpath + "index_identity_left")
+        hdf5_saver.save(self.IdR, subpath + "index_identity_right")
+        h5gr.attrs["grouped"] = self.grouped
+        hdf5_saver.save(self.bc, subpath + "boundary_condition")
+        hdf5_saver.save(self.max_range, subpath + "max_range")
+
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.sites = hdf5_loader.load(subpath + "sites")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj._W = hdf5_loader.load(subpath + "tensors")
+        obj.dtype = np.find_common_type([W.dtype for W in obj._W], [])
+        obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
+        obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
+        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
+        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
+        obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def from_grids(cls,
@@ -194,8 +267,7 @@ class MPO:
         assert len(legs) == L + 1
         Ws = []
         for i in range(L):
-            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
         return cls(sites, Ws, bc, IdL, IdR, max_range)
 
@@ -286,8 +358,8 @@ class MPO:
         else:
             assert grouped_sites[0].n_sites == n
         if self.max_range is not None:
-            min_n = min([gs.n_sites for gs in grouped_sites])
-            self.max_range = int(np.ceil(self.max_range // min_n))
+            min_n = max(min([gs.n_sites for gs in grouped_sites]), 1)
+            self.max_range = int(np.ceil(self.max_range / min_n))
         Ws = []
         IdL = []
         IdR = [self.IdR[0]]
@@ -371,8 +443,9 @@ class MPO:
         """
         if psi.finite:
             return MPOEnvironment(psi, self, psi).full_contraction(0)
+        env = MPOEnvironment(psi, self, psi)
         L = self.L
-        LP0 = psi.init_LP(0, mpo=self)
+        LP0 = env.init_LP(0)
         masks_L_no_IdL = []
         masks_R_no_IdRL = []
         for i, W in enumerate(self._W):
@@ -404,7 +477,7 @@ class MPO:
             LP = npc.tensordot(LP, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
 
             if i >= L:
-                RP = psi.init_RP(i, mpo=self)
+                RP = env.init_RP(i)
                 current_value = npc.inner(LP,
                                           RP,
                                           axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']],
@@ -519,18 +592,32 @@ class MPO:
                 return [Id] * (L + 1)
 
     def get_grouped_mpo(self, blocklen):
-        """Contract `blocklen` subsequent tensors into a single one and return result as a new MPO
-        object."""
-        groupedMPO = copy.deepcopy(self)
+        """group each `blocklen` subsequent tensors and  return result as a new MPO.
+
+        .. deprecated : 0.5.0
+            Make a copy and use :meth:`group_sites` instead.
+        """
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, FutureWarning, 2)
+        from copy import deepcopy
+        groupedMPO = deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
         return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
-        """extract the full Hamiltonian as a d**L x d**L matrix."""
+        """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
+
+        .. deprecated : 0.5.0
+            Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
+        """
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, FutureWarning, 2)
         if (self.dim[0]**(2 * self.L) > maxsize):
             print('Matrix dimension exceeds maxsize')
             return np.zeros(1)
         singlesitempo = self.get_grouped_mpo(self.L)
+        # Note: the trace works only for 'finite' boundary conditions
+        # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
     def __add__(self, other):
@@ -685,7 +772,6 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -705,7 +791,7 @@ class MPOGraph:
         ----------
         onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
             Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
+        coupling_terms : :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
             Coupling terms to be added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
@@ -722,7 +808,8 @@ class MPOGraph:
 
         See also
         --------
-        from_term_list : equivalent for other representation terms.
+        from_term_list :
+            equivalent for other representation terms.
         """
         graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
@@ -1142,10 +1229,10 @@ class MPOEnvironment(MPSEnvironment):
         The MPS on which `H` acts. May be identical with `bra`.
     init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very left part ``LP``. If ``None``, build trivial one with
-        :meth:`~tenpy.networks.mps.MPS.init_LP`.
+        :meth`init_LP`.
     init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
         Initial very right part ``RP``. If ``None``, build trivial one with
-        :meth:`~tenpy.networks.mps.MPS.init_RP`.
+        :meth:`init_RP`.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -1156,7 +1243,6 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-
     def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
@@ -1165,31 +1251,72 @@ class MPOEnvironment(MPSEnvironment):
         self.bra = bra
         self.ket = ket
         self.H = H
-        self.L = L = bra.L
-        self.finite = bra.finite
+        self.L = L = lcm(lcm(bra.L, ket.L), H.L)
+        self._finite = bra.finite
         self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if init_LP is None:
-            init_LP = self.ket.init_LP(0, bra, H)
+            init_LP = self.init_LP(0)
         self.set_LP(0, init_LP, age=age_LP)
         if init_RP is None:
-            init_RP = self.ket.init_RP(L - 1, bra, H)
+            init_RP = self.init_RP(L - 1)
         self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.L == self.ket.L == self.H.L)
-        assert (self.bra.finite == self.ket.finite == self.H.finite)
+        assert (self.bra.finite == self.ket.finite == self.H.finite == self._finite)
         # check that the network is contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
             b_s.leg.test_equal(H_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
+
+    def init_LP(self, i):
+        """Build initial left part ``LP``.
+
+        Parameters
+        ----------
+        i : int
+            Build ``LP`` left of site `i`.
+
+        Returns
+        -------
+        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vL` leg of ``.ket.get_B(i)``,
+            multiplied with a unit vector nonzero in ``H.IdL[i]``,
+            with labels ``'vR*', 'wR', 'vR'``.
+        """
+        init_LP = super().init_LP(i)
+        leg_mpo = self.H.get_W(i).get_leg('wL').conj()
+        IdL = self.H.get_IdL(i)
+        init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
+        return init_LP
+
+    def init_RP(self, i):
+        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``RP`` right of site `i`.
+
+        Returns
+        -------
+        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vR` leg of ``self.get_B(i)``,
+            multiplied with a unit vector nonzero in ``H.IdR[i]``,
+            with labels ``'vL*', 'wL', 'vL'``.
+        """
+        init_RP = super().init_RP(i)
+        leg_mpo = self.H.get_W(i).get_leg('wR').conj()
+        IdR = self.H.get_IdR(i)
+        init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
+        return init_RP
 
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
@@ -1293,10 +1420,10 @@ class MPOEnvironment(MPSEnvironment):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(),
-                           RP,
-                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
+        RP = npc.tensordot(RP,
+                           self.bra.get_B(i, form='B').conj(),
+                           axes=(['p', 'vL*'], ['p*', 'vR*']))
         return RP  # labels 'vL', 'wL', 'vL*'
 
 

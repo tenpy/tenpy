@@ -3,7 +3,7 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -38,7 +38,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     bc_MPS : {'finite' | 'infinte'}
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
-
     def __init__(self, model_params):
         # 0) read out/set default parameters
         name = "XXZChain"
@@ -87,7 +86,6 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
     based on the :class:`~tenpy.models.model.CouplingMPOModel`.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
@@ -103,7 +101,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         # add terms
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hz, u, 'Sz')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx)
             self.add_coupling(np.conj(Jxx * 0.5), u2, 'Sp', u1, 'Sm', -dx)  # h.c.
             self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)

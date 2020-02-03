@@ -7,12 +7,13 @@ Further, we have some predefined lattices, namely
 :class:`Chain`, :class:`Ladder` in 1D and
 :class:`Square`, :class:`Triangular`, :class:`Honeycomb`, and :class:`Kagome` in 2D.
 
-See also the :doc:`/intro_model`.
+See also the :doc:`/intro/model`.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
+import warnings
 
 from ..networks.site import Site
 from ..tools.misc import to_iterable, inverse_permutation
@@ -50,6 +51,11 @@ class Lattice:
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
 
+    .. deprecated : 0.5.0
+        The parameters and attributes `nearest_neighbors`, `next_nearest_neighbors` and
+        `next_next_nearest_neighbors` are deprecated. Instead, we use a dictionary `pairs`
+        with those names as keys and the corresponding values as specified before.
+
     Parameters
     ----------
     Ls : list of int
@@ -76,15 +82,18 @@ class Lattice:
         For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
     nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
-        as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
-        couplings.
-        Note that we include each coupling only in one direction; to get both directions, use
-        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
+        Deprecated. Specify as ``pairs['nearest_neighbors']`` instead.
     next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-nearest neighbors.
+        Deprecated. Specify as ``pairs['next_nearest_neighbors']`` instead.
     next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as `nearest_neighbors`, but for the next-next-nearest neighbors.
+        Deprecated. Specify as ``pairs['next_next_nearest_neighbors']`` instead.
+    pairs : dict
+        Of the form ``{'nearest_neighbors': [(u1, u2, dx), ...], ...}``.
+        Typical keys are ``'nearest_neighbors', 'next_nearest_neighbors'``.
+        For each of them, it specifies a list of tuples ``(u1, u2, dx)`` which can
+        be used as parameters for :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+        to generate couplings over each pair of ,e.g., ``'nearest_neighbors'``.
+        Note that this adds couplings for each pair *only in one direction*!
 
     Attributes
     ----------
@@ -118,16 +127,8 @@ class Lattice:
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
         for each site in the unit cell a vector giving its position within the unit cell.
-    nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        May be unspecified (``None``), otherwise it gives a list of parameters `u1`, `u2`, `dx`
-        as needed for the :meth:`~tenpy.models.model.CouplingModel` to generate nearest-neighbor
-        couplings.
-        Note that we include each coupling only in one direction; to get both directions, use
-        ``nearest_neighbors + [(u2, u1, -dx) for (u1, u2, dx) in nearest_neighbors]``.
-    next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-nearest neighbors.
-    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Same as :attr:`nearest_neighbors`, but for the next-next-nearest neighbors.
+    pairs : dict
+        See above.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -141,7 +142,6 @@ class Lattice:
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
-
     def __init__(self,
                  Ls,
                  unit_cell,
@@ -152,7 +152,8 @@ class Lattice:
                  positions=None,
                  nearest_neighbors=None,
                  next_nearest_neighbors=None,
-                 next_next_nearest_neighbors=None):
+                 next_next_nearest_neighbors=None,
+                 pairs=None):
         self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
         self.N_cells = int(np.prod(self.Ls))
@@ -176,9 +177,18 @@ class Lattice:
         for L in self.Ls:
             strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
-        self.nearest_neighbors = nearest_neighbors
-        self.next_nearest_neighbors = next_nearest_neighbors
-        self.next_next_nearest_neighbors = next_next_nearest_neighbors
+        self.pairs = pairs if pairs is not None else {}
+        for name, NN in [('nearest_neighbors', nearest_neighbors),
+                         ('next_nearest_neighbors', next_nearest_neighbors),
+                         ('next_next_nearest_neighbors', next_next_nearest_neighbors)]:
+            if NN is None:
+                continue  # no value set
+            msg = "Lattice.__init__() got argument `{0!s}`.\nSet as `neighbors['{0!s}'] instead!"
+            msg = msg.format(name)
+            warnings.warn(msg, FutureWarning)
+            if name in self.pairs:
+                raise ValueError("{0!s} sepcified twice!".format(name))
+            self.pairs[name] = NN
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -512,59 +522,52 @@ class Lattice:
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
 
-    def number_nearest_neighbors(self, u=0):
-        """Count the number of nearest neighbors for a site in the bulk.
-
-        Requires :attr:`nearest_neighbors` to be set.
+    def count_neighbors(self, u=0, key='nearest_neighbors'):
+        """Count e.g. the number of nearest neighbors for a site in the bulk.
 
         Parameters
         ----------
         u : int
-            Specifies the site in the unit cell.
+            Specifies the site in the unit cell, for which we should count the number
+            of neighbors (or whatever `key` specifies).
+        key : str
+            Key of :attr:`pairs` to select what to count.
 
         Returns
         -------
-        number_NN : int
-            Number of nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice. Note that it might be different at the edges of the lattice for open boundary
-            conditions.
+        number : int
+            Number of nearest neighbors (or whatever `key` specified) for the `u`-th site in the
+            unit cell, somewhere in the bulk of the lattice. Note that it might not be the correct
+            value at the edges of a lattice with open boundary conditions.
         """
-        if self.nearest_neighbors is None:
-            raise ValueError("self.nearest_neighbors were not specified")
+        pairs = self.pairs[key]
         count = 0
-        for u1, u2, dx in self.nearest_neighbors:
+        for u1, u2, dx in pairs:
             if u1 == u:
                 count += 1
             if u2 == u:
                 count += 1
         return count
+
+    def number_nearest_neighbors(self, u=0):
+        """Deprecated.
+
+        .. deprecated : 0.5.0
+            Use :meth:`count_neighbors` instead.
+        """
+        msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
+        warnings.warn(msg, FutureWarning)
+        return self.count_neighbors(u, 'nearest_neighbors')
 
     def number_next_nearest_neighbors(self, u=0):
-        """Count the number of next nearest neighbors for a site in the bulk.
+        """Deprecated.
 
-        Requires :attr:`next_nearest_neighbors` to be set.
-
-        Parameters
-        ----------
-        u : int
-            Specifies the site in the unit cell.
-
-        Returns
-        -------
-        number_NNN : int
-            Number of next nearest neighbors of the `u`-th site in the unit cell in the bulk of the
-            lattice. Note that it might be different at the edges of the lattice for open boundary
-            conditions.
+        .. deprecated : 0.5.0
+            Use :meth:`count_neighbors` instead.
         """
-        if self.next_nearest_neighbors is None:
-            raise ValueError("self.next_nearest_neighbors were not specified")
-        count = 0
-        for u1, u2, dx in self.next_nearest_neighbors:
-            if u1 == u:
-                count += 1
-            if u2 == u:
-                count += 1
-        return count
+        msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
+        warnings.warn(msg, FutureWarning)
+        return self.count_neighbors(u, 'next_nearest_neighbors')
 
     def possible_couplings(self, u1, u2, dx):
         """Find possible MPS indices for two-site couplings.
@@ -798,7 +801,7 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         coupling : list of (u1, u2, dx)
-            By default (``None``), use :attr:``nearest_neighbors``.
+            By default (``None``), use ``self.pairs['nearest_neighbors']``.
             Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
@@ -806,12 +809,12 @@ class Lattice:
             Further keyword arguments given to ``ax.plot()``.
         """
         if coupling is None:
-            coupling = self.nearest_neighbors
+            coupling = self.pairs['nearest_neighbors']
         kwargs.setdefault('color', 'k')
         Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
             # TODO: should use `possible_couplings` somehow,
-            # but then beriodic boundary conditions screew up the image
+            # but then beriodic boundary conditions screw up the image
             # should plot couplings of periodic boundary conditions
             dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
             lat_idx_1 = self.order[self._mps_fix_u[u1], :]
@@ -928,6 +931,27 @@ class Lattice:
                 self.bc_shift = None
         self.bc = np.array(bc)
 
+    @property
+    def nearest_neighbors(self):
+        msg = ("Deprecated access with ``lattice.nearest_neighbors``.\n"
+               "Use ``lattice.pairs['nearest_neighbors']`` instead.")
+        warnings.warn(msg, FutureWarning)
+        return self.pairs['nearest_neighbors']
+
+    @property
+    def next_nearest_neighbors(self):
+        msg = ("Deprecated access with ``lattice.next_nearest_neighbors``.\n"
+               "Use ``lattice.pairs['next_nearest_neighbors']`` instead.")
+        warnings.warn(msg, FutureWarning)
+        return self.pairs['next_nearest_neighbors']
+
+    @property
+    def next_next_nearest_neighbors(self):
+        msg = ("Deprecated access with ``lattice.next_next_nearest_neighbors``.\n"
+               "Use ``lattice.pairs['next_next_nearest_neighbors']`` instead.")
+        warnings.warn(msg, FutureWarning)
+        return self.pairs['next_next_nearest_neighbors']
+
 
 class TrivialLattice(Lattice):
     """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
@@ -941,7 +965,6 @@ class TrivialLattice(Lattice):
     **kwargs :
         Further keyword arguments given to :class:`Lattice`.
     """
-
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
@@ -952,7 +975,6 @@ class IrregularLattice(Lattice):
     .. todo ::
         - this doesn't fully work yet...
     """
-
     def __init__(self, mps_sites, based_on, order=None):
         self.based_on = based_on
         self._mps_sites = mps_sites
@@ -1005,7 +1027,6 @@ class SimpleLattice(Lattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
-
     def __init__(self, Ls, site, **kwargs):
         if 'positions' in kwargs:
             Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
@@ -1020,7 +1041,7 @@ class SimpleLattice(Lattice):
 
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        super().mps2lat_values(A, axes, 0)
+        return super().mps2lat_values(A, axes, 0)
 
 
 class Chain(SimpleLattice):
@@ -1036,23 +1057,16 @@ class Chain(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `[[next_]next_]nearest_neighbors` are set accordingly.
-        If `order` is specified in the form ``('standard', snake_winding, priority)``,
-        the `snake_winding` and `priority` should only be specified for the spatial directions.
-        Similarly, `positions` can be specified as a single vector.
+        `pairs` are initialize with ``[next_]next_]nearest_neighbors``.
+        `positions` can be specified as a single vector.
     """
     dim = 1
 
     def __init__(self, L, site, **kwargs):
-        kwargs.setdefault('nearest_neighbors', [(0, 0, np.array([
-            1,
-        ]))])
-        kwargs.setdefault('next_nearest_neighbors', [(0, 0, np.array([
-            2,
-        ]))])
-        kwargs.setdefault('next_next_nearest_neighbors', [(0, 0, np.array([
-            3,
-        ]))])
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', [(0, 0, np.array([1]))])
+        kwargs['pairs'].setdefault('next_nearest_neighbors', [(0, 0, np.array([2]))])
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', [(0, 0, np.array([3]))])
         # and otherwise default values.
         SimpleLattice.__init__(self, [L], site, **kwargs)
 
@@ -1108,7 +1122,7 @@ class Ladder(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
     dim = 1
 
@@ -1121,9 +1135,10 @@ class Ladder(Lattice):
         NN = [(0, 0, np.array([1])), (1, 1, np.array([1])), (0, 1, np.array([0]))]
         nNN = [(0, 1, np.array([1])), (1, 0, np.array([1]))]
         nnNN = [(0, 0, np.array([2])), (1, 1, np.array([2]))]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         Lattice.__init__(self, [L], sites, **kwargs)
 
 
@@ -1140,8 +1155,8 @@ class Square(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `[[next_]next_]nearest_neighbors` are set accordingly.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        `pairs` are set accordingly.
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
@@ -1151,9 +1166,10 @@ class Square(SimpleLattice):
         NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
         nNN = [(0, 0, np.array([1, 1])), (0, 0, np.array([1, -1]))]
         nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2]))]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
 
 
@@ -1170,7 +1186,7 @@ class Triangular(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `[[next_]next_]nearest_neighbors` are set accordingly.
+        `pairs` are set accordingly.
         If `order` is specified in the form ``('standard', snake_windingi, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
@@ -1180,14 +1196,14 @@ class Triangular(SimpleLattice):
     def __init__(self, Lx, Ly, site, **kwargs):
         sqrt3_half = 0.5 * np.sqrt(3)  # = cos(pi/6)
         basis = np.array([[sqrt3_half, 0.5], [0., 1.]])
-
         NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([-1, 1])), (0, 0, np.array([0, -1]))]
         nNN = [(0, 0, np.array([2, -1])), (0, 0, np.array([1, 1])), (0, 0, np.array([-1, 2]))]
         nnNN = [(0, 0, np.array([2, 0])), (0, 0, np.array([0, 2])), (0, 0, np.array([-2, 2]))]
         kwargs.setdefault('basis', basis)
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         SimpleLattice.__init__(self, [Lx, Ly], site, **kwargs)
 
 
@@ -1205,8 +1221,9 @@ class Honeycomb(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
-        Additionally, for the Honeycomb lattice fourth_nearest_neighbors and fifth_nearest_neighbors are implemented.
+        `basis`, `pos` and `pairs` are set accordingly.
+        For the Honeycomb lattice ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``
+        are set in :attr:`pairs`.
     """
     dim = 2
 
@@ -1221,15 +1238,16 @@ class Honeycomb(Lattice):
         nNN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, -1])),
                (1, 1, np.array([1, 0])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, -1]))]
         nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
-        self.fourth_nearest_neighbors = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])),
-                                         (0, 1, np.array([1, -2])), (0, 1, np.array([0, -2])),
-                                         (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
-        self.fifth_nearest_neighbors = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])),
-                                        (0, 0, np.array([1, -2])), (0, 0, np.array([-1, -1])),
-                                        (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        NN4 = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])), (0, 1, np.array([1, -2])),
+               (0, 1, np.array([0, -2])), (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
+        NN5 = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])), (0, 0, np.array([1, -2])),
+               (0, 0, np.array([-1, -1])), (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs['pairs'].setdefault('fourth_nearest_neighbors', NN4)
+        kwargs['pairs'].setdefault('fifth_nearest_neighbors', NN5)
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
     def ordering(self, order):
@@ -1255,6 +1273,20 @@ class Honeycomb(Lattice):
                 return get_order(self.shape, snake_winding, priority)
         return super().ordering(order)
 
+    @property
+    def fourth_nearest_neighbors(self):
+        msg = ("Deprecated access with ``lattice.fourth_nearest_neighbors``.\n"
+               "Use ``lattice.pairs['fourth_nearest_neighbors']`` instead.")
+        warnings.warn(msg, FutureWarning)
+        return self.pairs['fourth_nearest_neighbors']
+
+    @property
+    def fifth_nearest_neighbors(self):
+        msg = ("Deprecated access with ``lattice.fifth_nearest_neighbors``.\n"
+               "Use ``lattice.pairs['fifth_nearest_neighbors']`` instead.")
+        warnings.warn(msg, FutureWarning)
+        return self.pairs['fifth_nearest_neighbors']
+
 
 class Kagome(Lattice):
     """A Kagome lattice.
@@ -1270,7 +1302,7 @@ class Kagome(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for both sites.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
     dim = 2
 
@@ -1289,9 +1321,10 @@ class Kagome(Lattice):
         nNN = [(0, 1, np.array([0, -1])), (0, 2, np.array([1, -1])), (1, 0, np.array([1, -1])),
                (1, 2, np.array([1, 0])), (2, 0, np.array([1, 0])), (2, 1, np.array([0, 1]))]
         nnNN = [(0, 0, np.array([1, -1])), (1, 1, np.array([0, 1])), (2, 2, np.array([1, 0]))]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
 
 
@@ -1303,13 +1336,11 @@ def get_lattice(lattice_name):
     lattice_name : str
         Name of a :class:`Lattice` class defined in the module :mod:`~tenpy.models.lattice`,
         for example ``"Chain", "Square", "Honeycomb", ...``.
-    *args, **kwargs
-        Arguments and keyword-arguments for the initialization of the specified lattice class.
 
     Returns
     -------
-    LatticeClass : (subclass of) :class:`Lattice`
-        An instance of the lattice class specified by `lattice_name`.
+    LatticeClass : :class:`Lattice`
+        The lattice class (type, not instance) specified by `lattice_name`.
     """
     LatticeClass = globals()[lattice_name]
     assert issubclass(LatticeClass, Lattice)

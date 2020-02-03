@@ -3,8 +3,10 @@ r"""Time evolving block decimation (TEBD) for MPS of purification.
 See introduction in :mod:`~tenpy.networks.purification_mps`.
 Time evolution for finite-temperature ensembles.
 This can be used to obtain correlation functions in time.
+
+.. autodata:: disentanglers_atom_parse_dict
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import tebd
 from ..linalg import np_conserved as npc
@@ -50,7 +52,6 @@ class PurificationTEBD(tebd.Engine):
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
-
     def __init__(self, psi, model, TEBD_params):
         super().__init__(psi, model, TEBD_params)
         self._disent_iterations = np.zeros(psi.L)
@@ -391,7 +392,6 @@ class PurificationTEBD2(PurificationTEBD):
     for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag` does for
     imaginary time evolution).
     """
-
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
 
@@ -486,7 +486,6 @@ class Disentangler:
     parent : :class:`~tenpy.algorithms.tebd.Engine`
         The parent class calling the disentangler.
     """
-
     def __init__(self, parent):
         self.parent = parent
 
@@ -524,7 +523,6 @@ class BackwardDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __call__(self, theta):
         eng = self.parent
         if eng._U_param['type_evo'] == 'imag':
@@ -554,7 +552,6 @@ class RenyiDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -564,9 +561,8 @@ class RenyiDisentangler(Disentangler):
     def __call__(self, theta):
         """Find optimal `U` which minimizes the second Renyi entropy."""
         U_idx_dt, i = self.parent._update_index
-        U = npc.outer(
-            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(npc.eye_like(theta, 'q0', labels=['q0', 'q0*']),
+                      npc.eye_like(theta, 'q1', labels=['q1', 'q1*']))
         Sold = np.inf
         S0 = None
         for j in range(self.max_iter):
@@ -669,7 +665,6 @@ class NormDisentangler(Disentangler):
 
     Arguments and return values are the same as for :meth:`disentangle`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -684,9 +679,8 @@ class NormDisentangler(Disentangler):
 
     def __call__(self, theta):
         _, i = self.parent._update_index
-        U = npc.outer(
-            npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-            npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+        U = npc.outer(npc.eye_like(theta, 'q0', labels=['q0', 'q0*']),
+                      npc.eye_like(theta, 'q1', labels=['q1', 'q1*']))
         err = None
         trunc_par = self.trunc_par.copy()
         for chi_opt in self.chi_range:
@@ -762,7 +756,6 @@ class GradientDescentDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __init__(self, parent):
         self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
                                       'PurificationTEBD')
@@ -871,7 +864,6 @@ class NoiseDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __init__(self, parent):
         self.a = get_parameter(parent.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
 
@@ -893,7 +885,6 @@ class LastDisentangler(Disentangler):
     Useful as a starting point in a :class:`CompositeDisentangler` to reduce the number of
     iterations for a following disentangler.
     """
-
     def __call__(self, theta):
         # result was saved in :meth:`PurificationTEBD.disentangle`
         U = None
@@ -915,7 +906,6 @@ class DiagonalizeDisentangler(Disentangler):
 
     Arguments and return values are the same as for :class:`Disentangler`.
     """
-
     def __call__(self, theta):
         rho = npc.tensordot(theta,
                             theta.conj(),
@@ -951,7 +941,6 @@ class CompositeDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
-
     def __init__(self, disentanglers):
         self.disentanglers = disentanglers
 
@@ -987,7 +976,6 @@ class MinDisentangler(Disentangler):
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
     """
-
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
         self.n = get_parameter(parent.TEBD_params, 'disent_min_n', 1., 'PurificationTEBD')
@@ -1011,12 +999,6 @@ class MinDisentangler(Disentangler):
         return entropy(S**2, self.n)
 
 
-"""Dictionary to translate the 'disentangle' TEBD parameter into a :class:`Disentangler`.
-
-If you define your own disentanglers, you can dynamically append them to this dictionary.
-CompositeDisentangler and MinDisentangler separate: they have non-default constructor and
-special syntax.
-"""
 disentanglers_atom_parse_dict = {
     'None': Disentangler,
     'backwards': BackwardDisentangler,
@@ -1027,6 +1009,12 @@ disentanglers_atom_parse_dict = {
     'last': LastDisentangler,
     'diag': DiagonalizeDisentangler
 }
+"""Dictionary to translate the 'disentangle' TEBD parameter into a :class:`Disentangler`.
+
+If you define your own disentanglers, you can dynamically append them to this dictionary.
+CompositeDisentangler and MinDisentangler separate: they have non-default constructor and
+special syntax.
+"""
 
 
 def get_disentangler(method, parent):

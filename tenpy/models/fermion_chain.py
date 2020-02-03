@@ -1,8 +1,9 @@
 """The contents of this module have been moved to :mod:`tenpy.models.fermions_spinless`.
 
-This module is just around for backwards compatibility.
+.. deprecated : 0.4.1
+    This module is just around for backwards compatibility.
 """
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 from .fermions_spinless import FermionModel, FermionChain
 

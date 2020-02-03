@@ -2,7 +2,7 @@
 
 The :class:`Site` is the prototype, read it's docstring.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -10,6 +10,7 @@ import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 
-class Site:
+class Site(Hdf5Exportable):
     """Collects necessary information about a single local site of a lattice.
 
     This class defines what the local basis states are: it provides the :attr:`leg`
@@ -93,7 +94,6 @@ class Site:
     array([[ 1.,  0.],
            [ 0.,  0.]])
     """
-
     def __init__(self, leg, state_labels=None, **site_ops):
         self.leg = leg
         self.state_labels = dict()
@@ -390,7 +390,7 @@ class GroupedSite(Site):
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
-    expected commutation relations. See also :doc:`/intro_JordanWigner`.
+    expected commutation relations. See also :doc:`/intro/JordanWigner`.
 
     Parameters
     ----------
@@ -419,7 +419,6 @@ class GroupedSite(Site):
     labels: list of str
         The labels using which the single-site operators are added during construction.
     """
-
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
@@ -681,7 +680,6 @@ class SpinHalfSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-
     def __init__(self, conserve='Sz'):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -755,7 +753,6 @@ class SpinSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-
     def __init__(self, S=0.5, conserve='Sz'):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -813,7 +810,7 @@ class FermionSite(Site):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
-        Further details in :doc:`/intro_JordanWigner`.
+        Further details in :doc:`/intro/JordanWigner`.
 
     ==============  ===================================================================
     operator        description
@@ -849,7 +846,6 @@ class FermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, conserve='N', filling=0.5):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -961,7 +957,6 @@ class SpinHalfFermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
         if cons_N not in ['N', 'parity', None]:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
@@ -1105,7 +1100,6 @@ class BosonSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))

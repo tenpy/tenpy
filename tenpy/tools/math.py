@@ -1,20 +1,26 @@
-"""Different math functions needed at some point in the library."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+"""Different math functions needed at some point in the library.
+
+.. autodata:: LeviCivita3
+"""
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
 from . import misc
 
 import scipy.linalg
-from scipy.sparse.linalg import eigs as sparse_eigen
-
-int_I3 = np.eye(3, dtype=int)
-LeviCivita3 = np.array([[np.cross(b, a) for a in int_I3] for b in int_I3])
+import scipy.sparse.linalg
 
 __all__ = [
-    'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'perm_sign', 'qr_li',
-    'rq_li'
+    'LeviCivita3', 'matvec_to_array', 'entropy', 'gcd', 'gcd_array', 'lcm', 'speigs', 'speigsh',
+    'perm_sign', 'qr_li', 'rq_li'
 ]
+
+#: 3-dim identity matrix of type int
+_eye_I3 = np.eye(3, dtype=np.int_)
+
+#: Levi-Civita Symbol of int type
+LeviCivita3 = np.array([[np.cross(b, a) for a in _eye_I3] for b in _eye_I3])
 
 
 def matvec_to_array(H):
@@ -23,7 +29,7 @@ def matvec_to_array(H):
     Parameters
     ----------
     H : linear operator
-        should have `dim`, `dtype` attributes and a `matvec` method.
+        should have `shape`, `dtype` attributes and a `matvec` method.
 
     Returns
     -------
@@ -36,7 +42,7 @@ def matvec_to_array(H):
     v = np.zeros((dim), H.dtype)
     for i in range(dim):
         v[i] = 1
-        X[i] = H.matvec(v)
+        X[:, i] = H.matvec(v)
         v[i] = 0
     return X
 
@@ -115,8 +121,10 @@ def speigs(A, k, *args, **kwargs):
         the (square) linear operator for which the eigenvalues should be computed.
     k : int
         the number of eigenvalues to be computed.
-    *args, **kwargs :
-        further arguments are directly given to :func:`scipy.sparse.linalg.eigs`
+    *args:
+        Further arguments directly given to :func:`scipy.sparse.linalg.eigs`
+    **kwargs :
+        Further keyword arguments directly given to :func:`scipy.sparse.linalg.eigs`
 
     Returns
     -------
@@ -130,7 +138,7 @@ def speigs(A, k, *args, **kwargs):
     if A.shape != (d, d):
         raise ValueError("A.shape not a square matrix: " + str(A.shape))
     if k < d - 1:
-        return sparse_eigen(A, k, *args, **kwargs)
+        return scipy.sparse.linalg.eigs(A, k, *args, **kwargs)
     else:
         if k > d:
             warnings.warn("trimming speigs k to smaller matrix dimension d", stacklevel=2)
@@ -147,6 +155,53 @@ def speigs(A, k, *args, **kwargs):
             return W[keep], V[:, keep]
         else:
             W = np.linalg.eigvals(Amat)
+            keep = misc.argsort(W, which)[:k]
+            return W
+
+
+def speigsh(A, k, *args, **kwargs):
+    """Wrapper around :func:`scipy.sparse.linalg.eigsh`, lifting the restriction ``k < rank(A)-1``.
+
+    Parameters
+    ----------
+    A : MxM ndarray or like :class:`scipy.sparse.linalg.LinearOperator`
+        The (square) hermitian linear operator for which the eigenvalues should be computed.
+    k : int
+        The number of eigenvalues to be computed.
+    *args
+        Further arguments directly given to :func:`scipy.sparse.linalg.eigsh`.
+    **kwargs :
+        Further keyword arguments directly given to :func:`scipy.sparse.linalg.eigsh`.
+
+    Returns
+    -------
+    w : ndarray
+        Array of min(`k`, A.shape[0]) eigenvalues.
+    v : ndarray
+        Array of min(`k`, A.shape[0]) eigenvectors, ``v[:, i]`` is the `i`-th eigenvector.
+        Only returned if ``kwargs['return_eigenvectors'] == True``.
+    """
+    d = A.shape[0]
+    if A.shape != (d, d):
+        raise ValueError("A.shape not a square matrix: " + str(A.shape))
+    if k < d - 1:
+        return scipy.sparse.linalg.eigsh(A, k, *args, **kwargs)
+    else:
+        if k > d:
+            warnings.warn("trimming speigsh k to smaller matrix dimension d", stacklevel=2)
+            k = d
+        if isinstance(A, np.ndarray):
+            Amat = A
+        else:
+            Amat = matvec_to_array(A)  # Constructs the matrix
+        ret_eigv = kwargs.get('return_eigenvectors', args[7] if len(args) > 7 else True)
+        which = kwargs.get('which', args[2] if len(args) > 2 else 'LM')
+        if ret_eigv:
+            W, V = np.linalg.eigh(Amat)
+            keep = misc.argsort(W, which)[:k]
+            return W[keep], V[:, keep]
+        else:
+            W = np.linalg.eigvalsh(Amat)
             keep = misc.argsort(W, which)[:k]
             return W
 

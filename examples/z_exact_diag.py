@@ -2,7 +2,7 @@
 
 Sorry that this is not well documented! ED is meant to be used for debugging only ;)
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.xxz_chain import XXZChain
@@ -18,14 +18,14 @@ def example_exact_diagonalization(L, Jz):
 
     product_state = ["up", "down"] * (xxz_pars['L'] // 2)  # this selects a charge sector!
     psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state)
-    charge_sector = psi_DMRG.get_total_charge()  # the ED charge sector should match that of the MPS
+    charge_sector = psi_DMRG.get_total_charge(True)  # ED charge sector should match
 
-    ED = ExactDiag(M, charge_sector=charge_sector)
+    ED = ExactDiag(M, charge_sector=charge_sector, max_size=2.e6)
     ED.build_full_H_from_mpo()
     # ED.build_full_H_from_bonds()  # whatever you prefer
     print("start diagonalization")
     ED.full_diagonalization()  # the expensive part for large L
-    psi_ED = ED.groundstate()  # return the ground state
+    E0_ED, psi_ED = ED.groundstate()  # return the ground state
     print("psi_ED =", psi_ED)
 
     print("run DMRG")
@@ -33,7 +33,7 @@ def example_exact_diagonalization(L, Jz):
     # first way to compare ED with DMRG: convert MPS to ED vector
     psi_DMRG_full = ED.mps_to_full(psi_DMRG)
     print("psi_DMRG_full =", psi_DMRG_full)
-    ov = npc.inner(psi_ED, psi_DMRG_full, do_conj=True)
+    ov = npc.inner(psi_ED, psi_DMRG_full, axes='range', do_conj=True)
     print("<psi_ED|psi_DMRG_full> =", ov)
     assert (abs(abs(ov) - 1.) < 1.e-13)
 

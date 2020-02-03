@@ -1,5 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from .optimization import bottleneck
@@ -83,37 +83,44 @@ def argsort(a, sort=None, **kwargs):
     Parameters
     ----------
     a : array_like
-        the array to sort
+        The array to sort.
     sort : ``'m>', 'm<', '>', '<', None``
         Specify how the arguments should be sorted.
 
-        ================ ===========================
-        `sort`           order
-        ================ ===========================
-        ``'m>', 'LM'``   Largest magnitude first
-        ``'m<', 'SM'``   Smallest magnitude first
-        ``'>', 'LR'``    Largest real part first
-        ``'<', 'SR'``    Smallest real part first
-        ``'LI'``         Largest imaginary part first
-        ``'Si'``         Smallest imaginary part first
-        ``None``         numpy default: same as '<'
-        ================ ===========================
+        ==================== =============================
+        `sort`               order
+        ==================== =============================
+        ``'m>', 'LM'``       Largest magnitude first
+        -------------------- -----------------------------
+        ``'m<', 'SM'``       Smallest magnitude first
+        -------------------- -----------------------------
+        ``'>', 'LR', 'LA'``  Largest real part first
+        -------------------- -----------------------------
+        ``'<', 'SR', 'SA'``  Smallest real part first
+        -------------------- -----------------------------
+        ``'LI'``             Largest imaginary part first
+        -------------------- -----------------------------
+        ``'Si'``             Smallest imaginary part first
+        -------------------- -----------------------------
+        ``None``             numpy default: same as '<'
+        ==================== =============================
+
     **kwargs :
-        further keyword arguments given directly to :func:`numpy.argsort`.
+        Further keyword arguments given directly to :func:`numpy.argsort`.
 
     Returns
     -------
     index_array : ndarray, int
-        same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
+        Same shape as `a`, such that ``a[index_array]`` is sorted in the specified way.
     """
     if sort is not None:
         if sort == 'm<' or sort == 'SM':
             a = np.abs(a)
         elif sort == 'm>' or sort == 'LM':
             a = -np.abs(a)
-        elif sort == '<' or sort == 'SR':
+        elif sort == '<' or sort == 'SR' or sort == 'SA':
             a = np.real(a)
-        elif sort == '>' or sort == 'LR':
+        elif sort == '>' or sort == 'LR' or sort == 'LA':
             a = -np.real(a)
         elif sort == 'SI':
             a = np.imag(a)
@@ -285,7 +292,7 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
         the value to be inserted before `a`
     w_r : int
         the width to be padded after the last index
-    v_l : dtype
+    v_r : dtype
         the value to be inserted after `a`
     axis : int
         the axis along which to pad
@@ -348,7 +355,7 @@ def any_nonzero(params, keys, verbose_msg=None):
             val = params.get(k, None)
             if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
-                    print(verbose_mesg)
+                    print(verbose_msg)
                     print(str(k) + " has nonzero entries")
                 return True
     return False

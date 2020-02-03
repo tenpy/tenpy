@@ -4,12 +4,15 @@ Tensor Network Python (TeNPy)
 .. image:: https://img.shields.io/github/last-commit/tenpy/tenpy
     :alt: GitHub last commit
     :target: https://github.com/tenpy/tenpy
+.. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
+    :alt: Documentation Status
+    :target: https://tenpy.readthedocs.io/en/latest/?badge=latest
 .. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
     :alt: Build
     :target: https://travis-ci.org/tenpy/tenpy
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
-    :target: https://github.com/tenpy/tenpy
+    :target: https://github.com/tenpy/tenpy/issues
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
@@ -21,7 +24,7 @@ For good readability, we include an extensive documentation next to the code, bo
 
 How do I get set up?
 --------------------
-Follow the instructions in the file ``doc/INSTALL.rst``, online `here <https://tenpy.github.io/INSTALL.html>`_.
+Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.github.io/INSTALL.html.
 The latest version of the source code can be obtained from https://github.com/tenpy/tenpy.
 
 How to read the documentation
@@ -36,7 +39,7 @@ which means it is quite readable in the source plain text, but can also be conve
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
 Moreover, the documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and made available online at https://tenpy.github.io/.
 The big advantages of the (online) HTML documentation are a lot of cross-links between different functions, and even a search function.
-If you prefer yet another format, you can try to build the documentation yourself, as described in :doc:`doc/contributing.rst <contributing>`.
+If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contr/build_doc.rst``, online at https://tenpy.github.io/contr/build_doc.html.
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
@@ -78,4 +81,4 @@ If you are not sure whether your problem is a bug or a feature, you can also ask
 License
 -------
 The code is licensed under GPL-v3.0 given in the file ``LICENSE`` of the repository, 
-in the online documentation readable at https://tenpy.github.io/license.html.
+in the online documentation readable at https://tenpy.github.io/install/license.html.

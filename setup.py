@@ -1,4 +1,4 @@
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
 import numpy
@@ -13,25 +13,27 @@ if not sys.version_info >= (3, 5):
 # hardcode version for people without git
 
 MAJOR = 0
-MINOR = 4
-MICRO = 1
+MINOR = 5
+MICRO = 0
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
-#  To update:
+#  To update to a new release:
 #      # update CHANGELOG.rst
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
-#      git tag -a "v0.1.2"
+#      git tag -s "v0.1.2"  # (sign: requires GPG key)
 #      bash ./compile.sh
-#      python setup.py sdist  # create source package for PyPI
-#      python setup.py test # run tests!
+#      pytest -m "not slow"  # run at least a quick test!
+#      # python setup.py sdist  # create source package for PyPI, done by github action
 #      # reset RELEASED = False in this module"
 #      git commit -m "reset released=False" setup.py
 #      git push
 #      git push origin v0.1.2 # also push the tag
-#      python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
+#      create release with release-notes on github
+#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
+# or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
 
 
 def get_git_revision():
@@ -47,11 +49,26 @@ def get_git_revision():
     return rev
 
 
+def get_git_description():
+    """Get number of commits since last git tag.
+
+    If unknown, return 0
+    """
+    if not os.path.exists('.git'):
+        return 0
+    try:
+        descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
+                                        stderr=subprocess.STDOUT).decode().strip()
+    except:
+        return 0
+    return int(descr.split('-')[1])
+
+
 def get_version_info():
     full_version = VERSION
     git_rev = get_git_revision()
     if not RELEASED:
-        full_version += '.dev0+' + git_rev[:7]
+        full_version += '.dev{0:d}+{1!s}'.format(get_git_description(), git_rev[:7])
     return full_version, git_rev
 
 
@@ -60,7 +77,7 @@ def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
     content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}
@@ -92,12 +109,6 @@ def read_requ_file(filename):
 
 
 def read_requirements():
-    extra_requ = {
-        'doc': read_requ_file('requirements-doc.txt'),
-        'plot': read_requ_file('requirements-plot.txt'),
-        'test': read_requ_file('requirements-test.txt'),
-    }
-    extra_requ['all'] = [r for requ in extra_requ.values() for r in requ]
     return extra_requ
 
 
@@ -150,16 +161,18 @@ def setup_package():
 
     ext_modules = setup_cython_extension()
 
-    extras_require = read_requirements()
-
-    setup_requires = ['setuptools>=30.3.0', 'pytest-runner', 'Cython>=0.27', 'numpy>=1.13']
+    extras_require = {
+        'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
+        'hdf5': ['h5py'],
+        'plot': ['matplotlib>=2.0'],
+        'test': ['pytest'],
+    }
+    extras_require['all'] = [r for requ in extras_require.values() for r in requ]
 
     setup(version=full_version,
           ext_modules=ext_modules,
-          setup_requires=setup_requires,
           install_requires=read_requ_file('requirements.txt'),
-          extras_require=extras_require,
-          tests_require=extras_require['test'])
+          extras_require=extras_require)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 r"""A module to handle charge conservation in tensor networks.
 
-A detailed introduction to this module (including notations) can be found in :doc:`/intro_npc`.
+A detailed introduction to this module (including notations) can be found in :doc:`/intro/npc`.
 
 This module `np_conserved` implements a class :class:`Array`
 designed to make use of charge conservation in tensor networks.
@@ -14,6 +14,10 @@ All possible operations (e.g. tensordot, svd, ...) on such arrays preserve the t
 structure. In addition, these operations make use of the charges to figure out which of the blocks
 it has to use/combine - this is the basis for the speed-up.
 
+.. autodata:: QCUTOFF
+.. autodata:: QTYPE
+
+
 Overview
 ^^^^^^^^
 
@@ -25,7 +29,7 @@ Overview
     ~tenpy.linalg.charges.LegCharge
     ~tenpy.linalg.charges.LegPipe
 
-.. rubric :: Array creation
+.. rubric:: Array creation
 
 .. autosummary::
     Array.from_ndarray_trivial
@@ -77,7 +81,7 @@ Overview
     speigs
 
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg
@@ -107,7 +111,7 @@ __all__ = [
 #: A cutoff to ignore machine precision rounding errors when determining charges
 QCUTOFF = np.finfo(np.float64).eps * 10
 
-# the type used for charges
+#: the type used for charges
 QTYPE = charges.QTYPE
 
 # ##################################
@@ -120,7 +124,7 @@ class Array:
 
     An `Array` represents a multi-dimensional tensor,
     together with the charge structure of its legs (for abelian charges).
-    Further information can be found in :doc:`/intro_npc`.
+    Further information can be found in :doc:`/intro/npc`.
 
     The default :meth:`__init__` (i.e. ``Array(...)``) does not insert any data,
     and thus yields an Array 'full' of zeros, equivalent to :func:`zeros()`.
@@ -138,6 +142,8 @@ class Array:
         The data type of the array entries. Defaults to np.float64.
     qtotal : 1D array of QTYPE
         The total charge of the array. Defaults to 0.
+    labels : list of {str | None}
+        Labels associated to each leg, ``None`` for non-named labels.
 
     Attributes
     ----------
@@ -155,8 +161,8 @@ class Array:
         The total charge of the tensor.
     legs : list of :class:`~tenpy.linalg.charges.LegCharge`
         The leg charges for each of the legs.
-    labels : dict (string -> int)
-        Labels for the different legs.
+    _labels : list of { str | None }
+        Labels for the different legs, None for non-labeled legs.
     _data : list of arrays
         The actual entries of the tensor.
     _qdata : 2D array (len(_data), rank), dtype np.intp
@@ -166,8 +172,7 @@ class Array:
         but *must* be set to `False` by algorithms changing _qdata.
 
     """
-
-    def __init__(self, legcharges, dtype=np.float64, qtotal=None):
+    def __init__(self, legcharges, dtype=np.float64, qtotal=None, labels=None):
         """see help(self)"""
         self.legs = list(legcharges)
         if len(self.legs) == 0:
@@ -177,10 +182,56 @@ class Array:
         self.dtype = np.dtype(dtype)
         self.qtotal = self.chinfo.make_valid(qtotal)
         self._labels = [None] * len(self.legs)
+        if labels is not None:
+            self.iset_leg_labels(labels)
         self._data = []
         self._qdata = np.empty((0, self.rank), dtype=np.intp, order='C')
         self._qdata_sorted = True
         self.test_sanity()
+
+    def test_sanity(self):
+        """Sanity check.
+
+        Raises ValueErrors, if something is wrong.
+        """
+        if optimize(OptimizationFlag.skip_arg_checks):
+            return
+        if len(self.legs) == 0:
+            raise ValueError("We don't allow rank-0 tensors without legs")
+        for l in self.legs:
+            if l.chinfo != self.chinfo:
+                raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
+                    l.chinfo, self.chinfo))
+        if self.shape != tuple([lc.ind_len for lc in self.legs]):
+            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
+                self.shape, tuple([lc.ind_len for lc in self.legs])))
+        for l in self.legs:
+            l.test_sanity()
+        if any([self.dtype != d.dtype for d in self._data]):
+            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
+                self.dtype, [self.dtype != d.dtype for d in self._data]))
+        if self._qdata.shape != (self.stored_blocks, self.rank):
+            raise ValueError("_qdata shape wrong")
+        if self._qdata.dtype != np.intp:
+            raise ValueError("wront dtype of _qdata")
+        if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
+            raise ValueError("invalid qind in _qdata")
+        if not self._qdata.flags['C_CONTIGUOUS']:
+            raise ValueError("qdata is not C-contiguous")
+        if self._qdata_sorted:
+            perm = np.lexsort(self._qdata.T)
+            if np.any(perm != np.arange(len(perm))):
+                raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
+        # check total charge
+        block_q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, self._qdata.T)], axis=0)
+        block_q = self.chinfo.make_valid(block_q)
+        if np.any(block_q != self.qtotal):
+            raise ValueError("some row of _qdata is incompatible with total charge")
+        # test labels
+        assert len(self._labels) == self.rank
+        for lbl in self._labels:
+            if not isinstance(lbl, (type(None), str)):
+                raise ValueError("label not string: " + repr(self.labels))
 
     def copy(self, deep=True):
         """Return a (deep or shallow) copy of self.
@@ -239,8 +290,74 @@ class Array:
         else:
             raise ValueError("setstate with incompatible type of state")
 
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves :attr:`chinfo`, :attr:`legs`, :attr:`dtype` under these names,
+        :attr:`qtotal` as ``"total_charge"``,
+        :attr:`_data` as ``"blocks"``, :attr:`_qdata` as ``:block_inds"``,
+        the :attr:`labels` in the list-form (as returned by :meth:`get_leg_labels`).
+        Moreover, it saves :attr:`rank`, :attr:`shape` and
+        :attr:`_qdata_sorted` (under the name ``"block_inds_sorted"``) as HDF5 attributes.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self.legs, subpath + "legs")
+        hdf5_saver.save(self.dtype, subpath + "dtype")
+        hdf5_saver.save(self.qtotal, subpath + "total_charge")
+        hdf5_saver.save(self._labels, subpath + "labels")
+        hdf5_saver.save(self._data, subpath + "blocks")
+        hdf5_saver.save(self._qdata, subpath + "block_inds")
+        h5gr.attrs["block_inds_sorted"] = self._qdata_sorted
+        h5gr.attrs["rank"] = self.rank  # not needed for loading, but still usefull metadata
+        h5gr.attrs["shape"] = np.array(self.shape, np.intp)  # same
+
     @classmethod
-    def from_ndarray_trivial(cls, data_flat, dtype=None):
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj.legs = hdf5_loader.load(subpath + "legs")
+        obj.dtype = hdf5_loader.load(subpath + "dtype")
+        obj.qtotal = hdf5_loader.load(subpath + "total_charge")
+        obj._labels = hdf5_loader.load(subpath + "labels")
+        obj._data = hdf5_loader.load(subpath + "blocks")
+        obj._qdata = hdf5_loader.load(subpath + "block_inds")
+        obj._qdata_sorted = hdf5_loader.get_attr(h5gr, "block_inds_sorted")
+        obj._set_shape()
+        obj.test_sanity()
+        return obj
+
+    @classmethod
+    def from_ndarray_trivial(cls, data_flat, dtype=None, labels=None):
         """convert a flat numpy ndarray to an Array with trivial charge conservation.
 
         Parameters
@@ -249,6 +366,8 @@ class Array:
             The data to be converted to a Array.
         dtype : ``np.dtype``
             The data type of the array entries. Defaults to dtype of `data_flat`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -261,7 +380,7 @@ class Array:
         data_flat = data_flat.astype(dtype, copy=False)
         chinfo = ChargeInfo()
         legs = [LegCharge.from_trivial(s, chinfo) for s in data_flat.shape]
-        res = cls(legs, dtype)
+        res = cls(legs, dtype, labels=labels)
         res._data = [data_flat]
         res._qdata = np.zeros((1, res.rank), np.intp)
         res._qdata_sorted = True
@@ -269,7 +388,8 @@ class Array:
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None):
+    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None,
+                     labels=None):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -286,6 +406,8 @@ class Array:
         cutoff : float
             Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
             Defaults to :data:`QCUTOFF`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -302,7 +424,7 @@ class Array:
         if dtype is None:
             dtype = data_flat.dtype
         data_flat = data_flat.astype(dtype, copy=False)
-        res = cls(legcharges, dtype, qtotal)  # without any data
+        res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
                 res.shape, data_flat.shape))
@@ -332,7 +454,8 @@ class Array:
                   qtotal=None,
                   func_args=(),
                   func_kwargs={},
-                  shape_kw=None):
+                  shape_kw=None,
+                  labels=None):
         """Create an Array from a numpy func.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -362,6 +485,8 @@ class Array:
             Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -379,7 +504,7 @@ class Array:
                 block = func(*func_args, **kws)
             block = np.asarray(block)
             dtype = block.dtype
-        res = cls(legcharges, dtype, qtotal)  # without any data yet.
+        res = cls(legcharges, dtype, qtotal, labels)  # without any data yet.
         data = []
         qdata = []
         # iterate over all qindices compatible with qtotal
@@ -404,7 +529,14 @@ class Array:
         return res
 
     @classmethod
-    def from_func_square(cls, func, leg, dtype=None, func_args=(), func_kwargs={}, shape_kw=None):
+    def from_func_square(cls,
+                         func,
+                         leg,
+                         dtype=None,
+                         func_args=(),
+                         func_kwargs={},
+                         shape_kw=None,
+                         labels=None):
         """Create an Array from a (numpy) function.
 
         This function creates an array and fills the blocks *compatible* with the charges
@@ -434,6 +566,8 @@ class Array:
             Additional keyword arguments given to `func`.
         shape_kw : None | str
             If given, the keyword with which shape is given to `func`.
+        labels : list of {str | None}
+            Labels associated to each leg, ``None`` for non-named labels.
 
         Returns
         -------
@@ -446,7 +580,7 @@ class Array:
             legs = [pipe, pipe.conj()]
         else:
             legs = [leg, leg.conj()]
-        res = Array.from_func(func, legs, dtype, None, func_args, func_kwargs, shape_kw)
+        res = Array.from_func(func, legs, dtype, None, func_args, func_kwargs, shape_kw, labels)
         if not blocked:
             return res.split_legs()
         return res
@@ -458,46 +592,6 @@ class Array:
         res._qdata = np.empty((0, res.rank), dtype=np.intp)
         res._qdata_sorted = True
         return res
-
-    def test_sanity(self):
-        """Sanity check.
-
-        Raises ValueErrors, if something is wrong.
-        """
-        if optimize(OptimizationFlag.skip_arg_checks):
-            return
-        if len(self.legs) == 0:
-            raise ValueError("We don't allow rank-0 tensors without legs")
-        for l in self.legs:
-            if l.chinfo != self.chinfo:
-                raise ValueError("leg has different ChargeInfo:\n{0!s}\n vs {1!s}".format(
-                    l.chinfo, self.chinfo))
-        if self.shape != tuple([lc.ind_len for lc in self.legs]):
-            raise ValueError("shape mismatch with LegCharges\n self.shape={0!s} != {1!s}".format(
-                self.shape, tuple([lc.ind_len for lc in self.legs])))
-        for l in self.legs:
-            l.test_sanity()
-        if any([self.dtype != d.dtype for d in self._data]):
-            raise ValueError("wrong dtype: {0!s} vs\n {1!s}".format(
-                self.dtype, [self.dtype != d.dtype for d in self._data]))
-        if self._qdata.shape != (self.stored_blocks, self.rank):
-            raise ValueError("_qdata shape wrong")
-        if self._qdata.dtype != np.intp:
-            raise ValueError("wront dtype of _qdata")
-        if np.any(self._qdata < 0) or np.any(self._qdata >= [l.block_number for l in self.legs]):
-            raise ValueError("invalid qind in _qdata")
-        if not self._qdata.flags['C_CONTIGUOUS']:
-            raise ValueError("qdata is not C-contiguous")
-        if self._qdata_sorted:
-            perm = np.lexsort(self._qdata.T)
-            if np.any(perm != np.arange(len(perm))):
-                raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
-        # check total charge
-        block_q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, self._qdata.T)], axis=0)
-        block_q = self.chinfo.make_valid(block_q)
-        if np.any(block_q != self.qtotal):
-            raise ValueError("some row of _qdata is incompatible with total charge")
-        # TODO: check labels?
 
     # properties ==============================================================
 
@@ -590,7 +684,7 @@ class Array:
     def iset_leg_labels(self, labels):
         """Set labels for the different axes/legs; in place.
 
-        Introduction to leg labeling can be found in :doc:`/intro_npc`.
+        Introduction to leg labeling can be found in :doc:`/intro/npc`.
 
         Parameters
         ----------
@@ -603,7 +697,7 @@ class Array:
         get_leg: translate the labels to indices.
         """
         if len(labels) != self.rank:
-            raise ValueError("Need one leg label for each of the legs.")
+            raise ValueError("Need one leg label for each of the legs, got: " + str(list(labels)))
         for i, l in enumerate(labels):
             if l is None:
                 continue
@@ -700,7 +794,7 @@ class Array:
     def sparse_stats(self):
         """Returns a string detailing the sparse statistics."""
         total = np.prod(self.shape)
-        if total is 0:
+        if total == 0:
             return "Array without entries, one axis is empty."
         nblocks = self.stored_blocks
         stored = self.size
@@ -806,7 +900,10 @@ class Array:
         int_only, inds = self._pre_indexing(inds)
         if int_only:
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
-            block = self._get_block(pos[:, 0])
+            try:
+                block = self.get_block(pos[:, 0])
+            except IndexError:
+                return self.dtype.type(0)
             if block is None:
                 return self.dtype.type(0)
             else:
@@ -828,7 +925,7 @@ class Array:
         int_only, inds = self._pre_indexing(inds)
         if int_only:
             pos = np.array([l.get_qindex(i) for i, l in zip(inds, self.legs)])
-            block = self._get_block(pos[:, 0], insert=True, raise_incomp_q=True)
+            block = self.get_block(pos[:, 0], insert=True)
             block[tuple(pos[:, 1])] = other
             return
         # advanced indexing
@@ -841,6 +938,43 @@ class Array:
             like_other = like_other._advanced_getitem(inds)
             other = Array.from_ndarray(other, like_other.legs, self.dtype, like_other.qtotal)
         self._advanced_setitem_npc(inds, other)
+
+    def get_block(self, qindices, insert=False):
+        """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
+
+        Parameters
+        ----------
+        qindices : 1D array of np.intp
+            The qindices, for which we need to look in _qdata.
+        insert : bool
+            If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
+            Otherwise just return ``None``.
+
+        Returns
+        -------
+        block: ndarray | ``None``
+            The block in ``_data`` corresponding to qindices.
+            If `insert`=False and there is not block with qindices, return ``None``.
+
+        Raises
+        ------
+        IndexError
+            If `qindices` are incompatible with charge and `raise_incomp_q`.
+        """
+        if not np.all(self._get_block_charge(qindices) == self.qtotal):
+            raise IndexError("trying to get block for qindices incompatible with charges")
+        # find qindices in self._qdata
+        match = np.argwhere(np.all(self._qdata == qindices, axis=1))[:, 0]
+        if len(match) == 0:
+            if insert:
+                res = np.zeros(self._get_block_shape(qindices), dtype=self.dtype)
+                self._data.append(res)
+                self._qdata = np.append(self._qdata, [qindices], axis=0)
+                self._qdata_sorted = False
+                return res
+            else:
+                return None
+        return self._data[match[0]]
 
     def take_slice(self, indices, axes):
         """Return a copy of self fixing `indices` along one or multiple `axes`.
@@ -1315,7 +1449,7 @@ class Array:
         >>> c3 = oldarray.combine_legs([['a', 'd'], ['e', 'b']], new_axes=[2, 1],
         >>>                            pipes=[c2.legs[0], c2.legs[2]])
         >>> c3.get_leg_labels()
-        ['b', '(e.b)', '(a.d)']
+        ['c', '(e.b)', '(a.d)']
         """
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
@@ -1742,10 +1876,10 @@ class Array:
         if axes is None:
             axes = tuple(reversed(range(self.rank)))
         else:
-            axes = tuple(self.get_leg_indices(axes))
+            axes = self.get_leg_indices(axes)
             if len(axes) != self.rank or len(set(axes)) != self.rank:
                 raise ValueError("axes has wrong length: " + str(axes))
-            if axes == tuple(range(self.rank)):
+            if axes == list(range(self.rank)):
                 return self  # nothing to do
         axes_arr = np.array(axes)
         self.legs = [self.legs[a] for a in axes]
@@ -1934,17 +2068,33 @@ class Array:
         ``self._data`` and ``other._data``, storing result in place.
         Assumes that `other` is an :class:`Array` as well, with the same shape
         and compatible legs.
+        If leg labels of `other` and `self` are same up to permutations,
+        `other` gets transposed accordingly before the action.
 
         .. note ::
             Assumes implicitly that
             ``func(np.zeros(...), np.zeros(...), *args, **kwargs)`` gives 0,
             since we don't let `func` act on zero blocks!
 
+        Parameters
+        ----------
+        func : function
+            Binary function, called as
+            ``new_block = func(block_self, block_other, *args, **kwargs)``
+            for blocks (=Numpy arrays) of equal shape.
+        other : :class:`Array`
+            Other Array from which to take blocks. Should have the same leg structure as self.
+        *args :
+            Extra arguments given to `func`.
+        **kwargs :
+            Extra keyword arguments given to `func`.
+
         Examples
         --------
         >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
         >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
         """
+        other = other._transpose_same_labels(self._labels)
         if len(args) > 0 or len(kwargs) > 0:
             return self.ibinary_blockwise(lambda a, b: func(a, b, *args, **kwargs), other)
         if not optimize(OptimizationFlag.skip_arg_checks):
@@ -2020,6 +2170,8 @@ class Array:
         """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
 
         Note that we allow the type of `self` to change if necessary.
+        Moreover, if `self` and `other` have the same labels in different order,
+        other gets **transposed** before the action.
         """
         if not isinstance(other, Array) or not np.isscalar(prefactor):
             raise ValueError("wrong argument types: {0!r}, {1!r}".format(
@@ -2148,47 +2300,6 @@ class Array:
         """Return shape for the block given by qindices."""
         return tuple([(l.slices[qi + 1] - l.slices[qi]) for l, qi in zip(self.legs, qindices)])
 
-    def _get_block(self, qindices, insert=False, raise_incomp_q=False):
-        """Return the ndarray in ``_data`` representing the block corresponding to `qindices`.
-
-        Parameters
-        ----------
-        qindices : 1D array of np.intp
-            The qindices, for which we need to look in _qdata.
-        insert : bool
-            If True, insert a new (zero) block, if `qindices` is not existent in ``self._data``.
-            Else: just return ``None`` in that case.
-        raise_incomp_q : bool
-            Raise an IndexError if the charge is incompatible.
-
-        Returns
-        -------
-        block: ndarray
-            The block in ``_data`` corresponding to qindices.
-            If `insert`=False and there is not block with qindices, return ``False``.
-
-        Raises
-        ------
-        IndexError
-            If qindices are incompatible with charge and `raise_incomp_q`.
-        """
-        if not np.all(self._get_block_charge(qindices) == self.qtotal):
-            if raise_incomp_q:
-                raise IndexError("trying to get block for qindices incompatible with charges")
-            return None
-        # find qindices in self._qdata
-        match = np.argwhere(np.all(self._qdata == qindices, axis=1))[:, 0]
-        if len(match) == 0:
-            if insert:
-                res = np.zeros(self._get_block_shape(qindices), dtype=self.dtype)
-                self._data.append(res)
-                self._qdata = np.append(self._qdata, [qindices], axis=0)
-                self._qdata_sorted = False
-                return res
-            else:
-                return None
-        return self._data[match[0]]
-
     def _bunch(self, bunch_legs):
         """Return copy and bunch the qind for one or multiple legs.
 
@@ -2313,7 +2424,7 @@ class Array:
             Only returned if `calc_map_qind` is True.
             This function takes qindices from `res` as arguments
             and returns ``(qindices, block_mask)`` such that
-            ``res._get_block(part_qindices) = self._get_block(qindices)[block_mask]``.
+            ``res.get_block(part_qindices) = self.get_block(qindices)[block_mask]``.
             permutation are ignored for this.
         permutations : list((int, 1D array(int)))
             Only returned if `calc_map_qind` is True.
@@ -2392,7 +2503,7 @@ class Array:
         def part2self(part_qindices):
             """Given `part_qindices` of ``res = self[inds]``,
             return (`qindices`, `block_mask`) such that
-            ``res._get_block(part_qindices) == self._get_block(qindices)``.
+            ``res.get_block(part_qindices) == self.get_block(qindices)``.
             """
             qindices = map_qinds[:]  # copy
             block_mask = map_blocks[:]  # copy
@@ -2441,12 +2552,12 @@ class Array:
         # we first set self[inds] completely to zero
         for p_qindices in self_part._qdata:
             qindices, block_mask = map_part2self(p_qindices)
-            block = self._get_block(qindices)
+            block = self.get_block(qindices)
             block[block_mask] = 0.  # overwrite data in self
         # now we copy blocks from other
         for o_block, o_qindices in zip(other._data, other._qdata):
             qindices, block_mask = map_part2self(o_qindices)
-            block = self._get_block(qindices, insert=True)
+            block = self.get_block(qindices, insert=True)
             block[block_mask] = o_block  # overwrite data in self
         self.ipurge_zeros(0.)  # remove blocks identically zero
 
@@ -2598,28 +2709,51 @@ class Array:
         self._data = [np.ascontiguousarray(t) for t in self._data]
         return self
 
+    def _transpose_same_labels(self, other_labels):
+        """Return `self.transpose(other_labels)` if the labels are the same but shuffled."""
+        self_labels = self._labels
+        if self_labels == other_labels:
+            return self  # fits
+        if None in self_labels or None in other_labels:
+            if set(self_labels) == set(other_labels) != set([None]):
+                warnings.warn("Not all legs labeled, so no transpose for Array addition. "
+                              "Did you intend to transpose?")
+            return self  # not all legs labeled
+        if set(self_labels) != set(other_labels):
+            return self  # different labels
+        # now: same labels, different order.
+        # TODO to keep backwards compatibility, just warn for now
+        warnings.warn(
+            "Arrays with same labels in different order. Transpose intended?"
+            " We will transpose in the future!",
+            category=FutureWarning,
+            stacklevel=3)
+        return self
+        # TODO: do this for the next release
+        return self.transpose(other_labels)
+
 
 # ##################################
 # global functions
 # ##################################
 
 
-def zeros(legcharges, dtype=np.float64, qtotal=None):
+def zeros(legcharges, dtype=np.float64, qtotal=None, labels=None):
     """Create a npc array full of zeros (with no _data).
 
     This is just a wrapper around ``Array(...)``, detailed documentation can be found in the class
     doc-string of :class:`Array`.
     """
-    return Array(legcharges, dtype, qtotal)
+    return Array(legcharges, dtype, qtotal, labels)
 
 
-def eye_like(a, axis=0):
+def eye_like(a, axis=0, labels=None):
     """Return an identity matrix contractible with the leg `axis` of the :class:`Array` `a`."""
     axis = a.get_leg_index(axis)
-    return diag(1., a.legs[axis])
+    return diag(1., a.legs[axis], labels=labels)
 
 
-def diag(s, leg, dtype=None):
+def diag(s, leg, dtype=None, labels=None):
     """Returns a square, diagonal matrix of entries `s`.
 
     The resulting matrix has legs ``(leg, leg.conj())`` and charge 0.
@@ -2632,6 +2766,8 @@ def diag(s, leg, dtype=None):
         The first leg of the resulting matrix.
     dtype : None | type
         The data type to be used for the result. By default, use dtype of `s`.
+    labels : list of {str | None}
+        Labels associated to each leg, ``None`` for non-named labels.
 
     Returns
     -------
@@ -2646,7 +2782,7 @@ def diag(s, leg, dtype=None):
     scalar = (s.ndim == 0)
     if not scalar and len(s) != leg.ind_len:
         raise ValueError("len(s)={0:d} not equal to leg.ind_len={1:d}".format(len(s), leg.ind_len))
-    res = Array((leg, leg.conj()), s.dtype)  # default charge is 0
+    res = Array((leg, leg.conj()), s.dtype, labels=labels)  # default charge is 0
     # qdata = [[0, 0], [1, 1], ....]
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
@@ -2801,7 +2937,7 @@ def grid_concat(grid, axes, copy=True):
     return _grid_concat_recursion(grid, axes, copy)
 
 
-def grid_outer(grid, grid_legs, qtotal=None):
+def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
     """Given an np.array of npc.Arrays, return the corresponding higher-dimensional Array.
 
     Parameters
@@ -2815,6 +2951,8 @@ def grid_outer(grid, grid_legs, qtotal=None):
     qtotal : charge
         The total charge of the Array.
         By default (``None``), derive it out from a non-trivial entry of the grid.
+    grid_labels : list of {str | None}
+        One label associated to each of the grid axes. ``None`` for non-named labels.
 
     Returns
     -------
@@ -2831,14 +2969,13 @@ def grid_outer(grid, grid_legs, qtotal=None):
     Examples
     --------
     A typical use-case for this function is the generation of an MPO.
-    Say you have npc.Arrays ``Splus, Sminus, Sz``, each with legs ``[phys.conj(), phys]``.
+    Say you have npc.Arrays ``Splus, Sminus, Sz, Id``, each with legs ``[phys.conj(), phys]``.
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
     Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
-    >>> Id = np.eye_like(Sz)
     >>> W_mpo = grid_outer([[Id, Splus, Sminus, Sz, None],
-    ...                     [None, None, None, None, J*Sminus],
-    ...                     [None, None, None, None, J*Splus],
+    ...                     [None, None, None, None, J*0.5*Sminus],
+    ...                     [None, None, None, None, J*0.5*Splus],
     ...                     [None, None, None, None, J*Sz],
     ...                     [None, None, None, None, Id]],
     ...                    leg_charges=[l_left, l_right])
@@ -2855,20 +2992,21 @@ def grid_outer(grid, grid_legs, qtotal=None):
     dtype = np.find_common_type([e.dtype for _, e in entries], [])
     legs = list(grid_legs) + entry.legs
     labels = entry._labels[:]
+    if grid_labels is None:
+        grid_labels = [None] * len(grid_shape)
+    labels = grid_labels + labels
     if qtotal is None:
         # figure out qtotal from first non-zero entry
         grid_charges = [l.get_charge(l.get_qindex(i)[0]) for i, l in zip(idx, grid_legs)]
         qtotal = chinfo.make_valid(np.sum(grid_charges + [entry.qtotal], axis=0))
     else:
         qtotal = chinfo.make_valid(qtotal)
-    res = Array(legs, dtype, qtotal)
+    res = Array(legs, dtype, qtotal, labels)
     # main work: iterate over all non-trivial entries to fill `res`.
     for idx, entry in entries:
         res[idx] = entry  # insert the values with Array.__setitem__ partial slicing.
         if labels is not None and entry._labels != labels:
             labels = None
-    if labels is not None:
-        res.iset_leg_labels([None] * len(grid_shape) + labels)
     res.test_sanity()
     return res
 
@@ -3129,11 +3267,16 @@ def inner(a, b, axes=None, do_conj=False):
     a, b : class:`Array`
         The arrays for which to calculate the product.
         Must have same rank, and compatible LegCharges.
-    axes : ``(axes_a, axes_b)`` | ``None``
-        ``None`` is equivalent to ``(range(rank), range(rank))``.
-        Alternatively, `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
+    axes : ``(axes_a, axes_b)`` | ``'range'``, ``'labels'``
+        `axes_a` and `axes_b` specifiy the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
-        Contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+        We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
+        The default ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
+        ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        for ``do_conj=True``,
+        or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
+        In other words, ``axes='labels'`` requires `a` and `b` to have the same/conjugated labels
+        up to a possible transposition, which is then reverted.
     do_conj : bool
         If ``False`` (Default), ignore it.
         if ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``
@@ -3145,7 +3288,19 @@ def inner(a, b, axes=None, do_conj=False):
     """
     if a.rank != b.rank:
         raise ValueError("different rank!")
-    if axes is not None:
+    if axes is None or axes == 'range':
+        if axes is None:
+            msg = "inner(): `axes` currently defaults to 'range', will change to 'labels'"
+            warnings.warn(msg, FutureWarning, stacklevel=2)
+        transp = False
+    else:
+        if axes == 'labels':
+            a_labels = a.get_leg_labels()
+            if do_conj:
+                axes = (a_labels, a_labels)
+            else:
+                a_conj_labels = [Array._conj_leg_label(lbl) for lbl in a_labels]
+                axes = (a_labels, a_conj_labels)
         axes_a, axes_b = axes
         axes_a = a.get_leg_indices(to_iterable(axes_a))
         axes_b = b.get_leg_indices(to_iterable(axes_b))
@@ -3155,8 +3310,6 @@ def inner(a, b, axes=None, do_conj=False):
         sort_axes_b = np.argsort(axes_b)
         axes_a = [axes_a[i] for i in sort_axes_b]
         transp = (tuple(axes_a) != tuple(range(a.rank)))
-    else:
-        transp = False
     if transp:
         a = a.copy(deep=False)
         a.itranspose(axes_a)
@@ -3538,8 +3691,10 @@ def speigs(a, charge_sector, k, *args, **kwargs):
     k : int
         How many eigenvalues/vectors should be calculated.
         If the block of `charge_sector` is smaller than `k`, `k` may be reduced accordingly.
-    *args, **kwargs :
+    *args :
         Additional arguments given to `scipy.sparse.linalg.eigs`.
+    **kwargs :
+        Additional keyword arguments given to `scipy.sparse.linalg.eigs`.
 
     Returns
     -------

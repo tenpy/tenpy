@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.lanczos."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -29,7 +29,7 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
 
 
 @pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
-def test_lanczos_gs(n, N_cache, tol=5.e-15):
+def test_lanczos_gs(n, N_cache, tol=5.e-14):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg)
@@ -45,7 +45,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
-    psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), do_conj=True)
+    psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), 'range', do_conj=True)
     print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
     assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
     print("<psi0_flat|H_flat|psi0_flat> / E0_flat = ", end=' ')
@@ -54,11 +54,22 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
     print("|<psi0|psi0_flat>|=", abs(ov))
     assert (abs(1. - abs(ov)) < tol)
 
+    print("version with arpack")
+    E0a, psi0a = lanczos.lanczos_arpack(H_Op, psi_init, {'verbose': 1})
+    print("E0a = {E0a:.14f} vs exact {E0_flat:.14f}".format(E0a=E0a, E0_flat=E0_flat))
+    print("|E0a-E0_flat| / |E0_flat| =", abs((E0a - E0_flat) / E0_flat))
+    psi0a_H_psi0a = npc.inner(psi0a, npc.tensordot(H, psi0a, axes=[1, 0]), 'range', do_conj=True)
+    print("<psi0a|H|psi0a> / E0a = 1. + ", psi0a_H_psi0a / E0a - 1.)
+    assert (abs(psi0a_H_psi0a / E0a - 1.) < tol)
+    ov = np.inner(psi0a.to_ndarray().conj(), psi0_flat)
+    print("|<psi0a|psi0_flat>|=", abs(ov))
+    assert (abs(1. - abs(ov)) < tol)
+
     # now repeat, but keep orthogonal to original ground state
     # -> should give second eigenvector psi1 in the same charge sector
     for i in range(1, len(E_flat)):
         E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
-        qtotal = npc.detect_qtotal(psi1_flat, psi0.legs)
+        qtotal = npc.detect_qtotal(psi1_flat, psi0.legs, cutoff=1.e-10)
         if np.all(qtotal == psi0.qtotal) and E1_flat < -0.01:
             break  # found psi1 in same charge sector
     else:
@@ -72,7 +83,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
                                   orthogonal_to=[psi0])
     print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
     print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
-    psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), do_conj=True)
+    psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)
     print("<psi1|H|psi1> / E1 = 1 + ", psi1_H_psi1 / E1 - 1.)
     assert (abs(psi1_H_psi1 / E1 - 1.) < tol)
     print("<psi1_flat|H_flat|psi1_flat> / E1_flat = ", end=' ')
@@ -81,13 +92,13 @@ def test_lanczos_gs(n, N_cache, tol=5.e-15):
     print("|<psi1|psi1_flat>|=", abs(ov))
     assert (abs(1. - abs(ov)) < tol)
     # and finnally check also orthogonality to psi0
-    ov = npc.inner(psi0, psi1, do_conj=True)
+    ov = npc.inner(psi0, psi1, 'range', do_conj=True)
     print("|<psi0|psi1>| =", abs(ov))
     assert (abs(ov) < tol**0.5)
 
 
 @pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
-def test_lanczos_evolve(n, N_cache, tol=5.e-15):
+def test_lanczos_evolve(n, N_cache, tol=5.e-14):
     # generate Hermitian test array
     leg = gen_random_legcharge(ch, n)
     H = npc.Array.from_func_square(rmat.GUE, leg) - npc.diag(1., leg)

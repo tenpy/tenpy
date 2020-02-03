@@ -29,9 +29,9 @@ involving couplings between multiple sites.
 The :class:`CouplingMPOModel` aims at structuring the initialization for most models and is used
 as base class in (most of) the predefined models in TeNPy.
 
-See also the introduction in :doc:`/intro_model`.
+See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -68,7 +68,6 @@ class Model:
     lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
     """
-
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it get's called multiple times when a user implements e.g. a
@@ -139,7 +138,6 @@ class NearestNeighborModel(Model):
         ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
         Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
     """
-
     def __init__(self, lattice, H_bond):
         Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
@@ -240,42 +238,30 @@ class NearestNeighborModel(Model):
         old_L = len(self.H_bond)
         new_L = len(grouped_sites)
         finite = self.H_bond[0] is None
-        H_bond = [None] * (new_L + 1)
+        H_bond = [None] * new_L
         i = 0  # old index
         for k, gs in enumerate(grouped_sites):
             # calculate new_Hb on bond (k, k+1)
-            next_gs = grouped_sites[(k + 1) % new_L]
+            k2 = (k + 1) % new_L
+            next_gs = grouped_sites[k2]
             new_H_onsite = None  # collect old H_bond terms inside `gs`
-            if gs.n_sites > 1:
-                for j in range(1, gs.n_sites):
-                    old_Hb = self.H_bond[(i + j) % old_L]
-                    add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
-                    if new_H_onsite is None:
-                        new_H_onsite = add_H_onsite
-                    else:
-                        new_H_onsite = new_H_onsite + add_H_onsite
+            for j in range(1, gs.n_sites):
+                old_Hb = self.H_bond[(i + j) % old_L]
+                add_H_onsite = self._group_sites_Hb_to_onsite(gs, j, old_Hb)
+                new_H_onsite = add_with_None_0(new_H_onsite, add_H_onsite)
             old_Hb = self.H_bond[(i + gs.n_sites) % old_L]
             new_Hb = self._group_sites_Hb_to_bond(gs, next_gs, old_Hb)
             if new_H_onsite is not None:
                 if k + 1 != new_L or not finite:
                     # infinite or in the bulk: add new_H_onsite to new_Hb
                     add_Hb = npc.outer(new_H_onsite, next_gs.Id.transpose(['p', 'p*']))
-                    if new_Hb is None:
-                        new_Hb = add_Hb
-                    else:
-                        new_Hb = new_Hb + add_Hb
+                    new_Hb = add_with_None_0(new_Hb, add_Hb)
                 else:  # finite and k = new_L - 1
                     # the new_H_onsite needs to be added to the right-most Hb
+                    prev_gs = grouped_sites[k - 1]
                     add_Hb = npc.outer(prev_gs.Id.transpose(['p', 'p*']), new_H_onsite)
-                    if H_bond[-1] is None:
-                        H_bond[-1] = add_Hb
-                    else:
-                        H_bond[-1] = new_Hb + add_Hb
-            k2 = (k + 1) % new_L
-            if H_bond[k2] is None:
-                H_bond[k2] = new_Hb
-            else:
-                H_bond[k2] = H_bond[k2] + new_Hb
+                    H_bond[-1] = add_with_None_0(H_bond[-1], add_Hb)
+            H_bond[k2] = add_with_None_0(H_bond[k2], new_Hb)
             i += gs.n_sites
         for Hb in H_bond:
             if Hb is None:
@@ -393,7 +379,7 @@ class NearestNeighborModel(Model):
         for i in range(L):
             wL, wR = legs[i], legs[i + 1].conj()
             p = sites[i].leg
-            W = npc.zeros([wL, wR, p, p.conj()], dtype)
+            W = npc.zeros([wL, wR, p, p.conj()], dtype, labels=['wL', 'wR', 'p', 'p*'])
             W[0, 0, :, :] = sites[i].Id
             W[-1, -1, :, :] = sites[i].Id
             onsite = onsite_terms[i]
@@ -406,7 +392,6 @@ class NearestNeighborModel(Model):
             if bond_XYZ[j] is not None:
                 X, _ = bond_XYZ[j]
                 W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
             Ws[i] = W
         H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
         return H_MPO
@@ -432,7 +417,6 @@ class MPOModel(Model):
     H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian.
     """
-
     def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
@@ -576,7 +560,6 @@ class CouplingModel(Model):
         In a :class:`MultiCouplingModel`, values may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-
     def __init__(self, lattice, bc_coupling=None):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
@@ -741,7 +724,7 @@ class CouplingModel(Model):
         on all nearest-neighbor bonds of the lattice like this:
 
         >>> J = 1.  # the strength
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         The strength can be an array, which get's tiled to the correct shape.
@@ -757,13 +740,13 @@ class CouplingModel(Model):
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
 
         >>> t = 1.  # hopping strength
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
 
         With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
 
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
         ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
@@ -995,7 +978,7 @@ class CouplingModel(Model):
         >>> strength = 1. # hopping strength without external flux
         >>> phi = np.pi/4 # determines the external flux strength
         >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-        >>> for u1, u2, dx in self.lat.nearest_neighbors:
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
         ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """
@@ -1030,7 +1013,6 @@ class MultiCouplingModel(CouplingModel):
     :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
     instances of :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-
     def add_multi_coupling(self, strength, u0, op0, other_ops, op_string=None, category=None):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
@@ -1181,7 +1163,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     and :mod:`~tenpy.models.tf_ising`.
 
     The ``__init__`` of this function performs the standard initialization explained
-    in :doc:`/intro_model`, by calling the methods :meth:`init_lattice` (step 1-4)
+    in :doc:`/intro/model`, by calling the methods :meth:`init_lattice` (step 1-4)
     to initialize a lattice (which in turn calls :meth:`init_sites`) and
     :meth:`init_terms`. The latter should be overwritten by subclasses to add the
     desired terms.
@@ -1213,14 +1195,13 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
-
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
             # In the best case, this would just rescale the energy;
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
-            # To fix this problem, follow the instructions for subclassing in :doc:`/intro_model`.
+            # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = get_parameter(model_params, 'verbose', 1, self.name)

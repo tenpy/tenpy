@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
@@ -57,12 +57,11 @@ def test_tebd(bc_MPS, g=0.5):
         ED = ExactDiag(M)
         ED.build_full_H_from_mpo()
         ED.full_diagonalization()
-        psi_ED = ED.groundstate()
+        E_ED, psi_ED = ED.groundstate()
         Etebd = np.sum(M.bond_energies(psi))
-        Eexact = np.min(ED.E)
-        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
-        assert (abs((Etebd - Eexact) / Eexact) < 1.e-7)
-        ov = npc.inner(psi_ED, ED.mps_to_full(psi), do_conj=True)
+        print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=E_ED))
+        assert (abs((Etebd - E_ED) / E_ED) < 1.e-7)
+        ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print("compare with ED: overlap = ", abs(ov)**2)
         assert (abs(abs(ov) - 1.) < 1.e-7)
 

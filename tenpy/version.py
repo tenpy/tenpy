@@ -2,8 +2,15 @@
 
 The version is provided in the standard python format ``major.minor.revision`` as string. Use
 ``pkg_resources.parse_version`` before comparing versions.
+
+.. autodata :: version
+.. autodata :: released
+.. autodata :: short_version
+.. autodata :: git_revision
+.. autodata :: full_version
+.. autodata :: version_summary
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import sys
 import subprocess
@@ -14,13 +21,13 @@ __all__ = [
 ]
 
 # hard-coded version for people without git...
-# current release version
-version = '0.4.1'
+#: current release version as a string
+version = '0.5.0'
 
-# whether this is a released version or modified
+#: whether this is a released version or modified
 released = False
 
-# short version
+#: same as version, but with 'v' in front
 short_version = 'v' + version
 
 
@@ -35,7 +42,21 @@ def _get_git_revision():
     return rev
 
 
-# the current git revision (if available)
+def _get_git_description():
+    """Get number of commits since last git tag.
+
+    If unknown, return 0
+    """
+    try:
+        descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
+                                        cwd=os.path.dirname(os.path.abspath(__file__)),
+                                        stderr=subprocess.STDOUT).decode().strip()
+    except:
+        return 0
+    return int(descr.split('-')[1])
+
+
+#: the hash of the last git commit (if available)
 git_revision = _get_git_revision()
 
 
@@ -43,11 +64,11 @@ def _get_full_version():
     """obtain version from git."""
     full_version = version
     if not released:
-        full_version += '.dev0+' + git_revision[:7]
+        full_version += '.dev{0:d}+{1!s}'.format(_get_git_description(), git_revision[:7])
     return full_version
 
 
-# full version string including a begin of git revision hash
+#: if not released additional info with part of git revision
 full_version = _get_full_version()
 
 
@@ -61,11 +82,9 @@ def _get_version_summary():
         from . import _version
         if _version.version != version:
             raise ValueError("Version changed since installation/compilation")
-        if have_cython_functions and _version.numpy_version != numpy.version.full_version:
-            raise ValueError("Numpy version changed since compilation")
         if have_cython_functions:
             if git_revision != "unknown":
-                if _version.git_revision != git_revision:
+                if _version.git_revision != "unknown" and _version.git_revision != git_revision:
                     warnings.warn("TeNPy is compiled from different git "
                                   "version than the current HEAD")
                 cython_info = "compiled from git rev. " + _version.git_revision
@@ -91,5 +110,5 @@ def _get_version_summary():
     return summary
 
 
-# summary of the versions as sting
+#: summary of the tenpy, python, numpy and scipy versions used
 version_summary = _get_version_summary()

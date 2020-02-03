@@ -1,5 +1,5 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -56,7 +56,6 @@ class BosonicHaldaneModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
         CouplingMPOModel.__init__(self, model_params)
@@ -79,7 +78,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
             self.add_onsite(mu, 0, 'N', category='mu N')
             self.add_onsite(-mu, 1, 'N', category='mu N')
 
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j')
             self.add_coupling(np.conj(t1_phi), u2, 'Bd', u1, 'B', -dx,
@@ -116,7 +115,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`/intro_JordanWigner` for details.
+        See :doc:`/intro/JordanWigner` for details.
 
     Parameters
     ----------
@@ -145,7 +144,6 @@ class FermionicHaldaneModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
         CouplingMPOModel.__init__(self, model_params)
@@ -169,7 +167,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
             self.add_onsite(mu, 0, 'N', category='mu N')
             self.add_onsite(-mu, 1, 'N', category='mu N')
 
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
             self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
             self.add_coupling(np.conj(t1_phi),

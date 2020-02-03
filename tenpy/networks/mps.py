@@ -73,7 +73,7 @@ site of the MPS in :attr:`MPS.form`.
                     before using algorithms.
 ======== ========== ==========================================================================
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -144,13 +144,20 @@ class MPS:
         We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
         takes proper care of the boundary conditions.
     _valid_forms : dict
+        Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
         ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
     _valid_bc : tuple of str
-        Valid boundary conditions.
+        Class attribute. Possible valid boundary conditions.
     _transfermatrix_keep : int
         How many states to keep at least when diagonalizing a :class:`TransferMatrix`.
         Important if the state develops a near-degeneracy.
+    _p_label, _B_labels : list of str
+        Class attribute. `_p_label` defines the physical legs of the B-tensors, `_B_labels` lists
+        all the labels of the B tensors. Used by methods like :meth:`get_theta` to avoid
+        the necessity of re-implementations for derived classes like the
+        :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
+        legs changed.
     """
     # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
     # For the canonical forms, ``nu[0] + nu[1] = 1``
@@ -167,7 +174,6 @@ class MPS:
     _valid_bc = ('finite', 'segment', 'infinite')
     # the "physical" labels for each B
     _p_label = ['p']
-    _p_label_star = ['p*']
     # All labels of each tensor in _B (order is used!)
     _B_labels = ['vL', 'p', 'vR']
 
@@ -222,6 +228,93 @@ class MPS:
                 assert isinstance(f, tuple)
                 assert len(f) == 2
 
+    def copy(self):
+        """Returns a copy of `self`.
+
+        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
+        B and S are deeply copied.
+        """
+        # __init__ makes deep copies of B, S
+        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm)
+        cp.grouped = self.grouped
+        cp._transfermatrix_keep = self._transfermatrix_keep
+        return cp
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo` (under these names),
+        :attr:`_B` as ``"tensors"``,
+        :attr:`_S` as ``"singular_values"``,
+        :attr:`bc` as ``"boundary_condition"``, and
+        :attr:`form` converted to a single array of shape (L, 2) as ``"canonical_form"``,
+        Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
+        :attr:`_transfermatrix_keep` (as "transfermatrix_keep") as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name "max_bond_dimension".
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.sites, subpath + "sites")
+        hdf5_saver.save(self._B, subpath + "tensors")
+        hdf5_saver.save(self._S, subpath + "singular_values")
+        hdf5_saver.save(self.bc, subpath + "boundary_condition")
+        hdf5_saver.save(np.array(self.form), subpath + "canonical_form")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        h5gr.attrs["norm"] = self.norm
+        h5gr.attrs["grouped"] = self.grouped
+        h5gr.attrs["transfermatrix_keep"] = self._transfermatrix_keep
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.sites = hdf5_loader.load(subpath + "sites")
+        obj._B = hdf5_loader.load(subpath + "tensors")
+        obj._S = hdf5_loader.load(subpath + "singular_values")
+        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
+        form = hdf5_loader.load(subpath + "canonical_form")
+        obj.form = [tuple(f) for f in form]
+        obj.norm = hdf5_loader.get_attr(h5gr, "norm")
+
+        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
+        obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj.dtype = np.find_common_type([B.dtype for B in obj._B], [])
+        obj.test_sanity()
+        return obj
+
     @classmethod
     def from_product_state(cls,
                            sites,
@@ -266,16 +359,35 @@ class MPS:
 
         Examples
         --------
-        To get a Neel state:
+        Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TIChain`:
 
-        >>> M = SpinChain(model_params)
-        >>> p_state = ["up", "down"]*(L//2)  # repeats entries L/2 times
+        >>> M = TFIChain({'L': 10})
+        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
         >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
 
-        For Spin S=1/2, you could get a state with all sites pointing in negative x-direction with:
+        The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
+        in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
 
-        >>> neg_x_state = np.array([1., -1.])
-        >>> p_state = [neg_x_state/np.linalg.norm(neg_x_state)]*L  # other parameters as above
+        Extending the example, we can replace the spin in the center with one with arbitrary
+        angles ``theta, phi`` in the bloch sphere:
+
+        >>> M = TFIChain({'L': 8, 'conserve': None})
+        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
+        >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
+        >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
+        >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, dtype=np.complex)
+
+        Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
+        the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
+        (when we keep the the north-pole of the bloch sphere being the up-state).
+        The reason is that the `SpinChain` uses the general :class:`~tenpy.networks.site.SpinSite`,
+        where the states are orderd ascending from ``'down'`` to ``'up'``.
+        The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
+        ``'up', 'down'`` where that the Pauli matrices look as usual.
+
+        Moreover, note that you can not write this bloch state (for ``theta != 0, pi``) when
+        conserving symmetries, as the two physical basis states correspond to different symmetry
+        sectors.
         """
         sites = list(sites)
         L = len(sites)
@@ -293,13 +405,14 @@ class MPS:
                 perm = False
             try:
                 iter(p_st)
-                if len(p_st) != site.dim:
-                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
-                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             except TypeError:
                 # just an int for p_st
                 B = np.zeros((site.dim, 1, 1), dtype)
                 B[p_st, 0, 0] = 1.0
+            else:  # iter works
+                if len(p_st) != site.dim:
+                    raise ValueError("p_state incompatible with local dim:" + repr(p_st))
+                B = np.array(p_st, dtype).reshape((site.dim, 1, 1))
             if perm:
                 B = B[site.perm, :, :]
             Bs.append(B)
@@ -455,7 +568,8 @@ class MPS:
             psi = psi.combine_legs([labels[i + 1], 'vR'])
             psi, S, B = npc.svd(psi, inner_labels=['vR', 'vL'], cutoff=cutoff)
             S /= np.linalg.norm(S)  # normalize
-            psi.iscale_axis(S, 1)
+            if i > 1:
+                psi.iscale_axis(S, 1)
             B_list[i] = B.split_legs(1).replace_label(labels[i + 1], 'p')
             S_list[i] = S
             psi = psi.split_legs(0)
@@ -584,18 +698,6 @@ class MPS:
             Ts = next_Ts
             labels_L = labels_R
         return cls([site] * L, Bs, Ss, bc=bc, form=forms)
-
-    def copy(self):
-        """Returns a copy of `self`.
-
-        The copy still shares the sites, chinfo, and LegCharges of the B tensors, but the values of
-        B and S are deeply copied.
-        """
-        # __init__ makes deep copies of B, S
-        cp = MPS(self.sites, self._B, self._S, self.bc, self.form, self.norm)
-        cp.grouped = self.grouped
-        cp._transfermatrix_keep = self._transfermatrix_keep
-        return cp
 
     @property
     def L(self):
@@ -809,74 +911,6 @@ class MPS:
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
-    def init_LP(self, i, bra=None, mpo=None):
-        """Build initial left part ``LP`` for an MPS/MPOEnvironment.
-
-        Parameters
-        ----------
-        i : int
-            Build ``LP`` left of site `i`.
-        bra : :class:`MPS`
-            Check leg compatiblity with a `bra`. Note that the returned `init_LP` will
-            only be the contraction for the ``LP`` of  ``<bra|self>`` on the left most site `i` = 0
-            of a finite MPS.
-        mpo : None | :class:`~tenpy.networks.mpo.MPO`
-            If given, add a leg for the MPO. Requires the `MPO.IdL` on site `i` to be set.
-
-        Returns
-        -------
-        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vL` leg of ``self.get_B(i)``, labels ``'vR*', 'vR'``.
-            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdL[i]``,
-            with labels ``'vR*', 'wR', 'vR'``.
-        """
-        i0 = self._to_valid_index(i)
-        leg_ket = self._B[i0].get_leg('vL')
-        if bra is not None:
-            leg_bra = bra._B[i0].get_leg('vL')
-            leg_ket.test_equal(leg_bra)
-        init_LP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_LP.iset_leg_labels(['vR*', 'vR'])
-        if mpo is not None:
-            leg_mpo = mpo.get_W(i).get_leg('wL').conj()
-            IdL = mpo.get_IdL(i)
-            init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
-        return init_LP
-
-    def init_RP(self, i, bra=None, mpo=None):
-        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
-
-        Parameters
-        ----------
-        i : int
-            Build ``RP`` right of site `i`.
-        bra : :class:`MPS`
-            Check leg compatiblity with a `bra`. Note that the returned `init_RP` will
-            only be the contraction for the ``RP`` of  ``<bra|self>`` on the right most site
-            `i` = L - 1 of a finite MPS.
-        mpo : None | :class:`~tenpy.networks.mpo.MPO`
-            If given, add a leg for the MPO. Requires the `MPO.IdR` on site `i` to be set.
-
-        Returns
-        -------
-        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vR` leg of ``self.get_B(i)``, labels ``'vL*', 'vL'``.
-            If `mpo` is given, multiplied with a unit vector nonzero in ``mpo.IdR[i]``,
-            with labels ``'vL*', 'wL', 'vL'``.
-        """
-        i0 = self._to_valid_index(i)
-        leg_ket = self._B[i0].get_leg('vR')
-        if bra is not None:
-            leg_bra = bra._B[i0].get_leg('vR')
-            leg_ket.test_equal(leg_bra)
-        init_RP = npc.diag(1., leg_ket, dtype=self.dtype)
-        init_RP.iset_leg_labels(['vL*', 'vL'])
-        if mpo is not None:
-            leg_mpo = mpo.get_W(i).get_leg('wR').conj()
-            IdR = mpo.get_IdR(i)
-            init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
-        return init_RP
-
     def increase_L(self, new_L=None):
         """Modify `self` inplace to enlarge the unit cell.
 
@@ -1034,8 +1068,16 @@ class MPS:
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
-    def get_total_charge(self):
+    def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
+
+        Parameters
+        ----------
+        only_physical_legs : bool
+            For ``'finite'`` boundary conditions, the total charge can be gauged away
+            by changing the LegCharge of the trivial legs on the left and right of the MPS.
+            This option allows to project out the trivial legs to get the actual "physical"
+            total charge.
 
         Returns
         -------
@@ -1043,6 +1085,11 @@ class MPS:
             The sum of the `qtotal` of the individual `B` tensors.
         """
         qtotal = np.sum([B.qtotal for B in self._B], axis=0)
+        if only_physical_legs:
+            if self.bc != 'finite':
+                raise ValueError("`only_physical_legs` not supported for bc=" + repr(self.bc))
+            qtotal += self._B[0].get_leg('vL').get_charge(0)
+            qtotal += self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
@@ -1540,7 +1587,7 @@ class MPS:
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta = self.get_theta(i, n)
             C = npc.tensordot(op, theta, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            E.append(npc.inner(theta, C, axes=[theta.get_leg_labels()] * 2, do_conj=True))
+            E.append(npc.inner(theta, C, axes='labels', do_conj=True))
         return np.real_if_close(np.array(E))
 
     def expectation_value_term(self, term, autoJW=True):
@@ -2306,8 +2353,7 @@ class MPS:
                 sign = np.real_if_close(np.exp(1.j * np.pi * sign.reshape([dL * dR])))
                 swap_op = np.diag(sign).reshape([dL, dR, dL, dR])
                 legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
-                swap_op = npc.Array.from_ndarray(swap_op, legs)
-                swap_op.iset_leg_labels(['p1', 'p0', 'p0*', 'p1*'])
+                swap_op = npc.Array.from_ndarray(swap_op, legs, labels=['p1', 'p0', 'p0*', 'p1*'])
             else:  # no sign necessary
                 swap_op = None  # continue with transposition as for Bosons
         theta = self.get_theta(i, n=2)
@@ -2754,7 +2800,7 @@ class MPS:
         sqrt_Wr = np.sqrt(Wr)
         Gl.itranspose(['vR*', 'vR'])
         rhor = Gl.scale_axis(sqrt_Wr, 0).iscale_axis(sqrt_Wr, 1)
-        S2, YH = npc.eigh(rhor)  # YH has legs 'vR*', 'vR'
+        S2, YH = npc.eigh(rhor, sort='>')  # YH has legs 'vR*', 'vR'
         S2 /= np.sum(S2)  # equivalent to normalizing tr(rhor)=1
         s_norm = 1.
         # discard small values on order of machine precision
@@ -2846,9 +2892,9 @@ class MPSEnvironment:
         Stored in place, without making copies.
         If ``None``, use `bra`.
     init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part ``LP``. If ``None``, build trivial one.
+        Initial very left part ``LP``. If ``None``, build trivial one with :meth:`init_LP`.
     init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part ``RP``. If ``None``, build trivial one.
+        Initial very right part ``RP``. If ``None``, build trivial one with :meth:`init_RP`.
     age_LP : int
         The number of physical sites involved into the contraction yielding `firstLP`.
     age_RP : int
@@ -2857,11 +2903,14 @@ class MPSEnvironment:
     Attributes
     ----------
     L : int
-        Number of physical sites. For iMPS the len of the MPS unit cell.
+        Number of physical sites involved into the Environment, i.e. the least common multiple
+        of ``bra.L`` and ``ket.L``.
     bra, ket : :class:`~tenpy.networks.mps.MPS`
         The two MPS for the contraction.
     dtype : type
         The data type.
+    _finite : bool
+        Whether the boundary conditions of the MPS are finite.
     _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
@@ -2879,7 +2928,6 @@ class MPSEnvironment:
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
-
     def __init__(self, bra, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
@@ -2888,29 +2936,69 @@ class MPSEnvironment:
         self.bra = bra
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
-        self.L = L = bra.L
-        self.finite = bra.finite
+        self.L = L = lcm(bra.L, ket.L)
+        self._finite = bra.finite
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
+        self._finite = self.ket.finite  # just for _to_valid_index
         if init_LP is None:
-            init_LP = self.ket.init_LP(0, bra)
+            init_LP = self.init_LP(0)
         self.set_LP(0, init_LP, age=age_LP)
         if init_RP is None:
-            init_RP = self.ket.init_RP(L - 1, bra)
+            init_RP = self.init_RP(L - 1)
         self.set_RP(L - 1, init_RP, age=age_RP)
         self.test_sanity()
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.L == self.ket.L)
-        assert (self.bra.finite == self.ket.finite)
+        assert (self.bra.finite == self.ket.finite == self._finite)
         # check that the network is contractable
-        for b_s, k_s in zip(self.bra.sites, self.ket.sites):
+        for i in range(self.L):
+            b_s = self.bra.sites[i % self.bra.L]
+            k_s = self.ket.sites[i % self.ket.L]
             b_s.leg.test_equal(k_s.leg)
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
+
+    def init_LP(self, i):
+        """Build initial left part ``LP``.
+
+        Parameters
+        ----------
+        i : int
+            Build ``LP`` left of site `i`.
+
+        Returns
+        -------
+        init_LP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
+        """
+        leg_ket = self.ket.get_B(i, None).get_leg('vL')
+        leg_bra = self.bra.get_B(i, None).get_leg('vL')
+        leg_ket.test_equal(leg_bra)
+        init_LP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vR*', 'vR'])
+        return init_LP
+
+    def init_RP(self, i):
+        """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        Parameters
+        ----------
+        i : int
+            Build ``RP`` right of site `i`.
+
+        Returns
+        -------
+        init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
+        """
+        leg_ket = self.ket.get_B(i, None).get_leg('vR')
+        leg_bra = self.bra.get_B(i, None).get_leg('vR')
+        leg_ket.test_equal(leg_bra)
+        init_RP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vL*', 'vL'])
+        return init_RP
 
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).
@@ -2999,7 +3087,7 @@ class MPSEnvironment:
         return self._LP_age[self._to_valid_index(i)]
 
     def get_RP_age(self, i):
-        """Return number of physical sites in the contractions of get_LP(i).
+        """Return number of physical sites in the contractions of get_RP(i).
 
         Might be ``None``.
         """
@@ -3141,13 +3229,12 @@ class MPSEnvironment:
             op = self.ket.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             C = self.ket.get_theta(i, n)
-            th_labels = C.get_leg_labels()  # vL, vR, p0, p1, ...
             C = npc.tensordot(op, C, axes=[ax_pstar, ax_p])  # same labels
             C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
             C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self.bra.get_theta(i, n)
-            E.append(npc.inner(theta_bra, C, axes=[th_labels] * 2, do_conj=True))
+            E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
         return np.real_if_close(np.array(E)) * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
@@ -3161,14 +3248,20 @@ class MPSEnvironment:
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('*') + ['vR*'], self.ket._p_label + ['vL*'])
-        # for a ususal MPS, axes = (['p*', 'vR*'], ['p', 'vL*'])
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(), RP, axes=axes)
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `ket.bc`)."""
-        return self.ket._to_valid_index(i)
+        """Make sure `i` is a valid index (depending on `finite`)."""
+        if not self._finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for MPSEnvironment".format(i))
+        return i
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
@@ -3244,7 +3337,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
     _contract_legs : int
         Number of physical legs per site + 1.
     """
-
     def __init__(self,
                  bra,
                  ket,
@@ -3351,7 +3443,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         mat : :class:`~tenpy.linalg.np_conserved.Array`
             A 2D array with `diag` on the diagonal such that :meth:`matvec` can act on it.
         """
-        return npc.diag(diag, self.pipe.legs[0]).iset_leg_labels(self.label_split)
+        return npc.diag(diag, self.pipe.legs[0], labels=self.label_split)
 
     def eigenvectors(self,
                      num_ev=1,
@@ -3378,7 +3470,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         which : str
             Which eigenvalues to look for, see `scipy.sparse.linalg.speigs`.
         **kwargs :
-            Further keyword arguments are given to :func:`~tenpy.tools.math.speigs`.
+            Further keyword arguments given to :func:`~tenpy.tools.math.speigs`.
 
         Returns
         -------

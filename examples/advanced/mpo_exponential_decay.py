@@ -10,7 +10,7 @@ form (see the grid below).
 We run the iDMRG algorithm to find the ground state and energy density of the
 system in the thermodynamic limit.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc
@@ -50,7 +50,6 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     """
-
     def __init__(self, model_param):
         # model parameters
         L = get_parameter(model_param, 'L', 2, self.__class__)

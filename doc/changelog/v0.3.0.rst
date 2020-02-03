@@ -1,0 +1,20 @@
+[0.3.0] - 2018-02-19
+--------------------
+This is the first version published on github.
+
+Added
+^^^^^
+- Cython modules for np_conserved and charges, which can optionally be compiled for speed-ups
+- tools.optimization for dynamical optimization
+- Various models.
+- More predefined lattice sites.
+- Example toy-codes.
+- Network contractor for general networks
+
+Changed
+^^^^^^^
+- Switch to python3
+
+Removed
+^^^^^^^
+- Python 2 support.

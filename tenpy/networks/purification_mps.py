@@ -108,7 +108,7 @@ see [Hauschild2018]_.
     I think it should suffice to implement another `from_infiniteT`.
 
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -151,15 +151,6 @@ class PurificationMPS(MPS):
                 raise ValueError("B has wrong labels " + repr(B.get_leg_labels()))
         super().test_sanity()
 
-    def copy(self):
-        """Returns a copy of `self`.
-
-        The copy still shares the sites, chinfo, and LegCharges of the _B, but the values of B and
-        S are deeply copied.
-        """
-        # __init__ makes deep copies of B, S
-        return PurificationMPS(self.sites, self._B, self._S, self.bc, self.form)
-
     @classmethod
     def from_infiniteT(cls, sites, bc='finite', form='B'):
         """Initial state corresponding to infinite-Temperature ensemble.
@@ -186,8 +177,8 @@ class PurificationMPS(MPS):
         Bs = [None] * L
         for i in range(L):
             p_leg = sites[i].leg
-            B = npc.diag(1., p_leg, np.float) / sites[i].dim**0.5
-            B.iset_leg_labels(['p', 'q'])  # `q` has the physical leg with opposite `qconj`
+            B = npc.diag(1., p_leg, np.float, ['p', 'q']) / sites[i].dim**0.5
+            # leg `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B
         res = cls(sites, Bs, S, bc, form)

@@ -2,7 +2,7 @@
 
 Feel free to reuse/modify this script accordingly e.g. if you add another lattice.
 """
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import matplotlib.pyplot as plt
 from tenpy.models import lattice, toric_code

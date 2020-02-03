@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.np_conserved."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -7,6 +7,7 @@ import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
 import warnings
+import pytest
 
 from random_test import gen_random_legcharge, random_Array
 
@@ -485,6 +486,20 @@ def test_npc_Array_ops():
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
 
 
+def test_npc_addition_transpose():
+    # addition with labels and transposed axes
+    a1 = np.random.random([3, 3, 4])
+    a2 = np.swapaxes(a1, 0, 1)
+    t1 = npc.Array.from_ndarray_trivial(a1, labels=['a', 'b', 'c'])
+    t2 = npc.Array.from_ndarray_trivial(a2, labels=['b', 'a', 'c'])
+    # TODO: for now warning
+    with pytest.warns(FutureWarning):
+        diff = npc.norm(t1 - t2)
+    # TODO: when the behaviour is changed do
+    #  diff = npc.norm(t1 - t2)
+    #  assert diff < 1.e-10
+
+
 def test_npc_tensordot():
     for sort in [True, False]:
         print("sort =", sort)
@@ -560,18 +575,33 @@ def test_npc_tensordot_extra():
     assert abs(np.linalg.norm(theta_flat) - npc.norm(Utheta)) < 1.e-10
 
 
-def test_npc_inner():
+def test_npc_inner(tol=1.e-13):
     for sort in [True, False]:
         print("sort =", sort)
         a = random_Array((10, 7, 5), chinfo3, sort=sort)
+        a.iset_leg_labels(['x', 'y', 'z'])
         aflat = a.to_ndarray()
-        legs_b = [l.conj() for l in a.legs[::-1]]
-        b = npc.Array.from_func(np.random.random, legs_b, qtotal=-a.qtotal, shape_kw='size')
-        bflat = b.to_ndarray()
-        c = npc.inner(a, b, axes=[[2, 0, 1], [0, 2, 1]])
+        b = npc.Array.from_func(np.random.random, a.legs, qtotal=a.qtotal, shape_kw='size')
+        b.iset_leg_labels(['x', 'y', 'z'])
+        b_conj = b.conj()
+        b_conj_flat = b.to_ndarray()
+        cflat = np.tensordot(aflat, b_conj_flat, axes=[[0, 1, 2], [0, 1, 2]])
+        c = npc.inner(a, b_conj, axes='range')  # no transpose
         assert type(c) == np.dtype(float)
-        cflat = np.tensordot(aflat, bflat, axes=[[2, 0, 1], [0, 2, 1]])
-        npt.assert_array_almost_equal_nulp(c, cflat, max(a.size, b.size))
+        assert (abs(c - cflat) < tol)
+        c = npc.inner(a, b_conj, axes=[[0, 1, 2], [0, 1, 2]])
+        assert (abs(c - cflat) < tol)
+        c = npc.inner(a, b, axes='range', do_conj=True)
+        assert (abs(c - cflat) < tol)
+        # now transpose
+        b.itranspose([2, 1, 0])
+        b_conj.itranspose([2, 1, 0])
+        c = npc.inner(a, b_conj, axes=[[2, 0, 1], [0, 2, 1]])  # unordered axes!
+        assert (abs(c - cflat) < tol)
+        c = npc.inner(a, b_conj, axes='labels')
+        assert (abs(c - cflat) < tol)
+        c = npc.inner(a, b, axes='labels', do_conj=True)
+        assert (abs(c - cflat) < tol)
 
     print("for trivial charge")
     a = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')

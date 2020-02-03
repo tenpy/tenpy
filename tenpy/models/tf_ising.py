@@ -6,7 +6,7 @@ the idea is more to serve as a pedagogical example for a 'model'.
 
 We choose the field along z to allow to conserve the parity, if desired.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import get_parameter
@@ -58,7 +58,6 @@ class TFIModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -77,7 +76,7 @@ class TFIModel(CouplingMPOModel):
         g = get_parameter(model_params, 'g', 1., self.name, True)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
-        for u1, u2, dx in self.lat.nearest_neighbors:
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             self.add_coupling(-J, u1, 'Sigmax', u2, 'Sigmax', dx)
         # done
 
@@ -87,7 +86,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
 
     See the :class:`TFIModel` for the documentation of parameters.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

@@ -89,7 +89,7 @@ With this mapping, the Jordan-Wigner transformation generalizes to higher dimens
 Spinful fermions
 -----------------
 
-.. image :: images/JordanWignerSpinHalf.*
+.. image :: /images/JordanWignerSpinHalf.*
 
 As illustrated in the above picture, you can think of spin-1/2 fermions on a chain as spinless fermions living on a ladder (and analogous mappings for higher dimensional lattices).
 Each rung (a blue box in the picture) forms a :class:`~tenpy.networks.site.SpinHalfFermionSite` 

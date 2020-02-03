@@ -8,7 +8,7 @@ functions/classes defined here to overwrite those written in pure Python wheneve
 decorator ``@use_cython`` is used in other python files of tenpy.
 If this module was not compiled and could not be imported, a warning is issued.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
 
@@ -466,6 +466,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
             a += 1
         for j in range(idx[idx.shape[0]-1], nblocks):
             q_map[j, 2] = a
+        self.bunched = True
     else:
         # trivial mapping for q_map[:, 2]
         for j in range(nblocks):
@@ -654,7 +655,7 @@ def Array_itranspose(self, axes=None):
         axes =self.get_leg_indices(axes)
         if len(axes) != self.rank or len(set(axes)) != self.rank:
             raise ValueError("axes has wrong length: " + str(axes))
-        if axes == range(self.rank):
+        if axes == list(range(self.rank)):
             return self  # nothing to do
         axes = np.array(axes, dtype=np.intp)
     Array_itranspose_fast(self, axes)
@@ -691,6 +692,8 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     """``self += prefactor * other`` for scalar `prefactor` and :class:`Array` `other`.
 
     Note that we allow the type of `self` to change if necessary.
+    Moreover, if `self` and `other` have the same labels in different order,
+    other gets **transposed** before the action.
     """
     if not optimize(OptimizationFlag.skip_arg_checks):
         if self.rank != other.rank:
@@ -703,6 +706,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
         return self # nothing to do
     self.isort_qdata()
     other.isort_qdata()
+    other = other._transpose_same_labels(self._labels)
     # convert to equal types
     calc_dtype = np.find_common_type([self.dtype, other.dtype], [type(prefactor)])
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
