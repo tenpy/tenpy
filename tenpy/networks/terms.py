@@ -13,11 +13,12 @@ import itertools
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'order_combine_term']
 
 
-class TermList:
+class TermList(Hdf5Exportable):
     """A list of terms (=operator names and sites they act on) and associated strengths.
 
     A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
@@ -189,7 +190,7 @@ def order_combine_term(term, sites):
     return term, overall_sign
 
 
-class OnsiteTerms:
+class OnsiteTerms(Hdf5Exportable):
     """Operator names, site indices and strengths representing onsite terms.
 
     Represents a sum of onsite terms where the operators are only given by their name (in the form
@@ -364,7 +365,7 @@ class OnsiteTerms:
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
 
 
-class CouplingTerms:
+class CouplingTerms(Hdf5Exportable):
     """Operator names, site indices and strengths representing two-site coupling terms.
 
     Parameters

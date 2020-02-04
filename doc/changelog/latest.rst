@@ -12,14 +12,14 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
+- Don't save `H_MPO_graph` as model attribute anymore - this also wasn't documented.
 
 Added
 ^^^^^
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 - human-readable `boundary_conditions` property in :class:`~tenpy.models.lattice.Lattice`.
-- `save_hdf5` and `load_hdf5` methods to support saving/loading to HDF5 for the following classes:
+- `save_hdf5` and `load_hdf5` methods to support saving/loading to HDF5 for the following classes (and their subclasses):
   - :class:`~tenpy.linalg.charges.ChargeInfo`
   - :class:`~tenpy.linalg.charges.LegCharge`
   - :class:`~tenpy.linalg.charges.LegPipe`
@@ -33,9 +33,13 @@ Changed
 - DEFAULT DMRG paramter ``'diag_method'`` from ``'lanczos'`` to ``'default'``, which is the same for large bond
   dimensions, but performs a full exact diagonalization if the effective Hamiltonian has small dimensions.
   The threshold introduced is the new DMRG parameter ``'max_N_for_ED'``.
-- Derive the following classes from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable` to support saving
-  of sites to HDF5:
+- Derive the following classes (and their subclasses) from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`
+  to support saving to HDF5:
   - :class:`~tenpy.networks.site.Site`
+  - :class:`~tenpy.networks.terms.Terms`
+  - :class:`~tenpy.networks.terms.OnsiteTerms`
+  - :class:`~tenpy.networks.terms.CouplingTerms`
+  - :class:`~tenpy.models.model.Model`, i.e., all model classes.
 
 
 Fixed

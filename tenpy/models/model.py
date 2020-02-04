@@ -45,6 +45,7 @@ from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
 from ..networks.site import group_sites
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
@@ -52,7 +53,7 @@ __all__ = [
 ]
 
 
-class Model:
+class Model(Hdf5Exportable):
     """Base class for all models.
 
     The common base to all models is the underlying Hilbert space and geometry, specified by a
