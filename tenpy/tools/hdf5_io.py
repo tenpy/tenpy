@@ -3,11 +3,21 @@
 .. note ::
     This module is maintained in the repository https://github.com/tenpy/hdf5_io.git
 
+See :doc:`/intro/input_output` for a motivation and specification of the HDF5 format implemented
+below.
+.. online at https://tenpy.readthedocs.io/en/latest/intro/input_output.html
+
 The functions :func:`save` and :func:`load` are convenience functions for saving and loading
 quite general python objects (like dictionaries) to/from files, guessing the file type
 (and hence protocol for reading/writing) from the file ending.
 
 On top of that, this function provides support for saving python objects to [HDF5]_ files with
+the :class:`Hdf5Saver` and :class:`Hdf5Loader` classes
+and the wrapper functions :func:`save_to_hdf5`, :func:`load_from_hdf5`.
+
+.. note ::
+    To use the export/import features to HDF5, you need to install the `h5py`_ python package
+    (and hence some version of the HDF5 library).
 
 .. rubric:: Global module constants used for our HDF5 format
 
@@ -101,7 +111,7 @@ def save(data, filename, mode='w'):
     elif filename.endswith('.hdf5'):
         import h5py
         with h5py.File(filename, mode) as f:
-            save_to_hdf5(f, obj)
+            save_to_hdf5(f, data)
     else:
         raise ValueError("Don't recognise file ending of " + repr(filename))
 
