@@ -1,7 +1,6 @@
 """Spinless fermions with hopping and interaction.
 
-.. todo ::
-    add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
+.. todo ::     add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 

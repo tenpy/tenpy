@@ -1,12 +1,11 @@
 """Provide functionality for import (input) and export (output) tests.
 
 The subfolder "data/" (given by `datadir`) in the directory of this file is used for storage of
-test files to be imported.
-Files in this subfolder are detected by tests and checked for correct import.
-In that way, we can test the import of data files exported by old TeNPy versions.
-To generate the files, you can call the ``test_*.py`` files in this folder manually,
-e.g., ``python test_pickle.py``. This will generate the files with pre-defined data
-(see :func:`gen_example_data`) and the tenpy version in the filename.
+test files to be imported. Files in this subfolder are detected by tests and checked for correct
+import. In that way, we can test the import of data files exported by old TeNPy versions. To
+generate the files, you can call the ``test_*.py`` files in this folder manually, e.g., ``python
+test_pickle.py``. This will generate the files with pre-defined data (see :func:`gen_example_data`)
+and the tenpy version in the filename.
 """
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
