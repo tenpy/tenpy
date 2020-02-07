@@ -3,9 +3,14 @@
 
 Release Notes
 -------------
-This release contains a major update of the documenation.
-Apart from that, it introduces a format how to save and load data (in particular TeNPy classes) to HDF5 files.
+This release contains a major update of the documentation, which is now hosted by "Read the Docs" at https://tenpy.readthedocs.io/.
+Update your bookmark :-)
+
+Apart from that, this release introduces a format how to save and load data (in particular TeNPy classes) to HDF5 files.
 See :doc:`/intro/input_output` for more details.
+To use that feature, you need to **install** the h5py package (and therefore some version of the HDF5 library).
+This is easy with anaconda, ``conda install h5py``, but might be cumbersome on your local computing cluster.
+(However, many university computing clusters have some version of HDF5 installed already. Check with your local sysadmin.)
 
 Changelog
 ---------

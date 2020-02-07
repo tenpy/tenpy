@@ -24,12 +24,12 @@ For good readability, we include an extensive documentation next to the code, bo
 
 How do I get set up?
 --------------------
-Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.github.io/INSTALL.html.
+Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.readthedocs.io/en/latest/INSTALL.html.
 The latest version of the source code can be obtained from https://github.com/tenpy/tenpy.
 
 How to read the documentation
 -----------------------------
-The **documentation is available online** at https://tenpy.github.io.
+The **documentation is available online** at https://https://tenpy.readthedocs.io/.
 The documentation is roughly split in two parts: on one hand the full "reference" containing the documentation of all functions,
 classes, methods, etc., and on the other hand the "user guide" containing some introductions and additional explanations.
 
@@ -37,9 +37,9 @@ The documentation is based on Python's docstrings, and some additional ``*.rst``
 All documentation is formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
 which means it is quite readable in the source plain text, but can also be converted to other formats.
 If you like it simple, you can just use intective python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
-Moreover, the documentation is nightly converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and made available online at https://tenpy.github.io/.
+Moreover, the documentation gets converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and is made available online at https://tenpy.readthedocs.io/.
 The big advantages of the (online) HTML documentation are a lot of cross-links between different functions, and even a search function.
-If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contr/build_doc.rst``, online at https://tenpy.github.io/contr/build_doc.html.
+If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contr/build_doc.rst``.
 
 Help - I looked at the documentation, but I don't understand how ...?
 ---------------------------------------------------------------------
@@ -81,4 +81,4 @@ If you are not sure whether your problem is a bug or a feature, you can also ask
 License
 -------
 The code is licensed under GPL-v3.0 given in the file ``LICENSE`` of the repository, 
-in the online documentation readable at https://tenpy.github.io/install/license.html.
+in the online documentation readable at https://tenpy.readthedocs.io/en/latest/install/license.html.
