@@ -735,7 +735,8 @@ class Hdf5Loader:
     def find_class(module, classname):
         """Get the class of the qualified `classname` in a given python `module`.
 
-        Imports the module."""
+        Imports the module.
+        """
         mod = importlib.import_module(module)
         cls = mod
         for subpath in classname.split('.'):
