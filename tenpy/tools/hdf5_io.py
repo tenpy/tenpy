@@ -108,7 +108,7 @@ def save(data, filename, mode='w'):
     elif filename.endswith('.pklz'):
         with gzip.open(filename, mode + 'b') as f:
             pickle.dump(data, f)
-    elif filename.endswith('.hdf5'):
+    elif filename.endswith('.hdf5') or filename.endswith('.h5'):
         import h5py
         with h5py.File(filename, mode) as f:
             save_to_hdf5(f, data)
@@ -138,7 +138,7 @@ def load(filename):
     elif filename.endswith('.pklz'):
         with gzip.open(filename, mode) as f:
             data = pickle.load(f, 'rb')
-    elif filename.endswith('.hdf5'):
+    elif filename.endswith('.hdf5') or filename.endswith('.h5'):
         import h5py
         with h5py.File(filename, 'r') as f:
             data = load_from_hdf5(f)
@@ -152,28 +152,28 @@ def load(filename):
 # =================================================================================
 
 #: saved object is instance of a user-defined class following the :class:`Hdf5Exportable` style.
-REPR_HDF5EXPORTABLE = np.string_("instance")
+REPR_HDF5EXPORTABLE = "instance"
 
-REPR_ARRAY = np.string_("array")  #: saved object represents a numpy array
-REPR_INT = np.string_("int")  #: saved object represents a (python) int
-REPR_FLOAT = np.string_("float")  #: saved object represents a (python) float
-REPR_STR = np.string_("str")  #: saved object represents a (python unicode) string
-REPR_COMPLEX = np.string_("complex")  #: saved object represents a complex number
-REPR_INT64 = np.string_("np.int64")  #: saved object represents a np.int64
-REPR_FLOAT64 = np.string_("np.float64")  #: saved object represents a np.float64
-REPR_INT32 = np.string_("np.int32")  #: saved object represents a np.int32
-REPR_FLOAT32 = np.string_("np.float32")  #: saved object represents a np.float32
-REPR_BOOL = np.string_("bool")  #: saved object represents a boolean
+REPR_ARRAY = "array"  #: saved object represents a numpy array
+REPR_INT = "int"  #: saved object represents a (python) int
+REPR_FLOAT = "float"  #: saved object represents a (python) float
+REPR_STR = "str"  #: saved object represents a (python unicode) string
+REPR_COMPLEX = "complex"  #: saved object represents a complex number
+REPR_INT64 = "np.int64"  #: saved object represents a np.int64
+REPR_FLOAT64 = "np.float64"  #: saved object represents a np.float64
+REPR_INT32 = "np.int32"  #: saved object represents a np.int32
+REPR_FLOAT32 = "np.float32"  #: saved object represents a np.float32
+REPR_BOOL = "bool"  #: saved object represents a boolean
 
-REPR_NONE = np.string_("None")  #: saved object is ``None``
-REPR_RANGE = np.string_("range")  #: saved object is a range
-REPR_LIST = np.string_("list")  #: saved object represents a list
-REPR_TUPLE = np.string_("tuple")  #: saved object represents a tuple
-REPR_SET = np.string_("set")  #: saved object represents a set
-REPR_DICT_GENERAL = np.string_("dict")  #: saved object represents a dict with complicated keys
-REPR_DICT_SIMPLE = np.string_("simple_dict")  #: saved object represents a dict with simple keys
-REPR_DTYPE = np.string_("dtype")  #: saved object represents a np.dtype
-REPR_IGNORED = np.string_("ignore")  #: ignore the object/dataset during loading and saving
+REPR_NONE = "None"  #: saved object is ``None``
+REPR_RANGE = "range"  #: saved object is a range
+REPR_LIST = "list"  #: saved object represents a list
+REPR_TUPLE = "tuple"  #: saved object represents a tuple
+REPR_SET = "set"  #: saved object represents a set
+REPR_DICT_GENERAL = "dict"  #: saved object represents a dict with complicated keys
+REPR_DICT_SIMPLE = "simple_dict"  #: saved object represents a dict with simple keys
+REPR_DTYPE = "dtype"  #: saved object represents a np.dtype
+REPR_IGNORED = "ignore"  #: ignore the object/dataset during loading and saving
 
 #: tuple of (type, type_repr) which h5py can save as datasets; one entry for each type.
 TYPES_FOR_HDF5_DATASETS = tuple([
@@ -638,8 +638,7 @@ class Hdf5Loader:
     ignore_unknown : bool
         Whether to just warn (True) or raise an Error (False) if a class to be loaded is not found.
     dispatch_load : dict
-        Mapping from a :class:`np.string_`, which is one of the global ``REPR_*`` variables,
-        to methods `f` of this class.
+        Mapping from one of the global ``REPR_*`` variables to (unbound) methods `f` of this class.
         The method is called as ``f(self, h5gr, type_info, subpath)``.
         The call to `f` should load and return an object `obj` from the h5py :class:`Group`
         or :class:`Dataset` `h5gr`; and memorize the loaded `obj` with :meth:`memorize_load`.
@@ -685,7 +684,7 @@ class Hdf5Loader:
             return in_memo
 
         # determine type of object to be loaded.
-        type_repr = np.string_(self.get_attr(h5gr, ATTR_TYPE))
+        type_repr = self.get_attr(h5gr, ATTR_TYPE)
         disp = self.dispatch_load.get(type_repr)
         if disp is None:
             msg = "Unknown type {0!r} while loading hdf5 dataset {1!s}"
@@ -727,7 +726,7 @@ class Hdf5Loader:
         if res is None:
             msg = "missing attribute {0!r} for dataset {1!s}"
             raise Hdf5ImportError(msg.format(attr_name, h5gr.name))
-        if type(res) == bytes:  # not isinsance: exclude np.string_
+        if isinstance(res, bytes):
             res = res.decode()
         return res
 
