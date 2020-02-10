@@ -2261,6 +2261,22 @@ class Array:
             return self.iscale_prefactor(1. / other)
         return NotImplemented
 
+    def __eq__(self, other, eps=1.e-14):
+        """Check if two arrays are the same up to `eps`.
+
+        Parameters
+        ----------
+        other : :class:`Array`
+            The array to compare with.
+            Has to have the same compatible legcharges with `self`.
+        eps : float
+            Precision up to which the arrays need to agree in each entry.
+        """
+        if self is other:
+            return True
+        other = other._transpose_same_labels(self._labels)
+        return (self - other).norm(np.inf) < eps
+
     # private functions =======================================================
 
     def _set_shape(self):
