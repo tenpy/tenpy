@@ -606,6 +606,11 @@ class Array:
         return len(self._data)
 
     @property
+    def ndim(self):
+        """Alias for :attr:`rank` or ``len(self.shape)``."""
+        return self.rank
+
+    @property
     def labels(self):
         warnings.warn("Deprecated access of Array.labels as dictionary.",
                       category=FutureWarning,
