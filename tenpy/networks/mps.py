@@ -3117,6 +3117,26 @@ class MPSEnvironment:
         self._RP[i] = None
         self._RP_age[i] = None
 
+    def get_initialization_data(self):
+        """Return data for (re-)initialization.
+
+        The returned parameters are collected in a dictionary with the following names.
+
+        Returns
+        -------
+        init_LP, init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+            `LP` on the left of site `0` and `RP` on the right of site ``L-1``, which can be
+            used as `init_LP` and `init_RP` for the initialization of a new environment.
+        age_LP, age_RP : int
+            The number of physical sites involved into the contraction yielding `init_LP` and
+            `init_RP`, respectively.
+        """
+        L = self.ket.L
+        data = {'init_LP': self.get_LP(0, True), 'init_RP': self.get_RP(L - 1, True)}
+        data['age_LP'] = self.get_LP_age(0)
+        data['age_RP'] = self.get_RP_age(L - 1)
+        return data
+
     def full_contraction(self, i0):
         """Calculate the overlap by a full contraction of the network.
 

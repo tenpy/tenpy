@@ -32,6 +32,7 @@ Added
   - :class:`~tenpy.networks.mps.MPS`
   - :class:`~tenpy.networks.mpo.MPO`
   - :class:`~tenpy.models.lattice.Lattice`
+- :meth:`tenpy.networks.mps.MPSEnvironment.get_initialization_data` for a convenient way of saving the necessary parts of the environment after an DMRG run.
 
 Changed
 ^^^^^^^
