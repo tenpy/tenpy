@@ -161,8 +161,10 @@ REPR_STR = "str"  #: saved object represents a (python unicode) string
 REPR_COMPLEX = "complex"  #: saved object represents a complex number
 REPR_INT64 = "np.int64"  #: saved object represents a np.int64
 REPR_FLOAT64 = "np.float64"  #: saved object represents a np.float64
+REPR_COMPLEX128 = "np.complex128"  #: saved object represents a np.complex128
 REPR_INT32 = "np.int32"  #: saved object represents a np.int32
 REPR_FLOAT32 = "np.float32"  #: saved object represents a np.float32
+REPR_COMPLEX64 = "np.complex64"  #: saved object represents a np.complex64
 REPR_BOOL = "bool"  #: saved object represents a boolean
 
 REPR_NONE = "None"  #: saved object is ``None``
@@ -184,8 +186,10 @@ TYPES_FOR_HDF5_DATASETS = tuple([
     (complex, REPR_COMPLEX),
     (np.int64, REPR_INT64),
     (np.float64, REPR_FLOAT64),
+    (np.complex128, REPR_COMPLEX128),
     (np.int32, REPR_INT32),
     (np.float32, REPR_FLOAT32),
+    (np.complex64, REPR_COMPLEX64),
     (np.bool_, REPR_BOOL),
     (bool, REPR_BOOL),
 ])
@@ -418,7 +422,7 @@ class Hdf5Saver:
             return h5gr
 
         # unknown case
-        msg = "Don't know how to save object of type {0!r}".format(type(obj))
+        msg = "Don't know how to save object of type {0!r}:\n{1!r}".format(type(obj), obj)
         raise Hdf5ExportError(msg)
 
     def create_group_for_obj(self, path, obj):
