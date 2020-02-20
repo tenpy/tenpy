@@ -155,24 +155,32 @@ def truncate(S, trunc_par):
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
         A value ``None`` indicates that the constraint should be ignored.
 
-        ============ ====== ====================================================
-        key          type   constraint
-        ============ ====== ====================================================
-        chi_max      int    Keep at most `chi_max` Schmidt values.
-        ------------ ------ ----------------------------------------------------
-        chi_min      int    Keep at least `chi_min` Schmidt values.
-        ------------ ------ ----------------------------------------------------
-        symmetry_tol float  Don't cut between Schmidt values with
-                            ``|log(S[i]/S[j])| < log(symmetry_tol)``
-                            (i.e. either keep either both `i` and `j` or none).
-                            This is useful to prevent discarding (nearly)
-                            degenerate pairs in case of symmetries.
-        ------------ ------ ----------------------------------------------------
-        svd_min      float  Discard all small Schmidt values ``S[i] < svd_min``.
-        ------------ ------ ----------------------------------------------------
-        trunc_cut    float  Discard all small Schmidt values as long as
-                            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
-        ============ ====== ====================================================
+        ============== ====== ===============================================================
+        key            type   constraint
+        ============== ====== ===============================================================
+        chi_max        int    Keep at most `chi_max` Schmidt values.
+        -------------- ------ ---------------------------------------------------------------
+        chi_min        int    Keep at least `chi_min` Schmidt values.
+        -------------- ------ ---------------------------------------------------------------
+        degeneracy_tol float  Don't cut between neighboring Schmidt values with
+                              ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
+                              ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
+                              for small `symmetry_tol`.
+                              In other words, keep either both `i` and `j` or none, if the
+                              Schmidt values are degenerate with a relative error smaller
+                              than `symmetry_tol`, which we expect to happen in the case
+                              of symmetries.
+        -------------- ------ --------------------------------------------------------------
+        svd_min        float  Discard all small Schmidt values ``S[i] < svd_min``.
+        -------------- ------ --------------------------------------------------------------
+        trunc_cut      float  Discard all small Schmidt values as long as
+                              ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
+        ============== ====== ==============================================================
+
+        .. deprecated : 0.5.1
+            Renamed `symmetry_tol` to `degeneracy_tol`,
+            and don't use log in the condition any more.
+
 
     Returns
     -------
@@ -188,7 +196,12 @@ def truncate(S, trunc_par):
     # This is only to avoid problems with taking the inverse of `S`.
     chi_max = get_parameter(trunc_par, 'chi_max', 100, 'truncation')
     chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
-    sym_tol = get_parameter(trunc_par, 'symmetry_tol', None, 'truncation')
+    deg_tol = get_parameter(trunc_par, 'degeneracy_tol', None, 'truncation')
+    if 'symmetry_tol' in trunc_par:
+        warnings.warn("Deprecated truncation parameter `symmetry_tol`;"
+                      "use `degeneracy_tol` instead!"
+                      "We don't use `log` in the condition anymore!")
+        deg_tol = np.log(trunc_par['symmetry_tol'])
     svd_min = get_parameter(trunc_par, 'svd_min', 1.e-14, 'truncation')
     trunc_cut = get_parameter(trunc_par, 'trunc_cut', 1.e-14, 'truncation')
 
@@ -202,10 +215,10 @@ def truncate(S, trunc_par):
     # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
     logS = np.log(np.choose(S <= 0., [S, 1.e-100 * np.ones(len(S))]))
     piv = np.argsort(logS)  # sort *ascending*.
-    # goal: find an index 'cut' such that we keep piv[cut:].
     logS = logS[piv]
+    # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
     good = np.ones(len(piv), dtype=np.bool)  # good[cut] = (is `cut` a good choice?)
-    # we choose the smalles 'good' cut.
+    # we choose the smallest 'good' cut.
 
     if chi_max is not None:
         # keep at most chi_max values
@@ -219,12 +232,16 @@ def truncate(S, trunc_par):
         good2[-chi_min + 1:] = False
         good = _combine_constraints(good, good2, "chi_min")
 
-    if sym_tol:
-        # don't cut between values with log(S[i]/S[j]) < log(sym_tol)
+    if deg_tol:
+        # don't cut between values (cut-1, cut) with ``log(S[cut]/S[cut-1]) < deg_tol``
+        # this is equivalent to
+        # ``(S[cut] - S[cut-1])/S[cut-1] < exp(deg_tol) - 1 = deg_tol + O(deg_tol^2)``
         good2 = np.empty(len(piv), np.bool)
         good2[0] = True
-        good2[1:] = np.greater_equal(logS[1:] - logS[:-1], np.log(sym_tol))
-        good = _combine_constraints(good, good2, "symmetry_tol")
+        good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
+        print(good)
+        print(good2)
+        good = _combine_constraints(good, good2, "degeneracy_tol")
 
     if svd_min is not None:
         # keep only values S[i] >= svd_min
