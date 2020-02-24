@@ -338,7 +338,7 @@ class Sweep:
         A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
         To recover the originial form, this function simply performs one sweep with disabled mixer.
         """
-        if self.mixer is not None:
+        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
             mixer = self.mixer
             self.mixer = None  # disable the mixer
             self.sweep(optimize=False)  # (discard return value)
