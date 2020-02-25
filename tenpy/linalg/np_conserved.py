@@ -2519,7 +2519,7 @@ class Array:
         # keep_axes = neither in slice_axes nor in project_axes
         keep_axes = [a for a, i in enumerate(map_qinds) if i is None]
         not_slice_axes = sorted(project_axes + keep_axes)
-        bsizes = [l._get_block_sizes() for l in self.legs]
+        bsizes = [l.get_block_sizes() for l in self.legs]
 
         def part2self(part_qindices):
             """Given `part_qindices` of ``res = self[inds]``,
@@ -2808,7 +2808,7 @@ def diag(s, leg, dtype=None, labels=None):
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
     if scalar:
-        res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
+        res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg.get_block_sizes()]
     else:
         res._data = [np.diag(s[leg.get_slice(qi)]) for qi in range(leg.block_number)]
     return res
@@ -2863,7 +2863,7 @@ def concatenate(arrays, axis=0, copy=True):
     axis_qconj = res.legs[axis].qconj
     for a in arrays:
         leg = a.legs[axis]
-        res_axis_bl_sizes.extend(leg._get_block_sizes())
+        res_axis_bl_sizes.extend(leg.get_block_sizes())
         charges = leg.charges if leg.qconj == axis_qconj else res.chinfo.make_valid(-leg.charges)
         res_axis_charges.append(charges)
         qdata = a._qdata.copy()
@@ -3957,7 +3957,7 @@ def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, n
     q_map_inds = [qm[sort] for qm in q_map_inds]
     block_start = np.zeros((self.stored_blocks, res.rank), np.intp)
     block_shape = np.empty((self.stored_blocks, res.rank), np.intp)
-    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for ax in non_new_axes:
         block_shape[:, ax] = block_sizes[ax][qdata[:, ax]]
     for j in range(len(pipes)):
@@ -4060,7 +4060,7 @@ def _split_legs_worker(self, split_axes, cutoff):
         old_block_beg[:, split_axes[j]] = q_map[:, 0]
         old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
     new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
-    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
     old_block_shapes[:, nonsplit_axes] = new_block_shapes[:, new_nonsplit_axes]
