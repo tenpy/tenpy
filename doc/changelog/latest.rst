@@ -18,6 +18,10 @@ Changelog
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Don't save `H_MPO_graph` as model attribute anymore - this also wasn't documented.
+- Renamed the truncation parameter `symmetry_tol` to `degeneracy_tol` and make the criterion more reasonable by not 
+  checking :math:`log(S_i/S_j) < log(symmetry_tol)`, but simply :math:`log(S_i/S_j) < degeneracy_tol``.
+  The latter makes more sense, as it is equivalent to 
+  :math:`(S_i - S_j)/S_j < exp(degeneracy_tol) - 1 = degeneracy_tol + \mathcal{O}(degeneracy_tol^2)`.
 
 Added
 ^^^^^
@@ -53,3 +57,4 @@ Fixed
 - Adjust the default DMRG parameter `min_sweeps` if `chi_list` is set.
 - Avoid some unnecessary transpositions in MPO environments for MPS sweeps (e.g. in DMRG).
 - :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.
+- :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
