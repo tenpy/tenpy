@@ -58,3 +58,4 @@ Fixed
 - Avoid some unnecessary transpositions in MPO environments for MPS sweeps (e.g. in DMRG).
 - :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.
 - :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
+- :func:`~tenpy.linalg.np_conserved.svd` with ``full_matrices=True`` gave wrong charges.

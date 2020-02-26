@@ -4466,7 +4466,6 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         U_data = []
         VH_data = []
     new_leg_slices = []
-    new_leg_slices_full = []
     at_full = 0
     blocks_kept = []
 
@@ -4503,46 +4502,49 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             if compute_uv:
                 blocks_kept.append(i)
                 new_leg_slices.append(at)
-                new_leg_slices_full.append(at_full)
                 at_full += max(block.shape)
                 at += num
                 U_data.append(U_b.astype(a.dtype, copy=False))
                 VH_data.append(VH_b.astype(a.dtype, copy=False))
+        else:
+            assert not full_matrices
     if len(S) == 0:
         raise RuntimeError("SVD found no singluar values")  # (at least none > cutoff)
     S = np.concatenate(S)
     if not compute_uv:
         return (None, S, None)
     # else: compute_uv is True
-    blocks_kept = np.array(blocks_kept, np.intp)
-    nblocks = blocks_kept.shape[0]
-    qi_L, qi_R = a._qdata[blocks_kept, :].T
-    qi_C = np.arange(nblocks, dtype=np.intp)
-    U_qdata = np.stack([qi_L, qi_C], axis=1)
-    VH_qdata = np.stack([qi_C, qi_R], axis=1)
-    new_leg_slices.append(at)
-    new_leg_slices = np.array(new_leg_slices, np.intp)
-    new_leg_charges = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
-    new_leg_charges = chinfo.make_valid(new_leg_charges)
-    new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
-    new_leg_L = new_leg_R.conj()
     if full_matrices:
-        new_leg_slices_full.append(at_full)
-        new_leg_slices_full = np.array(new_leg_slices_full, np.intp)
-        new_leg_full = LegCharge.from_qind(chinfo, new_leg_slices_full, new_leg_charges,
-                                           inner_qconj)
-        if a.shape[0] >= a.shape[1]:  # new_leg_R is fine
-            new_leg_L = new_leg_full.conj()
-        else:  # new_leg_L is fine
-            new_leg_R = new_leg_full
+        new_leg_L = a.legs[0].conj()
+        new_leg_R = a.legs[1].conj()
+        qi_L, qi_R = a._qdata.T
+        U_qdata = np.stack([qi_L, qi_L], axis=1).astype(np.intp)
+        VH_qdata = np.stack([qi_R, qi_R], axis=1).astype(np.intp)
+    else:
+        blocks_kept = np.array(blocks_kept, np.intp)
+        nblocks = blocks_kept.shape[0]
+        qi_L, qi_R = a._qdata[blocks_kept, :].T
+        qi_C = np.arange(nblocks, dtype=np.intp)
+        U_qdata = np.stack([qi_L, qi_C], axis=1).astype(np.intp)
+        VH_qdata = np.stack([qi_C, qi_R], axis=1).astype(np.intp)
+        new_leg_slices.append(at)
+        new_leg_slices = np.array(new_leg_slices, np.intp)
+        new_leg_charges = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
+        new_leg_charges = chinfo.make_valid(new_leg_charges)
+        new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
+        new_leg_L = new_leg_R.conj()
     U = Array([a.legs[0], new_leg_L], a.dtype, qtotal_L)
     VH = Array([new_leg_R, a.legs[1]], a.dtype, qtotal_R)
     U._data = U_data
-    U._qdata = np.array(U_qdata, dtype=np.intp)
-    U._qdata_sorted = a._qdata_sorted
+    U._qdata = U_qdata
     VH._data = VH_data
-    VH._qdata = np.array(VH_qdata, dtype=np.intp)
-    VH._qdata_sorted = a._qdata_sorted
+    VH._qdata = VH_qdata
+    if full_matrices:
+        U._qdata_sorted = np.all(qi_L[:-1] < qi_L[1:])
+        VH._qdata_sorted = a._qdata_sorted
+    else:
+        U._qdata_sorted = a._qdata_sorted
+        VH._qdata_sorted = a._qdata_sorted
     return U, S, VH
 
 
