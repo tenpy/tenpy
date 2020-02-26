@@ -227,6 +227,10 @@ class Array:
         block_q = self.chinfo.make_valid(block_q)
         if np.any(block_q != self.qtotal):
             raise ValueError("some row of _qdata is incompatible with total charge")
+        # check block_sizes
+        block_sizes = [l.get_block_sizes()[qi] for l, qi in zip(self.legs, self._qdata.T)]
+        for block, block_shape in zip(self._data, zip(*block_sizes)):
+            assert block.shape == block_shape
         # test labels
         assert len(self._labels) == self.rank
         for lbl in self._labels:
