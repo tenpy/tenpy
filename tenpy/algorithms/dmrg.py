@@ -1975,13 +1975,17 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
         qi = leg.get_qindex_of_charges(theta_guess.qtotal)
         block = fullH.get_block(np.array([qi, qi], np.intp))
         if block is None:
-            raise ValueError("H is zero in the given block?!")
-        E, V = np.linalg.eigh(block)
-        E0 = E[0]
-        theta = theta_guess.zeros_like()
-        theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
-        theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
-        theta_block[:] = V[:, 0]  # copy data into theta
+            warnings.warn("H is zero in the given block, nothing to diagonalize."
+                          "We just return the initial state again.")
+            E0 = 0
+            theta = theta_guess
+        else:
+            E, V = np.linalg.eigh(block)
+            E0 = E[0]
+            theta = theta_guess.zeros_like()
+            theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+            theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
+            theta_block[:] = V[:, 0]  # copy data into theta
     else:  # allow to change charge sector!
         E, V = npc.eigh(fullH)
         i0 = np.argmin(E)

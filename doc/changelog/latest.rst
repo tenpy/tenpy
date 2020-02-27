@@ -60,3 +60,5 @@ Fixed
 - :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
 - :func:`~tenpy.linalg.np_conserved.svd` with ``full_matrices=True`` gave wrong charges.
 - wrong pairs for the `fifth_nearest_neighbors` of the :class:`~tenpy.models.lattice.Honeycomb`.
+- Continue in :func:`tenpy.algorithms.dmrg.full_diag_effH` with a warning instaed of raising an Error,
+  if the effective Hamltonian is zero.
