@@ -62,3 +62,4 @@ Fixed
 - wrong pairs for the `fifth_nearest_neighbors` of the :class:`~tenpy.models.lattice.Honeycomb`.
 - Continue in :func:`tenpy.algorithms.dmrg.full_diag_effH` with a warning instaed of raising an Error,
   if the effective Hamltonian is zero.
+- :meth:`~tenpy.networks.mps.MPS.correlation_length`: check for hermitian Flag might have raised and Error with new numpy warnings

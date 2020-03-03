@@ -882,6 +882,8 @@ class MPS:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
             return self.get_B(i, (1., 1.), True, cutoff, '0')
+        elif n < 1:
+            raise ValueError("n needs to be larger than 0")
         # n >= 2: contract some B's
         theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
         _, old_fR = self.form[i]
@@ -1861,7 +1863,7 @@ class MPS:
         """
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
-        if hermitian and sites1 != sites2:
+        if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
             hermitian = False
         C = np.empty((len(sites1), len(sites2)), dtype=np.complex)
