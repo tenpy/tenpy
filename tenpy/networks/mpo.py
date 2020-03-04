@@ -481,7 +481,7 @@ class MPO:
         else:  # no break
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
-        return current_value / L
+        return np.real_if_close(current_value / L)
 
     def dagger(self):
         """Return hermition conjugate copy of self."""
