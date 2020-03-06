@@ -170,12 +170,12 @@ def truncate(S, trunc_par):
                               Schmidt values are degenerate with a relative error smaller
                               than `symmetry_tol`, which we expect to happen in the case
                               of symmetries.
-        -------------- ------ --------------------------------------------------------------
+        -------------- ------ ---------------------------------------------------------------
         svd_min        float  Discard all small Schmidt values ``S[i] < svd_min``.
-        -------------- ------ --------------------------------------------------------------
+        -------------- ------ ---------------------------------------------------------------
         trunc_cut      float  Discard all small Schmidt values as long as
                               ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
-        ============== ====== ==============================================================
+        ============== ====== ===============================================================
 
         .. deprecated : 0.5.1
             Renamed `symmetry_tol` to `degeneracy_tol`,
