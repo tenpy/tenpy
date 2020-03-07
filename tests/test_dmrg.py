@@ -248,7 +248,7 @@ def test_enlarge_MPS_unit_cell():
     E_4, _ = dmrg.TwoSiteDMRGEngine(psi_4, M_4, dmrg_params).run()
     assert abs(E_2 - E_4) < 1.e-12
     psi_2.enlarge_MPS_unit_cell(2)
-    ov = psi_2.overlap(psi_4)
+    ov = abs(psi_2.overlap(psi_4))
     print("ov = ", ov)
     assert abs(ov - 1.) < 1.e-12
 
