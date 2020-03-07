@@ -284,7 +284,7 @@ class Lattice:
         obj.basis = hdf5_loader.load(subpath + "basis")
         obj.boundary_conditions = hdf5_loader.load(subpath + "boundary_conditions")
         obj.bc_MPS = hdf5_loader.load(subpath + "boundary_condition_MPS")
-        obj.order = hdf5_loader.load(subpath + "order_for_MPS")
+        obj.order = hdf5_loader.load(subpath + "order_for_MPS")  # property setter!
         obj.pairs = hdf5_loader.load(subpath + "pairs")
 
         obj.test_sanity()
@@ -299,7 +299,11 @@ class Lattice:
     def order(self):
         """Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
 
-        This order defines how an MPS/MPO winds through the lattice.
+        Each row of the array contains the lattice indices for one site,
+        the order of the rows thus specifies a path through the lattice,
+        along which an MPS will wind through through the lattice.
+
+        You can visualize the order with :meth:`plot_order`.
         """
         return self._order
 
@@ -425,6 +429,35 @@ class Lattice:
             if not np.any(self.bc_shift != 0):
                 self.bc_shift = None
         self.bc = np.array(bc)
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        if self.bc_MPS != "infinite":
+            raise ValueError("can only enlarge the MPS unit cell for infinite MPS.")
+        new_Ls = list(self.Ls)
+        old_Lx = new_Ls[0]
+        new_Ls[0] = old_Lx * factor
+        old_order = self.order
+        new_order = []
+        for i in range(factor):
+            order = old_order.copy()
+            shift_x = i * old_Lx
+            order[:, 0] += shift_x
+            new_order.append(order)
+        new_order = np.vstack(new_order)
+        # now update the contents of `self`
+        self._set_Ls(new_Ls)
+        self.order = new_order  # property setter
+        self.test_sanity()
 
     def position(self, lat_idx):
         """return 'space' position of one or multiple sites.

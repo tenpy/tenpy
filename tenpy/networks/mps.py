@@ -914,14 +914,18 @@ class MPS:
             self.set_B(i, new_B, form=new_form)
 
     def increase_L(self, new_L=None):
-        """Modify `self` inplace to enlarge the unit cell.
+        """Modify `self` inplace to enlarge the MPS unit cell; in place.
 
-        For an infinite MPS, we have unit cells.
+        .. deprecated:: 0.5.1
+            This method will be removed in version 1.0.0.
+            Use the equivalent ``psi.enlarge_MPS_unit_cell(new_L//psi.L)`` instead of
+            ``psi.increase_L(new_L)``.
 
         Parameters
         ----------
         new_L : int
-            New number of sites. Defaults to twice the number of current sites.
+            New number of sites. Needs to be an integer multiple of :attr:`L`.
+            Defaults to ``2*self.L``.
         """
         old_L = self.L
         if new_L is None:
@@ -929,6 +933,21 @@ class MPS:
         if new_L % old_L:
             raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
         factor = new_L // old_L
+        warnings.warn(
+            "use `psi.enlarge_MPS_unit_cell(factor=new_L//psi.L)` "
+            "instead of `psi.increase_L(new_L)`.", FutureWarning, 2)
+        self.enlarge_MPS_unit_cell(factor)
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+        """
+        if int(factor) != factor:
+            raise ValueError("`factor` should be integer!")
         if factor <= 1:
             raise ValueError("can't shrink!")
         if self.bc == 'segment':
@@ -937,6 +956,7 @@ class MPS:
         self._B = factor * self._B
         self._S = factor * self._S[:-1] + [self._S[-1]]
         self.form = factor * self.form
+        self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.

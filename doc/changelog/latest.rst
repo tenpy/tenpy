@@ -22,6 +22,9 @@ Backwards incompatible changes
   checking :math:`log(S_i/S_j) < log(symmetry_tol)`, but simply :math:`log(S_i/S_j) < degeneracy_tol``.
   The latter makes more sense, as it is equivalent to 
   :math:`(S_i - S_j)/S_j < exp(degeneracy_tol) - 1 = degeneracy_tol + \mathcal{O}(degeneracy_tol^2)`.
+- Deprecated :meth:`tenpy.networks.mps.MPS.increase_L` in favor of the newly added
+  :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
+
 
 Added
 ^^^^^
@@ -37,6 +40,11 @@ Added
   - :class:`~tenpy.networks.mpo.MPO`
   - :class:`~tenpy.models.lattice.Lattice`
 - :meth:`tenpy.networks.mps.MPSEnvironment.get_initialization_data` for a convenient way of saving the necessary parts of the environment after an DMRG run.
+- Method `enlarge_MPS_unit_cell` for the following classes:
+  - :class:`~tenpy.networks.mps.MPS`
+  - :class:`~tenpy.networks.mpo.MPO`
+  - :class:`~tenpy.models.lattice.Lattice`
+  - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
 
 Changed
 ^^^^^^^

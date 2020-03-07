@@ -81,6 +81,21 @@ class Model(Hdf5Exportable):
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
 
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        self.lat.enlarge_MPS_unit_cell(factor)
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
 
@@ -89,6 +104,9 @@ class Model(Hdf5Exportable):
         or help the convergence of DMRG (in case of too long range interactions).
 
         This has to be done after finishing initialization and can not be reverted.
+
+        .. todo :
+            We could actually keep the lattice structure if the order is (default) Cstyle.
 
         Parameters
         ----------
@@ -213,6 +231,22 @@ class NearestNeighborModel(Model):
             return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        super().enlarge_MPS_unit_cell(factor)
+        self.H_bond = self.H_bond * factor
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
@@ -427,6 +461,22 @@ class MPOModel(Model):
     def test_sanity(self):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        super().enlarge_MPS_unit_cell(factor)
+        self.H_MPO.enlarge_MPS_unit_cell(factor)
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.

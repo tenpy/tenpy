@@ -222,6 +222,37 @@ def test_dmrg_excited(eps=1.e-12):
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
 
 
+@pytest.mark.slow
+def test_enlarge_MPS_unit_cell():
+    g = 1.3  # deep in the paramagnetic phase
+    bc_MPS = 'infinite'
+    model_params = dict(L=2, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
+    M_2 = TFIChain(model_params)
+    M_4 = TFIChain(model_params)
+    M_4.enlarge_MPS_unit_cell(2)
+    psi_2 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS)
+    psi_4 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS)
+    psi_4.enlarge_MPS_unit_cell(2)
+    dmrg_params = {
+        'verbose': 1,
+        'combine': True,
+        'max_sweeps': 30,
+        'update_env': 0,
+        'mixer': False,  # not needed in this case
+        'trunc_params': {
+            'svd_min': 1.e-10,
+            'chi_max': 50
+        }
+    }
+    E_2, _ = dmrg.TwoSiteDMRGEngine(psi_2, M_2, dmrg_params).run()
+    E_4, _ = dmrg.TwoSiteDMRGEngine(psi_4, M_4, dmrg_params).run()
+    assert abs(E_2 - E_4) < 1.e-12
+    psi_2.enlarge_MPS_unit_cell(2)
+    ov = psi_2.overlap(psi_4)
+    print("ov = ", ov)
+    assert abs(ov - 1.) < 1.e-12
+
+
 def test_chi_list():
     assert dmrg.chi_list(3) == {0: 3}
     assert dmrg.chi_list(12, 12, 5) == {0: 12}
