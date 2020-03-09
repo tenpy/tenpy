@@ -230,7 +230,7 @@ class Lattice:
         :attr:`unit_cell`, :attr:`Ls`, :attr:`unit_cell_positions`, :attr:`basis`,
         :attr:`boundary_conditions`, :attr:`pairs` under their name,
         :attr:`bc_MPS` as ``"boundary_conditions_MPS"``, and
-        :attr:`bc_MPS` as ``"order_for_MPS"``.
+        :attr:`order` as ``"order_for_MPS"``.
         Moreover, it saves :attr:`dim` and :attr:`N_sites` as HDF5 attributes.
 
         Parameters
@@ -512,7 +512,7 @@ class Lattice:
             i = np.mod(i, self.N_sites)
             if np.any(i0 != i):
                 lat = self.order[i].copy()
-                lat[..., 0] += (i0 - i) // self.N_sites * self.N_rings
+                lat[..., 0] += (i0 - i) // self.N_sites_per_ring
                 return lat
         return self.order[i].copy()
 
@@ -540,7 +540,7 @@ class Lattice:
         i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
         i = np.take(self._perm, i)  # after permutation
         if self.bc_MPS == 'infinite':
-            i += i_shift * (self.N_sites // self.N_rings)
+            i += i_shift * self.N_sites_per_ring
         return i
 
     def mps_idx_fix_u(self, u=None):
@@ -732,7 +732,7 @@ class Lattice:
         if any([s == 0 for s in coupling_shape]):
             return [], [], np.zeros([0, self.dim]), coupling_shape
         Ls = np.array(self.Ls)
-        N_sites = self.N_sites
+        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls)  # assuming PBC
@@ -753,7 +753,7 @@ class Lattice:
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
         if self.bc_MPS == 'infinite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * (N_sites // Ls[0])
+            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * N_sites_per_ring
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -794,9 +794,9 @@ class Lattice:
         """
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
-            return [], [], [], coupling_shape
+            return [], [], coupling_shape
         Ls = np.array(self.Ls)
-        N_sites = self.N_sites
+        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u0)
         lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
@@ -820,7 +820,7 @@ class Lattice:
         mps_jkl = self.lat2mps_idx(latu_jkl)
         if self.bc_MPS == 'infinite':
             # shift by whole MPS unit cells for couplings along the infinite direction
-            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
+            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * N_sites_per_ring
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
         return mps_ijkl, lat_indices, coupling_shape
 
