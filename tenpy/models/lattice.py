@@ -692,6 +692,10 @@ class Lattice:
             mps_inds = [mps_inds]
             include_u = [include_u]
         else:  # iterable axes
+            if mps_inds is None:
+                mps_inds = [None] * len(axes)
+            if include_u is None:
+                include_u = [None] * len(axes)
             if len(axes) != len(mps_inds) or len(axes) != len(include_u):
                 raise ValueError("Lenght of `axes`, `mps_inds` and `include_u` different")
         # sort axes ascending
