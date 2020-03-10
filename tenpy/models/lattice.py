@@ -16,7 +16,7 @@ import itertools
 import warnings
 
 from ..networks.site import Site
-from ..tools.misc import to_iterable, inverse_permutation
+from ..tools.misc import to_iterable, to_iterable_of_len, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
@@ -600,8 +600,9 @@ class Lattice:
         Returns
         -------
         res_A : ndarray
-            Reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
-            ``res_A[..., self.order, ...] = A[..., np.arange(self.N_sites), ...]``
+            Reshaped and reordered verions of A. Such that MPS indices along the specified axes
+            are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
+            `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., j, ...]``.
 
         Examples
         --------
@@ -653,6 +654,102 @@ class Lattice:
         else:
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
+
+    def mps2lat_values_masked(self, A, axes=-1, mps_inds=None, include_u=None):
+        """Reshape/reorder an array `A` to replace an MPS index by lattice indices.
+
+        This is a generalization of :meth:`mps2lat_values` allowing for the case of an arbitrary
+        set of MPS indices present in each axis of `A`.
+
+        Parameters
+        ----------
+        A : ndarray
+            Some values.
+        axes : (iterable of) int
+            Chooses the axis of `A` which should be replaced.
+            If multiple axes are given, you also need to give multiple index arrays as `mps_inds`.
+        mps_inds : (list of) 1D ndarray
+            Specifies for each `axis` in `axes`, for which MPS indices we have values in the
+            corresponding `axis` of `A`.
+            Defaults to ``[np.arange(A.shape[ax]) for ax in axes]``.
+            For indices accross the MPS unit cell and "infinite" `bc_MPS`,
+            we shift `x_0` accordingly.
+        include_u : (list of) bool
+            Specifies for each `axis` in `axes`, whether the `u` index of the lattice should be
+            included into the output array `res_A`. Defaults to ``len(self.unit_cell) > 1``.
+
+        Returns
+        -------
+        res_A : np.ma.MaskedArray
+            Reshaped and reordered copy of A. Such that MPS indices along the specified axes
+            are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
+            `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., mps_inds[j], ...]``.
+        """
+        try:
+            iter(axes)
+        except TypeError:  # axes is single int
+            axes = [axes]
+            mps_inds = [mps_inds]
+            include_u = [include_u]
+        else:  # iterable axes
+            if len(axes) != len(mps_inds) or len(axes) != len(include_u):
+                raise ValueError("Lenght of `axes`, `mps_inds` and `include_u` different")
+        # sort axes ascending
+        axes = [(ax + A.ndim if ax < 0 else ax) for ax in axes]
+
+        # goal: use numpy advanced indexing for the data copy
+        lat_inds = []  # lattice indices to be used
+        new_shapes = []  # shape to be
+        for ax, mps_inds_ax, include_u_ax in zip(axes, mps_inds, include_u):
+            if mps_inds_ax is None:  # default
+                mps_inds_ax = np.arange(A.shape[ax])
+            if include_u_ax is None:  # default
+                include_u_ax = (len(self.unit_cell) > 1)
+            if mps_inds_ax.ndim != 1:
+                raise ValueError("got non-1D array in `mps_inds` " + str(mps_inds_ax.shape))
+            lat_inds_ax = self.mps2lat_idx(mps_inds_ax)
+            shape = list(self.shape)
+            max_i = np.max(mps_inds_ax)
+            if max_i >= self.N_sites:
+                shape[0] += (max_i - self.N_sites) // self.N_sites_per_ring + 1
+            min_i = np.min(mps_inds_ax)
+            if min_i < 0:
+                # we use numpy indexing to simply wrap around negative indices
+                shape[0] += (abs(min_i) - 1) // self.N_sites_per_ring + 1
+            if not include_u_ax:
+                shape = shape[:-1]
+                lat_inds_ax = lat_inds_ax[:, :-1]
+            new_shapes.append(shape)
+            lat_inds.append(lat_inds_ax)
+
+        res_A_ndim = A.ndim - len(axes) + sum([len(s) for s in new_shapes])
+        res_A_shape = []
+        res_A_inds = []
+        dim_before = 0
+        dim_after = A.ndim - 1
+        for ax in range(A.ndim):
+            if ax in axes:
+                i = axes.index(ax)
+                inds_ax = lat_inds[i].T
+                res_A_shape.extend(new_shapes[i])
+                for inds in lat_inds[i].T:
+                    inds = inds.reshape([1] * dim_before + [len(inds)] + [1] * dim_after)
+                    res_A_inds.append(inds)
+            else:
+                d = A.shape[ax]
+                res_A_shape.append(d)
+                inds = np.arange(d).reshape([1] * dim_before + [d] + [1] * dim_after)
+                res_A_inds.append(inds)
+            dim_before += 1
+            dim_after -= 1
+
+        # and finally we are in the position to create the masked Array
+        fill_value = np.ma.array([0, 1], dtype=A.dtype).get_fill_value()
+        res_A_data = np.full(res_A_shape, fill_value, dtype=A.dtype)
+        res_A = np.ma.array(res_A_data, mask=True, fill_value=fill_value)
+
+        res_A[tuple(res_A_inds)] = A  # copy data, automatically unmasks entries
+        return res_A
 
     def count_neighbors(self, u=0, key='nearest_neighbors'):
         """Count e.g. the number of nearest neighbors for a site in the bulk.

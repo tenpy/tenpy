@@ -50,6 +50,7 @@ def test_lattice():
         A = np.random.random([lat.N_sites, 2, lat.N_sites])
         print(A.shape)
         Ares = lat.mps2lat_values(A, axes=[-1, 0])
+        Ares_ma = lat.mps2lat_values_masked(A, [-1, 0], [None] * 2, [None] * 2)
         for i in range(lat.N_sites):
             idx_i = lat.mps2lat_idx(i)
             for j in range(lat.N_sites):
@@ -57,11 +58,19 @@ def test_lattice():
                 for k in range(2):
                     idx = tuple(idx_i) + (k, ) + tuple(idx_j)
                     assert Ares[idx] == A[i, k, j]
+                    assert Ares_ma[idx] == A[i, k, j]
         # and again for fixed `u` within the unit cell
         for u in range(len(lat.unit_cell)):
-            A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]
+            mps_u = lat.mps_idx_fix_u(u)
+            A_u = A[np.ix_(mps_u, np.arange(2), mps_u)]
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
-            npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
+            A_u_res_masked = lat.mps2lat_values_masked(A_u,
+                                                       axes=[-1, 0],
+                                                       mps_inds=[mps_u] * 2,
+                                                       include_u=[False] * 2)
+            A_u_expected = Ares[:, :, u, :, :, :, u]
+            npt.assert_equal(A_u_res, A_u_expected)
+            npt.assert_equal(A_u_res_masked, A_u_expected)
 
 
 def test_TrivialLattice():

@@ -46,6 +46,7 @@ Added
   - :class:`~tenpy.models.lattice.Lattice`
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
+- :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
 
 Changed
 ^^^^^^^
