@@ -710,7 +710,8 @@ class CouplingModel(Model):
                      op_string=None,
                      str_on_first=True,
                      raise_op2_left=False,
-                     category=None):
+                     category=None,
+                     add_hc=False):
         r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -768,6 +769,8 @@ class CouplingModel(Model):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
+        add_hc : bool
+            If True, a hermitian conjugate term is added automatically.
 
         Examples
         --------
@@ -862,6 +865,13 @@ class CouplingModel(Model):
             if str_on_first and op_string != 'Id':
                 o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
+
+        if add_hc:
+            # TODO do we need to worry about site1 and site2 having different sets of ops?
+            op_hc1 = site1.hcs[op1]
+            op_hc2 = site2.hcs[op2]
+            self.add_coupling(np.conj(strength), u2, op_hc2, u1, op_hc1, -dx, op_string, str_on_first,
+                              raise_op2_left, category, add_hc=False)
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):

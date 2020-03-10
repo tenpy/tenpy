@@ -710,6 +710,10 @@ class SpinHalfSite(Site):
             self.add_op('Sigmay', 2. * self.Sy)
         self.add_op('Sigmaz', 2. * self.Sz)
 
+        # Include h.c.s of operators
+        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
+                        Sigmay='Sigmay', Sigmaz='Sigmaz')  # TODO should this be a method?
+
     def __repr__(self):
         """Debug representation of self."""
         return "SpinHalfSite({c!r})".format(c=self.conserve)
@@ -796,6 +800,8 @@ class SpinSite(Site):
         Site.__init__(self, leg, names, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # TODO should this be a method?
 
     def __repr__(self):
         """Debug representation of self."""
@@ -869,6 +875,8 @@ class FermionSite(Site):
         Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')  # TODO method?
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1048,6 +1056,11 @@ class SpinHalfFermionSite(Site):
         Site.__init__(self, leg, states, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
+                        Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
+                        Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
+                        Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1141,6 +1154,8 @@ class BosonSite(Site):
         self.filling = filling
         Site.__init__(self, leg, states, **ops)
         self.state_labels['vac'] = self.state_labels['0']  # alias
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', C='Bd', Cd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')  # TODO method?
 
     def __repr__(self):
         """Debug representation of self."""
