@@ -71,8 +71,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # 6) add terms of the Hamiltonian
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-hz, 0, 'Sz')
-        self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1)
-        self.add_coupling(np.conj(Jxx * 0.5), 0, 'Sp', 0, 'Sm', -1)  # h.c.
+        self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
+        # self.add_coupling(np.conj(Jxx * 0.5), 0, 'Sp', 0, 'Sm', -1)  # h.c.
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
