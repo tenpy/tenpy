@@ -867,11 +867,10 @@ class CouplingModel(Model):
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
 
         if add_hc:
-            # TODO do we need to worry about site1 and site2 having different sets of ops?
-            op_hc1 = site1.hcs[op1]
-            op_hc2 = site2.hcs[op2]
-            self.add_coupling(np.conj(strength), u2, op_hc2, u1, op_hc1, -dx, op_string, str_on_first,
-                              raise_op2_left, category, add_hc=False)
+            hc_op1 = site1.get_hc_op_name(op1)
+            hc_op2 = site2.get_hc_op_name(op2)
+            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx, op_string,
+                              str_on_first, raise_op2_left, category, add_hc=False)
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
