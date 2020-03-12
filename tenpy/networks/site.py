@@ -700,6 +700,9 @@ class SpinHalfSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
+        # Specify Hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
+                        Sigmay='Sigmay', Sigmaz='Sigmaz')  # TODO should this be a method?
         Site.__init__(self, leg, ['up', 'down'], **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
@@ -709,10 +712,6 @@ class SpinHalfSite(Site):
             self.add_op('Sigmax', 2. * self.Sx)
             self.add_op('Sigmay', 2. * self.Sy)
         self.add_op('Sigmaz', 2. * self.Sz)
-
-        # Include h.c.s of operators
-        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
-                        Sigmay='Sigmay', Sigmaz='Sigmaz')  # TODO should this be a method?
 
     def __repr__(self):
         """Debug representation of self."""
@@ -797,11 +796,11 @@ class SpinSite(Site):
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S + 1, 1.)]
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # TODO should this be a method?
         Site.__init__(self, leg, names, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
-        # Specify hermitian conjugates
-        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # TODO should this be a method?
 
     def __repr__(self):
         """Debug representation of self."""
@@ -872,11 +871,11 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
+        # Specify hermitian conjugates
+        self.hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')  # TODO method?
         Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
-        # Specify hermitian conjugates
-        self.hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')  # TODO method?
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1053,14 +1052,14 @@ class SpinHalfFermionSite(Site):
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
-        # specify fermionic operators
-        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
         # Specify hermitian conjugates
         self.hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                         Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                         Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
                         Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
+        Site.__init__(self, leg, states, **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1152,10 +1151,10 @@ class BosonSite(Site):
         self.Nmax = Nmax
         self.conserve = conserve
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
-        self.state_labels['vac'] = self.state_labels['0']  # alias
         # Specify hermitian conjugates
         self.hcs = dict(Id='Id', JW='JW', C='Bd', Cd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')  # TODO method?
+        Site.__init__(self, leg, states, **ops)
+        self.state_labels['vac'] = self.state_labels['0']  # alias
 
     def __repr__(self):
         """Debug representation of self."""
