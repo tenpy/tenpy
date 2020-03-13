@@ -487,7 +487,7 @@ class Array:
             raise ValueError("invalid qind in _qdata")
         if not self._qdata.flags['C_CONTIGUOUS']:
             raise ValueError("qdata is not C-contiguous")
-        if self._qdata_sorted:
+        if self._qdata.size and self._qdata_sorted:
             perm = np.lexsort(self._qdata.T)
             if np.any(perm != np.arange(len(perm))):
                 raise ValueError("_qdata_sorted == True, but _qdata is not sorted")
