@@ -29,7 +29,7 @@ The latest version of the source code can be obtained from https://github.com/te
 
 How to read the documentation
 -----------------------------
-The **documentation is available online** at https://https://tenpy.readthedocs.io/.
+The **documentation is available online** at https://tenpy.readthedocs.io/.
 The documentation is roughly split in two parts: on one hand the full "reference" containing the documentation of all functions,
 classes, methods, etc., and on the other hand the "user guide" containing some introductions and additional explanations.
 
