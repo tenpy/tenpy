@@ -167,6 +167,7 @@ def setup_package():
 
     setup(version=full_version,
           ext_modules=ext_modules,
+          dependency_links=['https://github.com/TensorCon/PyNetcon'],
           install_requires=read_requ_file('requirements.txt'),
           extras_require=extras_require)
 
