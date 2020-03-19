@@ -17,6 +17,16 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
+  We replaced the three arguments `u0`, `op0` and `other_op` with
+  ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
+  by single, equivalent argment `ops` which should now read
+  ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
+  ``dx0 = [0]*lat.dim``. Note the changed order inside the tuple!
+  Old code (which specifies `opstr` and `category` as keyword argument, if at all)
+  still works as before, but raises a warning, and should be replaced.
+  Since :meth:`tenpy.lattice.Lattice.possible_multi_couplings` used similar arguments,
+  they were changed as well.
 - Don't save `H_MPO_graph` as model attribute anymore - this also wasn't documented.
 - Renamed the truncation parameter `symmetry_tol` to `degeneracy_tol` and make the criterion more reasonable by not 
   checking :math:`log(S_i/S_j) < log(symmetry_tol)`, but simply :math:`log(S_i/S_j) < degeneracy_tol``.

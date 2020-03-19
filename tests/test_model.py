@@ -124,14 +124,14 @@ def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
     M = model.MultiCouplingModel(spin_half_square)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
-    M.add_multi_coupling(0.8, 0, 'Sz', [(0, 'Sz', [0, 1]), (0, 'Sz', [1, 0])])
+    M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
     H = M.calc_H_MPO()
     dims = [W.shape[0] for W in H._W]
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[Lx:2 * Lx]
+        assert dims[:Lx] == dims[i*Lx:(i+1)* Lx]
 
 
 def test_CouplingModel_fermions():
@@ -199,13 +199,13 @@ def test_MultiCouplingModel_explicit():
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), 'JW')
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), 'JW')
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), 'JW')
-    M.add_multi_coupling(4., 0, 'N', [(0, 'N', (-2, -1))], 'Id')  # a full unit cell inbetween!
+    # multi_coupling with a full unit cell inbetween the operators!
+    M.add_multi_coupling(4., [('N', (0, 0), 0), ('N', (-2, -1), 0)])
     # some wired mediated hopping along the diagonal
-    M.add_multi_coupling(1.125, 0, 'N', other_ops=[(0, 'Cd', (0, 1)), (0, 'C', (1, 0))])
+    M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
     H_mpo = M.calc_H_MPO()
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    W2_new = H_mpo.get_W(2)
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
