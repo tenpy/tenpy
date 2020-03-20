@@ -172,6 +172,11 @@ class Site(Hdf5Exportable):
             assert op in self.opnames
         np.testing.assert_array_almost_equal(np.diag(np.exp(1.j * np.pi * self.JW_exponent)),
                                              self.JW.to_ndarray(), 15)
+        for op1, op2 in self.hc_ops.items():
+            assert op1 in self.opnames and op2 in self.opnames
+            op1 = self.get_op(op1)
+            op2 = self.get_op(op2)
+            assert op1.conj().transpose() == op2
 
     @property
     def dim(self):
