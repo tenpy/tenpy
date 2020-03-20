@@ -38,6 +38,10 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- argument `add_hc` for :meth:`tenpy.models.model.CouplingModel.add_coupling` and 
+  :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
+- :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
+  hermitian conjugate operator (name) of the onsite operators.
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 - human-readable `boundary_conditions` property in :class:`~tenpy.models.lattice.Lattice`.

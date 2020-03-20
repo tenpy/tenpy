@@ -781,7 +781,7 @@ class CouplingModel(Model):
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
         add_hc : bool
-            If `True`, a hermitian conjugate term is added automatically.
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         Examples
         --------
@@ -895,7 +895,7 @@ class CouplingModel(Model):
             hc_op1 = site1.get_hc_op_name(op1)
             hc_op2 = site2.get_hc_op_name(op2)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx, op_string,
-                              str_on_first, raise_op2_left, category, add_hc=False)
+                              str_on_first, raise_op2_left, category + " h.c.", add_hc=False)
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
@@ -1104,7 +1104,8 @@ class MultiCouplingModel(CouplingModel):
                            _deprecate_1=_DEPRECATED_ARG_NOT_SET,
                            _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
-                           category=None):
+                           category=None,
+                           add_hc=False):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -1162,6 +1163,8 @@ class MultiCouplingModel(CouplingModel):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+        add_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         Examples
         --------
@@ -1231,7 +1234,7 @@ class MultiCouplingModel(CouplingModel):
         strength = to_array(strength, strength_shape)  # tile to correct shape
         if category is None:
             category = " ".join(
-                ["{op!s}_{i!s}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
+                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
         ct = self.coupling_terms.get(category, None)
         if ct is None:
             self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
@@ -1252,6 +1255,13 @@ class MultiCouplingModel(CouplingModel):
             args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
                                                     op_string)
             ct.add_multi_coupling_term(*args)
+
+        # add h.c. term
+        if add_hc:
+            hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
+                      for (opname, dx, u) in reversed(ops)]
+            self.add_multi_coupling(np.conj(strength), hc_ops,
+                                    category=category + " h.c.", add_hc=False)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
