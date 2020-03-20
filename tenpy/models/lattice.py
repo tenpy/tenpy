@@ -862,21 +862,13 @@ class Lattice:
             mps_j += mps_ij_shift
         return mps_i, mps_j, lat_indices, coupling_shape
 
-    def possible_multi_couplings(self, u0, other_us, dx):
+    def possible_multi_couplings(self, ops):
         """Generalization of :meth:`possible_couplings` to couplings with more than 2 sites.
-
-        Given the arguments of :meth:`~tenpy.models.model.MultiCouplingModel.add_coupling`
-        determine the necessary shape of `strength`.
 
         Parameters
         ----------
-        u0 : int
-            Argument `u0` of :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
-        other_us : list of int
-            The `u` of the `other_ops` in
-            :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
-        dx : array, shape (len(other_us), lat.dim+1)
-            The `dx` specifying relative operator positions of the `other_ops` in
+        ops : list of ``(opname, dx, u)``
+            Same as the argument `ops` of
             :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
 
         Returns
@@ -893,36 +885,34 @@ class Lattice:
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
-        coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx)
+        D = self.dim
+        Nops = len(ops)
+        Ls = np.array(self.Ls)
+        # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
+        # recall numpy broadcasing: 1D equivalent to [np.newaxis, np.newaxis, :]
+        dx = np.array([op_dx for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, D])
+        coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
         if any([s == 0 for s in coupling_shape]):
             return [], [], coupling_shape
-        Ls = np.array(self.Ls)
-        N_sites_per_ring = self.N_sites_per_ring
-        mps_i, lat_i = self.mps_lat_idx_fix_u(u0)
-        lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
-        # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
-        lat_jkl = np.mod(lat_jkl_shifted, Ls)  # assuming PBC
+        lat_indices = np.indices(coupling_shape).reshape([1, self.dim, -1]).transpose([2, 0, 1])
+        lat_ijkl_shifted = lat_indices + (dx - shift_lat_indices)
+        lat_ijkl = np.mod(lat_ijkl_shifted, Ls)
         if self.bc_shift is not None:
-            shift = np.sum(((lat_jkl_shifted - lat_jkl) // Ls)[:, :, 1:] * self.bc_shift, axis=2)
-            lat_jkl_shifted[:, :, 0] -= shift
-            lat_jkl[:, :, 0] = np.mod(lat_jkl_shifted[:, :, 0], Ls[0])
+            shift = np.sum(((lat_ijkl_shifted - lat_ijkl) // Ls)[:, :, 1:] * self.bc_shift, axis=2)
+            lat_ijkl_shifted[:, :, 0] -= shift
+            lat_ijkl[:, :, 0] = np.mod(lat_ijkl_shifted[:, :, 0], Ls[0])
         keep = np.all(
             np.logical_or(
-                lat_jkl_shifted == lat_jkl,  # not accross the boundary
+                lat_ijkl_shifted == lat_ijkl,  # not accross the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=(1, 2))
-        mps_i = mps_i[keep]
-        lat_indices = lat_i[keep, :] + shift_lat_indices[np.newaxis, :]
-        lat_indices = np.mod(lat_indices, coupling_shape)
-        lat_jkl = lat_jkl[keep, :, :]
-        lat_jkl_shifted = lat_jkl_shifted[keep, :, :]
-        latu_jkl = np.concatenate((lat_jkl, np.array([other_us] * len(lat_jkl))[:, :, np.newaxis]),
-                                  axis=2)
-        mps_jkl = self.lat2mps_idx(latu_jkl)
+        lat_indices = lat_indices[keep, 0, :] # make 2D as to be returned
+        lat_ijkl = lat_ijkl[keep, :, :]
+        u = np.array([op_u for _, op_dx, op_u in ops], dtype=np.int_)[np.newaxis, :, np.newaxis]
+        u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1,))
+        mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
         if self.bc_MPS == 'infinite':
-            # shift by whole MPS unit cells for couplings along the infinite direction
-            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * N_sites_per_ring
-        mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
+            mps_ijkl += (lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites_per_ring
         return mps_ijkl, lat_indices, coupling_shape
 
     def coupling_shape(self, dx):
@@ -932,6 +922,8 @@ class Lattice:
         ----------
         dx : tuple of int
             Translation vector in the lattice for a coupling of two operators.
+            Corresponds to `dx` argument of
+            :meth:`tenpy.models.model.CouplingModel.add_multi_coupling`.
 
         Returns
         -------
@@ -939,7 +931,7 @@ class Lattice:
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         shift_lat_indices : array
-            Translation vector from lower left corner of box spanned by `dx` to the origin.
+            Translation vector from origin to the lower left corner of box spanned by `dx`.
         """
         shape = [La - abs(dxa) * int(bca) for La, dxa, bca in zip(self.Ls, dx, self.bc)]
         shift_strength = [min(0, dxa) for dxa in dx]
@@ -950,8 +942,10 @@ class Lattice:
 
         Parameters
         ----------
-        dx : tuple of int
-            Translation vector in the lattice for a coupling of two operators.
+        dx : 2D array, shape (N_ops, :attr:`dim`)
+            ``dx[i, :]`` is the translation vector in the lattice for the `i`-th operator.
+            Corresponds to the `dx` of each operator given in the argument `ops` of
+            :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
 
         Returns
         -------
@@ -959,16 +953,19 @@ class Lattice:
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         shift_lat_indices : array
-            Translation vector from lower left corner of box spanned by `dx` to the origin.
+            Translation vector from origin to the lower left corner of box spanned by `dx`.
+            (Unlike for :meth:`coupling_shape` it can also contain entries > 0)
         """
+        # coupling_shape(dx) is equivalent to
+        # multi_coupling_shape(np.array([[0]*self.dim, dx]))
         Ls = self.Ls
         shape = [None] * len(Ls)
         shift_strength = [None] * len(Ls)
         for a in range(len(Ls)):
             max_dx, min_dx = np.max(dx[:, a]), np.min(dx[:, a])
-            box_dx = max(max_dx, 0) - min(min_dx, 0)
+            box_dx = max_dx - min_dx
             shape[a] = Ls[a] - box_dx * int(self.bc[a])
-            shift_strength[a] = min(0, min_dx)
+            shift_strength[a] = min_dx  # note: can be positive!
         return tuple(shape), np.array(shift_strength)
 
     def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):

@@ -100,9 +100,13 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Jv = get_parameter(model_params, 'Jv', 1., self.name, True)
         Jp = get_parameter(model_params, 'Jp', 1., self.name, True)
         # vertex/star term
-        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]), (0, 'Sigmax', [-1, 0]),
-                                                  (1, 'Sigmax', [0, -1])])
+        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0),
+                                     ('Sigmax', [0, 0], 1),
+                                     ('Sigmax', [-1, 0], 0),
+                                     ('Sigmax', [0, -1], 1)])
         # plaquette term
-        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]), (0, 'Sigmaz', [0, 1]),
-                                                  (1, 'Sigmaz', [1, 0])])
+        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0),
+                                     ('Sigmaz', [0, 0], 1),
+                                     ('Sigmaz', [0, 1], 0),
+                                     ('Sigmaz', [1, 0], 1)])
         # done

@@ -172,6 +172,11 @@ class Site(Hdf5Exportable):
             assert op in self.opnames
         np.testing.assert_array_almost_equal(np.diag(np.exp(1.j * np.pi * self.JW_exponent)),
                                              self.JW.to_ndarray(), 15)
+        for op1, op2 in self.hc_ops.items():
+            assert op1 in self.opnames and op2 in self.opnames
+            op1 = self.get_op(op1)
+            op2 = self.get_op(op2)
+            assert op1.conj().transpose() == op2
 
     @property
     def dim(self):
@@ -765,8 +770,6 @@ class SpinHalfSite(Site):
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         # Specify Hermitian conjugates
-        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
-                        Sigmay='Sigmay', Sigmaz='Sigmaz')  # TODO should this be a method?
         Site.__init__(self, leg, ['up', 'down'], **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
@@ -860,8 +863,6 @@ class SpinSite(Site):
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S + 1, 1.)]
-        # Specify hermitian conjugates
-        self.hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # TODO should this be a method?
         Site.__init__(self, leg, names, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
@@ -935,8 +936,6 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
-        # Specify hermitian conjugates
-        self.hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')  # TODO method?
         Site.__init__(self, leg, ['empty', 'full'], **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
