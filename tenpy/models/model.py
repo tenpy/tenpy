@@ -1189,6 +1189,8 @@ class MultiCouplingModel(CouplingModel):
         add_coupling : Add terms acting on two sites.
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
+        if self.add_hcs:  # Override local flag.
+            add_hc = True
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
             msg = ("Deprecated arguments of MultiCouplingModel.add_multi_coupling:\n"
