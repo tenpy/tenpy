@@ -2707,7 +2707,7 @@ class MPS:
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         op1 = self.get_op(ops1, i)
         opstr1 = self.get_op(opstr, i)
-        if opstr1 is not None:
+        if opstr1 is not None and str_on_first:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
         theta = self.get_theta(i, n=1)
