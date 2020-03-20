@@ -99,17 +99,30 @@ Guidelines of the format:
    This is also necessary to allow saving and loading of objects with cyclic references.
 7. Loading a dataset should be (fairly) secure and not execute arbitrary python code (even if the dataset was manipulated),
    as it is the case for pickle.
-   As a catch: it's not secure if you also downloaded some ``*.py`` files to locations where they can be imported,
-   because importing them is possible and thereby execute them!
 
-    .. note ::
-        Disclaimer: I'm not an security expert, so I can't guarantee that...
-        Also, loading a HDF5 file can import other python modules, so importing
-        a manipulated file is not secure if you downloaded a malicious python file as well.
+   *Disclaimer*: I'm not an security expert, so I can't guarantee that...
+   Also, loading a HDF5 file can import other python modules, so importing
+   a manipulated file is not secure if you downloaded a malicious python file as well.
 
 An implementation along those guidelines is given inside TeNPy in the :mod:`tenpy.tools.hdf5_io` module with the
 :class:`~tenpy.tools.hdf5_io.Hdf5Saver` and :class:`~tenpy.tools.hdf5_io.Hdf5Loader` classes
 and the wrapper functions :func:`~tenpy.tools.hdf5_io.save_to_hdf5`, :func:`~tenpy.tools.hdf5_io.load_from_hdf5`.
+The usage is very similar to pickle::
+
+    import h5py
+    from tenpy.tools import hdf5_io
+
+    data = {"psi": psi,  # e.g. an MPS
+            "model": my_model,
+            "parameters": {"L": 6, "g": 1.3}}
+
+    with h5py.File("file.h5", 'w') as f:
+        hdf5_io.save_to_hdf5(f, data)
+    # ...
+    with h5py.File("file.h5", 'r') as f:
+        data = hdf5_io.load_from_hdf5(f)
+        # or for partial reading:
+        pars = hdf5_io.load_from_hdf5(f, "/parameters")
 
 The full format specification is given by the what the code does. Since this is not trivial to see, let me summarize it here:
 
