@@ -613,7 +613,7 @@ class CouplingModel(Model):
         In a :class:`MultiCouplingModel`, values may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-    def __init__(self, lattice, bc_coupling=None):
+    def __init__(self, lattice, bc_coupling=None, add_hcs=False):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
             warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
@@ -623,6 +623,7 @@ class CouplingModel(Model):
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
+        self.add_hcs = add_hcs
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -831,6 +832,8 @@ class CouplingModel(Model):
         MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
+        if self.add_hcs:  # Override local flag.
+            add_hc = True
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
