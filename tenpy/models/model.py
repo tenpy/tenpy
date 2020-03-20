@@ -637,10 +637,9 @@ class CouplingModel(Model):
     def add_onsite(self, strength, u, opname, category=None):
         r"""Add onsite terms to :attr:`onsite_terms`.
 
-        Adds a term :math:`\sum_{x_0, ..., x_{dim-1}} strength[x_0, ..., x_{dim-1}] * OP``,
+        Adds :math:`\sum_{\vec{x}} strength[\vec{x}] * OP`` to the represented Hamiltonian,
         where the operator ``OP=lat.unit_cell[u].get_op(opname)``
         acts on the site given by a lattice index ``(x_0, ..., x_{dim-1}, u)``,
-        to the represented Hamiltonian.
 
         The necessary terms are just added to :attr:`onsite_terms`; doesn't rebuild the MPO.
 
@@ -655,6 +654,11 @@ class CouplingModel(Model):
             valid operator name of an onsite operator in ``lat.unit_cell[u]``.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `opname`.
+
+        See also
+        --------
+        add_coupling : Add a terms acting on two sites.
+        add_onsite_term : Add a single term without summing over :math:`vec{x}`.
         """
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
         if not np.any(strength != 0.):
@@ -777,7 +781,7 @@ class CouplingModel(Model):
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
         add_hc : bool
-            If True, a hermitian conjugate term is added automatically.
+            If `True`, a hermitian conjugate term is added automatically.
 
         Examples
         --------
@@ -788,16 +792,24 @@ class CouplingModel(Model):
         >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
         ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
-        The strength can be an array, which get's tiled to the correct shape.
+        The strength can be an array, which gets tiled to the correct shape.
         For example, in a 1D :class:`~tenpy.models.lattice.Chain` with an even number of sites and
         periodic (or infinite) boundary conditions, you can add alternating strong and weak
         couplings with a line like::
 
         >>> self.add_coupling([1.5, 1.], 0, 'Sz', 0, 'Sz', dx)
 
-        To add the hermitian conjugate, e.g. for a hopping term, you should add it in the opposite
-        direction ``-dx``, complex conjugate the strength, and take the hermitian conjugate
-        of the operators in swapped order (including a swap of `u1` <-> `u2`).
+        Make sure to use the `add_hc` argument if necessary, e.g. for hoppings:
+
+        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, add_hc=True)
+
+        Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
+        complex conjugate the strength, take the hermitian conjugate of the operators and swap the
+        order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
+        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)` is
+        ``add_coupling(np.conj(t), u2, hc('B'), u1, hc('A'), -dx)``, where `hc` takes the hermitian
+        conjugate of the operator names, see :meth:`~tenpy.networks.site.Site.get_hc_op_name`.
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
 
         >>> t = 1.  # hopping strength
@@ -811,7 +823,13 @@ class CouplingModel(Model):
         ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
         ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
-        Note that the Jordan-Wigner strings are figured out automatically!
+        Note that the Jordan-Wigner strings for the fermions are added automatically!
+
+        See also
+        --------
+        add_onsite : Add terms acting on one site only.
+        MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
+        add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
@@ -1144,6 +1162,26 @@ class MultiCouplingModel(CouplingModel):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+
+        Examples
+        --------
+        A call to :meth:`add_coupling` with arguments
+        ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
+
+        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
+        >>> self.add_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
+
+        To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
+        `strength`, reverse the order of the operators and take the hermitian conjugates of the
+        individual operator names:
+
+        >>> self.add_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
+
+        See also
+        --------
+        add_onsite : Add terms acting on one site only.
+        add_coupling : Add terms acting on two sites.
+        add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
