@@ -660,6 +660,8 @@ class CouplingModel(Model):
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
+        if self.lat.unit_cell[u].op_needs_JW(opname):
+            raise ValueError("can't add onsite operator which needs a Jordan-Wigner string!")
         if category is None:
             category = opname
         ot = self.onsite_terms.get(category, None)
