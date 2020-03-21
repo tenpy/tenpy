@@ -24,7 +24,8 @@ Backwards incompatible changes
   :math:`(S_i - S_j)/S_j < exp(degeneracy_tol) - 1 = degeneracy_tol + \mathcal{O}(degeneracy_tol^2)`.
 - Deprecated :meth:`tenpy.networks.mps.MPS.increase_L` in favor of the newly added
   :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
-
+- :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
+  If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
 
 Added
 ^^^^^
