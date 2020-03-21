@@ -845,10 +845,11 @@ class MPS:
         op : npc.array
             One of the entries in `op_list`, not copied.
         """
-        i = self._to_valid_index(i)
+        if self.finite and i > self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
-            op = self.sites[i].get_op(op)
+            op = self.sites[i % self.L].get_op(op)
         return op
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
@@ -1839,14 +1840,12 @@ class MPS:
         ----------
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             First operator of the correlation function (acting after ops2).
-            ``ops1[x]`` acts on site ``sites1[x]``.
-            If less than ``len(sites1)`` operators are given, we repeat them periodically.
+            If a list is given, ``ops1[i]`` acts on site `i` of the MPS.
         ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             Second operator of the correlation function (acting before ops1).
-            ``ops2[y]`` acts on site ``sites2[y]``.
-            If less than ``len(sites2)`` operators are given, we repeat them periodically.
+            If a list is given, ``ops2[j]`` acts on site `j` of the MPS.
         sites1 : None | int | list of int
-            List of site indices; a single `int` is translated to ``range(0, sites1)``.
+            List of site indices `i`; a single `int` is translated to ``range(0, sites1)``.
             ``None`` defaults to all sites ``range(0, L)``.
             Is sorted before use, i.e. the order is ignored.
         sites2 : None | int | list of int
