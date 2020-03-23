@@ -4,8 +4,7 @@ r"""Compression of a MPS.
     This is still a beta version, use with care!
     The interface will probably still change!
 """
-
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -24,11 +23,13 @@ def make_U(H, dt, which='II'):
     Parameters
     ----------
     H : :class:`~tenpy.networks.mpo.MPO`
-        The MPO to be exponentiated. Typically the Hamiltonian. Must have all IdL and IdR defined on each bond.
+        The MPO to be exponentiated. Typically the Hamiltonian.
+        Must have `IdL` and `IdR` defined on each bond.
     dt : float|complex
-        The time step per application of the propagator. Should be imaginary for real time evolution!
+        The time step per application of the propagator.
+        Should be imaginary for real time evolution!
     which : 'I'|'II'
-        selects the approximation made by choosing :func:`make_U_I` (``'I'``) or :func:`make_U_II` (``'II'``)
+        Selects the approximation, :func:`make_U_I` (``'I'``) or :func:`make_U_II` (``'II'``).
 
     Returns
     -------
@@ -61,7 +62,7 @@ def make_U_I(H, dt):
 
     U = [
         H.get_W(i).astype(np.result_type(dt, H.dtype),
-                          copy=True).transpose(['wL', 'wR', 'p', 'p*']) for i in range(H.L)
+                          copy=True).itranspose(['wL', 'wR', 'p', 'p*']) for i in range(H.L)
     ]
 
     IdLR = []
@@ -110,7 +111,7 @@ def make_U_II(H, dt):
 
     Returns
     -------
-    UII : :class:`~tenpy.networks.mpo.MPO`
+    U_II : :class:`~tenpy.networks.mpo.MPO`
         The propagator, i.e. approximation :math:`UII ~= exp(H*dt)`
 
     """
