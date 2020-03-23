@@ -3,6 +3,7 @@
 
 import numpy as np
 import numpy.testing as npt
+import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import Square
 
@@ -250,14 +251,20 @@ def test_canonical_form(bc):
     assert np.max(psi.norm_test()) < 1.e-14
 
 
-def test_increase_L():
+def test_enlarge_MPS_unit_cell():
     s = site.SpinHalfSite(conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
     psi0 = psi.copy()
-    psi.increase_L(9)
-    psi.test_sanity()
-    expval = psi.expectation_value('Sigmaz')
-    npt.assert_equal(expval, [1., -1., 1.] * 3)
+    psi1 = psi.copy()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        psi0.increase_L(9)
+    psi1.enlarge_MPS_unit_cell(3)
+    for psi in [psi0, psi1]:
+        psi.test_sanity()
+        expval = psi.expectation_value('Sigmaz')
+        npt.assert_equal(expval, [1., -1., 1.] * 3)
+    # done
 
 
 def test_group():

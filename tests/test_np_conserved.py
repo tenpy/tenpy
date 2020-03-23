@@ -484,6 +484,15 @@ def test_npc_Array_ops():
         aflat2 = op(aflat, s)
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
         assert (np.max(np.abs(a.to_ndarray() - aflat)) < EPS)
+    # equality
+    assert a == a
+    a2 = a.copy(deep=False)
+    b = a.copy(deep=True)
+    assert b == a == a2
+    assert len(b._data) > 0
+    b._data[-1][0, -1] += 1.e-13  # change
+    assert not b == a  # not exactly equal
+    assert a.__eq__(b, 1.e-12)  # but to high precision
 
 
 def test_npc_addition_transpose():

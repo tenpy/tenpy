@@ -339,6 +339,27 @@ class MPO:
         i = self._to_valid_index(i)
         return self.IdR[i + 1]
 
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+        """
+        if int(factor) != factor:
+            raise ValueError("`factor` should be integer!")
+        if factor <= 1:
+            raise ValueError("can't shrink!")
+        if self.finite:
+            raise ValueError("can't enlarge finite MPO")
+        factor = int(factor)
+        self.sites = factor * self.sites
+        self._W = factor * self._W
+        self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
+        self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
+        self.test_sanity()
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
@@ -489,7 +510,7 @@ class MPO:
         else:  # no break
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
-        return current_value / L
+        return np.real_if_close(current_value / L)
 
     def dagger(self):
         """Return hermition conjugate copy of self."""

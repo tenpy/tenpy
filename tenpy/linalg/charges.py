@@ -830,6 +830,16 @@ class LegCharge:
             raise ValueError("incompatible LegCharge\n" +
                              vert_join(["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
+    def get_block_sizes(self):
+        """Return the sizes of the individual blocks.
+
+        Returns
+        -------
+        sizes : ndarray, shape (block_number,)
+            The sizes of the individual blocks; ``sizes[i] = slices[i+1] - slices[i]``.
+        """
+        return self.slices[1:] - self.slices[:-1]
+
     def get_slice(self, qindex):
         """Return slice selecting the block for a given `qindex`."""
         return slice(self.slices[qindex], self.slices[qindex + 1])
@@ -930,7 +940,7 @@ class LegCharge:
         perm_qind = lexsort(self.charges.T)
         cp = self.copy()
         cp._set_charges(self.charges[perm_qind, :])
-        block_sizes = self._get_block_sizes()
+        block_sizes = self.get_block_sizes()
         cp._set_block_sizes(block_sizes[perm_qind])
         cp.sorted = True
         # finally bunch: re-ordering can have brought together equal charges
@@ -1065,10 +1075,6 @@ class LegCharge:
     def _set_block_sizes(self, block_sizes):
         """Set self.slices from an list of the block-sizes."""
         self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
-
-    def _get_block_sizes(self):
-        """Return block sizes."""
-        return self.slices[1:] - self.slices[:-1]
 
     def _slice_start_stop(self):
         """Yield (start, stop) for each qindex."""
@@ -1445,8 +1451,8 @@ class LegPipe(LegCharge):
         # determine q_map -- it's essentially the grid.
         q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
-        # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
-        legbs = [l._get_block_sizes() for l in self.legs]
+        # the block size for given (i1, i2, ...) is the product of ``legs.get_block_sizes()[il]``
+        legbs = [l.get_block_sizes() for l in self.legs]
         # andvanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         blocksizes = np.prod([lbs[gr] for lbs, gr in zip(legbs, grid)], axis=0)

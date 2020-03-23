@@ -16,7 +16,7 @@ import itertools
 import warnings
 
 from ..networks.site import Site
-from ..tools.misc import to_iterable, inverse_permutation
+from ..tools.misc import to_iterable, to_iterable_of_len, inverse_permutation
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
@@ -99,6 +99,11 @@ class Lattice:
     ----------
     dim : int
     order : ndarray (N_sites, dim+1)
+    boundary_conditions
+    Ls : tuple of int
+        the length in each direction.
+    shape : tuple of int
+        the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     N_cells : int
         the number of unit cells in the lattice, ``np.prod(self.Ls)``.
     N_sites : int
@@ -107,12 +112,8 @@ class Lattice:
         Defined as ``N_sites / Ls[0]``, for an infinite system the number of cites per "ring".
     N_rings : int
         Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
-    Ls : tuple of int
-        the length in each direction.
-    shape : tuple of int
-        the 'shape' of the lattice, same as ``Ls + (len(unit_cell), )``
     unit_cell : list of :class:`~tenpy.networks.site.Site`
-        the lattice sites making up a unit cell of the lattice.
+        the sites making up a unit cell of the lattice.
     bc : bool ndarray
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `bc_choices`.
@@ -154,29 +155,19 @@ class Lattice:
                  next_nearest_neighbors=None,
                  next_next_nearest_neighbors=None,
                  pairs=None):
-        self.Ls = tuple([int(L) for L in Ls])
         self.unit_cell = list(unit_cell)
-        self.N_cells = int(np.prod(self.Ls))
-        self.shape = self.Ls + (len(unit_cell), )
-        self.N_sites = int(np.prod(self.shape))
-        self.N_rings = self.Ls[0]
-        self.N_sites_per_ring = int(self.N_sites // self.N_rings)
+        self._set_Ls(Ls)  # after setting unit_cell
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
         if basis is None:
             basis = np.eye(self.dim)
         self.unit_cell_positions = np.array(positions)
         self.basis = np.array(basis)
-        self._set_bc(bc)
+        self.boundary_conditions = bc  # property setter for self.bc and self.bc_shift
         self.bc_MPS = bc_MPS
         # calculate order for MPS
         self.order = self.ordering(order)
         # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
-        # calculate _strides
-        strides = [1]
-        for L in self.Ls:
-            strides.append(strides[-1] * L)
-        self._strides = np.array(strides, np.intp)
         self.pairs = pairs if pairs is not None else {}
         for name, NN in [('nearest_neighbors', nearest_neighbors),
                          ('next_nearest_neighbors', next_nearest_neighbors),
@@ -230,6 +221,75 @@ class Lattice:
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
 
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`unit_cell`, :attr:`Ls`, :attr:`unit_cell_positions`, :attr:`basis`,
+        :attr:`boundary_conditions`, :attr:`pairs` under their name,
+        :attr:`bc_MPS` as ``"boundary_conditions_MPS"``, and
+        :attr:`order` as ``"order_for_MPS"``.
+        Moreover, it saves :attr:`dim` and :attr:`N_sites` as HDF5 attributes.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.unit_cell, subpath + "unit_cell")
+        hdf5_saver.save(np.array(self.Ls, int), subpath + "lengths")
+        hdf5_saver.save(self.unit_cell_positions, subpath + "unit_cell_positions")
+        hdf5_saver.save(self.basis, subpath + "basis")
+        hdf5_saver.save(self.boundary_conditions, subpath + "boundary_conditions")
+        hdf5_saver.save(self.bc_MPS, subpath + "boundary_condition_MPS")
+        hdf5_saver.save(self.order, subpath + "order_for_MPS")
+        hdf5_saver.save(self.pairs, subpath + "pairs")
+        # not necessary for loading, but still usefull
+        h5gr.attrs["dim"] = self.dim
+        h5gr.attrs["N_sites"] = self.N_sites
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.unit_cell = hdf5_loader.load(subpath + "unit_cell")
+        Ls = hdf5_loader.load(subpath + "lengths")
+        obj._set_Ls(Ls)
+        obj.unit_cell_positions = hdf5_loader.load(subpath + "unit_cell_positions")
+        obj.basis = hdf5_loader.load(subpath + "basis")
+        obj.boundary_conditions = hdf5_loader.load(subpath + "boundary_conditions")
+        obj.bc_MPS = hdf5_loader.load(subpath + "boundary_condition_MPS")
+        obj.order = hdf5_loader.load(subpath + "order_for_MPS")  # property setter!
+        obj.pairs = hdf5_loader.load(subpath + "pairs")
+
+        obj.test_sanity()
+        return obj
+
     @property
     def dim(self):
         """The dimension of the lattice."""
@@ -239,7 +299,11 @@ class Lattice:
     def order(self):
         """Defines an ordering of the lattice sites, thus mapping the lattice to a 1D chain.
 
-        This order defines how an MPS/MPO winds through the lattice.
+        Each row of the array contains the lattice indices for one site,
+        the order of the rows thus specifies a path through the lattice,
+        along which an MPS will wind through through the lattice.
+
+        You can visualize the order with :meth:`plot_order`.
         """
         return self._order
 
@@ -327,6 +391,74 @@ class Lattice:
                 raise ValueError("unknown ordering " + repr(order))
         return get_order(self.shape, snake_winding, priority)
 
+    @property
+    def boundary_conditions(self):
+        """Human-readable list of boundary conditions from :attr:`bc` and :attr:`bc_shift`.
+
+        Returns
+        -------
+        boundary_conditions : list of str
+            List of ``"open"`` or ``"periodic"``, one entry for each direction of the lattice.
+        """
+        global bc_choices
+        bc_choices_reverse = dict([(v, k) for (k, v) in bc_choices.items()])
+        bc = [bc_choices_reverse[bc] for bc in self.bc]
+        if self.bc_shift is not None:
+            for i, shift in enumerate(self.bc_shift):
+                assert bc[i + 1] == "periodic"
+                bc[i + 1] = shift
+        return bc
+
+    @boundary_conditions.setter
+    def boundary_conditions(self, bc):
+        global bc_choices
+        if bc in list(bc_choices.keys()):
+            bc = [bc_choices[bc]] * self.dim
+            self.bc_shift = None
+        else:
+            bc = list(bc)  # we modify entries...
+            self.bc_shift = np.zeros(self.dim - 1, np.int_)
+            for i, bc_i in enumerate(bc):
+                if isinstance(bc_i, int):
+                    if i == 0:
+                        raise ValueError("Invalid bc: first entry can't be a shift")
+                    self.bc_shift[i - 1] = bc_i
+                    bc[i] = bc_choices['periodic']
+                else:
+                    bc[i] = bc_choices[bc_i]
+            if not np.any(self.bc_shift != 0):
+                self.bc_shift = None
+        self.bc = np.array(bc)
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        if self.bc_MPS != "infinite":
+            raise ValueError("can only enlarge the MPS unit cell for infinite MPS.")
+        new_Ls = list(self.Ls)
+        old_Lx = new_Ls[0]
+        new_Ls[0] = old_Lx * factor
+        old_order = self.order
+        new_order = []
+        for i in range(factor):
+            order = old_order.copy()
+            shift_x = i * old_Lx
+            order[:, 0] += shift_x
+            new_order.append(order)
+        new_order = np.vstack(new_order)
+        # now update the contents of `self`
+        self._set_Ls(new_Ls)
+        self.order = new_order  # property setter
+        self.test_sanity()
+
     def position(self, lat_idx):
         """return 'space' position of one or multiple sites.
 
@@ -380,7 +512,7 @@ class Lattice:
             i = np.mod(i, self.N_sites)
             if np.any(i0 != i):
                 lat = self.order[i].copy()
-                lat[..., 0] += (i0 - i) // self.N_sites * self.N_rings
+                lat[..., 0] += (i0 - i) // self.N_sites_per_ring
                 return lat
         return self.order[i].copy()
 
@@ -408,7 +540,7 @@ class Lattice:
         i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
         i = np.take(self._perm, i)  # after permutation
         if self.bc_MPS == 'infinite':
-            i += i_shift * (self.N_sites // self.N_rings)
+            i += i_shift * self.N_sites_per_ring
         return i
 
     def mps_idx_fix_u(self, u=None):
@@ -468,8 +600,9 @@ class Lattice:
         Returns
         -------
         res_A : ndarray
-            Reshaped and reordered verions of A. Such that an MPS index `j` is replaced by
-            ``res_A[..., self.order, ...] = A[..., np.arange(self.N_sites), ...]``
+            Reshaped and reordered verions of A. Such that MPS indices along the specified axes
+            are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
+            `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., j, ...]``.
 
         Examples
         --------
@@ -521,6 +654,106 @@ class Lattice:
         else:
             idx = self._mps2lat_vals_idx_fix_u[u]
         return np.take(A, idx, axis=axes[0])
+
+    def mps2lat_values_masked(self, A, axes=-1, mps_inds=None, include_u=None):
+        """Reshape/reorder an array `A` to replace an MPS index by lattice indices.
+
+        This is a generalization of :meth:`mps2lat_values` allowing for the case of an arbitrary
+        set of MPS indices present in each axis of `A`.
+
+        Parameters
+        ----------
+        A : ndarray
+            Some values.
+        axes : (iterable of) int
+            Chooses the axis of `A` which should be replaced.
+            If multiple axes are given, you also need to give multiple index arrays as `mps_inds`.
+        mps_inds : (list of) 1D ndarray
+            Specifies for each `axis` in `axes`, for which MPS indices we have values in the
+            corresponding `axis` of `A`.
+            Defaults to ``[np.arange(A.shape[ax]) for ax in axes]``.
+            For indices accross the MPS unit cell and "infinite" `bc_MPS`,
+            we shift `x_0` accordingly.
+        include_u : (list of) bool
+            Specifies for each `axis` in `axes`, whether the `u` index of the lattice should be
+            included into the output array `res_A`. Defaults to ``len(self.unit_cell) > 1``.
+
+        Returns
+        -------
+        res_A : np.ma.MaskedArray
+            Reshaped and reordered copy of A. Such that MPS indices along the specified axes
+            are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
+            `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., mps_inds[j], ...]``.
+        """
+        try:
+            iter(axes)
+        except TypeError:  # axes is single int
+            axes = [axes]
+            mps_inds = [mps_inds]
+            include_u = [include_u]
+        else:  # iterable axes
+            if mps_inds is None:
+                mps_inds = [None] * len(axes)
+            if include_u is None:
+                include_u = [None] * len(axes)
+            if len(axes) != len(mps_inds) or len(axes) != len(include_u):
+                raise ValueError("Lenght of `axes`, `mps_inds` and `include_u` different")
+        # sort axes ascending
+        axes = [(ax + A.ndim if ax < 0 else ax) for ax in axes]
+
+        # goal: use numpy advanced indexing for the data copy
+        lat_inds = []  # lattice indices to be used
+        new_shapes = []  # shape to be
+        for ax, mps_inds_ax, include_u_ax in zip(axes, mps_inds, include_u):
+            if mps_inds_ax is None:  # default
+                mps_inds_ax = np.arange(A.shape[ax])
+            if include_u_ax is None:  # default
+                include_u_ax = (len(self.unit_cell) > 1)
+            if mps_inds_ax.ndim != 1:
+                raise ValueError("got non-1D array in `mps_inds` " + str(mps_inds_ax.shape))
+            lat_inds_ax = self.mps2lat_idx(mps_inds_ax)
+            shape = list(self.shape)
+            max_i = np.max(mps_inds_ax)
+            if max_i >= self.N_sites:
+                shape[0] += (max_i - self.N_sites) // self.N_sites_per_ring + 1
+            min_i = np.min(mps_inds_ax)
+            if min_i < 0:
+                # we use numpy indexing to simply wrap around negative indices
+                shape[0] += (abs(min_i) - 1) // self.N_sites_per_ring + 1
+            if not include_u_ax:
+                shape = shape[:-1]
+                lat_inds_ax = lat_inds_ax[:, :-1]
+            new_shapes.append(shape)
+            lat_inds.append(lat_inds_ax)
+
+        res_A_ndim = A.ndim - len(axes) + sum([len(s) for s in new_shapes])
+        res_A_shape = []
+        res_A_inds = []
+        dim_before = 0
+        dim_after = A.ndim - 1
+        for ax in range(A.ndim):
+            if ax in axes:
+                i = axes.index(ax)
+                inds_ax = lat_inds[i].T
+                res_A_shape.extend(new_shapes[i])
+                for inds in lat_inds[i].T:
+                    inds = inds.reshape([1] * dim_before + [len(inds)] + [1] * dim_after)
+                    res_A_inds.append(inds)
+            else:
+                d = A.shape[ax]
+                res_A_shape.append(d)
+                inds = np.arange(d).reshape([1] * dim_before + [d] + [1] * dim_after)
+                res_A_inds.append(inds)
+            dim_before += 1
+            dim_after -= 1
+
+        # and finally we are in the position to create the masked Array
+        fill_value = np.ma.array([0, 1], dtype=A.dtype).get_fill_value()
+        res_A_data = np.full(res_A_shape, fill_value, dtype=A.dtype)
+        res_A = np.ma.array(res_A_data, mask=True, fill_value=fill_value)
+
+        res_A[tuple(res_A_inds)] = A  # copy data, automatically unmasks entries
+        return res_A
 
     def count_neighbors(self, u=0, key='nearest_neighbors'):
         """Count e.g. the number of nearest neighbors for a site in the bulk.
@@ -600,7 +833,7 @@ class Lattice:
         if any([s == 0 for s in coupling_shape]):
             return [], [], np.zeros([0, self.dim]), coupling_shape
         Ls = np.array(self.Ls)
-        N_sites = self.N_sites
+        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls)  # assuming PBC
@@ -621,7 +854,7 @@ class Lattice:
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
         if self.bc_MPS == 'infinite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * (N_sites // Ls[0])
+            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * N_sites_per_ring
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -662,9 +895,9 @@ class Lattice:
         """
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
-            return [], [], [], coupling_shape
+            return [], [], coupling_shape
         Ls = np.array(self.Ls)
-        N_sites = self.N_sites
+        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u0)
         lat_jkl_shifted = lat_i[:, np.newaxis, :] + dx[np.newaxis, :, :]
         # lat_jkl* has 3 axes "initial site", "other_op", "spatial directions"
@@ -688,7 +921,7 @@ class Lattice:
         mps_jkl = self.lat2mps_idx(latu_jkl)
         if self.bc_MPS == 'infinite':
             # shift by whole MPS unit cells for couplings along the infinite direction
-            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * (N_sites // Ls[0])
+            mps_jkl += (lat_jkl_shifted[:, :, 0] - lat_jkl[:, :, 0]) * N_sites_per_ring
         mps_ijkl = np.concatenate((mps_i[:, np.newaxis], mps_jkl), axis=1)
         return mps_ijkl, lat_indices, coupling_shape
 
@@ -911,25 +1144,17 @@ class Lattice:
             raise ValueError("wrong len of last dimension of lat_idx: " + str(lat_idx.shape))
         return lat_idx
 
-    def _set_bc(self, bc):
-        global bc_choices
-        if bc in list(bc_choices.keys()):
-            bc = [bc_choices[bc]] * self.dim
-            self.bc_shift = None
-        else:
-            bc = list(bc)  # we modify entries...
-            self.bc_shift = np.zeros(self.dim - 1, np.int_)
-            for i, bc_i in enumerate(bc):
-                if isinstance(bc_i, int):
-                    if i == 0:
-                        raise ValueError("Invalid bc: first entry can't be a shift")
-                    self.bc_shift[i - 1] = bc_i
-                    bc[i] = bc_choices['periodic']
-                else:
-                    bc[i] = bc_choices[bc_i]
-            if not np.any(self.bc_shift != 0):
-                self.bc_shift = None
-        self.bc = np.array(bc)
+    def _set_Ls(self, Ls):
+        self.Ls = tuple([int(L) for L in Ls])
+        self.N_cells = int(np.prod(self.Ls))
+        self.shape = self.Ls + (len(self.unit_cell), )
+        self.N_sites = int(np.prod(self.shape))
+        self.N_rings = self.Ls[0]
+        self.N_sites_per_ring = int(self.N_sites // self.N_rings)
+        strides = [1]
+        for L in self.Ls:
+            strides.append(strides[-1] * L)
+        self._strides = np.array(strides, np.intp)
 
     @property
     def nearest_neighbors(self):
@@ -1240,8 +1465,8 @@ class Honeycomb(Lattice):
         nnNN = [(1, 0, np.array([1, 1])), (0, 1, np.array([-1, 1])), (0, 1, np.array([1, -1]))]
         NN4 = [(0, 1, np.array([0, 1])), (0, 1, np.array([1, 0])), (0, 1, np.array([1, -2])),
                (0, 1, np.array([0, -2])), (0, 1, np.array([-2, 0])), (0, 1, np.array([-2, 1]))]
-        NN5 = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])), (0, 0, np.array([1, -2])),
-               (0, 0, np.array([-1, -1])), (0, 0, np.array([-2, 1])), (0, 0, np.array([-1, 2]))]
+        NN5 = [(0, 0, np.array([1, 1])), (0, 0, np.array([2, -1])), (0, 0, np.array([-1, 2])),
+               (1, 1, np.array([1, 1])), (1, 1, np.array([2, -1])), (1, 1, np.array([-1, 2]))]
         kwargs.setdefault('pairs', {})
         kwargs['pairs'].setdefault('nearest_neighbors', NN)
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)

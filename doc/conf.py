@@ -5,6 +5,7 @@
 import sys
 import os
 import inspect
+import sphinx_rtd_theme
 
 # ensure parent folder is in sys.path to allow import of tenpy
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -41,6 +42,7 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram',
+    'sphinx_rtd_theme',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -68,7 +70,8 @@ exclude_patterns = ['sphinx_build', 'Thumbs.db', '.DS_Store']
 
 # -- Options for HTML output ----------------------------------------------
 
-html_theme = 'default'
+html_theme = 'sphinx_rtd_theme'
+
 html_logo = "images/logo.png"
 html_favicon = "images/logo.ico"
 html_static_path = []

@@ -22,7 +22,7 @@ the scientific community by giving examples how to call the algorithms in TeNPy.
 .. [TeNPySource] 
     https://github.com/tenpy/tenpy
 .. [TeNPyDoc] 
-    Online documentation, https://tenpy.github.io/
+    Online documentation, https://tenpy.readthedocs.io/
 .. [TeNPyForum] 
     Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
 

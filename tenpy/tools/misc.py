@@ -11,9 +11,10 @@ import argparse
 import warnings
 
 __all__ = [
-    'to_iterable', 'to_array', 'anynan', 'argsort', 'lexsort', 'inverse_permutation',
-    'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list', 'zero_if_close', 'pad',
-    'any_nonzero', 'add_with_None_0', 'chi_list', 'build_initial_state', 'setup_executable'
+    'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
+    'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
+    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'build_initial_state',
+    'setup_executable'
 ]
 
 
@@ -27,6 +28,23 @@ def to_iterable(a):
         return [a]
     else:
         return a
+
+
+def to_iterable_of_len(a, L):
+    """If a is a non-string iterable of length `L`, return `a`, otherwise return [a]*L.
+
+    Raises ValueError if `a` is already an iterable of different length.
+    """
+    if type(a) == str:
+        return [a] * L
+    try:
+        iter(a)
+    except TypeError:
+        return [a] * L
+    # else:
+    if len(a) != L:
+        raise ValueError("wrong length: got {0:d}, expected {1:d}".format(len(a), L))
+    return a
 
 
 def to_array(a, shape=(None, )):

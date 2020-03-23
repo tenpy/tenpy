@@ -45,6 +45,7 @@ from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
 from ..networks.site import group_sites
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
@@ -52,7 +53,7 @@ __all__ = [
 ]
 
 
-class Model:
+class Model(Hdf5Exportable):
     """Base class for all models.
 
     The common base to all models is the underlying Hilbert space and geometry, specified by a
@@ -80,6 +81,21 @@ class Model:
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
 
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        self.lat.enlarge_MPS_unit_cell(factor)
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
 
@@ -88,6 +104,9 @@ class Model:
         or help the convergence of DMRG (in case of too long range interactions).
 
         This has to be done after finishing initialization and can not be reverted.
+
+        .. todo :
+            We could actually keep the lattice structure if the order is (default) Cstyle.
 
         Parameters
         ----------
@@ -212,6 +231,22 @@ class NearestNeighborModel(Model):
             return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        super().enlarge_MPS_unit_cell(factor)
+        self.H_bond = self.H_bond * factor
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
@@ -427,6 +462,22 @@ class MPOModel(Model):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
 
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        This has to be done after finishing initialization and can not be reverted.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the MPS unit cell will be increased from `N_sites` to
+            ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
+            in our convetion, the lattice shape goes from
+            ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
+        """
+        super().enlarge_MPS_unit_cell(factor)
+        self.H_MPO.enlarge_MPS_unit_cell(factor)
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
 
@@ -609,6 +660,8 @@ class CouplingModel(Model):
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
+        if self.lat.unit_cell[u].op_needs_JW(opname):
+            raise ValueError("can't add onsite operator which needs a Jordan-Wigner string!")
         if category is None:
             category = opname
         ot = self.onsite_terms.get(category, None)
@@ -929,8 +982,8 @@ class CouplingModel(Model):
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
 
-        self.H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
-        H_MPO = self.H_MPO_graph.build_MPO()
+        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         return H_MPO
 

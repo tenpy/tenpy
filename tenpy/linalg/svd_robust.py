@@ -47,17 +47,6 @@ from numpy.core import single, double, csingle, cdouble  # for those, 'c' = comp
 
 from numpy.linalg.linalg import LinAlgError
 
-try:
-    from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
-        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
-except:
-    warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
-    # If you get this warning, you might still be lucky and not need the workaround,
-    # for examply, if you have a recent version of scipy....
-
-    # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
-    # from the numpy code (version 1.11.0 works for me) on github.
-
 # check the scipy version wheter it includes LAPACK's 'gesvd'
 try:
     # simply check wether scipy.linalg.svd has the keyword it should have
@@ -67,6 +56,17 @@ except TypeError:
     _old_scipy = True
     warnings.warn("Old scipy <= 0.18.0: support will be dropped in TeNPy version 1.0.0",
                   FutureWarning)
+try:
+    from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
+        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
+except:
+    if _old_scipy:
+        warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
+    # If you get this warning, you might still be lucky and not need the workaround,
+    # for examply, if you have a recent version of scipy....
+
+    # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
+    # from the numpy code (version 1.11.0 works for me) on github.
 
 # (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
 

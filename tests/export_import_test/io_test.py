@@ -1,12 +1,11 @@
 """Provide functionality for import (input) and export (output) tests.
 
 The subfolder "data/" (given by `datadir`) in the directory of this file is used for storage of
-test files to be imported.
-Files in this subfolder are detected by tests and checked for correct import.
-In that way, we can test the import of data files exported by old TeNPy versions.
-To generate the files, you can call the ``test_*.py`` files in this folder manually,
-e.g., ``python test_pickle.py``. This will generate the files with pre-defined data
-(see :func:`gen_example_data`) and the tenpy version in the filename.
+test files to be imported. Files in this subfolder are detected by tests and checked for correct
+import. In that way, we can test the import of data files exported by old TeNPy versions. To
+generate the files, you can call the ``test_*.py`` files in this folder manually, e.g., ``python
+test_pickle.py``. This will generate the files with pre-defined data (see :func:`gen_example_data`)
+and the tenpy version in the filename.
 """
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
@@ -78,7 +77,8 @@ def gen_example_data(version=tenpy.version.full_version):
             'dtypes': [np.dtype("int64"),
                        np.dtype([('a', np.int32, 8), ('b', np.float64, 5)])],
             'psi': psi,
-            'H_MPO': M.H_MPO,
+            'H_mpo': M.H_MPO,
+            'model': M,
         }
         data['recursive'][3][1] = data['recursive'][1] = data['recursive']
         data['exportable'].some_attr = "something"
@@ -103,7 +103,7 @@ def assert_equal_data(data_imported, data_expected, max_recursion_depth=10):
         assert npc.norm(data_imported - data_expected) == 0.  # should be exactly equal!
     elif isinstance(data_expected, np.ndarray):
         np.testing.assert_array_equal(data_imported, data_expected)
-    elif isinstance(data_expected, (int, float, np.int64, np.float64)):
+    elif isinstance(data_expected, (int, float, np.int64, np.float64, complex, str)):
         assert data_imported == data_expected
 
 

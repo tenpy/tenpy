@@ -227,6 +227,10 @@ class Array:
         block_q = self.chinfo.make_valid(block_q)
         if np.any(block_q != self.qtotal):
             raise ValueError("some row of _qdata is incompatible with total charge")
+        # check block_sizes
+        block_sizes = [l.get_block_sizes()[qi] for l, qi in zip(self.legs, self._qdata.T)]
+        for block, block_shape in zip(self._data, zip(*block_sizes)):
+            assert block.shape == block_shape
         # test labels
         assert len(self._labels) == self.rank
         for lbl in self._labels:
@@ -604,6 +608,11 @@ class Array:
     def stored_blocks(self):
         """The number of (non-zero) blocks stored in :attr:`_data`."""
         return len(self._data)
+
+    @property
+    def ndim(self):
+        """Alias for :attr:`rank` or ``len(self.shape)``."""
+        return self.rank
 
     @property
     def labels(self):
@@ -2261,6 +2270,22 @@ class Array:
             return self.iscale_prefactor(1. / other)
         return NotImplemented
 
+    def __eq__(self, other, eps=1.e-14):
+        """Check if two arrays are the same up to `eps`.
+
+        Parameters
+        ----------
+        other : :class:`Array`
+            The array to compare with.
+            Has to have the same compatible legcharges with `self`.
+        eps : float
+            Precision up to which the arrays need to agree in each entry.
+        """
+        if self is other:
+            return True
+        other = other._transpose_same_labels(self._labels)
+        return (self - other).norm(np.inf) < eps
+
     # private functions =======================================================
 
     def _set_shape(self):
@@ -2498,7 +2523,7 @@ class Array:
         # keep_axes = neither in slice_axes nor in project_axes
         keep_axes = [a for a, i in enumerate(map_qinds) if i is None]
         not_slice_axes = sorted(project_axes + keep_axes)
-        bsizes = [l._get_block_sizes() for l in self.legs]
+        bsizes = [l.get_block_sizes() for l in self.legs]
 
         def part2self(part_qindices):
             """Given `part_qindices` of ``res = self[inds]``,
@@ -2787,7 +2812,7 @@ def diag(s, leg, dtype=None, labels=None):
     res._qdata = np.arange(leg.block_number, dtype=np.intp)[:, np.newaxis] * np.ones(2, np.intp)
     # ``res._qdata_sorted = True`` was already set
     if scalar:
-        res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg._get_block_sizes()]
+        res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg.get_block_sizes()]
     else:
         res._data = [np.diag(s[leg.get_slice(qi)]) for qi in range(leg.block_number)]
     return res
@@ -2842,7 +2867,7 @@ def concatenate(arrays, axis=0, copy=True):
     axis_qconj = res.legs[axis].qconj
     for a in arrays:
         leg = a.legs[axis]
-        res_axis_bl_sizes.extend(leg._get_block_sizes())
+        res_axis_bl_sizes.extend(leg.get_block_sizes())
         charges = leg.charges if leg.qconj == axis_qconj else res.chinfo.make_valid(-leg.charges)
         res_axis_charges.append(charges)
         qdata = a._qdata.copy()
@@ -3936,7 +3961,7 @@ def _combine_legs_worker(self, res, combine_legs, non_combined_legs, new_axes, n
     q_map_inds = [qm[sort] for qm in q_map_inds]
     block_start = np.zeros((self.stored_blocks, res.rank), np.intp)
     block_shape = np.empty((self.stored_blocks, res.rank), np.intp)
-    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for ax in non_new_axes:
         block_shape[:, ax] = block_sizes[ax][qdata[:, ax]]
     for j in range(len(pipes)):
@@ -4039,7 +4064,7 @@ def _split_legs_worker(self, split_axes, cutoff):
         old_block_beg[:, split_axes[j]] = q_map[:, 0]
         old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
     new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
-    block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
     old_block_shapes[:, nonsplit_axes] = new_block_shapes[:, new_nonsplit_axes]
@@ -4445,7 +4470,6 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
         U_data = []
         VH_data = []
     new_leg_slices = []
-    new_leg_slices_full = []
     at_full = 0
     blocks_kept = []
 
@@ -4482,46 +4506,49 @@ def _svd_worker(a, full_matrices, compute_uv, overwrite_a, cutoff, qtotal_LR, in
             if compute_uv:
                 blocks_kept.append(i)
                 new_leg_slices.append(at)
-                new_leg_slices_full.append(at_full)
                 at_full += max(block.shape)
                 at += num
                 U_data.append(U_b.astype(a.dtype, copy=False))
                 VH_data.append(VH_b.astype(a.dtype, copy=False))
+        else:
+            assert not full_matrices
     if len(S) == 0:
         raise RuntimeError("SVD found no singluar values")  # (at least none > cutoff)
     S = np.concatenate(S)
     if not compute_uv:
         return (None, S, None)
     # else: compute_uv is True
-    blocks_kept = np.array(blocks_kept, np.intp)
-    nblocks = blocks_kept.shape[0]
-    qi_L, qi_R = a._qdata[blocks_kept, :].T
-    qi_C = np.arange(nblocks, dtype=np.intp)
-    U_qdata = np.stack([qi_L, qi_C], axis=1)
-    VH_qdata = np.stack([qi_C, qi_R], axis=1)
-    new_leg_slices.append(at)
-    new_leg_slices = np.array(new_leg_slices, np.intp)
-    new_leg_charges = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
-    new_leg_charges = chinfo.make_valid(new_leg_charges)
-    new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
-    new_leg_L = new_leg_R.conj()
     if full_matrices:
-        new_leg_slices_full.append(at_full)
-        new_leg_slices_full = np.array(new_leg_slices_full, np.intp)
-        new_leg_full = LegCharge.from_qind(chinfo, new_leg_slices_full, new_leg_charges,
-                                           inner_qconj)
-        if a.shape[0] >= a.shape[1]:  # new_leg_R is fine
-            new_leg_L = new_leg_full.conj()
-        else:  # new_leg_L is fine
-            new_leg_R = new_leg_full
+        new_leg_L = a.legs[0].conj()
+        new_leg_R = a.legs[1].conj()
+        qi_L, qi_R = a._qdata.T
+        U_qdata = np.stack([qi_L, qi_L], axis=1).astype(np.intp)
+        VH_qdata = np.stack([qi_R, qi_R], axis=1).astype(np.intp)
+    else:
+        blocks_kept = np.array(blocks_kept, np.intp)
+        nblocks = blocks_kept.shape[0]
+        qi_L, qi_R = a._qdata[blocks_kept, :].T
+        qi_C = np.arange(nblocks, dtype=np.intp)
+        U_qdata = np.stack([qi_L, qi_C], axis=1).astype(np.intp)
+        VH_qdata = np.stack([qi_C, qi_R], axis=1).astype(np.intp)
+        new_leg_slices.append(at)
+        new_leg_slices = np.array(new_leg_slices, np.intp)
+        new_leg_charges = (qtotal_R - a.legs[1].get_charge(qi_R)) * inner_qconj
+        new_leg_charges = chinfo.make_valid(new_leg_charges)
+        new_leg_R = LegCharge.from_qind(chinfo, new_leg_slices, new_leg_charges, inner_qconj)
+        new_leg_L = new_leg_R.conj()
     U = Array([a.legs[0], new_leg_L], a.dtype, qtotal_L)
     VH = Array([new_leg_R, a.legs[1]], a.dtype, qtotal_R)
     U._data = U_data
-    U._qdata = np.array(U_qdata, dtype=np.intp)
-    U._qdata_sorted = a._qdata_sorted
+    U._qdata = U_qdata
     VH._data = VH_data
-    VH._qdata = np.array(VH_qdata, dtype=np.intp)
-    VH._qdata_sorted = a._qdata_sorted
+    VH._qdata = VH_qdata
+    if full_matrices:
+        U._qdata_sorted = np.all(qi_L[:-1] < qi_L[1:])
+        VH._qdata_sorted = a._qdata_sorted
+    else:
+        U._qdata_sorted = a._qdata_sorted
+        VH._qdata_sorted = a._qdata_sorted
     return U, S, VH
 
 
