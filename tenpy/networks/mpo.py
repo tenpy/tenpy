@@ -104,7 +104,7 @@ class MPO:
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None):
+    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None, add_hcs=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
@@ -114,6 +114,7 @@ class MPO:
         self.grouped = 1
         self.bc = bc
         self.max_range = max_range
+        self.add_hcs = add_hcs
         self.test_sanity()
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -197,7 +198,8 @@ class MPO:
                    IdR=None,
                    Ws_qtotal=None,
                    leg0=None,
-                   max_range=None):
+                   max_range=None,
+                   add_hcs=False,):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -261,7 +263,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, add_hcs)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -781,11 +783,12 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-    def __init__(self, sites, bc='finite', max_range=None):
+    def __init__(self, sites, bc='finite', max_range=None, add_hcs=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         self.max_range = max_range
+        self.add_hcs = add_hcs
         # empty graph
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
@@ -793,7 +796,7 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
+    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, add_hcs=False):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -817,14 +820,14 @@ class MPOGraph:
         from_term_list :
             equivalent for other representation terms.
         """
-        graph = cls(sites, bc, coupling_terms.max_range())
+        graph = cls(sites, bc, coupling_terms.max_range(), add_hcs)
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
         graph.add_missing_IdL_IdR()
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc):
+    def from_term_list(cls, term_list, sites, bc, add_hcs=False):
         """Initialize form a list of operator terms and prefactors.
 
         Parameters
@@ -1005,7 +1008,7 @@ class MPOGraph:
         grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range, self.add_hcs)
         return H
 
     def __repr__(self):
