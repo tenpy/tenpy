@@ -603,6 +603,9 @@ class CouplingModel(Model):
         An integer `shift` means that we have periodic boundary conditions along this direction,
         but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
         when going around the boundary along this direction.
+    add_hcs : bool
+        If True, the Hermitian conjugate of the MPO is computed at runtime,
+        rather than saved in the MPO.
 
     Attributes
     ----------
@@ -1017,7 +1020,7 @@ class CouplingModel(Model):
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
 
-        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS, self.add_hcs)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         return H_MPO
@@ -1337,6 +1340,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         and specifies how much status information should be printed during initialization.
         The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
         sorted by charges (see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`).
+        The parameter ``'add_hcs'`` specifies whether the Hermitian conjugate of 
+        the MPO is computed at runtime, rather than saved in the MPO.
 
     Attributes
     ----------

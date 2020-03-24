@@ -70,6 +70,9 @@ class MPO:
         Indices on the bonds, which correpond to 'only identities to the right'.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
+    add_hcs : bool
+        If True, the Hermitian conjugate of the MPO is computed at runtime,
+        rather than saved in the MPO.
 
     Attributes
     ----------
@@ -223,6 +226,9 @@ class MPO:
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
+        add_hcs : bool
+            If True, the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
         See also
         --------
@@ -763,6 +769,9 @@ class MPOGraph:
         MPO boundary conditions.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
+    add_hcs : bool
+        If True, the Hermitian conjugate of the MPO is computed at runtime,
+        rather than saved in the MPO.
 
     Attributes
     ----------
@@ -809,6 +818,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        add_hcs : bool
+            If True, the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
         Returns
         -------
@@ -838,6 +850,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        add_hcs : bool
+            If True, the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
         Returns
         -------
@@ -849,7 +864,7 @@ class MPOGraph:
         from_terms : equivalent for other representation of terms.
         """
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc)
+        return cls.from_terms(ot, ct, sites, bc, add_hcs)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
