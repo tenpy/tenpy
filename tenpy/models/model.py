@@ -73,7 +73,7 @@ class Model(Hdf5Exportable):
     """
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
-        # __init__, so it get's called multiple times when a user implements e.g. a
+        # __init__, so it gets called multiple times when a user implements e.g. a
         # class MyModel(CouplingModel, NearestNeighborModel, MPOModel).
         if not hasattr(self, 'lat'):
             # first call: initialize everything
@@ -454,7 +454,7 @@ class MPOModel(Model):
     H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian.
     """
-    def __init__(self, lattice, H_MPO):
+    def __init__(self, lattice, H_MPO, add_hcs=False):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
         MPOModel.test_sanity(self)
@@ -1355,10 +1355,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
+        self.add_hcs = get_parameter(model_params, 'add_hcs', False, self.name)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat)
+        CouplingModel.__init__(self, lat, add_hcs=self.add_hcs)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
         # 7) initialize H_MPO
