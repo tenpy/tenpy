@@ -664,6 +664,8 @@ class CouplingModel(Model):
         add_coupling : Add a terms acting on two sites.
         add_onsite_term : Add a single term without summing over :math:`vec{x}`.
         """
+        if self.add_hc_to_MPO:
+            strength /= 2
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined `opname`.
@@ -838,7 +840,10 @@ class CouplingModel(Model):
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
         if self.add_hc_to_MPO:  # Override local flag.
-            add_hc = True
+            if add_hc:
+                add_hc = False
+            else:  # Term is real, or h.c. is added manually.
+                strength /= 2
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
@@ -1195,7 +1200,10 @@ class MultiCouplingModel(CouplingModel):
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
         if self.add_hc_to_MPO:  # Override local flag.
-            add_hc = True
+            if add_hc:
+                add_hc = False
+            else:  # Term is real, or h.c. is added manually.
+                strength /= 2
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
             msg = ("Deprecated arguments of MultiCouplingModel.add_multi_coupling:\n"
