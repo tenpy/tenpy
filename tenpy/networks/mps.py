@@ -845,10 +845,11 @@ class MPS:
         op : npc.array
             One of the entries in `op_list`, not copied.
         """
-        i = self._to_valid_index(i)
+        if self.finite and i > self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
-            op = self.sites[i].get_op(op)
+            op = self.sites[i % self.L].get_op(op)
         return op
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
@@ -1693,6 +1694,10 @@ class MPS:
         In other words, evaluate the expectation value of a term
         ``op0_i0 op1_{i0+1} op2_{i0+2} ...``.
 
+        .. warning ::
+            This function does *not* automatically add Jordan-Wigner strings!
+            For correct handling of fermions, use :meth:`expectation_value_term` instead.
+
         Parameters
         ----------
         operators : List of { :class:`~tenpy.linalg.np_conserved.Array` | str }
@@ -1801,7 +1806,8 @@ class MPS:
                              sites2=None,
                              opstr=None,
                              str_on_first=True,
-                             hermitian=False):
+                             hermitian=False,
+                             autoJW=True):
         r"""Correlation function  ``<psi|op1_i op2_j|psi>/<psi|psi>`` of single site operators.
 
         Given the MPS in canonical form, it calculates 2-site correlation functions.
@@ -1839,14 +1845,12 @@ class MPS:
         ----------
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             First operator of the correlation function (acting after ops2).
-            ``ops1[x]`` acts on site ``sites1[x]``.
-            If less than ``len(sites1)`` operators are given, we repeat them periodically.
+            If a list is given, ``ops1[i]`` acts on site `i` of the MPS.
         ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             Second operator of the correlation function (acting before ops1).
-            ``ops2[y]`` acts on site ``sites2[y]``.
-            If less than ``len(sites2)`` operators are given, we repeat them periodically.
+            If a list is given, ``ops2[j]`` acts on site `j` of the MPS.
         sites1 : None | int | list of int
-            List of site indices; a single `int` is translated to ``range(0, sites1)``.
+            List of site indices `i`; a single `int` is translated to ``range(0, sites1)``.
             ``None`` defaults to all sites ``range(0, L)``.
             Is sorted before use, i.e. the order is ignored.
         sites2 : None | int | list of int
@@ -1867,6 +1871,10 @@ class MPS:
             Optimization flag: if ``sites1 == sites2`` and ``Ops1[i]^\dagger == Ops2[i]``
             (which is not checked explicitly!), the resulting ``C[x, y]`` will be hermitian.
             We can use that to avoid calculations, so ``hermitian=True`` will run faster.
+        autoJW : bool
+            *Ignored* if `opstr` is given.
+            If `True`, auto-determine if a Jordan-Wigner string is needed.
+            Works only if exclusively strings were used for `op1` and `op2`.
 
         Returns
         -------
@@ -1880,9 +1888,51 @@ class MPS:
             - For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
 
             The condition ``<= r`` is replaced by a strict ``< r``, if ``str_on_first=False``.
+
+        Examples
+        --------
+        For a spin chain:
+        >>> psi.correlation_function("A", "B")
+        [[A0B0,     A0B1, ..., A0B{L-1}],
+         [A1B0,     A1B1, ..., A1B{L-1]],
+         ...,
+         [A{L-1}B0, ALB1, ..., A{L-1}B{L-1}],
+        ]
+
+        To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``:
+        >>> psi.correlation_function("A", "B", [3])
+        [[A3B0,     A3B1, ..., A3B{L-1}]]
+
+        For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
+        >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
+        >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
+        True
+        >>> np.all(np.diag(CdC) == psi.expectation_value("Cd C"))  # "Cd C" is equivalent to "N"
+        True
+
+        See also
+        --------
+        expectation_value_term : best for a single combination of `i` and `j`.
         """
+        if opstr is not None:
+            autoJW = False
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
+        if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
+            warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
+            autoJW = False
+        if autoJW:
+            need_JW = []
+            for i in sites1:
+                need_JW.append(self.sites[i % self.L].op_needs_JW(ops1[i % len(ops1)]))
+            for j in sites2:
+                need_JW.append(self.sites[j % self.L].op_needs_JW(ops1[j % len(ops1)]))
+            if any(need_JW):
+                if not all(need_JW):
+                    raise ValueError("Some, but not any operators need 'JW' string!")
+                if not str_on_first:
+                    raise ValueError("Need Jordan Wigner string, but `str_on_first`=False`")
+                opstr = 'JW'
         if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
             hermitian = False
@@ -2707,7 +2757,7 @@ class MPS:
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         op1 = self.get_op(ops1, i)
         opstr1 = self.get_op(opstr, i)
-        if opstr1 is not None:
+        if opstr1 is not None and str_on_first:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
         theta = self.get_theta(i, n=1)
@@ -3256,8 +3306,8 @@ class MPSEnvironment:
         Example measuring <bra|SzSx|ket> on each second site, for inhomogeneous sites:
 
         >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                                   psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-                         for i in range(0, psi.L-1, 2)]
+        ...                        psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+        ...              for i in range(0, psi.L-1, 2)]
         >>> env.expectation_value(SzSx_list, range(0, psi.L-1, 2))
         [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """

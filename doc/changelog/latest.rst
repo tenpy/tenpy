@@ -34,7 +34,8 @@ Backwards incompatible changes
   :math:`(S_i - S_j)/S_j < exp(degeneracy_tol) - 1 = degeneracy_tol + \mathcal{O}(degeneracy_tol^2)`.
 - Deprecated :meth:`tenpy.networks.mps.MPS.increase_L` in favor of the newly added
   :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
-
+- :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
+  If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
 
 Added
 ^^^^^
@@ -87,3 +88,5 @@ Fixed
 - Continue in :func:`tenpy.algorithms.dmrg.full_diag_effH` with a warning instaed of raising an Error,
   if the effective Hamltonian is zero.
 - :meth:`~tenpy.networks.mps.MPS.correlation_length`: check for hermitian Flag might have raised and Error with new numpy warnings
+- :meth:`~tenpy.networks.mps.MPS.correlation_function` did not respect argument ``str_on_first=False``.
+- :meth:`tenpy.networks.mps.MPS.get_op` worked unexpected for infinite `bc` with incomensurate ``self.L`` and ``len(op_list)``.
