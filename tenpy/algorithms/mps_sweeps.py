@@ -32,7 +32,8 @@ from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator
 from ..tools.params import get_parameter, unused_parameters
 
-__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
+__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper',
+           'OrthogonalEffectiveH']
 
 
 class Sweep:
@@ -393,14 +394,6 @@ class EffectiveH(NpcLinearOperator):
         calculating charge combinations in the contractions.
     move_right : bool, optional
         Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right.
-    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-        List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
-        against. See :meth:`matvec_theta_ortho` for more details.
-        We implement this by effectively sending
-        ``H -> (1 - sum_o |theta_o><theta_o|) H (1 - sum_o |theta_o><theta_o|)``,
-        where ``|theta_o>`` is ``|psi_o>`` projected into the
-        appropriate basis (in which `self` is given).
-
 
     Attributes
     ----------
@@ -413,17 +406,11 @@ class EffectiveH(NpcLinearOperator):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Projections of `ortho_to_envs` into the basis of `self`.
-    _matvec_without_theta_ortho : function
-        Backup copy of :meth:`matvec`.
-        Allows to monkey-patch :meth:`matvec` with :meth:`matvec_theta_ortho`, which is
-        done in :meth:`_set_theta_ortho`.
     """
     length = None
     acts_on = None
 
-    def __init__(self, env, i0, combine=False, move_right=True, ortho_to_envs=[]):
+    def __init__(self, env, i0, combine=False, move_right=True):
         raise NotImplementedError("This function should be implemented in derived classes")
 
     def matvec(self, theta):
@@ -448,71 +435,30 @@ class EffectiveH(NpcLinearOperator):
         """Contract `self` to a matrix."""
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def _set_theta_ortho(self, i0, ortho_to_envs):
-        """Get the n-site wavefunctions to orthogonalize against from :attr:`ortho_to_envs`.
+    def combine_theta(self, theta):
+        """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
 
-        Paramaters
+        Parameters
         ----------
-        i0 : int
-            Index of the active site if length=1, or of the left-most active site if length>1.
-        ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-            List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
-            against.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
 
         Returns
         -------
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with legs 'vL', 'p0', 'p1', 'vR'
-            (for EffectiveH.length=1, the 'p1' label is missing).
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Wave function with labels as given by `self.acts_on`.
         """
-        self._matvec_without_theta_ortho = self.matvec
-        self.theta_ortho = []
-        if len(ortho_to_envs) == 0:
-            return  # nothing else to do
-        for o_env in ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=self.length)  # environments of form <psi|ortho>
-            LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + self.length - 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            theta.itranspose(self.acts_on)
-            self.theta_ortho.append(theta)
-        self.theta_ortho, _ = gram_schmidt(self.theta_ortho)  # orthogonalize
-        # monkey-patch the `matvec` function
-        self.matvec = self.matvec_theta_ortho
-        # combining legs, if necessary, is done in :meth:`combine_Heff`.
+        raise NotImplementedError("This function should be implemented in derived classes")
 
-    def matvec_theta_ortho(self, theta):
-        r"""Apply `self` to `theta`, and orthogonalize against `self.theta_ortho`.
-        __
-        We implement this by effectively replacing ``H -> P H P`` with
-        the projector ``P = 1 - sum_o |o> <o|`` projecting out the states
-        from :attr:`theta_ortho`.
+    def unpatched(self):
+        """Return unpatched version of `self`.
 
-        Parameter and return value as for :meth:`matvec` (which this function replaces,
-        if the class was initialized with non-empty `ortho_to_envs`.)
+        Instances of `self` can be replaced by a :class:`EffectiveHWrapper` for additional
+        behaviour, patching and extending the behaviour of the `matvec` defined in subclasses.
+        This method gives access to the original instance,
+        whether a `EffectiveHWrapper` was used or not.
         """
-        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
-        theta = theta.copy()
-        for o in self.theta_ortho:  # Project out
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        theta = self._matvec_without_theta_ortho(theta)
-        for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        return theta
-
-    def _make_matrix_orthogonal(self, matrix):
-        if len(self.theta_ortho) > 0:
-            labels = matrix.get_leg_labels()
-            proj = npc.eye_like(matrix, 0)
-            for th_o in self.theta_ortho:
-                if self.combine:
-                    th_o = th_o.combine_legs(th_o.get_leg_labels())
-                proj -= npc.outer(th_o, th_o.conj())
-            matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
-            matrix.iset_leg_labels(labels)
-        return matrix
+        return self
 
 
 class OneSiteH(EffectiveH):
@@ -563,7 +509,7 @@ class OneSiteH(EffectiveH):
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
-    def __init__(self, env, i0, combine=False, move_right=True, ortho_to_envs=[]):
+    def __init__(self, env, i0, combine=False, move_right=True):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
@@ -576,7 +522,6 @@ class OneSiteH(EffectiveH):
         self.move_right = move_right
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.RP.get_leg('vL').ind_len)
-        self._set_theta_ortho(i0, ortho_to_envs)
         if combine:
             self.combine_Heff()
 
@@ -635,10 +580,9 @@ class OneSiteH(EffectiveH):
             self.acts_on = ['(vL.p0)', 'vR']
         else:
             self.acts_on = ['vL', '(p0.vR)']
-        self.theta_ortho = [self.combine_theta(th_o) for th_o in self.theta_ortho]
 
     def combine_theta(self, theta):
-        """Combine the legs of `theta`, such that fit to how we combined the legs of `self`.
+        """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
 
         Parameters
         ----------
@@ -672,7 +616,7 @@ class OneSiteH(EffectiveH):
             contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
             contr = contr.combine_legs([['vR*', 'p0', 'vL*'], ['vR', 'p0*', 'vL']], qconj=[+1, -1])
-        return self._make_matrix_orthogonal(contr)
+        return contr
 
 
 class TwoSiteH(EffectiveH):
@@ -727,7 +671,7 @@ class TwoSiteH(EffectiveH):
     length = 2
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
-    def __init__(self, env, i0, combine=False, move_right=True, ortho_to_envs=[]):
+    def __init__(self, env, i0, combine=False, move_right=True):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
@@ -743,7 +687,6 @@ class TwoSiteH(EffectiveH):
         self.combine = combine
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.W1.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
-        self._set_theta_ortho(i0, ortho_to_envs)
         if combine:
             self.combine_Heff()
 
@@ -792,10 +735,9 @@ class TwoSiteH(EffectiveH):
                                         pipes=[pipeR, pipeR.conj()],
                                         new_axes=[2, 1])
         self.acts_on = ['(vL.p0)', '(p1.vR)']  # overwrites class attribute!
-        self.theta_ortho = [self.combine_theta(th_o) for th_o in self.theta_ortho]
 
     def combine_theta(self, theta):
-        """Combine the legs of `theta`, such that fit to how we combined the legs of `self`.
+        """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
 
         Parameters
         ----------
@@ -824,4 +766,104 @@ class TwoSiteH(EffectiveH):
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
             contr = contr.combine_legs([['vR*', 'p0', 'p1', 'vL*'], ['vR', 'p0*', 'p1*', 'vL']],
                                        qconj=[+1, -1])
-        return self._make_matrix_orthogonal(contr)
+        return contr
+
+
+class EffectiveHWrapper(EffectiveH):
+    """Baseclass for a wrapper around another :class:`EffectiveH`.
+
+
+    """
+    def __init__(self, orig_eff_H):
+        self.orig_eff_H = orig_eff_H
+
+    @property
+    def length(self):
+        return self.orig_eff_H.length
+
+    @property
+    def dtype(self):
+        return self.orig_eff_H.dtype
+
+    @property
+    def N(self):
+        return self.orig_eff_H.N
+
+    @property
+    def acts_on(self):
+        return self.orig_eff_H.acts_on
+
+    def combine_theta(self, theta):
+        return self.orig_eff_H.combine_theta(theta)
+
+    def unpatched(self):
+        return self.orig_eff_H.unpatched()
+
+
+class OrthogonalEffectiveH(EffectiveHWrapper):
+    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
+
+    Here, ``|o>`` are the states from :attr:`theta_ortho`, taken from `ortho_to_envs`.
+
+    Hence, this
+
+    Parameters
+    ----------
+    i0 : int
+        Index of the active site if length=1, or of the left-most active site if length>1.
+    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
+        List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
+        against. See :meth:`matvec_theta_ortho` for more details.
+        We implement this by effectively sending
+        ``H -> (1 - sum_o |theta_o><theta_o|) H (1 - sum_o |theta_o><theta_o|)``,
+        where ``|theta_o>`` is ``|psi_o>`` projected into the
+        appropriate basis (in which `self` is given).
+
+    """
+
+    def __init__(self, orig_eff_H, i0, ortho_to_envs):
+        if len(ortho_to_envs) == 0:
+            warnings.warn("Empty `ortho_to_envs`: no need to patch `OrthogonalEffectiveH`",
+                          stacklevel=2)
+        EffectiveHWrapper.__init__(self, orig_eff_H)
+        self.ortho_to_envs = ortho_to_envs
+        self.theta_ortho = []
+        for o_env in ortho_to_envs:
+            theta = o_env.ket.get_theta(i0, n=self.length)  # environments of form <psi|ortho>
+            LP = o_env.get_LP(i0, store=True)
+            RP = o_env.get_RP(i0 + self.length - 1, store=True)
+            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+            if self.orig_eff_H.combine:
+                theta = self.orig_eff_H.combine_theta(theta)
+            theta.itranspose(self.acts_on)
+            self.theta_ortho.append(theta)
+
+    def matvec(self, theta):
+        r"""Apply `self` to `theta`, and orthogonalize against `self.theta_ortho`.
+
+        Parameter and return value as for :meth:`matvec` (which this function replaces,
+        if the class was initialized with non-empty `ortho_to_envs`.)
+        """
+        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
+        theta = theta.copy()
+        for o in self.theta_ortho:  # Project out
+            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
+        theta = self.orig_eff_H.matvec(theta)
+        for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
+            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
+        return theta
+
+    def to_matrix(self):
+        matix = self.orig_eff_H.to_matrix()
+        labels = matrix.get_leg_labels()
+        proj = npc.eye_like(matrix, 0)
+        for th_o in self.theta_ortho:
+            if self.combine:
+                th_o = th_o.combine_legs(th_o.get_leg_labels())
+            proj -= npc.outer(th_o, th_o.conj())
+        matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
+        matrix.iset_leg_labels(labels)
+        return matrix
+
