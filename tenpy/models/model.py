@@ -966,12 +966,17 @@ class CouplingModel(Model):
         Returns
         -------
         H_onsite : list of npc.Array
-            onsite terms of the Hamiltonian.
+            onsite terms of the Hamiltonian. If self.add_hc_to_MPO is True, 
+            Hermitian conjugates of the onsite terms will be included.
         """
         warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)
-        return ot.to_Arrays(self.lat.mps_sites())
+        ot_arrays = ot.to_Arrays(self.lat.mps_sites())
+        if self.add_hc_to_MPO:
+            return [term + term.conj() for term in ot_arrays]
+        else:
+            return ot_arrays
 
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
@@ -1004,7 +1009,10 @@ class CouplingModel(Model):
 
         if finite:
             assert H_bond[0] is None
-        return H_bond
+        if self.add_hc_to_MPO:
+            return [term + term.conj() for term in H_bond]
+        else:
+            return H_bond
 
     def calc_H_MPO(self, tol_zero=1.e-15):
         """Calculate MPO representation of the Hamiltonian.
