@@ -567,6 +567,10 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        if env.H.add_hc_to_MPO:
+            self.LP += self.LP.conj()
+            self.RP += self.RP.conj()
+            self.W0 += self.W0.conj()
         self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
@@ -730,6 +734,11 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p0', 'p0*'
         self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
         # 'wL', 'wR', 'p1', 'p1*'
+        if env.H.add_hc_to_MPO:
+            self.LP += self.LP.conj()
+            self.RP += self.RP.conj()
+            self.W0 += self.W0.conj()
+            self.W1 += self.W1.conj()
         self.dtype = env.H.dtype
         self.combine = combine
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
