@@ -454,7 +454,7 @@ class MPOModel(Model):
     H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian.
     """
-    def __init__(self, lattice, H_MPO, add_hcs=False):
+    def __init__(self, lattice, H_MPO, add_hc_to_MPO=False):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
         MPOModel.test_sanity(self)
@@ -603,7 +603,7 @@ class CouplingModel(Model):
         An integer `shift` means that we have periodic boundary conditions along this direction,
         but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
         when going around the boundary along this direction.
-    add_hcs : bool
+    add_hc_to_MPO : bool
         If True, the Hermitian conjugate of the MPO is computed at runtime,
         rather than saved in the MPO.
 
@@ -616,7 +616,7 @@ class CouplingModel(Model):
         In a :class:`MultiCouplingModel`, values may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     """
-    def __init__(self, lattice, bc_coupling=None, add_hcs=False):
+    def __init__(self, lattice, bc_coupling=None, add_hc_to_MPO=False):
         Model.__init__(self, lattice)
         if bc_coupling is not None:
             warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
@@ -626,7 +626,7 @@ class CouplingModel(Model):
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
-        self.add_hcs = add_hcs
+        self.add_hc_to_MPO = add_hc_to_MPO
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
@@ -837,7 +837,7 @@ class CouplingModel(Model):
         MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
-        if self.add_hcs:  # Override local flag.
+        if self.add_hc_to_MPO:  # Override local flag.
             add_hc = True
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
@@ -1022,7 +1022,7 @@ class CouplingModel(Model):
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
 
-        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS, self.add_hcs)
+        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS, self.add_hc_to_MPO)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         return H_MPO
@@ -1194,7 +1194,7 @@ class MultiCouplingModel(CouplingModel):
         add_coupling : Add terms acting on two sites.
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
-        if self.add_hcs:  # Override local flag.
+        if self.add_hc_to_MPO:  # Override local flag.
             add_hc = True
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
@@ -1342,7 +1342,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         and specifies how much status information should be printed during initialization.
         The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
         sorted by charges (see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`).
-        The parameter ``'add_hcs'`` specifies whether the Hermitian conjugate of 
+        The parameter ``'add_hc_to_MPO'`` specifies whether the Hermitian conjugate of 
         the MPO is computed at runtime, rather than saved in the MPO.
 
     Attributes
@@ -1362,11 +1362,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
-        self.add_hcs = get_parameter(model_params, 'add_hcs', False, self.name)
+        self.add_hc_to_MPO = get_parameter(model_params, 'add_hc_to_MPO', False, self.name)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, add_hcs=self.add_hcs)
+        CouplingModel.__init__(self, lat, add_hc_to_MPO=self.add_hc_to_MPO)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
         # 7) initialize H_MPO
