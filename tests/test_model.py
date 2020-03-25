@@ -65,7 +65,7 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         print("check_model_sanity with following parameters:")
         print(params)
         M = ModelClass(params)
-        check_model_sanity(M)
+        check_model_sanity(M, hermitian)
 
 
 def test_CouplingModel():
