@@ -202,7 +202,7 @@ class MPO:
                    Ws_qtotal=None,
                    leg0=None,
                    max_range=None,
-                   add_hc_to_MPO=False,):
+                   add_hc_to_MPO=False):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -769,9 +769,6 @@ class MPOGraph:
         MPO boundary conditions.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
-    add_hc_to_MPO : bool
-        If True, the Hermitian conjugate of the MPO is computed at runtime,
-        rather than saved in the MPO.
 
     Attributes
     ----------
@@ -792,12 +789,11 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-    def __init__(self, sites, bc='finite', max_range=None, add_hc_to_MPO=False):
+    def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
         self.max_range = max_range
-        self.add_hc_to_MPO = add_hc_to_MPO
         # empty graph
         self.states = [set() for _ in range(self.L + 1)]
         self.graph = [{} for _ in range(self.L)]
@@ -805,7 +801,7 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, add_hc_to_MPO=False):
+    def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -818,9 +814,6 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
-        add_hc_to_MPO : bool
-            If True, the Hermitian conjugate of the MPO is computed at runtime,
-            rather than saved in the MPO.
 
         Returns
         -------
@@ -832,14 +825,14 @@ class MPOGraph:
         from_term_list :
             equivalent for other representation terms.
         """
-        graph = cls(sites, bc, coupling_terms.max_range(), add_hc_to_MPO)
+        graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
         coupling_terms.add_to_graph(graph)
         graph.add_missing_IdL_IdR()
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc, add_hc_to_MPO=False):
+    def from_term_list(cls, term_list, sites, bc):
         """Initialize form a list of operator terms and prefactors.
 
         Parameters
@@ -850,9 +843,6 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
-        add_hc_to_MPO : bool
-            If True, the Hermitian conjugate of the MPO is computed at runtime,
-            rather than saved in the MPO.
 
         Returns
         -------
@@ -864,7 +854,7 @@ class MPOGraph:
         from_terms : equivalent for other representation of terms.
         """
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc, add_hc_to_MPO)
+        return cls.from_terms(ot, ct, sites, bc)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1023,7 +1013,7 @@ class MPOGraph:
         grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range, self.add_hc_to_MPO)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range)
         return H
 
     def __repr__(self):

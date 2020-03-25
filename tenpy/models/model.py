@@ -452,9 +452,10 @@ class MPOModel(Model):
     Attributes
     ----------
     H_MPO : :class:`tenpy.networks.mpo.MPO`
-        MPO representation of the Hamiltonian.
+        MPO representation of the Hamiltonian. If the `add_hc_to_MPO` flag of the MPO is `True`,
+        the represented Hamiltonian is ``H_MPO + hermitian_cojugate(H_MPO)``.
     """
-    def __init__(self, lattice, H_MPO, add_hc_to_MPO=False):
+    def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
         self.H_MPO = H_MPO
         MPOModel.test_sanity(self)
@@ -615,6 +616,13 @@ class CouplingModel(Model):
         The :class:`~tenpy.networks.terms.CouplingTerms` ordered by category.
         In a :class:`MultiCouplingModel`, values may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
+    add_hc_to_MPO : bool
+        If `True`, `self` represents the terms in :attr:`onsite_terms` and :attr:`coupling_terms`
+        *and* their hermitian conjugate added. :meth:`add_onsite` and :meth:`add_coupling`
+        divides the strenght by two to account for that; so you should *ignore* the flag if you
+        just use `self.add_onsite(...)` and `self.add_coupling(...)`.
+        However, if you the use `add_hc` option of `self.add_coupling(...)`, it can result in a
+        reduced MPO bond dimension.
     """
     def __init__(self, lattice, bc_coupling=None, add_hc_to_MPO=False):
         Model.__init__(self, lattice)
@@ -664,11 +672,11 @@ class CouplingModel(Model):
         add_coupling : Add a terms acting on two sites.
         add_onsite_term : Add a single term without summing over :math:`vec{x}`.
         """
-        if self.add_hc_to_MPO:
-            strength /= 2
         strength = to_array(strength, self.lat.Ls)  # tile to lattice shape
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined `opname`.
+        if self.add_hc_to_MPO:
+            strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
@@ -839,11 +847,6 @@ class CouplingModel(Model):
         MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
-        if self.add_hc_to_MPO:  # Override local flag.
-            if add_hc:
-                add_hc = False
-            else:  # Term is real, or h.c. is added manually.
-                strength /= 2
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
@@ -873,6 +876,11 @@ class CouplingModel(Model):
             raise ValueError("Coupling shouldn't be onsite!")
         mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
+        if self.add_hc_to_MPO:
+            if add_hc:
+                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
         ct = self.coupling_terms.get(category, None)
@@ -957,6 +965,7 @@ class CouplingModel(Model):
             This function will be removed in 1.0.0.
             Replace calls to this function by
             ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
+            You might also want to take :attr:`add_hc_to_MPO` into account.
 
         Parameters
         ----------
@@ -966,7 +975,7 @@ class CouplingModel(Model):
         Returns
         -------
         H_onsite : list of npc.Array
-            onsite terms of the Hamiltonian. If self.add_hc_to_MPO is True, 
+        onsite terms of the Hamiltonian. If :attr:`add_hc_to_MPO` is True,
             Hermitian conjugates of the onsite terms will be included.
         """
         warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
@@ -974,9 +983,10 @@ class CouplingModel(Model):
         ot.remove_zeros(tol_zero)
         ot_arrays = ot.to_Arrays(self.lat.mps_sites())
         if self.add_hc_to_MPO:
-            return [term + term.conj() for term in ot_arrays]
-        else:
-            return ot_arrays
+            for i, op in enumerate(ot_arrays):
+                if op is not None:
+                    ot_arrays[i] = op + op.conj().itranspose(op.get_leg_labels())
+        return ot_arrays
 
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
@@ -1010,9 +1020,12 @@ class CouplingModel(Model):
         if finite:
             assert H_bond[0] is None
         if self.add_hc_to_MPO:
-            return [term + term.conj() for term in H_bond]
-        else:
-            return H_bond
+            # self representes the terms of `ct` and `ot` + their hermitian conjugates
+            # so we need to explicitly add the hermitian conjugate terms
+            for i, Hb in enumerate(H_bond):
+                if Hb is not None:
+                    H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
+        return H_bond
 
     def calc_H_MPO(self, tol_zero=1.e-15):
         """Calculate MPO representation of the Hamiltonian.
@@ -1035,9 +1048,10 @@ class CouplingModel(Model):
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
 
-        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS, self.add_hc_to_MPO)
+        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
+        H_MPO.add_hc_to_MPO = self.add_hc_to_MPO
         return H_MPO
 
     def coupling_strength_add_ext_flux(self, strength, dx, phase):
@@ -1207,11 +1221,6 @@ class MultiCouplingModel(CouplingModel):
         add_coupling : Add terms acting on two sites.
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
-        if self.add_hc_to_MPO:  # Override local flag.
-            if add_hc:
-                add_hc = False
-            else:  # Term is real, or h.c. is added manually.
-                strength /= 2
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
             msg = ("Deprecated arguments of MultiCouplingModel.add_multi_coupling:\n"
@@ -1233,7 +1242,7 @@ class MultiCouplingModel(CouplingModel):
         all_ops = [t[0] for t in ops]
         all_us = np.array([t[2] for t in ops], np.intp)
         all_dxs = np.array([t[1] for t in ops], np.intp).reshape([len(ops), self.lat.dim])
-        if not np.any(strength != 0.):
+        if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
         need_JW = np.array(
             [self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops],
@@ -1258,6 +1267,11 @@ class MultiCouplingModel(CouplingModel):
         # prepare: figure out the necessary mps indices
         mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
         strength = to_array(strength, strength_shape)  # tile to correct shape
+        if self.add_hc_to_MPO:
+            if add_hc:
+                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
@@ -1358,7 +1372,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         and specifies how much status information should be printed during initialization.
         The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
         sorted by charges (see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`).
-        The parameter ``'add_hc_to_MPO'`` specifies whether the Hermitian conjugate of 
+        The parameter ``'add_hc_to_MPO'`` specifies whether the Hermitian conjugate of
         the MPO is computed at runtime, rather than saved in the MPO.
 
     Attributes
@@ -1378,11 +1392,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
-        self.add_hc_to_MPO = get_parameter(model_params, 'add_hc_to_MPO', False, self.name)
+        add_hc_to_MPO = get_parameter(model_params, 'add_hc_to_MPO', False, self.name)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
-        CouplingModel.__init__(self, lat, add_hc_to_MPO=self.add_hc_to_MPO)
+        CouplingModel.__init__(self, lat, add_hc_to_MPO=add_hc_to_MPO)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
         # 7) initialize H_MPO
