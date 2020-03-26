@@ -43,7 +43,7 @@ from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
-from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
@@ -811,12 +811,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         """
-        # get instance of the effective Hamiltonian
-        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
-        # eff_H has attributes LP, RP, W0, W1
-        if len(self.ortho_to_envs) > 0:
-            self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
-
+        self.make_eff_H() # self.eff_H represents tensors LP, W0, W1, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
@@ -1106,13 +1101,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
         """
-        # get instance of the effective Hamiltonian
-        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
-        # eff_H has attributes LP, RP, W0, W1
-        if len(self.ortho_to_envs) > 0:
-            self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
-        # eff_H has attributes LP, RP, W0
-
+        self.make_eff_H() # self.eff_H represents tensors LP, W0, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'

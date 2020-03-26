@@ -24,6 +24,7 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 import numpy as np
 import time
 import warnings
+import copy
 
 from ..linalg import np_conserved as npc
 from ..linalg.lanczos import gram_schmidt
@@ -33,7 +34,7 @@ from ..linalg.sparse import NpcLinearOperator
 from ..tools.params import get_parameter, unused_parameters
 
 __all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper',
-           'OrthogonalEffectiveH']
+           'OrthogonalEffectiveH', 'EffectiveHPlusHC']
 
 
 class Sweep:
@@ -368,6 +369,14 @@ class Sweep:
         """
         raise NotImplementedError("needs to be overwritten by subclass")
 
+    def make_eff_H(self):
+        """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
+        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
+        if self.env.H.add_hc_to_MPO:
+            self.eff_H = EffectiveHPlusHC(self.eff_H)
+        if len(self.ortho_to_envs) > 0:
+            self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
+
 
 class EffectiveH(NpcLinearOperator):
     """Prototype class for local effective Hamiltonians used in sweep algorithms.
@@ -441,7 +450,7 @@ class EffectiveH(NpcLinearOperator):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
+            Wave function to apply the effective Hamiltonian to, with uncombined legs.
 
         Returns
         -------
@@ -500,7 +509,7 @@ class OneSiteH(EffectiveH):
     combine, move_right : bool
         See above.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Only set :attr:`combine`, and only one of them depending on :attr:`move_right`.
+        Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
         for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
     LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
@@ -513,10 +522,6 @@ class OneSiteH(EffectiveH):
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        if env.H.add_hc_to_MPO:
-            self.LP += self.LP.conj()
-            self.RP += self.RP.conj()
-            self.W0 += self.W0.conj()
         self.dtype = env.H.dtype
         self.combine = combine
         self.move_right = move_right
@@ -618,6 +623,22 @@ class OneSiteH(EffectiveH):
             contr = contr.combine_legs([['vR*', 'p0', 'vL*'], ['vR', 'p0*', 'vL']], qconj=[+1, -1])
         return contr
 
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`."""
+        adj = copy.copy(self)
+        adj.LP = self.LP.conj().ireplace_label('wR*', 'wR')
+        adj.RP = self.RP.conj().ireplace_label('wL*', 'wL')
+        adj.W0 = self.W0.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
+        if self.combine:
+            adj.LHeff = self.LHeff.conj().ireplace_label('wR*', 'wR')
+            adj.RHeff = self.RHeff.conj().ireplace_label('wL*', 'wL')
+        for key in ['LP', 'RP', 'W0', 'W1']:
+            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        if self.combine:
+            for key in ['LHeff', 'RHeff']:
+                getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        return adj
+
 
 class TwoSiteH(EffectiveH):
     r"""Class defining the two-site effective Hamiltonian for Lanczos.
@@ -678,11 +699,6 @@ class TwoSiteH(EffectiveH):
         # 'wL', 'wR', 'p0', 'p0*'
         self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
         # 'wL', 'wR', 'p1', 'p1*'
-        if env.H.add_hc_to_MPO:
-            self.LP += self.LP.conj()
-            self.RP += self.RP.conj()
-            self.W0 += self.W0.conj()
-            self.W1 += self.W1.conj()
         self.dtype = env.H.dtype
         self.combine = combine
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
@@ -768,11 +784,37 @@ class TwoSiteH(EffectiveH):
                                        qconj=[+1, -1])
         return contr
 
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`."""
+        adj = copy.copy(self)
+        adj.LP = self.LP.conj().ireplace_label('wR*', 'wR')
+        adj.RP = self.RP.conj().ireplace_label('wL*', 'wL')
+        adj.W0 = self.W0.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
+        adj.W1 = self.W1.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
+        if self.combine:
+            adj.LHeff = self.LHeff.conj().ireplace_labels('wR*', 'wR')
+            adj.RHeff = self.RHeff.conj().ireplace_labels('wL*', 'wL')
+        for key in ['LP', 'RP', 'W0', 'W1']:
+            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        if self.combine:
+            for key in ['LHeff', 'RHeff']:
+                getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        return adj
+
 
 class EffectiveHWrapper(EffectiveH):
     """Baseclass for a wrapper around another :class:`EffectiveH`.
 
+    For some cases, it's usefull to be able to replace an instance of a subclass of
+    :class:`EffectiveH` with a wrapper behaving in the same way, but doing something in addition.
 
+    For example, `EffectiveH_plus_hc` explicitly adds the hermitian conjugate during each
+    :meth:`matvec` call.
+
+    Parameters
+    ----------
+    orig_eff_H : :class:`EffectiveH`
+        The original `EffectiveH` instance to wrap around.
     """
     def __init__(self, orig_eff_H):
         self.orig_eff_H = orig_eff_H
@@ -805,10 +847,10 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
 
     Here, ``|o>`` are the states from :attr:`theta_ortho`, taken from `ortho_to_envs`.
 
-    Hence, this
-
     Parameters
     ----------
+    orig_eff_H : :class:`EffectiveH`
+        The original `EffectiveH` instance to wrap around.
     i0 : int
         Index of the active site if length=1, or of the left-most active site if length>1.
     ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
@@ -818,9 +860,7 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         ``H -> (1 - sum_o |theta_o><theta_o|) H (1 - sum_o |theta_o><theta_o|)``,
         where ``|theta_o>`` is ``|psi_o>`` projected into the
         appropriate basis (in which `self` is given).
-
     """
-
     def __init__(self, orig_eff_H, i0, ortho_to_envs):
         if len(ortho_to_envs) == 0:
             warnings.warn("Empty `ortho_to_envs`: no need to patch `OrthogonalEffectiveH`",
@@ -841,11 +881,7 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
             self.theta_ortho.append(theta)
 
     def matvec(self, theta):
-        r"""Apply `self` to `theta`, and orthogonalize against `self.theta_ortho`.
-
-        Parameter and return value as for :meth:`matvec` (which this function replaces,
-        if the class was initialized with non-empty `ortho_to_envs`.)
-        """
+        """Wrapper around :meth:`EffectiveH.matvec`, including the projectors."""
         # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
         theta = theta.copy()
         for o in self.theta_ortho:  # Project out
@@ -856,7 +892,8 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         return theta
 
     def to_matrix(self):
-        matix = self.orig_eff_H.to_matrix()
+        """Wrapper around :meth:`EffectiveH.to_matrix`, including the projectors."""
+        matrix = self.orig_eff_H.to_matrix()
         labels = matrix.get_leg_labels()
         proj = npc.eye_like(matrix, 0)
         for th_o in self.theta_ortho:
@@ -867,3 +904,19 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         matrix.iset_leg_labels(labels)
         return matrix
 
+
+class EffectiveHPlusHC(EffectiveHWrapper):
+    """Replace ``H -> H + hermitian_conjugate(H)``."""
+
+    def __init__(self, orig_eff_H):
+        EffectiveHWrapper.__init__(self, orig_eff_H)
+        self.hc_eff_H = self.orig_eff_H.adjoint()
+
+    def matvec(self, theta):
+        """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
+        import ipdb; ipdb.set_trace() # TODO XXX
+        return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
+
+    def to_matrix(self):
+        """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
+        return self.orig_eff_H.to_matrix() + self.hc_eff_H.to_matrix()
