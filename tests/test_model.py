@@ -254,8 +254,9 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCoupl
 
     def init_terms(self, model_params):
         x = get_parameter(model_params, 'x', 1., self.name)
-        self.add_onsite_term(0.25, 0, 'Sz')
-        self.add_onsite_term(0.25, 4, 'Sz')
+        y = get_parameter(model_params, 'y', 0.25, self.name)
+        self.add_onsite_term(y, 0, 'Sz')
+        self.add_onsite_term(y, 4, 'Sz')
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
         self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
         self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
@@ -318,18 +319,41 @@ def test_model_H_conversion(L=6):
 
 
 def test_model_add_hc(L=6):
-    params = dict(x=0.5, L=L, bc_MPS='finite')
+    params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite')
     m1 = MyMod(params)
     m2 = MyMod(params)
+    params['add_hc_to_MPO'] = True
+    params['x'] *= 0.5  # NOTE: Model.add_onsite_term() and Model.add_coupling_term()
+    # used in `MyModel` *cannot* respect `add_hc_to_onsite`
+    params['y'] *= 0.5
+    m3 = MyMod(params)
     t = np.random.random(L-1)
-    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
-    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
-    t2 = np.random.random(L-2)
-    m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [-1], 0), ('Sz', [0], 0)], add_hc=True)
-    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [-1], 0), ('Sz', [0], 0)])
-    m2.add_multi_coupling(t2, [('Sm', [+1], 0), ('Sp', [-1], 0), ('Sz', [0], 0)])
-    H1 = m1.calc_H_MPO()
-    assert H1.is_hermitian()
-    H2 = m2.calc_H_MPO()
-    assert H1.is_equal(H2)
+    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
+    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
+    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
+    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
+    t2 = np.random.random(L-1)
+    m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
+    m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
+    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], add_hc=True)
+    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], add_hc=True)
+    for m in [m1, m2, m3]:
+        # added extra terms: need to re-calculate H_bond and H_MPO
+        m.H_bond = m.calc_H_bond()
+        m.H_MPO = m.calc_H_MPO()
+    assert m1.H_MPO.is_hermitian()
+    assert m2.H_MPO.is_hermitian()
+    assert not m3.H_MPO.is_hermitian()
+    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] -1  # check for smaller MPO bond dimension
+    ED1 = ExactDiag(m1)
+    ED2 = ExactDiag(m2)
+    ED3 = ExactDiag(m3)
+    for ED in [ED1, ED2, ED3]:
+        ED.build_full_H_from_bonds()
+    assert ED1.full_H == ED2.full_H
+    assert ED1.full_H == ED3.full_H
+    for ED in [ED1, ED2, ED3]:
+        ED.full_H = None
+        ED.build_full_H_from_mpo()
+    assert ED1.full_H == ED2.full_H
+    assert ED1.full_H == ED3.full_H
