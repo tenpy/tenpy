@@ -17,6 +17,16 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
+  We replaced the three arguments `u0`, `op0` and `other_op` with
+  ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
+  by single, equivalent argment `ops` which should now read
+  ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
+  ``dx0 = [0]*lat.dim``. Note the changed order inside the tuple!
+  Old code (which specifies `opstr` and `category` as keyword argument, if at all)
+  still works as before, but raises a warning, and should be replaced.
+  Since :meth:`tenpy.lattice.Lattice.possible_multi_couplings` used similar arguments,
+  they were changed as well.
 - Don't save `H_MPO_graph` as model attribute anymore - this also wasn't documented.
 - Renamed the truncation parameter `symmetry_tol` to `degeneracy_tol` and make the criterion more reasonable by not 
   checking :math:`log(S_i/S_j) < log(symmetry_tol)`, but simply :math:`log(S_i/S_j) < degeneracy_tol``.
@@ -26,9 +36,22 @@ Backwards incompatible changes
   :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
+- Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
+  `ortho_to_envs` is not empty, we defined proper wrapper classes :class:`~tenpy.algorithms.mps_sweeps.EffeciveHWrapper`
+  and :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. The argument `ortho_to_envs` has been removed from
+  :class:`tenpy.algorithms.mps_sweeps.EffectiveH`.
+
 
 Added
 ^^^^^
+- parameter `add_hc_to_MPO` for :class:`~tenpy.models.model.MPOModel`, 
+  :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
+  to reduce MPO bond dimension by not storing Hermitian conjugat terms, but 
+  computing these at runtime.
+- argument `add_hc` for :meth:`tenpy.models.model.CouplingModel.add_coupling` and 
+  :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
+- :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
+  hermitian conjugate operator (name) of the onsite operators.
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 - human-readable `boundary_conditions` property in :class:`~tenpy.models.lattice.Lattice`.
@@ -48,6 +71,11 @@ Added
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
+- :class:`tenpy.algorithms.mps_sweeps.EffectiveHPlusHC` as a wrapper adding the h.c. during the `matvec`.
+  This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
+- :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
+  :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+
 
 Changed
 ^^^^^^^

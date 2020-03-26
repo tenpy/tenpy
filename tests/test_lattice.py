@@ -145,3 +145,24 @@ def test_lattice_order():
                              [1, 1, 2], [1, 2, 0], [1, 2, 2]])
     npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable
+
+
+def test_possible_couplings():
+    lat = lattice.Honeycomb(2, 3, [None, None], order="snake")
+    u0, u1 = 0, 1
+    for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
+        print("dx =", dx)
+        mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
+        ops = [(None, [0, 0], u0), (None, dx, u1)]
+        m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
+        assert coupling_shape == m_coupling_shape
+        if len(lat_indices) == 0:
+            continue
+        sort = np.lexsort(lat_indices.T)
+        mps0, mps1, lat_indices = mps0[sort], mps1[sort], lat_indices[sort, :]
+        assert m_ijkl.shape == (len(mps0), 2)
+        m_sort = np.lexsort(m_lat_indices.T)
+        m_ijkl, m_lat_indices = m_ijkl[m_sort, :], m_lat_indices[m_sort, :]
+        npt.assert_equal(m_lat_indices, lat_indices)
+        npt.assert_equal(mps0, m_ijkl[:, 0])
+        npt.assert_equal(mps1, m_ijkl[:, 1])
