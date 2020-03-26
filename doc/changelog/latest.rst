@@ -36,6 +36,11 @@ Backwards incompatible changes
   :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
+- Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
+  `ortho_to_envs` is not empty, we defined proper wrapper classes :class:`~tenpy.algorithms.mps_sweeps.EffeciveHWrapper`
+  and :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. The argument `ortho_to_envs` has been removed from
+  :class:`tenpy.algorithms.mps_sweeps.EffectiveH`.
+
 
 Added
 ^^^^^
@@ -62,6 +67,11 @@ Added
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
+- :class:`tenpy.algorithms.mps_sweeps.EffectiveHPlusHC` as a wrapper adding the h.c. during the `matvec`.
+  This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
+- :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
+  :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+
 
 Changed
 ^^^^^^^
