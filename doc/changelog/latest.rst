@@ -44,6 +44,10 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- parameter `add_hc_to_MPO` for :class:`~tenpy.models.model.MPOModel`, 
+  :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
+  to reduce MPO bond dimension by not storing Hermitian conjugat terms, but 
+  computing these at runtime.
 - argument `add_hc` for :meth:`tenpy.models.model.CouplingModel.add_coupling` and 
   :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
 - :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
