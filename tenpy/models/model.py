@@ -581,6 +581,12 @@ class MPOModel(Model):
             H_bond[j] = Hb
         if finite:
             assert H_bond[0] is None
+        if self.add_hc_to_MPO:
+            # represented H = H_MPO + h.c.
+            # so we need to explicitly add the hermitian conjugate terms
+            for i, Hb in enumerate(H_bond):
+                if Hb is not None:
+                    H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
         return H_bond
 
 
