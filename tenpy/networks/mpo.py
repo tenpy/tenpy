@@ -133,8 +133,8 @@ class MPO:
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
         :attr:`bc` as ``"boundary_condition"``.
-        Moreover, it saves :attr:`L`, and :attr:`grouped` as HDF5 attributes, as well as
-        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+        Moreover, it saves :attr:`L`, :attr:`add_hc_to_MPO` and :attr:`grouped` as HDF5 attributes,
+        as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
 
         Parameters
         ----------
@@ -153,7 +153,7 @@ class MPO:
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
-
+        h5gr.attrs["add_hc_to_MPO"] = True
         h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
@@ -189,6 +189,7 @@ class MPO:
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.add_hc_to_MPO = h5gr.attrs.get("add_hc_to_MPO", False)
         obj.test_sanity()
         return obj
 
