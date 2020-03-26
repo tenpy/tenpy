@@ -237,6 +237,8 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
           self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c.
           # ('Cdd' is h.c. of 'Cd', and 'Cu' is h.c. of 'Cdu'!)
 
+      Alternatively, you can use the optional `add_hc` argument for :meth:`~tenpy.models.model.CouplingModel.add_coupling` to automate the inclusion of Hermitian conjugate terms. See the section on Hermitian conjugate automation below for details.
+
       See also the other examples in :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.
@@ -313,13 +315,51 @@ It's not possible to generalize a :class:`~tenpy.models.model.NearestNeighborMod
 no longer nearest Neigbors in the MPS sense, but we can go the other way around:
 first write the model on an arbitrary 2D lattice and then restrict it to a 1D chain to make it a :class:`~tenpy.models.model.NearestNeighborModel`.
 
-Let me illustrate this with another standard example model: the transverse field Ising model, imlemented in the module
+Let me illustrate this with another standard example model: the transverse field Ising model, implemented in the module
 :mod:`tenpy.models.tf_ising` included below.
 The :class:`~tenpy.models.tf_ising.TFIModel` works for arbitrary 1D or 2D lattices.
 The :class:`~tenpy.models.tf_ising.TFIChain` is then taking the exact same model making a :class:`~tenpy.models.model.NearestNeighborModel`,
 which only works for the 1D chain.
 
 .. literalinclude:: /../tenpy/models/tf_ising.py
+
+
+Automation of Hermitian conjugation
+-----------------------------------
+As most physical Hamiltonians are Hermitian, these Hamiltonians are fully determined when only half of the mutually conjugate terms is defined. For example, a simple Hamiltonian:
+
+.. math ::
+        H = \sum_{\langle i,j\rangle, i<j}
+              - \mathtt{J} (c^{\dagger}_i c_j + c^{\dagger}_j c_i)
+
+is fully determined by the term :math:`c^{\dagger}_i c_j` if we demand that Hermitian conjugates are included automatically.
+In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`, you can use the optional argument `add_hc` to automatically create the Hermitian conjugate of that coupling term.
+
+Additionally, in an MPO, explicitly adding both a non-Hermitian term and its conjugate increases the bond dimension of the MPO, which increases the memory requirements of the :class:`~tenpy.networks.mpo.MPOEnvironment`.
+Instead of adding the conjugate terms explicitly, you can set a flag `add_hc_to_MPO` in the :class:`~tenpy.models.model.MPOCouplingModel` parameters, which will ensure two things:
+
+1. The MPO will only store half the terms of each Hermitian conjugate pair. I.e., in the example above, only the term :math:`c^{\dagger}_i c_j` would be saved.
+2. At runtime, the Hermitian conjugate of the (now non-Hermitian) MPO will be computed and applied along with the MPO, so that the effective Hamiltonian is still Hermitian.
+
+.. note ::
+
+    The model flag `add_hc_to_MPO` should be used in conjunction with the flag `add_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`.
+    If `add_hc` is `False` while `add_hc_to_MPO` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
+
+Thus, we end up with several use cases, depending on your preferences. 
+Consider the :class:`~tenpy.models.fermions_spinless.FermionModel`.
+If you do not care about the MPO bond dimension, and want to add Hermitian conjugate terms manually, you would set `model_par['add_hc_to_MPO'] = False` and write::
+
+    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx)
+    self.add_coupling(np.conj(-J), u2, 'C', u1, 'Cd', -dx)
+
+If you wanted to save the trouble of the extra line of code (but still did not care about MPO bond dimension), you would keep the `model_par`, but instead write::
+
+    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, add_hc=True)
+
+Finally, if you wanted a reduction in MPO bond dimension, you would need to set `model_par['add_hc_to_MPO'] = True`, and write::
+
+    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, add_hc=True)
 
 
 Some final remarks
@@ -333,7 +373,7 @@ Some final remarks
 
 - If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
 
-- We suggest writing the model to take a single parameter dicitionary for the initialization, which is to be read out
+- We suggest writing the model to take a single parameter dictionary for the initialization, which is to be read out
   inside the class with :func:`~tenpy.tools.params.get_parameter`.
   Read the doc-string of this function for more details on why this is a good idea.
   The ``CouplingMPOModel.__init__(...)`` calls :func:`~tenpy.tools.params.unused_parameters`, helping to avoid typos in the specified parameters.
