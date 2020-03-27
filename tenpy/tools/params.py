@@ -14,52 +14,102 @@ __all__ = ["get_parameter", "unused_parameters"]
 
 
 class Parameters(MutableMapping, Hdf5Exportable):
-    def __init__():
+    def __init__(self, params, name):
+        self.params = params
+        self.name = name
+        self.verbose = params.get('verbose', 0)
+        self.unused = set(params.keys())
+
+    def __getitem__(self, key):
+        self.print_if_verbose(key)
+        self.unused.discard[key]
+        return self.params[key]
+
+    def __setitem__(self, key, value):
+        # TODO verbosity?
+        self.params[key] = value
+
+    def __delitem__(self, key):
+        # TODO verbosity?
+        self.unused.discard[key]
+        del self.params[key]
+
+    def __iter__(self):
+        return iter(self.params)
+
+    def __len__(self):
+        return len(self.params)
+
+    def __str__(self):
         pass
 
-    def __getitem__():
+    def __repr__(self):
         pass
 
-    def __setitem__():
+    def __del__(self):
+        unused = self.unused
+        if len(unused) > 0:
+            if len(unused) > 1:
+                msg = "unused parameters for {name!s}:\n{keys!s}"
+            else:
+                msg = "unused parameter {keys!s} for {name!s}\n"
+            warnings.warn(msg.format(keys=sorted(unused), name=self.name))
+        return unused
+
+    def get(self, key, default):
+        """Find the value of `key`. If none is set, return `default` and set 
+        the value of `key` to `default` internally.
+        
+        Parameters
+        ----------
+        key : str
+            Key name for the parameter being read out.
+        default : any type
+            Default value for the parameter
+        
+        Returns
+        -------
+        val : any type
+            The value for `key` if it existed, `default` otherwise.
+        """
+        val = self.params.setdefault(key, default)  # get the value; set default if not existent
+        self.print_if_verbose(key)
+        self.unused.discard(key)  # (does nothing if key not in set)
+        return val
+
+    def print_if_verbose(self, key):
+        """Print out `key` if verbosity and other conditions are met.
+        
+        Parameters
+        ----------
+        key : str
+            Key name for the parameter being read out.
+        """
+        name = self.name
+        verbose = self.verbose
+        use_default = key not in self.params
+        new_key = key in self.unused
+        if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
+            defaultstring = "(default) " if use_default else ""
+            print("parameter {key!r}={val!r} {defaultstring}for {name!s}".format(
+                name=name, key=key, val=val, defaultstring=defaultstring))
+
+    def help(self):
         pass
 
-    def __delitem__():
+    def document(self):
         pass
 
-    def __iter__():
-        pass
-
-    def __len__():
-        pass
-
-    def __str__():
-        pass
-
-    def __repr__():
-        pass
-
-    def __del__():
-        pass
-
-    def verbosity_checker():
-        pass
-
-    def help():
-        pass
-
-    def document():
-        pass
-
-    def save_yaml():
+    def save_yaml(self):
         raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
 
-    def from_yaml():
+    def from_yaml(self):
         raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
 
-    def save_hdf5():
+    def save_hdf5(self):
         raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
 
-    def from_hdf5():
+    def from_hdf5(self):
         raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
 
 
