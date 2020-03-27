@@ -10,7 +10,7 @@ from collections.abc import MutableMapping
 
 from .hdf5_io import Hdf5Exportable
 
-__all__ = ["get_parameter", "unused_parameters"]
+__all__ = ["Parameters", "get_parameter", "unused_parameters"]
 
 
 class Parameters(MutableMapping, Hdf5Exportable):
