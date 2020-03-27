@@ -196,7 +196,7 @@ As a concrete example, let us specify a hopping
 in a 1D chain of :class:`~tenpy.networks.site.FermionSite` with :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 The recoomended way is just::
 
-    add_coupling(strength, 0, 'Cd', 0, 'C', 1, add_hc=True) 
+    add_coupling(strength, 0, 'Cd', 0, 'C', 1, plus_hc=True) 
 
 If you want to specify both the Jordan-Wigner string and the ``h.c.`` term explicitly, you can use::
 
@@ -208,10 +208,10 @@ Slightly more complicated, to specify the hopping
 in the Fermi-Hubbard model on a 2D square lattice, we could use::
 
     for (dx, dy) in [(1, 0), (0, 1)]:
-        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), add_hc=True)  # spin up
-        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), add_hc=True)  # spin down
+        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), plus_hc=True)  # spin up
+        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), plus_hc=True)  # spin down
 
-    # or without `add_hc`
+    # or without `plus_hc`
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:  # include -dx !
         add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy))  # spin up
         add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy))  # spin down

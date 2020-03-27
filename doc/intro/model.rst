@@ -237,7 +237,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
           self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c.
           # ('Cdd' is h.c. of 'Cd', and 'Cu' is h.c. of 'Cdu'!)
 
-      Alternatively, you can use the optional `add_hc` argument for :meth:`~tenpy.models.model.CouplingModel.add_coupling` to automate the inclusion of Hermitian conjugate terms. See the section on Hermitian conjugate automation below for details.
+      Alternatively, you can use the optional `plus_hc` argument for :meth:`~tenpy.models.model.CouplingModel.add_coupling` to automate the inclusion of Hermitian conjugate terms. See the section on Hermitian conjugate automation below for details.
 
       See also the other examples in :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
 
@@ -333,7 +333,7 @@ As most physical Hamiltonians are Hermitian, these Hamiltonians are fully determ
               - \mathtt{J} (c^{\dagger}_i c_j + c^{\dagger}_j c_i)
 
 is fully determined by the term :math:`c^{\dagger}_i c_j` if we demand that Hermitian conjugates are included automatically.
-In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`, you can use the optional argument `add_hc` to automatically create the Hermitian conjugate of that coupling term.
+In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`, you can use the optional argument `plus_hc` to automatically create the Hermitian conjugate of that coupling term.
 
 Additionally, in an MPO, explicitly adding both a non-Hermitian term and its conjugate increases the bond dimension of the MPO, which increases the memory requirements of the :class:`~tenpy.networks.mpo.MPOEnvironment`.
 Instead of adding the conjugate terms explicitly, you can set a flag `add_hc_to_MPO` in the :class:`~tenpy.models.model.MPOCouplingModel` parameters, which will ensure two things:
@@ -343,8 +343,8 @@ Instead of adding the conjugate terms explicitly, you can set a flag `add_hc_to_
 
 .. note ::
 
-    The model flag `add_hc_to_MPO` should be used in conjunction with the flag `add_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`.
-    If `add_hc` is `False` while `add_hc_to_MPO` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
+    The model flag `add_hc_to_MPO` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`.
+    If `plus_hc` is `False` while `add_hc_to_MPO` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
 
 Thus, we end up with several use cases, depending on your preferences. 
 Consider the :class:`~tenpy.models.fermions_spinless.FermionModel`.
@@ -355,11 +355,11 @@ If you do not care about the MPO bond dimension, and want to add Hermitian conju
 
 If you wanted to save the trouble of the extra line of code (but still did not care about MPO bond dimension), you would keep the `model_par`, but instead write::
 
-    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, add_hc=True)
+    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
 Finally, if you wanted a reduction in MPO bond dimension, you would need to set `model_par['add_hc_to_MPO'] = True`, and write::
 
-    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, add_hc=True)
+    self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
 
 Some final remarks

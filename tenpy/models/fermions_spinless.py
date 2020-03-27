@@ -82,7 +82,7 @@ class FermionModel(CouplingMPOModel):
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, add_hc=True)
+            self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 

@@ -627,7 +627,7 @@ class CouplingModel(Model):
         *and* their hermitian conjugate added. :meth:`add_onsite` and :meth:`add_coupling`
         divides the strenght by two to account for that; so you should *ignore* the flag if you
         just use `self.add_onsite(...)` and `self.add_coupling(...)`.
-        However, if you the use `add_hc` option of `self.add_coupling(...)`, it can result in a
+        However, if you the use `plus_hc` option of `self.add_coupling(...)`, it can result in a
         reduced MPO bond dimension.
     """
     def __init__(self, lattice, bc_coupling=None, add_hc_to_MPO=False):
@@ -652,7 +652,7 @@ class CouplingModel(Model):
         for ct in self.coupling_terms.values():
             ct._test_terms(sites)
 
-    def add_onsite(self, strength, u, opname, category=None, add_hc=False):
+    def add_onsite(self, strength, u, opname, category=None, plus_hc=False):
         r"""Add onsite terms to :attr:`onsite_terms`.
 
         Adds :math:`\sum_{\vec{x}} strength[\vec{x}] * OP`` to the represented Hamiltonian,
@@ -672,7 +672,7 @@ class CouplingModel(Model):
             valid operator name of an onsite operator in ``lat.unit_cell[u]``.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `opname`.
-        add_hc : bool
+        plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 
         See also
@@ -684,8 +684,8 @@ class CouplingModel(Model):
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined `opname`.
         if self.add_hc_to_MPO:
-            if add_hc:
-                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if not self.lat.unit_cell[u].valid_opname(opname):
@@ -700,9 +700,9 @@ class CouplingModel(Model):
             self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             ot.add_onsite_term(strength[tuple(i_lat)], i, opname)
-        if add_hc:
+        if plus_hc:
             hc_op = self.lat.unit_cell[u].get_hc_op_name(opname)
-            self.add_onsite(np.conj(strength), u, hc_op, category + " h.c.", add_hc=False)
+            self.add_onsite(np.conj(strength), u, hc_op, category + " h.c.", plus_hc=False)
 
     def add_onsite_term(self, strength, i, op, category=None):
         """Add an onsite term on a given MPS site.
@@ -750,7 +750,7 @@ class CouplingModel(Model):
                      str_on_first=True,
                      raise_op2_left=False,
                      category=None,
-                     add_hc=False):
+                     plus_hc=False):
         r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -813,7 +813,7 @@ class CouplingModel(Model):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
-        add_hc : bool
+        plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 
         Examples
@@ -832,10 +832,10 @@ class CouplingModel(Model):
 
         >>> self.add_coupling([1.5, 1.], 0, 'Sz', 0, 'Sz', dx)
 
-        Make sure to use the `add_hc` argument if necessary, e.g. for hoppings:
+        Make sure to use the `plus_hc` argument if necessary, e.g. for hoppings:
 
         >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, add_hc=True)
+        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
         Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
@@ -894,8 +894,8 @@ class CouplingModel(Model):
         mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
         strength = to_array(strength, strength_shape)  # tile to correct shape
         if self.add_hc_to_MPO:
-            if add_hc:
-                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
@@ -929,12 +929,12 @@ class CouplingModel(Model):
                 o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
 
-        if add_hc:
+        if plus_hc:
             hc_op1 = site1.get_hc_op_name(op1)
             hc_op2 = site2.get_hc_op_name(op2)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
                               op_string, str_on_first, raise_op2_left,
-                              category + " h.c.", add_hc=False)  # yapf: disable
+                              category + " h.c.", plus_hc=False)  # yapf: disable
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
@@ -1161,7 +1161,7 @@ class MultiCouplingModel(CouplingModel):
                            _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
                            category=None,
-                           add_hc=False):
+                           plus_hc=False):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -1219,7 +1219,7 @@ class MultiCouplingModel(CouplingModel):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
-        add_hc : bool
+        plus_hc : bool
             If `True`, the hermitian conjugate of the terms is added automatically.
 
         Examples
@@ -1288,8 +1288,8 @@ class MultiCouplingModel(CouplingModel):
         mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
         strength = to_array(strength, strength_shape)  # tile to correct shape
         if self.add_hc_to_MPO:
-            if add_hc:
-                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
             else:
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
@@ -1317,13 +1317,13 @@ class MultiCouplingModel(CouplingModel):
             ct.add_multi_coupling_term(*args)
 
         # add h.c. term
-        if add_hc:
+        if plus_hc:
             hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
                       for (opname, dx, u) in reversed(ops)]
             self.add_multi_coupling(np.conj(strength),
                                     hc_ops,
                                     category=category + " h.c.",
-                                    add_hc=False)
+                                    plus_hc=False)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):

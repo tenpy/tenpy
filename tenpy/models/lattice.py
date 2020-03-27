@@ -906,10 +906,10 @@ class Lattice:
                 lat_ijkl_shifted == lat_ijkl,  # not accross the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=(1, 2))
-        lat_indices = lat_indices[keep, 0, :] # make 2D as to be returned
+        lat_indices = lat_indices[keep, 0, :]  # make 2D as to be returned
         lat_ijkl = lat_ijkl[keep, :, :]
         u = np.array([op_u for _, op_dx, op_u in ops], dtype=np.int_)[np.newaxis, :, np.newaxis]
-        u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1,))
+        u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1, ))
         mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
         if self.bc_MPS == 'infinite':
             mps_ijkl += (lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites_per_ring
@@ -1551,7 +1551,7 @@ class Kagome(Lattice):
 
 
 def get_lattice(lattice_name):
-    """Given the name of a :class:`Lattice` class, create an instance of it with gi.
+    """Given the name of a :class:`Lattice` class, get the lattice class itself.
 
     Parameters
     ----------

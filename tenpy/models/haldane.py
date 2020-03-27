@@ -80,14 +80,14 @@ class BosonicHaldaneModel(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j', add_hc=True)
+            self.add_coupling(t1_phi, u1, 'Bd', u2, 'B', dx, category='t1 Bd_i B_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])),
                            (0, 0, np.array([0, -1])), (1, 1, np.array([0, 1])),
                            (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Bd', u2, 'B', dx, category='t2 Bd_i B_j', add_hc=True)
+            self.add_coupling(t2_phi, u1, 'Bd', u2, 'B', dx, category='t2 Bd_i B_j', plus_hc=True)
 
 
 class FermionicHaldaneModel(CouplingMPOModel):
@@ -165,11 +165,11 @@ class FermionicHaldaneModel(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, category='t1 Cd_i C_j', add_hc=True)
+            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, category='t1 Cd_i C_j', plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in [(0, 0, np.array([-1, 1])), (0, 0, np.array([1, 0])),
                            (0, 0, np.array([0, -1])), (1, 1, np.array([0, 1])),
                            (1, 1, np.array([1, -1])), (1, 1, np.array([-1, 0]))]:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, category='t2 Cd_i C_j', add_hc=True)
+            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, category='t2 Cd_i C_j', plus_hc=True)
