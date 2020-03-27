@@ -544,7 +544,7 @@ class GroupedSite(Site):
                 if opname == 'Id':
                     continue
                 need_JW = opname in site.need_JW_string
-                hc_opname = self.hc_ops.get(opname, None)
+                hc_opname = site.hc_ops.get(opname, None)
                 if hc_opname is None:
                     hc_opname = False
                 else:
