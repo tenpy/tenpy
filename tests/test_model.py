@@ -323,10 +323,9 @@ def test_model_plus_hc(L=6):
     params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite', conserve=None)
     m1 = MyMod(params)
     m2 = MyMod(params)
-    params['add_hc_to_MPO'] = True
+    params['explicit_plus_hc'] = True
     params['x'] *= 0.5  # NOTE: Model.add_onsite_term() and Model.add_coupling_term()
-    # used in `MyModel` *cannot* respect `add_hc_to_onsite`
-    params['y'] *= 0.5
+    params['y'] *= 0.5  # used in `MyModel` *don't* respect `explicit_plus_hc`
     m3 = MyMod(params)
     nu = np.random.random(L)
     m1.add_onsite(nu, 0, 'Sp', plus_hc=True)
