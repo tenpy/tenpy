@@ -6,8 +6,61 @@ See the doc-string of :func:`get_parameter` for details.
 
 import warnings
 import numpy as np
+from collections.abc import MutableMapping
+
+from .hdf5_io import Hdf5Exportable
 
 __all__ = ["get_parameter", "unused_parameters"]
+
+
+class Parameters(MutableMapping, Hdf5Exportable):
+    def __init__():
+        pass
+
+    def __getitem__():
+        pass
+
+    def __setitem__():
+        pass
+
+    def __delitem__():
+        pass
+
+    def __iter__():
+        pass
+
+    def __len__():
+        pass
+
+    def __str__():
+        pass
+
+    def __repr__():
+        pass
+
+    def __del__():
+        pass
+
+    def verbosity_checker():
+        pass
+
+    def help():
+        pass
+
+    def document():
+        pass
+
+    def save_yaml():
+        raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
+
+    def from_yaml():
+        raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
+
+    def save_hdf5():
+        raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
+
+    def from_hdf5():
+        raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
 
 
 def get_parameter(params, key, default, descr, asarray=False):
