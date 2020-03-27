@@ -19,6 +19,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.name = name
         self.verbose = params.get('verbose', 0)
         self.unused = set(params.keys())
+        self.documentation = {key:{} for key in params}
 
     def __getitem__(self, key):
         self.print_if_verbose(key)
@@ -44,7 +45,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         pass
 
     def __repr__(self):
-        pass
+        return "<Parameters, {0!s} parameters>".format(len(self))
 
     def __del__(self):
         unused = self.unused
@@ -94,11 +95,30 @@ class Parameters(MutableMapping, Hdf5Exportable):
             print("parameter {key!r}={val!r} {defaultstring}for {name!s}".format(
                 name=name, key=key, val=val, defaultstring=defaultstring))
 
-    def help(self):
-        pass
+    def help(self, keys=None):
+        """Reproduce documentation for `keys`.
+        
+        Parameters
+        ----------
+        keys : None | str | list, optional
+            Which key(s) to describe
+        """
+        if keys is None:  # Assume you want all documentation.
+            for key in self.params:
+                print_documentation(key)
+        elif isinstance(keys, list):
+            for key in keys:
+                print_documentation(key)
+        else:
+            print_documentation(key)
 
-    def document(self):
-        pass
+    def print_documentation(self, key):
+        doc = self.documentation[key]
+        output = "{key!r} : {type_info!r} \n\t{help}"
+        print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
+
+    def document(self, key, type_info, help_text):
+        self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
     def save_yaml(self):
         raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
