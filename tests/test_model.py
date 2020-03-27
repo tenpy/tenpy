@@ -131,7 +131,7 @@ def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[i*Lx:(i+1)* Lx]
+        assert dims[:Lx] == dims[i * Lx:(i + 1) * Lx]
 
 
 def test_CouplingModel_fermions():
@@ -250,7 +250,8 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCoupl
         model.CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        return tenpy.networks.site.SpinHalfSite('parity')
+        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
+        return tenpy.networks.site.SpinHalfSite(conserve)
 
     def init_terms(self, model_params):
         x = get_parameter(model_params, 'x', 1., self.name)
@@ -319,7 +320,7 @@ def test_model_H_conversion(L=6):
 
 
 def test_model_add_hc(L=6):
-    params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite')
+    params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite', conserve=None)
     m1 = MyMod(params)
     m2 = MyMod(params)
     params['add_hc_to_MPO'] = True
@@ -327,12 +328,16 @@ def test_model_add_hc(L=6):
     # used in `MyModel` *cannot* respect `add_hc_to_onsite`
     params['y'] *= 0.5
     m3 = MyMod(params)
-    t = np.random.random(L-1)
+    nu = np.random.random(L)
+    m1.add_onsite(nu, 0, 'Sp', add_hc=True)
+    m2.add_onsite(nu, 0, 'Sp', add_hc=True)
+    m3.add_onsite(nu, 0, 'Sp', add_hc=True)
+    t = np.random.random(L - 1)
     m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
     m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
     m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
     m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
-    t2 = np.random.random(L-1)
+    t2 = np.random.random(L - 1)
     m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
     m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
     m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], add_hc=True)
@@ -344,7 +349,7 @@ def test_model_add_hc(L=6):
     assert m1.H_MPO.is_hermitian()
     assert m2.H_MPO.is_hermitian()
     assert not m3.H_MPO.is_hermitian()
-    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] -1  # check for smaller MPO bond dimension
+    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
     ED1 = ExactDiag(m1)
     ED2 = ExactDiag(m2)
     ED3 = ExactDiag(m3)

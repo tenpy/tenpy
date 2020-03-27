@@ -652,7 +652,7 @@ class CouplingModel(Model):
         for ct in self.coupling_terms.values():
             ct._test_terms(sites)
 
-    def add_onsite(self, strength, u, opname, category=None):
+    def add_onsite(self, strength, u, opname, category=None, add_hc=False):
         r"""Add onsite terms to :attr:`onsite_terms`.
 
         Adds :math:`\sum_{\vec{x}} strength[\vec{x}] * OP`` to the represented Hamiltonian,
@@ -672,6 +672,8 @@ class CouplingModel(Model):
             valid operator name of an onsite operator in ``lat.unit_cell[u]``.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `opname`.
+        add_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
 
         See also
         --------
@@ -682,7 +684,10 @@ class CouplingModel(Model):
         if not np.any(strength != 0.):
             return  # nothing to do: can even accept non-defined `opname`.
         if self.add_hc_to_MPO:
-            strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+            if add_hc:
+                add_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if not self.lat.unit_cell[u].valid_opname(opname):
             raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                              "{2!r}".format(opname, u, self.lat.unit_cell[u]))
@@ -695,11 +700,17 @@ class CouplingModel(Model):
             self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             ot.add_onsite_term(strength[tuple(i_lat)], i, opname)
+        if add_hc:
+            hc_op = self.lat.unit_cell[u].get_hc_op_name(opname)
+            self.add_onsite(np.conj(strength), u, hc_op, category + " h.c.", add_hc=False)
 
     def add_onsite_term(self, strength, i, op, category=None):
         """Add an onsite term on a given MPS site.
 
         Wrapper for ``self.onsite_terms[category].add_onsite_term(...)``.
+
+        .. warning ::
+            This method is not aware of the :attr:`add_hc_to_MPO` flag!
 
         Parameters
         ----------
@@ -921,14 +932,18 @@ class CouplingModel(Model):
         if add_hc:
             hc_op1 = site1.get_hc_op_name(op1)
             hc_op2 = site2.get_hc_op_name(op2)
-            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx, op_string,
-                              str_on_first, raise_op2_left, category + " h.c.", add_hc=False)
+            self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
+                              op_string, str_on_first, raise_op2_left,
+                              category + " h.c.", add_hc=False)  # yapf: disable
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
         """Add a two-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_coupling_term(...)``.
+
+        .. warning ::
+            This method is not aware of the :attr:`add_hc_to_MPO` flag!
 
         Parameters
         ----------
@@ -1250,9 +1265,8 @@ class MultiCouplingModel(CouplingModel):
         all_dxs = np.array([t[1] for t in ops], np.intp).reshape([len(ops), self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
             return  # nothing to do: can even accept non-defined onsite operators
-        need_JW = np.array(
-            [self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops],
-            dtype=np.bool_)
+        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops],
+                           dtype=np.bool_)
         if not np.sum(need_JW) % 2 == 0:
             raise ValueError("Invalid coupling: odd number of operators which need 'JW' string")
         if op_string is None and not any(need_JW):
@@ -1306,14 +1320,19 @@ class MultiCouplingModel(CouplingModel):
         if add_hc:
             hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
                       for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(np.conj(strength), hc_ops,
-                                    category=category + " h.c.", add_hc=False)
+            self.add_multi_coupling(np.conj(strength),
+                                    hc_ops,
+                                    category=category + " h.c.",
+                                    add_hc=False)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
         """Add a general M-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
+
+        .. warning ::
+            This method is not aware of the :attr:`add_hc_to_MPO` flag!
 
         Parameters
         ----------
