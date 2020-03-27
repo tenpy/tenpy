@@ -19,11 +19,11 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.name = name
         self.verbose = params.get('verbose', 0)
         self.unused = set(params.keys())
-        self.documentation = {key:{} for key in params}
+        self.documentation = {}
 
     def __getitem__(self, key):
         self.print_if_verbose(key)
-        self.unused.discard[key]
+        self.unused.discard(key)
         return self.params[key]
 
     def __setitem__(self, key, value):
@@ -32,7 +32,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     def __delitem__(self, key):
         # TODO verbosity?
-        self.unused.discard[key]
+        self.unused.discard(key)
         del self.params[key]
 
     def __iter__(self):
@@ -42,7 +42,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         return len(self.params)
 
     def __str__(self):
-        pass
+        return repr(self)  # TODO This is not what we want 
 
     def __repr__(self):
         return "<Parameters, {0!s} parameters>".format(len(self))
@@ -105,17 +105,20 @@ class Parameters(MutableMapping, Hdf5Exportable):
         """
         if keys is None:  # Assume you want all documentation.
             for key in self.params:
-                print_documentation(key)
+                self.print_documentation(key)
         elif isinstance(keys, list):
             for key in keys:
-                print_documentation(key)
+                self.print_documentation(key)
         else:
-            print_documentation(key)
+            self.print_documentation(keys)
 
     def print_documentation(self, key):
-        doc = self.documentation[key]
-        output = "{key!r} : {type_info!r} \n\t{help}"
-        print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
+        if not key in self.documentation:
+            print("No documentation for parameter {}.".format(key))
+        else:
+            doc = self.documentation[key]
+            output = "{key!r} : {type_info!r} \n\t{help}"
+            print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
 
     def document(self, key, type_info, help_text):
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
