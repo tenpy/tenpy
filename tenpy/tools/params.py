@@ -86,6 +86,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         key : str
             Key name for the parameter being read out.
         """
+        val = self.params[key]
         name = self.name
         verbose = self.verbose
         use_default = key not in self.params
