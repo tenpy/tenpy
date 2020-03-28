@@ -935,8 +935,9 @@ class CouplingModel(Model):
         if plus_hc:
             hc_op1 = site1.get_hc_op_name(op1)
             hc_op2 = site2.get_hc_op_name(op2)
+            hc_opstr = site2.get_hc_op_name(op_string)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
-                              op_string, str_on_first, raise_op2_left,
+                              hc_opstr, str_on_first, raise_op2_left,
                               category, plus_hc=False)  # yapf: disable
         # done
 
