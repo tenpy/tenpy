@@ -627,11 +627,10 @@ class CouplingModel(Model):
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     explicit_plus_hc : bool
         If `True`, `self` represents the terms in :attr:`onsite_terms` and :attr:`coupling_terms`
-        *and* their hermitian conjugate added. :meth:`add_onsite` and :meth:`add_coupling`
-        divides the strenght by two to account for that; so you should *ignore* the flag if you
-        just use `self.add_onsite(...)` and `self.add_coupling(...)`.
-        However, if you the use `plus_hc` option of `self.add_coupling(...)`, it can result in a
-        reduced MPO bond dimension.
+        *and* their hermitian conjugate added. The flag will be carried on the MPO, which will
+        have a reduced bond dimension if ``self.add_coupling(..., plus_hc=True)`` was used.
+        Note that :meth:`add_onsite` and :meth:`add_coupling` respect this flag, ensuring that the
+        *represented* Hamiltonian is indepentent of the `explicit_plus_hc` flag.
     """
     def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
         Model.__init__(self, lattice)
@@ -707,13 +706,10 @@ class CouplingModel(Model):
             hc_op = self.lat.unit_cell[u].get_hc_op_name(opname)
             self.add_onsite(np.conj(strength), u, hc_op, category, plus_hc=False)
 
-    def add_onsite_term(self, strength, i, op, category=None):
+    def add_onsite_term(self, strength, i, op, category=None, plus_hc=False):
         """Add an onsite term on a given MPS site.
 
         Wrapper for ``self.onsite_terms[category].add_onsite_term(...)``.
-
-        .. warning ::
-            This method is not aware of the :attr:`explicit_plus_hc` flag!
 
         Parameters
         ----------
@@ -726,13 +722,24 @@ class CouplingModel(Model):
             Name of the involved operator.
         category : str
             Descriptive name used as key for :attr:`onsite_terms`. Defaults to `op`.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
         """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = op
         ot = self.onsite_terms.get(category, None)
         if ot is None:
             self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
         ot.add_onsite_term(strength, i, op)
+        if plus_hc:
+            site = self.lat.unit_cell[self.lat.order[i, -1]]
+            hc_op = site.get_hc_op_name(opname)
+            ot.add_onsite_term(np.conj(strength), i, hc_op)
 
     def all_onsite_terms(self):
         """Sum of all :attr:`onsite_terms`."""
@@ -941,13 +948,18 @@ class CouplingModel(Model):
                               category, plus_hc=False)  # yapf: disable
         # done
 
-    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
+    def add_coupling_term(self,
+                          strength,
+                          i,
+                          j,
+                          op_i,
+                          op_j,
+                          op_string='Id',
+                          category=None,
+                          plus_hc=False):
         """Add a two-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_coupling_term(...)``.
-
-        .. warning ::
-            This method is not aware of the :attr:`explicit_plus_hc` flag!
 
         Parameters
         ----------
@@ -964,13 +976,28 @@ class CouplingModel(Model):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
         """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = "{op_i}_i {op_j}_j".format(op_i=op_i, op_j=op_j)
         ct = self.coupling_terms.get(category, None)
         if ct is None:
             self.coupling_terms[category] = ct = CouplingTerms(self.lat.N_sites)
         ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
+        if plus_hc:
+            site_i = self.lat.unit_cell[self.lat.order[i, -1]]
+            site_j = self.lat.unit_cell[self.lat.order[j % self.lat.N_sites, -1]]
+            hc_op_i = site_i.get_hc_op_name(op_i)
+            # NB: op_string should be defined on all sites in the unit cell...
+            hc_op_string = site_i.get_hc_op_name(op_string)
+            hc_op_j = site_j.get_hc_op_name(op_j)
+            ct.add_coupling_term(np.conj(strength), i, j, hc_op_i, hc_op_j, hc_op_string)
 
     def all_coupling_terms(self):
         """Sum of all :attr:`coupling_terms`."""
@@ -1327,13 +1354,16 @@ class MultiCouplingModel(CouplingModel):
             self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
         # done
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
+    def add_multi_coupling_term(self,
+                                strength,
+                                ijkl,
+                                ops_ijkl,
+                                op_string,
+                                category=None,
+                                plus_hc=False):
         """Add a general M-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
-
-        .. warning ::
-            This method is not aware of the :attr:`explicit_plus_hc` flag!
 
         Parameters
         ----------
@@ -1352,7 +1382,14 @@ class MultiCouplingModel(CouplingModel):
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
         """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(ops_ijkl)])
@@ -1364,6 +1401,14 @@ class MultiCouplingModel(CouplingModel):
             new_ct += ct
             ct = new_ct
         ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
+        if plus_hc:
+            sites_ijkl = [
+                self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl
+            ]
+            hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
+            # NB: op_string should be defined on all sites in the unit cell...
+            hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
+            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
 
 
 class CouplingMPOModel(CouplingModel, MPOModel):
