@@ -257,10 +257,10 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCoupl
         x = get_parameter(model_params, 'x', 1., self.name)
         y = get_parameter(model_params, 'y', 0.25, self.name)
         self.add_onsite_term(y, 0, 'Sz')
-        self.add_onsite_term(y, 4, 'Sz')
+        self.add_local_term(y, [('Sz', [4, 0])])
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
         self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
-        self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
+        self.add_local_term(3. * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
 
 
 def test_CouplingMPOModel_group():

@@ -654,6 +654,70 @@ class CouplingModel(Model):
         for ct in self.coupling_terms.values():
             ct._test_terms(sites)
 
+    def add_local_term(self, strength, term, category=None, plus_hc=False):
+        """Add a single term to `self`.
+
+        The repesented term is `strength` times the product of the operators given in `terms`.
+        Each operator is specified by the name and the site it acts on; the latter given by
+        a lattice index, see :class:`~tenpy.models.lattice.Lattice`.
+
+        Depending on the length of `term`, it can add an onsite term or a coupling term to
+        :attr:`onsite_terms` or :attr:`coupling_terms`, respectively.
+
+        Parameters
+        ----------
+        strength : float/complex
+            The prefactor of the term.
+        term : list of (str, array_like)
+            List of tuples ``(opname, lat_idx)`` where `opname` is a string describing the operator
+            acting on the site given by the lattice index `lat_idx`. Here, `lat_idx` is for
+            example `[x, y, u]` for a 2D lattice, with `u` being the index within the unit cell.
+        category:
+            Descriptive name used as key for :attr:`onsite_terms` or :attr:`coupling_terms`.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
+        """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+        # convert lattice to MPS index
+        term = [(op, self.lat.lat2mps_idx(idx)) for op, idx in term]
+        if category is None:
+            category = "local " + " ".join([op for op, i in term])
+        sites = self.lat.mps_sites()
+        N = len(sites)
+        if len(term) == 1:
+            ot = self.onsite_terms.setdefault(category, OnsiteTerms(N))
+            op, i = term[0]
+            if sites[i].op_needs_JW(op):
+                raise ValueError("can't add onsite operator which needs a Jordan-Wigner string!")
+            ot.add_onsite_term(strength, i, op)
+        elif len(term) == 2:
+            ct = self.coupling_terms.setdefault(category, CouplingTerms(N))
+            args = ct.coupling_term_handle_JW(strength, term, sites)
+            ct.add_coupling_term(*args)
+        elif len(term) > 2:
+            # this case belongs into the MultiCouplingModel,
+            # but then we would need to copy-paste the above parts...
+            if not isinstance(self, MultiCouplingModel):
+                raise ValueError("term has too many operators for CouplingModel, "
+                                 "make it a MultiCouplingModel!")
+            ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(N))
+            if not isinstance(ct, MultiCouplingTerms):
+                # convert ct to MultiCouplingTerms
+                self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
+                new_ct += ct
+                ct = new_ct
+            args = ct.multi_coupling_term_handle_JW(strength, term, sites)
+            ct.add_multi_coupling_term(*args)
+        else:
+            raise ValueError("empty term!")
+        if plus_hc:
+            hc_term = [(sites[i % N].get_hc_op_name(op), i) for op, i in reversed(term)]
+            self.add_local_term(np.conj(strength), hc_term, category, plus_hc=False)
+
     def add_onsite(self, strength, u, opname, category=None, plus_hc=False):
         r"""Add onsite terms to :attr:`onsite_terms`.
 
@@ -697,9 +761,7 @@ class CouplingModel(Model):
             raise ValueError("can't add onsite operator which needs a Jordan-Wigner string!")
         if category is None:
             category = opname
-        ot = self.onsite_terms.get(category, None)
-        if ot is None:
-            self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
+        ot = self.onsite_terms.setdefault(category, OnsiteTerms(self.lat.N_sites))
         for i, i_lat in zip(*self.lat.mps_lat_idx_fix_u(u)):
             ot.add_onsite_term(strength[tuple(i_lat)], i, opname)
         if plus_hc:
@@ -732,9 +794,7 @@ class CouplingModel(Model):
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = op
-        ot = self.onsite_terms.get(category, None)
-        if ot is None:
-            self.onsite_terms[category] = ot = OnsiteTerms(self.lat.N_sites)
+        ot = self.onsite_terms.setdefault(category, OnsiteTerms(self.lat.N_sites))
         ot.add_onsite_term(strength, i, op)
         if plus_hc:
             site = self.lat.unit_cell[self.lat.order[i, -1]]
@@ -910,9 +970,7 @@ class CouplingModel(Model):
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
-        ct = self.coupling_terms.get(category, None)
-        if ct is None:
-            self.coupling_terms[category] = ct = CouplingTerms(self.lat.N_sites)
+        ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         # loop to perform the sum over {x_0, x_1, ...}
         for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
             current_strength = strength[tuple(lat_idx)]
@@ -961,6 +1019,10 @@ class CouplingModel(Model):
 
         Wrapper for ``self.coupling_terms[category].add_coupling_term(...)``.
 
+        .. warning ::
+            This function does not handle Jordan-Wigner strings!
+            You might want to use :meth:`add_local_term` instead.
+
         Parameters
         ----------
         strength : float
@@ -986,9 +1048,7 @@ class CouplingModel(Model):
                 strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
         if category is None:
             category = "{op_i}_i {op_j}_j".format(op_i=op_i, op_j=op_j)
-        ct = self.coupling_terms.get(category, None)
-        if ct is None:
-            self.coupling_terms[category] = ct = CouplingTerms(self.lat.N_sites)
+        ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         ct.add_coupling_term(strength, i, j, op_i, op_j, op_string)
         if plus_hc:
             site_i = self.lat.unit_cell[self.lat.order[i, -1]]
@@ -1326,10 +1386,8 @@ class MultiCouplingModel(CouplingModel):
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
-        ct = self.coupling_terms.get(category, None)
-        if ct is None:
-            self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
-        elif not isinstance(ct, MultiCouplingTerms):
+        ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(self.lat.N_sites))
+        if not isinstance(ct, MultiCouplingTerms):
             # convert ct to MultiCouplingTerms
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
@@ -1365,6 +1423,10 @@ class MultiCouplingModel(CouplingModel):
 
         Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
 
+        .. warning ::
+            This function does not handle Jordan-Wigner strings!
+            You might want to use :meth:`add_local_term` instead.
+
         Parameters
         ----------
         strength : float
@@ -1381,7 +1443,7 @@ class MultiCouplingModel(CouplingModel):
             e.g., op_string[0] is inserted between `i` and `j`.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
-            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+            Defaults to a string of the form ``"{op0}_i {op1}_j {op2}_k ..."``.
         plus_hc : bool
             If `True`, the hermitian conjugate of the term is added automatically.
         """

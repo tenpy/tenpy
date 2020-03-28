@@ -51,6 +51,8 @@ Added
   :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
   to reduce MPO bond dimension by not storing Hermitian conjugate terms, 
   but computing them at runtime.
+- :meth:`tenpy.models.model.CouplingModel.add_local_term` for adding a single term to the lattice, and still handling
+  Jordan-Wigner strings etc.
 - :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
   hermitian conjugate operator (name) of the onsite operators.
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
