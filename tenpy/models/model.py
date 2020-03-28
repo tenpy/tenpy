@@ -705,7 +705,7 @@ class CouplingModel(Model):
             ot.add_onsite_term(strength[tuple(i_lat)], i, opname)
         if plus_hc:
             hc_op = self.lat.unit_cell[u].get_hc_op_name(opname)
-            self.add_onsite(np.conj(strength), u, hc_op, category + " h.c.", plus_hc=False)
+            self.add_onsite(np.conj(strength), u, hc_op, category, plus_hc=False)
 
     def add_onsite_term(self, strength, i, op, category=None):
         """Add an onsite term on a given MPS site.
@@ -937,7 +937,7 @@ class CouplingModel(Model):
             hc_op2 = site2.get_hc_op_name(op2)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
                               op_string, str_on_first, raise_op2_left,
-                              category + " h.c.", plus_hc=False)  # yapf: disable
+                              category, plus_hc=False)  # yapf: disable
         # done
 
     def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', category=None):
@@ -1323,10 +1323,7 @@ class MultiCouplingModel(CouplingModel):
         if plus_hc:
             hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
                       for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(np.conj(strength),
-                                    hc_ops,
-                                    category=category + " h.c.",
-                                    plus_hc=False)
+            self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
         # done
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string, category=None):
