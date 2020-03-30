@@ -5,6 +5,7 @@ See the doc-string of :func:`get_parameter` for details.
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
+import yaml
 import numpy as np
 from collections.abc import MutableMapping
 
@@ -97,7 +98,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
             actionstring = "Parameter" if action is None else action + " "
             defaultstring = "(default) " if use_default else ""
             print("{actionstring} {key!r}={val!r} {defaultstring}for {name!s}".format(
-                action=action, name=name, key=key, val=val, defaultstring=defaultstring))
+                actionstring=actionstring, name=name, key=key, val=val, defaultstring=defaultstring))
 
     def help(self, keys=None):
         """Reproduce documentation for `keys`.
@@ -127,11 +128,49 @@ class Parameters(MutableMapping, Hdf5Exportable):
     def document(self, key, type_info, help_text):
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
-    def save_yaml(self):
-        raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
+    def save_yaml(self, filename):
+        """Save a representation of `self` to `filename` as a YAML file
+        
+        Parameters
+        ----------
+        filename : str
+            Name of the resulting YAML file.
+        """
+        with open(filename, 'w') as stream:
+            try:
+                yaml.dump(self, stream)
+            except yaml.YAMLError as err:
+                print("Reading from YAML file encountered an error:")
+                print(err)
 
-    def from_yaml(self):
-        raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
+    @classmethod
+    def from_yaml(cls, filename):
+        """Load a `Parameters` instance from a YAML file at `filename`.
+
+
+        .. warning ::
+            It is not safe to call :method:`~tenpy.tools.params.Parameters.from_yaml()` 
+            with any data received from an untrusted source! This method may 
+            call any Python function and should thus be treated with extreme 
+            caution.
+        
+        Parameters
+        ----------
+        filename : str
+            Name of the YAML file
+        
+        Returns
+        -------
+        obj : Parameters
+            A `Parameters` object, loaded from file.
+        """
+        with open(filename, 'r') as stream:
+            try:
+                return yaml.load(stream, Loader=yaml.Loader)
+            except yaml.YAMLError as err:
+                print("Reading from YAML file encountered an error:")
+                print(err)
+                return
 
 
 def get_parameter(params, key, default, descr, asarray=False):
