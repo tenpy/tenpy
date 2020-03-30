@@ -15,6 +15,23 @@ __all__ = ["Parameters", "get_parameter", "unused_parameters"]
 
 
 class Parameters(MutableMapping, Hdf5Exportable):
+    """Wrapper class for parameter dictionaries.
+    
+    Attributes
+    ----------
+    documentation : dict
+        Contains type and general information ror parameters
+    name : str
+        Name oof the dictionary, for output statements. For example, when using
+        a `Parameters` class for DMRG parameters, `name='DMRG'`
+    params : dict
+        Dictionary containing the actual parameters
+    unused : set
+        Keeps track of any parameters not yet used.
+    verbose : int
+        Verbosity level for output statements.
+    """
+    
     def __init__(self, params, name):
         self.params = params
         self.name = name
@@ -126,6 +143,17 @@ class Parameters(MutableMapping, Hdf5Exportable):
             print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
 
     def document(self, key, type_info, help_text):
+        """Add documentation for a parameter
+        
+        Parameters
+        ----------
+        key : str
+            Name of the parameter
+        type_info : str
+            Type description of the parameter
+        help_text : str
+            Description of the parameter.
+        """
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
     def save_yaml(self, filename):
@@ -170,7 +198,6 @@ class Parameters(MutableMapping, Hdf5Exportable):
             except yaml.YAMLError as err:
                 print("Reading from YAML file encountered an error:")
                 print(err)
-                return
 
 
 def get_parameter(params, key, default, descr, asarray=False):
