@@ -130,12 +130,6 @@ class Parameters(MutableMapping, Hdf5Exportable):
     def from_yaml(self):
         raise NotImplementedError("yaml i/o for Parameters class not implemented (yet)!")
 
-    def save_hdf5(self):
-        raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
-
-    def from_hdf5(self):
-        raise NotImplementedError("Hdf5 i/o for Parameters class not implemented (yet)!")
-
 
 def get_parameter(params, key, default, descr, asarray=False):
     """Read out a parameter from the dictionary and/or provide default values.
