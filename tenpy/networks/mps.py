@@ -1494,7 +1494,7 @@ class MPS:
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other, charge_sector=0, ignore_form=False, **kwargs):
+    def overlap(self, other, charge_sector=None, ignore_form=False, **kwargs):
         """Compute overlap ``<self|other>``.
 
         Parameters
@@ -1503,8 +1503,8 @@ class MPS:
             An MPS with the same physical sites.
         charge_sector : None | charges | ``0``
             Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
-            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+            ``None`` stands for *all* sectors, ``0`` stands for the sector of zero charges.
+            If a sector is given, it *assumes* the dominant eigenvector is in that charge sector.
         ignore_form : bool
             If ``False`` (default), take into account the canonical form :attr:`form` at each site.
             If ``True``, we ignore the canonical form (i.e., whether the MPS is in left, right,

@@ -85,6 +85,8 @@ Changed
 - DEFAULT DMRG paramter ``'diag_method'`` from ``'lanczos'`` to ``'default'``, which is the same for large bond
   dimensions, but performs a full exact diagonalization if the effective Hamiltonian has small dimensions.
   The threshold introduced is the new DMRG parameter ``'max_N_for_ED'``.
+- DEFAULT parameter ``charge_sector=None`` instead of ``charge_sector=0`` in :meth:`tenpy.networks.mps.MPS.overlap` 
+  to look for eigenvalues of the transfer matrix in *all* charge sectors, and not assume that it's the 0 sector.
 - Derive the following classes (and their subclasses) from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`
   to support saving to HDF5:
   - :class:`~tenpy.networks.site.Site`
