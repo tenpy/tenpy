@@ -200,6 +200,12 @@ def get_parameter(params, key, default, descr, asarray=False):
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
     parameter 'dt'=0.1 for TEBD
     """
+    msg = ("Old-style parameter dictionaries are deprecated in favor of "
+           "`Parameter` class objects. Use `Parameter` methods to read out"
+           "parameters.")
+    warnings.warn(msg, category=FutureWarning, stacklevel=2)
+    if isinstance(params, Parameter):
+        return params.get(key, default)
     use_default = key not in params
     val = params.setdefault(key, default)  # get the value; set default if not existent
     used = params.setdefault('_used_param', set())
@@ -232,6 +238,12 @@ def unused_parameters(params, warn=None):
     unused_keys : set
         The set of keys of the params which was not used
     """
+    msg = ("Old-style parameter dictionaries are deprecated in favor of "
+           "`Parameter` class objects. Use `Parameter.unused` attribute to"
+           "get unused parameters.")
+    warnings.warn(msg, category=FutureWarning, stacklevel=2)
+    if isinstance(params, Parameter):
+        return params.unused
     used = params.get('_used_param', set())
     unused = set(params.keys()) - used
     unused.discard('_used_param')
