@@ -75,6 +75,9 @@ class Parameters(MutableMapping, Hdf5Exportable):
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
         return unused
 
+    def keys(self):
+        return self.params.keys()
+
     def get(self, key, default):
         """Find the value of `key`. If none is set, return `default` and set 
         the value of `key` to `default` internally.
@@ -270,7 +273,7 @@ def get_parameter(params, key, default, descr, asarray=False):
     parameter 'dt'=0.1 for TEBD
     """
     msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Parameter` class objects. Use `Parameter` methods to read out"
+           "`Parameter` class objects. Use `Parameter` methods to read out "
            "parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Parameters):
