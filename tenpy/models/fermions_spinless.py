@@ -7,7 +7,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from ..tools.params import Parameters
 from ..networks.site import FermionSite
 
 __all__ = ['FermionModel', 'FermionChain']

@@ -4,6 +4,7 @@
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
+from .params import Parameters
 import random
 import os
 import itertools
@@ -363,14 +364,31 @@ def any_nonzero(params, keys, verbose_msg=None):
     for k in keys:
         if isinstance(k, tuple):
             # check equality
-            val = params.get(k[0], None)
+            if isinstance(params, Parameters):  # Need to avoid setting val to None in params.
+                try:
+                    val = params[k[0]]
+                except KeyError:
+                    val = None
+            else:
+                val = params.get(k[0], None)
             for k1 in k[1:]:
-                if not np.array_equal(val, params.get(k1, None)):
+                if isinstance(params, Parameters):  # Need to avoid setting val to None in params.
+                    try:
+                        param_val = params[k1]
+                    except KeyError:
+                        param_val = None
+                if not np.array_equal(val, param_val):
                     if verbose:
                         print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
                     return True
         else:
-            val = params.get(k, None)
+            if isinstance(params, Parameters):
+                try:
+                    val = params[k[0]]
+                except KeyError:
+                    val = None
+            else:
+                val = params.get(k, None)
             if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
                     print(verbose_msg)

@@ -7,7 +7,7 @@ from tenpy.models import model, lattice
 from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import get_parameter
+from tenpy.tools.params import Parameters
 from tenpy.algorithms.exact_diag import ExactDiag
 import numpy as np
 import numpy.testing as npt
@@ -247,15 +247,17 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
 
 class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "MyMod")
         model.CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
+        conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve)
 
     def init_terms(self, model_params):
-        x = get_parameter(model_params, 'x', 1., self.name)
-        y = get_parameter(model_params, 'y', 0.25, self.name)
+        x = model_params.get('x', 1.)
+        y = model_params.get('y', 0.25)
         self.add_onsite_term(y, 0, 'Sz')
         self.add_local_term(y, [('Sz', [4, 0])])
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')

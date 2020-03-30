@@ -293,8 +293,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = model_params.get('phi_ext', 0.)
-        mu = model_params.get('mu', 0., sel)
-        U = model_params.get('U', 0, sel)
+        mu = model_params.get('mu', 0.)
+        U = model_params.get('U', 0)
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
