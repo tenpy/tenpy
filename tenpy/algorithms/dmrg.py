@@ -41,7 +41,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import Parameters
 from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
@@ -191,7 +191,8 @@ def run(psi, model, DMRG_params):
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
     """
     # initialize the engine
-    active_sites = get_parameter(DMRG_params, 'active_sites', 2, 'DMRG')
+    DMRG_params = Parameters(DMRG_params, 'DMRG')
+    active_sites = DMRG_params.get('active_sites', 2)
     if active_sites == 1:
         engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
     elif active_sites == 2:
@@ -312,35 +313,35 @@ class DMRGEngine(Sweep):
         start_time = self.time0
         self.shelve = False
         # parameters for lanczos
-        p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
+        p_tol_to_trunc = DMRG_params.get('P_tol_to_trunc', 0.05)
         if p_tol_to_trunc is not None:
             p_tol_min = max(1.e-30,
                             self.lanczos_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
                             self.lanczos_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
-            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', p_tol_min, 'DMRG')
-            p_tol_max = get_parameter(DMRG_params, 'P_tol_max', 1.e-4, 'DMRG')
-        e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
+            p_tol_min = DMRG_params.get('P_tol_min', p_tol_min)
+            p_tol_max = DMRG_params.get('P_tol_max', 1.e-4)
+        e_tol_to_trunc = DMRG_params.get('E_tol_to_trunc', None)
         if e_tol_to_trunc is not None:
-            e_tol_min = get_parameter(DMRG_params, 'E_tol_min', 5.e-16, 'DMRG')
-            e_tol_max = get_parameter(DMRG_params, 'E_tol_max', 1.e-4, 'DMRG')
+            e_tol_min = DMRG_params.get('E_tol_min', 5.e-16)
+            e_tol_max = DMRG_params.get('E_tol_max', 1.e-4)
 
         # parameters for DMRG convergence criteria
-        N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
+        N_sweeps_check = DMRG_params.get('N_sweeps_check', 10)
         min_sweeps = int(1.5 * N_sweeps_check)
         if self.chi_list is not None:
             min_sweeps = max(max(self.chi_list.keys()), min_sweeps)
-        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', min_sweeps, 'DMRG')
-        max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
-        max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-8, 'DMRG')
-        max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-5, 'DMRG')
-        max_seconds = 3600 * get_parameter(DMRG_params, 'max_hours', 24 * 365, 'DMRG')
-        norm_tol = get_parameter(DMRG_params, 'norm_tol', 1.e-5, 'DMRG')
+        min_sweeps = DMRG_params.get('min_sweeps', min_sweeps)
+        max_sweeps = DMRG_params.get('max_sweeps', 1000)
+        max_E_err = DMRG_params.get('max_E_err', 1.e-8)
+        max_S_err = DMRG_params.get('max_S_err', 1.e-5)
+        max_seconds = 3600 * DMRG_params.get('max_hours', 24 * 365)
+        norm_tol = DMRG_params.get('norm_tol', 1.e-5)
         if not self.finite:
-            update_env = get_parameter(DMRG_params, 'update_env', N_sweeps_check // 2, 'DMRG')
-            norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
+            update_env = DMRG_params.get('update_env', N_sweeps_check // 2)
+            norm_tol_iter = DMRG_params.get('norm_tol_iter', 5)
         E_old, S_old = np.nan, np.nan  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
-        self.diag_method = get_parameter(DMRG_params, 'diag_method', 'default', 'DMRG')
+        self.diag_method = DMRG_params.get('diag_method', 'default')
 
         self.mixer_activate()
         # loop over sweeps
@@ -475,7 +476,7 @@ class DMRGEngine(Sweep):
 
     def reset_stats(self):
         """Reset the statistics, useful if you want to start a new sweep run."""
-        self.sweeps = get_parameter(self.engine_params, 'sweep_0', 0, 'Sweep')
+        self.sweeps = self.engine_params.get('sweep_0', 0)
         self.update_stats = {
             'i0': [],
             'age': [],
@@ -497,7 +498,7 @@ class DMRGEngine(Sweep):
             'max_chi': [],
             'norm_err': []
         }
-        self.chi_list = get_parameter(self.engine_params, 'chi_list', None, 'Sweep')
+        self.chi_list = self.engine_params.get('chi_list', None)
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
@@ -610,7 +611,7 @@ class DMRGEngine(Sweep):
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
-            max_N = get_parameter(self.engine_params, 'max_N_for_ED', 400, 'DMRG')
+            max_N = self.engine_params.get('max_N_for_ED', 400)
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
@@ -799,6 +800,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, engine_params):
+        if not isinstance(engine_params, Parameters):
+            engine_params = Parameters(engine_params, 'DMRG')
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
@@ -952,7 +955,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
-        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        Mixer_class = self.engine_params.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = DensityMatrixMixer
@@ -963,7 +966,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
                     warnings.warn(msg, FutureWarning)
                     Mixer = "DensityMatrixMixer"
                 Mixer_class = globals()[Mixer_class]
-            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params = self.engine_params.get('mixer_params', {})
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
@@ -1089,6 +1092,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, engine_params):
+        if not isinstance(engine_params, Parameters):
+            engine_params = Parameters(engine_params, 'DMRG')
         self.EffectiveH = OneSiteH
         super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
@@ -1287,7 +1292,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
-        Mixer_class = get_parameter(self.engine_params, 'mixer', None, 'Sweep')
+        Mixer_class = self.engine_params.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = SingleSiteMixer
@@ -1298,7 +1303,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     warnings.warn(msg, FutureWarning)
                     Mixer = "SingleSiteMixer"
                 Mixer_class = globals()[Mixer_class]
-            mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
+            mixer_params = self.engine_params.get('mixer_params', {})
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
@@ -1441,13 +1446,15 @@ class Mixer:
         Level of output vebosity.
     """
     def __init__(self, mixer_params):
-        self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-5, 'Mixer')
+        if not isinstance(mixer_params, Parameters):
+            mixer_params = Parameters(mixer_params, "Mixer")
+        self.amplitude = mixer_params.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
-        self.decay = get_parameter(mixer_params, 'decay', 2., 'Mixer')
+        self.decay = mixer_params.get('decay', 2.)
         assert self.decay >= 1.
         if self.decay == 1.:
             warnings.warn("Mixer with decay=1. doesn't decay")
-        self.disable_after = get_parameter(mixer_params, 'disable_after', 15, 'Mixer')
+        self.disable_after = mixer_params.get('disable_after', 15)
         self.verbose = mixer_params.get('verbose', 0)
 
     def update_amplitude(self, sweeps):

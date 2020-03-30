@@ -20,7 +20,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
     Attributes
     ----------
     documentation : dict
-        Contains type and general information ror parameters
+        Contains type and general information ror parameters.
     name : str
         Name oof the dictionary, for output statements. For example, when using
         a `Parameters` class for DMRG parameters, `name='DMRG'`
@@ -146,7 +146,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
             print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
 
     def document(self, key, type_info, help_text):
-        """Add documentation for a parameter
+        """Add documentation for a parameter.
         
         Parameters
         ----------
@@ -160,7 +160,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
     def save_yaml(self, filename):
-        """Save a representation of `self` to `filename` as a YAML file
+        """Save a representation of `self` to `filename` as a YAML file.
         
         Parameters
         ----------

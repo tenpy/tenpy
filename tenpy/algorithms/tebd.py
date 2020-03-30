@@ -43,7 +43,7 @@ import time
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import unused_parameters, Parameters
 from ..linalg.random_matrix import CUE
 
 __all__ = ['Engine', 'RandomUnitaryEvolution']
@@ -92,22 +92,24 @@ class Engine:
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
     def __init__(self, psi, model, TEBD_params):
-        self.verbose = get_parameter(TEBD_params, 'verbose', 1, 'TEBD')
+        if not isinstance(TEBD_params, Parameters):
+            TEBD_params = Parameters(TEBD_params, "TEBD")
         self.TEBD_params = TEBD_params
-        self.trunc_params = get_parameter(TEBD_params, 'trunc_params', {}, 'TEBD')
+        self.verbose = TEBD_params.get('verbose', 1)
+        self.trunc_params = TEBD_params.get('trunc_params', {})
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.psi = psi
         self.model = model
-        self.evolved_time = get_parameter(TEBD_params, 'start_time', 0., 'TEBD')
-        self.trunc_err = get_parameter(TEBD_params, 'start_trunc_err', TruncationError(), 'TEBD')
+        self.evolved_time = TEBD_params.get('start_time', 0.)
+        self.trunc_err = TEBD_params.get('start_trunc_err', TruncationError())
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
         self._update_index = None
 
     def __del__(self):
+        # TODO figure out how to get rid of the unused_parameters() calls.
         unused_parameters(self.TEBD_params['trunc_params'], "TEBD trunc_params")
-        unused_parameters(self.TEBD_params, "TEBD")
 
     @property
     def trunc_err_bonds(self):
@@ -137,9 +139,9 @@ class Engine:
         ============== ====== ======================================================
         """
         # initialize parameters
-        delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'TEBD')
-        N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'TEBD')
-        TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'TEBD')
+        delta_t = self.TEBD_params.get('dt', 0.1)
+        N_steps = self.TEBD_params.get('N_steps', 10)
+        TrotterOrder = self.TEBD_params.get('order', 2)
 
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
@@ -194,13 +196,11 @@ class Engine:
         ============== ====== =============================================
         """
         # initialize parameters
-        delta_tau_list = get_parameter(
-            self.TEBD_params, 'delta_tau_list',
-            [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.],
-            'run_GS')
-        max_error_E = get_parameter(self.TEBD_params, 'max_error_E', 1.e-13, 'run_GS')
-        N_steps = get_parameter(self.TEBD_params, 'N_steps', 10, 'run_GS')
-        TrotterOrder = get_parameter(self.TEBD_params, 'order', 2, 'run_GS')
+        delta_tau_list = self.TEBD_params.get('delta_t',
+            [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.])
+        max_error_E = self.TEBD_params.get('max_error_E', 1.e-13, )
+        N_steps = self.TEBD_params.get('N_steps', 10, )
+        TrotterOrder = self.TEBD_params.get('order', 2, )
 
         Eold = np.average(self.model.bond_energies(self.psi))
         if self.verbose >= 1:
@@ -692,7 +692,7 @@ class RandomUnitaryEvolution(Engine):
                               :func:`~tenpy.algorithms.truncation.truncate`
         ============== ====== ======================================================
         """
-        N_steps = get_parameter(self.TEBD_params, 'N_steps', 1, 'TEBD')
+        N_steps = self.TEBD_params.get('N_steps', 1)
         if self.verbose >= 1:
             Sold = np.average(self.psi.entanglement_entropy())
             start_time = time.time()

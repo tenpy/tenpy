@@ -23,7 +23,7 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
 import numpy as np
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import get_parameter
+from tenpy.tools.params import Parameters
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta
 
@@ -75,20 +75,22 @@ class Engine:
     def __init__(self, psi, model, TDVP_params, environment=None):
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
-        self.verbose = get_parameter(TDVP_params, 'verbose', 1, 'TDVP')
+        if not isinstance(TDVP_params, Parameters):
+            TDVP_params = Parameters(TDVP_params, "TDVP")
         self.TDVP_params = TDVP_params
+        self.verbose = TDVP_params.get('verbose', 1)
         if environment is None:
             environment = MPOEnvironment(psi, model.H_MPO, psi)
-        self.evolved_time = get_parameter(TDVP_params, 'start_time', 0., 'TDVP')
+        self.evolved_time = TDVP_params.get('start_time', 0.)
         self.H_MPO = model.H_MPO
         self.environment = environment
         if not psi.finite:
             raise ValueError("TDVP is only implemented for finite boundary conditions")
         self.psi = psi
         self.L = self.psi.L
-        self.dt = get_parameter(TDVP_params, 'dt', 2, 'TDVP')
-        self.trunc_params = get_parameter(TDVP_params, 'trunc_params', {}, 'TDVP')
-        self.N_steps = get_parameter(TDVP_params, 'N_steps', 10, 'TDVP')
+        self.dt = TDVP_params.get('dt', 2)
+        self.trunc_params = TDVP_params.get('trunc_params', {})
+        self.N_steps = TDVP_params.get('N_steps', 10)
 
     # Actual calculation
     def run_one_site(self, N_steps=None):
