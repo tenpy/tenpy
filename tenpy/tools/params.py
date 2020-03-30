@@ -273,7 +273,7 @@ def get_parameter(params, key, default, descr, asarray=False):
            "`Parameter` class objects. Use `Parameter` methods to read out"
            "parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Parameter):
+    if isinstance(params, Parameters):
         return params.get(key, default)
     use_default = key not in params
     val = params.setdefault(key, default)  # get the value; set default if not existent
@@ -311,7 +311,7 @@ def unused_parameters(params, warn=None):
            "`Parameter` class objects. Use `Parameter.unused` attribute to"
            "get unused parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Parameter):
+    if isinstance(params, Parameters):
         return params.unused
     used = params.get('_used_param', set())
     unused = set(params.keys()) - used
