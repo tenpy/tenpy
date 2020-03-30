@@ -22,16 +22,16 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.documentation = {}
 
     def __getitem__(self, key):
-        self.print_if_verbose(key)
+        self.print_if_verbose(key, "Reading")
         self.unused.discard(key)
         return self.params[key]
 
     def __setitem__(self, key, value):
-        # TODO verbosity?
+        self.print_if_verbose(key, "Setting")
         self.params[key] = value
 
     def __delitem__(self, key):
-        # TODO verbosity?
+        self.print_if_verbose(key, "Deleting")
         self.unused.discard(key)
         del self.params[key]
 
@@ -78,13 +78,15 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
-    def print_if_verbose(self, key):
+    def print_if_verbose(self, key, action=None):
         """Print out `key` if verbosity and other conditions are met.
         
         Parameters
         ----------
         key : str
             Key name for the parameter being read out.
+        action : str, optional
+            Use to adapt printout message to specific actions (e.g. "Deleting")
         """
         val = self.params[key]
         name = self.name
@@ -92,9 +94,10 @@ class Parameters(MutableMapping, Hdf5Exportable):
         use_default = key not in self.params
         new_key = key in self.unused
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
+            actionstring = "Parameter" if action is None else action + " "
             defaultstring = "(default) " if use_default else ""
-            print("parameter {key!r}={val!r} {defaultstring}for {name!s}".format(
-                name=name, key=key, val=val, defaultstring=defaultstring))
+            print("{actionstring} {key!r}={val!r} {defaultstring}for {name!s}".format(
+                action=action, name=name, key=key, val=val, defaultstring=defaultstring))
 
     def help(self, keys=None):
         """Reproduce documentation for `keys`.
