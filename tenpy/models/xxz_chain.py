@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import Parameters
 from ..networks.site import SpinHalfSite  # if you want to use the predefined site
 
 __all__ = ['XXZChain', 'XXZChain2']
@@ -26,8 +26,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
                  + \mathtt{Jz} S^z_i S^z_{i+1} \\
             - \sum_i \mathtt{hz} S^z_i
 
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -40,13 +40,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     """
     def __init__(self, model_params):
         # 0) read out/set default parameters
-        name = "XXZChain"
-        L = get_parameter(model_params, 'L', 2, name)
-        Jxx = get_parameter(model_params, 'Jxx', 1., name, asarray=True)
-        Jz = get_parameter(model_params, 'Jz', 1., name, True)
-        hz = get_parameter(model_params, 'hz', 0., name, True)
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'finite', name)
-        unused_parameters(model_params, name)  # checks for mistyped parameters
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "XXZChain")
+        L = model_params.get('L', 2)
+        Jxx = model_params.get('Jxx', 1.)
+        Jz = model_params.get('Jz', 1.)
+        hz = model_params.get('hz', 0.)
+        bc_MPS = model_params.get('bc_MPS', 'finite')
         # 1-3):
         USE_PREDEFINED_SITE = False
         if not USE_PREDEFINED_SITE:
@@ -88,6 +88,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "XXZChain2")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -95,9 +97,9 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     def init_terms(self, model_params):
         # read out parameters
-        Jxx = get_parameter(model_params, 'Jxx', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        Jxx = model_params.get('Jxx', 1.)
+        Jz = model_params.get('Jz', 1.)
+        hz = model_params.get('hz', 0.)
         # add terms
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hz, u, 'Sz')

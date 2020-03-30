@@ -17,6 +17,9 @@ __all__ = ["Parameters", "get_parameter", "unused_parameters"]
 class Parameters(MutableMapping, Hdf5Exportable):
     """Wrapper class for parameter dictionaries.
     
+    .. todo ::
+        - Implement setdefault method.
+
     Attributes
     ----------
     documentation : dict

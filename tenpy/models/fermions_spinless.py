@@ -25,8 +25,8 @@ class FermionModel(CouplingMPOModel):
               \mathtt{mu} n_{i}
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -64,10 +64,12 @@ class FermionModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "FermionModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        conserve = model_params.get('conserve', 'N')
         if conserve == 'best':
             conserve = 'N'
             if self.verbose >= 1.:
@@ -76,9 +78,9 @@ class FermionModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        J = get_parameter(model_params, 'J', 1., self.name, True)
-        V = get_parameter(model_params, 'V', 1., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
+        J = model_params.get('J', 1.)
+        V = model_params.get('V', 1.)
+        mu = model_params.get('mu', 0.)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
@@ -93,4 +95,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "FermionChain")
         CouplingMPOModel.__init__(self, model_params)

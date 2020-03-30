@@ -21,7 +21,7 @@ import numpy as np
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import Parameters
 from ..tools.misc import any_nonzero
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
@@ -42,8 +42,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -61,11 +61,13 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "SpinChainNNN")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        S = get_parameter(model_params, 'S', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
+        S = model_params.get('S', 0.5)
+        conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
             if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
@@ -82,15 +84,15 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         return site
 
     def init_terms(self, model_params):
-        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        Jxp = get_parameter(model_params, 'Jxp', 1., self.name, True)
-        Jyp = get_parameter(model_params, 'Jyp', 1., self.name, True)
-        Jzp = get_parameter(model_params, 'Jzp', 1., self.name, True)
-        hx = get_parameter(model_params, 'hx', 0., self.name, True)
-        hy = get_parameter(model_params, 'hy', 0., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        Jx = model_params.get('Jx', 1.)
+        Jy = model_params.get('Jy', 1.)
+        Jz = model_params.get('Jz', 1.)
+        Jxp = model_params.get('Jxp', 1.)
+        Jyp = model_params.get('Jyp', 1.)
+        Jzp = model_params.get('Jzp', 1.)
+        hx = model_params.get('hx', 0.)
+        hy = model_params.get('hy', 0.)
+        hz = model_params.get('hz', 0.)
 
         # Only valid for self.lat being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
@@ -133,8 +135,8 @@ class SpinChainNNN2(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -169,11 +171,13 @@ class SpinChainNNN2(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "SpinChainNNN2")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        S = get_parameter(model_params, 'S', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
+        S = model_params.get('S', 0.5)
+        conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
             if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
@@ -190,15 +194,15 @@ class SpinChainNNN2(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) read out/set default parameters
-        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        Jxp = get_parameter(model_params, 'Jxp', 1., self.name, True)
-        Jyp = get_parameter(model_params, 'Jyp', 1., self.name, True)
-        Jzp = get_parameter(model_params, 'Jzp', 1., self.name, True)
-        hx = get_parameter(model_params, 'hx', 0., self.name, True)
-        hy = get_parameter(model_params, 'hy', 0., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        Jx = model_params.get('Jx', 1.)
+        Jy = model_params.get('Jy', 1.)
+        Jz = model_params.get('Jz', 1.)
+        Jxp = model_params.get('Jxp', 1.)
+        Jyp = model_params.get('Jyp', 1.)
+        Jzp = model_params.get('Jzp', 1.)
+        hx = model_params.get('hx', 0.)
+        hy = model_params.get('hy', 0.)
+        hz = model_params.get('hz', 0.)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hx, u, 'Sx')

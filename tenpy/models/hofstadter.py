@@ -15,7 +15,7 @@ import warnings
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel, CouplingMPOModel
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import Parameters
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
@@ -74,12 +74,12 @@ def gauge_hopping(model_params):
     # If the array is smaller than the actual number of couplings,
     # it is 'tiled', i.e. repeated periodically, see also tenpy.tools.to_array().
     # If no magnetic unit cell size is defined, minimal size will be used.
-    gauge = get_parameter(model_params, 'gauge', 'landau_x', 'Gauge hopping')
-    mx = get_parameter(model_params, 'mx', None, 'Gauge hopping')
-    my = get_parameter(model_params, 'my', None, 'Gauge hopping')
-    Jx = get_parameter(model_params, 'Jx', 1., 'Gauge hopping')
-    Jy = get_parameter(model_params, 'Jy', 1., 'Gauge hopping')
-    phi_p, phi_q = get_parameter(model_params, 'phi', (1, 3), 'Gauge hopping')
+    gauge = model_params.get('gauge', 'landau_x')
+    mx = model_params.get('mx', None)
+    my = model_params.get('my', None)
+    Jx = model_params.get('Jx', 1.)
+    Jy = model_params.get('Jy', 1.)
+    phi_p, phi_q = model_params.get('phi', (1, 3))
     phi = 2 * np.pi * phi_p / phi_q
 
     if gauge == 'landau_x':
@@ -125,8 +125,8 @@ class HofstadterFermions(CouplingMPOModel):
     phase, depending on lattice coordinates and gauge choice (see
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -161,24 +161,26 @@ class HofstadterFermions(CouplingMPOModel):
         magnetic unit cell. See :func:`gauge_hopping` for details.
     """
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "HofstadterFermions")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        filling = get_parameter(model_params, 'filling', (1, 8), self.name)
+        conserve = model_params.get('conserve', 'N')
+        filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = FermionSite(conserve=conserve, filling=filling)
         return site
 
     def init_lattice(self, model_params):
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
-        order = get_parameter(model_params, 'order', 'default', self.name)
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        order = model_params.get('order', 'default')
         site = self.init_sites(model_params)
-        Lx = get_parameter(model_params, 'Lx', 3, self.name)
-        Ly = get_parameter(model_params, 'Ly', 4, self.name)
+        Lx = model_params.get('Lx', 3)
+        Ly = model_params.get('Ly', 4)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
-        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
+        bc_x = model_params.get('bc_x', bc_x)
+        bc_y = model_params.get('bc_y', 'cylinder')
         assert bc_y in ['cylinder', 'ladder']
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
         if bc_MPS == 'infinite' and bc_x == 'open':
@@ -189,9 +191,9 @@ class HofstadterFermions(CouplingMPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        v = get_parameter(model_params, 'v', 0, self.name)
+        phi_ext = model_params.get('phi_ext', 0.)
+        mu = model_params.get('mu', 0.)
+        v = model_params.get('v', 0)
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
@@ -221,8 +223,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
     phase, depending on lattice coordinates and gauge choice (see
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -259,25 +261,27 @@ class HofstadterBosons(CouplingModel, MPOModel):
         magnetic unit cell.
     """
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "HofstadterBosons")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        Nmax = get_parameter(model_params, 'Nmax', 3, self.__class__)
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
-        filling = get_parameter(model_params, 'filling', (1, 8), self.name)
+        Nmax = model_params.get('Nmax', 3)
+        conserve = model_params.get('conserve', 'N')
+        filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
         return site
 
     def init_lattice(self, model_params):
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
-        order = get_parameter(model_params, 'order', 'default', self.name)
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
+        order = model_params.get('order', 'default')
         site = self.init_sites(model_params)
-        Lx = get_parameter(model_params, 'Lx', 4, self.name)
-        Ly = get_parameter(model_params, 'Ly', 6, self.name)
+        Lx = model_params.get('Lx', 4)
+        Ly = model_params.get('Ly', 6)
         bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'  # Next line needs default
-        bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
-        bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
+        bc_x = model_params.get('bc_x', bc_x)
+        bc_y = model_params.get('bc_y', 'cylinder')
         assert bc_y in ['cylinder', 'ladder']
         bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
         if bc_MPS == 'infinite' and bc_x == 'open':
@@ -288,9 +292,9 @@ class HofstadterBosons(CouplingModel, MPOModel):
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
-        phi_ext = get_parameter(model_params, 'phi_ext', 0., self.name)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        U = get_parameter(model_params, 'U', 0, self.name, True)
+        phi_ext = model_params.get('phi_ext', 0.)
+        mu = model_params.get('mu', 0., sel)
+        U = model_params.get('U', 0, sel)
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian

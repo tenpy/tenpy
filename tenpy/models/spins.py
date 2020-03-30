@@ -8,7 +8,7 @@ import numpy as np
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from ..tools.params import Parameters
 from ..tools.misc import any_nonzero
 
 __all__ = ['SpinModel', 'SpinChain']
@@ -27,8 +27,8 @@ class SpinModel(CouplingMPOModel):
             + \sum_i (\mathtt{D} (S^z_i)^2 + \mathtt{E} ((S^x_i)^2 - (S^y_i)^2))
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which 
+    is turned into a :class:`~tenpy.tools.params.Parameters` object.
 
     Parameters
     ----------
@@ -63,11 +63,13 @@ class SpinModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "SpinModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        S = get_parameter(model_params, 'S', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
+        S = model_params.get('S', 0.5)
+        conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
             if not any_nonzero(model_params, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
@@ -83,15 +85,15 @@ class SpinModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        hx = get_parameter(model_params, 'hx', 0., self.name, True)
-        hy = get_parameter(model_params, 'hy', 0., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
-        D = get_parameter(model_params, 'D', 0., self.name, True)
-        E = get_parameter(model_params, 'E', 0., self.name, True)
-        muJ = get_parameter(model_params, 'muJ', 0., self.name, True)
+        Jx = model_params.get('Jx', 1.)
+        Jy = model_params.get('Jy', 1.)
+        Jz = model_params.get('Jz', 1.)
+        hx = model_params.get('hx', 0.)
+        hy = model_params.get('hy', 0.)
+        hz = model_params.get('hz', 0.)
+        D = model_params.get('D', 0.)
+        E = model_params.get('E', 0.)
+        muJ = model_params.get('muJ', 0.)
 
         # (u is always 0 as we have only one site in the unit cell)
         for u in range(len(self.lat.unit_cell)):
@@ -119,4 +121,6 @@ class SpinChain(SpinModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, "SpinChain")
         CouplingMPOModel.__init__(self, model_params)

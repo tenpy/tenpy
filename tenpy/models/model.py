@@ -40,7 +40,7 @@ from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import get_parameter, unused_parameters, Parameters
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
@@ -1522,10 +1522,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
+        if not isinstance(model_params, Parameters):
+            model_params = Parameters(model_params, self.name)
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
-        self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
-        explicit_plus_hc = get_parameter(model_params, 'explicit_plus_hc', False, self.name)
+        self.verbose = model_params.get('verbose', 1)
+        explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
@@ -1534,7 +1536,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_terms(model_params)
         # 7) initialize H_MPO
         H_MPO = self.calc_H_MPO()
-        if get_parameter(model_params, 'sort_mpo_legs', False, self.name):
+        if model_params.get('sort_mpo_legs', False):
             H_MPO.sort_legcharges()
         MPOModel.__init__(self, lat, H_MPO)
         if isinstance(self, NearestNeighborModel):
@@ -1604,24 +1606,24 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         lat : :class:`~tenpy.models.lattice.Lattice`
             An initialized lattice.
         """
-        lat = get_parameter(model_params, 'lattice', "Chain", self.name)
+        lat = model_params.get('lattice', "Chain")
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
-            bc_MPS = get_parameter(model_params, 'bc_MPS', 'finite', self.name)
-            order = get_parameter(model_params, 'order', 'default', self.name)
+            bc_MPS = model_params.get('bc_MPS', 'finite')
+            order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
             bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-            bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
+            bc_x = model_params.get('bc_x', bc_x)
             if bc_MPS == 'infinite' and bc_x == 'open':
                 raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
             if LatticeClass.dim == 1:  # 1D lattice
-                L = get_parameter(model_params, 'L', 2, self.name)
+                L = model_params.get('L', 2)
                 # 4) lattice
                 lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
-                Lx = get_parameter(model_params, 'Lx', 1, self.name)
-                Ly = get_parameter(model_params, 'Ly', 4, self.name)
-                bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
+                Lx = model_params.get('Lx', 1)
+                Ly = model_params.get('Ly', 4)
+                bc_y = model_params.get('bc_y', 'cylinder')
                 assert bc_y in ['cylinder', 'ladder']
                 bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
