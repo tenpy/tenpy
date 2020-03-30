@@ -33,8 +33,10 @@ from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator
 from ..tools.params import get_parameter, unused_parameters
 
-__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper',
-           'OrthogonalEffectiveH', 'EffectiveHPlusHC']
+__all__ = [
+    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper', 'OrthogonalEffectiveH',
+    'EffectiveHPlusHC'
+]
 
 
 class Sweep:
@@ -372,7 +374,7 @@ class Sweep:
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
-        if self.env.H.add_hc_to_MPO:
+        if self.env.H.explicit_plus_hc:
             self.eff_H = EffectiveHPlusHC(self.eff_H)
         if len(self.ortho_to_envs) > 0:
             self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
@@ -463,9 +465,9 @@ class EffectiveH(NpcLinearOperator):
         """Return unpatched version of `self`.
 
         Instances of `self` can be replaced by a :class:`EffectiveHWrapper` for additional
-        behaviour, patching and extending the behaviour of the `matvec` defined in subclasses.
-        This method gives access to the original instance,
-        whether a `EffectiveHWrapper` was used or not.
+        behaviour, patching and extending the behaviour of the `matvec` defined in subclasses. This
+        method gives access to the original instance, whether a `EffectiveHWrapper` was used or
+        not.
         """
         return self
 
@@ -907,14 +909,14 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
 
 class EffectiveHPlusHC(EffectiveHWrapper):
     """Replace ``H -> H + hermitian_conjugate(H)``."""
-
     def __init__(self, orig_eff_H):
         EffectiveHWrapper.__init__(self, orig_eff_H)
         self.hc_eff_H = self.orig_eff_H.adjoint()
 
     def matvec(self, theta):
         """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        import ipdb; ipdb.set_trace() # TODO XXX
+        import ipdb
+        ipdb.set_trace()  # TODO XXX
         return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
 
     def to_matrix(self):

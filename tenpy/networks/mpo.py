@@ -70,9 +70,9 @@ class MPO:
         Indices on the bonds, which correpond to 'only identities to the right'.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
-    add_hc_to_MPO : bool
-        If True, the Hermitian conjugate of the MPO is computed at runtime,
-        rather than saved in the MPO.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
 
     Attributes
     ----------
@@ -99,6 +99,9 @@ class MPO:
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
@@ -107,7 +110,14 @@ class MPO:
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None, add_hc_to_MPO=False):
+    def __init__(self,
+                 sites,
+                 Ws,
+                 bc='finite',
+                 IdL=None,
+                 IdR=None,
+                 max_range=None,
+                 explicit_plus_hc=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
@@ -117,7 +127,7 @@ class MPO:
         self.grouped = 1
         self.bc = bc
         self.max_range = max_range
-        self.add_hc_to_MPO = add_hc_to_MPO
+        self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -133,7 +143,7 @@ class MPO:
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
         :attr:`bc` as ``"boundary_condition"``.
-        Moreover, it saves :attr:`L`, :attr:`add_hc_to_MPO` and :attr:`grouped` as HDF5 attributes,
+        Moreover, it saves :attr:`L`, :attr:`explicit_plus_hc` and :attr:`grouped` as HDF5 attributes,
         as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
 
         Parameters
@@ -153,7 +163,7 @@ class MPO:
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
-        h5gr.attrs["add_hc_to_MPO"] = True
+        h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
@@ -189,7 +199,7 @@ class MPO:
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
-        obj.add_hc_to_MPO = h5gr.attrs.get("add_hc_to_MPO", False)
+        obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
         obj.test_sanity()
         return obj
 
@@ -203,7 +213,7 @@ class MPO:
                    Ws_qtotal=None,
                    leg0=None,
                    max_range=None,
-                   add_hc_to_MPO=False):
+                   explicit_plus_hc=False):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -227,7 +237,7 @@ class MPO:
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
-        add_hc_to_MPO : bool
+        explicit_plus_hc : bool
             If True, the Hermitian conjugate of the MPO is computed at runtime,
             rather than saved in the MPO.
 
@@ -270,7 +280,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, add_hc_to_MPO)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""

@@ -44,13 +44,15 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- parameter `add_hc_to_MPO` for :class:`~tenpy.models.model.MPOModel`, 
-  :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
-  to reduce MPO bond dimension by not storing Hermitian conjugat terms, but 
-  computing these at runtime.
-- argument `add_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
+- argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
   :meth:`tenpy.models.model.CouplingModel.add_coupling`, and 
   :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
+- parameter `explicit_plus_hc` for :class:`~tenpy.models.model.MPOModel`, 
+  :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
+  to reduce MPO bond dimension by not storing Hermitian conjugate terms, 
+  but computing them at runtime.
+- :meth:`tenpy.models.model.CouplingModel.add_local_term` for adding a single term to the lattice, and still handling
+  Jordan-Wigner strings etc.
 - :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
   hermitian conjugate operator (name) of the onsite operators.
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 

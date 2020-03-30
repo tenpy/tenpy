@@ -190,15 +190,15 @@ def test_CouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
-@pytest.mark.parametrize("use_add_hc, JW", [(False, 'JW'), (False, None), (True, None)])
-def test_MultiCouplingModel_explicit(use_add_hc, JW):
+@pytest.mark.parametrize("use_plus_hc, JW", [(False, 'JW'), (False, None), (True, None)])
+def test_MultiCouplingModel_explicit(use_plus_hc, JW):
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.MultiCouplingModel(fermion_lat_cyl)
     # create a wired fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), add_hc=use_add_hc)
-    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, add_hc=use_add_hc)
-    if not use_add_hc:
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
+    if not use_plus_hc:
         M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), JW)
         M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
     # multi_coupling with a full unit cell inbetween the operators!
@@ -257,10 +257,10 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCoupl
         x = get_parameter(model_params, 'x', 1., self.name)
         y = get_parameter(model_params, 'y', 0.25, self.name)
         self.add_onsite_term(y, 0, 'Sz')
-        self.add_onsite_term(y, 4, 'Sz')
+        self.add_local_term(y, [('Sz', [4, 0])])
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
         self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
-        self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
+        self.add_local_term(3. * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
 
 
 def test_CouplingMPOModel_group():
@@ -319,29 +319,26 @@ def test_model_H_conversion(L=6):
     assert npc.norm(H0 - full_H_bond) < 1.e-14  # round off errors on order of 1.e-15
 
 
-def test_model_add_hc(L=6):
+def test_model_plus_hc(L=6):
     params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite', conserve=None)
     m1 = MyMod(params)
     m2 = MyMod(params)
-    params['add_hc_to_MPO'] = True
-    params['x'] *= 0.5  # NOTE: Model.add_onsite_term() and Model.add_coupling_term()
-    # used in `MyModel` *cannot* respect `add_hc_to_onsite`
-    params['y'] *= 0.5
+    params['explicit_plus_hc'] = True
     m3 = MyMod(params)
     nu = np.random.random(L)
-    m1.add_onsite(nu, 0, 'Sp', add_hc=True)
-    m2.add_onsite(nu, 0, 'Sp', add_hc=True)
-    m3.add_onsite(nu, 0, 'Sp', add_hc=True)
+    m1.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
     t = np.random.random(L - 1)
     m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
     m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
-    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
-    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, add_hc=True)
+    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
     t2 = np.random.random(L - 1)
     m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
     m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
-    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], add_hc=True)
-    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], add_hc=True)
+    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
     for m in [m1, m2, m3]:
         # added extra terms: need to re-calculate H_bond and H_MPO
         m.H_bond = m.calc_H_bond()
