@@ -44,6 +44,8 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- Class :class:`~tenpy.tools.params.Parameters` to replace Python-native 
+  parameter dictionaries and add some useful functionality.
 - argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
   :meth:`tenpy.models.model.CouplingModel.add_coupling`, and 
   :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
