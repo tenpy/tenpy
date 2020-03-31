@@ -343,8 +343,9 @@ def any_nonzero(params, keys, verbose_msg=None):
 
     Parameters
     ----------
-    params : dict
-        A dictionary of parameters.
+    params : dict | Parameters
+        A dictionary of parameters, or a :class:`~tenpy.tools.params.Parameters`
+        instance.
     keys : list of {key | tuple of keys}
         For a single key, check ``params[key]`` for non-zero entries.
         For a tuple of keys, all the ``params[key]`` have to be equal (as numpy arrays).
@@ -357,38 +358,30 @@ def any_nonzero(params, keys, verbose_msg=None):
     match : bool
         False, if all params[key] are zero or `None` and
         True, if any of the params[key] for single `key` in `keys`,
-
-        of if any of the entries for a tuple of `keys`
+        or if any of the entries for a tuple of `keys`
     """
     verbose = (params.get('verbose', 0) > 1.)
     for k in keys:
         if isinstance(k, tuple):
             # check equality
-            if isinstance(params, Parameters):  # Need to avoid setting val to None in params.
-                try:
-                    val = params[k[0]]
-                except KeyError:
-                    val = None
-            else:
-                val = params.get(k[0], None)
+            try:
+                val = params[k[0]]
+            except KeyError:
+                val = None
             for k1 in k[1:]:
-                if isinstance(params, Parameters):  # Need to avoid setting val to None in params.
-                    try:
-                        param_val = params[k1]
-                    except KeyError:
-                        param_val = None
+                try:
+                    param_val = params[k1]
+                except KeyError:
+                    param_val = None
                 if not np.array_equal(val, param_val):
                     if verbose:
                         print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
                     return True
         else:
-            if isinstance(params, Parameters):
-                try:
-                    val = params[k[0]]
-                except KeyError:
-                    val = None
-            else:
-                val = params.get(k, None)
+            try:
+                val = params[k]
+            except KeyError:
+                val = None
             if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
                     print(verbose_msg)
