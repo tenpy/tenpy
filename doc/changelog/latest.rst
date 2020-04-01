@@ -111,3 +111,4 @@ Fixed
 - :meth:`~tenpy.networks.mps.MPS.correlation_length`: check for hermitian Flag might have raised and Error with new numpy warnings
 - :meth:`~tenpy.networks.mps.MPS.correlation_function` did not respect argument ``str_on_first=False``.
 - :meth:`tenpy.networks.mps.MPS.get_op` worked unexpected for infinite `bc` with incomensurate ``self.L`` and ``len(op_list)``.
+- :issue:`105` Unintended side-effects using `lanczos_params.verbose` in combination with `orthogonal_to`
