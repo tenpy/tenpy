@@ -360,28 +360,23 @@ def any_nonzero(params, keys, verbose_msg=None):
         True, if any of the params[key] for single `key` in `keys`,
         or if any of the entries for a tuple of `keys`
     """
+    msg = ("tools.misc.any_nonzero() is deprecated in favor of "
+           "tools.params.Parameters.any_nonzero().")
+    warnings.warn(msg, category=FutureWarning, stacklevel=2)
+    if isinstance(params, Parameters):
+        return params.any_nonzero(keys, verbose_msg)
     verbose = (params.get('verbose', 0) > 1.)
     for k in keys:
         if isinstance(k, tuple):
             # check equality
-            try:
-                val = params[k[0]]
-            except KeyError:
-                val = None
+            val = params.get(k[0], None)
             for k1 in k[1:]:
-                try:
-                    param_val = params[k1]
-                except KeyError:
-                    param_val = None
-                if not np.array_equal(val, param_val):
+                if not np.array_equal(val, params.get(k1, None)):
                     if verbose:
                         print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
                     return True
         else:
-            try:
-                val = params[k]
-            except KeyError:
-                val = None
+            val = params.get(k, None)
             if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
                 if verbose:
                     print(verbose_msg)
