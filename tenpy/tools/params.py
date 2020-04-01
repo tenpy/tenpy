@@ -5,7 +5,6 @@ See the doc-string of :func:`get_parameter` for details.
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
-import yaml
 import numpy as np
 from collections.abc import MutableMapping
 
@@ -16,9 +15,16 @@ __all__ = ["Parameters", "get_parameter", "unused_parameters"]
 
 class Parameters(MutableMapping, Hdf5Exportable):
     """Wrapper class for parameter dictionaries.
-    
+
     .. todo ::
         - Implement setdefault method.
+
+    Parameters
+    ----------
+    params : dict
+        Dictionary containing the actual parameters.
+    name : str
+        Descriptive name of the parameter set used for verbose printing.
 
     Attributes
     ----------
@@ -28,13 +34,12 @@ class Parameters(MutableMapping, Hdf5Exportable):
         Name oof the dictionary, for output statements. For example, when using
         a `Parameters` class for DMRG parameters, `name='DMRG'`
     params : dict
-        Dictionary containing the actual parameters
+        Dictionary containing the actual parameters.
     unused : set
         Keeps track of any parameters not yet used.
     verbose : int
         Verbosity level for output statements.
     """
-    
     def __init__(self, params, name):
         self.params = params
         self.name = name
@@ -63,7 +68,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         return len(self.params)
 
     def __str__(self):
-        return repr(self)  # TODO This is not what we want 
+        return repr(self)  # TODO This is not what we want
 
     def __repr__(self):
         return "<Parameters, {0!s} parameters>".format(len(self))
@@ -82,16 +87,16 @@ class Parameters(MutableMapping, Hdf5Exportable):
         return self.params.keys()
 
     def get(self, key, default):
-        """Find the value of `key`. If none is set, return `default` and set 
-        the value of `key` to `default` internally.
-        
+        """Find the value of `key`. If none is set, return `default` and set the value of `key` to
+        `default` internally.
+
         Parameters
         ----------
         key : str
             Key name for the parameter being read out.
         default : any type
             Default value for the parameter
-        
+
         Returns
         -------
         val : any type
@@ -104,7 +109,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     def print_if_verbose(self, key, action=None):
         """Print out `key` if verbosity and other conditions are met.
-        
+
         Parameters
         ----------
         key : str
@@ -121,11 +126,15 @@ class Parameters(MutableMapping, Hdf5Exportable):
             actionstring = "Parameter" if action is None else action + " "
             defaultstring = "(default) " if use_default else ""
             print("{actionstring} {key!r}={val!r} {defaultstring}for {name!s}".format(
-                actionstring=actionstring, name=name, key=key, val=val, defaultstring=defaultstring))
+                actionstring=actionstring,
+                name=name,
+                key=key,
+                val=val,
+                defaultstring=defaultstring))
 
     def help(self, keys=None):
         """Reproduce documentation for `keys`.
-        
+
         Parameters
         ----------
         keys : None | str | list, optional
@@ -150,7 +159,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     def document(self, key, type_info, help_text):
         """Add documentation for a parameter.
-        
+
         Parameters
         ----------
         key : str
@@ -163,47 +172,39 @@ class Parameters(MutableMapping, Hdf5Exportable):
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
     def save_yaml(self, filename):
-        """Save a representation of `self` to `filename` as a YAML file.
-        
+        """Save the parameters to `filename` as a YAML file.
+
         Parameters
         ----------
         filename : str
             Name of the resulting YAML file.
         """
+        import yaml
         with open(filename, 'w') as stream:
-            try:
-                yaml.dump(self, stream)
-            except yaml.YAMLError as err:
-                print("Reading from YAML file encountered an error:")
-                print(err)
+            yaml.dump(self.params, stream)
 
     @classmethod
-    def from_yaml(cls, filename):
-        """Load a `Parameters` instance from a YAML file at `filename`.
-
+    def from_yaml(cls, filename, name):
+        """Load a `Parameters` instance from a YAML file containing the `params`.
 
         .. warning ::
-            It is not safe to call :method:`~tenpy.tools.params.Parameters.from_yaml()` 
-            with any data received from an untrusted source! This method may 
-            call any Python function and should thus be treated with extreme 
-            caution.
-        
+            Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
+            file can call any Python function and should thus be treated with extreme caution.
+
         Parameters
         ----------
         filename : str
             Name of the YAML file
-        
+
         Returns
         -------
         obj : Parameters
             A `Parameters` object, loaded from file.
         """
+        import yaml
         with open(filename, 'r') as stream:
-            try:
-                return yaml.load(stream, Loader=yaml.Loader)
-            except yaml.YAMLError as err:
-                print("Reading from YAML file encountered an error:")
-                print(err)
+            params = yaml.safe_load(stream)
+        return cls(params, name)
 
 
 def get_parameter(params, key, default, descr, asarray=False):
