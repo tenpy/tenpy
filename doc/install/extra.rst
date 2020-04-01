@@ -49,6 +49,10 @@ We support exporting data to files in the [HDF5]_ format through the python inte
 `h5py <https://docs.h5py.org/en/stable/>` package, see :doc:`/intro/input_output` for more information.
 However, that requires the installation of the HDF5 library and h5py.
 
+YAML parameter files
+^^^^^^^^^^^^^^^^^^^^
+The :class:`tenpy.tools.params.Parameters` class supports reading and writing YAML files.
+
 Tests
 -----
 To run the tests, you need to install `pytest <http://pytest.org>`_, which you can for example do with ``pip install pytest``.
