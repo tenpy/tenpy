@@ -186,6 +186,67 @@ class Parameters(MutableMapping, Hdf5Exportable):
         """
         self.documentation[key] = {'type_info': type_info, 'help': help_text}
 
+    def any_nonzero(self, keys, verbose_msg=None):
+        """Check for any non-zero or non-equal entries in some parameters.
+
+        .. todo ::
+            Currently, if k is a tuple, only checks equality between k[0] and 
+            any other element. Should potentially be generalized.
+
+        Parameters
+        ----------
+        keys : list of {key | tuple of keys}
+            For a single key, check ``params[key]`` for non-zero entries.
+            For a tuple of keys, all the ``params[key]`` have to be equal (as numpy arrays).
+        verbose_msg : None | str
+            If params['verbose'] >= 1, we print `verbose_msg` before checking,
+            and a short notice with the `key`, if a non-zero entry is found.
+
+        Returns
+        -------
+        match : bool
+            False, if all params[key] are zero or `None` and
+            True, if any of the params[key] for single `key` in `keys`,
+            or if any of the entries for a tuple of `keys`
+        """
+        verbose = (self.verbose > 1.)
+        for k in keys:
+            if isinstance(k, tuple):
+                # check equality
+                if self.has_nonzero(k[0]):
+                    val = self.params[k[0]]
+                    for k1 in k[1:]:
+                        if self.has_nonzero(k1):
+                            param_val = self.params[k1]
+                        if not np.array_equal(val, param_val):
+                            if verbose:
+                                print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
+                            return True
+            else:
+                if self.has_nonzero(k):
+                    if verbose:
+                        print(verbose_msg)
+                        print(str(k) + " has nonzero entries")
+                    return True
+        return False
+
+    def has_nonzero(self, key):
+        """Check whether `self` contains `key`, and if `self[key]` is nontrivial.
+        
+        Parameters
+        ----------
+        key : str
+            Key
+        
+        Returns
+        -------
+        bool
+            True if `self` has key `key` with a nontrivial value. False otherwise.
+        """
+        return (key in self.keys() 
+                and np.any(np.array(self.params[key])) != 0 
+                and self.params[key] is not None)
+
     def save_yaml(self, filename):
         """Save the parameters to `filename` as a YAML file.
 

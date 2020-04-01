@@ -22,7 +22,6 @@ from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import Parameters
-from ..tools.misc import any_nonzero
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
@@ -70,10 +69,10 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
+            if not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
                                "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
@@ -180,10 +179,10 @@ class SpinChainNNN2(CouplingMPOModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
+            if not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
                                "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None

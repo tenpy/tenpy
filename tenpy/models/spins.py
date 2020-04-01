@@ -9,7 +9,6 @@ import numpy as np
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import Parameters
-from ..tools.misc import any_nonzero
 
 __all__ = ['SpinModel', 'SpinChain']
 
@@ -72,10 +71,10 @@ class SpinModel(CouplingMPOModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_params, [('Jx', 'Jy'), 'hx', 'hy', 'E'],
+            if not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'],
                                "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
