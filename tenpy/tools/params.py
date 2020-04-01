@@ -21,15 +21,17 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     Parameters
     ----------
-    params : dict
+    params : dict | :class:`Parameters`
         Dictionary containing the actual parameters.
+        If `params` is already a :class:`Parameters` instance, a *shallow* copy is made,
+        using the very same :attr:`params`, and :attr:`unused`.
     name : str
         Descriptive name of the parameter set used for verbose printing.
 
     Attributes
     ----------
     documentation : dict
-        Contains type and general information ror parameters.
+        Contains type and general information for parameters.
     name : str
         Name oof the dictionary, for output statements. For example, when using
         a `Parameters` class for DMRG parameters, `name='DMRG'`
@@ -41,11 +43,22 @@ class Parameters(MutableMapping, Hdf5Exportable):
         Verbosity level for output statements.
     """
     def __init__(self, params, name):
-        self.params = params
-        self.name = name
-        self.verbose = params.get('verbose', 0)
-        self.unused = set(params.keys())
-        self.documentation = {}
+        if isinstance(params, Parameters):
+            # make *shallow* copy of the given `Parameters` instance.
+            # Intended behaviour: check for unused parameters once the shallow copy is deleted
+            self.params = params.params
+            self.unused = params.unused
+            self.verbose = params.verbose
+            self.documentation = params.documentation
+            self.name = params.name
+            if name != params.name:
+                warnings.warn("Parameters {0!r} already have name {1!r}".format(name, params.name))
+        else:
+            self.params = params
+            self.unused = set(params.keys())
+            self.verbose = params.get('verbose', 0)
+            self.documentation = {}
+            self.name = name
 
     def __getitem__(self, key):
         self.print_if_verbose(key, "Reading")
@@ -120,7 +133,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         val = self.params[key]
         name = self.name
         verbose = self.verbose
-        use_default = key not in self.params
+        use_default = key not in self.params  # TODO: this doesn't work...
         new_key = key in self.unused
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
             actionstring = "Parameter" if action is None else action + " "
