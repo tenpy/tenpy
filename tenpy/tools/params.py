@@ -115,12 +115,15 @@ class Parameters(MutableMapping, Hdf5Exportable):
         val : any type
             The value for `key` if it existed, `default` otherwise.
         """
+        use_default = key not in self.keys()
+        if use_default:
+            self.unused.add(key)
         val = self.params.setdefault(key, default)  # get the value; set default if not existent
-        self.print_if_verbose(key)
+        self.print_if_verbose(key, "Reading", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
-    def print_if_verbose(self, key, action=None):
+    def print_if_verbose(self, key, action=None, use_default=False):
         """Print out `key` if verbosity and other conditions are met.
 
         Parameters
@@ -133,10 +136,9 @@ class Parameters(MutableMapping, Hdf5Exportable):
         val = self.params[key]
         name = self.name
         verbose = self.verbose
-        use_default = key not in self.params  # TODO: this doesn't work...
         new_key = key in self.unused
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
-            actionstring = "Parameter" if action is None else action + " "
+            actionstring = "Parameter" if action is None else action
             defaultstring = "(default) " if use_default else ""
             print("{actionstring} {key!r}={val!r} {defaultstring}for {name!s}".format(
                 actionstring=actionstring,
@@ -208,6 +210,8 @@ class Parameters(MutableMapping, Hdf5Exportable):
         ----------
         filename : str
             Name of the YAML file
+        name : str
+            Name of the resulting :class:`Parameters` instance.
 
         Returns
         -------
