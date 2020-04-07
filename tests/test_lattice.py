@@ -166,3 +166,24 @@ def test_possible_couplings():
         npt.assert_equal(m_lat_indices, lat_indices)
         npt.assert_equal(mps0, m_ijkl[:, 0])
         npt.assert_equal(mps1, m_ijkl[:, 1])
+
+
+def test_index_conversion():
+    from tenpy.networks.mps import MPS
+    s = site.SpinHalfSite(conserve=None)
+    state1 = [[[0, 1]]]  # 0=up, 1=down
+    for order in ["snake", "default"]:
+        lat = lattice.Honeycomb(2, 3, [s, s], order=order, bc_MPS="finite")
+        psi1 = MPS.from_lat_product_state(lat, state1)
+        sz1_mps = psi1.expectation_value("Sigmaz")
+        sz1_lat = lat.mps2lat_values(sz1_mps)
+        npt.assert_equal(sz1_lat[:, :, 0], +1.)
+        npt.assert_equal(sz1_lat[:, :, 1], -1.)
+        # and a random state
+        state2 = np.random.random(lat.shape + (2, ))
+        psi2 = MPS.from_lat_product_state(lat, state2)
+        sz2_mps = psi2.expectation_value("Sigmaz")
+        sz2_lat = lat.mps2lat_values(sz2_mps)
+        expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
+        npt.assert_equal(sz2_lat, expect_sz2)
+    # doen

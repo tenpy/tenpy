@@ -44,6 +44,8 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- Classmethod :meth:`tenpy.networks.MPS.from_lat_product_state` to initialize an MPS from a product state given in
+  lattice coordinates (independent of the `order` of the lattice).
 - argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
   :meth:`tenpy.models.model.CouplingModel.add_coupling`, and 
   :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
