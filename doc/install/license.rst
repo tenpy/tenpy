@@ -1,7 +1,7 @@
 TeNPy developer team
 ====================
 
-.. include:: ../AUTHORS.txt
+.. include:: /../AUTHORS.txt
     :literal:
 
 License
@@ -9,5 +9,5 @@ License
 
 The source code documented here is published under a GPL v3 license, which we include below.
 
-.. include:: ../LICENSE
+.. include:: /../LICENSE
     :literal:

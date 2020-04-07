@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import itertools
 
@@ -65,7 +65,7 @@ def check_general_model(ModelClass, model_pars={}, check_pars={}, hermitian=True
         print("check_model_sanity with following parameters:")
         print(params)
         M = ModelClass(params)
-        check_model_sanity(M)
+        check_model_sanity(M, hermitian)
 
 
 def test_CouplingModel():
@@ -124,14 +124,14 @@ def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
     M = model.MultiCouplingModel(spin_half_square)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
-    M.add_multi_coupling(0.8, 0, 'Sz', [(0, 'Sz', [0, 1]), (0, 'Sz', [1, 0])])
+    M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
     H = M.calc_H_MPO()
     dims = [W.shape[0] for W in H._W]
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[Lx:2 * Lx]
+        assert dims[:Lx] == dims[i * Lx:(i + 1) * Lx]
 
 
 def test_CouplingModel_fermions():
@@ -190,22 +190,24 @@ def test_CouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
-def test_MultiCouplingModel_explicit():
+@pytest.mark.parametrize("use_plus_hc, JW", [(False, 'JW'), (False, None), (True, None)])
+def test_MultiCouplingModel_explicit(use_plus_hc, JW):
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.MultiCouplingModel(fermion_lat_cyl)
     # create a wired fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1))
-    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), 'JW')
-    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), 'JW')
-    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), 'JW')
-    M.add_multi_coupling(4., 0, 'N', [(0, 'N', (-2, -1))], 'Id')  # a full unit cell inbetween!
+    M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
+    M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
+    if not use_plus_hc:
+        M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, -1), JW)
+        M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
+    # multi_coupling with a full unit cell inbetween the operators!
+    M.add_multi_coupling(4., [('N', (0, 0), 0), ('N', (-2, -1), 0)])
     # some wired mediated hopping along the diagonal
-    M.add_multi_coupling(1.125, 0, 'N', other_ops=[(0, 'Cd', (0, 1)), (0, 'C', (1, 0))])
+    M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
     H_mpo = M.calc_H_MPO()
     W0_new = H_mpo.get_W(0)
     W1_new = H_mpo.get_W(1)
-    W2_new = H_mpo.get_W(2)
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
@@ -243,50 +245,57 @@ def test_MultiCouplingModel_explicit():
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
+class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
     def __init__(self, model_params):
         model.CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        return tenpy.networks.site.SpinHalfSite('parity')
+        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
+        return tenpy.networks.site.SpinHalfSite(conserve)
 
     def init_terms(self, model_params):
         x = get_parameter(model_params, 'x', 1., self.name)
-        self.add_onsite_term(0.25, 0, 'Sz')
-        self.add_onsite_term(0.25, 4, 'Sz')
+        y = get_parameter(model_params, 'y', 0.25, self.name)
+        self.add_onsite_term(y, 0, 'Sz')
+        self.add_local_term(y, [('Sz', [4, 0])])
         self.add_coupling_term(x, 0, 1, 'Sx', 'Sx')
         self.add_coupling_term(2. * x, 1, 2, 'Sy', 'Sy')
-        self.add_coupling_term(3. * x, 3, 4, 'Sy', 'Sy')
+        self.add_local_term(3. * x, [('Sy', [3, 0]), ('Sy', [4, 0])])
 
 
 def test_CouplingMPOModel_group():
-    m = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    assert m.H_MPO.max_range == 1
-    # test grouping sites
-    ED = ExactDiag(m)
-    #  ED.build_full_H_from_mpo()
-    ED.build_full_H_from_bonds()
-    m.group_sites(n=2)
-    assert m.H_MPO.max_range == 1
-    ED_gr = ExactDiag(m)
-    ED_gr.build_full_H_from_mpo()
-    H = ED.full_H.split_legs().to_ndarray()
-    Hgr = ED_gr.full_H.split_legs()
-    Hgr.idrop_labels()
-    Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H - Hgr) == 0
-    ED_gr.full_H = None
-    ED_gr.build_full_H_from_bonds()
-    Hgr = ED_gr.full_H.split_legs()
-    Hgr.idrop_labels()
-    Hgr = Hgr.split_legs().to_ndarray()
-    assert np.linalg.norm(H - Hgr) == 0
+    m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
+    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
+    m2 = XXZChain(model_params)
+    for m in [m1, m2]:
+        print("model = ", m)
+        assert m.H_MPO.max_range == 1
+        # test grouping sites
+        ED = ExactDiag(m)
+        #  ED.build_full_H_from_mpo()
+        ED.build_full_H_from_bonds()
+        m.group_sites(n=2)
+        assert m.H_MPO.max_range == 1
+        ED_gr = ExactDiag(m)
+        ED_gr.build_full_H_from_mpo()
+        H = ED.full_H.split_legs().to_ndarray()
+        Hgr = ED_gr.full_H.split_legs()
+        Hgr.idrop_labels()
+        Hgr = Hgr.split_legs().to_ndarray()
+        assert np.linalg.norm(H - Hgr) < 1.e-14
+        ED_gr.full_H = None
+        ED_gr.build_full_H_from_bonds()
+        Hgr = ED_gr.full_H.split_legs()
+        Hgr.idrop_labels()
+        Hgr = Hgr.split_legs().to_ndarray()
+        assert np.linalg.norm(H - Hgr) < 1.e-14
 
 
 def test_model_H_conversion(L=6):
     bc = 'finite'
     model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
     m = XXZChain(model_params)
+
     # can we run the conversion?
     # conversion from bond to MPO in NearestNeighborModel
     H_MPO = m.calc_H_MPO_from_bond()
@@ -308,3 +317,45 @@ def test_model_H_conversion(L=6):
     full_H_bond = ED.full_H  # the one generated by NearstNeighborModel.calc_H_MPO_from_bond()
     print("npc.norm(H0 - full_H_bond) = ", npc.norm(H0 - full_H_bond))
     assert npc.norm(H0 - full_H_bond) < 1.e-14  # round off errors on order of 1.e-15
+
+
+def test_model_plus_hc(L=6):
+    params = dict(x=0.5, y=0.25, L=L, bc_MPS='finite', conserve=None)
+    m1 = MyMod(params)
+    m2 = MyMod(params)
+    params['explicit_plus_hc'] = True
+    m3 = MyMod(params)
+    nu = np.random.random(L)
+    m1.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    t = np.random.random(L - 1)
+    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
+    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
+    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    t2 = np.random.random(L - 1)
+    m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
+    m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
+    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    for m in [m1, m2, m3]:
+        # added extra terms: need to re-calculate H_bond and H_MPO
+        m.H_bond = m.calc_H_bond()
+        m.H_MPO = m.calc_H_MPO()
+    assert m1.H_MPO.is_hermitian()
+    assert m2.H_MPO.is_hermitian()
+    assert not m3.H_MPO.is_hermitian()
+    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
+    ED1 = ExactDiag(m1)
+    ED2 = ExactDiag(m2)
+    ED3 = ExactDiag(m3)
+    for ED in [ED1, ED2, ED3]:
+        ED.build_full_H_from_bonds()
+    assert ED1.full_H == ED2.full_H
+    assert ED1.full_H == ED3.full_H
+    for ED in [ED1, ED2, ED3]:
+        ED.full_H = None
+        ED.build_full_H_from_mpo()
+    assert ED1.full_H == ED2.full_H
+    assert ED1.full_H == ED3.full_H

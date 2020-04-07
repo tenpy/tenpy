@@ -10,14 +10,16 @@ implemented here.
     The contents of this module are imported in :mod:`~tenpy.linalg.np_conserved`,
     so you usually don't need to import this module in your application.
 
-A detailed introduction to `np_conserved` can be found in :doc:`/intro_npc`.
+A detailed introduction to `np_conserved` can be found in :doc:`/intro/npc`.
 
 In this module, some functions have the python decorator ``@use_cython``.
-Functions with this decoartor are replaced by the ones written in Cython, implemented in
+Functions with this decorator are replaced by the ones written in Cython, implemented in
 the file ``tenpy/linalg/_npc_helper.pyx``.
 For further details, see the definition of :func:`~tenpy.tools.optimization.use_cython`.
+
+.. autodata:: QTYPE
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -30,7 +32,7 @@ from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
-QTYPE = np.int_  # numpy dtype for the charges
+QTYPE = np.int_
 """Numpy data type for the charges."""
 
 
@@ -61,7 +63,7 @@ class ChargeInfo:
         1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
-    _mask_mod1 : 1D array bool
+    _mask : 1D array bool
         mask ``(mod == 1)``, to speed up `make_valid` in pure python.
     _mod_masked : 1D array QTYPE
         Equivalent to ``self.mod[self._maks_mod1]``
@@ -72,7 +74,6 @@ class ChargeInfo:
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
-
     def __init__(self, mod=[], names=None):
         mod = np.array(mod, dtype=QTYPE)
         assert mod.ndim == 1
@@ -81,6 +82,76 @@ class ChargeInfo:
         names = [str(n) for n in names]
         self.__setstate__((len(mod), mod, names))
         self.test_sanity()  # checks for invalid arguments
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        return (self._qnumber, self._mod, self.names)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        qnumber, mod, names = state
+        self._mod = mod
+        self._qnumber = mod.shape[0]
+        assert qnumber == self._qnumber
+        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
+        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
+        self.names = names
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        It stores the :attr:`names` under the path ``"names"``, and
+        :attr:`mod` as dataset ``"U1_ZN"``.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        h5gr.attrs['num_charges'] = self._qnumber
+        hdf5_saver.save(self._mod, subpath + "U1_ZN")
+        hdf5_saver.save(self.names, subpath + "names")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        The ``"U1_ZN"`` dataset is mandatory, ``'names'`` are optional.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+        qmod = hdf5_loader.load(subpath + "U1_ZN")
+        qmod = np.asarray(qmod, dtype=QTYPE)
+        qnumber = len(qmod)
+        if "names" in h5gr:
+            names = hdf5_loader.load(subpath + "names")
+        else:
+            names = [''] * qnumber
+        obj.__setstate__((qnumber, qmod, names))
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def add(cls, chinfos):
@@ -173,6 +244,7 @@ class ChargeInfo:
 
         1 for a U(1) charge, i.e., mod 1 -> mod infinity.
         """
+        # The property makes `mod` readonly.
         return self._mod
 
     @use_cython(replacement='ChargeInfo_make_valid')
@@ -232,26 +304,12 @@ class ChargeInfo:
         r"""Define `self != other` as `not (self == other)`"""
         return not self.__eq__(other)
 
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        return (self._qnumber, self._mod, self.names)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        qnumber, mod, names = state
-        self._mod = mod
-        self._qnumber = mod.shape[0]
-        assert qnumber == self._qnumber
-        self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
-        self._mod_masked = mod[self._mask].copy()  # only where mod != 1
-        self.names = names
-
 
 class LegCharge:
     r"""Save the charge data associated to a leg of a tensor.
 
     This class is more or less a wrapper around a 2D numpy array `charges` and a 1D array `slices`.
-    See :doc:`/intro_npc` for more details.
+    See :doc:`/intro/npc` for more details.
 
     (This class is implemented in :mod:`tenpy.linalg.charges` but also imported in
     :mod:`tenpy.linalg.np_conserved` for convenience.)
@@ -296,7 +354,6 @@ class LegCharge:
     Thus, functions changing ``self.slices`` or ``self.charges`` *must* always make copies.
     Further they *must* set `sorted` and `bunched` to ``False`` (if they might not preserve them).
     """
-
     def __init__(self, chargeinfo, slices, charges, qconj=1):
         self.chinfo = chargeinfo
         self.slices = np.array(slices, dtype=np.intp)
@@ -317,6 +374,130 @@ class LegCharge:
         res = LegCharge.__new__(LegCharge)
         res.__setstate__(self.__getstate__())
         return res
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
+                self.qconj, self.sorted, self.bunched)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        ind_len, block_number, chinfo, slices, charges, qconj, sorted_, bunched = state
+        self.ind_len = ind_len
+        self.block_number = block_number
+        self.chinfo = chinfo
+        self.slices = slices
+        self.charges = charges
+        self.qconj = qconj
+        self.sorted = sorted_
+        self.bunched = bunched
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Checks :class:`~tenpy.tools.hdf5_io.Hdf5Saver.format` for an ouput format key ``"LegCharge"``.
+        Possible choices are:
+
+        ``"blocks"`` (default)
+            Store :attr:`slices` and :attr:`charges` directly as datasets,
+            and :attr:`block_number`, :attr:`sorted`, :attr:`bunched` as further attributes.
+        ``"compact"``
+            A single array ``np.hstack([self.slices[:-1], self.slices[1:], self.charges])``
+            as dataset ``"blockcharges"``,
+            and :attr:`block_number`, :attr:`sorted`, :attr:`bunched` as further attributes.
+        ``"flat"``
+            Insufficient (!) to recover the exact blocks; saves only the array
+            returned by :meth:`to_flat` as dataset ``'charges'``.
+
+        The :attr:`ind_len`, :attr:`qconj`, and the `format` parameter are saved as group
+        attributes under the same names. :attr:`chinfo` is always saved as subgroup.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        format = hdf5_saver.format_selection.get("LegCharge", "blocks")
+        h5gr.attrs["format"] = format
+        h5gr.attrs["ind_len"] = self.ind_len
+        h5gr.attrs["qconj"] = self.qconj
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        if format == "blocks":
+            h5gr.attrs["block_number"] = self.block_number
+            h5gr.attrs["sorted"] = self.sorted
+            h5gr.attrs["bunched"] = self.bunched
+            hdf5_saver.save(self.slices, subpath + "slices")
+            hdf5_saver.save(self.charges, subpath + "charges")
+        elif format == "compact":
+            h5gr.attrs["block_number"] = self.block_number
+            h5gr.attrs["sorted"] = self.sorted
+            h5gr.attrs["bunched"] = self.bunched
+            blockcharges = np.hstack(
+                [self.slices[:-1, np.newaxis], self.slices[1:, np.newaxis], self.charges])
+            hdf5_saver.save(blockcharges, subpath + "blockcharges")
+        elif format == "flat":
+            qflat = self.to_qflat()
+            hdf5_saver.save(qflat, subpath + "charges")
+        else:
+            raise ValueError("Unknown format")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)
+        hdf5_loader.memorize_load(h5gr, obj)
+        format = hdf5_loader.get_attr(h5gr, "format")
+        obj.ind_len = hdf5_loader.get_attr(h5gr, "ind_len")
+        obj.qconj = hdf5_loader.get_attr(h5gr, "qconj")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        if format == "blocks":
+            obj.block_number = hdf5_loader.get_attr(h5gr, "block_number")
+            obj.sorted = hdf5_loader.get_attr(h5gr, "sorted")
+            obj.bunched = hdf5_loader.get_attr(h5gr, "bunched")
+            obj.slices = hdf5_loader.load(subpath + "slices")
+            obj.charges = hdf5_loader.load(subpath + "charges")
+        elif format == "compact":
+            obj.block_number = hdf5_loader.get_attr(h5gr, "block_number")
+            obj.sorted = hdf5_loader.get_attr(h5gr, "sorted")
+            obj.bunched = hdf5_loader.get_attr(h5gr, "bunched")
+            blockcharges = hdf5_loader.load(subpath + "blockcharges")
+            obj.slices = slices = np.zeros(obj.block_number + 1, dtype=np.intp)
+            slices[:-1] = blockcharges[:, 0]
+            slices[-1] = blockcharges[-1, 1]
+            obj.charges = np.asarray(blockcharges[:, 2:], dtype=QTYPE, order='C')
+        elif format == "flat":
+            obj.block_number = obj.ind_len
+            obj.slices = np.arange(obj.ind_len + 1)
+            obj.charges = hdf5_loader.load(subpath + "charges")
+            obj.bunched = obj.is_bunched()
+            obj.sorted = obj.is_sorted()
+        else:
+            raise ValueError("Unknown format")
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def from_trivial(cls, ind_len, chargeinfo=None, qconj=1):
@@ -600,7 +781,7 @@ class LegCharge:
 
                 self.charges * self.qconj = - other.charges * other.qconj
 
-        In general, there could also be a change of the total charge, see :doc:`/intro_npc`
+        In general, there could also be a change of the total charge, see :doc:`/intro/npc`
         This special case is not considered here - instead use
         :meth:`~tenpy.linalg.np_conserved.gauge_total_charge`,
         if a change of the charge is desired.
@@ -649,6 +830,16 @@ class LegCharge:
             raise ValueError("incompatible LegCharge\n" +
                              vert_join(["self\n" + str(self), "other\n" + str(other)], delim=' | '))
 
+    def get_block_sizes(self):
+        """Return the sizes of the individual blocks.
+
+        Returns
+        -------
+        sizes : ndarray, shape (block_number,)
+            The sizes of the individual blocks; ``sizes[i] = slices[i+1] - slices[i]``.
+        """
+        return self.slices[1:] - self.slices[:-1]
+
     def get_slice(self, qindex):
         """Return slice selecting the block for a given `qindex`."""
         return slice(self.slices[qindex], self.slices[qindex + 1])
@@ -657,9 +848,9 @@ class LegCharge:
         """Find qindex containing a flat index.
 
         Given a flat index, to find the corresponding entry in an Array, we need to determine the
-        block it is saved in. For example, if ``qind[:, 2] = [[0, 3], [3, 7], [7, 12]]``,
+        block it is saved in. For example, if ``slices = [[0, 3], [3, 7], [7, 12]]``,
         the flat index ``5`` corresponds to the second entry, ``qindex = 1`` (since 5 is in [3:7]),
-        and the index within the block would be ``5-3 =2``.
+        and the index within the block would be ``2 = 5 - 3``.
 
         Parameters
         ----------
@@ -683,6 +874,35 @@ class LegCharge:
                 flat_index, self.ind_len))
         qind = bisect.bisect(self.slices, flat_index) - 1
         return qind, flat_index - self.slices[qind]
+
+    def get_qindex_of_charges(self, charges):
+        """Return the slice selecting the block for given charge values.
+
+        Inverse function of :meth:`get_charge`.
+
+        Parameters
+        ----------
+        charges : 1D array_like
+            Charge values for which the slice of the block is to be determined.
+
+        Returns
+        -------
+        slice(i, j) : slice
+            Slice of the charge values for
+
+        Raises
+        ------
+        ValueError : if the answer is not unique (because `self` is not blocked).
+        """
+        charges = self.chinfo.make_valid(self.qconj * np.asarray(charges))
+        equal_rows = np.all(charges[np.newaxis, :] == self.charges, axis=1)
+        qinds = np.nonzero(equal_rows)[0]
+        if len(qinds) > 1:
+            raise ValueError("Non-unique answer: " + repr(qinds))
+        elif len(qinds) == 0:
+            raise ValueError("Charge block not found")
+        # else
+        return qinds[0]
 
     def get_charge(self, qindex):
         """Return charge ``self.charges[qindex] * self.qconj`` for a given `qindex`."""
@@ -720,14 +940,12 @@ class LegCharge:
         perm_qind = lexsort(self.charges.T)
         cp = self.copy()
         cp._set_charges(self.charges[perm_qind, :])
-        block_sizes = self._get_block_sizes()
+        block_sizes = self.get_block_sizes()
         cp._set_block_sizes(block_sizes[perm_qind])
         cp.sorted = True
-        # finally bunch: re-ordering can have brought together equal charges
+        cp.bunched = False  # re-ordering can have brought together equal charges
         if bunch:
             _, cp = cp.bunch()
-        else:
-            cp.bunched = False
         return perm_qind, cp
 
     def bunch(self):
@@ -856,10 +1074,6 @@ class LegCharge:
         """Set self.slices from an list of the block-sizes."""
         self._set_slices(np.append([0], np.cumsum(block_sizes)).astype(np.intp, copy=False))
 
-    def _get_block_sizes(self):
-        """Return block sizes."""
-        return self.slices[1:] - self.slices[:-1]
-
     def _slice_start_stop(self):
         """Yield (start, stop) for each qindex."""
         return zip(self.slices[:-1], self.slices[1:])
@@ -894,23 +1108,6 @@ class LegCharge:
         if np.any(perm_flat != self.perm_flat_from_perm_qind(perm_qind)):
             raise ValueError("Permutation mixes qind")
         return perm_qind
-
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        return (self.ind_len, self.block_number, self.chinfo, self.slices, self.charges,
-                self.qconj, self.sorted, self.bunched)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
-        self.ind_len = ind_len
-        self.block_number = block_number
-        self.chinfo = chinfo
-        self.slices = slices
-        self.charges = charges
-        self.qconj = qconj
-        self.sorted = sorted
-        self.bunched = bunched
 
 
 class LegPipe(LegCharge):
@@ -1002,7 +1199,6 @@ class LegPipe(LegCharge):
 
     Here the qindex ``Qi`` of the pipe corresponds to qindices ``qi_l`` on the individual legs.
     """
-
     def __init__(self, legs, qconj=1, sort=True, bunch=True):
         chinfo = legs[0].chinfo
         # initialize LegCharge with trivial charges/slices; gets overwritten in _init_from_legs
@@ -1037,6 +1233,74 @@ class LegPipe(LegCharge):
         res = LegPipe.__new__(LegPipe)
         res.__setstate__(self.__getstate__())
         return res
+
+    def __getstate__(self):
+        """Allow to pickle and copy."""
+        super_state = LegCharge.__getstate__(self)
+        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
+                self.q_map_slices, self._perm, self._strides)
+
+    def __setstate__(self, state):
+        """Allow to pickle and copy."""
+        super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
+        self.nlegs = nlegs
+        self.legs = legs
+        self.subshape = subshape
+        self.subqshape = subqshape
+        self.q_map = q_map
+        self.q_map_slices = q_map_slices
+        self._perm = _perm
+        self._strides = _strides
+        LegCharge.__setstate__(self, super_state)
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        In addition to the data saved for the :class:`LegCharge`, it just
+        saves the :attr:`legs` as subgroup.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        super().save_hdf5(hdf5_saver, h5gr, subpath)
+        hdf5_saver.save(self.legs, subpath + "legs")
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        sorted = hdf5_loader.get_attr(h5gr, "sorted")
+        bunched = hdf5_loader.get_attr(h5gr, "bunched")
+        qconj = hdf5_loader.get_attr(h5gr, "qconj")
+        legs = hdf5_loader.load(subpath + "legs")
+        # just initialize a LegPipe -> don't need to save/reconstruct all the other attributes!
+        obj = cls(legs, qconj, sorted, bunched)
+        hdf5_loader.memorize_load(h5gr, obj)  # late, but okay: don't expect cyclic references.
+        return obj
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1185,8 +1449,8 @@ class LegPipe(LegCharge):
         # determine q_map -- it's essentially the grid.
         q_map = np.empty((nblocks, 3 + nlegs), dtype=np.intp)
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
-        # the block size for given (i1, i2, ...) is the product of ``legs._get_block_sizes()[il]``
-        legbs = [l._get_block_sizes() for l in self.legs]
+        # the block size for given (i1, i2, ...) is the product of ``legs.get_block_sizes()[il]``
+        legbs = [l.get_block_sizes() for l in self.legs]
         # andvanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         blocksizes = np.prod([lbs[gr] for lbs, gr in zip(legbs, grid)], axis=0)
@@ -1231,6 +1495,7 @@ class LegPipe(LegCharge):
             q_map_Qi = np.zeros(len(q_map), dtype=np.intp)
             q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
             q_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
+            self.bunched = True
         else:
             q_map[:, 2] = q_map_Qi = np.arange(len(q_map), dtype=np.intp)
             idx = np.arange(len(q_map) + 1, dtype=np.intp)
@@ -1263,25 +1528,6 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
-
-    def __getstate__(self):
-        """Allow to pickle and copy."""
-        super_state = LegCharge.__getstate__(self)
-        return (super_state, self.nlegs, self.legs, self.subshape, self.subqshape, self.q_map,
-                self.q_map_slices, self._perm, self._strides)
-
-    def __setstate__(self, state):
-        """Allow to pickle and copy."""
-        super_state, nlegs, legs, subshape, subqshape, q_map, q_map_slices, _perm, _strides = state
-        self.nlegs = nlegs
-        self.legs = legs
-        self.subshape = subshape
-        self.subqshape = subqshape
-        self.q_map = q_map
-        self.q_map_slices = q_map_slices
-        self._perm = _perm
-        self._strides = _strides
-        LegCharge.__setstate__(self, super_state)
 
 
 # (in cython, but with different arguments)

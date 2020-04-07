@@ -1,6 +1,6 @@
 """Definition of the various models.
 
-For an introduction to models see :doc:`/intro_model`.
+For an introduction to models see :doc:`/intro/model`.
 
 The module :mod:`tenpy.models.model` contains base classes for models.
 The module :mod:`tenpy.models.lattice` contains base classes and implementations of lattices.
@@ -29,7 +29,7 @@ All other modules in this folder contain model classes derived from these base c
     haldane
     toric_code
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
 

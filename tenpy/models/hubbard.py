@@ -1,5 +1,5 @@
 """Bosonic and fermionic Hubbard models."""
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -58,7 +58,6 @@ class BoseHubbardModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -82,9 +81,8 @@ class BoseHubbardModel(CouplingMPOModel):
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
-        for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(-t, u1, 'Bd', u2, 'B', dx)
-            self.add_coupling(-np.conj(t), u2, 'Bd', u1, 'B', -dx)  # h.c.
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            self.add_coupling(-t, u1, 'Bd', u2, 'B', dx, plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
@@ -93,7 +91,6 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
 
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
@@ -118,7 +115,7 @@ class FermiHubbardModel(CouplingMPOModel):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`/intro_JordanWigner` for details.
+        See :doc:`/intro/JordanWigner` for details.
 
     Parameters
     ----------
@@ -153,7 +150,6 @@ class FermiHubbardModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -173,11 +169,9 @@ class FermiHubbardModel(CouplingMPOModel):
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
             self.add_onsite(U, u, 'NuNd')
-        for u1, u2, dx in self.lat.nearest_neighbors:
-            self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx)
-            self.add_coupling(-np.conj(t), u2, 'Cdu', u1, 'Cu', -dx)  # h.c.
-            self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx)
-            self.add_coupling(-np.conj(t), u2, 'Cdd', u1, 'Cd', -dx)  # h.c.
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
+            self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
@@ -186,7 +180,6 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
-
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

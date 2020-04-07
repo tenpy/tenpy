@@ -34,7 +34,7 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -70,6 +70,9 @@ class MPO:
         Indices on the bonds, which correpond to 'only identities to the right'.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
 
     Attributes
     ----------
@@ -96,15 +99,25 @@ class MPO:
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
-        Valid boundary conditions. The same as for an MPS.
+        Class attribute. Valid boundary conditions; the same as for an MPS.
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None):
+    def __init__(self,
+                 sites,
+                 Ws,
+                 bc='finite',
+                 IdL=None,
+                 IdR=None,
+                 max_range=None,
+                 explicit_plus_hc=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
@@ -114,7 +127,81 @@ class MPO:
         self.grouped = 1
         self.bc = bc
         self.max_range = max_range
+        self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo`,
+        :attr:`max_range` (under these names),
+        :attr:`_W` as ``"tensors"``,
+        :attr:`IdL` as ``"index_identity_left"``,
+        :attr:`IdR` as ``"index_identity_right"``, and
+        :attr:`bc` as ``"boundary_condition"``.
+        Moreover, it saves :attr:`L`, :attr:`explicit_plus_hc` and :attr:`grouped` as HDF5 attributes,
+        as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        hdf5_saver.save(self.sites, subpath + "sites")
+        hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        hdf5_saver.save(self._W, subpath + "tensors")
+        hdf5_saver.save(self.IdL, subpath + "index_identity_left")
+        hdf5_saver.save(self.IdR, subpath + "index_identity_right")
+        h5gr.attrs["grouped"] = self.grouped
+        hdf5_saver.save(self.bc, subpath + "boundary_condition")
+        hdf5_saver.save(self.max_range, subpath + "max_range")
+        h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+
+        obj.sites = hdf5_loader.load(subpath + "sites")
+        obj.chinfo = hdf5_loader.load(subpath + "chinfo")
+        obj._W = hdf5_loader.load(subpath + "tensors")
+        obj.dtype = np.find_common_type([W.dtype for W in obj._W], [])
+        obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
+        obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
+        obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
+        obj.bc = hdf5_loader.load(subpath + "boundary_condition")
+        obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
+        obj.test_sanity()
+        return obj
 
     @classmethod
     def from_grids(cls,
@@ -125,7 +212,8 @@ class MPO:
                    IdR=None,
                    Ws_qtotal=None,
                    leg0=None,
-                   max_range=None):
+                   max_range=None,
+                   explicit_plus_hc=False):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -149,6 +237,9 @@ class MPO:
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
+        explicit_plus_hc : bool
+            If True, the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
         See also
         --------
@@ -187,10 +278,9 @@ class MPO:
         assert len(legs) == L + 1
         Ws = []
         for i in range(L):
-            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -260,6 +350,27 @@ class MPO:
         i = self._to_valid_index(i)
         return self.IdR[i + 1]
 
+    def enlarge_MPS_unit_cell(self, factor=2):
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            The new number of sites in the unit cell will be increased from `L` to ``factor*L``.
+        """
+        if int(factor) != factor:
+            raise ValueError("`factor` should be integer!")
+        if factor <= 1:
+            raise ValueError("can't shrink!")
+        if self.finite:
+            raise ValueError("can't enlarge finite MPO")
+        factor = int(factor)
+        self.sites = factor * self.sites
+        self._W = factor * self._W
+        self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
+        self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
+        self.test_sanity()
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
@@ -279,8 +390,8 @@ class MPO:
         else:
             assert grouped_sites[0].n_sites == n
         if self.max_range is not None:
-            min_n = min([gs.n_sites for gs in grouped_sites])
-            self.max_range = int(np.ceil(self.max_range // min_n))
+            min_n = max(min([gs.n_sites for gs in grouped_sites]), 1)
+            self.max_range = int(np.ceil(self.max_range / min_n))
         Ws = []
         IdL = []
         IdR = [self.IdR[0]]
@@ -410,7 +521,7 @@ class MPO:
         else:  # no break
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
-        return current_value / L
+        return np.real_if_close(current_value / L)
 
     def dagger(self):
         """Return hermition conjugate copy of self."""
@@ -510,18 +621,32 @@ class MPO:
                 return [Id] * (L + 1)
 
     def get_grouped_mpo(self, blocklen):
-        """Contract `blocklen` subsequent tensors into a single one and return result as a new MPO
-        object."""
-        groupedMPO = copy.deepcopy(self)
+        """group each `blocklen` subsequent tensors and  return result as a new MPO.
+
+        .. deprecated : 0.5.0
+            Make a copy and use :meth:`group_sites` instead.
+        """
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, FutureWarning, 2)
+        from copy import deepcopy
+        groupedMPO = deepcopy(self)
         groupedMPO.group_sites(n=blocklen)
         return (groupedMPO)
 
     def get_full_hamiltonian(self, maxsize=1e6):
-        """extract the full Hamiltonian as a d**L x d**L matrix."""
+        """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
+
+        .. deprecated : 0.5.0
+            Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
+        """
+        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
+        warnings.warn(msg, FutureWarning, 2)
         if (self.dim[0]**(2 * self.L) > maxsize):
             print('Matrix dimension exceeds maxsize')
             return np.zeros(1)
         singlesitempo = self.get_grouped_mpo(self.L)
+        # Note: the trace works only for 'finite' boundary conditions
+        # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
     def __add__(self, other):
@@ -675,7 +800,6 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
-
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -695,7 +819,7 @@ class MPOGraph:
         ----------
         onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
             Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
+        coupling_terms : :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
             Coupling terms to be added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
@@ -709,7 +833,8 @@ class MPOGraph:
 
         See also
         --------
-        from_term_list : equivalent for other representation terms.
+        from_term_list :
+            equivalent for other representation terms.
         """
         graph = cls(sites, bc, coupling_terms.max_range())
         onsite_terms.add_to_graph(graph)
@@ -1019,7 +1144,6 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-
     def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
         if ket is None:
             ket = bra
@@ -1197,10 +1321,10 @@ class MPOEnvironment(MPSEnvironment):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(self.H.get_W(i), RP, axes=(['p*', 'wR'], ['p', 'wL']))
-        RP = npc.tensordot(self.bra.get_B(i, form='B').conj(),
-                           RP,
-                           axes=(['p*', 'vR*'], ['p', 'vL*']))
+        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
+        RP = npc.tensordot(RP,
+                           self.bra.get_B(i, form='B').conj(),
+                           axes=(['p', 'vL*'], ['p*', 'vR*']))
         return RP  # labels 'vL', 'wL', 'vL*'
 
 

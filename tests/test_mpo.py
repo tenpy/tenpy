@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -21,8 +21,7 @@ def test_MPO():
             grid = [[s.Id, s.Sp, s.Sm, s.Sz], [None, None, None, s.Sm], [None, None, None, s.Sp],
                     [None, None, None, s.Id]]
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
-            W = npc.grid_outer(grid, [legW, legW.conj()])
-            W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])
+            W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
             Ws = [W] * L
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]

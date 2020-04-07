@@ -89,7 +89,7 @@ With this mapping, the Jordan-Wigner transformation generalizes to higher dimens
 Spinful fermions
 -----------------
 
-.. image :: images/JordanWignerSpinHalf.*
+.. image :: /images/JordanWignerSpinHalf.*
 
 As illustrated in the above picture, you can think of spin-1/2 fermions on a chain as spinless fermions living on a ladder (and analogous mappings for higher dimensional lattices).
 Each rung (a blue box in the picture) forms a :class:`~tenpy.networks.site.SpinHalfFermionSite` 
@@ -160,50 +160,78 @@ you cannot reverse this mapping (in a straightforward way), and thus your result
 Whatever you do, you should first think about if (and how much of) the Jordan-Wigner string cancels.
 For example for many of the onsite operators (like the particle number operator ``N`` or the spin operators in the :class:`~tenpy.networks.site.SpinHalfFermionSite`)
 the Jordan-Wigner string cancels completely and you can just ignore it both in onsite-terms and couplings.
-To check, whether the Jordan-Wigner string cancels for a given operator, 
-take a look at :attr:`~tenpy.networks.site.Site.need_JW_string` and :meth:`~tenpy.networks.site.Site.op_needs_JW`.
-In case of operators acting on different sites, you typically have a Jordan-Wigner string inbetween (e.g. for the
+In case of two operators acting on different sites, you typically have a Jordan-Wigner string inbetween (e.g. for the
 :math:`c^\dagger_i c_j` examples described above and below) or no Jordan-Wigner strings at all (e.g. for density-density
 interactions :math:`n_i n_j`).
 In fact, the case that the Jordan Wigner string on the left of the first non-trivial operator does not cancel is currently not supported
-for models and expectation values, as it usually doesn't appear in practice. 
+for models and expectation values, as it usually doesn't appear in practice.
+For terms involving more operators, things tend to get more complicated, e.g. :math:`c^\dagger_i c^\dagger_j c_k c_l` with
+:math:`i < j < k < l` requires a Jordan-Wigner string on sites `m` with :math:`i \leq m <j` or :math:`k \leq m <l`, but
+not for :math:`j < m < k`.
 
-When **building a model** with the :class:`~tenpy.models.model.CouplingModel`,
-*onsite* terms for which the Jordan-Wigner string cancels can be added directly.
-Care has to be taken when adding *couplings* with :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
-When you need a Jordan-Wigner string inbetween the operators, set the optional arguments ``op_string='JW', str_on_first=True``.
-Then, the function automatically takes care of the Jordan-Wigner string in the correct way, adding it on the left
-operator. With the default arguments, it is checked automatically whether the model 
+.. note ::
+    TeNPy keeps track of which onsite operators need a Jordan-Wigner string in the :class:`~tenpy.networks.site.Site` class,
+    specifically in :attr:`~tenpy.networks.site.Site.need_JW_string` and :meth:`~tenpy.networks.site.Site.op_needs_JW`.
+    Hence, when you define custom sites or add extra operators to the sites, make sure that 
+    :meth:`~tenpy.networks.site.Site.op_needs_JW` returns the expected results.
 
-Obviously, you should be careful about the convention which of the two coupling terms is applied first (in a physical
-sense as an operator acting on a state), as this corresponds to a sign. We follow the convention that the operator given
-as argument `op2` is applied first, independent of wheter it ends up left or right in the MPS ordering sense.
+When **building a model** the Jordan-Wigner strings need to be taken into account. 
+If you just specify the `H_MPO` or `H_bond`, it is *your* responsibility to use the correct mapping.
+However, if you use the :meth:`~tenpy.models.model.CouplingModel.add_coupling` method of the 
+:class:`~tenpy.models.model.CouplingModel` ,
+(or the generalization :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` for more than 2 operators),
+TeNPy can use the information from the `Site` class to *automatically add Jordan-Wigner* strings as needed.
+Indeed, with the default argument ``op_string=None``, `add_coupling` will automatically check whether the operators
+need Jordan-Wigner strings and correspondlingly set ``op_string='JW', str_on_first=True``, if necessary.
+For `add_multi_coupling`, you cann't even explicitly specify the correct Jordan-Wigner strings, but you **must use**
+``op_string=None``, from which it will automatically determine where Jordan-Wigner strings are needed.
+
+Obviously, you should be careful about the convention which of the operators is applied first (in a physical
+sense as an operator acting on a state), as this corresponds to a sign of the prefactor.
+Read the doc-strings of :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+:meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` for details.
 
 As a concrete example, let us specify a hopping
-:math:`\sum_{\langle i, j\rangle} (c^\dagger_i c_j + h.c.) = \sum_{\langle i, j\rangle} (c^\dagger_i c_j + c^\dagger_j c_i)`
-in a 1D chain of :class:`~tenpy.networks.site.FermionSite` with :meth:`~tenpy.models.model.CouplingModel.add_coupling`::
+:math:`\sum_{i} (c^\dagger_i c_{i+1} + h.c.) = \sum_{i} (c^\dagger_i c_{i+1} + c^\dagger_{i} c_{i-1})`
+in a 1D chain of :class:`~tenpy.networks.site.FermionSite` with :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
+The recoomended way is just::
 
-    add_coupling(strength, 0, 'Cd', 0, 'C', 1, 'JW', True) 
-    add_coupling(strength, 0, 'Cd', 0, 'C', -1, 'JW', True)
-    # (without the last 2 arguments, add_coupling checks for necessary JW strings automatically)
+    add_coupling(strength, 0, 'Cd', 0, 'C', 1, plus_hc=True) 
+
+If you want to specify both the Jordan-Wigner string and the ``h.c.`` term explicitly, you can use::
+
+    add_coupling(strength, 0, 'Cd', 0, 'C', 1, op_string='JW', str_on_first=True) 
+    add_coupling(strength, 0, 'Cd', 0, 'C', -1, op_string='JW', str_on_first=True)
 
 Slightly more complicated, to specify the hopping
 :math:`\sum_{\langle i, j\rangle, s} (c^\dagger_{s,i} c_{s,j} + h.c.)`
-in the Fermi-Hubbard model on a 2D square lattice, we would need more terms::
+in the Fermi-Hubbard model on a 2D square lattice, we could use::
 
+    for (dx, dy) in [(1, 0), (0, 1)]:
+        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), plus_hc=True)  # spin up
+        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), plus_hc=True)  # spin down
+
+    # or without `plus_hc`
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:  # include -dx !
+        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy))  # spin up
+        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy))  # spin down
+
+    # or specifying the 'JW' string explicitly
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)
-        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)
-
-If you want to build a model directly as an MPO or with nearest-neighbor bonds only, *you* have to care about how to handle the Jordan-Wigner string correctly.
+        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)  # spin up
+        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)  # spin down
 
 
 The most important functions for doing **measurements** are probably :meth:`~tenpy.networks.mps.MPS.expectation_value`
 and :meth:`~tenpy.networks.mps.MPS.correlation_function`. Again, if all the Jordan-Wigner strings cancel, you don't have
 to worry about them at all, e.g. for many onsite operators or correlation functions involving only number operators.
-If you measure operators involving multiple sites with `expectation_value`, take care to include the Jordan-Wigner
-string correctly while building these operators.
+If you build multi-site operators to be measured by `expectation_value`, take care to include the Jordan-Wigner
+string correctly.
 
-The :meth:`~tenpy.networks.mps.MPS.correlation_function` supports a Jordan-Wigner string in between the two operators to
-be measured. As for :meth:`~tenpy.models.model.CouplingModel.add_coupling`, you should set the optional arguments ``op_string='JW', str_on_first=True`` in that case.
-Functions like :meth:`~tenpy.networks.mps.MPS.expectation_value_term` also care about the Jordan Wigner string (if specified in the documentation).
+Some MPS methods like
+:meth:`~tenpy.networks.mps.MPS.correlation_function`,
+:meth:`~tenpy.networks.mps.MPS.expectation_value_term` and
+:meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` automatically add Jordan-Wignder strings 
+(at least with default arguments).
+Other more low-level functions like :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` don't do it.
+Hence, you should always watch out during measurements, if the function used needs special treatment for Jordan-Wigner strings.

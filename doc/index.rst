@@ -1,13 +1,33 @@
 .. include:: ../README.rst
-    
 
-Contents
---------
 .. toctree::
-   :maxdepth: 3
+    :caption: User guide
+    :maxdepth: 2
 
-   userguide
-   reference
+    INSTALL
+    releases
+    introductions
+    literature
+    contributing
+
+.. toctree::
+    :caption: Reference
+
+    main
+
+.. rubric:: Submodules
+
+.. currentmodule:: tenpy
+
+.. autosummary::
+    :toctree: reference
+
+    algorithms
+    linalg
+    models
+    networks
+    tools
+    version
 
 
 Indices and tables

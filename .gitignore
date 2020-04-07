@@ -2,6 +2,8 @@
 ./*.py
 *.pyc
 *.dat
+*.hdf5
+*.h5
 .DS_Store
 ._*
 .eggs

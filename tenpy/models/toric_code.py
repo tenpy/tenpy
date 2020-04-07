@@ -3,7 +3,7 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -32,9 +32,8 @@ class DualSquare(Lattice):
         The sites for the horizontal (first entry) and vertical (second entry) bonds.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `[[next_]next_]nearest_neighbors` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
     """
-
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
@@ -45,15 +44,15 @@ class DualSquare(Lattice):
               (1, 0, np.array([0, 1]))]
         nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
         nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
-        kwargs.setdefault('nearest_neighbors', NN)
-        kwargs.setdefault('next_nearest_neighbors', nNN)
-        kwargs.setdefault('next_nearest_neighbors', nnNN)
-        kwargs.setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         super().__init__([Lx, Ly], sites, **kwargs)
 
 
 class ToricCode(CouplingMPOModel, MultiCouplingModel):
-    r"""Spin-S sites coupled by nearest neighbour interactions.
+    r"""Toric code model.
 
     The Hamiltonian reads:
 
@@ -78,7 +77,6 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     order : str
         The order of the lattice sites in the lattice, see :class:`DualSquare`.
     """
-
     def __init__(self, model_params):
         CouplingMPOModel.__init__(self, model_params)
 
@@ -102,9 +100,13 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Jv = get_parameter(model_params, 'Jv', 1., self.name, True)
         Jp = get_parameter(model_params, 'Jp', 1., self.name, True)
         # vertex/star term
-        self.add_multi_coupling(Jv, 0, 'Sigmax', [(1, 'Sigmax', [0, 0]), (0, 'Sigmax', [-1, 0]),
-                                                  (1, 'Sigmax', [0, -1])])
+        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0),
+                                     ('Sigmax', [0, 0], 1),
+                                     ('Sigmax', [-1, 0], 0),
+                                     ('Sigmax', [0, -1], 1)])
         # plaquette term
-        self.add_multi_coupling(Jp, 0, 'Sigmaz', [(1, 'Sigmaz', [0, 0]), (0, 'Sigmaz', [0, 1]),
-                                                  (1, 'Sigmaz', [1, 0])])
+        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0),
+                                     ('Sigmaz', [0, 0], 1),
+                                     ('Sigmaz', [0, 1], 0),
+                                     ('Sigmaz', [1, 0], 1)])
         # done

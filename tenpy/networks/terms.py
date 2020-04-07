@@ -5,7 +5,7 @@ acting on them. Each term is given by a collection of (onsite) operator names an
 sites it acts on. Moreover, we associate a `strength` to each term, which corresponds to the
 prefactor when specifying e.g. a Hamiltonian.
 """
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -13,11 +13,12 @@ import itertools
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'order_combine_term']
 
 
-class TermList:
+class TermList(Hdf5Exportable):
     """A list of terms (=operator names and sites they act on) and associated strengths.
 
     A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
@@ -49,7 +50,6 @@ class TermList:
     strengths : 1D ndarray
         For each term in `terms` an associated prefactor or strength (e.g. expectation value).
     """
-
     def __init__(self, terms, strength):
         self.terms = list(terms)
         self.strength = np.array(strength)
@@ -190,7 +190,7 @@ def order_combine_term(term, sites):
     return term, overall_sign
 
 
-class OnsiteTerms:
+class OnsiteTerms(Hdf5Exportable):
     """Operator names, site indices and strengths representing onsite terms.
 
     Represents a sum of onsite terms where the operators are only given by their name (in the form
@@ -210,7 +210,6 @@ class OnsiteTerms:
         Filled by meth:`add_onsite_term`.
         For each index `i` a dictionary ``{'opname': strength}`` defining the onsite terms.
     """
-
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -366,7 +365,7 @@ class OnsiteTerms:
                     raise ValueError("Operator {op!r} not in site".format(op=opname))
 
 
-class CouplingTerms:
+class CouplingTerms(Hdf5Exportable):
     """Operator names, site indices and strengths representing two-site coupling terms.
 
     Parameters
@@ -386,7 +385,6 @@ class CouplingTerms:
         ``bc_MPS == 'infinite'``, in which case they indicate couplings between different
         iMPS unit cells.
     """
-
     def __init__(self, L):
         assert L > 0
         self.L = L
@@ -475,7 +473,7 @@ class CouplingTerms:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
                 op_string = 'Id'
-        if op_string is 'JW':
+        if op_string == 'JW':
             op_i = site_i.multiply_op_names([op_i, op_string])
         return strength, i, j, op_i, op_j, op_string
 
@@ -624,14 +622,13 @@ class CouplingTerms:
             H = H_bond[j]
             for (op1, op_str), d2 in d1.items():
                 for j2, d3 in d2.items():
-                    if isinstance(j2, tuple):
-                        # This should only happen in a MultiSiteCoupling model
-                        raise ValueError("MultiCouplingTerms: can't generate H_bond")
                     # i, j in coupling_terms are defined such that we expect j2 = i + 1
                     if j2 != i + 1:
                         msg = "Can't give nearest neighbor H_bond for long-range {i:d}-{j:d}"
                         raise ValueError(msg.format(i=i, j=j2))
                     for op2, strength in d3.items():
+                        if isinstance(op2, tuple):
+                            raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
                         H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
                         H = add_with_None_0(H, H_add)
             if H is not None:
@@ -754,7 +751,6 @@ class MultiCouplingTerms(CouplingTerms):
         are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
         between different iMPS unit cells.
     """
-
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id"):
         """Add a multi-site coupling term.
 

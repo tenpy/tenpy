@@ -5,13 +5,15 @@ A tool to contract a network of multiple tensors.
 This is an implementation of 'NCON: A tensor network contractor for MATLAB'
 by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxiv:`1402.0939`
 
+.. autodata :: outer_product
+
 .. todo ::
     - implement or wrap netcon.m, a function to find optimal contractionn sequences
         (:arxiv:`1304.6112`)
     - improve helpfulness of Warnings
     - _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -20,7 +22,7 @@ from ..linalg import np_conserved as npc
 
 __all__ = ['outer_product', 'contract', 'ncon']
 
-outer_product = -66666666  # a constant that represents an outer product in the sequence of ncon
+outer_product = -66666666  #: a constant that represents an outer product in the sequence of ncon
 
 
 def contract(tensor_list, tensor_names=None, leg_contractions=None, open_legs=None, sequence=None):

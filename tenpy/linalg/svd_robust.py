@@ -34,7 +34,7 @@ The idea is that you just import the `svd` from this module and use it as replac
 >>> from svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., [1.]])
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy
@@ -47,17 +47,6 @@ from numpy.core import single, double, csingle, cdouble  # for those, 'c' = comp
 
 from numpy.linalg.linalg import LinAlgError
 
-try:
-    from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
-        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
-except:
-    warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
-    # If you get this warning, you might still be lucky and not need the workaround,
-    # for examply, if you have a recent version of scipy....
-
-    # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
-    # from the numpy code (version 1.11.0 works for me) on github.
-
 # check the scipy version wheter it includes LAPACK's 'gesvd'
 try:
     # simply check wether scipy.linalg.svd has the keyword it should have
@@ -67,6 +56,17 @@ except TypeError:
     _old_scipy = True
     warnings.warn("Old scipy <= 0.18.0: support will be dropped in TeNPy version 1.0.0",
                   FutureWarning)
+try:
+    from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
+        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
+except:
+    if _old_scipy:
+        warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
+    # If you get this warning, you might still be lucky and not need the workaround,
+    # for examply, if you have a recent version of scipy....
+
+    # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
+    # from the numpy code (version 1.11.0 works for me) on github.
 
 # (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
 
@@ -88,6 +88,8 @@ def svd(a,
     Tries to avoid raising an LinAlgError by using using the lapack_driver `gesvd`,
     if `gesdd` failed.
 
+    Parameters not described below are as in :func:`scipy.linalg.svd`
+
     Parameters
     ----------
     overwrite_a : bool
@@ -100,14 +102,13 @@ def svd(a,
         Default is ``'gesdd'``.
         If ``'gesdd'`` fails, ``'gesvd'`` is used as backup.
     warn : bool
-        whether to create a warning when the SVD failed.
+        Whether to create a warning when the SVD failed.
 
-    Other parameters as described in doc-string of :func:`scipy.linalg.svd`
 
     Returns
     -------
     U, S, Vh : ndarray
-        As described in doc-string of :func:`scipy.linalg.svd`
+        As described in doc-string of :func:`scipy.linalg.svd`.
     """
     if lapack_driver == 'gesdd':
         try:
@@ -243,6 +244,7 @@ def _load_lapack(libs=[
     if _lapack_lib is None:
         msg = "Couldn't find LAPACK library for 'gesvd' workaround.\nTried: " + str(libs)
         raise EnvironmentError(msg)
+    warnings.warn("Old Scipy version. We will drop the support!", FutureWarning)
     return _lapack_lib
 
 

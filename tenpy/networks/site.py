@@ -2,7 +2,7 @@
 
 The :class:`Site` is the prototype, read it's docstring.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -10,6 +10,7 @@ import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 
-class Site:
+class Site(Hdf5Exportable):
     """Collects necessary information about a single local site of a lattice.
 
     This class defines what the local basis states are: it provides the :attr:`leg`
@@ -70,6 +71,9 @@ class Site:
     JW_exponent : 1D array
         Exponents of the ``'JW'`` operator, such that
         ``self.JW.to_ndarray() = np.diag(np.exp(1.j*np.pi* JW_exponent))``
+    hc_ops : dict(str->str)
+        Mapping from operator names to their hermitian conjugates.
+        Use :meth:`get_hc_op_name` to obtain entries.
 
     Examples
     --------
@@ -93,7 +97,6 @@ class Site:
     array([[ 1.,  0.],
            [ 0.,  0.]])
     """
-
     def __init__(self, leg, state_labels=None, **site_ops):
         self.leg = leg
         self.state_labels = dict()
@@ -103,7 +106,8 @@ class Site:
                     self.state_labels[str(v)] = i
         self.opnames = set()
         self.need_JW_string = set(['JW'])
-        self.add_op('Id', npc.diag(1., self.leg))
+        self.hc_ops = {}
+        self.add_op('Id', npc.diag(1., self.leg), hc='Id')
         for name, op in site_ops.items():
             self.add_op(name, op)
         if not hasattr(self, 'perm'):  # default permutation for the local states
@@ -111,7 +115,7 @@ class Site:
         if 'JW' not in self.opnames:
             # include trivial `JW` to allow combinations
             # of bosonic and fermionic sites in an MPS
-            self.add_op('JW', self.Id)
+            self.add_op('JW', self.Id, hc='JW')
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -125,7 +129,7 @@ class Site:
             The permuation applied to the physical leg,
             which gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
-            use ``leg.perm_flat_from_perm_qind(perm_qind)``.
+            use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
         """
         if new_leg_charge is None:
@@ -140,11 +144,12 @@ class Site:
                 self.state_labels[label] = inv_perm[state_labels[label]]
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
-            need_JW = opname in self.need_JW_string
-            self.remove_op(opname)
+            self.opnames.remove(opname)
+            delattr(self, opname)
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
-            self.add_op(opname, op, need_JW)
+            # need_JW and hc_ops are still set
+            self.add_op(opname, op, need_JW=False, hc=False)
         # done
 
     def test_sanity(self):
@@ -167,6 +172,12 @@ class Site:
             assert op in self.opnames
         np.testing.assert_array_almost_equal(np.diag(np.exp(1.j * np.pi * self.JW_exponent)),
                                              self.JW.to_ndarray(), 15)
+        if hasattr(self, 'hc_ops'):
+            for op1, op2 in self.hc_ops.items():
+                assert op1 in self.opnames and op2 in self.opnames
+                op1 = self.get_op(op1)
+                op2 = self.get_op(op2)
+                assert op1.conj().transpose() == op2
 
     @property
     def dim(self):
@@ -181,7 +192,7 @@ class Site:
         """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op, need_JW=False):
+    def add_op(self, name, op, need_JW=False, hc=None):
         """Add one on-site operators.
 
         Parameters
@@ -197,7 +208,11 @@ class Site:
             We set labels ``'p', 'p*'``.
         need_JW : bool
             Whether the operator needs a Jordan-Wigner string.
-            If ``True``, the function adds `name` to :attr:`need_JW_string`.
+            If ``True``, add `name` to :attr:`need_JW_string`.
+        hc : None | False | str
+            The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
+            By default (``None``), try to auto-determine it.
+            If ``False``, disable adding antries to :attr:`hc_ops`.
         """
         name = str(name)
         if not name.isidentifier():
@@ -222,6 +237,19 @@ class Site:
         self.opnames.add(name)
         if need_JW:
             self.need_JW_string.add(name)
+        # keep track of h.c. operators
+        if hc is None and not name in self.hc_ops:
+            if op.conj().transpose() == op:
+                hc = name
+            else:
+                for other in self.opnames:
+                    other_op = self.get_op(other)
+                    if other_op.conj().transpose() == op:
+                        hc = other
+                        break
+        if hc:
+            self.hc_ops[hc] = name
+            self.hc_ops[name] = hc
         if name == 'JW':
             self.JW_exponent = np.angle(np.real_if_close(np.diag(op.to_ndarray()))) / np.pi
 
@@ -239,8 +267,10 @@ class Site:
             return
         if new_name in self.opnames:
             raise ValueError("new_name already exists")
+        old_hc_name = self.hc_ops.get(old_name, None)
         op = getattr(self, old_name)
         need_JW = old_name in self.need_JW_string
+        hc_op_name = self.get_hc_op_name(old_name)
         self.remove_op(old_name)
         setattr(self, new_name, op)
         self.opnames.add(new_name)
@@ -248,6 +278,12 @@ class Site:
             self.need_JW_string.add(new_name)
         if new_name == 'JW':
             self.JW_exponent = np.real_if_close(np.angle(np.diag(op.to_ndarray())) / np.pi)
+        if old_hc_name is not None:
+            if old_hc_name == old_name:
+                self.hc_ops[new_name] = new_name
+            else:
+                self.hc_ops[new_name] = old_hc_name
+                self.hc_ops[old_hc_name] = new_name
 
     def remove_op(self, name):
         """Remove an added operator.
@@ -257,6 +293,11 @@ class Site:
         name : str
             The name of the operator to be removed.
         """
+        hc_name = self.hc_ops.get(name, None)
+        if hc_name is not None:
+            del self.hc_ops[name]
+            if hc_name != name:
+                del self.hc_ops[hc_name]
         self.opnames.remove(name)
         delattr(self, name)
         self.need_JW_string.discard(name)
@@ -312,6 +353,30 @@ class Site:
                 raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, name2))
             op = npc.tensordot(op, op2, axes=['p*', 'p'])
         return op
+
+    def get_hc_op_name(self, name):
+        """Return the hermitian conjugate of a given operator.
+
+        Parameters
+        ----------
+        name : str
+            The name of the operator to be returned.
+            Multiple operators separated by whitespace are interpreted as an operator product,
+            exactly as :meth:`get_op` does.
+
+        Returns
+        -------
+        hc_op_name : str
+            Operator name for the hermi such that :meth:`get_op` of
+        """
+        names = name.split(' ')
+        hc_names = []
+        for name2 in reversed(names):
+            hc_name_2 = self.hc_ops.get(name2)
+            if hc_name_2 is None:
+                raise ValueError("hermitian conjugate of operator {0!s} unknown".format(name2))
+            hc_names.append(hc_name_2)
+        return ' '.join(hc_names)
 
     def op_needs_JW(self, name):
         """Whether an (composite) onsite operator is fermionic and needs a Jordan-Wigner string.
@@ -390,7 +455,7 @@ class GroupedSite(Site):
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
-    expected commutation relations. See also :doc:`/intro_JordanWigner`.
+    expected commutation relations. See also :doc:`/intro/JordanWigner`.
 
     Parameters
     ----------
@@ -419,7 +484,6 @@ class GroupedSite(Site):
     labels: list of str
         The labels using which the single-site operators are added during construction.
     """
-
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
@@ -480,9 +544,14 @@ class GroupedSite(Site):
                 if opname == 'Id':
                     continue
                 need_JW = opname in site.need_JW_string
+                hc_opname = site.hc_ops.get(opname, None)
+                if hc_opname is None:
+                    hc_opname = False
+                else:
+                    hc_opname = hc_opname + labels[i]
                 ops = JW_Ids if need_JW else Ids
                 ops[i] = op
-                self.add_op(opname + labels[i], self.kroneckerproduct(ops), need_JW)
+                self.add_op(opname + labels[i], self.kroneckerproduct(ops), need_JW, hc_opname)
                 Ids[i] = site.Id
                 JW_Ids[i] = site.JW
         # done
@@ -681,7 +750,6 @@ class SpinHalfSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-
     def __init__(self, conserve='Sz'):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -702,6 +770,7 @@ class SpinHalfSite(Site):
             else:
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
+        # Specify Hermitian conjugates
         Site.__init__(self, leg, ['up', 'down'], **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
@@ -755,7 +824,6 @@ class SpinSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-
     def __init__(self, S=0.5, conserve='Sz'):
         if conserve not in ['Sz', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -813,7 +881,7 @@ class FermionSite(Site):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
         otherwise you just describe hardcore bosons!
-        Further details in :doc:`/intro_JordanWigner`.
+        Further details in :doc:`/intro/JordanWigner`.
 
     ==============  ===================================================================
     operator        description
@@ -849,7 +917,6 @@ class FermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, conserve='N', filling=0.5):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))
@@ -961,7 +1028,6 @@ class SpinHalfFermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
         if cons_N not in ['N', 'parity', None]:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
@@ -1105,7 +1171,6 @@ class BosonSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
-
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if conserve not in ['N', 'parity', None]:
             raise ValueError("invalid `conserve`: " + repr(conserve))

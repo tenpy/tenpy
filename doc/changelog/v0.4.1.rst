@@ -1,0 +1,45 @@
+[0.4.1] - 2019-08-14
+--------------------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Switch the sign of the :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`
+  to hopping and chemical potential having negative prefactors.
+  Of course, the same adjustment happens in the :class:`~tenpy.models.hubbard.BoseHubbardChain` and :class:`~tenpy.models.hubbard.FermiHubbardChain`.
+- moved :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.BoseHubbardChain` as well as 
+  :class:`~tenpy.models.hubbard.FermiHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardChain` into the new
+  module :mod:`tenpy.models.hubbard`.
+- Change arguments of :meth:`~tenpy.networks.terms.CouplingTerms.coupling_term_handle_JW` and :meth:`~tenpy.networks.terms.MultiCouplingTerms.multi_coupling_term_handle_JW`
+  to use `strength` and `sites` instead of `op_needs_JW`.
+- Only accept valid identifiers as operator names in :meth:`~tenpy.networks.site.Site.add_op`.
+
+Changed
+^^^^^^^
+- :func:`~tenpy.linalg.np_conserved.grid_concat` allows for ``None`` entries (representing zero blocks).
+- :meth:`~tenpy.networks.mps.MPS.from_full` allows for 'segment' boundary conditions.
+- :meth:`~tenpy.networks.mps.MPS.apply_local_op` allows for n-site operators.
+
+Added
+^^^^^
+- `max_range` attribute in :class:`~tenpy.networks.mpo.MPO` and :class:`~tenpy.networks.mpo.MPOGraph`.
+- :meth:`~tenpy.networks.mpo.MPO.is_hermitian`
+- Nearest-neighbor interaction in :class:`~tenpy.models.bose_hubbard.BoseHubbardModel`
+- :meth:`~tenpy.networks.site.Site.multiply_op_names` to replace ``' '.join(op_names)`` and allow explicit compression/multiplication.
+- :func:`~tenpy.networks.terms.order_combine_term` to group operators together.
+- :meth:`~tenpy.networks.mpo.MPO.dagger` of MPO's (and to implement that also :meth:`~tenpy.linalg.charges.LegCharge.flip_charges_qconj`).
+- :meth:`~tenpy.linalg.np_conserved.Arrray.has_label` to check if a label exists
+- :meth:`~tenpy.tools.math.qr_li` and :meth:`~tenpy.tools.math.rq_li`
+- Addition of MPOs
+- 3 additional examples for chern insulators in ``examples/chern_insulators/``.
+- :class:`~tenpy.models.haldane.FermionicHaldaneModel` and :class:`~tenpy.models.haldane.BosonicHaldaneModel`.
+- :meth:`~tenpy.models.model.NearestNeighborModel.from_MPOModel` for initializing nearest-neighbor models after grouping
+  sites.
+
+Fixed
+^^^^^
+- :issue:`36`: long-range couplings could give IndexError.
+- :issue:`42`: Onsite-terms in :class:`~tenpy.models.hubbard.FermiHubbardModel` were wrong for lattices with non-trivial unit cell.
+- Missing a factor 0.5 in :func:`~tenpy.linalg.random_matrix.GUE`.
+- Allow :class:`~tenpy.networks.terms.TermList` to have terms with multiple operators acting on the same site.
+- Allow MPS indices outside unit cell in :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.models.lattice.Lattice.lat2mps_idx`.
+- :meth:`~tenpy.networks.MPSEnvironment.expectation_value` did not work for n-site operators.

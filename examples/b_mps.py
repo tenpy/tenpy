@@ -12,7 +12,7 @@ This example includes the following steps:
 Note that this example performs the same steps as `a_np_conserved.py`,
 but makes use of other predefined classes except npc.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -54,8 +54,8 @@ W_grid = [[Id,   Sp,   Sm,   Sz,   None          ],
           [None, None, None, None, Jz * Sz       ],
           [None, None, None, None, Id            ]]  # yapf:disable
 
-W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()])
-W.iset_leg_labels(['wL', 'wR', 'p', 'p*'])  # wL/wR = virtual left/right of the MPO
+W = npc.grid_outer(W_grid, [mpo_leg, mpo_leg.conj()], grid_labels=['wL', 'wR'])
+# wL/wR = virtual left/right of the MPO
 Ws = [W] * L
 Ws[0] = W[:1, :]
 Ws[-1] = W[:, -1:]

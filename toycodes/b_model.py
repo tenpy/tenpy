@@ -1,5 +1,5 @@
 """Toy code implementing the transverse-field ising model."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -37,7 +37,6 @@ class TFIModel:
         Each ``H_mpo[i]`` has legs (virutal left, virtual right, physical out, physical in),
         in short ``wL wR i i*``.
     """
-
     def __init__(self, L, J, g, bc='finite'):
         assert bc in ['finite', 'infinite']
         self.L, self.d, self.bc = L, 2, bc

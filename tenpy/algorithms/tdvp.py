@@ -18,7 +18,7 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
     we should have a general way to sweep through an MPS and updated one or two sites, used in both
     cases.
 """
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from tenpy.networks.mpo import MPOEnvironment
@@ -31,7 +31,7 @@ __all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
 class Engine:
-    """Time dependant variational principle 'Engine'.
+    """Time dependent variational principle 'Engine'.
 
     You can call :meth:`run_one_site` for single-site TDVP, or
     :meth:`run_two_sites` for two-site TDVP.
@@ -72,8 +72,9 @@ class Engine:
     environment : :class:`~tenpy.networks.mpo.MPOEnvironment`
         The environment, storing the `LP` and `RP` to avoid recalculations.
     """
-
     def __init__(self, psi, model, TDVP_params, environment=None):
+        if model.H_MPO.explicit_plus_hc:
+            raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
         self.verbose = get_parameter(TDVP_params, 'verbose', 1, 'TDVP')
         self.TDVP_params = TDVP_params
         if environment is None:
@@ -449,7 +450,6 @@ class H0_mixed:
     Rp : :class:`tenpy.linalg.np_conserved.Array`
         right part of the environment
     """
-
     def __init__(self, Lp, Rp):
         self.Lp = Lp
         self.Rp = Rp
@@ -486,7 +486,6 @@ class H1_mixed:
     W : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p0' leg of theta
     """
-
     def __init__(self, Lp, Rp, W):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n
@@ -529,7 +528,6 @@ class H2_mixed:
     W1 : :class:`tenpy.linalg.np_conserved.Array`
         MPO which is applied to the 'p1' leg of theta
     """
-
     def __init__(self, Lp, Rp, W0, W1):
         self.Lp = Lp  # a,ap,m
         self.Rp = Rp  # b,bp,n

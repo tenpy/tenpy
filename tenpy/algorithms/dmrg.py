@@ -30,7 +30,7 @@ crucial, as the one-site algorithm cannot increase the MPS bond dimension by its
 .. todo ::
     Write UserGuide!!!
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -39,16 +39,16 @@ import warnings
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.lanczos import lanczos
-from ..linalg.sparse import NpcLinearOperator
+from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
-from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
-    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list'
+    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list',
+    'full_diag_effH'
 ]
 
 
@@ -114,6 +114,13 @@ def run(psi, model, DMRG_params):
         -------------- --------- ---------------------------------------------------------------
         lanczos_params dict      Lanczos parameters as described in
                                  :func:`~tenpy.linalg.lanczos.lanczos`
+        -------------- --------- ---------------------------------------------------------------
+        diag_method    str       Method to be used for diagonalzation, default ``'default'``.
+                                 For possible arguments see :meth:`DMRGEngine.diag`.
+        -------------- --------- ---------------------------------------------------------------
+        max_N_for_ED   int       Maximum matrix dimension of the effective hamiltonian
+                                 up to which the ``'default'`` `diag_method` uses ED instead of
+                                 Lanczos.
         -------------- --------- ---------------------------------------------------------------
         N_sweeps_check int       Number of sweeps to perform between checking convergence
                                  criteria and giving a status update.
@@ -220,7 +227,7 @@ class DMRGEngine(Sweep):
     Attributes
     ----------
     EffectiveH : class type
-        Class for the effective Hamiltonian (i.e., a subclass of
+        Class for the effective Hamiltonian, i.e., a subclass of
         :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
@@ -257,7 +264,12 @@ class DMRGEngine(Sweep):
         N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
         ----------- -------------------------------------------------------------------
         time        Wallclock time evolved since :attr:`time0` (in seconds).
+        ----------- -------------------------------------------------------------------
+        ov_change   ``1. - abs(<theta_guess|theta_diag>)``, where ``|theta_guess>`` is
+                    the initial guess for the wave function and ``|theta_diag>`` is the
+                    *untruncated* wave function returned by :meth:`diag`.
         =========== ===================================================================
+
     sweep_stats : dict
         A dictionary with detailed statistics at the sweep level.
         For each key in the following table, the dictionary contains a list where one value is
@@ -266,7 +278,9 @@ class DMRGEngine(Sweep):
         ============= ===================================================================
         key           description
         ============= ===================================================================
-        sweep         Number of sweeps performed so far.
+        sweep         Number of sweeps (excluding environment sweeps) performed so far.
+        ------------- -------------------------------------------------------------------
+        N_updates     Number of updates (including environment sweeps) performed so far.
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
@@ -283,7 +297,6 @@ class DMRGEngine(Sweep):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def run(self):
         """Run the DMRG simulation to find the ground state.
 
@@ -301,7 +314,10 @@ class DMRGEngine(Sweep):
         # parameters for lanczos
         p_tol_to_trunc = get_parameter(DMRG_params, 'P_tol_to_trunc', 0.05, 'DMRG')
         if p_tol_to_trunc is not None:
-            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', 5.e-16, 'DMRG')
+            p_tol_min = max(1.e-30,
+                            self.lanczos_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
+                            self.lanczos_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
+            p_tol_min = get_parameter(DMRG_params, 'P_tol_min', p_tol_min, 'DMRG')
             p_tol_max = get_parameter(DMRG_params, 'P_tol_max', 1.e-4, 'DMRG')
         e_tol_to_trunc = get_parameter(DMRG_params, 'E_tol_to_trunc', None, 'DMRG')
         if e_tol_to_trunc is not None:
@@ -310,7 +326,10 @@ class DMRGEngine(Sweep):
 
         # parameters for DMRG convergence criteria
         N_sweeps_check = get_parameter(DMRG_params, 'N_sweeps_check', 10, 'DMRG')
-        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', int(1.5 * N_sweeps_check), 'DMRG')
+        min_sweeps = int(1.5 * N_sweeps_check)
+        if self.chi_list is not None:
+            min_sweeps = max(max(self.chi_list.keys()), min_sweeps)
+        min_sweeps = get_parameter(DMRG_params, 'min_sweeps', min_sweeps, 'DMRG')
         max_sweeps = get_parameter(DMRG_params, 'max_sweeps', 1000, 'DMRG')
         max_E_err = get_parameter(DMRG_params, 'max_E_err', 1.e-8, 'DMRG')
         max_S_err = get_parameter(DMRG_params, 'max_S_err', 1.e-5, 'DMRG')
@@ -321,6 +340,7 @@ class DMRGEngine(Sweep):
             norm_tol_iter = get_parameter(DMRG_params, 'norm_tol_iter', 5, 'DMRG')
         E_old, S_old = np.nan, np.nan  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
+        self.diag_method = get_parameter(DMRG_params, 'diag_method', 'default', 'DMRG')
 
         self.mixer_activate()
         # loop over sweeps
@@ -350,9 +370,15 @@ class DMRGEngine(Sweep):
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
                 self.lanczos_params['P_tol'] = max(p_tol_min,
                                                    min(p_tol_max, max_trunc_err * p_tol_to_trunc))
+                if self.verbose > 3:
+                    print("set lanczos_params['P_tol'] = {0:.2e}".format(
+                        self.lanczos_params['P_tol']))
             if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
                 self.lanczos_params['E_tol'] = max(e_tol_min,
                                                    min(e_tol_max, max_E_trunc * e_tol_to_trunc))
+                if self.verbose > 3:
+                    print("set lanczos_params['E_tol'] = {0:.2e}".format(
+                        self.lanczos_params['P_tol']))
             # update environment
             if not self.finite:
                 self.environment_sweeps(update_env)
@@ -380,6 +406,7 @@ class DMRGEngine(Sweep):
 
             # update statistics
             self.sweep_stats['sweep'].append(self.sweeps)
+            self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
             self.sweep_stats['E'].append(E)
             self.sweep_stats['S'].append(S)
             self.sweep_stats['time'].append(time.time() - start_time)
@@ -456,10 +483,12 @@ class DMRGEngine(Sweep):
             'N_lanczos': [],
             'time': [],
             'err': [],
-            'E_trunc': []
+            'E_trunc': [],
+            'ov_change': []
         }
         self.sweep_stats = {
             'sweep': [],
+            'N_updates': [],
             'E': [],
             'S': [],
             'time': [],
@@ -516,20 +545,55 @@ class DMRGEngine(Sweep):
         self.update_stats['E_total'].append(E0)
         self.update_stats['E_trunc'].append(E_trunc)
         self.update_stats['N_lanczos'].append(update_data['N'])
+        self.update_stats['ov_change'].append(update_data['ov_change'])
         self.update_stats['err'].append(update_data['err'])
         self.update_stats['time'].append(time.time() - self.time0)
         self.trunc_err_list.append(update_data['err'].eps)
         self.E_trunc_list.append(E_trunc)
 
-    def diag(self, theta_guess, theta_ortho):
+    def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
+
+        The method used depends on the DMRG parameter `diag_method`.
+
+        ============  ================================================================
+        diag_method   Function, comment
+        ============  ================================================================
+        'default'     Same as ``'lanczos'`` for large bond dimensions, but if the
+                      total dimension of the effective Hamiltonian does not exceed
+                      the DMRG parameter ``'max_N_for_ED'`` it uses ``'ED_block'``.
+        ------------  ----------------------------------------------------------------
+        'lanczos'     :func:`~tenpy.linalg.lanczos.lanczos`
+                      Default, the Lanczos implementation in TeNPy.
+        ------------  ----------------------------------------------------------------
+        'arpack'      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
+                      Based on :func:`scipy.linalg.sparse.eigsh`.
+                      Slower than 'lanczos', since it needs to convert the npc arrays
+                      to numpy arrays during *each* matvec, and possibly does many
+                      more iterations.
+        ------------  ----------------------------------------------------------------
+        'ED_block'    :func:`full_diag_effH`
+                      Contract the effective Hamiltonian to a (large!) matrix and
+                      diagonalize the block in the charge sector of the initial state.
+                      Preserves the charge sector of the explicitly conserved charges.
+                      However, if you don't preserve a charge explicitly, it can break
+                      it.
+                      For example if you use a ``SpinChain({'conserve': 'parity'})``,
+                      it could change the total "Sz", but not the parity of 'Sz'.
+        ------------  ----------------------------------------------------------------
+        'ED_all'      :func:`full_diag_effH`
+                      Contract the effective Hamiltonian to a (large!) matrix and
+                      diagonalize it completely.
+                      Allows to change the charge sector *even for explicitly
+                      conserved charges*.
+                      For example if you use a ``SpinChain({'conserve': 'Sz'})``,
+                      it **can** change the total "Sz".
+        ============  ================================================================
 
         Parameters
         ----------
         theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta_guess`.
 
         Returns
         -------
@@ -538,10 +602,31 @@ class DMRGEngine(Sweep):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state of the effective Hamiltonian.
         N : int
-            Number of Lanczos iterations used.
+            Number of Lanczos iterations used. ``-1`` if unknown.
+        ov_change : float
+            Change in the wave function ``1. - abs(<theta_guess|theta_diag>)``
         """
-        E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params, theta_ortho)
-        return E, theta, N
+        N = -1  # (unknown)
+
+        if self.diag_method == 'default':
+            # use ED for small matrix dimensions, but lanczos by default
+            max_N = get_parameter(self.engine_params, 'max_N_for_ED', 400, 'DMRG')
+            if self.eff_H.N < max_N:
+                E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
+            else:
+                E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+        elif self.diag_method == 'lanczos':
+            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+        elif self.diag_method == 'arpack':
+            E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
+        elif self.diag_method == 'ED_block':
+            E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
+        elif self.diag_method == 'ED_all':
+            E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=False)
+        else:
+            raise ValueError("Unknown diagonalization method: " + repr(self.diag_method))
+        ov_change = 1. - abs(npc.inner(theta_guess, theta, 'labels', do_conj=True))
+        return E, theta, N, ov_change
 
     def plot_update_stats(self, axes, xaxis='time', yaxis='E', y_exact=None, **kwargs):
         """Plot :attr:`update_stats` to display the convergence during the sweeps.
@@ -550,9 +635,9 @@ class DMRGEngine(Sweep):
         ----------
         axes : :class:`matplotlib.axes.Axes`
             The axes to plot into. Defaults to :func:`matplotlib.pyplot.gca()`
-        xaxis : ``'index' | 'sweep'`` | keys of :attr:`update_stats`
+        xaxis : ``'N_updates' | 'sweep'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the x-axis of the plots.
-            ``'index'`` is just enumerating the number of bond updates,
+            ``'N_updates'`` is just enumerating the number of bond updates,
             and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
         yaxis : ``'E'`` | keys of :attr:`update_stats`
             Key of :attr:`update_stats` to be used for the y-axisof the plots.
@@ -574,8 +659,8 @@ class DMRGEngine(Sweep):
         E = np.array(stats['E_total'])
         schedule = list(self.get_sweep_schedule())
         N = len(schedule)  # bond updates per sweep
-        if xaxis is None or xaxis == 'index':
-            xaxis = 'index'
+        if xaxis is None or xaxis == 'N_updates' or xaxis == 'index':
+            xaxis = 'N_updates'
             x = np.arange(len(E))
         elif xaxis == 'sweep':
             x = np.arange(1, len(E) + 1) / N
@@ -713,7 +798,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def __init__(self, psi, model, engine_params):
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
@@ -726,73 +810,53 @@ class TwoSiteDMRGEngine(DMRGEngine):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            c.f. see :meth:`get_theta_ortho`.
         """
-        EffectiveH = self.EffectiveH
-        env = self.env
-        eff_H = EffectiveH(env, self.i0, self.combine)  # eff_H has attributes LP, RP, W1, W2.
-        self.eff_H = eff_H
-
+        self.make_eff_H() # self.eff_H represents tensors LP, W0, W1, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta_ortho = self.get_theta_ortho()
-        if self.combine:
-            theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
-                                       pipes=[eff_H.pipeL, eff_H.pipeR])
-            theta_ortho = [
-                th_o.combine_legs([['vL', 'p0'], ['p1', 'vR']], pipes=[eff_H.pipeL, eff_H.pipeR])
-                for th_o in theta_ortho
-            ]
-        else:
-            theta.itranspose(['vL', 'p0', 'p1', 'vR'])
-            for th_o in theta_ortho:
-                th_o.itranspose(['vL', 'p0', 'p1', 'vR'])
-        return theta, theta_ortho
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
-    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, optimize=True, meas_E_trunc=False):
         """Perform bond-update on the sites ``(i0, i0+1)``.
 
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta`.
-        optimize : bool, optional
+        optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        meas_E_trunc : bool, optional
+        meas_E_trunc : bool
             Wheter to measure the energy after truncation.
 
         Returns
         -------
         update_data : dict
-            Data computed during the local update, as described in the following list.
+            Data computed during the local update, as described in the following:
 
-            E_total : float
+            E0 : float
                 Total energy, obtained *before* truncation (if ``optimize=True``),
                 or *after* truncation (if ``optimize=False``) (but never ``None``).
-            E_trunc : float | ``None``
-                The energy difference of the total energy after minus before truncation,
-                ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-            err : :class:`~tenpy.algorithms.truncation.TruncationError`
-                The truncation error introduced after bond optimization.
-            N_lanczos : int
+            N : int
                 Dimension of the Krylov space used for optimization in the lanczos algorithm.
                 0 if ``optimize=False``.
             age : int
                 Current size of the DMRG simulation: number of physical sites involved
                 into the contraction.
+            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+                `U` and `VH` returned by :meth:`mixed_svd`.
+            ov_change: float
+                Change in the wave function ``1. - abs(<theta_guess|theta>)``
+                induced by :meth:`diag`, *not* including the truncation!
         """
         i0 = self.i0
         age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
         if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta)
         else:
-            E0, N = None, 0
+            E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         U, S, VH, err = self.mixed_svd(theta)
         self.set_B(U, S, VH)
@@ -803,6 +867,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             'age': age,
             'U': U,
             'VH': VH,
+            'ov_change': ov_change
         }
         return update_data
 
@@ -915,7 +980,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LHeff = self.eff_H.unpatched().LHeff
+            LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
         else:  # as implemented directly in the environment
@@ -934,7 +1000,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RHeff = self.eff_H.unpatched().RHeff
+            RP = npc.tensordot(VH, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
             self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
         else:  # as implemented directly in the environment
@@ -1021,7 +1088,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-
     def __init__(self, psi, model, engine_params):
         self.EffectiveH = OneSiteH
         super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
@@ -1033,49 +1099,22 @@ class SingleSiteDMRGEngine(DMRGEngine):
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States (also with labels ``'vL', 'p0', 'vR', 'p1'``) to orthogonalize against,
-            see :meth:`get_theta_ortho`.
+            Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
         """
-        EffectiveH = self.EffectiveH
-        env = self.env
-        self.eff_H = eff_H = EffectiveH(env, self.i0, self.combine, self.move_right)
-        # eff_H has attributes LP, RP, W.
-
+        self.make_eff_H() # self.eff_H represents tensors LP, W0, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff).replace_label('p0', 'p')
-        # 'vL', 'p', 'vR'
-        theta_ortho = self.get_theta_ortho()
-        for th_o in theta_ortho:
-            th_o.ireplace_label('p0', 'p')
-        if self.combine:
-            if self.move_right:
-                theta = theta.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL])
-                theta_ortho = [
-                    th_o.combine_legs(['vL', 'p'], pipes=[eff_H.pipeL]) for th_o in theta_ortho
-                ]
-            else:
-                theta = theta.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR])
-                theta_ortho = [
-                    th_o.combine_legs(['p', 'vR'], pipes=[eff_H.pipeR]) for th_o in theta_ortho
-                ]
-        else:
-            theta.itranspose(['vL', 'p', 'vR'])
-            for th_o in theta_ortho:
-                th_o.ireplace_label('p0', 'p').itranspose(['vL', 'p', 'vR'])
-        return theta, theta_ortho
+        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
-    def update_local(self, theta, theta_ortho, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, optimize=True, meas_E_trunc=False):
         """Perform site-update on the site ``i0``.
 
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
-        theta_ortho : list of :class:`~tenpy.linalg.np_conserved.Array`
-            States to orthogonalize against, with same tensor structure as `theta`.
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
@@ -1084,27 +1123,30 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         Returns
         -------
-        E_total : float
-            Total energy, obtained *before* truncation (if ``optimize=True``),
-            or *after* truncation (if ``optimize=False``) (but never ``None``).
-        E_trunc : float | ``None``
-            The energy difference of the total energy after minus before truncation,
-            ``E_truncated - E_total``. ``None`` if ``meas_E_trunc=False``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced after bond optimization.
-        N_lanczos : int
-            Dimension of the Krylov space used for optimization in the lanczos algorithm.
-            0 if ``optimize=False``.
-        age : int
-            Current size of the DMRG simulation: number of physical sites involved
-            into the contraction.
+        update_data : dict
+            Data computed during the local update, as described in the following:
+
+            E0 : float
+                Total energy, obtained *before* truncation (if ``optimize=True``),
+                or *after* truncation (if ``optimize=False``) (but never ``None``).
+            N : int
+                Dimension of the Krylov space used for optimization in the lanczos algorithm.
+                0 if ``optimize=False``.
+            age : int
+                Current size of the DMRG simulation: number of physical sites involved
+                into the contraction.
+            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+                `U` and `VH` returned by :meth:`mixed_svd`.
+            ov_change: float
+                Change in the wave function ``1. - abs(<theta_guess|theta>)``
+                induced by :meth:`diag`, *not* including the truncation!
         """
         i0 = self.i0
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0)
+        age = self.env.get_LP_age(i0) + 1 + self.env.get_RP_age(i0)
         if optimize:
-            E0, theta, N = self.diag(theta, theta_ortho)
+            E0, theta, N, ov_change = self.diag(theta)
         else:
-            E0, N = None, 0
+            E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         if self.move_right:
             next_B = self.env.bra.get_B(i0 + 1, form='B')
@@ -1112,7 +1154,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
             next_B = self.env.bra.get_B(i0 - 1, form='A')
         U, S, VH, err = self.mixed_svd(theta, next_B)
         self.set_B(U, S, VH)
-
         update_data = {
             'E0': E0,
             'err': err,
@@ -1120,8 +1161,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
             'age': age,
             'U': U,
             'VH': VH,
+            'ov_change': ov_change
         }
-
         return update_data
 
     def prepare_svd(self, theta):
@@ -1132,14 +1173,14 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         if self.combine:
             if self.move_right:
-                theta.itranspose(['(vL.p)', 'vR'])  # ensure the order.
+                theta.itranspose(['(vL.p0)', 'vR'])  # ensure the order.
             else:
-                theta.itranspose(['vL', '(p.vR)'])  # ensure the order.
+                theta.itranspose(['vL', '(p0.vR)'])  # ensure the order.
         else:
             if self.move_right:
-                theta = theta.combine_legs(['vL', 'p'], qconj=+1, new_axes=0)
+                theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
             else:
-                theta = theta.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
+                theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         return theta
 
     def mixed_svd(self, theta, next_B):
@@ -1174,12 +1215,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
         Returns
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singluar values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p0.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
@@ -1208,7 +1249,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = U.combine_legs(['vL', 'p'], qconj=+1)
                 U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
                 U = U.split_legs(['(vL.p)'])
-                S = VH_U.iscale_axis(S, 'vR').iscale_axis(S_U, 'vL')
+                S = VH_U.iscale_axis(S_U, 'vL').iscale_axis(S, 'vR')
             return U, S, VH, err
 
     def set_B(self, U, S, VH):
@@ -1224,7 +1265,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.move_right:
-            B0 = U.split_legs(['(vL.p)'])
+            B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
             self.psi.set_B(i0, B0, form='A')  # left-canonical
             self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
             self.psi.set_SR(i0, S)
@@ -1234,11 +1275,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_LP(i0 + 1)
             self.env.del_RP(i0)
         else:
-            B1 = VH.split_legs(['(p.vR)'])
+            B1 = VH.split_legs(['(p0.vR)']).replace_label('p0', 'p')
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
             self.psi.set_SL(i0, S)
-            for o_env in self.ortho_to_envs:  # TODO indexing here
+            for o_env in self.ortho_to_envs:
                 o_env.del_LP(i0)
                 o_env.del_RP(i0 - 1)
             self.env.del_LP(i0)
@@ -1255,7 +1296,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
                            'for Sweep parameter "mixer"')
                     warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"  # TODO not for 1-site.
+                    Mixer = "SingleSiteMixer"
                 Mixer_class = globals()[Mixer_class]
             mixer_params = get_parameter(self.engine_params, 'mixer_params', {}, 'Sweep')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
@@ -1272,12 +1313,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ----------
         U : :class:`~tenpy.linalg.np_conserved.Array`
             The U as returned by SVD, with combined legs,
-            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+            labels ``'(vL.p0)', 'vR'`` if self.move_right, else ``'vL', '(p0.vR)'``.
         """
         i0 = self.i0
         if self.combine and self.move_right:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p*)', '(vL.p)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p)'])
+            LHeff = self.eff_H.unpatched().LHeff
+            LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
         else:  # as implemented directly in the environment
             if self.move_right:
@@ -1296,12 +1338,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ----------
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             The VH as returned by SVD, with combined legs,
-            labels ``'(vL.p)', 'vR'`` if self.move_right or ``'vL', '(p.vR)'`` if self.move_left.
+            labels ``'(vL.p0)', 'vR'`` if self.move_right, else ``'vL', '(p0.vR)'``.
         """
         i0 = self.i0
         if self.combine and not self.move_right:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p.vR)', '(p*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p.vL*)', '(p*.vR*)'])
+            RHeff = self.eff_H.unpatched().RHeff
+            RP = npc.tensordot(VH, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
             self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
         else:  # as implemented directly in the environment
             if self.move_right:
@@ -1317,16 +1360,9 @@ class EngineCombine(TwoSiteDMRGEngine):
     This reduces the overhead of calculating charge combinations in the contractions,
     but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
 
-    Attributes
-    ----------
-    LHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Left part of the effective Hamiltonian.
-        Labels ``'(vR*.p0)', 'wR', '(vR.p0*)'`` for bra, MPO, ket.
-    RHeff : :class:`~tenpy.linalg.np_conserved.Array`
-        Right part of the effective Hamiltonian.
-        Labels ``'(vL.p1*)', 'wL', '(vL*.p1)'`` for ket, MPO, bra.
+    .. deprecated : 0.5.0
+       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
     """
-
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
                "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
@@ -1343,17 +1379,9 @@ class EngineFracture(TwoSiteDMRGEngine):
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
     One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
 
-    Attributes
-    ----------
-    LP : :class:`~tenpy.linalg.np_conserved.Array`
-        Left part of the effective Hamiltonian. Labels ``'vR*', 'wR', 'vR'``.
-    RP : :class:`~tenpy.linalg.np_conserved.Array`
-        Right part of the effective Hamiltonian. Labels ``'vL*', 'wL', 'vL'``.
-    H0, H1 : :class:`~tenpy.linalg.np_conserved.Array`
-        MPO on the two sites to be optimized.
-        Labels ``'wL, 'wR', 'p0', 'p0*'`` and ``'wL, 'wR', 'p1', 'p1*'``.
+    .. deprecated : 0.5.0
+       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
     """
-
     def __init__(self, psi, model, DMRG_params):
         msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
                "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
@@ -1412,7 +1440,6 @@ class Mixer:
     verbose : int
         Level of output vebosity.
     """
-
     def __init__(self, mixer_params):
         self.amplitude = get_parameter(mixer_params, 'amplitude', 1.e-5, 'Mixer')
         assert self.amplitude <= 1.
@@ -1481,7 +1508,6 @@ class SingleSiteMixer(Mixer):
 
     Performs a subspace expansion following [Hubig2015]_.
     """
-
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1556,19 +1582,20 @@ class SingleSiteMixer(Mixer):
             MPS tensor at site `i0+1` or `i0-1` (depending on sweep direction) after subspace
             expansion.
         """
+        eff_H = engine.eff_H.unpatched()
         if not engine.combine:  # Need to get Heff's even if combine=False
-            engine.eff_H.combine_Heff()
+            eff_H.combine_Heff()
 
-        if move_right:  # theta has legs (vL.p), vR
-            LHeff = engine.eff_H.LHeff
-            expand = npc.tensordot(LHeff, theta, axes=['(vR.p*)', '(vL.p)'])
+        if move_right:  # theta has legs (vL.p0), vR
+            LHeff = eff_H.LHeff
+            expand = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
             expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
-        else:  # theta has legs vL, (p.vR)
-            RHeff = engine.eff_H.RHeff
-            expand = npc.tensordot(theta, RHeff, axes=['(p.vR)', '(p*.vL)'])
+        else:  # theta has legs vL, (p0.vR)
+            RHeff = eff_H.RHeff
+            expand = npc.tensordot(theta, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
             expand = expand.combine_legs(['vL', 'wL'], qconj=+1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=0, copy=False)
@@ -1587,7 +1614,6 @@ class TwoSiteMixer(SingleSiteMixer):
         Works only with :class:`TwoSiteDMRGEngine`.
         Has not been ported to `Sweep`-based setup yet. Do we need to?
     """
-
     def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1636,7 +1662,6 @@ class DensityMatrixMixer(Mixer):
 
     This mixer constructs density matrices as described in the original paper [White2005]_.
     """
-
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
 
@@ -1748,6 +1773,7 @@ class DensityMatrixMixer(Mixer):
         try:
             LHeff = engine.LHeff
         except AttributeError:
+            # TODO: needed?
             H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
             LP = engine.env.get_LP(i0, store=False)
             LHeff = npc.tensordot(LP, H0, axes=['wR', 'wL'])
@@ -1858,8 +1884,7 @@ class DensityMatrixMixer(Mixer):
             x[Id_L] = 1.
         if Id_R is not None:
             x[Id_R] = 0.
-        x = npc.diag(x, wR_leg)
-        x.iset_leg_labels(['wL*', 'wL'])
+        x = npc.diag(x, wR_leg, labels=['wL*', 'wL'])
         return x, separate_Id
 
     def get_xL(self, wL_leg, Id_L, Id_R):
@@ -1889,8 +1914,7 @@ class DensityMatrixMixer(Mixer):
             x[Id_R] = 1.
         if Id_L is not None:
             x[Id_L] = 0.
-        x = npc.diag(x, wL_leg)
-        x.iset_leg_labels(['wR*', 'wR'])
+        x = npc.diag(x, wL_leg, labels=['wR*', 'wR'])
         return x, separate_Id
 
 
@@ -1926,3 +1950,43 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     if chi < chi_max:
         chi_list[nsweeps * (i + 1)] = chi_max
     return chi_list
+
+
+def full_diag_effH(effH, theta_guess, keep_sector=True):
+    """Perform an exact diagonalization of `effH`.
+
+    This function offers an alternative to :func:`~tenpy.linalg.lanczos.lanczos`.
+
+    Parameters
+    ----------
+    effH : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+        The effective Hamiltonian.
+    theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
+        Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.
+    """
+    theta_guess = theta_guess.combine_legs(effH.acts_on, qconj=+1)
+    fullH = effH.to_matrix()
+    if keep_sector:
+        # diagonalize only the block of the charge sector in which `theta_guess` is.
+        leg = theta_guess.legs[0]
+        qi = leg.get_qindex_of_charges(theta_guess.qtotal)
+        block = fullH.get_block(np.array([qi, qi], np.intp))
+        if block is None:
+            warnings.warn("H is zero in the given block, nothing to diagonalize."
+                          "We just return the initial state again.")
+            E0 = 0
+            theta = theta_guess
+        else:
+            E, V = np.linalg.eigh(block)
+            E0 = E[0]
+            theta = theta_guess.zeros_like()
+            theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+            theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
+            theta_block[:] = V[:, 0]  # copy data into theta
+    else:  # allow to change charge sector!
+        E, V = npc.eigh(fullH)
+        i0 = np.argmin(E)
+        E0 = E[i0]
+        theta = V.take_slice(i0, 1)
+    theta = theta.split_legs([0]).iset_leg_labels(effH.acts_on)
+    return E0, theta

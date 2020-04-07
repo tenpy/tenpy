@@ -1,5 +1,5 @@
 """Basic use of the `Array` class with trivial arrays."""
-# Copyright 2019 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 
@@ -12,5 +12,5 @@ print("|v> =", v.to_ndarray())
 M_v = npc.tensordot(M, v, axes=[1, 0])
 print("M|v> =", M_v.to_ndarray())
 # M|v> = [ 4.+1.j  3.+0.j]
-print("<v|M|v> =", npc.inner(v.conj(), M_v))
+print("<v|M|v> =", npc.inner(v.conj(), M_v, axes='range'))
 # <v|M|v> = (24+0j)

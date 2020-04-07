@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.purification_mps`."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np
@@ -89,9 +89,8 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     # Now we have unitary `A`, i.e. the optimal `U` should be `A^dagger`.
     theta = npc.tensordot(A, theta, axes=[['p0*', 'p1*'], ['p0', 'p1']])
 
-    U0 = npc.outer(
-        npc.eye_like(theta, 'q0').iset_leg_labels(['q0', 'q0*']),
-        npc.eye_like(theta, 'q1').iset_leg_labels(['q1', 'q1*']))
+    U0 = npc.outer(npc.eye_like(theta, 'q0', labels=['q0', 'q0*']),
+                   npc.eye_like(theta, 'q1', labels=['q1', 'q1*']))
     U = U0
     Sold = np.inf
     for i in range(20):

@@ -8,7 +8,7 @@ functions/classes defined here to overwrite those written in pure Python wheneve
 decorator ``@use_cython`` is used in other python files of tenpy.
 If this module was not compiled and could not be imported, a warning is issued.
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
 
@@ -429,7 +429,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     cdef np.ndarray[intp_t, ndim=1] blocksizes = np.ones((nblocks,), dtype=np.intp)
     cdef intp_t[::1] leg_bs
     for i in range(nlegs):
-        leg_bs = self.legs[i]._get_block_sizes()
+        leg_bs = self.legs[i].get_block_sizes()
         for j in range(nblocks):
             blocksizes[j] *= leg_bs[grid2[i, j]]
 
@@ -466,6 +466,7 @@ def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
             a += 1
         for j in range(idx[idx.shape[0]-1], nblocks):
             q_map[j, 2] = a
+        self.bunched = True
     else:
         # trivial mapping for q_map[:, 2]
         for j in range(nblocks):
@@ -654,7 +655,7 @@ def Array_itranspose(self, axes=None):
         axes =self.get_leg_indices(axes)
         if len(axes) != self.rank or len(set(axes)) != self.rank:
             raise ValueError("axes has wrong length: " + str(axes))
-        if axes == range(self.rank):
+        if axes == list(range(self.rank)):
             return self  # nothing to do
         axes = np.array(axes, dtype=np.intp)
     Array_itranspose_fast(self, axes)
@@ -904,7 +905,7 @@ def _combine_legs_worker(self,
     q_map_inds = [qm[sort] for qm in q_map_inds]
     cdef np.ndarray[intp_t, ndim=2, mode='c'] block_start = _np_zeros_2D(self_stored_blocks, res_rank, intp_num)
     cdef np.ndarray[intp_t, ndim=2, mode='c'] block_shape = _np_empty_2D(self_stored_blocks, res_rank, intp_num)
-    cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    cdef list block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for j in range(non_new_axes.shape[0]):
         ax = non_new_axes[j]
         block_shape[:, ax] = block_sizes[ax][qdata[:, ax]]
@@ -1042,7 +1043,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         old_block_beg[:, split_axes[j]] = q_map[:, 0]
         old_block_shapes[:, split_axes[j]] = q_map[:, 1] - q_map[:, 0]
     cdef np.ndarray[intp_t, ndim=2, mode='c'] new_block_shapes = np.empty((res_stored_blocks, res.rank), dtype=np.intp)
-    cdef list block_sizes = [leg._get_block_sizes() for leg in res.legs]
+    cdef list block_sizes = [leg.get_block_sizes() for leg in res.legs]
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
     old_block_shapes[:, nonsplit_axes] =  new_block_shapes[:, new_nonsplit_axes]

@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -50,6 +50,7 @@ def test_lattice():
         A = np.random.random([lat.N_sites, 2, lat.N_sites])
         print(A.shape)
         Ares = lat.mps2lat_values(A, axes=[-1, 0])
+        Ares_ma = lat.mps2lat_values_masked(A, [-1, 0], [None] * 2, [None] * 2)
         for i in range(lat.N_sites):
             idx_i = lat.mps2lat_idx(i)
             for j in range(lat.N_sites):
@@ -57,11 +58,19 @@ def test_lattice():
                 for k in range(2):
                     idx = tuple(idx_i) + (k, ) + tuple(idx_j)
                     assert Ares[idx] == A[i, k, j]
+                    assert Ares_ma[idx] == A[i, k, j]
         # and again for fixed `u` within the unit cell
         for u in range(len(lat.unit_cell)):
-            A_u = A[np.ix_(lat.mps_idx_fix_u(u), np.arange(2), lat.mps_idx_fix_u(u))]
+            mps_u = lat.mps_idx_fix_u(u)
+            A_u = A[np.ix_(mps_u, np.arange(2), mps_u)]
             A_u_res = lat.mps2lat_values(A_u, axes=[-1, 0], u=u)
-            npt.assert_equal(A_u_res, Ares[:, :, u, :, :, :, u])
+            A_u_res_masked = lat.mps2lat_values_masked(A_u,
+                                                       axes=[-1, 0],
+                                                       mps_inds=[mps_u] * 2,
+                                                       include_u=[False] * 2)
+            A_u_expected = Ares[:, :, u, :, :, :, u]
+            npt.assert_equal(A_u_res, A_u_expected)
+            npt.assert_equal(A_u_res_masked, A_u_expected)
 
 
 def test_TrivialLattice():
@@ -75,31 +84,26 @@ def test_TrivialLattice():
 def test_number_nn():
     s = site.SpinHalfSite('Sz')
     chain = lattice.Chain(2, s)
-    assert chain.number_nearest_neighbors() == 2
-    assert chain.number_next_nearest_neighbors() == 2
+    assert chain.count_neighbors() == 2
+    assert chain.count_neighbors(key='next_nearest_neighbors') == 2
     ladd = lattice.Ladder(2, s)
-    assert ladd.number_nearest_neighbors(0) == 3
-    assert ladd.number_nearest_neighbors(1) == 3
-    assert ladd.number_next_nearest_neighbors(0) == 2
-    assert ladd.number_next_nearest_neighbors(1) == 2
+    for u in [0, 1]:
+        assert ladd.count_neighbors(u) == 3
+        assert ladd.count_neighbors(u, key='next_nearest_neighbors') == 2
     square = lattice.Square(2, 2, s)
-    assert square.number_nearest_neighbors() == 4
-    assert square.number_next_nearest_neighbors() == 4
+    assert square.count_neighbors() == 4
+    assert square.count_neighbors(key='next_nearest_neighbors') == 4
     triang = lattice.Triangular(2, 2, s)
-    assert triang.number_nearest_neighbors() == 6
-    assert triang.number_next_nearest_neighbors() == 6
+    assert triang.count_neighbors() == 6
+    assert triang.count_neighbors(key='next_nearest_neighbors') == 6
     hc = lattice.Honeycomb(2, 2, s)
-    assert hc.number_nearest_neighbors(0) == 3
-    assert hc.number_nearest_neighbors(1) == 3
-    assert hc.number_next_nearest_neighbors(0) == 6
-    assert hc.number_next_nearest_neighbors(1) == 6
+    for u in [0, 1]:
+        assert hc.count_neighbors(u) == 3
+        assert hc.count_neighbors(u, key='next_nearest_neighbors') == 6
     kag = lattice.Kagome(2, 2, s)
-    assert kag.number_nearest_neighbors(0) == 4
-    assert kag.number_nearest_neighbors(1) == 4
-    assert kag.number_nearest_neighbors(2) == 4
-    assert kag.number_next_nearest_neighbors(0) == 4
-    assert kag.number_next_nearest_neighbors(1) == 4
-    assert kag.number_next_nearest_neighbors(2) == 4
+    for u in [0, 1, 2]:
+        assert kag.count_neighbors(u) == 4
+        assert kag.count_neighbors(u, key='next_nearest_neighbors') == 4
 
 
 def test_lattice_order():
@@ -141,3 +145,24 @@ def test_lattice_order():
                              [1, 1, 2], [1, 2, 0], [1, 2, 2]])
     npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable
+
+
+def test_possible_couplings():
+    lat = lattice.Honeycomb(2, 3, [None, None], order="snake")
+    u0, u1 = 0, 1
+    for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
+        print("dx =", dx)
+        mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
+        ops = [(None, [0, 0], u0), (None, dx, u1)]
+        m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
+        assert coupling_shape == m_coupling_shape
+        if len(lat_indices) == 0:
+            continue
+        sort = np.lexsort(lat_indices.T)
+        mps0, mps1, lat_indices = mps0[sort], mps1[sort], lat_indices[sort, :]
+        assert m_ijkl.shape == (len(mps0), 2)
+        m_sort = np.lexsort(m_lat_indices.T)
+        m_ijkl, m_lat_indices = m_ijkl[m_sort, :], m_lat_indices[m_sort, :]
+        npt.assert_equal(m_lat_indices, lat_indices)
+        npt.assert_equal(mps0, m_ijkl[:, 0])
+        npt.assert_equal(mps1, m_ijkl[:, 1])

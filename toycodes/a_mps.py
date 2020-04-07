@@ -1,9 +1,9 @@
 """Toy code implementing a matrix product state."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from scipy.linalg import svd
-# if you get an error message LinAlgError: SVD did not converge,
+# if you get an error message "LinAlgError: SVD did not converge",
 # uncomment the following line. (This requires TeNPy to be installed.)
 #  from tenpy.linalg.svd_robust import svd  # (works like scipy.linalg.svd)
 
@@ -34,7 +34,6 @@ class SimpleMPS:
     nbonds : int
         Number of (non-trivial) bonds: L-1 for 'finite' boundary conditions
     """
-
     def __init__(self, Bs, Ss, bc='finite'):
         assert bc in ['finite', 'infinite']
         self.Bs = Bs

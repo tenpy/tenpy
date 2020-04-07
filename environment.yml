@@ -2,10 +2,12 @@ name: tenpy
 channels:
   - default
 dependencies:
-  - numpy>=1.12
+  - python>=3.5
+  - numpy>=1.13
   - scipy>=0.18
   - mkl
   - cython>=0.29
   - bottleneck
   - pip
   - setuptools>=30.3.0
+  - h5py

@@ -1,13 +1,19 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import np_conserved as npc
 from ..tools.params import get_parameter
 import numpy as np
 from scipy.linalg import expm
+import scipy.sparse
+from .sparse import FlatHermitianOperator
+from ..tools.math import speigsh
 import warnings
 
-__all__ = ['LanczosGroundState', 'LanczosEvolution', 'lanczos', 'gram_schmidt', 'plot_stats']
+__all__ = [
+    'LanczosGroundState', 'LanczosEvolution', 'lanczos', 'lanczos_arpack', 'gram_schmidt',
+    'plot_stats'
+]
 
 
 class LanczosGroundState:
@@ -21,13 +27,15 @@ class LanczosGroundState:
 
     Parameters
     ----------
-    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
         A hermitian linear operator. Must implement the method `matvec` acting on a
         :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
         The result has to have the same legs as the argument.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
+        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
+        as vectors.
     params : dict
         Further optional parameters as described in the following table.
         Add a parameter ``verbose >=1`` to print the used parameters during runtime.
@@ -74,7 +82,7 @@ class LanczosGroundState:
 
     Attributes
     ----------
-    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
         The hermitian linear operator.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector.
@@ -101,7 +109,6 @@ class LanczosGroundState:
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
     """
-
     def __init__(self, H, psi0, params, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
@@ -120,7 +127,7 @@ class LanczosGroundState:
         self._cutoff = get_parameter(params, 'cutoff', np.finfo(psi0.dtype).eps * 100, "Lanczos")
         self.verbose = params.get('verbose', 0)
         if len(orthogonal_to) > 0:
-            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, self.verbose / 10)
+            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose=self.verbose / 10)
         else:
             self.orthogonal_to = []
         self._cache = []
@@ -167,13 +174,13 @@ class LanczosGroundState:
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
             w = self._apply_H(w)
-            alpha = np.real(npc.inner(w, self._cache[-1], do_conj=True)).item()
+            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
+                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
                 w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = npc.norm(w)
@@ -207,7 +214,7 @@ class LanczosGroundState:
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, do_conj=True), c)
+                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
             elif k > 0:
                 w.iadd_prefactor_other(-beta, self._cache[-2])
             beta = T[k, k + 1]  # = norm(w)
@@ -238,10 +245,10 @@ class LanczosGroundState:
         if len(self.orthogonal_to) > 0:
             w = w.copy()
             for o in self.orthogonal_to:  # Project out
-                w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
+                w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
         w = self.H.matvec(w)
         for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w.iadd_prefactor_other(-npc.inner(o, w, do_conj=True), o)
+            w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
         return w
 
     def _calc_result_krylov(self, k):
@@ -259,7 +266,7 @@ class LanczosGroundState:
     def _converged(self, k):
         v0 = self._result_krylov
         E = self.Es[k, :]  # current energies
-        RitzRes = np.abs(v0[k - 1] * self._T[k, k + 1])
+        RitzRes = abs(v0[k - 1]) * self._T[k, k + 1]
         gap = max(E[1] - E[0], self.min_gap)
         P_err = (RitzRes / gap)**2
         Delta_E0 = self.Es[k - 1, 0] - E[0]
@@ -289,7 +296,6 @@ class LanczosEvolution(LanczosGroundState):
     _result_norm : float
         Norm of the resulting vector.
     """
-
     def __init__(self, H, psi0, params):
         super().__init__(H, psi0, params)
         self.delta = None
@@ -350,8 +356,61 @@ class LanczosEvolution(LanczosGroundState):
 
 
 def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
-    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``"""
+    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``
+
+    Parameters
+    ----------
+    H, psi, lanczos_params, orthogonal_to :
+        See :class:`LanczosGroundState`.
+
+    Returns
+    -------
+    E0, psi0, N :
+        See :meth:`LanczosGroundState.run`.
+    """
     return LanczosGroundState(H, psi, lanczos_params, orthogonal_to).run()
+
+
+def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
+    """Use :func:`scipy.sparse.linalg.eigsh` to find the ground state of `H`.
+
+    This function has the same call/return structure as :func:`lanczos`, but uses
+    the ARPACK package through the functions :func:`~tenpy.tools.math.speigsh` instead of the
+    custom lanczos implementation in :class:`LanczosGroundState`.
+    This function is mostly intended for debugging, since it requires to convert the vector
+    from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
+    and back during *each* `matvec`-operation!
+
+    Parameters
+    ----------
+    H, psi, lanczos_params, orthogonal_to :
+        See :class:`LanczosGroundState`.
+        `H` and `psi` should have/use labels.
+
+    Returns
+    -------
+    E0 : float
+        Ground state energy.
+    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+        Ground state vector.
+    """
+    if len(orthogonal_to) > 0:
+        # TODO: write method to project out orthogonal states from a NpcLinearOperator
+        raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
+    H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
+    tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
+    N_min = get_parameter(lanczos_params, 'N_min', None, "Lanczos")
+    try:
+        Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    except scipy.sparse.linalg.ArpackNoConvergence:
+        # simply try again with larger "k", that often helps
+        new_k = min(6, H_flat.shape[1])
+        if new_k <= 1:
+            raise
+        Es, Vs = speigsh(H_flat, k=new_k, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
+    psi0.itranspose(psi.get_leg_labels())
+    return Es[0], psi0
 
 
 def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
@@ -360,8 +419,9 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     Parameters
     ----------
     vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The vectors which should be orthogonalized. Entries are modified *in place*.
-        if a norm < rcond, they entry is set to `None`
+        The vectors which should be orthogonalized.
+        All with the same *order* of the legs. Entries are modified *in place*.
+        if a norm < rcond, the entry is set to `None`.
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
     verbose : int
@@ -372,7 +432,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
     ov : 2D Array
-        For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], do_conj=True)``
+        For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)``
         (where vecs[j] was orthogonalized to all ``vecs[k], k < i``).
     """
     k = len(vecs)
@@ -382,7 +442,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         if n > rcond:
             vecs[j].iscale_prefactor(1. / n)
             for i in range(j + 1, k):
-                ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], do_conj=True)
+                ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)
                 vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
         else:
             if verbose >= 1:
@@ -394,7 +454,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         G = np.empty((k, k), dtype=vecs[0].dtype)
         for i, v in enumerate(vecs):
             for j, w in enumerate(vecs):
-                G[i, j] = npc.inner(v, w, do_conj=True)
+                G[i, j] = npc.inner(v, w, 'range', do_conj=True)
         print("GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k)))
     return vecs, ov
 

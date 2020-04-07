@@ -4,7 +4,7 @@ This example code evaluate the central charge of the transverse field Ising mode
 The expected value for the central charge c = 1/2. The code always recycle the environment from
 the previous simulation, which can be seen at the "age".
 """
-# Copyright 2018-2019 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy
