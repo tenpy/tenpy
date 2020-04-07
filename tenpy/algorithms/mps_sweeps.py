@@ -915,8 +915,6 @@ class EffectiveHPlusHC(EffectiveHWrapper):
 
     def matvec(self, theta):
         """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        import ipdb
-        ipdb.set_trace()  # TODO XXX
         return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
 
     def to_matrix(self):
