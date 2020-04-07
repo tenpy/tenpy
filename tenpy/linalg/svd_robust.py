@@ -43,7 +43,7 @@ import warnings
 
 from ctypes import CDLL, POINTER, c_int, c_char
 from ctypes.util import find_library
-from numpy.core import single, double, csingle, cdouble  # for those, 'c' = complex
+from numpy.core import single, double, csingle, cdouble, isfinite  # for those, 'c' = complex
 
 from numpy.linalg.linalg import LinAlgError
 
@@ -58,7 +58,7 @@ except TypeError:
                   FutureWarning)
 try:
     from numpy.linalg.linalg import _makearray, _fastCopyAndTranspose, \
-        isComplexType, _realType, _commonType, _assertRank2, _assertFinite, _assertNoEmpty2d
+        isComplexType, _realType, _commonType
 except:
     if _old_scipy:
         warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
@@ -150,10 +150,13 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
         See :func:`numpy.linalg.svd` for details.
     """
     a, wrap = _makearray(a)  # uses order='C'
-    _assertNoEmpty2d(a)
-    _assertRank2(a)
+    if a.ndim != 2:
+        raise LinAlgError("array must be 2D!")
+    if a.size == 0 or np.product(a.shape) == 0:
+        raise LinAlgError("array cannot be empty")
     if check_finite:
-        _assertFinite(a)
+        if not isfinite(a).all():
+            raise LinAlgError("Array must not contain infs or NaNs")
     M, N = a.shape
     # determine types
     t, result_t = _commonType(a)
