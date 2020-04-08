@@ -382,7 +382,10 @@ class MPS:
         if p_state.ndim == len(lat.shape):  # == lat.dim + 1
             p_state = to_array(p_state, shape=lat.shape)  # tile to lattice shape
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
-        elif p_state.ndim == len(lat.shape) + 1:  # extra dimension could be from 1D array entries
+        elif p_state.ndim == len(lat.shape) + 1:
+            # extra dimension could be from purely 1D array entries
+            # make sure this is the case by converting to float
+            p_state = np.array(p_state, kwargs.get("dtype", np.float64))
             # tile to lattice shape, ignore last dimension
             p_state = to_array(p_state, shape=lat.shape + (None, ))
             inds = tuple(lat.order.T) + (slice(None), )
