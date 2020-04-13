@@ -114,3 +114,4 @@ Fixed
 - :meth:`~tenpy.networks.mps.MPS.correlation_function` did not respect argument ``str_on_first=False``.
 - :meth:`tenpy.networks.mps.MPS.get_op` worked unexpected for infinite `bc` with incomensurate ``self.L`` and ``len(op_list)``.
 - :issue:`105` Unintended side-effects using `lanczos_params.verbose` in combination with `orthogonal_to`
+- :issue:`108` :meth:`tenpy.linalg.sparse.FlatLinearOperator._matvec` changes ``self._charge_sector``
