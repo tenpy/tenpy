@@ -260,6 +260,7 @@ def test_chi_list():
     assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}
 
 
+@pytest.mark.slow
 def test_dmrg_explicit_plus_hc(tol=1.e-13):
     model_params = dict(L=12, Jx=1., Jy=1., Jz=1.25, hz=5.125)
     dmrg_params = dict(N_sweeps_check=2, mixer=False)
