@@ -15,6 +15,8 @@ if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
     sys.exit(1)
 
+# don't use compiled version to avoid problems with doc-strings of compiled functions
+os.environ['TENPY_OPTIMIZE'] = "0"
 try:
     import tenpy.version
 except:
