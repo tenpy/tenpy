@@ -41,7 +41,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
@@ -191,7 +191,7 @@ def run(psi, model, DMRG_params):
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
     """
     # initialize the engine
-    DMRG_params = Parameters(DMRG_params, 'DMRG')
+    DMRG_params = Config(DMRG_params, 'DMRG')
     active_sites = DMRG_params.get('active_sites', 2)
     if active_sites == 1:
         engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
@@ -800,8 +800,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, engine_params):
-        if not isinstance(engine_params, Parameters):
-            engine_params = Parameters(engine_params, 'DMRG')
+        if not isinstance(engine_params, Config):
+            engine_params = Config(engine_params, 'DMRG')
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
@@ -1092,8 +1092,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, engine_params):
-        if not isinstance(engine_params, Parameters):
-            engine_params = Parameters(engine_params, 'DMRG')
+        if not isinstance(engine_params, Config):
+            engine_params = Config(engine_params, 'DMRG')
         self.EffectiveH = OneSiteH
         super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
 
@@ -1446,8 +1446,8 @@ class Mixer:
         Level of output vebosity.
     """
     def __init__(self, mixer_params):
-        if not isinstance(mixer_params, Parameters):
-            mixer_params = Parameters(mixer_params, "Mixer")
+        if not isinstance(mixer_params, Config):
+            mixer_params = Config(mixer_params, "Mixer")
         self.amplitude = mixer_params.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
         self.decay = mixer_params.get('decay', 2.)

@@ -8,7 +8,7 @@ import numpy as np
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 
 __all__ = ['SpinModel', 'SpinChain']
 
@@ -27,7 +27,7 @@ class SpinModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -62,8 +62,8 @@ class SpinModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "SpinModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "SpinModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -120,6 +120,6 @@ class SpinChain(SpinModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "SpinChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "SpinChain")
         CouplingMPOModel.__init__(self, model_params)

@@ -4,7 +4,7 @@
 import numpy as np
 
 from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import Parameters
+from tenpy.tools.params import Config
 from tenpy.networks.site import BosonSite, FermionSite
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
@@ -27,7 +27,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`\pm\phi` is the phase acquired by a boson hopping between atoms in the same sublattice with a sign
     given by the direction of the hopping. This Hamiltonian is translated from [Grushin2015]_.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -58,8 +58,8 @@ class BosonicHaldaneModel(CouplingMPOModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "BosonicHaldaneModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "BosonicHaldaneModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -109,7 +109,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
     given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -144,8 +144,8 @@ class FermionicHaldaneModel(CouplingMPOModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', 'Honeycomb')
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "FermionicHaldaneModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "FermionicHaldaneModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):

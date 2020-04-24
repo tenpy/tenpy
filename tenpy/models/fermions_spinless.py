@@ -7,7 +7,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..networks.site import FermionSite
 
 __all__ = ['FermionModel', 'FermionChain']
@@ -26,7 +26,7 @@ class FermionModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -64,8 +64,8 @@ class FermionModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "FermionModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "FermionModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -95,6 +95,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "FermionChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "FermionChain")
         CouplingMPOModel.__init__(self, model_params)

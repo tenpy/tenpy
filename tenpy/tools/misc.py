@@ -4,7 +4,7 @@
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
-from .params import Parameters
+from .params import Config
 import random
 import os
 import itertools
@@ -343,8 +343,8 @@ def any_nonzero(params, keys, verbose_msg=None):
 
     Parameters
     ----------
-    params : dict | Parameters
-        A dictionary of parameters, or a :class:`~tenpy.tools.params.Parameters`
+    params : dict | Config
+        A dictionary of parameters, or a :class:`~tenpy.tools.params.Config`
         instance.
     keys : list of {key | tuple of keys}
         For a single key, check ``params[key]`` for non-zero entries.
@@ -361,9 +361,9 @@ def any_nonzero(params, keys, verbose_msg=None):
         or if any of the entries for a tuple of `keys`
     """
     msg = ("tools.misc.any_nonzero() is deprecated in favor of "
-           "tools.params.Parameters.any_nonzero().")
+           "tools.params.Config.any_nonzero().")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Parameters):
+    if isinstance(params, Config):
         return params.any_nonzero(keys, verbose_msg)
     verbose = (params.get('verbose', 0) > 1.)
     for k in keys:

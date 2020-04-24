@@ -9,7 +9,7 @@ We choose the field along z to allow to conserve the parity, if desired.
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..networks.site import SpinHalfSite
 
 __all__ = ['TFIModel', 'TFIChain']
@@ -27,7 +27,7 @@ class TFIModel(CouplingMPOModel):
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -59,8 +59,8 @@ class TFIModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "TFIModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "TFIModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -90,6 +90,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "TFIChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "TFIChain")
         CouplingMPOModel.__init__(self, model_params)

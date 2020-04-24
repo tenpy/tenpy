@@ -10,10 +10,10 @@ from collections.abc import MutableMapping
 
 from .hdf5_io import Hdf5Exportable
 
-__all__ = ["Parameters", "get_parameter", "unused_parameters"]
+__all__ = ["Config", "get_parameter", "unused_parameters"]
 
 
-class Parameters(MutableMapping, Hdf5Exportable):
+class Config(MutableMapping, Hdf5Exportable):
     """Wrapper class for parameter dictionaries.
 
     .. todo ::
@@ -21,9 +21,9 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     Parameters
     ----------
-    params : dict | :class:`Parameters`
+    params : dict | :class:`Config`
         Dictionary containing the actual parameters.
-        If `params` is already a :class:`Parameters` instance, a *shallow* copy is made,
+        If `params` is already a :class:`Config` instance, a *shallow* copy is made,
         using the very same :attr:`params`, and :attr:`unused`.
     name : str
         Descriptive name of the parameter set used for verbose printing.
@@ -34,7 +34,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         Contains type and general information for parameters.
     name : str
         Name oof the dictionary, for output statements. For example, when using
-        a `Parameters` class for DMRG parameters, `name='DMRG'`
+        a `Config` class for DMRG parameters, `name='DMRG'`
     params : dict
         Dictionary containing the actual parameters.
     unused : set
@@ -43,8 +43,8 @@ class Parameters(MutableMapping, Hdf5Exportable):
         Verbosity level for output statements.
     """
     def __init__(self, params, name):
-        if isinstance(params, Parameters):
-            # make *shallow* copy of the given `Parameters` instance.
+        if isinstance(params, Config):
+            # make *shallow* copy of the given `Config` instance.
             # Intended behaviour: check for unused parameters once the shallow copy is deleted
             self.params = params.params
             self.unused = params.unused
@@ -52,7 +52,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
             self.documentation = params.documentation
             self.name = params.name
             if name != params.name:
-                warnings.warn("Parameters {0!r} already have name {1!r}".format(name, params.name))
+                warnings.warn("Config {0!r} already has name {1!r}".format(name, params.name))
         else:
             self.params = params
             self.unused = set(params.keys())
@@ -84,7 +84,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
         return repr(self)  # TODO This is not what we want
 
     def __repr__(self):
-        return "<Parameters, {0!s} parameters>".format(len(self))
+        return "<Config, {0!s} parameters>".format(len(self))
 
     def __del__(self):
         unused = self.unused
@@ -261,7 +261,7 @@ class Parameters(MutableMapping, Hdf5Exportable):
 
     @classmethod
     def from_yaml(cls, filename, name):
-        """Load a `Parameters` instance from a YAML file containing the `params`.
+        """Load a `Config` instance from a YAML file containing the `params`.
 
         .. warning ::
             Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
@@ -272,12 +272,12 @@ class Parameters(MutableMapping, Hdf5Exportable):
         filename : str
             Name of the YAML file
         name : str
-            Name of the resulting :class:`Parameters` instance.
+            Name of the resulting :class:`Config` instance.
 
         Returns
         -------
-        obj : Parameters
-            A `Parameters` object, loaded from file.
+        obj : Config
+            A `Config` object, loaded from file.
         """
         import yaml
         with open(filename, 'r') as stream:
@@ -358,7 +358,7 @@ def get_parameter(params, key, default, descr, asarray=False):
            "`Parameter` class objects. Use `Parameter` methods to read out "
            "parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Parameters):
+    if isinstance(params, Config):
         return params.get(key, default)
     use_default = key not in params
     val = params.setdefault(key, default)  # get the value; set default if not existent
@@ -396,7 +396,7 @@ def unused_parameters(params, warn=None):
            "`Parameter` class objects. Use `Parameter.unused` attribute to"
            "get unused parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Parameters):
+    if isinstance(params, Config):
         return params.unused
     used = params.get('_used_param', set())
     unused = set(params.keys()) - used

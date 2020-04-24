@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..networks.site import SpinHalfSite  # if you want to use the predefined site
 
 __all__ = ['XXZChain', 'XXZChain2']
@@ -27,7 +27,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             - \sum_i \mathtt{hz} S^z_i
 
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -40,8 +40,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     """
     def __init__(self, model_params):
         # 0) read out/set default parameters
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "XXZChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "XXZChain")
         L = model_params.get('L', 2)
         Jxx = model_params.get('Jxx', 1.)
         Jz = model_params.get('Jz', 1.)
@@ -88,8 +88,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "XXZChain2")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "XXZChain2")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):

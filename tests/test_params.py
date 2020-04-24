@@ -2,7 +2,7 @@
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
-from tenpy.tools.params import Parameters
+from tenpy.tools.params import Config
 
 
 def example_function(example_pars, keys=['a', 'b']):
@@ -13,14 +13,14 @@ def example_function(example_pars, keys=['a', 'b']):
 
 
 def test_parameters():
-    pars = Parameters(dict(), "Test empty")
+    pars = Config(dict(), "Test empty")
     example_function(pars)
-    pars = Parameters(dict(a=None, b=2.5, c="dict-style", d="non-used"), "Test parameters")
+    pars = Config(dict(a=None, b=2.5, c="dict-style", d="non-used"), "Test parameters")
     assert pars['c'] == "dict-style"
     example_function(pars)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
-        pars = Parameters(dict(miss_spelled=1.23), "Test unused")
+        pars = Config(dict(miss_spelled=1.23), "Test unused")
         example_function(pars)
         unused = pars.unused
         assert len(unused) == 1

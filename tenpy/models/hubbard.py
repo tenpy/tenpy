@@ -4,7 +4,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain']
@@ -22,7 +22,7 @@ class BoseHubbardModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
 
     Parameters
@@ -59,8 +59,8 @@ class BoseHubbardModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "BoseHubbardModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "BoseHubbardModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -95,8 +95,8 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "BoseHubbardChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "BoseHubbardChain")
         CouplingMPOModel.__init__(self, model_params)
 
 
@@ -115,7 +115,7 @@ class FermiHubbardModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -130,7 +130,7 @@ class FermiHubbardModel(CouplingMPOModel):
         Whether spin is conserved,
         see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
     t, U, mu : float | array
-        Parameters as defined for the Hamiltonian above. Note the signs!
+        Config as defined for the Hamiltonian above. Note the signs!
     lattice : str | :class:`~tenpy.models.lattice.Lattice`
         Instance of a lattice class for the underlaying geometry.
         Alternatively a string being the name of one of the Lattices defined in
@@ -155,8 +155,8 @@ class FermiHubbardModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "FermiHubbardModel")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "FermiHubbardModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -188,6 +188,6 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "FermiHubbardChain")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "FermiHubbardChain")
         CouplingMPOModel.__init__(self, model_params)

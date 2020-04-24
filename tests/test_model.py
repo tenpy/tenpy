@@ -7,7 +7,7 @@ from tenpy.models import model, lattice
 from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import Parameters
+from tenpy.tools.params import Config
 from tenpy.algorithms.exact_diag import ExactDiag
 import numpy as np
 import numpy.testing as npt
@@ -247,8 +247,8 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
 
 class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "MyMod")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "MyMod")
         model.CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):

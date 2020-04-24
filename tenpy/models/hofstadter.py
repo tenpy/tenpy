@@ -15,7 +15,7 @@ import warnings
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel, CouplingMPOModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
@@ -126,7 +126,7 @@ class HofstadterFermions(CouplingMPOModel):
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -161,8 +161,8 @@ class HofstadterFermions(CouplingMPOModel):
         magnetic unit cell. See :func:`gauge_hopping` for details.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "HofstadterFermions")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "HofstadterFermions")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -224,7 +224,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -261,8 +261,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         magnetic unit cell.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "HofstadterBosons")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "HofstadterBosons")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):

@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Lattice, _parse_sites
 from ..networks.site import SpinHalfSite
 from .model import MultiCouplingModel, CouplingMPOModel
-from ..tools.params import Parameters
+from ..tools.params import Config
 from ..tools.misc import any_nonzero
 
 __all__ = ['DualSquare', 'ToricCode']
@@ -62,7 +62,7 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
 
     (Note that this are Pauli matrices, not spin-1/2 operators.)
     All parameters are collected in a single dictionary `model_params`, which 
-    is turned into a :class:`~tenpy.tools.params.Parameters` object.
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
@@ -78,8 +78,8 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         The order of the lattice sites in the lattice, see :class:`DualSquare`.
     """
     def __init__(self, model_params):
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, "ToricCode")
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, "ToricCode")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
