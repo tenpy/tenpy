@@ -811,7 +811,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         """
-        self.make_eff_H() # self.eff_H represents tensors LP, W0, W1, RP
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, W1, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
@@ -1101,7 +1101,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
         """
-        self.make_eff_H() # self.eff_H represents tensors LP, W0, RP
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'
@@ -1360,7 +1360,7 @@ class EngineCombine(TwoSiteDMRGEngine):
     This reduces the overhead of calculating charge combinations in the contractions,
     but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
 
-    .. deprecated : 0.5.0
+    .. deprecated :: 0.5.0
        Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
     """
     def __init__(self, psi, model, DMRG_params):
@@ -1379,7 +1379,7 @@ class EngineFracture(TwoSiteDMRGEngine):
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
     One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
 
-    .. deprecated : 0.5.0
+    .. deprecated :: 0.5.0
        Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
     """
     def __init__(self, psi, model, DMRG_params):

@@ -177,7 +177,7 @@ def truncate(S, trunc_par):
                               ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
         ============== ====== ===============================================================
 
-        .. deprecated : 0.5.1
+        .. deprecated :: 0.5.1
             Renamed `symmetry_tol` to `degeneracy_tol`,
             and don't use log in the condition any more.
 
