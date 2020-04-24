@@ -31,7 +31,7 @@ from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator
-from ..tools.params import unused_parameters, Parameters
+from ..tools.params import unused_parameters, Config
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper', 'OrthogonalEffectiveH',
@@ -107,8 +107,8 @@ class Sweep:
     def __init__(self, psi, model, engine_params):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        if not isinstance(engine_params, Parameters,):
-            engine_params = Parameters(engine_params, "Sweep")
+        if not isinstance(engine_params, Config,):
+            engine_params = Config(engine_params, "Sweep")
         self.psi = psi
         self.engine_params = engine_params
         self.verbose = engine_params.get('verbose', 1)

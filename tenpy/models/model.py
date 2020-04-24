@@ -40,7 +40,7 @@ from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
-from ..tools.params import get_parameter, unused_parameters, Parameters
+from ..tools.params import get_parameter, unused_parameters, Config
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
@@ -1522,8 +1522,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
-        if not isinstance(model_params, Parameters):
-            model_params = Parameters(model_params, self.name)
+        if not isinstance(model_params, Config):
+            model_params = Config(model_params, self.name)
         self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
         self.verbose = model_params.get('verbose', 1)

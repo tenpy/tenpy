@@ -43,7 +43,7 @@ import time
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import unused_parameters, Parameters
+from ..tools.params import unused_parameters, Config
 from ..linalg.random_matrix import CUE
 
 __all__ = ['Engine', 'RandomUnitaryEvolution']
@@ -92,8 +92,8 @@ class Engine:
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
     def __init__(self, psi, model, TEBD_params):
-        if not isinstance(TEBD_params, Parameters):
-            TEBD_params = Parameters(TEBD_params, "TEBD")
+        if not isinstance(TEBD_params, Config):
+            TEBD_params = Config(TEBD_params, "TEBD")
         self.TEBD_params = TEBD_params
         self.verbose = TEBD_params.get('verbose', 1)
         self.trunc_params = TEBD_params.get('trunc_params', {})
