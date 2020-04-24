@@ -16,7 +16,8 @@ the :class:`Hdf5Saver` and :class:`Hdf5Loader` classes
 and the wrapper functions :func:`save_to_hdf5`, :func:`load_from_hdf5`.
 
 .. note ::
-    To use the export/import features to HDF5, you need to install the `h5py`_ python package
+    To use the export/import features to HDF5, you need to install the
+    `h5py <http://docs.h5py.org>`_ python package
     (and hence some version of the HDF5 library).
 
 .. rubric:: Global module constants used for our HDF5 format
