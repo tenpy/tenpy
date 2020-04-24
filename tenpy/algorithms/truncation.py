@@ -67,7 +67,6 @@ class TruncationError:
 
     Attributes
     ----------
-    ov_err
     eps : float
         The total sum of all discared Schmidt values squared.
         Note that if you keep singular values up to 1.e-14 (= a bit more than machine precision

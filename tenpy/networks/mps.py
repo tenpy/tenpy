@@ -111,10 +111,6 @@ class MPS:
 
     Attributes
     ----------
-    L
-    chi
-    finite
-    nontrivial_bonds
     sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site.
     bc : {'finite', 'segment', 'infinite'}

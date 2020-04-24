@@ -97,9 +97,6 @@ class Lattice:
 
     Attributes
     ----------
-    dim : int
-    order : ndarray (N_sites, dim+1)
-    boundary_conditions
     Ls : tuple of int
         the length in each direction.
     shape : tuple of int

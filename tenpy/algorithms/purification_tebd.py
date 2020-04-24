@@ -41,7 +41,6 @@ class PurificationTEBD(tebd.Engine):
 
     Attributes
     ----------
-    disent_iterations
     used_disentangler : :class:`Disentangler`
         The disentangler to be used on the auxiliar indices.
         Chosen by :func:`get_disentangler`, called with the TEBD parameter ``'disentangle'``.

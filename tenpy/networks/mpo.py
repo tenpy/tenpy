@@ -76,8 +76,6 @@ class MPO:
 
     Attributes
     ----------
-    L : int
-        ``len(sites)``. For an iMPS, this is the number of sites in the MPS unit cell.
     chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
@@ -783,7 +781,6 @@ class MPOGraph:
 
     Attributes
     ----------
-    L
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
     chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
