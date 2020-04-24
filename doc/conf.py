@@ -9,6 +9,7 @@ import sphinx_rtd_theme
 
 # ensure parent folder is in sys.path to allow import of tenpy
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'sphinx_ext')))
 
 if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
