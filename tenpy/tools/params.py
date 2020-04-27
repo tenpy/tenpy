@@ -1,4 +1,4 @@
-"""Tools to handle paramters for algorithms.
+"""Tools to handle config options/paramters for algorithms.
 
 See the doc-string of :func:`get_parameter` for details.
 """
@@ -16,9 +16,6 @@ __all__ = ["Config", "get_parameter", "unused_parameters"]
 class Config(MutableMapping, Hdf5Exportable):
     """Wrapper class for parameter dictionaries.
 
-    .. todo ::
-        - Implement setdefault method.
-
     Parameters
     ----------
     params : dict | :class:`Config`
@@ -33,9 +30,9 @@ class Config(MutableMapping, Hdf5Exportable):
     documentation : dict
         Contains type and general information for parameters.
     name : str
-        Name oof the dictionary, for output statements. For example, when using
-        a `Config` class for DMRG parameters, `name='DMRG'`
-    params : dict
+        Name of the dictionary, for output statements. For example, when using
+        a `Config` class for DMRG parameters, ``name='DMRG'``.
+    paramss : dict
         Dictionary containing the actual parameters.
     unused : set
         Keeps track of any parameters not yet used.
@@ -43,22 +40,11 @@ class Config(MutableMapping, Hdf5Exportable):
         Verbosity level for output statements.
     """
     def __init__(self, params, name):
-        if isinstance(params, Config):
-            # make *shallow* copy of the given `Config` instance.
-            # Intended behaviour: check for unused parameters once the shallow copy is deleted
-            self.params = params.params
-            self.unused = params.unused
-            self.verbose = params.verbose
-            self.documentation = params.documentation
-            self.name = params.name
-            if name != params.name:
-                warnings.warn("Config {0!r} already has name {1!r}".format(name, params.name))
-        else:
-            self.params = params
-            self.unused = set(params.keys())
-            self.verbose = params.get('verbose', 0)
-            self.documentation = {}
-            self.name = name
+        self.params = params
+        self.unused = set(params.keys())
+        self.verbose = params.get('verbose', 0)
+        self.documentation = {}
+        self.name = name
 
     def __getitem__(self, key):
         self.print_if_verbose(key, "Reading")
@@ -90,9 +76,9 @@ class Config(MutableMapping, Hdf5Exportable):
         unused = self.unused
         if len(unused) > 0:
             if len(unused) > 1:
-                msg = "unused parameters for {name!s}:\n{keys!s}"
+                msg = "unused parameters for config {name!s}:\n{keys!s}"
             else:
-                msg = "unused parameter {keys!s} for {name!s}\n"
+                msg = "unused parameter {keys!s} for config {name!s}\n"
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
         return unused
 
@@ -100,15 +86,17 @@ class Config(MutableMapping, Hdf5Exportable):
         return self.params.keys()
 
     def get(self, key, default):
-        """Find the value of `key`. If none is set, return `default` and set the value of `key` to
+        """Find the value of `key`; really more like `setdefault` of a :class:`dict`.
+
+        If no value is set, return `default` and set the value of `key` to
         `default` internally.
 
         Parameters
         ----------
         key : str
             Key name for the parameter being read out.
-        default : any type
-            Default value for the parameter
+        default :
+            Default value for the parameter.
 
         Returns
         -------
@@ -122,6 +110,22 @@ class Config(MutableMapping, Hdf5Exportable):
         self.print_if_verbose(key, "Reading", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         return val
+
+    def setdefault(self, key, default):
+        """Set a default value without reading it out.
+
+        Parameters
+        ----------
+        key : str
+            Key name for the parameter being set.
+        default :
+            The value to be set by default if the parameter is not yet set.
+        """
+        use_default = key not in self.keys()
+        self.params.setdefault(key, default)  # get the value; set default if not existent
+        self.print_if_verbose(key, "Set default", not use_default)
+        self.unused.discard(key)  # (does nothing if key not in set)
+        # do no return the value: not added to self.unused!
 
     def print_if_verbose(self, key, action=None, use_default=False):
         """Print out `key` if verbosity and other conditions are met.
@@ -190,23 +194,23 @@ class Config(MutableMapping, Hdf5Exportable):
         """Check for any non-zero or non-equal entries in some parameters.
 
         .. todo ::
-            Currently, if k is a tuple, only checks equality between k[0] and 
+            Currently, if k is a tuple, only checks equality between k[0] and
             any other element. Should potentially be generalized.
 
         Parameters
         ----------
         keys : list of {key | tuple of keys}
-            For a single key, check ``params[key]`` for non-zero entries.
-            For a tuple of keys, all the ``params[key]`` have to be equal (as numpy arrays).
+            For a single key, check ``self[key]`` for non-zero entries.
+            For a tuple of keys, all the ``self[key]`` have to be equal (as numpy arrays).
         verbose_msg : None | str
-            If params['verbose'] >= 1, we print `verbose_msg` before checking,
+            If :attr:`verbose` >= 1, we print `verbose_msg` before checking,
             and a short notice with the `key`, if a non-zero entry is found.
 
         Returns
         -------
         match : bool
-            False, if all params[key] are zero or `None` and
-            True, if any of the params[key] for single `key` in `keys`,
+            False, if all ``self[key]`` are zero or `None` and
+            True, if any of the ``self[key]`` for single `key` in `keys`,
             or if any of the entries for a tuple of `keys`
         """
         verbose = (self.verbose > 1.)
@@ -220,7 +224,8 @@ class Config(MutableMapping, Hdf5Exportable):
                             param_val = self.params[k1]
                         if not np.array_equal(val, param_val):
                             if verbose:
-                                print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
+                                print("{k0!r} and {k1!r} have different entries.".format(k0=k[0],
+                                                                                         k1=k1))
                             return True
             else:
                 if self.has_nonzero(k):
@@ -232,19 +237,18 @@ class Config(MutableMapping, Hdf5Exportable):
 
     def has_nonzero(self, key):
         """Check whether `self` contains `key`, and if `self[key]` is nontrivial.
-        
+
         Parameters
         ----------
         key : str
-            Key
-        
+            Key for the parameter to check
+
         Returns
         -------
         bool
             True if `self` has key `key` with a nontrivial value. False otherwise.
         """
-        return (key in self.keys() 
-                and np.any(np.array(self.params[key])) != 0 
+        return (key in self.keys() and np.any(np.array(self.params[key])) != 0
                 and self.params[key] is not None)
 
     def save_yaml(self, filename):
@@ -353,9 +357,10 @@ def get_parameter(params, key, default, descr, asarray=False):
 
     >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
     parameter 'dt'=0.1 for TEBD
+
     """
     msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Parameter` class objects. Use `Parameter` methods to read out "
+           "`Config` class objects. Use `Config` methods to read out "
            "parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
@@ -393,7 +398,7 @@ def unused_parameters(params, warn=None):
         The set of keys of the params which was not used
     """
     msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Parameter` class objects. Use `Parameter.unused` attribute to"
+           "`Config` class objects. Use `Config.unused` attribute to "
            "get unused parameters.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
