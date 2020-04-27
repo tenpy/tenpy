@@ -25,13 +25,13 @@ from sphinx.util import logging
 logger = logging.getLogger(__name__)
 
 # ConfigEntry is used in CfgDomain.data['config']
-ConfigEntry = namedtuple('ConfigEntry',
-                         "fullname, dispname, docname, anchor, master, includes, source, line")
+ConfigEntry = namedtuple(
+    'ConfigEntry', "fullname, dispname, docname, anchor, master, nolist, includes, source, line")
 
 # OptionEntry is used in CfgDomain.data['config2options']
 OptionEntry = namedtuple(
     'OptionEntry', "fullname, dispname, config, docname, anchor, context, "
-    "default, summary, source, line")
+    "default, summary, summarycropped, source, line")
 
 # ObjectsEntry is returned by Domain.get_objects()
 ObjectsEntry = namedtuple('ObjectsEntry', "name, dispname, typ, docname, anchor, prio")
@@ -89,6 +89,7 @@ class CfgConfig(ObjectDescription):
                                    docname=self.env.docname,
                                    anchor=node_id,
                                    master=master,
+                                   nolist='nolist' in self.options,
                                    includes=includes,
                                    source=source,
                                    line=line)
@@ -110,12 +111,15 @@ class CfgConfig(ObjectDescription):
         if 'nolist' not in self.options:
             contentnode.insert(0, cfgconfig(config, self.env.ref_context['cfg:context']))
         else:
-            master_ref = addnodes.pending_xref(config,
-                                               config,
-                                               refdomain='cfg',
-                                               reftype='config',
-                                               reftarget=config)
-            contentnode.insert(0, master_ref)
+            par = nodes.paragraph('')
+            par += nodes.Text("See ")
+            par += addnodes.pending_xref(config,
+                                         nodes.Text(config),
+                                         refdomain='cfg',
+                                         reftype='config',
+                                         reftarget=config)
+            par += nodes.Text(" for a list of further options.")
+            contentnode.insert(0, par)
         super().transform_content(contentnode)
 
     def after_content(self):
@@ -187,6 +191,23 @@ def _parse_inline(state, line, info):
     return par.children
 
 
+class CfgConfigOptions(CfgConfig):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.options['noindex'] = None
+
+    def before_content(self):
+        super().before_content()
+        self.env.ref_context['cfg:in-config'] = False
+
+    def run(self):
+        index, desc = super().run()
+        assert isinstance(desc, addnodes.desc)
+        desc_content = desc[1]
+        assert isinstance(desc_content, addnodes.desc_content)
+        return desc_content.children[1:]  #don't include the summary table/list/reference
+
+
 class CfgOption(ObjectDescription):
     """Directive for ``.. cfg:option``, documenting an option."""
 
@@ -241,6 +262,13 @@ class CfgOption(ObjectDescription):
         self.state.document.note_explicit_target(signode)
         if 'noindex' not in self.options:
             source, line = self.state_machine.get_source_and_line()
+            summary = self.content[0]
+            if len(self.content) > 1 or len(summary) > 80:
+                summary = summary[:75]
+                cropped = True
+            else:
+                cropped = False
+
             option_entry = OptionEntry(
                 fullname=fullname,
                 dispname=sig,
@@ -249,7 +277,8 @@ class CfgOption(ObjectDescription):
                 anchor=node_id,
                 context=context,
                 default=self.options.get('default', ""),
-                summary=self.content[0],
+                summary=summary,
+                summarycropped=cropped,
                 source=source,
                 line=line,
             )
@@ -340,6 +369,8 @@ class ConfigNodeProcessor:
         summary = option.summary
         par = nodes.paragraph()
         par += nodes.Text(summary)
+        if option.summarycropped:
+            par += self.make_refnode(option.docname, option.anchor, nodes.Text(" [...]"))
         row += nodes.entry("", par)
         return row
 
@@ -385,7 +416,7 @@ class CfgOptionIndex(Index):
     def generate(self, docnames=None):
         config_options = self.domain.config_options.copy()
         content = []
-        dummy_option = OptionEntry(*([""] * 10))
+        dummy_option = OptionEntry(*([""] * 11))
         for k in sorted(config_options.keys(), key=lambda x: x.upper()):
             options = config_options[k]
             if len(options) == 0:
@@ -462,6 +493,7 @@ class CfgDomain(Domain):
 
     directives = {
         'config': CfgConfig,
+        'configoptions': CfgConfigOptions,
         'currentconfig': CfgCurrentConfig,
         'option': CfgOption,
     }
@@ -550,9 +582,14 @@ class CfgDomain(Domain):
                         "in %s, line %d and %s, line %d", config_entry.fullname,
                         config_entry.source, config_entry.line, other.source, other.line)
                 master_configs[config_entry.fullname] = config_entry
-        # if no master is given: master = first defined entry
+        # if no master is given: master = first defined entry without :nolist: option
+        for config_entry in data_config:
+            if not config_entry.nolist:
+                master_configs.setdefault(config_entry.fullname, config_entry)
+        # unless we don't even have an entry without :nolist:
         for config_entry in data_config:
             master_configs.setdefault(config_entry.fullname, config_entry)
+
         # collect the includes from other entries in `data_config`
         # and make sure that we only have valid includes
         for config_entry in data_config:
