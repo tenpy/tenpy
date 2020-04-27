@@ -149,45 +149,6 @@ class Config(MutableMapping, Hdf5Exportable):
                 val=val,
                 defaultstring=defaultstring))
 
-    def help(self, keys=None):
-        """Reproduce documentation for `keys`.
-
-        Parameters
-        ----------
-        keys : None | str | list, optional
-            Which key(s) to describe
-        """
-        if keys is None:  # Assume you want all documentation.
-            for key in self.params:
-                self.print_documentation(key)
-        elif isinstance(keys, list):
-            for key in keys:
-                self.print_documentation(key)
-        else:
-            self.print_documentation(keys)
-
-    def print_documentation(self, key):
-        if not key in self.documentation:
-            print("No documentation for parameter {}.".format(key))
-        else:
-            doc = self.documentation[key]
-            output = "{key!r} : {type_info!r} \n\t{help}"
-            print(output.format(key=key, type_info=doc['type_info'], help=doc['help']))
-
-    def document(self, key, type_info, help_text):
-        """Add documentation for a parameter.
-
-        Parameters
-        ----------
-        key : str
-            Name of the parameter
-        type_info : str
-            Type description of the parameter
-        help_text : str
-            Description of the parameter.
-        """
-        self.documentation[key] = {'type_info': type_info, 'help': help_text}
-
     def any_nonzero(self, keys, verbose_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
 
