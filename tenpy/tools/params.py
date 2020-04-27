@@ -1,151 +1,169 @@
 """Tools to handle config options/paramters for algorithms.
 
-See the doc-string of :func:`get_parameter` for details.
+See the doc-string of :class:`Config` for details.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np
 from collections.abc import MutableMapping
+import pprint
 
 from .hdf5_io import Hdf5Exportable
 
-__all__ = ["Config", "get_parameter", "unused_parameters"]
+__all__ = ["Config", "asconfig", "get_parameter", "unused_parameters"]
 
 
 class Config(MutableMapping, Hdf5Exportable):
-    """Wrapper class for parameter dictionaries.
+    """Dict-like wrapper class for parameter/configuration dictionaries.
+
+    This class behaves mostly like a dictionary of option keys/values (together making the whole
+    "config") with some additional features:
+
+    - Printing of the options used, with the level of how much should be printed adjustable by
+      the option `verbose`.
+    - :meth:`get` acts more like :meth:`dict.setdefault` such that after the algorithm, all the
+      used default values are known and can be saved for future reference.
+    - Keeping track of unused options to detect typos in the keys.
+    - Nicer formatting with ``print(config)``
+    - Import/export to yaml and hdf5 files.
 
     Parameters
     ----------
-    params : dict
-        Dictionary containing the actual parameters.
+    config : dict
+        Dictionary containing the actual option keys and values.
     name : str
-        Descriptive name of the parameter set used for verbose printing.
+        Descriptive name of the config used for verbose printing.
 
     Attributes
     ----------
-    documentation : dict
-        Contains type and general information for parameters.
     name : str
         Name of the dictionary, for output statements. For example, when using
-        a `Config` class for DMRG parameters, ``name='DMRG'``.
-    paramss : dict
-        Dictionary containing the actual parameters.
+        a `Config` class for DMRG, ``name='DMRG'``.
+    options : dict
+        Dictionary containing the actual option keys and values.
     unused : set
-        Keeps track of any parameters not yet used.
-    verbose : int
+        Keeps track of any :attr:`options` not yet used.
+    verbose : float
         Verbosity level for output statements.
     """
-    def __init__(self, params, name):
-        self.params = params
-        self.unused = set(params.keys())
-        self.verbose = params.get('verbose', 0)
+    def __init__(self, config, name):
+        self.options = config
+        self.unused = set(config.keys())
+        self.unused.discard('verbose')
+        self.verbose = config.get('verbose', 0)
         self.documentation = {}
         self.name = name
 
     def __getitem__(self, key):
         self.print_if_verbose(key, "Reading")
         self.unused.discard(key)
-        return self.params[key]
+        return self.options[key]
 
     def __setitem__(self, key, value):
         self.print_if_verbose(key, "Setting")
-        self.params[key] = value
+        self.options[key] = value
 
     def __delitem__(self, key):
         self.print_if_verbose(key, "Deleting")
         self.unused.discard(key)
-        del self.params[key]
+        del self.options[key]
 
     def __iter__(self):
-        return iter(self.params)
+        return iter(self.options)
 
     def __len__(self):
-        return len(self.params)
+        return len(self.options)
 
     def __str__(self):
-        return repr(self)  # TODO This is not what we want
+        res = "Config, name={0!r}, options:\n".format(self.name)
+        res += pprint.pformat(self.options)
+        return res
 
     def __repr__(self):
-        return "<Config, {0!s} parameters>".format(len(self))
+        return "Config(name={1!r}, config={0!r})".format(self.options, self.name)
 
     def __del__(self):
+        self.warn_unused()
+
+    def warn_unused(self):
+        """Warn about so-far unused options.
+
+        This can help to detect typos in the option keys."""
         unused = self.unused
         if len(unused) > 0:
             if len(unused) > 1:
-                msg = "unused parameters for config {name!s}:\n{keys!s}"
+                msg = "unused options for config {name!s}:\n{keys!s}"
             else:
-                msg = "unused parameter {keys!s} for config {name!s}\n"
+                msg = "unused option {keys!s} for config {name!s}\n"
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
-        return unused
 
     def keys(self):
-        return self.params.keys()
+        return self.options.keys()
 
-    def get(self, key, default):
-        """Find the value of `key`; really more like `setdefault` of a :class:`dict`.
+    def get(self, option, default):
+        """Find the value of `option`; really more like `setdefault` of a :class:`dict`.
 
-        If no value is set, return `default` and set the value of `key` to
+        If no value is set, return `default` and set the value of `option` to
         `default` internally.
 
         Parameters
         ----------
-        key : str
-            Key name for the parameter being read out.
+        option : str
+            Key for the option being read out.
         default :
             Default value for the parameter.
 
         Returns
         -------
-        val : any type
-            The value for `key` if it existed, `default` otherwise.
+        val :
+            The value for `option` if it existed, `default` otherwise.
         """
-        use_default = key not in self.keys()
+        use_default = option not in self.keys()
         if use_default:
-            self.unused.add(key)
-        val = self.params.setdefault(key, default)  # get the value; set default if not existent
-        self.print_if_verbose(key, "Reading", use_default)
-        self.unused.discard(key)  # (does nothing if key not in set)
+            self.unused.add(option)
+        val = self.options.setdefault(option, default)  # get & set default if not existent
+        self.print_if_verbose(option, "Reading", use_default)
+        self.unused.discard(option)  # (does nothing if option not in set)
         return val
 
-    def setdefault(self, key, default):
+    def setdefault(self, option, default):
         """Set a default value without reading it out.
 
         Parameters
         ----------
-        key : str
+        option : str
             Key name for the parameter being set.
         default :
             The value to be set by default if the parameter is not yet set.
         """
-        use_default = key not in self.keys()
-        self.params.setdefault(key, default)  # get the value; set default if not existent
-        self.print_if_verbose(key, "Set default", not use_default)
-        self.unused.discard(key)  # (does nothing if key not in set)
+        use_default = option not in self.keys()
+        self.options.setdefault(option, default)
+        self.print_if_verbose(option, "Set default", not use_default)
+        self.unused.discard(option)  # (does nothing if option not in set)
         # do no return the value: not added to self.unused!
 
-    def print_if_verbose(self, key, action=None, use_default=False):
-        """Print out `key` if verbosity and other conditions are met.
+    def print_if_verbose(self, option, action=None, use_default=False):
+        """Print out `option` if verbosity and other conditions are met.
 
         Parameters
         ----------
-        key : str
-            Key name for the parameter being read out.
+        option : str
+            Key/option name for the parameter being read out.
         action : str, optional
             Use to adapt printout message to specific actions (e.g. "Deleting")
         """
-        val = self.params[key]
+        val = self.options[option]
         name = self.name
         verbose = self.verbose
-        new_key = key in self.unused
+        new_key = option in self.unused
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
-            actionstring = "Parameter" if action is None else action
+            actionstring = "Option" if action is None else action
             defaultstring = "(default) " if use_default else ""
-            print("{actionstring} {key!r}={val!r} {defaultstring}for {name!s}".format(
+            print("{actionstring} {option!r}={val!r} {defaultstring}for config {name!s}".format(
                 actionstring=actionstring,
                 name=name,
-                key=key,
+                option=option,
                 val=val,
                 defaultstring=defaultstring))
 
@@ -177,10 +195,10 @@ class Config(MutableMapping, Hdf5Exportable):
             if isinstance(k, tuple):
                 # check equality
                 if self.has_nonzero(k[0]):
-                    val = self.params[k[0]]
+                    val = self.options[k[0]]
                     for k1 in k[1:]:
                         if self.has_nonzero(k1):
-                            param_val = self.params[k1]
+                            param_val = self.options[k1]
                         if not np.array_equal(val, param_val):
                             if verbose:
                                 print("{k0!r} and {k1!r} have different entries.".format(k0=k[0],
@@ -207,8 +225,8 @@ class Config(MutableMapping, Hdf5Exportable):
         bool
             True if `self` has key `key` with a nontrivial value. False otherwise.
         """
-        return (key in self.keys() and np.any(np.array(self.params[key])) != 0
-                and self.params[key] is not None)
+        return (key in self.keys() and np.any(np.array(self.options[key])) != 0
+                and self.options[key] is not None)
 
     def save_yaml(self, filename):
         """Save the parameters to `filename` as a YAML file.
@@ -220,11 +238,11 @@ class Config(MutableMapping, Hdf5Exportable):
         """
         import yaml
         with open(filename, 'w') as stream:
-            yaml.dump(self.params, stream)
+            yaml.dump(self.options, stream)
 
     @classmethod
     def from_yaml(cls, filename, name):
-        """Load a `Config` instance from a YAML file containing the `params`.
+        """Load a `Config` instance from a YAML file containing the :attr:`options`.
 
         .. warning ::
             Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
@@ -244,16 +262,16 @@ class Config(MutableMapping, Hdf5Exportable):
         """
         import yaml
         with open(filename, 'r') as stream:
-            params = yaml.safe_load(stream)
-        return cls(params, name)
+            config = yaml.safe_load(stream)
+        return cls(config, name)
 
 
-def asconfig(params, name):
-    """Convert a dict-like `params` to a :class:`Config`.
+def asconfig(config, name):
+    """Convert a dict-like `config` to a :class:`Config`.
 
     Parameters
     ----------
-    params : dict | :class:`Config`
+    config : dict | :class:`Config`
         If this is a :class:`Config`, just return it.
         Otherwise, create a :class:`Config` from it and return that.
     name : str
@@ -262,11 +280,11 @@ def asconfig(params, name):
     Returns
     -------
     config : :class:`Config`
-        Either directly `params` or ``Config(params, name)``.
+        Either directly `config` or ``Config(config, name)``.
     """
-    if isinstance(params, Config):
-        return params
-    return Config(params, name)
+    if isinstance(config, Config):
+        return config
+    return Config(config, name)
 
 
 def get_parameter(params, key, default, descr, asarray=False):
@@ -314,7 +332,7 @@ def get_parameter(params, key, default, descr, asarray=False):
 
     Examples
     --------
-    In the algorith
+    In the algorithm
     :class:`~tenpy.algorithms.tebd.Engine` gets a dictionary of parameters.
     Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
     with the dictionary as argument, which looks similar like:
