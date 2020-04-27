@@ -1969,6 +1969,7 @@ class MPS:
         Examples
         --------
         For a spin chain:
+
         >>> psi.correlation_function("A", "B")
         [[A0B0,     A0B1, ..., A0B{L-1}],
          [A1B0,     A1B1, ..., A1B{L-1]],
@@ -1977,10 +1978,12 @@ class MPS:
         ]
 
         To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``:
+
         >>> psi.correlation_function("A", "B", [3])
         [[A3B0,     A3B1, ..., A3B{L-1}]]
 
         For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
+
         >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
         >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
         True
