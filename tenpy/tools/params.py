@@ -18,10 +18,8 @@ class Config(MutableMapping, Hdf5Exportable):
 
     Parameters
     ----------
-    params : dict | :class:`Config`
+    params : dict
         Dictionary containing the actual parameters.
-        If `params` is already a :class:`Config` instance, a *shallow* copy is made,
-        using the very same :attr:`params`, and :attr:`unused`.
     name : str
         Descriptive name of the parameter set used for verbose printing.
 
@@ -287,6 +285,27 @@ class Config(MutableMapping, Hdf5Exportable):
         with open(filename, 'r') as stream:
             params = yaml.safe_load(stream)
         return cls(params, name)
+
+
+def asconfig(params, name):
+    """Convert a dict-like `params` to a :class:`Config`.
+
+    Parameters
+    ----------
+    params : dict | :class:`Config`
+        If this is a :class:`Config`, just return it.
+        Otherwise, create a :class:`Config` from it and return that.
+    name : str
+        Name to be used for the :class:`Config`.
+
+    Returns
+    -------
+    config : :class:`Config`
+        Either directly `params` or ``Config(params, name)``.
+    """
+    if isinstance(params, Config):
+        return params
+    return Config(params, name)
 
 
 def get_parameter(params, key, default, descr, asarray=False):
