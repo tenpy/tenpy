@@ -77,7 +77,7 @@ html_theme = 'sphinx_rtd_theme'
 
 html_logo = "images/logo.png"
 html_favicon = "images/logo.ico"
-html_static_path = []
+html_static_path = ['_static']
 #  html_extra_path = []
 html_last_updated_fmt = '%b %d, %Y'
 
@@ -88,6 +88,7 @@ html_context = {
     "github_repo": "tenpy",  # Repo name
     "github_version": "master",  # Version
     "conf_py_path": "/doc/",  # Path in the checkout to the docs root
+    "css_files": ["_static/custom.css"],  # to highlight targets
 }
 
 html_theme_options = {
