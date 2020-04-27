@@ -44,8 +44,10 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- Class :class:`~tenpy.tools.params.Parameters` to replace Python-native 
+- Class :class:`~tenpy.tools.params.Config` to replace Python-native 
   parameter dictionaries and add some useful functionality.
+- Classmethod :meth:`tenpy.networks.MPS.from_lat_product_state` to initialize an MPS from a product state given in
+  lattice coordinates (independent of the `order` of the lattice).
 - argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
   :meth:`tenpy.models.model.CouplingModel.add_coupling`, and 
   :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
@@ -87,6 +89,8 @@ Changed
 - DEFAULT DMRG paramter ``'diag_method'`` from ``'lanczos'`` to ``'default'``, which is the same for large bond
   dimensions, but performs a full exact diagonalization if the effective Hamiltonian has small dimensions.
   The threshold introduced is the new DMRG parameter ``'max_N_for_ED'``.
+- DEFAULT parameter ``charge_sector=None`` instead of ``charge_sector=0`` in :meth:`tenpy.networks.mps.MPS.overlap` 
+  to look for eigenvalues of the transfer matrix in *all* charge sectors, and not assume that it's the 0 sector.
 - Derive the following classes (and their subclasses) from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`
   to support saving to HDF5:
   - :class:`~tenpy.networks.site.Site`
@@ -100,6 +104,8 @@ Fixed
 ^^^^^
 - Adjust the default DMRG parameter `min_sweeps` if `chi_list` is set.
 - Avoid some unnecessary transpositions in MPO environments for MPS sweeps (e.g. in DMRG).
+- :class:`~tenpy.linalg.charges.LegCharge.sort(bunch=True)` could return un-bunched Array,
+  but still set the `bunched` flag.
 - :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.
 - :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
 - :func:`~tenpy.linalg.np_conserved.svd` with ``full_matrices=True`` gave wrong charges.
@@ -109,3 +115,5 @@ Fixed
 - :meth:`~tenpy.networks.mps.MPS.correlation_length`: check for hermitian Flag might have raised and Error with new numpy warnings
 - :meth:`~tenpy.networks.mps.MPS.correlation_function` did not respect argument ``str_on_first=False``.
 - :meth:`tenpy.networks.mps.MPS.get_op` worked unexpected for infinite `bc` with incomensurate ``self.L`` and ``len(op_list)``.
+- :issue:`105` Unintended side-effects using `lanczos_params.verbose` in combination with `orthogonal_to`
+- :issue:`108` :meth:`tenpy.linalg.sparse.FlatLinearOperator._matvec` changes ``self._charge_sector``

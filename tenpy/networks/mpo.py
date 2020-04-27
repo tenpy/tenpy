@@ -621,7 +621,7 @@ class MPO:
     def get_grouped_mpo(self, blocklen):
         """group each `blocklen` subsequent tensors and  return result as a new MPO.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Make a copy and use :meth:`group_sites` instead.
         """
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
@@ -634,7 +634,7 @@ class MPO:
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
         """
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"

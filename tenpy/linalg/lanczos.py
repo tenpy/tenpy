@@ -127,7 +127,7 @@ class LanczosGroundState:
         self._cutoff = get_parameter(params, 'cutoff', np.finfo(psi0.dtype).eps * 100, "Lanczos")
         self.verbose = params.get('verbose', 0)
         if len(orthogonal_to) > 0:
-            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, self.verbose / 10)
+            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose=self.verbose / 10)
         else:
             self.orthogonal_to = []
         self._cache = []

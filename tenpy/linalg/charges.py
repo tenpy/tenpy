@@ -377,14 +377,14 @@ class LegCharge:
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
-        ind_len, block_number, chinfo, slices, charges, qconj, sorted, bunched = state
+        ind_len, block_number, chinfo, slices, charges, qconj, sorted_, bunched = state
         self.ind_len = ind_len
         self.block_number = block_number
         self.chinfo = chinfo
         self.slices = slices
         self.charges = charges
         self.qconj = qconj
-        self.sorted = sorted
+        self.sorted = sorted_
         self.bunched = bunched
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -938,11 +938,9 @@ class LegCharge:
         block_sizes = self.get_block_sizes()
         cp._set_block_sizes(block_sizes[perm_qind])
         cp.sorted = True
-        # finally bunch: re-ordering can have brought together equal charges
+        cp.bunched = False  # re-ordering can have brought together equal charges
         if bunch:
             _, cp = cp.bunch()
-        else:
-            cp.bunched = False
         return perm_qind, cp
 
     def bunch(self):

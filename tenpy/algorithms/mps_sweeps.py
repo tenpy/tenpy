@@ -419,6 +419,11 @@ class EffectiveH(NpcLinearOperator):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
+    combine : bool
+        Whether to combine legs into pipes as far as possible. This reduces the overhead of
+        calculating charge combinations in the contractions.
+    move_right : bool
+        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right.
     """
     length = None
     acts_on = None
@@ -839,6 +844,14 @@ class EffectiveHWrapper(EffectiveH):
     def acts_on(self):
         return self.orig_eff_H.acts_on
 
+    @property
+    def combine(self):
+        return self.orig_eff_H.combine
+
+    @property
+    def move_right(self):
+        return self.orig_eff_H.move_right
+
     def combine_theta(self, theta):
         return self.orig_eff_H.combine_theta(theta)
 
@@ -901,7 +914,7 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         labels = matrix.get_leg_labels()
         proj = npc.eye_like(matrix, 0)
         for th_o in self.theta_ortho:
-            if self.combine:
+            if self.orig_eff_H.combine:
                 th_o = th_o.combine_legs(th_o.get_leg_labels())
             proj -= npc.outer(th_o, th_o.conj())
         matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
@@ -917,8 +930,6 @@ class EffectiveHPlusHC(EffectiveHWrapper):
 
     def matvec(self, theta):
         """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        import ipdb
-        ipdb.set_trace()  # TODO XXX
         return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
 
     def to_matrix(self):

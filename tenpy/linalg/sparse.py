@@ -207,20 +207,23 @@ class FlatLinearOperator(ScipyLinearOperator):
         if vec.ndim != 1:
             vec = np.squeeze(vec, axis=1)  # need a vector, not a Nx1 matrix
         if self._charge_sector is not None:
-            npc_vec = self.flat_to_npc(vec)  # convert into npc Array
-            npc_vec = self.npc_matvec(npc_vec)  # apply the transfer matrix
+            npc_vec = self.flat_to_npc(vec)  # convert to npc Array
+            npc_vec = self.npc_matvec(npc_vec)  # the expensive part
             self.matvec_count += 1
-            return self.npc_to_flat(npc_vec)  # convert back into numpy ndarray.
+            return self.npc_to_flat(npc_vec)  # convert back
         else:
             result = np.zeros(self.shape[0], self.dtype)
-            # iterator over all charge sectors
-            for sector in self.possible_charge_sectors:
-                self.charge_sector = sector
-                assert self._charge_sector is not None
-                npc_vec = self.flat_to_npc(vec[self._mask])  # convert into npc Array
-                npc_vec = self.npc_matvec(npc_vec)  # apply the transfer matrix
-                self.matvec_count += 1
-                result[self._mask] = self.npc_to_flat(npc_vec)  # convert back into numpy ndarray.
+            try:
+                # iterator over all charge sectors
+                for sector in self.possible_charge_sectors:
+                    self.charge_sector = sector
+                    assert self._charge_sector is not None
+                    npc_vec = self.flat_to_npc(vec[self._mask])  # convert to npc Array
+                    npc_vec = self.npc_matvec(npc_vec)  # the expensive part
+                    self.matvec_count += 1
+                    result[self._mask] = self.npc_to_flat(npc_vec)  # convert back
+            finally:
+                self.charge_sector = None
             return result
 
     def flat_to_npc(self, vec):
