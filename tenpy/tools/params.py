@@ -170,10 +170,6 @@ class Config(MutableMapping, Hdf5Exportable):
     def any_nonzero(self, keys, verbose_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
 
-        .. todo ::
-            Currently, if k is a tuple, only checks equality between k[0] and
-            any other element. Should potentially be generalized.
-
         Parameters
         ----------
         keys : list of {key | tuple of keys}
@@ -193,17 +189,25 @@ class Config(MutableMapping, Hdf5Exportable):
         verbose = (self.verbose > 1.)
         for k in keys:
             if isinstance(k, tuple):
+                if len(k) == 0:
+                    raise ValueError("got empty tuple, nothing to compare")
                 # check equality
-                if self.has_nonzero(k[0]):
-                    val = self.options[k[0]]
-                    for k1 in k[1:]:
-                        if self.has_nonzero(k1):
-                            param_val = self.options[k1]
-                        if not np.array_equal(val, param_val):
-                            if verbose:
-                                print("{k0!r} and {k1!r} have different entries.".format(k0=k[0],
-                                                                                         k1=k1))
-                            return True
+                nonzero = [self.has_nonzero(k0) for k0 in k]
+                if not any(nonzero):
+                    continue  # all zero, so equal
+                if not all(nonzero):
+                    print(verbose_msg)
+                    print("{k!r} are partially non-zero but would need to be equal".format(k=k))
+                    return True
+                val = self.options[k[0]]
+                for k1 in k[1:]:
+                    other_val = self.options[k1]
+                    if not np.array_equal(val, other_val):
+                        if verbose:
+                            print(verbose_msg)
+                            msg = "{k0!r} and {k1!r} have different entries."
+                            print(msg.format(k0=k[0], k1=k1))
+                        return True
             else:
                 if self.has_nonzero(k):
                     if verbose:
