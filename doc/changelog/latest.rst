@@ -21,6 +21,10 @@ Backwards incompatible changes
   parameter dictionaries and add some useful functionality. 
   Old code using :meth:`tenpy.tools.params.get_parameter()` and :meth:`tenpy.tools.params.unused_parameters()` 
   still works as before, but raises a warning, and should be replaced.
+  For example, if you defined your own models, you should replace calls
+  ``get_parameter(model_params, "key", "default_value", "ModelName")`` with
+  ``model_params.get("key", "default_value")``, 
+  the latter syntax being what you would use for a normal python dictionary as well.
 - Renamed the following class parameter dictionaries to simply `options` for more consitency.
   Old code using the class attributes should still work (since we provide property aliases), but raises warnings.
   Note that this affects also derived classes (for example the :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine`).
