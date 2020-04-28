@@ -408,7 +408,7 @@ def unused_parameters(params, warn=None):
     Parameters
     ----------
     params : dict
-        A dictionary of parameters which was given to (functions using) :meth:`get_parameter`
+        A dictionary of parameters which was given to (functions using) :func:`get_parameter`
     warn : None | str
         If given, print a warning "unused parameter for {warn!s}: {unused_keys!s}".
 

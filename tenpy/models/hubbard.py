@@ -4,7 +4,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Config
+from ..tools.params import asConfig
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain']
@@ -21,7 +21,7 @@ class BoseHubbardModel(CouplingMPOModel):
             + \frac{U}{2} \sum_i n_i (n_i - 1) - \mu \sum_i n_i
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
 
@@ -58,11 +58,6 @@ class BoseHubbardModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "BoseHubbardModel")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3)
         filling = model_params.get('filling', 0.5)
@@ -94,9 +89,8 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "BoseHubbardChain")
         CouplingMPOModel.__init__(self, model_params)
 
 
@@ -114,7 +108,7 @@ class FermiHubbardModel(CouplingMPOModel):
 
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
@@ -154,11 +148,6 @@ class FermiHubbardModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "FermiHubbardModel")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N')
         cons_Sz = model_params.get('cons_Sz', 'Sz')
@@ -187,7 +176,6 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "FermiHubbardChain")
         CouplingMPOModel.__init__(self, model_params)

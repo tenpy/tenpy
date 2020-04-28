@@ -21,7 +21,7 @@ import numpy as np
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Config
+from ..tools.params import asConfig
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
@@ -41,7 +41,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -59,9 +59,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "SpinChainNNN")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -69,8 +68,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
-                               "check Sz conservation"):
+            if not model_params.any_nonzero([('Jx', 'Jy'),
+                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
@@ -134,7 +133,7 @@ class SpinChainNNN2(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -169,18 +168,13 @@ class SpinChainNNN2(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "SpinChainNNN2")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not model_params.any_nonzero([('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
-                               "check Sz conservation"):
+            if not model_params.any_nonzero([('Jx', 'Jy'),
+                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'

@@ -15,7 +15,6 @@ import warnings
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
 from .model import CouplingModel, MPOModel, CouplingMPOModel
-from ..tools.params import Config
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 
@@ -125,7 +124,7 @@ class HofstadterFermions(CouplingMPOModel):
     phase, depending on lattice coordinates and gauge choice (see
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -160,11 +159,6 @@ class HofstadterFermions(CouplingMPOModel):
         Choice of the gauge used for the magnetic field. This changes the
         magnetic unit cell. See :func:`gauge_hopping` for details.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "HofstadterFermions")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
         filling = model_params.get('filling', (1, 8))
@@ -192,8 +186,8 @@ class HofstadterFermions(CouplingMPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = model_params.get('phi_ext', 0.)
-        mu = model_params.get('mu', 0.)
-        v = model_params.get('v', 0)
+        mu = np.asarray(model_params.get('mu', 0.))
+        v = np.asarray(model_params.get('v', 0))
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian
@@ -209,7 +203,7 @@ class HofstadterFermions(CouplingMPOModel):
         self.add_coupling(v, 0, 'N', 0, 'N', dy)
 
 
-class HofstadterBosons(CouplingModel, MPOModel):
+class HofstadterBosons(CouplingMPOModel):
     r"""Bosons on a square lattice with magnetic flux.
 
     For now, the Hamiltonian reads:
@@ -223,7 +217,7 @@ class HofstadterBosons(CouplingModel, MPOModel):
     phase, depending on lattice coordinates and gauge choice (see
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -260,11 +254,6 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Choice of the gauge used for the magnetic field. This changes the
         magnetic unit cell.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "HofstadterBosons")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         Nmax = model_params.get('Nmax', 3)
         conserve = model_params.get('conserve', 'N')
@@ -293,8 +282,8 @@ class HofstadterBosons(CouplingModel, MPOModel):
         Lx = self.lat.shape[0]
         Ly = self.lat.shape[1]
         phi_ext = model_params.get('phi_ext', 0.)
-        mu = model_params.get('mu', 0.)
-        U = model_params.get('U', 0)
+        mu = np.asarray(model_params.get('mu', 0.))
+        U = np.asarray(model_params.get('U', 0))
         hop_x, hop_y = gauge_hopping(model_params)
 
         # 6) add terms of the Hamiltonian

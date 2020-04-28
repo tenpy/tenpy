@@ -8,7 +8,7 @@ import numpy as np
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Config
+from ..tools.params import asConfig
 
 __all__ = ['SpinModel', 'SpinChain']
 
@@ -26,7 +26,7 @@ class SpinModel(CouplingMPOModel):
             + \sum_i (\mathtt{D} (S^z_i)^2 + \mathtt{E} ((S^x_i)^2 - (S^y_i)^2))
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -61,18 +61,13 @@ class SpinModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "SpinModel")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)
         conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
             if not model_params.any_nonzero([('Jx', 'Jy'), 'hx', 'hy', 'E'],
-                               "check Sz conservation"):
+                                            "check Sz conservation"):
                 conserve = 'Sz'
             elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
@@ -119,7 +114,6 @@ class SpinChain(SpinModel, NearestNeighborModel):
     See the :class:`SpinModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "SpinChain")
         CouplingMPOModel.__init__(self, model_params)

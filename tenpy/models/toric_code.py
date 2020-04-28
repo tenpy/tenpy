@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Lattice, _parse_sites
 from ..networks.site import SpinHalfSite
 from .model import MultiCouplingModel, CouplingMPOModel
-from ..tools.params import Config
+from ..tools.params import asConfig
 from ..tools.misc import any_nonzero
 
 __all__ = ['DualSquare', 'ToricCode']
@@ -61,7 +61,7 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
             - \mathtt{Jp} \sum_{plaquettes p} \prod_{i \in p} \sigma^z_i
 
     (Note that this are Pauli matrices, not spin-1/2 operators.)
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -77,11 +77,6 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     order : str
         The order of the lattice sites in the lattice, see :class:`DualSquare`.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "ToricCode")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         site = SpinHalfSite(conserve)
@@ -102,13 +97,9 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Jv = model_params.get('Jv', 1.)
         Jp = model_params.get('Jp', 1.)
         # vertex/star term
-        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0),
-                                     ('Sigmax', [0, 0], 1),
-                                     ('Sigmax', [-1, 0], 0),
-                                     ('Sigmax', [0, -1], 1)])
+        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0), ('Sigmax', [0, 0], 1),
+                                     ('Sigmax', [-1, 0], 0), ('Sigmax', [0, -1], 1)])
         # plaquette term
-        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0),
-                                     ('Sigmaz', [0, 0], 1),
-                                     ('Sigmaz', [0, 1], 0),
-                                     ('Sigmaz', [1, 0], 1)])
+        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0), ('Sigmaz', [0, 0], 1),
+                                     ('Sigmaz', [0, 1], 0), ('Sigmaz', [1, 0], 1)])
         # done

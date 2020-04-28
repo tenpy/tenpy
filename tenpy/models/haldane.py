@@ -4,7 +4,7 @@
 import numpy as np
 
 from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import Config
+from tenpy.tools.params import asConfig
 from tenpy.networks.site import BosonSite, FermionSite
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
@@ -26,7 +26,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
     :math:`\pm\phi` is the phase acquired by a boson hopping between atoms in the same sublattice with a sign
     given by the direction of the hopping. This Hamiltonian is translated from [Grushin2015]_.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -57,24 +57,22 @@ class BosonicHaldaneModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', 'Honeycomb')
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "BosonicHaldaneModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        conserve = model_params.get('conserve', 'N', self.name)
+        conserve = model_params.get('conserve', 'N')
         site = BosonSite(conserve=conserve)
         return site
 
     def init_terms(self, model_params):
-        t1 = model_params.get('t1', -1., self.name, True)
-        t2 = model_params.get('t2',
-                           (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43))),
-                           self.name, True)
-        V = model_params.get('V', 0, self.name, True)
-        mu = model_params.get('mu', 0., self.name, True)
-        phi_ext = 2 * np.pi * model_params.get('phi_ext', 0., self.name)
+        t1 = np.asarray(model_params.get('t1', -1.))
+        t2_default = (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
+        t2 = np.asarray(model_params.get('t2', t2_default))
+        V = np.asarray(model_params.get('V', 0))
+        mu = np.asarray(model_params.get('mu', 0.))
+        phi_ext = 2 * np.pi * model_params.get('phi_ext', 0.)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(mu, 0, 'N', category='mu N')
@@ -108,7 +106,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
     :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
     given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
@@ -143,9 +141,8 @@ class FermionicHaldaneModel(CouplingMPOModel):
         Only used if `lattice` is the name of a 2D Lattice.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', 'Honeycomb')
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "FermionicHaldaneModel")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
@@ -154,11 +151,11 @@ class FermionicHaldaneModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        t1 = model_params.get('t1', -1.)
-        t2 = model_params.get('t2',
-                           (np.sqrt(129) / 36) * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43))))
-        V = model_params.get('V', 0)
-        mu = model_params.get('mu', 0.)
+        t1 = np.asarray(model_params.get('t1', -1.))
+        t2_default = np.sqrt(129) / 36 * t1 * np.exp(1j * np.arccos(3 * np.sqrt(3 / 43)))
+        t2 = np.asarray(model_params.get('t2', t2_default))
+        V = np.asarray(model_params.get('V', 0))
+        mu = np.asarray(model_params.get('mu', 0.))
         phi_ext = 2 * np.pi * model_params.get('phi_ext', 0.)
 
         for u in range(len(self.lat.unit_cell)):

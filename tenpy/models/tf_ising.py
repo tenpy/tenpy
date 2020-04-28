@@ -8,8 +8,10 @@ We choose the field along z to allow to conserve the parity, if desired.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
+import numpy as np
+
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import Config
+from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite
 
 __all__ = ['TFIModel', 'TFIChain']
@@ -26,7 +28,7 @@ class TFIModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
@@ -58,11 +60,6 @@ class TFIModel(CouplingMPOModel):
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     """
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "TFIModel")
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         assert conserve != 'Sz'
@@ -74,8 +71,8 @@ class TFIModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        J = model_params.get('J', 1.)
-        g = model_params.get('g', 1.)
+        J = np.asarray(model_params.get('J', 1.))
+        g = np.asarray(model_params.get('g', 1.))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
@@ -89,7 +86,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
     See the :class:`TFIModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "TFIChain")
         CouplingMPOModel.__init__(self, model_params)
