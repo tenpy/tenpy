@@ -11,7 +11,7 @@ import pprint
 
 from .hdf5_io import Hdf5Exportable
 
-__all__ = ["Config", "asconfig", "get_parameter", "unused_parameters"]
+__all__ = ["Config", "asConfig", "get_parameter", "unused_parameters"]
 
 
 class Config(MutableMapping, Hdf5Exportable):
@@ -101,11 +101,10 @@ class Config(MutableMapping, Hdf5Exportable):
     def keys(self):
         return self.options.keys()
 
-    def get(self, option, default):
-        """Find the value of `option`; really more like `setdefault` of a :class:`dict`.
+    def get(self, key, default):
+        """Find the value of `key`; really more like `setdefault` of a :class:`dict`.
 
-        If no value is set, return `default` and set the value of `option` to
-        `default` internally.
+        If no value is set, return `default` and set the value of `key` to `default` internally.
 
         Parameters
         ----------
@@ -119,29 +118,35 @@ class Config(MutableMapping, Hdf5Exportable):
         val :
             The value for `option` if it existed, `default` otherwise.
         """
-        use_default = option not in self.keys()
-        if use_default:
-            self.unused.add(option)
-        val = self.options.setdefault(option, default)  # get & set default if not existent
-        self.print_if_verbose(option, "Reading", use_default)
-        self.unused.discard(option)  # (does nothing if option not in set)
+        use_default = key not in self.keys()
+        val = self.options.setdefault(key, default)  # get & set default if not existent
+        self.print_if_verbose(key, "Reading", use_default)
+        self.unused.discard(key)  # (does nothing if option not in set)
         return val
 
-    def setdefault(self, option, default):
+    def setdefault(self, key, default):
         """Set a default value without reading it out.
 
         Parameters
         ----------
-        option : str
-            Key name for the parameter being set.
+        key : str
+            Key name for the option being set.
         default :
-            The value to be set by default if the parameter is not yet set.
+            The value to be set by default if the option is not yet set.
         """
-        use_default = option not in self.keys()
-        self.options.setdefault(option, default)
-        self.print_if_verbose(option, "Set default", not use_default)
-        self.unused.discard(option)  # (does nothing if option not in set)
+        use_default = key not in self.keys()
+        self.options.setdefault(key, default)
+        self.print_if_verbose(key, "Set default", not use_default)
+        self.unused.discard(key)  # (does nothing if option not in set)
         # do no return the value: not added to self.unused!
+
+    def subconfig(self, key):
+        """Get ``self[key]`` as a :class:`Config`."""
+        use_default = key not in self.keys()
+        subconfig = asConfig(self.options.get(key, {}), key)
+        self.print_if_verbose(key, "Subconfig", use_default)
+        self.unused.discard(key)  # (does nothing if option not in set)
+        return subconfig
 
     def print_if_verbose(self, option, action=None, use_default=False):
         """Print out `option` if verbosity and other conditions are met.
@@ -270,7 +275,7 @@ class Config(MutableMapping, Hdf5Exportable):
         return cls(config, name)
 
 
-def asconfig(config, name):
+def asConfig(config, name):
     """Convert a dict-like `config` to a :class:`Config`.
 
     Parameters

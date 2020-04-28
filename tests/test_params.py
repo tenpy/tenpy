@@ -2,10 +2,10 @@
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import warnings
-from tenpy.tools.params import Config
+from tenpy.tools.params import Config, asConfig
 
 
-def example_function(example_pars, keys=['a', 'b']):
+def example_function(example_pars, keys=['a', 'b', 'c']):
     """example function using a parameter dictionary."""
     for default, k in enumerate(keys):
         p_k = example_pars.get(k, default)
@@ -15,13 +15,17 @@ def example_function(example_pars, keys=['a', 'b']):
 def test_parameters():
     pars = Config(dict(), "Test empty")
     example_function(pars)
-    pars = Config(dict(a=None, b=2.5, c="dict-style", d="non-used"), "Test parameters")
-    assert pars['c'] == "dict-style"
-    example_function(pars)
+    pars = dict(a=None, b=2.5, d="dict-style", e="non-used", sub=dict(x=10, y=20), verbose=1)
+    config = asConfig(pars, "Test parameters")
+    example_function(config)
+    assert config['d'] == "dict-style"
+    sub = config.subconfig("sub")
+    sub.setdefault('z', 30)
+    example_function(sub)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
-        pars = Config(dict(miss_spelled=1.23), "Test unused")
-        example_function(pars)
-        unused = pars.unused
-        assert len(unused) == 1
-        assert len(w) == 1
+        assert len(config.unused) == 1
+        del config  # catch the warning for 'e'
+        assert len(sub.unused) == 2
+        del sub  # catch warnings for 'x', y'
+        assert len(w) == 2
