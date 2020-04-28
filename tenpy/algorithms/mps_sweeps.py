@@ -31,7 +31,7 @@ from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator
-from ..tools.params import unused_parameters, Config
+from ..tools.params import asConfig
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper', 'OrthogonalEffectiveH',
@@ -51,12 +51,13 @@ class Sweep:
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    engine_params : dict
-        Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in subclasses.
+    options : dict
+        Further optional configuration parameters.
 
     Attributes
     ----------
+    options: :class:`~tenpy.tools.params.Config`
+        Optional parameters.
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
@@ -75,7 +76,7 @@ class Sweep:
     i0 : int
         Only set during sweep.
         Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
-    lanczos_params : dict
+    lanczos_params : :class:`Config`
         Parameters for the Lanczos algorithm.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
@@ -104,22 +105,20 @@ class Sweep:
     verbose : bool | int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
-    def __init__(self, psi, model, engine_params):
+    def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        if not isinstance(engine_params, Config,):
-            engine_params = Config(engine_params, "Sweep")
+        self.options = options = asConfig(options, "MPSSweeps")
         self.psi = psi
-        self.engine_params = engine_params
-        self.verbose = engine_params.get('verbose', 1)
+        self.verbose = options.get('verbose', 1)
 
-        self.combine = engine_params.get('combine', False)
+        self.combine = options.get('combine', False)
         self.finite = self.psi.finite
         self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
 
-        self.lanczos_params = engine_params.get('lanczos_params', {})
+        self.lanczos_params = options.get('lanczos_params', {})
         self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = engine_params.get('trunc_params', {})
+        self.trunc_params = options.get('trunc_params', {})
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
 
         self.env = None
@@ -129,13 +128,10 @@ class Sweep:
         self.move_right = True
         self.update_LP_RP = (True, False)
 
-    def __del__(self):
-        # TODO work out how to get rid of the unused_parameters() calls.
-        engine_params = self.engine_params
-        unused_parameters(engine_params['lanczos_params'], "Sweep lanczos_params")
-        unused_parameters(engine_params['trunc_params'], "Sweep trunc_params")
-        if 'mixer_params' in engine_params and engine_params.get('mixer', True):
-            unused_parameters(engine_params['mixer_params'], "Sweep mixer_params")
+    @property
+    def engine_params(self):
+        warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
+        return self.options
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.
@@ -160,10 +156,10 @@ class Sweep:
         """
         H = model.H_MPO if model is not None else self.env.H
         if self.env is None or self.finite:
-            LP = self.engine_params.get('LP', None)
-            RP = self.engine_params.get('RP', None)
-            LP_age = self.engine_params.get('LP_age', 0)
-            RP_age = self.engine_params.get('RP_age', 0)
+            LP = self.options.get('LP', None)
+            RP = self.options.get('RP', None)
+            LP_age = self.options.get('LP_age', 0)
+            RP_age = self.options.get('RP_age', 0)
         else:  # re-initialize
             compatible = True
             if model is not None:
@@ -179,16 +175,16 @@ class Sweep:
                 RP = self.env.get_RP(self.psi.L - 1, False)
                 RP_age = self.env.get_RP_age(self.psi.L - 1)
             else:
-                LP = self.engine_params.get('LP', None)
-                RP = self.engine_params.get('RP', None)
-                LP_age = self.engine_params.get('LP_age', 0)
-                RP_age = self.engine_params.get('RP_age', 0)
-            if self.engine_params.get('chi_list', None) is not None:
+                LP = self.options.get('LP', None)
+                RP = self.options.get('RP', None)
+                LP_age = self.options.get('LP_age', 0)
+                RP_age = self.options.get('RP_age', 0)
+            if self.options.get('chi_list', None) is not None:
                 warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
 
         # (re)initialize ortho_to_envs
-        orthogonal_to = self.engine_params.get('orthogonal_to', [])
+        orthogonal_to = self.options.get('orthogonal_to', [])
         if len(orthogonal_to) > 0:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
@@ -199,8 +195,8 @@ class Sweep:
         # initial sweeps of the environment (without mixer)
         if not self.finite:
             print("Initial sweeps...")
-            # print(self.engine_params['start_env'])
-            start_env = self.engine_params.get('start_env', 1)
+            # print(self.options['start_env'])
+            start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
 
     def reset_stats(self):
@@ -212,9 +208,9 @@ class Sweep:
         """
         warnings.warn(
             "reset_stats() is not overwritten by the engine. No statistics will be collected!")
-        self.sweeps = self.engine_params.get('sweep_0', 0)
+        self.sweeps = self.options.get('sweep_0', 0)
         self.shelve = False
-        self.chi_list = self.engine_params.get('chi_list', None)
+        self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
@@ -351,7 +347,7 @@ class Sweep:
             self.mixer = mixer  # recover the original mixer
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`.
+        """Set `self.mixer` to the class specified by `options['mixer']`.
 
         It is expected that different algorithms have differen ways of implementing mixers (with
         different defaults). Thus, this is algorithm-specific.

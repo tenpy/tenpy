@@ -2,7 +2,7 @@
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import np_conserved as npc
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
@@ -36,7 +36,7 @@ class LanczosGroundState:
         For finding the ground state, this should be the best guess available.
         Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
         as vectors.
-    params : dict
+    options : dict
         Further optional parameters as described in the following table.
         Add a parameter ``verbose >=1`` to print the used parameters during runtime.
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
@@ -82,6 +82,8 @@ class LanczosGroundState:
 
     Attributes
     ----------
+    options : :class:`~tenpy.tools.params.Config`
+        Optional parameters.
     H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
         The hermitian linear operator.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
@@ -109,23 +111,23 @@ class LanczosGroundState:
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
     """
-    def __init__(self, H, psi0, params, orthogonal_to=[]):
+    def __init__(self, H, psi0, options, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
-        self._params = params
-        self.N_min = get_parameter(params, 'N_min', 2, "Lanczos")
-        self.N_max = get_parameter(params, 'N_max', 20, "Lanczos")
-        self.E_tol = get_parameter(params, 'E_tol', np.inf, "Lanczos")
-        self.P_tol = get_parameter(params, 'P_tol', 1.e-14, "Lanczos")
-        self.N_cache = get_parameter(params, 'N_cache', self.N_max, "Lanczos")
-        self.min_gap = get_parameter(params, 'min_gap', 1.e-12, "Lanczos")
-        self.reortho = get_parameter(params, 'reortho', False, "Lanczos")
+        self.options = options = asConfig(options, "Lanczos")
+        self.N_min = options.get('N_min', 2)
+        self.N_max = options.get('N_max', 20)
+        self.E_tol = options.get('E_tol', np.inf)
+        self.P_tol = options.get('P_tol', 1.e-14)
+        self.N_cache = options.get('N_cache', self.N_max)
+        self.min_gap = options.get('min_gap', 1.e-12)
+        self.reortho = options.get('reortho', False)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = get_parameter(params, 'cutoff', np.finfo(psi0.dtype).eps * 100, "Lanczos")
-        self.verbose = params.get('verbose', 0)
+        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
+        self.verbose = options.verbose
         if len(orthogonal_to) > 0:
             self.orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose=self.verbose / 10)
         else:
@@ -283,7 +285,7 @@ class LanczosEvolution(LanczosGroundState):
 
     Parameters
     ----------
-    H, psi0, params :
+    H, psi0, options :
         Hamiltonian, starting vector and parameters as defined in :class:`LanczosGroundState`.
         The parameters `E_tol` and `min_gap` are ignored,
         the parameters `P_tol` defines when convergence is reached, see :meth:`_converged` for
@@ -296,9 +298,8 @@ class LanczosEvolution(LanczosGroundState):
     _result_norm : float
         Norm of the resulting vector.
     """
-    def __init__(self, H, psi0, params):
-        super().__init__(H, psi0, params)
-        self.delta = None
+    def __init__(self, H, psi0, options):
+        super().__init__(H, psi0, options)
         self._result_norm = 1.
 
     def run(self, delta):
@@ -355,12 +356,12 @@ class LanczosEvolution(LanczosGroundState):
         return np.abs(self._result_krylov[k]) < self.P_tol
 
 
-def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
-    """Simple wrapper calling ``LanczosGroundState(H, psi, params, orthogonal_to).run()``
+def lanczos(H, psi, options={}, orthogonal_to=[]):
+    """Simple wrapper calling ``LanczosGroundState(H, psi, options, orthogonal_to).run()``
 
     Parameters
     ----------
-    H, psi, lanczos_params, orthogonal_to :
+    H, psi, options, orthogonal_to :
         See :class:`LanczosGroundState`.
 
     Returns
@@ -368,10 +369,10 @@ def lanczos(H, psi, lanczos_params={}, orthogonal_to=[]):
     E0, psi0, N :
         See :meth:`LanczosGroundState.run`.
     """
-    return LanczosGroundState(H, psi, lanczos_params, orthogonal_to).run()
+    return LanczosGroundState(H, psi, options, orthogonal_to).run()
 
 
-def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
+def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     """Use :func:`scipy.sparse.linalg.eigsh` to find the ground state of `H`.
 
     This function has the same call/return structure as :func:`lanczos`, but uses
@@ -383,7 +384,7 @@ def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
 
     Parameters
     ----------
-    H, psi, lanczos_params, orthogonal_to :
+    H, psi, options, orthogonal_to :
         See :class:`LanczosGroundState`.
         `H` and `psi` should have/use labels.
 
@@ -397,9 +398,10 @@ def lanczos_arpack(H, psi, lanczos_params={}, orthogonal_to=[]):
     if len(orthogonal_to) > 0:
         # TODO: write method to project out orthogonal states from a NpcLinearOperator
         raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
+    options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
-    tol = get_parameter(lanczos_params, 'P_tol', 1.e-14, "Lanczos")
-    N_min = get_parameter(lanczos_params, 'N_min', None, "Lanczos")
+    tol = options.get('P_tol', 1.e-14)
+    N_min = options.get('N_min', None)
     try:
         Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
     except scipy.sparse.linalg.ArpackNoConvergence:

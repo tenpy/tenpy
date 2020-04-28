@@ -46,7 +46,7 @@ is the discarded part (orthogonal to the kept part) and the
 import numpy as np
 from ..linalg import np_conserved as npc
 import warnings
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
@@ -141,7 +141,7 @@ class TruncationError:
             return "TruncationError()"
 
 
-def truncate(S, trunc_par):
+def truncate(S, options):
     """Given a Schmidt spectrum `S`, determine which values to keep.
 
     Parameters
@@ -149,8 +149,8 @@ def truncate(S, trunc_par):
     S : 1D array
         Schmidt values (as returned by an SVD), not necessarily sorted.
         Should be normalized to ``np.sum(S*S) == 1.``.
-    trunc_par: dict
-        Parameters giving constraints for the truncation.
+    options: dict-like
+        Config with constraints for the truncation.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
         A value ``None`` indicates that the constraint should be ignored.
 
@@ -191,18 +191,18 @@ def truncate(S, trunc_par):
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
     """
+    options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
     # This is only to avoid problems with taking the inverse of `S`.
-    chi_max = get_parameter(trunc_par, 'chi_max', 100, 'truncation')
-    chi_min = get_parameter(trunc_par, 'chi_min', None, 'truncation')
-    deg_tol = get_parameter(trunc_par, 'degeneracy_tol', None, 'truncation')
-    if 'symmetry_tol' in trunc_par:
-        warnings.warn("Deprecated truncation parameter `symmetry_tol`;"
-                      "use `degeneracy_tol` instead!"
-                      "We don't use `log` in the condition anymore!")
-        deg_tol = np.log(trunc_par['symmetry_tol'])
-    svd_min = get_parameter(trunc_par, 'svd_min', 1.e-14, 'truncation')
-    trunc_cut = get_parameter(trunc_par, 'trunc_cut', 1.e-14, 'truncation')
+    chi_max = options.get('chi_max', 100)
+    chi_min = options.get('chi_min', None)
+    deg_tol = options.get('degeneracy_tol', None)
+    options.deprecated_alias('symmetry_tol', 'degeneracy_tol',
+                             "We don't use `log` in the condition anymore!")
+    if 'symmetry_tol' in options:  # deprecated!
+        deg_tol = np.log(options['symmetry_tol'])
+    svd_min = options.get('svd_min', 1.e-14)
+    trunc_cut = options.get('trunc_cut', 1.e-14)
 
     if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")

@@ -23,7 +23,7 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
 import numpy as np
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import Config
+from tenpy.tools.params import asConfig
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta
 
@@ -42,7 +42,7 @@ class Engine:
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    TDVP_params : dict
+    options : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
 
@@ -61,36 +61,40 @@ class Engine:
 
     Attributes
     ----------
+    options: dict
+        Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     psi : :class:`~tenpy.networks.mps.MPS`
         The MPS, time evolved in-place.
-    TDVP_params: dict
-        Optional parameters, see :func:`run` and :func:`run_GS` for more details.
     environment : :class:`~tenpy.networks.mpo.MPOEnvironment`
         The environment, storing the `LP` and `RP` to avoid recalculations.
     """
-    def __init__(self, psi, model, TDVP_params, environment=None):
+    def __init__(self, psi, model, options, environment=None):
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
-        if not isinstance(TDVP_params, Config):
-            TDVP_params = Config(TDVP_params, "TDVP")
-        self.TDVP_params = TDVP_params
-        self.verbose = TDVP_params.get('verbose', 1)
+        self.options = options = asConfig(options, "TDVP")
+        self.verbose = options.get('verbose', 1)
+        self.lanczos_options = options.subconfig('lanczos_options')
         if environment is None:
             environment = MPOEnvironment(psi, model.H_MPO, psi)
-        self.evolved_time = TDVP_params.get('start_time', 0.)
+        self.evolved_time = options.get('start_time', 0.)
         self.H_MPO = model.H_MPO
         self.environment = environment
         if not psi.finite:
             raise ValueError("TDVP is only implemented for finite boundary conditions")
         self.psi = psi
         self.L = self.psi.L
-        self.dt = TDVP_params.get('dt', 2)
-        self.trunc_params = TDVP_params.get('trunc_params', {})
-        self.N_steps = TDVP_params.get('N_steps', 10)
+        self.dt = options.get('dt', 2)
+        self.trunc_params = options.get('trunc_params', {})
+        self.N_steps = options.get('N_steps', 10)
+
+    @property
+    def TDVP_params(self):
+        warnings.warn("renamed self.TDVP_params -> self.options", FutureWarning, stacklevel=2)
+        return self.options
 
     # Actual calculation
     def run_one_site(self, N_steps=None):
@@ -320,8 +324,7 @@ class Engine:
         H = H1_mixed(Lp, Rp, W)
         theta = theta.combine_legs(['vL', 'p', 'vR'])
         #Initialize Lanczos
-        parameters_lanczos_h1 = {'delta': dt}
-        lanczos_h1 = LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
+        lanczos_h1 = LanczosEvolution(H=H, psi0=theta, options=self.lanczos_options)
         theta, N_h1 = lanczos_h1.run(dt)
         theta = theta.split_legs(['(vL.p.vR)'])
         return theta
@@ -345,8 +348,7 @@ class Engine:
         H = H2_mixed(Lp, Rp, W0, W1)
         theta = theta.combine_legs(['vL', 'p0', 'p1', 'vR'])
         #Initialize Lanczos
-        parameters_lanczos_h1 = {'delta': dt}
-        lanczos_h1 = LanczosEvolution(H=H, psi0=theta, params=parameters_lanczos_h1)
+        lanczos_h1 = LanczosEvolution(H=H, psi0=theta, options=self.lanczos_options)
         theta, N_h1 = lanczos_h1.run(dt)
         theta = theta.split_legs(['(vL.p0.p1.vR)'])
         return theta
@@ -426,10 +428,9 @@ class Engine:
             time step of the evolution
         """
         #Initialize Lanczos
-        parameters_lanczos_h1 = {'delta': dt}
         lanczos_h0 = LanczosEvolution(H=H,
                                       psi0=s.combine_legs(['vL', 'vR']),
-                                      params=parameters_lanczos_h1)
+                                      options=self.lanczos_options)
         s_new, N_h0 = lanczos_h0.run(dt)
         s_new = s_new.split_legs(['(vL.vR)'])
         return s_new

@@ -41,7 +41,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
-from ..tools.params import Config
+from ..tools.params import asConfig
 from ..tools.process import memory_usage
 from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 
-def run(psi, model, DMRG_params):
+def run(psi, model, options):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -61,7 +61,7 @@ def run(psi, model, DMRG_params):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    DMRG_params : dict
+    options : dict
         Further optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
 
@@ -191,12 +191,12 @@ def run(psi, model, DMRG_params):
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
     """
     # initialize the engine
-    DMRG_params = Config(DMRG_params, 'DMRG')
-    active_sites = DMRG_params.get('active_sites', 2)
+    options = asConfig(options, 'DMRG')
+    active_sites = options.get('active_sites', 2)
     if active_sites == 1:
-        engine = SingleSiteDMRGEngine(psi, model, DMRG_params)
+        engine = SingleSiteDMRGEngine(psi, model, options)
     elif active_sites == 2:
-        engine = TwoSiteDMRGEngine(psi, model, DMRG_params)
+        engine = TwoSiteDMRGEngine(psi, model, options)
     else:
         raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
     E, _ = engine.run()
@@ -221,7 +221,7 @@ class DMRGEngine(Sweep):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    engine_params : dict
+    options : dict
         Further optional parameters. These are usually algorithm-specific, and thus should be
         described in subclasses.
 
@@ -309,7 +309,7 @@ class DMRGEngine(Sweep):
             The MPS representing the ground state after the simluation,
             i.e. just a reference to :attr:`psi`.
         """
-        DMRG_params = self.engine_params
+        DMRG_params = self.options
         start_time = self.time0
         self.shelve = False
         # parameters for lanczos
@@ -476,7 +476,7 @@ class DMRGEngine(Sweep):
 
     def reset_stats(self):
         """Reset the statistics, useful if you want to start a new sweep run."""
-        self.sweeps = self.engine_params.get('sweep_0', 0)
+        self.sweeps = self.options.get('sweep_0', 0)
         self.update_stats = {
             'i0': [],
             'age': [],
@@ -498,7 +498,7 @@ class DMRGEngine(Sweep):
             'max_chi': [],
             'norm_err': []
         }
-        self.chi_list = self.engine_params.get('chi_list', None)
+        self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
@@ -611,7 +611,7 @@ class DMRGEngine(Sweep):
 
         if self.diag_method == 'default':
             # use ED for small matrix dimensions, but lanczos by default
-            max_N = self.engine_params.get('max_N_for_ED', 400)
+            max_N = self.options.get('max_N_for_ED', 400)
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
@@ -728,7 +728,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    engine_params : dict
+    options : dict
         Further optional parameters. These are usually algorithm-specific, and thus should be
         described in subclasses.
 
@@ -799,11 +799,11 @@ class TwoSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-    def __init__(self, psi, model, engine_params):
-        if not isinstance(engine_params, Config):
-            engine_params = Config(engine_params, 'DMRG')
-        self.EffectiveH = TwoSiteH
-        super(TwoSiteDMRGEngine, self).__init__(psi, model, engine_params)
+    EffectiveH = TwoSiteH
+
+    def __init__(self, psi, model, options):
+        options = asConfig(options, 'DMRG')
+        super(TwoSiteDMRGEngine, self).__init__(psi, model, options)
 
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on sites ``(i0, i0+1)``.
@@ -954,8 +954,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         self.env.del_RP(i0)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
-        Mixer_class = self.engine_params.get('mixer', None)
+        """Set `self.mixer` to the class specified by `options['mixer']`."""
+        Mixer_class = self.options.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = DensityMatrixMixer
@@ -966,7 +966,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
                     warnings.warn(msg, FutureWarning)
                     Mixer = "DensityMatrixMixer"
                 Mixer_class = globals()[Mixer_class]
-            mixer_params = self.engine_params.get('mixer_params', {})
+            mixer_params = self.options.subconfig('mixer_params')
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
@@ -1020,7 +1020,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         Initial guess for the ground state, which is to be optimized in-place.
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    engine_params : dict
+    options : dict
         Further optional parameters. These are usually algorithm-specific, and thus should be
         described in subclasses.
 
@@ -1091,11 +1091,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-    def __init__(self, psi, model, engine_params):
-        if not isinstance(engine_params, Config):
-            engine_params = Config(engine_params, 'DMRG')
-        self.EffectiveH = OneSiteH
-        super(SingleSiteDMRGEngine, self).__init__(psi, model, engine_params)
+    EffectiveH = OneSiteH
+
+    def __init__(self, psi, model, options):
+        options = asConfig(options, 'DMRG')
+        super(SingleSiteDMRGEngine, self).__init__(psi, model, options)
 
     def prepare_update(self):
         """Prepare `self` to represent the effective Hamiltonian on site ``i0``.
@@ -1291,8 +1291,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_RP(i0 - 1)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `engine_params['mixer']`."""
-        Mixer_class = self.engine_params.get('mixer', None)
+        """Set `self.mixer` to the class specified by `options['mixer']`."""
+        Mixer_class = self.options.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = SingleSiteMixer
@@ -1303,7 +1303,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     warnings.warn(msg, FutureWarning)
                     Mixer = "SingleSiteMixer"
                 Mixer_class = globals()[Mixer_class]
-            mixer_params = self.engine_params.get('mixer_params', {})
+            mixer_params = self.options.get('mixer_params', {})
             mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
             self.mixer = Mixer_class(mixer_params)
 
@@ -1419,7 +1419,7 @@ class Mixer:
     ----------
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
         Environment for contraction ``<psi|H|psi>`` for later
-    mixer_params : dict
+    options : dict
         Optional parameters as described in the following table.
         Use ``verbose>0`` to print the used parameters during runtime.
 
@@ -1445,17 +1445,16 @@ class Mixer:
     verbose : int
         Level of output vebosity.
     """
-    def __init__(self, mixer_params):
-        if not isinstance(mixer_params, Config):
-            mixer_params = Config(mixer_params, "Mixer")
-        self.amplitude = mixer_params.get('amplitude', 1.e-5)
+    def __init__(self, options):
+        self.options = options = asConfig(options, "Mixer")
+        self.amplitude = options.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
-        self.decay = mixer_params.get('decay', 2.)
+        self.decay = options.get('decay', 2.)
         assert self.decay >= 1.
         if self.decay == 1.:
             warnings.warn("Mixer with decay=1. doesn't decay")
-        self.disable_after = mixer_params.get('disable_after', 15)
-        self.verbose = mixer_params.get('verbose', 0)
+        self.disable_after = options.get('disable_after', 15)
+        self.verbose = options.get('verbose', 0)
 
     def update_amplitude(self, sweeps):
         """Update the amplitude, possibly disable the mixer.

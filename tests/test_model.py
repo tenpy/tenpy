@@ -246,11 +246,6 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
 
 
 class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
-    def __init__(self, model_params):
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "MyMod")
-        model.CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve)

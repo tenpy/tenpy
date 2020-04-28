@@ -56,9 +56,10 @@ class Config(MutableMapping, Hdf5Exportable):
         self.name = name
 
     def __getitem__(self, key):
+        val = self.options[key]
         self.print_if_verbose(key, "Reading")
         self.unused.discard(key)
-        return self.options[key]
+        return val
 
     def __setitem__(self, key, value):
         self.unused.add(key)
@@ -159,7 +160,7 @@ class Config(MutableMapping, Hdf5Exportable):
         action : str, optional
             Use to adapt printout message to specific actions (e.g. "Deleting")
         """
-        val = self.options[option]
+        val = self.options.get(option, "<not set>")
         name = self.name
         verbose = self.verbose
         new_key = option in self.unused

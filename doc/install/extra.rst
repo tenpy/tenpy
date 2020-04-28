@@ -51,7 +51,8 @@ However, that requires the installation of the HDF5 library and h5py.
 
 YAML parameter files
 ^^^^^^^^^^^^^^^^^^^^
-The :class:`tenpy.tools.params.Parameters` class supports reading and writing YAML files.
+The :class:`tenpy.tools.params.Config` class supports reading and writing YAML files, which requires the package
+`pyyaml`; ``pip install pyyaml``.
 
 Tests
 -----

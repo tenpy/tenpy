@@ -40,10 +40,11 @@ If one chooses imaginary :math:`dt`, the exponential projects
 
 import numpy as np
 import time
+import warnings
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import unused_parameters, Config
+from ..tools.params import asConfig
 from ..linalg.random_matrix import CUE
 
 __all__ = ['Engine', 'RandomUnitaryEvolution']
@@ -52,13 +53,16 @@ __all__ = ['Engine', 'RandomUnitaryEvolution']
 class Engine:
     """Time Evolving Block Decimation (TEBD) 'engine'.
 
+    .. changed :: 0.6.0
+        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networs.mps.MPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    TEBD_params : dict
+    options : dict
         Further optional parameters as described in the tables in
         :func:`run` and :func:`run_GS` for more details.
         Use ``verbose=1`` to print the used parameters during runtime.
@@ -76,8 +80,8 @@ class Engine:
         The MPS, time evolved in-place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model defining the Hamiltonian.
-    TEBD_params: dict
-        Optional parameters, see :func:`run` and :func:`run_GS` for more details.
+    options: :class:`~tenpy.tools.params.Config`
+        Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
         Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,
@@ -91,25 +95,24 @@ class Engine:
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
-    def __init__(self, psi, model, TEBD_params):
-        if not isinstance(TEBD_params, Config):
-            TEBD_params = Config(TEBD_params, "TEBD")
-        self.TEBD_params = TEBD_params
-        self.verbose = TEBD_params.get('verbose', 1)
-        self.trunc_params = TEBD_params.get('trunc_params', {})
+    def __init__(self, psi, model, options):
+        self.options = options = asConfig(options, "TEBD")
+        self.verbose = options.get('verbose', 1)
+        self.trunc_params = options.get('trunc_params', {})
         self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
         self.psi = psi
         self.model = model
-        self.evolved_time = TEBD_params.get('start_time', 0.)
-        self.trunc_err = TEBD_params.get('start_trunc_err', TruncationError())
+        self.evolved_time = options.get('start_time', 0.)
+        self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
         self._update_index = None
 
-    def __del__(self):
-        # TODO figure out how to get rid of the unused_parameters() calls.
-        unused_parameters(self.TEBD_params['trunc_params'], "TEBD trunc_params")
+    @property
+    def TEBD_params(self):
+        warnings.warn("renamed self.TEBD_params -> self.options", FutureWarning, stacklevel=2)
+        return self.options
 
     @property
     def trunc_err_bonds(self):
@@ -119,7 +122,7 @@ class Engine:
     def run(self):
         """(Real-)time evolution with TEBD (time evolving block decimation).
 
-        The following (optional) parameters are read out from the :attr:`TEBD_params`.
+        The following (optional) parameters are read out from the :attr:`options`.
 
         ============== ====== ======================================================
         key            type   description
@@ -139,9 +142,9 @@ class Engine:
         ============== ====== ======================================================
         """
         # initialize parameters
-        delta_t = self.TEBD_params.get('dt', 0.1)
-        N_steps = self.TEBD_params.get('N_steps', 10)
-        TrotterOrder = self.TEBD_params.get('order', 2)
+        delta_t = self.options.get('dt', 0.1)
+        N_steps = self.options.get('N_steps', 10)
+        TrotterOrder = self.options.get('order', 2)
 
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
@@ -170,7 +173,7 @@ class Engine:
             It is almost always more efficient (and hence advisable) to use DMRG.
             This algorithms can nonetheless be used quite well as a benchmark and for comparison.
 
-        The following (optional) parameters are read out from the :attr:`TEBD_params`.
+        The following (optional) parameters are read out from the :attr:`options`.
         Use ``verbose=1`` to print the used parameters during runtime.
 
         ============== ====== =============================================
@@ -196,11 +199,12 @@ class Engine:
         ============== ====== =============================================
         """
         # initialize parameters
-        delta_tau_list = self.TEBD_params.get('delta_t',
+        delta_tau_list = self.options.get(
+            'delta_tau_list',
             [0.1, 0.01, 0.001, 1.e-4, 1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10, 1.e-11, 0.])
-        max_error_E = self.TEBD_params.get('max_error_E', 1.e-13, )
-        N_steps = self.TEBD_params.get('N_steps', 10, )
-        TrotterOrder = self.TEBD_params.get('order', 2, )
+        max_error_E = self.options.get('max_error_E', 1.e-13)
+        N_steps = self.options.get('N_steps', 10)
+        TrotterOrder = self.options.get('order', 2)
 
         Eold = np.average(self.model.bond_energies(self.psi))
         if self.verbose >= 1:
@@ -643,7 +647,7 @@ class RandomUnitaryEvolution(Engine):
     ----------
     psi : :class:`~tenpy.networs.mps.MPS`
         Initial state to be time evolved. Modified in place.
-    TEBD_params : dict
+    options : dict
         Use ``verbose=1`` to print the used parameters during runtime.
         See :func:`run` and :func:`run_GS` for more details.
 
@@ -656,8 +660,8 @@ class RandomUnitaryEvolution(Engine):
     >>> psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
     >>> print(psi.chi)
     [1, 1, 1, 1, 1, 1, 1]
-    >>> TEBD_params = dict(N_steps=2, trunc_params={'chi_max':10})
-    >>> eng = RandomUnitaryEvolution(psi, TEBD_params)
+    >>> options = dict(N_steps=2, trunc_params={'chi_max':10})
+    >>> eng = RandomUnitaryEvolution(psi, options)
     >>> eng.run()
     >>> print(psi.chi)
     [2, 4, 8, 10, 8, 4, 2]
@@ -669,18 +673,18 @@ class RandomUnitaryEvolution(Engine):
     >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
     >>> print(psi2.chi)
     [1, 1, 1, 1, 1, 1, 1]
-    >>> eng2 = RandomUnitaryEvolution(psi2, TEBD_params)
+    >>> eng2 = RandomUnitaryEvolution(psi2, options)
     >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
     >>> print(psi2.chi)  # still a product state, not really random!!!
     [1, 1, 1, 1, 1, 1, 1]
     """
-    def __init__(self, psi, TEBD_params):
-        Engine.__init__(self, psi, None, TEBD_params)
+    def __init__(self, psi, options):
+        Engine.__init__(self, psi, None, options)
 
     def run(self):
         """Time evolution with TEBD (time evolving block decimation) and random two-site unitaries.
 
-        The following (optional) parameters are read out from the :attr:`TEBD_params`.
+        The following (optional) parameters are read out from the :attr:`options`.
 
         ============== ====== ======================================================
         key            type   description
@@ -692,7 +696,7 @@ class RandomUnitaryEvolution(Engine):
                               :func:`~tenpy.algorithms.truncation.truncate`
         ============== ====== ======================================================
         """
-        N_steps = self.TEBD_params.get('N_steps', 1)
+        N_steps = self.options.get('N_steps', 1)
         if self.verbose >= 1:
             Sold = np.average(self.psi.entanglement_entropy())
             start_time = time.time()

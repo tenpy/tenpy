@@ -40,7 +40,7 @@ from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
-from ..tools.params import get_parameter, unused_parameters, Config
+from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
@@ -1498,9 +1498,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     ----------
     model_params : dict
         A dictionary with all the model parameters.
-        These parameters are given to the different ``init_...()`` methods, and
-        should be read out using :func:`~tenpy.tools.params.get_parameter`.
-        This may happen in any of the ``init_...()`` methods.
+        These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`,
+        and then set as :attr:`options` and given to the different ``init_...()`` methods.
         The parameter ``'verbose'`` is read out in the `__init__` of this function
         and specifies how much status information should be printed during initialization.
         The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
@@ -1511,7 +1510,9 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     Attributes
     ----------
     name : str
-        The name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
+        The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
+    options: :class:`~tenpy.tools.params.Config`
+        Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
@@ -1522,10 +1523,9 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, self.name)
-        self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
+        self.options = model_params = asConfig(model_params, self.name)
+        self._called_CouplingMPOModel_init = True
         self.verbose = model_params.get('verbose', 1)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
@@ -1543,7 +1543,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # 8) initialize H_bonds
             NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
         # checks for misspelled parameters
-        unused_parameters(model_params, self.name)
+        model_params.warn_unused()
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
