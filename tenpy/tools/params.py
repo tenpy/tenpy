@@ -61,6 +61,7 @@ class Config(MutableMapping, Hdf5Exportable):
         return self.options[key]
 
     def __setitem__(self, key, value):
+        self.unused.add(key)
         self.print_if_verbose(key, "Setting")
         self.options[key] = value
 
@@ -171,6 +172,17 @@ class Config(MutableMapping, Hdf5Exportable):
                 option=option,
                 val=val,
                 defaultstring=defaultstring))
+
+    def deprecated_alias(self, old_key, new_key, extra_msg=""):
+        if old_key in self.options.keys():
+            msg = "Deprecated option in {name!r}: {old!r} renamed to {new!r}"
+            msg = msg.format(name=self.name, old=old_key, new=new_key)
+            if extra_msg:
+                msg = '\n'.join(msg, extra_msg)
+            warnings.warn(msg, FutureWarning)
+            self.options[new_key] = self.options[old_key]
+            self.unused.discard(old_key)
+            self.unused.add(new_key)
 
     def any_nonzero(self, keys, verbose_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
