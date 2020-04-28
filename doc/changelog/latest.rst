@@ -17,6 +17,10 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Created a class :class:`~tenpy.tools.params.Config` to replace Python-native 
+  parameter dictionaries and add some useful functionality. 
+  Old code using :meth:`tenpy.tools.params.get_parameter()` and :meth:`tenpy.tools.params.unused_parameters()` 
+  still works as before, but raises a warning, and should be replaced.
 - Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
   We replaced the three arguments `u0`, `op0` and `other_op` with
   ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
@@ -44,8 +48,6 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- Class :class:`~tenpy.tools.params.Config` to replace Python-native 
-  parameter dictionaries and add some useful functionality.
 - Classmethod :meth:`tenpy.networks.MPS.from_lat_product_state` to initialize an MPS from a product state given in
   lattice coordinates (independent of the `order` of the lattice).
 - argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
