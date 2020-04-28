@@ -39,6 +39,9 @@ ObjectsEntry = namedtuple('ObjectsEntry', "name, dispname, typ, docname, anchor,
 # IndexEntry is retured by Index.generate()
 IndexEntry = namedtuple('IndexEntry', "name, subtype, docname, anchor, extra, qualifier, descr")
 
+option_header_re = re.compile("([\w.]*)\s*(?::\s*([^=]*))?(?:=\s*(\S*)\s*)?$")
+directive_re = re.compile("^..\s*\w+\s*::")
+
 
 class cfgconfig(nodes.General, nodes.Element):
     """A node to be replaced by a list of options for a given `config`.
@@ -136,7 +139,6 @@ class CfgConfig(ObjectDescription):
         return super().run()
 
     def parse_numpydoc_style_options(self):
-        option_header_re = re.compile("([\w.]*)\s*(?::\s*([^=]*))?(?:=\s*(\S*)\s*)?$")
         self.env.app.emit('cfg_options-parse_config', self)
         self.content.disconnect()  # avoid screwing up the parsing of the parent
         N = len(self.content)
@@ -145,11 +147,8 @@ class CfgConfig(ObjectDescription):
         field_begin = [i for i, indent in enumerate(indents) if indent == 0]
         for field_beg, field_end in reversed(list(zip(field_begin, field_begin[1:] + [N]))):
             field_beg_line = self.content[field_beg]
-            next_indent = "    "  # default indent, if no non-empty lines follow
-            for j in range(field_beg + 1, field_end):
-                if indents[j] > 0:
-                    next_indent = self.content[j][:indents[j]]
-                    break
+            if directive_re.match(field_beg_line):
+                continue  # ignore other directives
             m = option_header_re.match(field_beg_line)
             if m is None:
                 source, line = self.content.info(field_beg)
@@ -158,6 +157,11 @@ class CfgConfig(ObjectDescription):
                                repr(field_beg_line),
                                location=location)
                 continue
+            next_indent = "    "  # default indent, if no non-empty lines follow
+            for j in range(field_beg + 1, field_end):
+                if indents[j] > 0:
+                    next_indent = self.content[j][:indents[j]]
+                    break
             name, typ, default = m.groups()
             replace = [".. cfg:option :: " + name]
             if typ is not None and typ.strip():
@@ -325,28 +329,10 @@ class ConfigNodeProcessor:
 
             if self.builder.config.cfg_options_summary is None:
                 new_content = []
+            elif len(options) == 0:
+                new_content = [nodes.Text("[No options defined for this config]")]
             elif self.builder.config.cfg_options_summary == "table":
-                table_spec = addnodes.tabular_col_spec()
-                table_spec['spec'] = r'\X{1}{4}\X{1}{4}\X{2}{4}'
-                table = nodes.table("", classes=["longtable"])
-                group = nodes.tgroup('', cols=3)
-                table.append(group)
-                group.append(nodes.colspec('', colwidth=20))
-                group.append(nodes.colspec('', colwidth=20))
-                group.append(nodes.colspec('', colwidth=60))
-                if self.builder.config.cfg_options_table_add_header:
-                    header = nodes.thead('')
-                    group.append(header)
-                    row = nodes.row()
-                    row += nodes.entry("", nodes.Text("option"))
-                    row += nodes.entry("", nodes.Text("default"))
-                    row += nodes.entry("", nodes.Text("summary"))
-                    header.append(row)
-                body = nodes.tbody('')
-                group.append(body)
-                for opt in options:
-                    body += self.create_option_reference_table_row(opt, config, context)
-                new_content = [table_spec, table]
+                new_content = self.create_summary_table(config, context, options)
             elif self.builder.config.cfg_options_summary == "list":
                 new_content = [self.create_option_reference(o, config, context) for o in options]
                 if len(new_content) > 1:
@@ -358,17 +344,48 @@ class ConfigNodeProcessor:
                 raise ValueError("unknown value for config option `cfg_options_summary`.")
             node.replace_self(new_content)
 
+    def create_summary_table(self, config, context, options):
+        default_column = self.builder.config.cfg_options_default_in_summary_table
+        table_spec = addnodes.tabular_col_spec()
+        table = nodes.table("", classes=["longtable"])
+        if default_column:
+            table_spec['spec'] = r'\X{1}{4}\X{1}{4}\X{2}{4}'
+            group = nodes.tgroup('', cols=3)
+            group.append(nodes.colspec('', colwidth=20))
+            group.append(nodes.colspec('', colwidth=20))
+            group.append(nodes.colspec('', colwidth=60))
+        else:
+            table_spec['spec'] = r'\X{1}{4}\X{2}{4}'
+            group = nodes.tgroup('', cols=2)
+            group.append(nodes.colspec('', colwidth=25))
+            group.append(nodes.colspec('', colwidth=75))
+        table.append(group)
+        if self.builder.config.cfg_options_table_add_header:
+            header = nodes.thead('')
+            group.append(header)
+            row = nodes.row()
+            row += nodes.entry("", nodes.Text("option"))
+            if default_column:
+                row += nodes.entry("", nodes.Text("default"))
+            row += nodes.entry("", nodes.Text("summary"))
+            header.append(row)
+        body = nodes.tbody('')
+        group.append(body)
+        for opt in options:
+            body += self.create_option_reference_table_row(opt, config, context)
+        return [table_spec, table]
+
     def create_option_reference_table_row(self, option, config, context):
         row = nodes.row("")
         par = self.create_option_reference(option, config, context)
         row += nodes.entry("", par)
+        if self.builder.config.cfg_options_default_in_summary_table:
+            par = nodes.paragraph()
+            if option.default:
+                par += nodes.literal(option.default, option.default)
+            row += nodes.entry("", par)
         par = nodes.paragraph()
-        if option.default:
-            par += nodes.literal(option.default, option.default)
-        row += nodes.entry("", par)
-        summary = option.summary
-        par = nodes.paragraph()
-        par += nodes.Text(summary)
+        par += nodes.Text(option.summary)
         if option.summarycropped:
             par += self.make_refnode(option.docname, option.anchor, nodes.Text(" [...]"))
         row += nodes.entry("", par)
@@ -668,6 +685,7 @@ def setup(app):
     app.add_config_value('cfg_options_parse_numpydoc_style_options', True, 'html')
     app.add_config_value('cfg_options_summary', "table", 'html')
     app.add_config_value('cfg_options_table_add_header', True, 'html')
+    app.add_config_value('cfg_options_default_in_summary_table', True, 'html')
 
     app.add_domain(CfgDomain)
 

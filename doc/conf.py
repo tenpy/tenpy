@@ -46,6 +46,7 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
+    'sphinx_cfg_options',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -200,3 +201,8 @@ def linkcode_resolve(domain, info):
                                                                        linespec)
     else:
         return "https://github.com/tenpy/tenpy/blob/master/tenpy/%s%s" % (fn, linespec)
+
+
+# -- sphinx_cfg_options ---------------------------------------------------
+
+cfg_options_default_in_summary_table = False
