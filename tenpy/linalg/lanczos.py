@@ -25,6 +25,9 @@ class LanczosGroundState:
     in which `H` is a small tridiagonal matrix, and solves the eigenvalue problem there.
     Finally, it transform the resulting ground state back into the original space.
 
+    .. deprecated :: 0.6.0
+        Renamed parameter/attribute `params` to :attr:`options`.
+
     Parameters
     ----------
     H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like

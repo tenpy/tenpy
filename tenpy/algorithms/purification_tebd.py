@@ -28,6 +28,9 @@ __all__ = [
 class PurificationTEBD(tebd.Engine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
+    .. deprecated :: 0.6.0
+        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networs.purification_mps.PurificationMPS`

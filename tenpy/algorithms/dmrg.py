@@ -215,6 +215,9 @@ class DMRGEngine(Sweep):
     :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
     are generic between :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
+    .. deprecated :: 0.5.0
+        Renamed parameter/attribute `DMRG_params` to :attr:`options`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -298,6 +301,11 @@ class DMRGEngine(Sweep):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
+    @property
+    def DMRG_params(self):
+        warnings.warn("renamed self.DMRG_params -> self.options", FutureWarning, stacklevel=2)
+        return self.options
+
     def run(self):
         """Run the DMRG simulation to find the ground state.
 
@@ -309,39 +317,39 @@ class DMRGEngine(Sweep):
             The MPS representing the ground state after the simluation,
             i.e. just a reference to :attr:`psi`.
         """
-        DMRG_params = self.options
+        options = self.options
         start_time = self.time0
         self.shelve = False
         # parameters for lanczos
-        p_tol_to_trunc = DMRG_params.get('P_tol_to_trunc', 0.05)
+        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
         if p_tol_to_trunc is not None:
             p_tol_min = max(1.e-30,
                             self.lanczos_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
                             self.lanczos_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
-            p_tol_min = DMRG_params.get('P_tol_min', p_tol_min)
-            p_tol_max = DMRG_params.get('P_tol_max', 1.e-4)
-        e_tol_to_trunc = DMRG_params.get('E_tol_to_trunc', None)
+            p_tol_min = options.get('P_tol_min', p_tol_min)
+            p_tol_max = options.get('P_tol_max', 1.e-4)
+        e_tol_to_trunc = options.get('E_tol_to_trunc', None)
         if e_tol_to_trunc is not None:
-            e_tol_min = DMRG_params.get('E_tol_min', 5.e-16)
-            e_tol_max = DMRG_params.get('E_tol_max', 1.e-4)
+            e_tol_min = options.get('E_tol_min', 5.e-16)
+            e_tol_max = options.get('E_tol_max', 1.e-4)
 
         # parameters for DMRG convergence criteria
-        N_sweeps_check = DMRG_params.get('N_sweeps_check', 10)
+        N_sweeps_check = options.get('N_sweeps_check', 10)
         min_sweeps = int(1.5 * N_sweeps_check)
         if self.chi_list is not None:
             min_sweeps = max(max(self.chi_list.keys()), min_sweeps)
-        min_sweeps = DMRG_params.get('min_sweeps', min_sweeps)
-        max_sweeps = DMRG_params.get('max_sweeps', 1000)
-        max_E_err = DMRG_params.get('max_E_err', 1.e-8)
-        max_S_err = DMRG_params.get('max_S_err', 1.e-5)
-        max_seconds = 3600 * DMRG_params.get('max_hours', 24 * 365)
-        norm_tol = DMRG_params.get('norm_tol', 1.e-5)
+        min_sweeps = options.get('min_sweeps', min_sweeps)
+        max_sweeps = options.get('max_sweeps', 1000)
+        max_E_err = options.get('max_E_err', 1.e-8)
+        max_S_err = options.get('max_S_err', 1.e-5)
+        max_seconds = 3600 * options.get('max_hours', 24 * 365)
+        norm_tol = options.get('norm_tol', 1.e-5)
         if not self.finite:
-            update_env = DMRG_params.get('update_env', N_sweeps_check // 2)
-            norm_tol_iter = DMRG_params.get('norm_tol_iter', 5)
+            update_env = options.get('update_env', N_sweeps_check // 2)
+            norm_tol_iter = options.get('norm_tol_iter', 5)
         E_old, S_old = np.nan, np.nan  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
-        self.diag_method = DMRG_params.get('diag_method', 'default')
+        self.diag_method = options.get('diag_method', 'default')
 
         self.mixer_activate()
         # loop over sweeps
@@ -799,10 +807,9 @@ class TwoSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-    EffectiveH = TwoSiteH
-
     def __init__(self, psi, model, options):
         options = asConfig(options, 'DMRG')
+        self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, options)
 
     def prepare_update(self):
@@ -1091,9 +1098,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
     """
-    EffectiveH = OneSiteH
-
     def __init__(self, psi, model, options):
+        self.EffectiveH = OneSiteH
         options = asConfig(options, 'DMRG')
         super(SingleSiteDMRGEngine, self).__init__(psi, model, options)
 

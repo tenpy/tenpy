@@ -21,6 +21,16 @@ Backwards incompatible changes
   parameter dictionaries and add some useful functionality. 
   Old code using :meth:`tenpy.tools.params.get_parameter()` and :meth:`tenpy.tools.params.unused_parameters()` 
   still works as before, but raises a warning, and should be replaced.
+- Renamed the following class parameter dictionaries to simply `options` for more consitency.
+  Old code using the class attributes should still work (since we provide property aliases), but raises warnings.
+  Note that this affects also derived classes (for example the :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine`).
+
+   * ``tenpy.algorithms.dmrg.DMRGEngine.DMRG_params``  (was already renamed to `engine_params` in versin 0.5.0)
+   * ``tenpy.algorithms.mps_sweeps.Sweep.engine_params``
+   * ``tenpy.algorithms.tebd.Engine.TEBD_params``
+   * ``tenpy.algorithms.tdvp.Engine.TDVP_params``
+   * ``tenpy.linalg.lanczos.Lanczos``
+
 - Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
   We replaced the three arguments `u0`, `op0` and `other_op` with
   ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
@@ -84,6 +94,7 @@ Added
   This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+- attribute :attr:`~tenpy.models.model.options` for the Model.
 
 
 Changed

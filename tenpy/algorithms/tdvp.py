@@ -36,6 +36,9 @@ class Engine:
     You can call :meth:`run_one_site` for single-site TDVP, or
     :meth:`run_two_sites` for two-site TDVP.
 
+    .. deprecated :: 0.6.0
+        Renamed parameter/attribute `TDVP_params` to :attr:`options`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -55,6 +58,8 @@ class Engine:
         -------------- --------- ---------------------------------------------------------------
         trunc_params   dict      Truncation parameters as described in
                                  :func:`~tenpy.algorithms.truncation.truncate`
+        -------------- --------- ---------------------------------------------------------------
+        Lanczos        dict      Lanczos options as described in :cfg:config:`Lanczos`.
         ============== ========= ===============================================================
     environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
@@ -71,6 +76,8 @@ class Engine:
         The MPS, time evolved in-place.
     environment : :class:`~tenpy.networks.mpo.MPOEnvironment`
         The environment, storing the `LP` and `RP` to avoid recalculations.
+    lanczos_options : :class:`~tenpy.tools.params.Config`
+        Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     def __init__(self, psi, model, options, environment=None):
         if model.H_MPO.explicit_plus_hc:

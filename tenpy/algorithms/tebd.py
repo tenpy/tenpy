@@ -53,7 +53,7 @@ __all__ = ['Engine', 'RandomUnitaryEvolution']
 class Engine:
     """Time Evolving Block Decimation (TEBD) 'engine'.
 
-    .. changed :: 0.6.0
+    .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
     Parameters
