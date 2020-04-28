@@ -17,8 +17,16 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPOGraph.build_MPO`.
-- Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPO.from_grids`, instead optionally give *all* `legs` as argument.
+- Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
+  We replaced the three arguments `u0`, `op0` and `other_op` with
+  ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
+  by single, equivalent argment `ops` which should now read
+  ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
+  ``dx0 = [0]*lat.dim``. Note the changed order inside the tuple!
+  Old code (which specifies `opstr` and `category` as keyword argument, if at all)
+  still works as before, but raises a warning, and should be replaced.
+  Since :meth:`tenpy.lattice.Lattice.possible_multi_couplings` used similar arguments,
+  they were changed as well.
 - Don't save `H_MPO_graph` as model attribute anymore - this also wasn't documented.
 - Renamed the truncation parameter `symmetry_tol` to `degeneracy_tol` and make the criterion more reasonable by not 
   checking :math:`log(S_i/S_j) < log(symmetry_tol)`, but simply :math:`log(S_i/S_j) < degeneracy_tol``.
@@ -28,9 +36,29 @@ Backwards incompatible changes
   :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
+- Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
+  `ortho_to_envs` is not empty, we defined proper wrapper classes :class:`~tenpy.algorithms.mps_sweeps.EffeciveHWrapper`
+  and :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. The argument `ortho_to_envs` has been removed from
+  :class:`tenpy.algorithms.mps_sweeps.EffectiveH`.
+- Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPOGraph.build_MPO`.
+- Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPO.from_grids`, instead optionally give *all* `legs` as argument.
+
 
 Added
 ^^^^^
+- Classmethod :meth:`tenpy.networks.MPS.from_lat_product_state` to initialize an MPS from a product state given in
+  lattice coordinates (independent of the `order` of the lattice).
+- argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 
+  :meth:`tenpy.models.model.CouplingModel.add_coupling`, and 
+  :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling` to simplify adding the hermitian conjugate terms.
+- parameter `explicit_plus_hc` for :class:`~tenpy.models.model.MPOModel`, 
+  :class:`~tenpy.models.model.CouplingModel` and :class:`~tenpy.networks.mpo.MPO`, 
+  to reduce MPO bond dimension by not storing Hermitian conjugate terms, 
+  but computing them at runtime.
+- :meth:`tenpy.models.model.CouplingModel.add_local_term` for adding a single term to the lattice, and still handling
+  Jordan-Wigner strings etc.
+- :meth:`tenpy.networks.site.Site.get_hc_opname` and :attr:`~tenpy.networks.site.Site.hc_ops` to allow getting the 
+  hermitian conjugate operator (name) of the onsite operators.
 - :mod:`tenpy.tools.hdf5_io` with convenience functions for import and output with pickle, as well as an implementation 
   allowing to save and load objects to HDF5 files in the format specified in :doc:`/intro/input_output`.
 - human-readable `boundary_conditions` property in :class:`~tenpy.models.lattice.Lattice`.
@@ -51,12 +79,19 @@ Added
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
+- :class:`tenpy.algorithms.mps_sweeps.EffectiveHPlusHC` as a wrapper adding the h.c. during the `matvec`.
+  This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
+- :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
+  :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+
 
 Changed
 ^^^^^^^
 - DEFAULT DMRG paramter ``'diag_method'`` from ``'lanczos'`` to ``'default'``, which is the same for large bond
   dimensions, but performs a full exact diagonalization if the effective Hamiltonian has small dimensions.
   The threshold introduced is the new DMRG parameter ``'max_N_for_ED'``.
+- DEFAULT parameter ``charge_sector=None`` instead of ``charge_sector=0`` in :meth:`tenpy.networks.mps.MPS.overlap` 
+  to look for eigenvalues of the transfer matrix in *all* charge sectors, and not assume that it's the 0 sector.
 - Derive the following classes (and their subclasses) from the new :class:`~tenpy.tools.hdf5_io.Hdf5Exportable`
   to support saving to HDF5:
   - :class:`~tenpy.networks.site.Site`
@@ -72,6 +107,8 @@ Fixed
 ^^^^^
 - Adjust the default DMRG parameter `min_sweeps` if `chi_list` is set.
 - Avoid some unnecessary transpositions in MPO environments for MPS sweeps (e.g. in DMRG).
+- :class:`~tenpy.linalg.charges.LegCharge.sort(bunch=True)` could return un-bunched Array,
+  but still set the `bunched` flag.
 - :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.
 - :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
 - :func:`~tenpy.linalg.np_conserved.svd` with ``full_matrices=True`` gave wrong charges.
@@ -81,3 +118,5 @@ Fixed
 - :meth:`~tenpy.networks.mps.MPS.correlation_length`: check for hermitian Flag might have raised and Error with new numpy warnings
 - :meth:`~tenpy.networks.mps.MPS.correlation_function` did not respect argument ``str_on_first=False``.
 - :meth:`tenpy.networks.mps.MPS.get_op` worked unexpected for infinite `bc` with incomensurate ``self.L`` and ``len(op_list)``.
+- :issue:`105` Unintended side-effects using `lanczos_params.verbose` in combination with `orthogonal_to`
+- :issue:`108` :meth:`tenpy.linalg.sparse.FlatLinearOperator._matvec` changes ``self._charge_sector``

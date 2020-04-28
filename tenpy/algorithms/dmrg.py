@@ -43,7 +43,7 @@ from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import get_parameter, unused_parameters
 from ..tools.process import memory_usage
-from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
@@ -227,7 +227,7 @@ class DMRGEngine(Sweep):
     Attributes
     ----------
     EffectiveH : class type
-        Class for the effective Hamiltonian (i.e., a subclass of
+        Class for the effective Hamiltonian, i.e., a subclass of
         :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
@@ -811,11 +811,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR', 'p1'``.
         """
-        # get instance of the effective Hamiltonian
-        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
-                                     self.ortho_to_envs)
-        # eff_H has attributes LP, RP, W0, W1
-
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, W1, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
@@ -984,7 +980,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LHeff = self.eff_H.unpatched().LHeff
+            LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
         else:  # as implemented directly in the environment
@@ -1003,7 +1000,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RHeff = self.eff_H.unpatched().RHeff
+            RP = npc.tensordot(VH, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
             self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
         else:  # as implemented directly in the environment
@@ -1103,11 +1101,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Current best guess for the ground state, which is to be optimized.
             Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
         """
-        # get instance of the effective Hamiltonian
-        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right,
-                                     self.ortho_to_envs)
-        # eff_H has attributes LP, RP, W0
-
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
         theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'
@@ -1323,7 +1317,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine and self.move_right:
-            LP = npc.tensordot(self.eff_H.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LHeff = self.eff_H.unpatched().LHeff
+            LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
         else:  # as implemented directly in the environment
@@ -1347,7 +1342,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine and not self.move_right:
-            RP = npc.tensordot(VH, self.eff_H.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
+            RHeff = self.eff_H.unpatched().RHeff
+            RP = npc.tensordot(VH, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
             self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
         else:  # as implemented directly in the environment
@@ -1364,7 +1360,7 @@ class EngineCombine(TwoSiteDMRGEngine):
     This reduces the overhead of calculating charge combinations in the contractions,
     but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
 
-    .. deprecated : 0.5.0
+    .. deprecated :: 0.5.0
        Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
     """
     def __init__(self, psi, model, DMRG_params):
@@ -1383,7 +1379,7 @@ class EngineFracture(TwoSiteDMRGEngine):
     :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
     One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
 
-    .. deprecated : 0.5.0
+    .. deprecated :: 0.5.0
        Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
     """
     def __init__(self, psi, model, DMRG_params):
@@ -1586,18 +1582,19 @@ class SingleSiteMixer(Mixer):
             MPS tensor at site `i0+1` or `i0-1` (depending on sweep direction) after subspace
             expansion.
         """
+        eff_H = engine.eff_H.unpatched()
         if not engine.combine:  # Need to get Heff's even if combine=False
-            engine.eff_H.combine_Heff()
+            eff_H.combine_Heff()
 
         if move_right:  # theta has legs (vL.p0), vR
-            LHeff = engine.eff_H.LHeff
+            LHeff = eff_H.LHeff
             expand = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
             expand = expand.combine_legs(['wR', 'vR'], qconj=-1, new_axes=1)
             expand *= self.amplitude
             theta = npc.concatenate([theta, expand], axis=1, copy=False)
             next_B = next_B.extend('vL', expand.legs[1].conj())
         else:  # theta has legs vL, (p0.vR)
-            RHeff = engine.eff_H.RHeff
+            RHeff = eff_H.RHeff
             expand = npc.tensordot(theta, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
             expand = expand.combine_legs(['vL', 'wL'], qconj=+1)
             expand *= self.amplitude

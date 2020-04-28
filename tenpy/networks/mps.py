@@ -84,7 +84,7 @@ import scipy.sparse.linalg.eigen.arpack
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, argsort
+from ..tools.misc import to_iterable, argsort, to_array
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
@@ -316,6 +316,86 @@ class MPS:
         return obj
 
     @classmethod
+    def from_lat_product_state(cls, lat, p_state, **kwargs):
+        """Construct an MPS from a product state given in lattice coordinates.
+
+        This is a wrapper around :meth:`from_product_state`.
+        The purpuse is to make the `p_state` argument independent of the `order` of the `Lattice`,
+        and specify it in terms of lattice indices instead.
+
+        Parameters
+        ----------
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            The underlying lattice defining the geometry and Hilbert Space.
+        p_state : array_like of {int | str | 1D array}
+            Defines the product state to be represented.
+            Should be of dimension `lat.dim`+1, entries are indexed by lattice indices.
+            Entries of the array as for the `p_state` argument of :meth:`from_product_state`.
+            It gets tiled to the shape ``lat.shape``, if it is smaller.
+        **kwargs :
+            Other keyword arguments as definied in :meth:`from_product_state`.
+            `bc` is set by default from ``lat.bc_MPS``.
+
+        Returns
+        -------
+        product_mps : :class:`MPS`
+            An MPS representing the specified product state.
+
+        Examples
+        --------
+        Let's first consider a :class:`~tenpy.models.lattice.Ladder` composed of a
+        :class:`~tenpy.networks.site.SpinHalfSite` and a
+        :class:`~tenpy.networks.site.FermionSite`.
+
+        >>> spin_half = tenpy.networks.site.SpinHalfSite()
+        >>> fermion = tenpy.networks.site.FermionSite()
+        >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
+
+        To initialize a state of up-spins on the spin sites and half-filled ferions, you can use:
+
+        >>> p_state = [["up", "empty"], ["up", "full"]]
+        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_i, p_state)
+
+        Note that the same `p_state` works for a finite lattice of even length, say ``L=10``, as
+        well. We then just "tile" in x-direction, i.e., repeat the specified state 5 times:
+
+        >>> ladder_f = tenpy.models.lattice.Ladder(10, [spin_half, fermion], bc_MPS="finite")
+        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_f, p_state)
+
+        You can also easily half-fill a :class:`~tenpy.models.lattice.Honeycomb`, for example
+        with only the `A` sites occupied, or as stripe parallel to the x-direction (`stripe_x`,
+        alternating along `y` axis),
+        or as stripes parallel to the y-direction (`stripe_y`, alternating along `x` axis).
+
+        >>> honeycomb = tenpy.models.lattice.Honeycomb([4, 4], [fermion, fermion], bc_MPS="finite")
+        >>> p_state_only_A = [[["empty", "full"]]]
+        >>> psi_only_A = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_only_A)
+        >>> p_state_stripe_x = [[["empty", "empty"],
+        ...                      ["full", "full"]]]
+        >>> psi_stripe_x = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_x)
+        >>> p_state_stripe_y = [[["empty", "empty"]],
+        ...                      [["full", "full"]]]
+        >>> psi_stripe_y = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_y)
+        """
+        kwargs.setdefault("bc", lat.bc_MPS)
+        p_state = np.array(p_state, dtype=object)
+        if p_state.ndim == len(lat.shape):  # == lat.dim + 1
+            p_state = to_array(p_state, shape=lat.shape)  # tile to lattice shape
+            p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
+        elif p_state.ndim == len(lat.shape) + 1:
+            # extra dimension could be from purely 1D array entries
+            # make sure this is the case by converting to float
+            p_state = np.array(p_state, kwargs.get("dtype", np.float64))
+            # tile to lattice shape, ignore last dimension
+            p_state = to_array(p_state, shape=lat.shape + (None, ))
+            inds = tuple(lat.order.T) + (slice(None), )
+            p_state_flat = p_state[inds]  # "advanced" numpy indexing
+        else:
+            raise ValueError("wrong dimension of `p_state`. Expected {0:d}-dimensional array of "
+                             "(string, int, or 1D array)".format(d=lat.dim + 1))
+        return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
+
+    @classmethod
     def from_product_state(cls,
                            sites,
                            p_state,
@@ -330,12 +410,13 @@ class MPS:
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
-        p_state : iterable of {int | str | 1D array}
-            Defines the product state to be represented.
-            If ``p_state[i]`` is str, then site ``i`` is in state
-            ``self.sites[i].state_labels(p_state[i])``.
-            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``.
-            If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``.
+        p_state : list of {int | str | 1D array}
+            Defines the product state to be represented; one entry for each `site` of the MPS.
+            An entry of `str` type is translated to an `int` with the help of
+            :meth:`~tenpy.networks.site.Site.state_labels`.
+            An entry of `int` type represents the physical index of the state to be used.
+            An entry which is a 1D array defines the complete wavefunction on that site; this
+            allows to make a (local) superposition.
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
@@ -345,12 +426,12 @@ class MPS:
             conservation gets enabled.
             If `permute` is True (default), we permute the given `p_state` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` argument should then always be given as if `conserve=None` in the Site.
+            The `p_state` entries should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
-            Leg charge at bond 0, which are purely conventional.
+            Leg charges at bond 0, which are purely conventional.
 
         Returns
         -------
@@ -1494,7 +1575,7 @@ class MPS:
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other, charge_sector=0, ignore_form=False, **kwargs):
+    def overlap(self, other, charge_sector=None, ignore_form=False, **kwargs):
         """Compute overlap ``<self|other>``.
 
         Parameters
@@ -1503,8 +1584,8 @@ class MPS:
             An MPS with the same physical sites.
         charge_sector : None | charges | ``0``
             Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
-            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+            ``None`` stands for *all* sectors, ``0`` stands for the sector of zero charges.
+            If a sector is given, it *assumes* the dominant eigenvector is in that charge sector.
         ignore_form : bool
             If ``False`` (default), take into account the canonical form :attr:`form` at each site.
             If ``True``, we ignore the canonical form (i.e., whether the MPS is in left, right,

@@ -134,6 +134,8 @@ class ExactDiag:
         full_H = full_H.combine_legs([self._labels_p, self._labels_pconj],
                                      new_axes=[0, 1],
                                      pipes=[self._pipe, self._pipe_conj])
+        if mpo.explicit_plus_hc:
+            full_H = full_H + full_H.conj().itranspose(full_H.get_leg_labels())
         self._set_full_H(full_H)
 
     def build_full_H_from_bonds(self):

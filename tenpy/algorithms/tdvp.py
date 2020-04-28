@@ -31,7 +31,7 @@ __all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
 class Engine:
-    """Time dependant variational principle 'Engine'.
+    """Time dependent variational principle 'Engine'.
 
     You can call :meth:`run_one_site` for single-site TDVP, or
     :meth:`run_two_sites` for two-site TDVP.
@@ -73,6 +73,8 @@ class Engine:
         The environment, storing the `LP` and `RP` to avoid recalculations.
     """
     def __init__(self, psi, model, TDVP_params, environment=None):
+        if model.H_MPO.explicit_plus_hc:
+            raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
         self.verbose = get_parameter(TDVP_params, 'verbose', 1, 'TDVP')
         self.TDVP_params = TDVP_params
         if environment is None:

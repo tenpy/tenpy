@@ -145,3 +145,45 @@ def test_lattice_order():
                              [1, 1, 2], [1, 2, 0], [1, 2, 2]])
     npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable
+
+
+def test_possible_couplings():
+    lat = lattice.Honeycomb(2, 3, [None, None], order="snake")
+    u0, u1 = 0, 1
+    for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
+        print("dx =", dx)
+        mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
+        ops = [(None, [0, 0], u0), (None, dx, u1)]
+        m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
+        assert coupling_shape == m_coupling_shape
+        if len(lat_indices) == 0:
+            continue
+        sort = np.lexsort(lat_indices.T)
+        mps0, mps1, lat_indices = mps0[sort], mps1[sort], lat_indices[sort, :]
+        assert m_ijkl.shape == (len(mps0), 2)
+        m_sort = np.lexsort(m_lat_indices.T)
+        m_ijkl, m_lat_indices = m_ijkl[m_sort, :], m_lat_indices[m_sort, :]
+        npt.assert_equal(m_lat_indices, lat_indices)
+        npt.assert_equal(mps0, m_ijkl[:, 0])
+        npt.assert_equal(mps1, m_ijkl[:, 1])
+
+
+def test_index_conversion():
+    from tenpy.networks.mps import MPS
+    s = site.SpinHalfSite(conserve=None)
+    state1 = [[[0, 1]]]  # 0=up, 1=down
+    for order in ["snake", "default"]:
+        lat = lattice.Honeycomb(2, 3, [s, s], order=order, bc_MPS="finite")
+        psi1 = MPS.from_lat_product_state(lat, state1)
+        sz1_mps = psi1.expectation_value("Sigmaz")
+        sz1_lat = lat.mps2lat_values(sz1_mps)
+        npt.assert_equal(sz1_lat[:, :, 0], +1.)
+        npt.assert_equal(sz1_lat[:, :, 1], -1.)
+        # and a random state
+        state2 = np.random.random(lat.shape + (2, ))
+        psi2 = MPS.from_lat_product_state(lat, state2)
+        sz2_mps = psi2.expectation_value("Sigmaz")
+        sz2_lat = lat.mps2lat_values(sz2_mps)
+        expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
+        npt.assert_equal(sz2_lat, expect_sz2)
+    # doen

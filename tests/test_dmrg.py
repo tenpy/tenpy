@@ -258,3 +258,21 @@ def test_chi_list():
     assert dmrg.chi_list(12, 12, 5) == {0: 12}
     assert dmrg.chi_list(24, 12, 5) == {0: 12, 5: 24}
     assert dmrg.chi_list(27, 12, 5) == {0: 12, 5: 24, 10: 27}
+
+
+def test_dmrg_explicit_plus_hc(tol=1.e-13):
+    model_params = dict(L=12, Jx=1., Jy=1., Jz=1.25, hz=5.125)
+    dmrg_params = dict(N_sweeps_check=2, mixer=False)
+    M1 = SpinChain(model_params)
+    model_params['explicit_plus_hc'] = True
+    M2 = SpinChain(model_params)
+    assert M2.H_MPO.explicit_plus_hc
+    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 6)
+    E1, psi1 = dmrg.TwoSiteDMRGEngine(psi1, M1, dmrg_params).run()
+    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * 6)
+    E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
+    print(E1, E2, abs(E1 - E2))
+    assert abs(E1 - E2) < tol
+    ov = abs(psi1.overlap(psi2))
+    print("ov =", ov)
+    assert abs(ov - 1) < tol

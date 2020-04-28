@@ -117,52 +117,60 @@ def check_same_operators(sites):
     # done
 
 
-def test_spin_half_site_checks():
+def test_spin_half_site():
+    hcs = dict(Id='Id',
+               JW='JW',
+               Sx='Sx',
+               Sy='Sy',
+               Sz='Sz',
+               Sp='Sm',
+               Sm='Sp',
+               Sigmax='Sigmax',
+               Sigmay='Sigmay',
+               Sigmaz='Sigmaz')
+    sites = []
     for conserve in [None, 'Sz', 'parity']:
         S = site.SpinHalfSite(conserve)
         S.test_sanity()
+        for op in S.onsite_ops:
+            assert S.hc_ops[op] == hcs[op]
         if conserve != 'Sz':
             SxSy = ['Sx', 'Sy']
         else:
             SxSy = None
         check_spin_site(S, SxSy=SxSy)
-
-
-def test_spin_half_site():
-    sites = []
-    for conserve in [None, 'Sz', 'parity']:
-        S = site.SpinHalfSite(conserve)
         sites.append(S)
     check_same_operators(sites)
 
 
 def test_spin_site():
+    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
     for s in [0.5, 1, 1.5, 2, 5]:
         print('s = ', s)
+        sites = []
         for conserve in [None, 'Sz', 'parity']:
             print("conserve = ", conserve)
             S = site.SpinSite(s, conserve)
             S.test_sanity()
+            for op in S.onsite_ops:
+                assert S.hc_ops[op] == hcs[op]
             if conserve != 'Sz':
                 SxSy = ['Sx', 'Sy']
             else:
                 SxSy = None
             check_spin_site(S, SxSy=SxSy)
-
-
-def test_spin_site_ops():
-    for s in [0.5, 1, 1.5, 2, 5]:
-        sites = []
-        for conserve in [None, 'Sz', 'parity']:
-            S = site.SpinSite(s, conserve)
             sites.append(S)
         check_same_operators(sites)
 
 
 def test_fermion_site():
+    hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')
+    sites = []
     for conserve in [None, 'N', 'parity']:
         S = site.FermionSite(conserve)
         S.test_sanity()
+        for op in S.onsite_ops:
+            assert S.hc_ops[op] == hcs[op]
         C, Cd, N = S.C.to_ndarray(), S.Cd.to_ndarray(), S.N.to_ndarray()
         Id = S.Id.to_ndarray()
         JW = S.JW.to_ndarray()
@@ -177,21 +185,22 @@ def test_fermion_site():
             assert S.op_needs_JW(op)
         for op in ['N', 'C Cd', 'C JW', 'JW C']:
             assert not S.op_needs_JW(op)
-
-
-def test_fermion_site_ops():
-    sites = []
-    for conserve in [None, 'N', 'parity']:
-        S = site.FermionSite(conserve)
         sites.append(S)
     check_same_operators(sites)
 
 
 def test_spin_half_fermion_site():
+    hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
+               Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
+               Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
+               Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
+    sites = []
     for cons_N, cons_Sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
         print("conserve ", repr(cons_N), repr(cons_Sz))
         S = site.SpinHalfFermionSite(cons_N, cons_Sz)
         S.test_sanity()
+        for op in S.onsite_ops:
+            assert S.hc_ops[op] == hcs[op]
         Id = S.Id.to_ndarray()
         JW = S.JW.to_ndarray()
         Cu, Cd = S.Cu.to_ndarray(), S.Cd.to_ndarray()
@@ -218,30 +227,22 @@ def test_spin_half_fermion_site():
         else:
             SxSy = None
         check_spin_site(S, SxSy=SxSy)
-
-
-def test_spin_half_fermion_site_ops():
-    sites = []
-    for cons_n, cons_sz in it.product(['N', 'parity', None], ['Sz', 'parity', None]):
-        S = site.SpinHalfFermionSite(cons_n, cons_sz)
         sites.append(S)
     check_same_operators(sites)
 
 
 def test_boson_site():
-    for Nmax in [1, 2, 5, 10]:
-        for conserve in ['N', 'parity', None]:
-            S = site.BosonSite(Nmax, conserve=conserve)
-            S.test_sanity()
-        npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
-                                           S.N.to_ndarray(), 2)
-
-
-def test_boson_site_ops():
+    hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     for Nmax in [1, 2, 5, 10]:
         sites = []
         for conserve in ['N', 'parity', None]:
             S = site.BosonSite(Nmax, conserve=conserve)
+            S.test_sanity()
+            for op in S.onsite_ops:
+                assert S.hc_ops[op] == hcs[op]
+            npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
+                                               S.N.to_ndarray(), 2)
+            sites.append(S)
         check_same_operators(sites)
 
 

@@ -2283,7 +2283,11 @@ class Array:
         """
         if self is other:
             return True
+        if other.chinfo != self.chinfo:
+            raise ValueError("other array has different charges!")
         other = other._transpose_same_labels(self._labels)
+        if np.any(self.qtotal != other.qtotal):
+            return False
         return (self - other).norm(np.inf) < eps
 
     # private functions =======================================================

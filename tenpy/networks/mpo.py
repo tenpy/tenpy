@@ -71,6 +71,9 @@ class MPO:
         Indices on the bonds, which correpond to 'only identities to the right'.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
 
     Attributes
     ----------
@@ -97,6 +100,9 @@ class MPO:
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
+    explicit_plus_hc : bool
+        If True, this flag indicates that the hermitian conjugate of the MPO should be
+        computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
     _W : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
@@ -105,7 +111,14 @@ class MPO:
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
 
-    def __init__(self, sites, Ws, bc='finite', IdL=None, IdR=None, max_range=None):
+    def __init__(self,
+                 sites,
+                 Ws,
+                 bc='finite',
+                 IdL=None,
+                 IdR=None,
+                 max_range=None,
+                 explicit_plus_hc=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
@@ -115,6 +128,7 @@ class MPO:
         self.grouped = 1
         self.bc = bc
         self.max_range = max_range
+        self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -130,8 +144,8 @@ class MPO:
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
         :attr:`bc` as ``"boundary_condition"``.
-        Moreover, it saves :attr:`L`, and :attr:`grouped` as HDF5 attributes, as well as
-        the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
+        Moreover, it saves :attr:`L`, :attr:`explicit_plus_hc` and :attr:`grouped` as HDF5 attributes,
+        as well as the maximum of :attr:`chi` under the name :attr:`max_bond_dimension`.
 
         Parameters
         ----------
@@ -150,7 +164,7 @@ class MPO:
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
-
+        h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
@@ -186,6 +200,7 @@ class MPO:
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
         obj.test_sanity()
         return obj
 
@@ -198,7 +213,8 @@ class MPO:
                    IdR=None,
                    Ws_qtotal=None,
                    legs=None,
-                   max_range=None):
+                   max_range=None,
+                   explicit_plus_hc=False):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -227,6 +243,9 @@ class MPO:
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
+        explicit_plus_hc : bool
+            If True, the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
         See also
         --------
@@ -269,7 +288,7 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -607,7 +626,7 @@ class MPO:
             try:
                 Id = list(Id)
                 if len(Id) != L + 1:
-                    raise ValueError("expected list with L+1={0:d} entries".format(L+1))
+                    raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
                 return Id
             except TypeError:
                 return [Id] * (L + 1)
@@ -615,7 +634,7 @@ class MPO:
     def get_grouped_mpo(self, blocklen):
         """group each `blocklen` subsequent tensors and  return result as a new MPO.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Make a copy and use :meth:`group_sites` instead.
         """
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
@@ -628,7 +647,7 @@ class MPO:
     def get_full_hamiltonian(self, maxsize=1e6):
         """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
         """
         msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
@@ -1116,7 +1135,7 @@ class MPOGraph:
             if Ws_qtotal.ndim == 1:
                 Ws_qtotal = [Ws_qtotal] * L
 
-        charges = [[None]*len(st) for st in states]
+        charges = [[None] * len(st) for st in states]
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
         if infinite:
             charges[-1] = charges[0]  # bond is identical
@@ -1169,15 +1188,14 @@ class MPOGraph:
                     op_qtotal = site.get_op(ops[0][0]).qtotal
                     charges[i][l] = Wq + qR - op_qtotal  # solve chargerule for q_left
                     break
-            else: # no break
+            else:  # no break
                 return False
             return True
 
         if not infinite and any([ch is None for ch in charges[-1]]):
             raise ValueError("can't determine all charges on the very right leg of the MPO!")
 
-
-        max_checks = sys.getrecursionlimit() # I don't expect interactions with larger range...
+        max_checks = sys.getrecursionlimit()  # I don't expect interactions with larger range...
         for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
             repeat = False
             for i in reversed(range(L)):
