@@ -144,42 +144,40 @@ class TruncationError:
 def truncate(S, options):
     """Given a Schmidt spectrum `S`, determine which values to keep.
 
+    .. cfg:config:: truncation
+
+        .. deprecated :: 0.5.1
+            Renamed `symmetry_tol` to `degeneracy_tol`,
+            and don't use log in the condition any more.
+
+        chi_max : int
+            Keep at most `chi_max` Schmidt values.
+        chi_min : int
+            Keep at least `chi_min` Schmidt values.
+        degeneracy_tol: float
+            Don't cut between neighboring Schmidt values with
+            ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
+            for small `symmetry_tol`.
+            In other words, keep either both `i` and `j` or none, if the
+            Schmidt values are degenerate with a relative error smaller
+            than `symmetry_tol`, which we expect to happen in the case
+            of symmetries.
+        svd_min : float
+            Discard all small Schmidt values ``S[i] < svd_min``.
+        trunc_cut : float
+            Discard all small Schmidt values as long as
+            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
+
     Parameters
     ----------
     S : 1D array
         Schmidt values (as returned by an SVD), not necessarily sorted.
         Should be normalized to ``np.sum(S*S) == 1.``.
     options: dict-like
-        Config with constraints for the truncation.
+        Config with constraints for the truncation, see :cfg:config:`truncation`.
         If a constraint can not be fullfilled (without violating a previous one), it is ignored.
         A value ``None`` indicates that the constraint should be ignored.
-
-        ============== ====== ===============================================================
-        key            type   constraint
-        ============== ====== ===============================================================
-        chi_max        int    Keep at most `chi_max` Schmidt values.
-        -------------- ------ ---------------------------------------------------------------
-        chi_min        int    Keep at least `chi_min` Schmidt values.
-        -------------- ------ ---------------------------------------------------------------
-        degeneracy_tol float  Don't cut between neighboring Schmidt values with
-                              ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
-                              ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
-                              for small `symmetry_tol`.
-                              In other words, keep either both `i` and `j` or none, if the
-                              Schmidt values are degenerate with a relative error smaller
-                              than `symmetry_tol`, which we expect to happen in the case
-                              of symmetries.
-        -------------- ------ ---------------------------------------------------------------
-        svd_min        float  Discard all small Schmidt values ``S[i] < svd_min``.
-        -------------- ------ ---------------------------------------------------------------
-        trunc_cut      float  Discard all small Schmidt values as long as
-                              ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
-        ============== ====== ===============================================================
-
-        .. deprecated :: 0.5.1
-            Renamed `symmetry_tol` to `degeneracy_tol`,
-            and don't use log in the condition any more.
-
 
     Returns
     -------
