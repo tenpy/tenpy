@@ -10,8 +10,8 @@ def test_mps_compress(eps=1.e-13):
     # Test compression of a sum of a state with itself
     L = 5
     sites = [tenpy.networks.site.SpinHalfSite(conserve=None) for i in range(L)]
-    plus_x = np.array([1., 1.])/np.sqrt(2)
-    minus_x = np.array([1., -1.])/np.sqrt(2)
+    plus_x = np.array([1., 1.]) / np.sqrt(2)
+    minus_x = np.array([1., -1.]) / np.sqrt(2)
     psi = tenpy.networks.mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
     psiOrth = tenpy.networks.mps.MPS.from_product_state(sites, [minus_x for i in range(L)],
                                                         bc='finite')
@@ -58,14 +58,19 @@ def test_apply_mpo():
     assert abs(Eexp - Eapply) < 1e-5
 
 
-@pytest.mark.parametrize('bc_MPS, method', [('finite', 'I'), ('finite', 'II'),
-                                            ('infinite', 'I'), ('infinite', 'II')])
-def test_U_I(bc_MPS, method, g=0.5):
+@pytest.mark.parametrize('bc_MPS, method', [
+    ('finite', 'I'),
+    ('finite', 'II'),
+    ('infinite', 'I'),
+    ('infinite', 'II'),
+])
+def test_U_I(bc_MPS, method, g=1.5):
     # Test a time evolution against exact diagonalization for finite bc
-    L = 10
     dt = 0.01
     if bc_MPS == 'finite':
         L = 6
+    else:
+        L = 4
     model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
@@ -86,7 +91,7 @@ def test_U_I(bc_MPS, method, g=0.5):
             psi = apply_mpo(U, psi, {})
             psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
             psi_full = ED.mps_to_full(psi)
-            assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < 1e-2)
+            assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < dt)
 
     if bc_MPS == 'infinite':
         psiTEBD = psi.copy()

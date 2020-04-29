@@ -7,6 +7,7 @@ r"""Compression of a MPS.
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+from scipy.linalg import expm
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta
@@ -118,44 +119,48 @@ def make_U_II(H, dt):
     dtype = np.result_type(dt, H.dtype)
     IdL = H.IdL
     IdR = H.IdR
-    v = np.empty_like(IdL)
 
-    c0 = np.zeros((1, H[0].num_q), dtype=np.int)  #TODO
+    chinfo = H.chinfo
+    trivial = chinfo.make_valid()
     U = []
-    for i in xrange(0, self.L):
-        W = H.get_W(i).itranspose(['wL', 'wR', 'p', 'p*'])
-        W = W.to_ndarray()
-        proj_L = range(W.shape[0])
-        proj_L.remove(IdL[i])
-        proj_L.remove(IdR[i])
-        proj_R = range(W.shape[1])
-        proj_R.remove(IdL[i + 1])
-        proj_R.remove(IdR[i + 1])
+    for i in range(0, H.L):
+        labels = ['wL', 'wR', 'p', 'p*']
+        W = H.get_W(i).itranspose(labels)
+        assert np.all(W.qtotal == trivial)
+        DL, DR, _, _ = W.shape
+        Wflat = W.to_ndarray()
+        proj_L = np.ones(DL, dtype=np.bool_)
+        proj_L[IdL[i]] = False
+        proj_L[IdR[i]] = False
+        proj_R = np.ones(DR, dtype=np.bool_)
+        proj_R[IdL[i + 1]] = False
+        proj_R[IdR[i + 1]] = False
 
         #Extract (A, B, C, D)
-        D = W[IdL[i], IdR[i + 1], :, :]
-        C = W[IdL[i], proj_R, :, :]
-        B = W[proj_L, IdR[i + 1], :, :]
-        A = W[proj_L, aR, :, :]
+        D = Wflat[IdL[i], IdR[i + 1], :, :]
+        C = Wflat[IdL[i], proj_R, :, :]
+        B = Wflat[proj_L, IdR[i + 1], :, :]
+        A = Wflat[proj_L, :, :, :][:, proj_R, :, :]  # numpy indexing requires two steps
 
         W_II = make_W_II(dt, A, B, C, D)
-        #TODO from here on
-        qL_flat = npc.q_flat_from_q_ind(H[i].q_ind[0])[proj_L, :]
-        qL_flat = np.vstack((c0, qL_flat))
-        qR_flat = npc.q_flat_from_q_ind(H[i].q_ind[1])[proj_R, :]
-        qR_flat = np.vstack((c0, qR_flat))
-        qp_flat = npc.q_flat_from_q_ind(H[i].q_ind[2])
 
-        perm, W_II = npc.Array.from_ndarray(W_II, [qL_flat, qR_flat, qp_flat, qp_flat],
-                                            q_conj=H[i].q_conj,
-                                            mod_q=H[i].mod_q,
-                                            cutoff=1e-16)
+        leg_L, leg_R, leg_p, leg_pconj = W.legs
+        new_leg_L = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_L.qconj)
+        new_leg_L = new_leg_L.extend(leg_L.project(proj_L)[2])
+        new_leg_R = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_R.qconj)
+        new_leg_R = new_leg_R.extend(leg_R.project(proj_R)[2])
 
-        v[i - 1] = np.argsort(perm[0])[0]
-        v[i] = np.argsort(perm[1])[0]
-        U.append(WII)
-
-    return mpo.MPO(H.sites, U, H.bc, v, v.copy())  #  translate_Q1_data = self.translate_Q1_data ??
+        W_II = npc.Array.from_ndarray(
+            W_II,
+            [new_leg_L, new_leg_R, leg_p, leg_pconj],
+            dtype=dtype,
+            qtotal=trivial,
+            labels=labels,
+        )
+        # TODO: could sort by charges.
+        U.append(W_II)
+    Id = [0] * (H.L + 1)
+    return mpo.MPO(H.sites, U, H.bc, Id, Id)
 
 
 def make_W_II(t, A, B, C, D):
@@ -168,7 +173,6 @@ def make_W_II(t, A, B, C, D):
     A, B, C, D :  :class:`numpy.ndarray`
         Blocks of the MPO tensor to be exponentiated, as defined in :arxiv:`1407.1832`.
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
-
     """
     ### Algorithm
     #
@@ -198,7 +202,7 @@ def make_W_II(t, A, B, C, D):
             #Select relevent part of virtual space and extend by hardcore bosons
             h = np.kron(Brc, A[r, c, :, :]) + np.kron(Br, tB * B[r, :, :]) + np.kron(
                 Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
-            w = sp.linalg.expm(h)  #Exponentiate in the extended Hilbert space
+            w = expm(h)  #Exponentiate in the extended Hilbert space
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
             W[1 + r, 1 +
@@ -211,7 +215,7 @@ def make_W_II(t, A, B, C, D):
                     W[0, 0] = w[0, 0]
         if Nc == 0:  #technically only need one boson
             h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
-            w = sp.linalg.expm(h)
+            w = expm(h)
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
             W[1 + r, 0] = w[1, 0]
@@ -221,14 +225,14 @@ def make_W_II(t, A, B, C, D):
     if Nr == 0:
         for c in range(Nc):
             h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
-            w = sp.linalg.expm(h)
+            w = expm(h)
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
             W[0, 1 + c] = w[0, 1]
             if c == 0:
                 W[0, 0] = w[0, 0]
         if Nc == 0:
-            W = sp.linalg.expm(t * D)
+            W = expm(t * D)
 
     return W
 
