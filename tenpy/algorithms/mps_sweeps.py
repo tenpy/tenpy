@@ -45,6 +45,19 @@ class Sweep:
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
     includes DMRG, TDVP, TEBD, etc. Only DMRG is currently implemented in this way.
 
+    .. cfg:config :: Sweep
+
+        combine : bool
+            Whether to combine legs into pipes as far as possible. This reduces the overhead of
+            calculating charge combinations in the contractions. Makes the two-site DMRG engine
+            equivalent to the old `EngineCombine`.
+        lanczos_params : :class:`Config`
+            Parameters for the Lanczos algorithm.
+        trunc_params : dict
+            Parameters for truncations.
+        verbose : bool | int
+            Level of verbosity (i.e. how much status information to print); higher=more output.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -58,15 +71,6 @@ class Sweep:
     ----------
     options: :class:`~tenpy.tools.params.Config`
         Optional parameters.
-    chi_list : dict | ``None``
-        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
-        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
-        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
-        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
-    combine : bool
-        Whether to combine legs into pipes as far as possible. This reduces the overhead of
-        calculating charge combinations in the contractions. Makes the two-site DMRG engine
-        equivalent to the old `EngineCombine`.
     E_trunc_list : list
         List of truncation energies throughout a sweep.
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
@@ -76,8 +80,6 @@ class Sweep:
     i0 : int
         Only set during sweep.
         Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
-    lanczos_params : :class:`Config`
-        Parameters for the Lanczos algorithm.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     move_right : bool
@@ -95,15 +97,11 @@ class Sweep:
         Time marker for the start of the run.
     trunc_err_list : list
         List of truncation errors.
-    trunc_params : dict
-        Parameters for truncations.
     update_LP_RP : (bool, bool)
         Only set during a sweep.
         Whether it is necessary to update the `LP` and `RP`.
         The latter are chosen such that the environment is growing for infinite systems, but
         we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
-    verbose : bool | int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
     """
     def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
@@ -141,6 +139,33 @@ class Sweep:
         still have the same `psi`.
         Calls :meth:`reset_stats`.
 
+        .. cfg:configoptions :: Sweep
+
+            chi_list : dict | ``None``
+                A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
+                defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
+                uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
+                `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+            LP : :class:`~tenpy.linalg.np_conserved.Array`
+                Initial left-most `LP` ('left part') of the environment. By 
+                default (``None``) generate trivial, see 
+                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
+            LP_age : int
+                The 'age' (i.e. number of physical sites invovled into the 
+                contraction of the left-most `LP` of the environment.)
+            LP : :class:`~tenpy.linalg.np_conserved.Array`
+                Initial right-most `RP` ('right part') of the environment. By 
+                default (``None``) generate trivial, see 
+                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
+            LP_age : int
+                The 'age' (i.e. number of physical sites invovled into the 
+                contraction of the right-most `RP` of the environment.)
+            orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
+                List of environments ``<psi|psi_ortho>``, where `psi_ortho` is 
+                an MPS to orthogonalize against.
+            start_env : int
+                Number of sweeps to be performed without optimization to update 
+                the environment.
 
         Parameters
         ----------
@@ -201,6 +226,11 @@ class Sweep:
 
     def reset_stats(self):
         """Reset the statistics. Useful if you want to start a new Sweep run.
+
+        .. cfg:configoptions :: Sweep
+
+            sweep_0 : int
+                Number of sweeps that have already been performed.
 
         This method is expected to be overwritten by subclass, and should then define
         self.update_stats and self.sweep_stats dicts consistent with the statistics generated by
