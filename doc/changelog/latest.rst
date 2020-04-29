@@ -33,7 +33,7 @@ Backwards incompatible changes
   The latter makes more sense, as it is equivalent to 
   :math:`(S_i - S_j)/S_j < exp(degeneracy_tol) - 1 = degeneracy_tol + \mathcal{O}(degeneracy_tol^2)`.
 - Deprecated :meth:`tenpy.networks.mps.MPS.increase_L` in favor of the newly added
-  :meth:`tenpy.networks.mps.MPS.enlarge_MPS_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
+  :meth:`tenpy.networks.mps.MPS.enlarge_mps_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
 - Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
@@ -69,7 +69,7 @@ Added
   - :class:`~tenpy.networks.mpo.MPO`
   - :class:`~tenpy.models.lattice.Lattice`
 - :meth:`tenpy.networks.mps.MPSEnvironment.get_initialization_data` for a convenient way of saving the necessary parts of the environment after an DMRG run.
-- Method `enlarge_MPS_unit_cell` for the following classes:
+- Method `enlarge_mps_unit_cell` for the following classes:
   - :class:`~tenpy.networks.mps.MPS`
   - :class:`~tenpy.networks.mpo.MPO`
   - :class:`~tenpy.models.lattice.Lattice`
@@ -80,7 +80,7 @@ Added
   This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
-- :meth:`tenpy.networks.mps.MPS.roll_MPS_unit_cell`.
+- :meth:`tenpy.networks.mps.MPS.roll_mps_unit_cell`.
 
 
 Changed
