@@ -267,6 +267,20 @@ def test_enlarge_MPS_unit_cell():
     # done
 
 
+def test_roll_MPS_unit_cell():
+    s = site.SpinHalfSite(conserve='Sz')
+    psi = mps.MPS.from_product_state([s] * 4, ['down', 'up', 'up', 'up'], bc='infinite')
+    psi1 = psi.copy()
+    psi1.roll_MPS_unit_cell(1)
+    psi1.test_sanity()
+    npt.assert_equal(psi.expectation_value('Sigmaz'), [-1., 1., 1., 1.])
+    npt.assert_equal(psi1.expectation_value('Sigmaz'), [1., -1., 1., 1.])
+    psi_m_1 = psi.copy()
+    psi_m_1.roll_MPS_unit_cell(-1)
+    psi_m_1.test_sanity()
+    npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
+
+
 def test_group():
     s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')

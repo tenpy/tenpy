@@ -1040,6 +1040,27 @@ class MPS:
         self.form = factor * self.form
         self.test_sanity()
 
+    def roll_MPS_unit_cell(self, shift=1):
+        """Shift the section we define as unit cellof an infinite MPS; in place.
+
+        Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
+        With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
+        whereas ``shift = -1`` will give ``[B, C, D, A]``.
+
+        Parameters
+        ----------
+        shift : int
+            By how many sites to move the tensors to the right.
+        """
+        if self.finite:
+            raise ValueError("makes only sense for infinite boundary conditions")
+        inds = np.roll(np.arange(self.L), shift)
+        self.sites = [self.sites[i] for i in inds]
+        self.form = [self.form[i] for i in inds]
+        self._B = [self._B[i] for i in inds]
+        self._S = [self._S[i] for i in inds]
+        self._S.append(self._S[0])
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 

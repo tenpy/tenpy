@@ -73,13 +73,14 @@ Added
   - :class:`~tenpy.networks.mps.MPS`
   - :class:`~tenpy.networks.mpo.MPO`
   - :class:`~tenpy.models.lattice.Lattice`
-  - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.MPSModel`
+  - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.NearestNeighborModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
 - :class:`tenpy.algorithms.mps_sweeps.EffectiveHPlusHC` as a wrapper adding the h.c. during the `matvec`.
   This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+- :meth:`tenpy.networks.mps.MPS.roll_MPS_unit_cell`.
 
 
 Changed
