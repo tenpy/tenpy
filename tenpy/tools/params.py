@@ -61,6 +61,10 @@ class Config(MutableMapping, Hdf5Exportable):
         self.documentation = {}
         self.name = name
 
+    def copy(self):
+        """Make a shallow copy, as for a dictionary."""
+        return Config(self.options.copy(), self.name)
+
     def __getitem__(self, key):
         val = self.options[key]
         self.print_if_verbose(key, "Reading")
