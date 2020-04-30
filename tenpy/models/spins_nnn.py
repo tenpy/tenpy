@@ -44,19 +44,40 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. cfg:config :: SpinChainNNN
+        L : int
+            Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
+            i.e. we have ``2*L`` spin sites.
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+        conserve : 'best' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        Jx : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jy : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jz : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jxp : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jyp : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jzp : float | array
+            Coupling as defined for the Hamiltonian above.
+        hx : float | array
+            Coupling as defined for the Hamiltonian above.
+        hy : float | array
+            Coupling as defined for the Hamiltonian above.
+        hz : float | array
+            Coupling as defined for the Hamiltonian above.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+
+
     Parameters
     ----------
-    L : int
-        Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
-        i.e. we have ``2*L`` spin sites.
-    S : {0.5, 1, 1.5, 2, ...}
-        The 2S+1 local states range from m = -S, -S+1, ... +S.
-    conserve : 'best' | 'Sz' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-    Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+    model_params : dict
+        See :cfg:config:`SpinChainNNN`
     """
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
@@ -136,14 +157,29 @@ class SpinChainNNN2(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
-    Parameters
-    ----------
+    .. cfg:config :: SpinChainNNN2
     S : {0.5, 1, 1.5, 2, ...}
         The 2S+1 local states range from m = -S, -S+1, ... +S.
     conserve : 'best' | 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
         For ``'best'``, we check the parameters what can be preserved.
-    Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
+    Jx : float | array
+        Couplings as defined for the Hamiltonian above.
+    Jy : float | array
+        Couplings as defined for the Hamiltonian above.
+    Jz : float | array
+        Couplings as defined for the Hamiltonian above.
+    Jxp : float | array
+        Couplings as defined for the Hamiltonian above.
+    Jyp : float | array
+        Couplings as defined for the Hamiltonian above.
+    Jzp : float | array
+        Couplings as defined for the Hamiltonian above.
+    hx : float | array
+        Couplings as defined for the Hamiltonian above.
+    hy : float | array
+        Couplings as defined for the Hamiltonian above.
+    hz : float | array
         Couplings as defined for the Hamiltonian above.
     lattice : str | :class:`~tenpy.models.lattice.Lattice`
         Instance of a lattice class for the underlaying geometry.
@@ -161,12 +197,20 @@ class SpinChainNNN2(CouplingMPOModel):
     L : int
         Lenght of the lattice.
         Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
+    Lx : int
+        Length of the lattice in x--direction.
+        Only used if `lattice` is the name of a 2D Lattice.
+    Ly : int
+        Length of the lattice in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
     bc_y : 'ladder' | 'cylinder'
         Boundary conditions in y-direction.
         Only used if `lattice` is the name of a 2D Lattice.
+
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        See :cfg:config:`SpinChainNNN2`
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)

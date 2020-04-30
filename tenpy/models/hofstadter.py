@@ -127,37 +127,52 @@ class HofstadterFermions(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. cfg:config :: HofstadterFermions
+
+        Lx : int
+            Length of the lattice in x-direction.
+        Ly : int
+            Length of the lattice in y-direction.
+        mx : int
+            Size of the magnetic unit cell along x, in terms of lattice sites.
+        my : int
+            Size of the magnetic unit cell along y, in terms of lattice sites.
+        filling : tuple
+            Average number of fermions per site, defined as a fraction (numerator, denominator)
+            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
+        Jx : float
+            Hamiltonian parameter as defined above.
+        Jy : float
+            Hamiltonian parameter as defined above.
+        mu : float
+            Hamiltonian parameter as defined above.
+        v : float
+            Hamiltonian parameter as defined above.
+        bc_MPS : {'finite' | 'infinite'}
+            MPS boundary conditions along the x-direction.
+            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+            Coupling boundary conditions in x-direction are chosen accordingly.
+        bc_x : 'periodic' | 'open'
+            Lattice boundary conditions in x-direction
+        bc_y : 'ladder' | 'cylinder'
+            Lattice boundary conditions in y-direction.
+        conserve : {'N' | 'parity' | None}
+            What quantum number to conserve.
+        order : string
+            Ordering of the sites in the MPS, e.g. 'default', 'snake';
+            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+        phi : tuple
+            Magnetic flux density, defined as a fraction (numerator, denominator)
+        phi_ext : float
+            External magnetic flux 'threaded' through the cylinder.
+        gauge : 'landau_x' | 'landau_y' | 'symmetric'
+            Choice of the gauge used for the magnetic field. This changes the
+            magnetic unit cell. See :func:`gauge_hopping` for details.
+
     Parameters
     ----------
-    Lx, Ly : int
-        Size of the simulation unit cell in terms of lattice sites.
-    mx, my : int
-        Size of the magnetic unit cell in terms of lattice sites.
-    filling : tuple
-        Average number of fermions per site, defined as a fraction (numerator, denominator)
-        Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.FermionSite`.
-    Jx, Jy, mu, v: float
-        Hamiltonian parameters as defined above.
-    bc_MPS : {'finite' | 'infinite'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'open'
-        Lattice boundary conditions in x-direction
-    bc_y : 'ladder' | 'cylinder'
-        Lattice boundary conditions in y-direction.
-    conserve : {'N' | 'parity' | None}
-        What quantum number to conserve.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-    phi : tuple
-        Magnetic flux density, defined as a fraction (numerator, denominator)
-    phi_ext : float
-        External magnetic flux 'threaded' through the cylinder.
-    gauge : 'landau_x' | 'landau_y' | 'symmetric'
-        Choice of the gauge used for the magnetic field. This changes the
-        magnetic unit cell. See :func:`gauge_hopping` for details.
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`HofstadterFermions`.
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
@@ -220,39 +235,53 @@ class HofstadterBosons(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. cfg:config :: HofstadterBosons
+        Lx : int
+            Length of the lattice in x-direction.
+        Ly : int
+            Length of the lattice in y-direction.
+        mx : int
+            Size of the magnetic unit cell along x, in terms of lattice sites.
+        my : int
+            Size of the magnetic unit cell along y, in terms of lattice sites.
+        Nmax : int
+            Maximum number of bosons per site.
+        filling : tuple
+            Average number of fermions per site, defined as a fraction (numerator, denominator)
+            Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
+        Jx : float
+            Hamiltonian parameter as defined above.
+        Jy : float
+            Hamiltonian parameter as defined above.
+        mu : float
+            Hamiltonian parameter as defined above.
+        U : float
+            Hamiltonian parameter as defined above.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions along the x-direction.
+            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+            Coupling boundary conditions in x-direction are chosen accordingly.
+        bc_x : 'periodic' | 'open'
+            Boundary conditions in x-direction
+        bc_y : 'ladder' | 'cylinder'
+            Boundary conditions in y-direction.
+        conserve : {'N' | 'parity' | None}
+            What quantum number to conserve.
+        order : string
+            Ordering of the sites in the MPS, e.g. 'default', 'snake';
+            see :meth:`~tenpy.models.lattice.Lattice.ordering`
+        phi : tuple
+            Magnetic flux density, defined as a fraction (numerator, denominator)
+        phi_ext : float
+            External magnetic flux 'threaded' through the cylinder.
+        gauge : 'landau_x' | 'landau_y' | 'symmetric'
+            Choice of the gauge used for the magnetic field. This changes the
+            magnetic unit cell.
+
     Parameters
     ----------
-    Lx, Ly : int
-        Size of the simulation unit cell in terms of lattice sites.
-    mx, my : int
-        Size of the magnetic unit cell in terms of lattice sites.
-    Nmax : int
-        Maximum number of bosons per site.
-    filling : tuple
-        Average number of fermions per site, defined as a fraction (numerator, denominator)
-        Changes the definition of ``'dN'`` in the :class:`~tenpy.networks.site.BosonSite`.
-    Jx, Jy, mu, U: float
-        Hamiltonian parameters as defined above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-    bc_x : 'periodic' | 'open'
-        Boundary conditions in x-direction
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-    conserve : {'N' | 'parity' | None}
-        What quantum number to conserve.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`
-    phi : tuple
-        Magnetic flux density, defined as a fraction (numerator, denominator)
-    phi_ext : float
-        External magnetic flux 'threaded' through the cylinder.
-    gauge : 'landau_x' | 'landau_y' | 'symmetric'
-        Choice of the gauge used for the magnetic field. This changes the
-        magnetic unit cell.
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`HofstadterFermions`.
     """
     def init_sites(self, model_params):
         Nmax = model_params.get('Nmax', 3)

@@ -64,18 +64,26 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. cfg:config :: ToricCode
+        Lx: int
+            Dimension of the lattice, number of plaquettes around the cylinder.
+        Ly: int
+            Dimension of the lattice, number of plaquettes around the cylinder.
+        conserve : 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        Jc : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jp : float | array
+            Coupling as defined for the Hamiltonian above.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        order : str
+            The order of the lattice sites in the lattice, see :class:`DualSquare`.
+
     Parameters
     ----------
-    Lx, Ly : int
-        Dimension of the lattice, number of plaquettes around the cylinder.
-    conserve : 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-    Jc, Jp: float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-    order : str
-        The order of the lattice sites in the lattice, see :class:`DualSquare`.
+    model_params : :class:`~tenpy.tools.params.Config`
+        See :cfg:config:`ToricCode`
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')

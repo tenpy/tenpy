@@ -29,14 +29,23 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     All parameters are collected in a single dictionary `model_params`, which 
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. cfg:config :: XXZChain
+        L : int
+            Length of the chain.
+        Jxx : float | array
+            Coupling as defined for the Hamiltonian above.
+        Jz : float | array
+            Coupling as defined for the Hamiltonian above.
+        hz : float | array
+            Coupling as defined for the Hamiltonian above.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+
+
     Parameters
     ----------
-    L : int
-        Length of the chain.
-    Jxx, Jz, hz : float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+    model_params : dict
+        See :cfg:config:`XXZChain`
     """
     def __init__(self, model_params):
         # 0) read out/set default parameters
@@ -85,6 +94,11 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
 
     This implementation takes the same parameters as the :class:`XXZChain`, but is implemented
     based on the :class:`~tenpy.models.model.CouplingMPOModel`.
+
+    Parameters
+    ----------
+    model_params : dict | :class:`~tenpy.tools.params.Config`
+        See :cfg:config:`XXZChain`
     """
     def __init__(self, model_params):
         model_params.setdefault('lattice', "Chain")

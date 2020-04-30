@@ -32,36 +32,49 @@ class FermionModel(CouplingMPOModel):
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
+    .. cfg:config :: FermionModel
+
+        conserve : 'best' | 'N' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
+            For ``'best'``, we check the parameters what can be preserved.
+        J : float | array
+            Hopping,as defined for the Hamiltonian above.
+        V : float | array
+            Interactionas defined for the Hamiltonian above.
+        mu : float | array
+            Chemical potential as defined for the Hamiltonian above.
+        lattice : str | :class:`~tenpy.models.lattice.Lattice`
+            Instance of a lattice class for the underlaying geometry.
+            Alternatively a string being the name of one of the Lattices defined in
+            :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions along the x-direction.
+            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+            Coupling boundary conditions in x-direction are chosen accordingly.
+            Only used if `lattice` is a string.
+        order : string
+            Ordering of the sites in the MPS, e.g. 'default', 'snake';
+            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+            Only used if `lattice` is a string.
+        L : int
+            Lenght of the lattice.
+            Only used if `lattice` is the name of a 1D Lattice.
+        Lx : int
+            Length of the lattice in x-direction.
+            Only used if `lattice` is the name of a 2D Lattice.
+        Ly : int
+            Length of the lattice in y-direction.
+            Only used if `lattice` is the name of a 2D Lattice.
+        bc_y : 'ladder' | 'cylinder'
+            Boundary conditions in y-direction.
+            Only used if `lattice` is the name of a 2D Lattice.
+
+
     Parameters
     ----------
-    conserve : 'best' | 'N' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
-        For ``'best'``, we check the parameters what can be preserved.
-    J, V, mu : float | array
-        Hopping, interaction and chemical potential as defined for the
-        Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model.
+
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')

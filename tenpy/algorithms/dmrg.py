@@ -113,7 +113,7 @@ class DMRGEngine(Sweep):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in subclasses.
+        described in :cfg:config:`DMRGEngine`.
 
     Attributes
     ----------
