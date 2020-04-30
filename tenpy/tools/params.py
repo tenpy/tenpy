@@ -30,7 +30,7 @@ class Config(MutableMapping, Hdf5Exportable):
 
     .. cfg:config :: Config
 
-        verbose : int | float
+        verbose : int | float = 1
             How much to print what's being done; higher means print more.
             Sub-configs default to having the parent `verbose` divided by 10.
 
@@ -57,7 +57,7 @@ class Config(MutableMapping, Hdf5Exportable):
         self.options = config
         self.unused = set(config.keys())
         self.unused.discard('verbose')
-        self.verbose = config.get('verbose', 0)
+        self.verbose = config.get('verbose', 1)
         self.documentation = {}
         self.name = name
 
