@@ -145,7 +145,9 @@ class Config(MutableMapping, Hdf5Exportable):
     def subconfig(self, key):
         """Get ``self[key]`` as a :class:`Config`."""
         use_default = key not in self.keys()
-        subconfig = asConfig(self.options.get(key, {}), key)
+        subconfig = self.options.get(key, {})
+        subconfig.setdefault('verbose', self.verbose / 10.)
+        subconfig = asConfig(subconfig, key)
         self.print_if_verbose(key, "Subconfig", use_default)
         self.unused.discard(key)  # (does nothing if option not in set)
         return subconfig
