@@ -62,128 +62,8 @@ def run(psi, model, options):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters as described in the following table.
+        Further optional parameters as described in :cfg:config:`DMRGEngine`.
         Use ``verbose>0`` to print the used parameters during runtime.
-
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        LP             npc.Array Initial left-most `LP` and right-most `RP` ('left/right part')
-        RP                       of the environment. By default (``None``) generate trivial,
-                                 see :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
-        -------------- --------- ---------------------------------------------------------------
-        LP_age         int       The 'age' (i.e. number of physical sites invovled into the
-        RP_age                   contraction) of the left-most `LP` and right-most `RP`
-                                 of the environment.
-        -------------- --------- ---------------------------------------------------------------
-        mixer          str |     Chooses the :class:`Mixer` to be used.
-                       class |   A string stands for one of the mixers defined in this module,
-                       bool      a class is used as custom mixer.
-                                 Default (``None``) uses no mixer, ``True`` uses
-                                 :class:`DensityMatrixMixer` for the 2-site case and
-                                 :class:`SingleSiteMixer` for the 1-site case.
-        -------------- --------- ---------------------------------------------------------------
-        mixer_params   dict      Non-default initialization arguments of the mixer.
-                                 Options may be custom to the specified mixer, so they're
-                                 documented in the class doc-string of the mixer.
-        -------------- --------- ---------------------------------------------------------------
-        orthogonal_to  list of   List of other matrix produc states to orthogonalize against.
-                       MPS       Works only for finite systems.
-                                 This parameter can be used to find (a few) excited states as
-                                 follows. First, run DMRG to find the ground state and then
-                                 run DMRG again while orthogonalizing against the ground state,
-                                 which yields the first excited state (in the same symmetry
-                                 sector), and so on.
-        -------------- --------- ---------------------------------------------------------------
-        combine        bool      Whether to combine legs into pipes. This combines the virtual and
-                                 physical leg for the left site (when moving right) or right side
-                                 (when moving left) into pipes. This reduces the overhead of
-                                 calculating charge combinations in the contractions, but one
-                                 :meth:`matvec` is formally more expensive,
-                                 :math:`O(2 d^3 \chi^3 D)`.
-        -------------- --------- ---------------------------------------------------------------
-        trunc_params   dict      Truncation parameters as described in
-                                 :func:`~tenpy.algorithms.truncation.truncate`
-        -------------- --------- ---------------------------------------------------------------
-        chi_list       dict |    A dictionary to gradually increase the `chi_max` parameter of
-                       None      `trunc_params`. The key defines starting from which sweep
-                                 `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
-                                 ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
-                                 afterwards. Overwrites `trunc_params['chi_list']``.
-                                 By default (``None``) this feature is disabled.
-        -------------- --------- ---------------------------------------------------------------
-        lanczos_params dict      Lanczos parameters as described in
-                                 :func:`~tenpy.linalg.lanczos.lanczos`
-        -------------- --------- ---------------------------------------------------------------
-        diag_method    str       Method to be used for diagonalzation, default ``'default'``.
-                                 For possible arguments see :meth:`DMRGEngine.diag`.
-        -------------- --------- ---------------------------------------------------------------
-        max_N_for_ED   int       Maximum matrix dimension of the effective hamiltonian
-                                 up to which the ``'default'`` `diag_method` uses ED instead of
-                                 Lanczos.
-        -------------- --------- ---------------------------------------------------------------
-        N_sweeps_check int       Number of sweeps to perform between checking convergence
-                                 criteria and giving a status update.
-        -------------- --------- ---------------------------------------------------------------
-        sweep_0        int       The number of sweeps already performed. (Useful for re-start).
-        -------------- --------- ---------------------------------------------------------------
-        start_env      int       Number of initial sweeps performed without bond optimizaiton to
-                                 initialize the environment.
-        -------------- --------- ---------------------------------------------------------------
-        update_env     int       Number of sweeps without bond optimizaiton to update the
-                                 environment for infinite boundary conditions,
-                                 performed every `N_sweeps_check` sweeps.
-        -------------- --------- ---------------------------------------------------------------
-        norm_tol       float     After the DMRG run, update the environment with at most
-                                 `norm_tol_iter` sweeps until
-                                 ``np.linalg.norm(psi.norm_err()) < norm_tol``.
-        -------------- --------- ---------------------------------------------------------------
-        norm_tol_iter  float     Perform at most `norm_tol_iter`*`update_env` sweeps to
-                                 converge the norm error below `norm_tol`.
-                                 If the state is not converged after that, call
-                                 :meth:`~tenpy.networks.mps.canonical_form` instead.
-        -------------- --------- ---------------------------------------------------------------
-        max_sweeps     int       Maximum number of sweeps to be performed.
-        -------------- --------- ---------------------------------------------------------------
-        min_sweeps     int       Minimum number of sweeps to be performed.
-                                 Defaults to 1.5*N_sweeps_check.
-        -------------- --------- ---------------------------------------------------------------
-        max_E_err      float     Convergence if the change of the energy in each step
-                                 satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
-                                 this is also satisfied if ``Delta E > 0``,
-                                 i.e., if the energy increases (due to truncation).
-        -------------- --------- ---------------------------------------------------------------
-        max_S_err      float     Convergence if the relative change of the entropy in each step
-                                 satisfies ``|Delta S|/S < max_S_err``
-        -------------- --------- ---------------------------------------------------------------
-        max_hours      float     If the DMRG took longer (measured in wall-clock time),
-                                 'shelve' the simulation, i.e. stop and return with the flag
-                                 ``shelve=True``.
-        -------------- --------- ---------------------------------------------------------------
-        P_tol_to_trunc float     It's reasonable to choose the Lanczos convergence criteria
-        P_tol_max                ``'P_tol'`` not many magnitudes lower than the current
-        P_tol_min                truncation error. Therefore, if `P_tol_to_trunc` is not
-                                 ``None``, we update `P_tol` of `lanczos_params` to
-                                 ``max_trunc_err*P_tol_to_trunc``,
-                                 restricted to the interval [`P_tol_min`, `P_tol_max`],
-                                 where ``max_trunc_err`` is the maximal truncation error
-                                 (discarded weight of the Schmidt values) due to truncation
-                                 right after each Lanczos optimization during the sweeps.
-        -------------- --------- ---------------------------------------------------------------
-        E_tol_to_trunc float     It's reasonable to choose the Lanczos convergence criteria
-        E_tol_max                ``'E_tol'`` not many magnitudes lower than the current
-        E_tol_min                truncation error. Therefore, if `E_tol_to_trunc` is not
-                                 ``None``, we update `E_tol` of `lanczos_params` to
-                                 ``max_E_trunc*E_tol_to_trunc``,
-                                 restricted to the interval [`E_tol_min`, `E_tol_max`],
-                                 where ``max_E_trunc`` is the maximal energy difference due to
-                                 truncation right after each Lanczos optimization during the
-                                 sweeps.
-        -------------- --------- ---------------------------------------------------------------
-        active_sites   int       The number of active sites to be used by DMRG.
-                                 If set to 1, :class:`SingleSiteDMRGEngine` is used.
-                                 If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
-        ============== ========= ===============================================================
 
     Returns
     -------
@@ -218,6 +98,13 @@ class DMRGEngine(Sweep):
     .. deprecated :: 0.5.0
         Renamed parameter/attribute `DMRG_params` to :attr:`options`.
 
+    .. cfg:config :: DMRGEngine
+        
+        active_sites
+            The number of active sites to be used by DMRG.
+            If set to 1, :class:`SingleSiteDMRGEngine` is used.
+            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -236,10 +123,7 @@ class DMRGEngine(Sweep):
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
     chi_list : dict | ``None``
-        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
-        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
-        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
-        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+        See :cfg:option:`DMRGEngine.chi_list`
     eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
@@ -308,6 +192,73 @@ class DMRGEngine(Sweep):
 
     def run(self):
         """Run the DMRG simulation to find the ground state.
+
+        .. cfg:configoptions :: DMRGEngine
+
+            diag_method : str
+                Method to be used for diagonalzation, default ``'default'``.
+                For possible arguments see :meth:`DMRGEngine.diag`.
+            E_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'E_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `E_tol_to_trunc` is not
+                ``None``, we update `E_tol` of `lanczos_params` to
+                ``max_E_trunc*E_tol_to_trunc``,
+                restricted to the interval [`E_tol_min`, `E_tol_max`],
+                where ``max_E_trunc`` is the maximal energy difference due to
+                truncation right after each Lanczos optimization during the
+                sweeps.
+            E_tol_max : float
+                See `E_tol_to_trunc`  
+            E_tol_min : float
+                See `E_tol_to_trunc`
+            max_E_err : float
+                Convergence if the change of the energy in each step
+                satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
+                this is also satisfied if ``Delta E > 0``,
+                i.e., if the energy increases (due to truncation).
+            max_hours : float
+                If the DMRG took longer (measured in wall-clock time),
+                'shelve' the simulation, i.e. stop and return with the flag
+                ``shelve=True``.
+            max_S_err : float
+                Convergence if the relative change of the entropy in each step
+                satisfies ``|Delta S|/S < max_S_err``
+            max_sweeps : int
+                Maximum number of sweeps to be performed.
+            min_sweeps : int
+                Minimum number of sweeps to be performed.
+                Defaults to 1.5*N_sweeps_check.
+            N_sweeps_check : int
+                Number of sweeps to perform between checking convergence
+                criteria and giving a status update.
+            norm_tol : float
+                After the DMRG run, update the environment with at most
+                `norm_tol_iter` sweeps until
+                ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+            norm_tol_iter : float
+                Perform at most `norm_tol_iter`*`update_env` sweeps to
+                converge the norm error below `norm_tol`.
+                If the state is not converged after that, call
+                :meth:`~tenpy.networks.mps.canonical_form` instead.
+            P_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'P_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `P_tol_to_trunc` is not
+                ``None``, we update `P_tol` of `lanczos_params` to
+                ``max_trunc_err*P_tol_to_trunc``,
+                restricted to the interval [`P_tol_min`, `P_tol_max`],
+                where ``max_trunc_err`` is the maximal truncation error
+                (discarded weight of the Schmidt values) due to truncation
+                right after each Lanczos optimization during the sweeps.
+            P_tol_max : float
+                See `P_tol_to_trunc`
+            P_tol_min : float
+                See `P_tol_to_trunc`
+            update_env : int
+                Number of sweeps without bond optimizaiton to update the
+                environment for infinite boundary conditions,
+                performed every `N_sweeps_check` sweeps.
 
         Returns
         -------
@@ -483,7 +434,20 @@ class DMRGEngine(Sweep):
         return E, self.psi
 
     def reset_stats(self):
-        """Reset the statistics, useful if you want to start a new sweep run."""
+        """Reset the statistics, useful if you want to start a new sweep run.
+
+        .. cfg:configoptions :: DMRGEngine
+
+            chi_list : dict | None
+                A dictionary to gradually increase the `chi_max` parameter of
+                `trunc_params`. The key defines starting from which sweep
+                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
+                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
+                afterwards. Overwrites `trunc_params['chi_list']``.
+                By default (``None``) this feature is disabled.
+            sweep_0 : int
+                The number of sweeps already performed. (Useful for re-start).
+        """
         self.sweeps = self.options.get('sweep_0', 0)
         self.update_stats = {
             'i0': [],
@@ -562,6 +526,13 @@ class DMRGEngine(Sweep):
 
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
+
+        .. cfg:configoptions :: DMRGEngine
+
+            max_N_for_ED : int
+                Maximum matrix dimension of the effective hamiltonian
+                up to which the ``'default'`` `diag_method` uses ED instead of
+                Lanczos.
 
         The method used depends on the DMRG parameter `diag_method`.
 
@@ -729,6 +700,9 @@ class DMRGEngine(Sweep):
 
 class TwoSiteDMRGEngine(DMRGEngine):
     """'Engine' for the two-site DMRG algorithm.
+
+    .. cfg:config :: TwoSiteDMRGEngine
+        :include: DMRGEngine
 
     Parameters
     ----------
@@ -961,7 +935,21 @@ class TwoSiteDMRGEngine(DMRGEngine):
         self.env.del_RP(i0)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`."""
+        """Set `self.mixer` to the class specified by `options['mixer']`.
+
+        .. cfg:configoptions :: TwoSiteDMRGEngine
+
+            mixer : str | class | bool
+                Chooses the :class:`Mixer` to be used.
+                A string stands for one of the mixers defined in this module,
+                a class is used as custom mixer.
+                Default (``None``) uses no mixer, ``True`` uses
+                :class:`DensityMatrixMixer` for the 2-site case and
+                :class:`SingleSiteMixer` for the 1-site case.
+            mixer_params : dict
+                Mixer parameters as described in :cfg:config:`Mixer`.
+
+        """
         Mixer_class = self.options.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
@@ -1020,6 +1008,9 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
 class SingleSiteDMRGEngine(DMRGEngine):
     """'Engine' for the single-site DMRG algorithm.
+
+    .. cfg:config :: SingleSiteDMRGEngine
+        :include: DMRGEngine
 
     Parameters
     ----------
@@ -1297,7 +1288,20 @@ class SingleSiteDMRGEngine(DMRGEngine):
             self.env.del_RP(i0 - 1)
 
     def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`."""
+        """Set `self.mixer` to the class specified by `options['mixer']`.
+
+        .. cfg:configoptions :: SingleSiteDMRGEngine
+
+            mixer : str | class | bool
+                Chooses the :class:`Mixer` to be used.
+                A string stands for one of the mixers defined in this module,
+                a class is used as custom mixer.
+                Default (``None``) uses no mixer, ``True`` uses
+                :class:`DensityMatrixMixer` for the 2-site case and
+                :class:`SingleSiteMixer` for the 1-site case.
+            mixer_params : dict
+                Mixer parameters as described in :cfg:config:`Mixer`.
+        """
         Mixer_class = self.options.get('mixer', None)
         if Mixer_class:
             if Mixer_class is True:
@@ -1421,24 +1425,26 @@ class Mixer:
     This original idea of the mixer was introduced in [White2005]_.
     [Hubig2015]_ discusses the mixer and provides an improved version.
 
+
+    .. cfg:config :: Mixer
+
+        amplitude : float
+            Initial strength of the mixer. (Should be << 1.)
+        decay : float
+            To slowly turn off the mixer, we divide `amplitude` by `decay`
+            after each sweep. (Should be >= 1.)
+        disable_after : int
+            We disable the mixer completely after this number of sweeps.
+        verbose : int
+            Level of output verbosity
+
     Parameters
     ----------
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
         Environment for contraction ``<psi|H|psi>`` for later
     options : dict
         Optional parameters as described in the following table.
-        Use ``verbose>0`` to print the used parameters during runtime.
-
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        amplitude      float     Initial strength of the mixer. (Should be << 1.)
-        -------------- --------- ---------------------------------------------------------------
-        decay          float     To slowly turn off the mixer, we divide `amplitude` by `decay`
-                                 after each sweep. (Should be >= 1.)
-        -------------- --------- ---------------------------------------------------------------
-        disable_after  int       We disable the mixer completely after this number of sweeps.
-        ============== ========= ===============================================================
+        see :cfg:config:`Mixer`
 
     Attributes
     ----------

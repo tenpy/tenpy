@@ -40,7 +40,7 @@ __all__ = [
 
 
 class Sweep:
-    """Prototype class for a 'sweeping' algorithm.
+    r"""Prototype class for a 'sweeping' algorithm.
 
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
     includes DMRG, TDVP, TEBD, etc. Only DMRG is currently implemented in this way.
@@ -48,13 +48,18 @@ class Sweep:
     .. cfg:config :: Sweep
 
         combine : bool
-            Whether to combine legs into pipes as far as possible. This reduces the overhead of
-            calculating charge combinations in the contractions. Makes the two-site DMRG engine
-            equivalent to the old `EngineCombine`.
+            Whether to combine legs into pipes. This combines the virtual and
+            physical leg for the left site (when moving right) or right side
+            (when moving left) into pipes. This reduces the overhead of
+            calculating charge combinations in the contractions, but one
+            :meth:`matvec` is formally more expensive,
+            :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : :class:`Config`
-            Parameters for the Lanczos algorithm.
+            Lanczos parameters as described in
+            :func:`~tenpy.linalg.lanczos.lanczos`
         trunc_params : dict
-            Parameters for truncations.
+            Truncation parameters as described in
+            :func:`~tenpy.algorithms.truncation.truncate`
         verbose : bool | int
             Level of verbosity (i.e. how much status information to print); higher=more output.
 
@@ -161,8 +166,13 @@ class Sweep:
                 The 'age' (i.e. number of physical sites invovled into the
                 contraction of the right-most `RP` of the environment.)
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-                List of environments ``<psi|psi_ortho>``, where `psi_ortho` is
-                an MPS to orthogonalize against.
+                List of other matrix produc states to orthogonalize against.
+                Works only for finite systems.
+                This parameter can be used to find (a few) excited states as
+                follows. First, run DMRG to find the ground state and then
+                run DMRG again while orthogonalizing against the ground state,
+                which yields the first excited state (in the same symmetry
+                sector), and so on.
             start_env : int
                 Number of sweeps to be performed without optimization to update
                 the environment.
