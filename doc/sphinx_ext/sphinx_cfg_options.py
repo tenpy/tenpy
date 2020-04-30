@@ -580,10 +580,21 @@ class CfgDomain(Domain):
 
     @property
     def config_options(self):
-        """dict config_name -> List[OptionEntry], taking into account recursive `includes`."""
+        """dict config_name -> List[OptionEntry], taking into account recursive `includes`.
+
+        If `cfg_options_unique` is True, the list is filtered to include each option name only
+        once.
+        """
         if not hasattr(self, '_config_options'):
             self._build_config_options()
         return self._config_options
+
+    @property
+    def all_config_options(self):
+        """same as `config_options`"""
+        if not hasattr(self, '_all_config_options'):
+            self._build_config_options()
+        return self._all_config_options
 
     def _build_master_configs(self):
         """build recursive configs from "flat" configs in self.data"""
@@ -637,6 +648,7 @@ class CfgDomain(Domain):
         self._config_options = config_options = {}
         data_config2options = self.data['config2options']
         config_names = set(master_configs.keys()).union(set(data_config2options.keys()))
+        self._all_config_options = {}
         for config in config_names:
             includes = [config]
             master_config = master_configs.get(config, None)
@@ -660,7 +672,19 @@ class CfgDomain(Domain):
             def sort_priority(option_entry):
                 return (option_entry.dispname.lower(), prio[option_entry.config])
 
-            config_options[config] = sorted(options, key=sort_priority)
+            options = sorted(options, key=sort_priority)
+            self._all_config_options[config] = options
+
+            if self.env.config.cfg_options_unique:
+                new_options = []
+                last = ""
+                for option in options:
+                    if option.dispname != last:
+                        new_options.append(option)
+                    last = option.dispname
+                options = new_options
+
+            config_options[config] = options
 
     def _set_recursive_include(self, config, handled_recursive):
         includes = self.master_configs[config].includes
@@ -686,6 +710,7 @@ def setup(app):
     app.add_config_value('cfg_options_summary', "table", 'html')
     app.add_config_value('cfg_options_table_add_header', True, 'html')
     app.add_config_value('cfg_options_default_in_summary_table', True, 'html')
+    app.add_config_value('cfg_options_unique', True, 'html')
 
     app.add_domain(CfgDomain)
 
