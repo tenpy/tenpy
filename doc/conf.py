@@ -206,3 +206,4 @@ def linkcode_resolve(domain, info):
 # -- sphinx_cfg_options ---------------------------------------------------
 
 cfg_options_default_in_summary_table = False
+cfg_options_always_include = ["Config"]

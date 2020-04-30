@@ -28,6 +28,12 @@ class Config(MutableMapping, Hdf5Exportable):
     - Nicer formatting with ``print(config)``
     - Import/export to yaml and hdf5 files.
 
+    .. cfg:config :: Config
+
+        verbose : int | float
+            How much to print what's being done; higher means print more.
+            Sub-configs default to having the parent `verbose` divided by 10.
+
     Parameters
     ----------
     config : dict

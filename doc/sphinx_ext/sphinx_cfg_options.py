@@ -431,7 +431,7 @@ class CfgOptionIndex(Index):
     shortname = 'Config Option'
 
     def generate(self, docnames=None):
-        config_options = self.domain.config_options.copy()
+        config_options = self.domain.all_config_options.copy()
         content = []
         dummy_option = OptionEntry(*([""] * 11))
         for k in sorted(config_options.keys(), key=lambda x: x.upper()):
@@ -641,6 +641,11 @@ class CfgDomain(Domain):
             handled_recursive = set([])
             for config in master_configs.keys():
                 self._set_recursive_include(config, handled_recursive)
+        always_include = self.env.config.cfg_options_always_include
+        for incl in always_include:
+            for master in master_configs.values():
+                if incl not in master.includes:
+                    master.includes.append(incl)
         return master_configs
 
     def _build_config_options(self):
@@ -711,6 +716,7 @@ def setup(app):
     app.add_config_value('cfg_options_table_add_header', True, 'html')
     app.add_config_value('cfg_options_default_in_summary_table', True, 'html')
     app.add_config_value('cfg_options_unique', True, 'html')
+    app.add_config_value('cfg_options_always_include', [], 'html')
 
     app.add_domain(CfgDomain)
 
