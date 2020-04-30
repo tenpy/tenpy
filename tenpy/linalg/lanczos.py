@@ -28,6 +28,36 @@ class LanczosGroundState:
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `params` to :attr:`options`.
 
+    .. cfg:config :: Lanczos
+
+        N_min : int
+            Minimum number of steps to perform.
+        N_max : int
+            Maximum number of steps to perform.
+        E_tol : float
+            Stop if energy difference per step < `E_tol`
+        P_tol : float
+            Tolerance for the error estimate from the Ritz Residual,
+            stop if ``(RitzRes/gap)**2 < P_tol``
+        min_gap : float
+            Lower cutoff for the gap estimate used in the P_tol criterion.
+        N_cache : int
+            The maximum number of `psi` to keep in memory during the first iteration.
+            By default, we keep all states (up to N_max).
+            Set this to a number >= 2 if you are short on memory.
+            The penalty is that one needs another Lanczos iteration to
+            determine the ground state in the end, i.e., runtime is large.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
+        cutoff : float
+            Cutoff to abort if `beta` (= norm of next vector in Krylov basis before normalizing)
+            is too small.
+            This is necessary if the rank of `H` is smaller than `N_max` -
+            then we get a complete basis of the Krylov space, and `beta` will be zero.
+
     Parameters
     ----------
     H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
@@ -40,43 +70,9 @@ class LanczosGroundState:
         Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
         as vectors.
     options : dict
-        Further optional parameters as described in the following table.
-        Add a parameter ``verbose >=1`` to print the used parameters during runtime.
+        Further optional parameters as described in :cfg:config:`Lanczos`.
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
         or if the maximum number of steps was reached.
-
-        ======= ====== ===============================================================
-        key     type   description
-        ======= ====== ===============================================================
-        N_min   int    Minimum number of steps to perform.
-        ------- ------ ---------------------------------------------------------------
-        N_max   int    Maximum number of steps to perform.
-        ------- ------ ---------------------------------------------------------------
-        E_tol   float  Stop if energy difference per step < `E_tol`
-        ------- ------ ---------------------------------------------------------------
-        P_tol   float  Tolerance for the error estimate from the
-                       Ritz Residual, stop if ``(RitzRes/gap)**2 < P_tol``
-        ------- ------ ---------------------------------------------------------------
-        min_gap float  Lower cutoff for the gap estimate used in the P_tol criterion.
-        ------- ------ ---------------------------------------------------------------
-        N_cache int    The maximum number of `psi` to keep in memory during the first
-                       iteration. By default, we keep all states (up to N_max).
-                       Set this to a number >= 2 if you are short on memory.
-                       The penalty is that one needs another Lanczos iteration to
-                       determine the ground state in the end, i.e., runtime is large.
-        ------- ------ ---------------------------------------------------------------
-        reortho bool   For poorly conditioned matrices, one can quickly loose
-                       orthogonality of the generated Krylov basis.
-                       If `reortho` is True, we re-orthogonalize against all the
-                       vectors kept in cache to avoid that problem.
-        ------- ------ ---------------------------------------------------------------
-        cutoff  float  Cutoff to abort if `beta` (= norm of next vector in Krylov
-                       basis before normalizing) is too small.
-                       This is necessary if the rank of A is smaller than N_max -
-                       then we get a complete basis of the Krylov space,
-                       and `beta` will be zero.
-        ======= ====== ===============================================================
-
     orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
         Vectors (same tensor structure as psi) against which Lanczos will orthogonalize,
         ensuring that the result is perpendicular to them.
@@ -286,13 +282,20 @@ class LanczosEvolution(LanczosGroundState):
     ground state, we now calculate ``exp(delta T) e_0 in the Krylov ONB, where
     ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
 
+    .. cfg:config :: LanczosEvolution
+        :include: Lanczos
+
+        E_tol :
+            Ignored.
+        min_gap :
+            Ignored.
+
     Parameters
     ----------
     H, psi0, options :
         Hamiltonian, starting vector and parameters as defined in :class:`LanczosGroundState`.
-        The parameters `E_tol` and `min_gap` are ignored,
-        the parameters `P_tol` defines when convergence is reached, see :meth:`_converged` for
-        details.
+        The option :cfg:option`LanczosEvolution.P_tol` defines when convergence is reached,
+        see :meth:`_converged` for details.
 
     Attributes
     ----------

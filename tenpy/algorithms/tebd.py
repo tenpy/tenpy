@@ -51,10 +51,20 @@ __all__ = ['Engine', 'RandomUnitaryEvolution']
 
 
 class Engine:
-    """Time Evolving Block Decimation (TEBD) 'engine'.
+    """Time Evolving Block Decimation (TEBD) algorithm.
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
+
+    .. cfg:config :: TEBD
+
+        trunc_params : dict
+            Truncation parameters as described in :cfg:config:`truncate`.
+        start_time : float
+            Initial value for :attr:`evolved_time`.
+        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            Initial truncation error for :attr:`trunc_err`.
+
 
     Parameters
     ----------
@@ -70,7 +80,9 @@ class Engine:
     Attributes
     ----------
     verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
+        See :cfg:option:`TEBD.verbose`.
+    options: :class:`~tenpy.tools.params.Config`
+        Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
@@ -80,8 +92,6 @@ class Engine:
         The MPS, time evolved in-place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model defining the Hamiltonian.
-    options: :class:`~tenpy.tools.params.Config`
-        Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
     _U : list of list of :class:`~tenpy.linalg.np_conserved.Array`
         Exponentiated `H_bond` (bond Hamiltonians), i.e. roughly ``exp(-i H_bond dt_i)``.
         First list for different `dt_i` as necessary for the chosen `order`,
@@ -97,9 +107,8 @@ class Engine:
     """
     def __init__(self, psi, model, options):
         self.options = options = asConfig(options, "TEBD")
-        self.verbose = options.get('verbose', 1)
-        self.trunc_params = options.get('trunc_params', {})
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        self.verbose = options.verbose
+        self.trunc_params = options.subconfig('trunc_params')
         self.psi = psi
         self.model = model
         self.evolved_time = options.get('start_time', 0.)
@@ -122,24 +131,17 @@ class Engine:
     def run(self):
         """(Real-)time evolution with TEBD (time evolving block decimation).
 
-        The following (optional) parameters are read out from the :attr:`options`.
+        .. cfg:configoptions :: TEBD
 
-        ============== ====== ======================================================
-        key            type   description
-        ============== ====== ======================================================
-        dt             float  Time step.
-        -------------- ------ ------------------------------------------------------
-        order          int    Order of the algorithm.
-                                The total error scales as O(t, dt^order).
-        -------------- ------ ------------------------------------------------------
-        N_steps        int    Number of time steps `dt` to evolve.
-                              (The Trotter decompositions of order > 1 are slightly
-                              more efficient if more than one step is performed at
-                              once.)
-        -------------- ------ ------------------------------------------------------
-        trunc_params   dict   Truncation parameters as described in
-                              :func:`~tenpy.algorithms.truncation.truncate`.
-        ============== ====== ======================================================
+            dt : float
+                Time step.
+            N_steps : int
+                Number of time steps `dt` to evolve.
+                The Trotter decompositions of order > 1 are slightly more efficient
+                if more than one step is performed at once.
+            order : int
+                Order of the algorithm. The total error scales as ``O(t*dt^order)``.
+
         """
         # initialize parameters
         delta_t = self.options.get('dt', 0.1)
@@ -173,30 +175,19 @@ class Engine:
             It is almost always more efficient (and hence advisable) to use DMRG.
             This algorithms can nonetheless be used quite well as a benchmark and for comparison.
 
-        The following (optional) parameters are read out from the :attr:`options`.
-        Use ``verbose=1`` to print the used parameters during runtime.
+        .. cfg:configoptions :: TEBD
 
-        ============== ====== =============================================
-        key            type   description
-        ============== ====== =============================================
-        delta_tau_list list   A list of floats: the timesteps to be used.
-                              Choosing a large timestep `delta_tau`
-                              introduces large (Trotter) errors, but a too
-                              small time step requires a lot of steps to
-                              reach  ``exp(-tau H) --> |psi0><psi0|``.
-                              Therefore, we start with fairly large time
-                              steps for a quick time evolution until
-                              convergence, and the gradually decrease the
-                              time step.
-        -------------- ------ ---------------------------------------------
-        order          int    Order of the Suzuki-Trotter decomposition.
-        -------------- ------ ---------------------------------------------
-        N_steps        int    Number of steps before measurement can be
-                              performed
-        -------------- ------ ---------------------------------------------
-        trunc_params   dict   Truncation parameters as described in
-                              :func:`~tenpy.algorithms.truncation.truncate`
-        ============== ====== =============================================
+            delta_tau_list : list
+                A list of floats: the timesteps to be used.
+                Choosing a large timestep `delta_tau` introduces large (Trotter) errors,
+                but a too small time step requires a lot of steps to reach
+                ``exp(-tau H) --> |psi0><psi0|``.
+                Therefore, we start with fairly large time steps for a quick time evolution until
+                convergence, and the gradually decrease the time step.
+            order : int
+                Order of the Suzuki-Trotter decomposition.
+            N_steps : int
+                Number of steps before measurement can be performed
         """
         # initialize parameters
         delta_tau_list = self.options.get(
@@ -643,6 +634,13 @@ class RandomUnitaryEvolution(Engine):
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
 
+    .. cfg:config :: RandomUnitaryEvolution
+
+        N_steps : int
+            Number of two-site unitaries to be applied on each bond.
+        trunc_params : dict
+            Truncation parameters as described in :cfg:config:`truncate`
+
     Parameters
     ----------
     psi : :class:`~tenpy.networs.mps.MPS`
@@ -682,20 +680,7 @@ class RandomUnitaryEvolution(Engine):
         Engine.__init__(self, psi, None, options)
 
     def run(self):
-        """Time evolution with TEBD (time evolving block decimation) and random two-site unitaries.
-
-        The following (optional) parameters are read out from the :attr:`options`.
-
-        ============== ====== ======================================================
-        key            type   description
-        ============== ====== ======================================================
-        N_steps        int    Number of two-site unitaries to be applied on each
-                              bond.
-        -------------- ------ ------------------------------------------------------
-        trunc_params   dict   Truncation parameters as described in
-                              :func:`~tenpy.algorithms.truncation.truncate`
-        ============== ====== ======================================================
-        """
+        """Time evolution with TEBD and random two-site unitaries."""
         N_steps = self.options.get('N_steps', 1)
         if self.verbose >= 1:
             Sold = np.average(self.psi.entanglement_entropy())

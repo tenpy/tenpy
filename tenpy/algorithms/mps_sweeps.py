@@ -147,24 +147,24 @@ class Sweep:
                 uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
                 `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
             LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial left-most `LP` ('left part') of the environment. By 
-                default (``None``) generate trivial, see 
+                Initial left-most `LP` ('left part') of the environment. By
+                default (``None``) generate trivial, see
                 :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
             LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the 
+                The 'age' (i.e. number of physical sites invovled into the
                 contraction of the left-most `LP` of the environment.)
             LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial right-most `RP` ('right part') of the environment. By 
-                default (``None``) generate trivial, see 
+                Initial right-most `RP` ('right part') of the environment. By
+                default (``None``) generate trivial, see
                 :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
             LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the 
+                The 'age' (i.e. number of physical sites invovled into the
                 contraction of the right-most `RP` of the environment.)
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-                List of environments ``<psi|psi_ortho>``, where `psi_ortho` is 
+                List of environments ``<psi|psi_ortho>``, where `psi_ortho` is
                 an MPS to orthogonalize against.
             start_env : int
-                Number of sweeps to be performed without optimization to update 
+                Number of sweeps to be performed without optimization to update
                 the environment.
 
         Parameters
