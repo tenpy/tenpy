@@ -123,6 +123,7 @@ todo_include_todos = True  # show todo-boxes in output
 
 napoleon_use_admonition_for_examples = True
 napoleon_use_ivar = False  # otherwise :attr:`...` doesn't work anymore
+napoleon_custom_sections = ['Options']
 
 # -- sphinx.ext.inheritance_diagram ---------------------------------------
 
