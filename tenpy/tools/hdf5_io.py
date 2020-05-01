@@ -16,7 +16,8 @@ the :class:`Hdf5Saver` and :class:`Hdf5Loader` classes
 and the wrapper functions :func:`save_to_hdf5`, :func:`load_from_hdf5`.
 
 .. note ::
-    To use the export/import features to HDF5, you need to install the `h5py`_ python package
+    To use the export/import features to HDF5, you need to install the
+    `h5py <http://docs.h5py.org>`_ python package
     (and hence some version of the HDF5 library).
 
 .. rubric:: Global module constants used for our HDF5 format
@@ -245,12 +246,12 @@ class Hdf5Exportable:
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
 
         This implementation saves the content of :attr:`~object.__dict__` with
-        :meth:`~tenpy.tools.io.Hdf5Saver.save_dict_content`,
+        :meth:`~tenpy.tools.hdf5_io.Hdf5Saver.save_dict_content`,
         storing the format under the attribute ``'format'``.
 
         Parameters
         ----------
-        hdf5_saver : :class:`~tenpy.tools.io.Hdf5Saver`
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
             Instance of the saving engine.
         h5gr : :class`Group`
             HDF5 group which is supposed to represent `self`.

@@ -8,8 +8,10 @@ We choose the field along z to allow to conserve the parity, if desired.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
+import numpy as np
+
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite
 
 __all__ = ['TFIModel', 'TFIChain']
@@ -26,43 +28,27 @@ class TFIModel(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs, each pair appearing
     exactly once.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
-    conserve : None | 'parity'
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-    J, g : float | array
-        Couplings as defined for the Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`TFIModel` below.
 
+    Options
+    -------
+    .. cfg:config :: TFIModel
+        :include: CouplingMPOModel
+
+        conserve : None | 'parity'
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        J, g : float | array
+            Coupling as defined for the Hamiltonian above.
+
+    """
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
+        conserve = model_params.get('conserve', 'parity')
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
@@ -72,8 +58,8 @@ class TFIModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        J = get_parameter(model_params, 'J', 1., self.name, True)
-        g = get_parameter(model_params, 'g', 1., self.name, True)
+        J = np.asarray(model_params.get('J', 1.))
+        g = np.asarray(model_params.get('g', 1.))
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-g, u, 'Sigmaz')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
@@ -87,5 +73,6 @@ class TFIChain(TFIModel, NearestNeighborModel):
     See the :class:`TFIModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

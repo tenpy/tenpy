@@ -11,7 +11,7 @@ This can be used to obtain correlation functions in time.
 from . import tebd
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..linalg import random_matrix as rand_mat
 
@@ -28,35 +28,37 @@ __all__ = [
 class PurificationTEBD(tebd.Engine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
+    .. deprecated :: 0.6.0
+        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networs.purification_mps.PurificationMPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
-    TEBD_params : dict
+    options : dict
         Further optional parameters as described in the following table.
         Use ``verbose=1`` to print the used parameters during runtime.
         See :func:`run` and :func:`run_GS` for more details.
 
     Attributes
     ----------
-    disent_iterations
     used_disentangler : :class:`Disentangler`
         The disentangler to be used on the auxiliar indices.
         Chosen by :func:`get_disentangler`, called with the TEBD parameter ``'disentangle'``.
-        Defaults to the trivial disentangler for ``TEBD_params['disentangle']=None``.
+        Defaults to the trivial disentangler for ``options['disentangle']=None``.
     _disent_iterations : 1D ndarray
         Number of iterations performed on all bonds, including trivial bonds; lenght `L`.
     _guess_U_disent : list of list of npc.Array
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
-    def __init__(self, psi, model, TEBD_params):
-        super().__init__(psi, model, TEBD_params)
+    def __init__(self, psi, model, options):
+        super().__init__(psi, model, asConfig(options, 'PurificationTEBD'))
         self._disent_iterations = np.zeros(psi.L)
         self._guess_U_disent = None  # will be set in calc_U
-        method = get_parameter(self.TEBD_params, 'disentangle', None, 'PurificationTEBD')
+        method = self.options.get('disentangle', None)
         self.used_disentangler = get_disentangler(str(method), self)
 
     def run_imaginary(self, beta):
@@ -68,10 +70,10 @@ class PurificationTEBD(tebd.Engine):
         ----------
         beta : float
             The inverse temperature `beta` = 1/T, by which we should cool down.
-            We evolve to the closest multiple of ``TEBD_params['dt']``,
+            We evolve to the closest multiple of ``options['dt']``,
             see also :attr:`evolved_time`.
         """
-        delta_t = get_parameter(self.TEBD_params, 'dt', 0.1, 'PurificationTEBD')
+        delta_t = self.options.get('dt', 0.1)
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update_imag(N_steps=int(beta / delta_t + 0.5))
@@ -217,7 +219,7 @@ class PurificationTEBD(tebd.Engine):
             / correlation functions!
 
         The behaviour of this function is set by :attr:`used_disentangler`,
-        which in turn is obtained from ``get_disentangler(TEBD_params['disentangle'])``,
+        which in turn is obtained from ``get_disentangler(options['disentangle'])``,
         see :func:`get_disentangler` for details on the syntax.
 
         Parameters
@@ -245,7 +247,7 @@ class PurificationTEBD(tebd.Engine):
         Caclulate the mutual information (in the auxiliar space) between two sites and determine
         where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
-        max_range = get_parameter(self.TEBD_params, 'disent_gl_maxrange', 10, 'PurificationTEBD')
+        max_range = self.options.get('disent_gl_maxrange', 10)
         if pair is None:
             coords, mutinf = self.psi.mutinf_two_site(max_range, legs='q')
             # TODO: recalculate mutinf only as necessary and do multiple steps at once...
@@ -327,7 +329,7 @@ class PurificationTEBD(tebd.Engine):
 
     def _disentangle_two_site(self, i, j):
         """swap until i and j are next to each other and use :meth:`disentangle`; swap back."""
-        on_way = get_parameter(self.TEBD_params, 'disent_gl_on_swap', False, 'PurificationTEBD')
+        on_way = self.options.get('disent_gl_on_swap', False)
         if not self.psi.finite:
             raise NotImplementedError  # adjust: what's the shortest path?
         assert (i < j)
@@ -539,7 +541,7 @@ class RenyiDisentangler(Disentangler):
 
     See [Hauschild2018]_
 
-    Reads of the following `TEBD_params` as break criteria for the iteration:
+    Reads of the following `options` as break criteria for the iteration:
 
     ================ ====== ======================================================
     key              type   description
@@ -553,9 +555,8 @@ class RenyiDisentangler(Disentangler):
     Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
-                                      'PurificationTEBD')
-        self.eps = get_parameter(parent.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
+        self.max_iter = parent.options.get('disent_max_iter', 20)
+        self.eps = parent.options.get('disent_eps', 1.e-10)
         self.parent = parent
 
     def __call__(self, theta):
@@ -643,7 +644,7 @@ class RenyiDisentangler(Disentangler):
 class NormDisentangler(Disentangler):
     """Find optimal `U` for which the truncation of U|theta> has maximal overlap with U|theta>.
 
-    Reads of the following `TEBD_params` as break criteria for the iteration:
+    Reads of the following `options` as break criteria for the iteration:
 
     ================ ========= ======================================================
     key              type      description
@@ -666,15 +667,12 @@ class NormDisentangler(Disentangler):
     Arguments and return values are the same as for :meth:`disentangle`.
     """
     def __init__(self, parent):
-        self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
-                                      'PurificationTEBD')
-        self.eps = get_parameter(parent.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
-        self.trunc_par = get_parameter(parent.TEBD_params, 'disent_trunc_par', parent.trunc_params,
-                                       'PurificationTEBD')
-        self.chi_max = get_parameter(self.trunc_par, 'chi_max', 100, 'PurificationTEBD')
-        self.trunc_cut = get_parameter(self.trunc_par, 'trunc_cut', None, 'PurificationTEBD')
-        self.chi_range = get_parameter(self.trunc_par, 'disent_norm_chi',
-                                       range(1, self.chi_max + 1), 'PurificationTEBD')
+        self.max_iter = parent.options.get('disent_max_iter', 20)
+        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.trunc_par = parent.options.get('disent_trunc_par', parent.trunc_params)
+        self.chi_max = self.trunc_par.get('chi_max', 100)
+        self.trunc_cut = self.trunc_par.get('trunc_cut', None)
+        self.chi_range = self.trunc_par.get('disent_norm_chi', range(1, self.chi_max + 1))
         self.parent = parent
 
     def __call__(self, theta):
@@ -757,12 +755,10 @@ class GradientDescentDisentangler(Disentangler):
     Arguments and return values are the same as for :class:`Disentangler`.
     """
     def __init__(self, parent):
-        self.max_iter = get_parameter(parent.TEBD_params, 'disent_max_iter', 20,
-                                      'PurificationTEBD')
-        self.eps = get_parameter(parent.TEBD_params, 'disent_eps', 1.e-10, 'PurificationTEBD')
-        self.n = get_parameter(parent.TEBD_params, 'disent_n', 1., 'PurificationTEBD')
-        self.stepsizes = get_parameter(parent.TEBD_params, 'disent_stepsizes', [0.2, 1., 2.],
-                                       'PurificationTEBD')
+        self.max_iter = parent.options.get('disent_max_iter', 20)
+        self.eps = parent.options.get('disent_eps', 1.e-10)
+        self.n = parent.options.get('disent_n', 1.)
+        self.stepsizes = parent.options.get('disent_stepsizes', [0.2, 1., 2.])
         self.parent = parent
 
     def __call__(self, theta):
@@ -865,7 +861,7 @@ class NoiseDisentangler(Disentangler):
     Arguments and return values are the same as for :class:`Disentangler`.
     """
     def __init__(self, parent):
-        self.a = get_parameter(parent.TEBD_params, 'disent_noiselevel', 0.01, 'PurificationTEBD')
+        self.a = parent.options.get('disent_noiselevel', 0.01)
 
     def __call__(self, theta):
         a = self.a
@@ -978,7 +974,7 @@ class MinDisentangler(Disentangler):
     """
     def __init__(self, disentanglers, parent):
         self.disentanglers = disentanglers
-        self.n = get_parameter(parent.TEBD_params, 'disent_min_n', 1., 'PurificationTEBD')
+        self.n = parent.options.get('disent_min_n', 1.)
 
     def __call__(self, theta):
         theta_min, U_min = self.disentanglers[0](theta)

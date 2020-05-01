@@ -47,8 +47,6 @@ class Site(Hdf5Exportable):
 
     Attributes
     ----------
-    dim
-    onsite_ops
     leg : :class:`~tenpy.linalg.charges.LegCharge`
         Charges of the local basis states.
     state_labels : {str: int}

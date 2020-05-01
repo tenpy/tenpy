@@ -97,9 +97,6 @@ class Lattice:
 
     Attributes
     ----------
-    dim : int
-    order : ndarray (N_sites, dim+1)
-    boundary_conditions
     Ls : tuple of int
         the length in each direction.
     shape : tuple of int
@@ -430,7 +427,7 @@ class Lattice:
                 self.bc_shift = None
         self.bc = np.array(bc)
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
