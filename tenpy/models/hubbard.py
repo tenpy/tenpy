@@ -25,6 +25,7 @@ class BoseHubbardModel(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: BoseHubbardModel
+
         n_max : int
             Maximum number of bosons per site.
         filling : float
@@ -128,6 +129,7 @@ class FermiHubbardModel(CouplingMPOModel):
         See :doc:`/intro/JordanWigner` for details.
 
     .. cfg:config :: FermiHubbardModel
+
         cons_N : {'N' | 'parity' | None}
             Whether particle number is conserved,
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.

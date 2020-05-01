@@ -65,6 +65,7 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: ToricCode
+
         Lx: int
             Dimension of the lattice, number of plaquettes around the cylinder.
         Ly: int

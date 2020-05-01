@@ -45,6 +45,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: SpinChainNNN
+
         L : int
             Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
             i.e. we have ``2*L`` spin sites.
@@ -158,54 +159,55 @@ class SpinChainNNN2(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: SpinChainNNN2
-    S : {0.5, 1, 1.5, 2, ...}
-        The 2S+1 local states range from m = -S, -S+1, ... +S.
-    conserve : 'best' | 'Sz' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-        For ``'best'``, we check the parameters what can be preserved.
-    Jx : float | array
-        Couplings as defined for the Hamiltonian above.
-    Jy : float | array
-        Couplings as defined for the Hamiltonian above.
-    Jz : float | array
-        Couplings as defined for the Hamiltonian above.
-    Jxp : float | array
-        Couplings as defined for the Hamiltonian above.
-    Jyp : float | array
-        Couplings as defined for the Hamiltonian above.
-    Jzp : float | array
-        Couplings as defined for the Hamiltonian above.
-    hx : float | array
-        Couplings as defined for the Hamiltonian above.
-    hy : float | array
-        Couplings as defined for the Hamiltonian above.
-    hz : float | array
-        Couplings as defined for the Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx : int
-        Length of the lattice in x--direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    Ly : int
-        Length of the lattice in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
+
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+        conserve : 'best' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+            For ``'best'``, we check the parameters what can be preserved.
+        Jx : float | array
+            Couplings as defined for the Hamiltonian above.
+        Jy : float | array
+            Couplings as defined for the Hamiltonian above.
+        Jz : float | array
+            Couplings as defined for the Hamiltonian above.
+        Jxp : float | array
+            Couplings as defined for the Hamiltonian above.
+        Jyp : float | array
+            Couplings as defined for the Hamiltonian above.
+        Jzp : float | array
+            Couplings as defined for the Hamiltonian above.
+        hx : float | array
+            Couplings as defined for the Hamiltonian above.
+        hy : float | array
+            Couplings as defined for the Hamiltonian above.
+        hz : float | array
+            Couplings as defined for the Hamiltonian above.
+        lattice : str | :class:`~tenpy.models.lattice.Lattice`
+            Instance of a lattice class for the underlaying geometry.
+            Alternatively a string being the name of one of the Lattices defined in
+            :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions along the x-direction.
+            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
+            Coupling boundary conditions in x-direction are chosen accordingly.
+            Only used if `lattice` is a string.
+        order : string
+            Ordering of the sites in the MPS, e.g. 'default', 'snake';
+            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+            Only used if `lattice` is a string.
+        L : int
+            Lenght of the lattice.
+            Only used if `lattice` is the name of a 1D Lattice.
+        Lx : int
+            Length of the lattice in x--direction.
+            Only used if `lattice` is the name of a 2D Lattice.
+        Ly : int
+            Length of the lattice in y-direction.
+            Only used if `lattice` is the name of a 2D Lattice.
+        bc_y : 'ladder' | 'cylinder'
+            Boundary conditions in y-direction.
+            Only used if `lattice` is the name of a 2D Lattice.
 
     Parameters
     ----------

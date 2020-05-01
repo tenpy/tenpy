@@ -30,6 +30,7 @@ class SpinModel(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: SpinModel
+
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'Sz' | 'parity' | None

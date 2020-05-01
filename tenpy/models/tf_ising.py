@@ -32,6 +32,7 @@ class TFIModel(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: TFIModel
+
         conserve : None | 'parity'
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
         J : float | array

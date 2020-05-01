@@ -236,6 +236,7 @@ class HofstadterBosons(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: HofstadterBosons
+
         Lx : int
             Length of the lattice in x-direction.
         Ly : int

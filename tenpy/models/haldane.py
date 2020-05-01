@@ -30,6 +30,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: BosonicHaldaneModel
+
         conserve : 'best' | 'N' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
             For ``'best'``, we check the parameters that can be preserved.

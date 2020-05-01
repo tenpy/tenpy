@@ -26,10 +26,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
                  + \mathtt{Jz} S^z_i S^z_{i+1} \\
             - \sum_i \mathtt{hz} S^z_i
 
-    All parameters are collected in a single dictionary `model_params`, which 
+    All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: XXZChain
+
         L : int
             Length of the chain.
         Jxx : float | array
