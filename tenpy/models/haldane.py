@@ -20,16 +20,17 @@ class BosonicHaldaneModel(CouplingMPOModel):
         + V \sum_{\langle ij \rangle, i<j} n_{A, i} n_{B, j}
 
 
-    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`n_A, n_B` are the number operators
-    on the A and B sites. Hopping is allowed to nearest and next-nearest neighbor sites with amplitudes
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`n_A, n_B`
+    are the number operators on the A and B sites.
+    Hopping is allowed to nearest and next-nearest neighbor sites with amplitudes
     :math:`t_{\langle ij \rangle}=t_1 \in \mathbb{R}` and
-    :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
-    :math:`\pm\phi` is the phase acquired by a boson hopping between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is translated from [Grushin2015]_.
-    All parameters are collected in a single dictionary `model_params`, which
-    is turned into a :class:`~tenpy.tools.params.Config` object.
+    :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
+    respectively, where :math:`\pm\phi` is the phase acquired by a boson hopping between atoms
+    in the same sublattice with a sign given by the direction of the hopping.
+    This Hamiltonian is translated from [Grushin2015]_.
 
     .. cfg:config :: BosonicHaldaneModel
+        :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
@@ -37,24 +38,6 @@ class BosonicHaldaneModel(CouplingMPOModel):
         t1, t2, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
-        bc_MPS : {'finite' | 'infinte'}
-            MPS boundary conditions along the x-direction.
-            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-            Coupling boundary conditions in x-direction are chosen accordingly.
-            Only used if `lattice` is a string.
-        order : string
-            Ordering of the sites in the MPS, e.g. 'default', 'snake';
-            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-            Only used if `lattice` is a string.
-        L : int
-            Lenght of the lattice.
-            Only used if `lattice` is the name of a 1D Lattice.
-        Lx, Ly : int
-            Length of the lattice in x- and y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        bc_y : 'ladder' | 'cylinder'
-            Boundary conditions in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
 
     Parameters
     ----------
@@ -105,54 +88,27 @@ class FermionicHaldaneModel(CouplingMPOModel):
         + V \sum_{\langle ij \rangle, i<j} n_{A, i} n_{B, j}
 
 
-    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`n_A, n_B` are the number operators
-    on the A and B sites. Hopping is allowed to nearest and next-nearest neighbor sites with amplitudes
+    Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs and :math:`n_A, n_B`
+    are the number operators on the A and B sites.
+    Hopping is allowed to nearest and next-nearest neighbor sites with amplitudes
     :math:`t_{\langle ij \rangle}=t_1 \in \mathbb{R}` and
-    :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}` respectively, where
-    :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
+    :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
+    respectively, where :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
     given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
-    All parameters are collected in a single dictionary `model_params`, which
-    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
     .. cfg:config :: FermionicHaldaneModel
+        :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
             For ``'best'``, we check the parameters what can be preserved.
-        t1 : float | array
-            Hopping as defined for the Hamiltonian above.
-        t2 : float | array
-            Hopping as defined for the Hamiltonian above.
+        t1, t2, V, mu : float | array
+            Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
-        V : float | array
-            Interaction as defined for the Hamiltonian above.
-        mu : float | array
-            Chemical potential as defined for the Hamiltonian above.
-        bc_MPS : {'finite' | 'infinte'}
-            MPS boundary conditions along the x-direction.
-            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-            Coupling boundary conditions in x-direction are chosen accordingly.
-            Only used if `lattice` is a string.
-        order : string
-            Ordering of the sites in the MPS, e.g. 'default', 'snake';
-            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-            Only used if `lattice` is a string.
-        L : int
-            Lenght of the lattice.
-            Only used if `lattice` is the name of a 1D Lattice.
-        Lx : int
-            Length of the lattice in x-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        Ly : int
-            Length of the lattice in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        bc_y : 'ladder' | 'cylinder'
-            Boundary conditions in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
 
     Parameters
     ----------

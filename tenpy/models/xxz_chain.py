@@ -30,14 +30,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: XXZChain
+        :include: CouplingMPOModel
 
         L : int
             Length of the chain.
-        Jxx : float | array
-            Coupling as defined for the Hamiltonian above.
-        Jz : float | array
-            Coupling as defined for the Hamiltonian above.
-        hz : float | array
+        Jxx, Jz, hz : float | array
             Coupling as defined for the Hamiltonian above.
         bc_MPS : {'finite' | 'infinte'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.

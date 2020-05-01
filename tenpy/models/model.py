@@ -1494,6 +1494,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             CouplingMPOModel.__init__(self, model_params)
 
 
+    .. cfg:config :: CouplingMPOModel
+
+
+
     Parameters
     ----------
     model_params : dict
@@ -1555,46 +1559,40 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         of one of the predefined lattices, which then gets initialized.
         Depending on the dimensionality of the lattice, this requires different model parameters.
 
-        The following model parameters get read out.
+        .. cfg:configoptions :: CouplingMPOModel
 
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        lattice        str |     The name of a lattice pre-defined in TeNPy to be initialized.
-                       Lattice   Alternatively, a (possibly self-defined) Lattice instance.
-                                 In the latter case, no further parameters are read out.
-        -------------- --------- ---------------------------------------------------------------
-        bc_MPS         str       Boundary conditions for the MPS
-        -------------- --------- ---------------------------------------------------------------
-        order          str       The order of sites within the lattice for non-trivial lattices.
-        -------------- --------- ---------------------------------------------------------------
-        L              int       The length in x-direction (or lenght of the unit cell for
-                                 infinite systems).
-                                 Only read out for 1D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        Lx, Ly         int       The length in x- and y-direction.
-                                 For ``"infinite"`` `bc_MPS`, the system is infinite in
-                                 x-direction and `Lx` is the number of "rings" in the infinite
-                                 MPS unit cell, while `Ly` gives the circumference around the
-                                 cylinder or width of th the rung for a ladder (depending on
-                                 `bc_y`.
-                                 Only read out for 2D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        bc_y           str       ``"cylinder" | "ladder"``.
-                                 The boundary conditions in y-direction.
-                                 Only read out for 2D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        bc_x           str       ``"open" | "periodic"``.
-                                 Can be used to force "periodic" boundaries for the lattice,
-                                 i.e., for the couplings in the Hamiltonian,
-                                 even if the MPS is finite.
-                                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
-                                 ``"periodic"`` for ``bc_MPS="infinite``.
-                                 If you are not aware of the consequences, you should probably
-                                 *not* use "periodic" boundary conditions.
-                                 (The MPS is still "open", so this will introduce long-range
-                                 couplings between the first and last sites of the MPS!)
-        ============== ========= ===============================================================
+            lattice : str | Lattice
+                The name of a lattice pre-defined in TeNPy to be initialized.
+                Alternatively, a (possibly self-defined) Lattice instance.
+                In the latter case, no further parameters are read out.
+            bc_MPS : str
+                Boundary conditions for the MPS.
+            order : str
+                The order of sites within the lattice for non-trivial lattices,
+                e.g, ``'default', 'snake'``, see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+                Only used if `lattice` is a string.
+            L : int
+                The length in x-direction; only read out for 1D lattices.
+                For an infinite system the length of the unit cell.
+            Lx, Ly : int
+                The length in x- and y-direction; only read out for 2D lattices.
+                For ``"infinite"`` `bc_MPS`, the system is infinite in x-direction and
+                `Lx` is the number of "rings" in the infinite MPS unit cell,
+                while `Ly` gives the circumference around the cylinder or width of th the rung
+                for a ladder (depending on `bc_y`).
+            bc_y : str
+               ``"cylinder" | "ladder"``; only read out for 2D lattices.
+               The boundary conditions in y-direction.
+            bc_x : str
+                ``"open" | "periodic"``.
+                Can be used to force "periodic" boundaries for the lattice,
+                i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
+                Defaults to ``"open"`` for ``bc_MPS="finite"`` and
+                ``"periodic"`` for ``bc_MPS="infinite``.
+                If you are not aware of the consequences, you should probably
+                *not* use "periodic" boundary conditions.
+                (The MPS is still "open", so this will introduce long-range
+                couplings between the first and last sites of the MPS!)
 
         Parameters
         ----------

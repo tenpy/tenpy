@@ -65,19 +65,14 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: ToricCode
+        :include: CouplingMPOModel
 
-        Lx: int
-            Dimension of the lattice, number of plaquettes around the cylinder.
-        Ly: int
+        Lx, Ly: int
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        Jc : float | array
-            Coupling as defined for the Hamiltonian above.
-        Jp : float | array
-            Coupling as defined for the Hamiltonian above.
-        bc_MPS : {'finite' | 'infinte'}
-            MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        Jc, Jp : float | array
+            Couplings as defined for the Hamiltonian above.
         order : str
             The order of the lattice sites in the lattice, see :class:`DualSquare`.
 

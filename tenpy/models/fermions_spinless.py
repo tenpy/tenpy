@@ -20,9 +20,9 @@ class FermionModel(CouplingMPOModel):
 
     .. math ::
         H = \sum_{\langle i,j\rangle, i<j}
-              - \mathtt{J} (c^{\dagger}_i c_j + c^{\dagger}_j c_i) + \mathtt{V} n_i n_j \\
+              - \mathtt{J}~(c^{\dagger}_i c_j + c^{\dagger}_j c_i) + \mathtt{V}~n_i n_j \\
             - \sum_i
-              \mathtt{mu} n_{i}
+              \mathtt{mu}~n_{i}
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
     All parameters are collected in a single dictionary `model_params`, which
@@ -33,42 +33,13 @@ class FermionModel(CouplingMPOModel):
         See :doc:`/intro/JordanWigner` for details.
 
     .. cfg:config :: FermionModel
+        :include: CouplingMPOModel
 
         conserve : 'best' | 'N' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
             For ``'best'``, we check the parameters what can be preserved.
-        J : float | array
-            Hopping,as defined for the Hamiltonian above.
-        V : float | array
-            Interactionas defined for the Hamiltonian above.
-        mu : float | array
-            Chemical potential as defined for the Hamiltonian above.
-        lattice : str | :class:`~tenpy.models.lattice.Lattice`
-            Instance of a lattice class for the underlaying geometry.
-            Alternatively a string being the name of one of the Lattices defined in
-            :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-        bc_MPS : {'finite' | 'infinte'}
-            MPS boundary conditions along the x-direction.
-            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-            Coupling boundary conditions in x-direction are chosen accordingly.
-            Only used if `lattice` is a string.
-        order : string
-            Ordering of the sites in the MPS, e.g. 'default', 'snake';
-            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-            Only used if `lattice` is a string.
-        L : int
-            Lenght of the lattice.
-            Only used if `lattice` is the name of a 1D Lattice.
-        Lx : int
-            Length of the lattice in x-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        Ly : int
-            Length of the lattice in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        bc_y : 'ladder' | 'cylinder'
-            Boundary conditions in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-
+        J, V, mu : float | array
+            Hopping, interaction and chemical potential as defined for the Hamiltonian above.
 
     Parameters
     ----------

@@ -32,38 +32,12 @@ class TFIModel(CouplingMPOModel):
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. cfg:config :: TFIModel
+        :include: CouplingMPOModel
 
         conserve : None | 'parity'
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        J : float | array
+        J, g : float | array
             Coupling as defined for the Hamiltonian above.
-        g : float | array
-            Coupling as defined for the Hamiltonian above.
-        lattice : str | :class:`~tenpy.models.lattice.Lattice`
-            Instance of a lattice class for the underlaying geometry.
-            Alternatively a string being the name of one of the Lattices defined in
-            :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-        bc_MPS : {'finite' | 'infinte'}
-            MPS boundary conditions along the x-direction.
-            For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-            Coupling boundary conditions in x-direction are chosen accordingly.
-            Only used if `lattice` is a string.
-        order : string
-            Ordering of the sites in the MPS, e.g. 'default', 'snake';
-            see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-            Only used if `lattice` is a string.
-        L : int
-            Lenght of the lattice.
-            Only used if `lattice` is the name of a 1D Lattice.
-        Lx : int
-            Length of the lattice in x--direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        Ly : int
-            Length of the lattice in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
-        bc_y : 'ladder' | 'cylinder'
-            Boundary conditions in y-direction.
-            Only used if `lattice` is the name of a 2D Lattice.
 
     Parameters
     ----------
