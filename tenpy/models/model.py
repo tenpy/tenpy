@@ -40,7 +40,7 @@ from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import order_combine_term
@@ -1494,13 +1494,16 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             CouplingMPOModel.__init__(self, model_params)
 
 
+    .. cfg:config :: CouplingMPOModel
+
+
+
     Parameters
     ----------
     model_params : dict
         A dictionary with all the model parameters.
-        These parameters are given to the different ``init_...()`` methods, and
-        should be read out using :func:`~tenpy.tools.params.get_parameter`.
-        This may happen in any of the ``init_...()`` methods.
+        These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`,
+        and then set as :attr:`options` and given to the different ``init_...()`` methods.
         The parameter ``'verbose'`` is read out in the `__init__` of this function
         and specifies how much status information should be printed during initialization.
         The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
@@ -1511,7 +1514,9 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     Attributes
     ----------
     name : str
-        The name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
+        The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
+    options: :class:`~tenpy.tools.params.Config`
+        Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
     """
@@ -1522,10 +1527,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             # in the worst case we get the wrong Hamiltonian.
             raise ValueError("Called CouplingMPOModel.__init__(...) multiple times.")
             # To fix this problem, follow the instructions for subclassing in :doc:`/intro/model`.
-        self._called_CouplingMPOModel_init = True
         self.name = self.__class__.__name__
-        self.verbose = get_parameter(model_params, 'verbose', 1, self.name)
-        explicit_plus_hc = get_parameter(model_params, 'explicit_plus_hc', False, self.name)
+        self.options = model_params = asConfig(model_params, self.name)
+        self._called_CouplingMPOModel_init = True
+        self.verbose = model_params.get('verbose', 1)
+        explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
@@ -1534,14 +1540,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_terms(model_params)
         # 7) initialize H_MPO
         H_MPO = self.calc_H_MPO()
-        if get_parameter(model_params, 'sort_mpo_legs', False, self.name):
+        if model_params.get('sort_mpo_legs', False):
             H_MPO.sort_legcharges()
         MPOModel.__init__(self, lat, H_MPO)
         if isinstance(self, NearestNeighborModel):
             # 8) initialize H_bonds
             NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
         # checks for misspelled parameters
-        unused_parameters(model_params, self.name)
+        model_params.warn_unused()
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
@@ -1553,46 +1559,40 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         of one of the predefined lattices, which then gets initialized.
         Depending on the dimensionality of the lattice, this requires different model parameters.
 
-        The following model parameters get read out.
+        .. cfg:configoptions :: CouplingMPOModel
 
-        ============== ========= ===============================================================
-        key            type      description
-        ============== ========= ===============================================================
-        lattice        str |     The name of a lattice pre-defined in TeNPy to be initialized.
-                       Lattice   Alternatively, a (possibly self-defined) Lattice instance.
-                                 In the latter case, no further parameters are read out.
-        -------------- --------- ---------------------------------------------------------------
-        bc_MPS         str       Boundary conditions for the MPS
-        -------------- --------- ---------------------------------------------------------------
-        order          str       The order of sites within the lattice for non-trivial lattices.
-        -------------- --------- ---------------------------------------------------------------
-        L              int       The length in x-direction (or lenght of the unit cell for
-                                 infinite systems).
-                                 Only read out for 1D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        Lx, Ly         int       The length in x- and y-direction.
-                                 For ``"infinite"`` `bc_MPS`, the system is infinite in
-                                 x-direction and `Lx` is the number of "rings" in the infinite
-                                 MPS unit cell, while `Ly` gives the circumference around the
-                                 cylinder or width of th the rung for a ladder (depending on
-                                 `bc_y`.
-                                 Only read out for 2D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        bc_y           str       ``"cylinder" | "ladder"``.
-                                 The boundary conditions in y-direction.
-                                 Only read out for 2D lattices.
-        -------------- --------- ---------------------------------------------------------------
-        bc_x           str       ``"open" | "periodic"``.
-                                 Can be used to force "periodic" boundaries for the lattice,
-                                 i.e., for the couplings in the Hamiltonian,
-                                 even if the MPS is finite.
-                                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
-                                 ``"periodic"`` for ``bc_MPS="infinite``.
-                                 If you are not aware of the consequences, you should probably
-                                 *not* use "periodic" boundary conditions.
-                                 (The MPS is still "open", so this will introduce long-range
-                                 couplings between the first and last sites of the MPS!)
-        ============== ========= ===============================================================
+            lattice : str | Lattice
+                The name of a lattice pre-defined in TeNPy to be initialized.
+                Alternatively, a (possibly self-defined) Lattice instance.
+                In the latter case, no further parameters are read out.
+            bc_MPS : str
+                Boundary conditions for the MPS.
+            order : str
+                The order of sites within the lattice for non-trivial lattices,
+                e.g, ``'default', 'snake'``, see :meth:`~tenpy.models.lattice.Lattice.ordering`.
+                Only used if `lattice` is a string.
+            L : int
+                The length in x-direction; only read out for 1D lattices.
+                For an infinite system the length of the unit cell.
+            Lx, Ly : int
+                The length in x- and y-direction; only read out for 2D lattices.
+                For ``"infinite"`` `bc_MPS`, the system is infinite in x-direction and
+                `Lx` is the number of "rings" in the infinite MPS unit cell,
+                while `Ly` gives the circumference around the cylinder or width of th the rung
+                for a ladder (depending on `bc_y`).
+            bc_y : str
+               ``"cylinder" | "ladder"``; only read out for 2D lattices.
+               The boundary conditions in y-direction.
+            bc_x : str
+                ``"open" | "periodic"``.
+                Can be used to force "periodic" boundaries for the lattice,
+                i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
+                Defaults to ``"open"`` for ``bc_MPS="finite"`` and
+                ``"periodic"`` for ``bc_MPS="infinite``.
+                If you are not aware of the consequences, you should probably
+                *not* use "periodic" boundary conditions.
+                (The MPS is still "open", so this will introduce long-range
+                couplings between the first and last sites of the MPS!)
 
         Parameters
         ----------
@@ -1604,24 +1604,24 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         lat : :class:`~tenpy.models.lattice.Lattice`
             An initialized lattice.
         """
-        lat = get_parameter(model_params, 'lattice', "Chain", self.name)
+        lat = model_params.get('lattice', "Chain")
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
-            bc_MPS = get_parameter(model_params, 'bc_MPS', 'finite', self.name)
-            order = get_parameter(model_params, 'order', 'default', self.name)
+            bc_MPS = model_params.get('bc_MPS', 'finite')
+            order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
             bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-            bc_x = get_parameter(model_params, 'bc_x', bc_x, self.name)
+            bc_x = model_params.get('bc_x', bc_x)
             if bc_MPS == 'infinite' and bc_x == 'open':
                 raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
             if LatticeClass.dim == 1:  # 1D lattice
-                L = get_parameter(model_params, 'L', 2, self.name)
+                L = model_params.get('L', 2)
                 # 4) lattice
                 lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
-                Lx = get_parameter(model_params, 'Lx', 1, self.name)
-                Ly = get_parameter(model_params, 'Ly', 4, self.name)
-                bc_y = get_parameter(model_params, 'bc_y', 'cylinder', self.name)
+                Lx = model_params.get('Lx', 1)
+                Ly = model_params.get('Ly', 4)
+                bc_y = model_params.get('bc_y', 'cylinder')
                 assert bc_y in ['cylinder', 'ladder']
                 bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)

@@ -56,11 +56,6 @@ class ChargeInfo:
 
     Attributes
     ----------
-    qnumber : int
-        The number of charges.
-    mod :  ndarray[QTYPE,ndim=1]
-        Modulo how much each of the charges is taken.
-        1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
     names : list of strings
         A descriptive name for each of the charges.  May have '' entries.
     _mask : 1D array bool
@@ -68,7 +63,7 @@ class ChargeInfo:
     _mod_masked : 1D array QTYPE
         Equivalent to ``self.mod[self._maks_mod1]``
     _qnumber, _mod :
-        Storage of `qnumber` and `mod`.
+        Storage of :attr:`qnumber` and :attr:`mod`.
 
     Notes
     -----
@@ -242,7 +237,7 @@ class ChargeInfo:
     def mod(self):
         """Modulo how much each of the charges is taken.
 
-        1 for a U(1) charge, i.e., mod 1 -> mod infinity.
+        1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
         """
         # The property makes `mod` readonly.
         return self._mod

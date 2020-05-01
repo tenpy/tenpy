@@ -10,7 +10,7 @@ import numpy as np
 from .lattice import Lattice, _parse_sites
 from ..networks.site import SpinHalfSite
 from .model import MultiCouplingModel, CouplingMPOModel
-from ..tools.params import get_parameter, unused_parameters
+from ..tools.params import asConfig
 from ..tools.misc import any_nonzero
 
 __all__ = ['DualSquare', 'ToricCode']
@@ -61,52 +61,49 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
             - \mathtt{Jp} \sum_{plaquettes p} \prod_{i \in p} \sigma^z_i
 
     (Note that this are Pauli matrices, not spin-1/2 operators.)
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
+
+    .. cfg:config :: ToricCode
+        :include: CouplingMPOModel
+
+        Lx, Ly: int
+            Dimension of the lattice, number of plaquettes around the cylinder.
+        conserve : 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        Jc, Jp : float | array
+            Couplings as defined for the Hamiltonian above.
+        order : str
+            The order of the lattice sites in the lattice, see :class:`DualSquare`.
 
     Parameters
     ----------
-    Lx, Ly : int
-        Dimension of the lattice, number of plaquettes around the cylinder.
-    conserve : 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-    Jc, Jp: float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-    order : str
-        The order of the lattice sites in the lattice, see :class:`DualSquare`.
+    model_params : :class:`~tenpy.tools.params.Config`
+        See :cfg:config:`ToricCode`
     """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'parity', self.name)
+        conserve = model_params.get('conserve', 'parity')
         site = SpinHalfSite(conserve)
         return site
 
     def init_lattice(self, model_params):
         site = self.init_sites(model_params)
-        Lx = get_parameter(model_params, 'Lx', 2, self.name)
-        Ly = get_parameter(model_params, 'Ly', 2, self.name)
-        order = get_parameter(model_params, 'order', 'default', self.name)
-        bc_MPS = get_parameter(model_params, 'bc_MPS', 'infinite', self.name)
+        Lx = model_params.get('Lx', 2)
+        Ly = model_params.get('Ly', 2)
+        order = model_params.get('order', 'default')
+        bc_MPS = model_params.get('bc_MPS', 'infinite')
         bc = [None, 'periodic']
         bc[0] = 'periodic' if bc_MPS == 'infinite' else 'open'
         lat = DualSquare(Lx, Ly, site, order=order, bc=bc, bc_MPS=bc_MPS)
         return lat
 
     def init_terms(self, model_params):
-        Jv = get_parameter(model_params, 'Jv', 1., self.name, True)
-        Jp = get_parameter(model_params, 'Jp', 1., self.name, True)
+        Jv = model_params.get('Jv', 1.)
+        Jp = model_params.get('Jp', 1.)
         # vertex/star term
-        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0),
-                                     ('Sigmax', [0, 0], 1),
-                                     ('Sigmax', [-1, 0], 0),
-                                     ('Sigmax', [0, -1], 1)])
+        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0), ('Sigmax', [0, 0], 1),
+                                     ('Sigmax', [-1, 0], 0), ('Sigmax', [0, -1], 1)])
         # plaquette term
-        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0),
-                                     ('Sigmaz', [0, 0], 1),
-                                     ('Sigmaz', [0, 1], 0),
-                                     ('Sigmaz', [1, 0], 1)])
+        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0), ('Sigmaz', [0, 0], 1),
+                                     ('Sigmaz', [0, 1], 0), ('Sigmaz', [1, 0], 1)])
         # done

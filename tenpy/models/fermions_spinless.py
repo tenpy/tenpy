@@ -7,7 +7,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 from ..networks.site import FermionSite
 
 __all__ = ['FermionModel', 'FermionChain']
@@ -20,54 +20,35 @@ class FermionModel(CouplingMPOModel):
 
     .. math ::
         H = \sum_{\langle i,j\rangle, i<j}
-              - \mathtt{J} (c^{\dagger}_i c_j + c^{\dagger}_j c_i) + \mathtt{V} n_i n_j \\
+              - \mathtt{J}~(c^{\dagger}_i c_j + c^{\dagger}_j c_i) + \mathtt{V}~n_i n_j \\
             - \sum_i
-              \mathtt{mu} n_{i}
+              \mathtt{mu}~n_{i}
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
+    .. cfg:config :: FermionModel
+        :include: CouplingMPOModel
+
+        conserve : 'best' | 'N' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
+            For ``'best'``, we check the parameters what can be preserved.
+        J, V, mu : float | array
+            Hopping, interaction and chemical potential as defined for the Hamiltonian above.
+
     Parameters
     ----------
-    conserve : 'best' | 'N' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.FermionSite`.
-        For ``'best'``, we check the parameters what can be preserved.
-    J, V, mu : float | array
-        Hopping, interaction and chemical potential as defined for the
-        Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model.
 
+    """
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        conserve = model_params.get('conserve', 'N')
         if conserve == 'best':
             conserve = 'N'
             if self.verbose >= 1.:
@@ -76,9 +57,9 @@ class FermionModel(CouplingMPOModel):
         return site
 
     def init_terms(self, model_params):
-        J = get_parameter(model_params, 'J', 1., self.name, True)
-        V = get_parameter(model_params, 'V', 1., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
+        J = model_params.get('J', 1.)
+        V = model_params.get('V', 1.)
+        mu = model_params.get('mu', 0.)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
@@ -92,5 +73,6 @@ class FermionChain(FermionModel, NearestNeighborModel):
     See the :class:`FermionModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

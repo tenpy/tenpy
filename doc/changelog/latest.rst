@@ -17,6 +17,24 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Created a class :class:`~tenpy.tools.params.Config` to replace Python-native 
+  parameter dictionaries and add some useful functionality. 
+  Old code using :meth:`tenpy.tools.params.get_parameter()` and :meth:`tenpy.tools.params.unused_parameters()` 
+  still works as before, but raises a warning, and should be replaced.
+  For example, if you defined your own models, you should replace calls
+  ``get_parameter(model_params, "key", "default_value", "ModelName")`` with
+  ``model_params.get("key", "default_value")``, 
+  the latter syntax being what you would use for a normal python dictionary as well.
+- Renamed the following class parameter dictionaries to simply `options` for more consitency.
+  Old code using the class attributes should still work (since we provide property aliases), but raises warnings.
+  Note that this affects also derived classes (for example the :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine`).
+
+   * ``tenpy.algorithms.dmrg.DMRGEngine.DMRG_params``  (was already renamed to `engine_params` in versin 0.5.0)
+   * ``tenpy.algorithms.mps_sweeps.Sweep.engine_params``
+   * ``tenpy.algorithms.tebd.Engine.TEBD_params``
+   * ``tenpy.algorithms.tdvp.Engine.TDVP_params``
+   * ``tenpy.linalg.lanczos.Lanczos``
+
 - Changed the arguments of :meth:`tenpy.models.model.MultiCouplingModel`:
   We replaced the three arguments `u0`, `op0` and `other_op` with
   ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
@@ -80,6 +98,7 @@ Added
   This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+- attribute :attr:`~tenpy.models.model.options` for the Model.
 - :meth:`tenpy.networks.mps.MPS.roll_mps_unit_cell`.
 
 
@@ -108,7 +127,7 @@ Fixed
 - :class:`~tenpy.linalg.charges.LegPipe` did not initialize ``self.bunched`` correctly.
 - :issue:`98`: Error of calling `psi.canonical_form()` directly after disabling the DMRG mixer.
 - :func:`~tenpy.linalg.np_conserved.svd` with ``full_matrices=True`` gave wrong charges.
-- :meth:`tenpy.lina.np_conserved.Array.drop_charge` and :meth:`tenpy.lina.np_conserved.Array.drop_charge`
+- :meth:`tenpy.linalg.np_conserved.Array.drop_charge` and :meth:`tenpy.lina.np_conserved.Array.drop_charge`
   did not copy over labels.
 - wrong pairs for the `fifth_nearest_neighbors` of the :class:`~tenpy.models.lattice.Honeycomb`.
 - Continue in :func:`tenpy.algorithms.dmrg.full_diag_effH` with a warning instaed of raising an Error,

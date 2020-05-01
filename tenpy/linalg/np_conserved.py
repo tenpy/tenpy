@@ -147,8 +147,6 @@ class Array:
 
     Attributes
     ----------
-    size
-    stored_blocks
     rank : int
         The rank or "number of dimensions", equivalent to ``len(shape)``.
     shape : tuple(int)

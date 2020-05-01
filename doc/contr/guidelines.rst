@@ -53,7 +53,6 @@ However, these are just guidelines - it still helps if you contribute something,
            This block can describe things which need to be done and is automatically included in a section of :doc:`todo`.
         """
 
-
 - Use relative imports within TeNPy. Example::
 
       from ..linalg import np_conserved as npc
@@ -75,3 +74,14 @@ However, these are just guidelines - it still helps if you contribute something,
 - Summarize the changes you have made in the Changelog under :doc:`/changelog/latest`.
 - If you want to try out new things in temporary files: any folder named ``playground`` is ignored by `git`.
 - If you add a new toycode or example: add a reference to include it in the documentation.
+- We've created a sphinx extensions for `documenting config-option dictionaries <https://sphinx-cfg-options.readthedocs.io/en/latest/>`_.
+  If a class takes a dictionary of options, we usually call it `options`, 
+  convert it to a :class:`~tenpy.tools.params.Config` at the very beginning of the `__init__` with
+  :func:`~tenpy.tools.params.asConfig`, save it as ``self.options``, 
+  and document it in the class doc-string with a ``.. cfg:config ::`` directive.
+  The name of the `config` should usually be the class-name (if that is sufficiently unique),
+  or for algorithms directly the common name of the algorithm, e.g. "DMRG"; use the same name for the 
+  use the same name for the documentation of the ``.. cfg:config ::`` directive as for the 
+  :class:`~tenpy.tools.params.Config` class instance.
+  Attributes which are simply read-out options should be documented by just referencing the options with the
+  ``:cfg:option:`configname.optionname``` role.

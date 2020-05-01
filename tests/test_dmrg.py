@@ -114,9 +114,9 @@ def test_dmrg_rerun(L=2):
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
     M = TFIChain(model_params)
-    del eng.engine_params['chi_list']
+    del eng.options['chi_list']
     new_chi = 15
-    eng.engine_params['trunc_params']['chi_max'] = new_chi
+    eng.options['trunc_params']['chi_max'] = new_chi
     eng.init_env(M)
     E2, psi = eng.run()
     assert max(psi.chi) == new_chi
