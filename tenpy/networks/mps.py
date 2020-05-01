@@ -996,7 +996,7 @@ class MPS:
 
         .. deprecated:: 0.5.1
             This method will be removed in version 1.0.0.
-            Use the equivalent ``psi.enlarge_MPS_unit_cell(new_L//psi.L)`` instead of
+            Use the equivalent ``psi.enlarge_mps_unit_cell(new_L//psi.L)`` instead of
             ``psi.increase_L(new_L)``.
 
         Parameters
@@ -1012,11 +1012,11 @@ class MPS:
             raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
         factor = new_L // old_L
         warnings.warn(
-            "use `psi.enlarge_MPS_unit_cell(factor=new_L//psi.L)` "
+            "use `psi.enlarge_mps_unit_cell(factor=new_L//psi.L)` "
             "instead of `psi.increase_L(new_L)`.", FutureWarning, 2)
-        self.enlarge_MPS_unit_cell(factor)
+        self.enlarge_mps_unit_cell(factor)
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
@@ -1035,6 +1035,27 @@ class MPS:
         self._S = factor * self._S[:-1] + [self._S[-1]]
         self.form = factor * self.form
         self.test_sanity()
+
+    def roll_mps_unit_cell(self, shift=1):
+        """Shift the section we define as unit cellof an infinite MPS; in place.
+
+        Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
+        With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
+        whereas ``shift = -1`` will give ``[B, C, D, A]``.
+
+        Parameters
+        ----------
+        shift : int
+            By how many sites to move the tensors to the right.
+        """
+        if self.finite:
+            raise ValueError("makes only sense for infinite boundary conditions")
+        inds = np.roll(np.arange(self.L), shift)
+        self.sites = [self.sites[i] for i in inds]
+        self.form = [self.form[i] for i in inds]
+        self._B = [self._B[i] for i in inds]
+        self._S = [self._S[i] for i in inds]
+        self._S.append(self._S[0])
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
@@ -2556,6 +2577,7 @@ class MPS:
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
+        perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
         # => more or less an 'insertion' sort algorithm.

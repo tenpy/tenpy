@@ -1231,7 +1231,7 @@ class Array:
                 raise ValueError("no non-zero entry: can't detect qtotal")
         else:
             qtotal = np.concatenate((self.qtotal, np.array(qtotal, dtype=QTYPE)))
-        res = Array(legs, self.dtype, qtotal)
+        res = Array(legs, self.dtype, qtotal, self._labels)
         for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
         return res
@@ -1265,7 +1265,7 @@ class Array:
                 charge = self.chinfo.names.index(charge)
             qtotal = np.delete(self.qtotal, charge, 0)
         res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
-                    self.dtype, qtotal)
+                    self.dtype, qtotal, self._labels)
         for block, slices, _, _ in self:  # use __iter__
             res[slices] = block  # use __setitem__
         return res
@@ -1508,10 +1508,7 @@ class Array:
         for na, p, plab in zip(new_axes, pipes, pipe_labels):
             labels[na:na + p.nlegs] = [plab]
 
-        res = Array(legs, self.dtype, self.qtotal)
-        res.legs = legs
-        res._set_shape()
-        res.iset_leg_labels(labels)
+        res = Array(legs, self.dtype, self.qtotal, labels)
 
         # the **main work** of copying & reshaping the data
         if self.stored_blocks == 1:

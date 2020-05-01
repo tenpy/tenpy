@@ -348,7 +348,7 @@ class MPO:
         i = self._to_valid_index(i)
         return self.IdR[i + 1]
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters

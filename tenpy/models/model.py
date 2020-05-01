@@ -83,7 +83,7 @@ class Model(Hdf5Exportable):
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         This has to be done after finishing initialization and can not be reverted.
@@ -96,7 +96,7 @@ class Model(Hdf5Exportable):
             in our convetion, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
-        self.lat.enlarge_MPS_unit_cell(factor)
+        self.lat.enlarge_mps_unit_cell(factor)
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
@@ -237,7 +237,7 @@ class NearestNeighborModel(Model):
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         This has to be done after finishing initialization and can not be reverted.
@@ -250,7 +250,7 @@ class NearestNeighborModel(Model):
             in our convetion, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
-        super().enlarge_MPS_unit_cell(factor)
+        super().enlarge_mps_unit_cell(factor)
         self.H_bond = self.H_bond * factor
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -468,7 +468,7 @@ class MPOModel(Model):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         This has to be done after finishing initialization and can not be reverted.
@@ -481,8 +481,8 @@ class MPOModel(Model):
             in our convetion, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
-        super().enlarge_MPS_unit_cell(factor)
-        self.H_MPO.enlarge_MPS_unit_cell(factor)
+        super().enlarge_mps_unit_cell(factor)
+        self.H_MPO.enlarge_mps_unit_cell(factor)
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` in place to group sites.
