@@ -39,7 +39,9 @@ ObjectsEntry = namedtuple('ObjectsEntry', "name, dispname, typ, docname, anchor,
 # IndexEntry is retured by Index.generate()
 IndexEntry = namedtuple('IndexEntry', "name, subtype, docname, anchor, extra, qualifier, descr")
 
-option_header_re = re.compile("([\w.]*)\s*(?::\s*([^=]*))?(?:=\s*(\S*)\s*)?$")
+option_header_re = re.compile(r"([\w.]+)\s*(?::\s*([^=]*))?(?:=\s*(\S+.*)\s*)?$")
+option_header_re_comma_sep = re.compile(
+    r"([\w.]+(?:\s*,\s*[\w.]+)*)\s*(?::\s*([^=]*))?(?:=\s*(\S+.*)\s*)?$")
 directive_re = re.compile("^..\s*\w+\s*::")
 
 
@@ -142,6 +144,11 @@ class CfgConfig(ObjectDescription):
         self.env.app.emit('cfg_options-parse_config', self)
         self.content.disconnect()  # avoid screwing up the parsing of the parent
         N = len(self.content)
+        comma_sep = self.config.cfg_options_parse_comma_sep_names
+        if comma_sep:
+            header_re = option_header_re_comma_sep
+        else:
+            header_re = option_header_re
         # i = index in the lines
         indents = [_get_indent(line) for line in self.content]
         field_begin = [i for i, indent in enumerate(indents) if indent == 0]
@@ -149,7 +156,7 @@ class CfgConfig(ObjectDescription):
             field_beg_line = self.content[field_beg]
             if directive_re.match(field_beg_line):
                 continue  # ignore other directives
-            m = option_header_re.match(field_beg_line)
+            m = header_re.match(field_beg_line)
             if m is None:
                 source, line = self.content.info(field_beg)
                 location = "{0!s}:{1!s}".format(source, line)
@@ -162,8 +169,17 @@ class CfgConfig(ObjectDescription):
                 if indents[j] > 0:
                     next_indent = self.content[j][:indents[j]]
                     break
-            name, typ, default = m.groups()
-            replace = [".. cfg:option :: " + name]
+            names, typ, default = m.groups()
+            if comma_sep:
+                # name is ','-spearated list of names.
+                replace = []
+                names = names.split(',')
+                directive = ".. cfg:option :: "
+                replace = [directive + names[0]]
+                for name in names[1:]:
+                    replace.append(" " * len(directive) + name)
+            else:
+                replace = [".. cfg:option :: " + names]
             if typ is not None and typ.strip():
                 replace.append(next_indent + ":type: " + typ)
             if default:
@@ -712,6 +728,7 @@ def setup(app):
     app.add_event('cfg_options-parse_config')
     app.add_config_value('cfg_options_recursive_includes', True, 'html')
     app.add_config_value('cfg_options_parse_numpydoc_style_options', True, 'html')
+    app.add_config_value('cfg_options_parse_comma_sep_names', False, 'html')
     app.add_config_value('cfg_options_summary', "table", 'html')
     app.add_config_value('cfg_options_table_add_header', True, 'html')
     app.add_config_value('cfg_options_default_in_summary_table', True, 'html')
