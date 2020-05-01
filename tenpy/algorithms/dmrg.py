@@ -55,6 +55,15 @@ __all__ = [
 def run(psi, model, options):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
+    .. cfg:config :: DMRG
+        :include: SingleSiteDMRGEngine, TwoSiteDMRGEngine
+
+
+        active_sites
+            The number of active sites to be used by DMRG.
+            If set to 1, :class:`SingleSiteDMRGEngine` is used.
+            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -89,31 +98,17 @@ def run(psi, model, options):
 
 
 class DMRGEngine(Sweep):
-    """Generic 'Engine' for the single-site DMRG algorithm.
+    """DMRG base class.'Engine' for the DMRG algorithm.
 
-    This engine is implemented as a subclass of
-    :class:`~tenpy.algorithms.mps_sweeps.Sweep`. It contains all methods that
-    are generic between :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
+    This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_sweeps.Sweep`.
+    It contains all methods that are generic between
+    :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
     .. deprecated :: 0.5.0
         Renamed parameter/attribute `DMRG_params` to :attr:`options`.
 
     .. cfg:config :: DMRGEngine
-        
-        active_sites
-            The number of active sites to be used by DMRG.
-            If set to 1, :class:`SingleSiteDMRGEngine` is used.
-            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
-
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial guess for the ground state, which is to be optimized in-place.
-    model : :class:`~tenpy.models.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in :cfg:config:`DMRGEngine`.
+        :include: Sweep
 
     Attributes
     ----------
@@ -209,7 +204,7 @@ class DMRGEngine(Sweep):
                 truncation right after each Lanczos optimization during the
                 sweeps.
             E_tol_max : float
-                See `E_tol_to_trunc`  
+                See `E_tol_to_trunc`
             E_tol_min : float
                 See `E_tol_to_trunc`
             max_E_err : float
@@ -533,26 +528,24 @@ class DMRGEngine(Sweep):
                 Maximum matrix dimension of the effective hamiltonian
                 up to which the ``'default'`` `diag_method` uses ED instead of
                 Lanczos.
+            diag_method : str
+                One of the folloing strings:
 
-        The method used depends on the DMRG parameter `diag_method`.
-
-        ============  ================================================================
-        diag_method   Function, comment
-        ============  ================================================================
-        'default'     Same as ``'lanczos'`` for large bond dimensions, but if the
+                'default'
+                      Same as ``'lanczos'`` for large bond dimensions, but if the
                       total dimension of the effective Hamiltonian does not exceed
                       the DMRG parameter ``'max_N_for_ED'`` it uses ``'ED_block'``.
-        ------------  ----------------------------------------------------------------
-        'lanczos'     :func:`~tenpy.linalg.lanczos.lanczos`
+                'lanczos'
+                      :func:`~tenpy.linalg.lanczos.lanczos`
                       Default, the Lanczos implementation in TeNPy.
-        ------------  ----------------------------------------------------------------
-        'arpack'      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
+                'arpack'
+                      :func:`~tenpy.linalg.lanczos.lanczos_arpack`
                       Based on :func:`scipy.linalg.sparse.eigsh`.
                       Slower than 'lanczos', since it needs to convert the npc arrays
                       to numpy arrays during *each* matvec, and possibly does many
                       more iterations.
-        ------------  ----------------------------------------------------------------
-        'ED_block'    :func:`full_diag_effH`
+                'ED_block'
+                      :func:`full_diag_effH`
                       Contract the effective Hamiltonian to a (large!) matrix and
                       diagonalize the block in the charge sector of the initial state.
                       Preserves the charge sector of the explicitly conserved charges.
@@ -560,15 +553,14 @@ class DMRGEngine(Sweep):
                       it.
                       For example if you use a ``SpinChain({'conserve': 'parity'})``,
                       it could change the total "Sz", but not the parity of 'Sz'.
-        ------------  ----------------------------------------------------------------
-        'ED_all'      :func:`full_diag_effH`
+                'ED_all'
+                      :func:`full_diag_effH`
                       Contract the effective Hamiltonian to a (large!) matrix and
                       diagonalize it completely.
                       Allows to change the charge sector *even for explicitly
                       conserved charges*.
                       For example if you use a ``SpinChain({'conserve': 'Sz'})``,
                       it **can** change the total "Sz".
-        ============  ================================================================
 
         Parameters
         ----------
@@ -711,8 +703,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in subclasses.
+        Further optional parameters.
 
     Attributes
     ----------
@@ -1019,8 +1010,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     model : :class:`~tenpy.models.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters. These are usually algorithm-specific, and thus should be
-        described in subclasses.
+        Further optional parameters.
 
     Attributes
     ----------

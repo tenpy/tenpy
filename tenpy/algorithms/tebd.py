@@ -635,6 +635,7 @@ class RandomUnitaryEvolution(Engine):
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
 
     .. cfg:config :: RandomUnitaryEvolution
+        :include: TEBD
 
         N_steps : int
             Number of two-site unitaries to be applied on each bond.
