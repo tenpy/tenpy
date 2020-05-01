@@ -124,6 +124,13 @@ class HofstadterFermions(CouplingMPOModel):
     phase, depending on lattice coordinates and gauge choice (see
     :func:`tenpy.models.hofstadter.gauge_hopping`).
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`HofstadterFermions` below.
+
+    Options
+    -------
     .. cfg:config :: HofstadterFermions
         :include: CouplingMPOModel
 
@@ -146,10 +153,6 @@ class HofstadterFermions(CouplingMPOModel):
             Choice of the gauge used for the magnetic field. This changes the
             magnetic unit cell. See :func:`gauge_hopping` for details.
 
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        Parameters for the model. See :cfg:config:`HofstadterFermions`.
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
@@ -212,6 +215,13 @@ class HofstadterBosons(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`HofstadterBosons` below.
+
+    Options
+    -------
     .. cfg:config :: HofstadterBosons
         :include: CouplingMPOModel
 
@@ -235,11 +245,6 @@ class HofstadterBosons(CouplingMPOModel):
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
             Choice of the gauge used for the magnetic field. This changes the
             magnetic unit cell.
-
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        Parameters for the model. See :cfg:config:`HofstadterFermions`.
     """
     def init_sites(self, model_params):
         Nmax = model_params.get('Nmax', 3)

@@ -55,15 +55,6 @@ __all__ = [
 def run(psi, model, options):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
-    .. cfg:config :: DMRG
-        :include: SingleSiteDMRGEngine, TwoSiteDMRGEngine
-
-
-        active_sites
-            The number of active sites to be used by DMRG.
-            If set to 1, :class:`SingleSiteDMRGEngine` is used.
-            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -78,6 +69,17 @@ def run(psi, model, options):
     -------
     info : dict
         A dictionary with keys ``'E', 'shelve', 'bond_statistics', 'sweep_statistics'``
+
+    Options
+    -------
+    .. cfg:config :: DMRG
+        :include: SingleSiteDMRGEngine, TwoSiteDMRGEngine
+
+        active_sites
+            The number of active sites to be used by DMRG.
+            If set to 1, :class:`SingleSiteDMRGEngine` is used.
+            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
+
     """
     # initialize the engine
     options = asConfig(options, 'DMRG')
@@ -107,6 +109,8 @@ class DMRGEngine(Sweep):
     .. deprecated :: 0.5.0
         Renamed parameter/attribute `DMRG_params` to :attr:`options`.
 
+    Options
+    -------
     .. cfg:config :: DMRGEngine
         :include: Sweep
 
@@ -188,6 +192,16 @@ class DMRGEngine(Sweep):
     def run(self):
         """Run the DMRG simulation to find the ground state.
 
+        Returns
+        -------
+        E : float
+            The energy of the resulting ground state MPS.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS representing the ground state after the simluation,
+            i.e. just a reference to :attr:`psi`.
+
+        Options
+        -------
         .. cfg:configoptions :: DMRGEngine
 
             diag_method : str
@@ -255,13 +269,6 @@ class DMRGEngine(Sweep):
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
 
-        Returns
-        -------
-        E : float
-            The energy of the resulting ground state MPS.
-        psi : :class:`~tenpy.networks.mps.MPS`
-            The MPS representing the ground state after the simluation,
-            i.e. just a reference to :attr:`psi`.
         """
         options = self.options
         start_time = self.time0
@@ -693,9 +700,6 @@ class DMRGEngine(Sweep):
 class TwoSiteDMRGEngine(DMRGEngine):
     """'Engine' for the two-site DMRG algorithm.
 
-    .. cfg:config :: TwoSiteDMRGEngine
-        :include: DMRGEngine
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -704,6 +708,11 @@ class TwoSiteDMRGEngine(DMRGEngine):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters.
+
+    Options
+    -------
+    .. cfg:config :: TwoSiteDMRGEngine
+        :include: DMRGEngine
 
     Attributes
     ----------
@@ -1000,9 +1009,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
 class SingleSiteDMRGEngine(DMRGEngine):
     """'Engine' for the single-site DMRG algorithm.
 
-    .. cfg:config :: SingleSiteDMRGEngine
-        :include: DMRGEngine
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -1011,6 +1017,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters.
+
+    Options
+    -------
+    .. cfg:config :: SingleSiteDMRGEngine
+        :include: DMRGEngine
 
     Attributes
     ----------
@@ -1416,6 +1427,16 @@ class Mixer:
     [Hubig2015]_ discusses the mixer and provides an improved version.
 
 
+    Parameters
+    ----------
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>`` for later
+    options : dict
+        Optional parameters as described in the following table.
+        see :cfg:config:`Mixer`
+
+    Options
+    -------
     .. cfg:config :: Mixer
 
         amplitude : float
@@ -1428,13 +1449,6 @@ class Mixer:
         verbose : int
             Level of output verbosity
 
-    Parameters
-    ----------
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Environment for contraction ``<psi|H|psi>`` for later
-    options : dict
-        Optional parameters as described in the following table.
-        see :cfg:config:`Mixer`
 
     Attributes
     ----------

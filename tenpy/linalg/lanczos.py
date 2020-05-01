@@ -28,6 +28,29 @@ class LanczosGroundState:
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `params` to :attr:`options`.
 
+    Parameters
+    ----------
+    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
+        A hermitian linear operator. Must implement the method `matvec` acting on a
+        :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
+        The result has to have the same legs as the argument.
+    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+        The starting vector defining the Krylov basis.
+        For finding the ground state, this should be the best guess available.
+        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
+        as vectors.
+    options : dict
+        Further optional parameters as described in :cfg:config:`Lanczos`.
+        The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
+        or if the maximum number of steps was reached.
+    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
+        Vectors (same tensor structure as psi) against which Lanczos will orthogonalize,
+        ensuring that the result is perpendicular to them.
+        (Assumes that the smallest eigenvalue is smaller than 0, which should *always* be the
+        case if you want to find ground states with Lanczos!)
+
+    Options
+    -------
     .. cfg:config :: Lanczos
 
         N_min : int
@@ -57,27 +80,6 @@ class LanczosGroundState:
             is too small.
             This is necessary if the rank of `H` is smaller than `N_max` -
             then we get a complete basis of the Krylov space, and `beta` will be zero.
-
-    Parameters
-    ----------
-    H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
-        A hermitian linear operator. Must implement the method `matvec` acting on a
-        :class:`~tenpy.linalg.np_conserved.Array`; nothing else required.
-        The result has to have the same legs as the argument.
-    psi0 : :class:`~tenpy.linalg.np_conserved.Array`
-        The starting vector defining the Krylov basis.
-        For finding the ground state, this should be the best guess available.
-        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
-        as vectors.
-    options : dict
-        Further optional parameters as described in :cfg:config:`Lanczos`.
-        The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
-        or if the maximum number of steps was reached.
-    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Vectors (same tensor structure as psi) against which Lanczos will orthogonalize,
-        ensuring that the result is perpendicular to them.
-        (Assumes that the smallest eigenvalue is smaller than 0, which should *always* be the
-        case if you want to find ground states with Lanczos!)
 
     Attributes
     ----------
@@ -282,6 +284,15 @@ class LanczosEvolution(LanczosGroundState):
     ground state, we now calculate ``exp(delta T) e_0 in the Krylov ONB, where
     ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
 
+    Parameters
+    ----------
+    H, psi0, options :
+        Hamiltonian, starting vector and parameters as defined in :class:`LanczosGroundState`.
+        The option :cfg:option`LanczosEvolution.P_tol` defines when convergence is reached,
+        see :meth:`_converged` for details.
+
+    Options
+    -------
     .. cfg:config :: LanczosEvolution
         :include: Lanczos
 
@@ -289,13 +300,6 @@ class LanczosEvolution(LanczosGroundState):
             Ignored.
         min_gap :
             Ignored.
-
-    Parameters
-    ----------
-    H, psi0, options :
-        Hamiltonian, starting vector and parameters as defined in :class:`LanczosGroundState`.
-        The option :cfg:option`LanczosEvolution.P_tol` defines when convergence is reached,
-        see :meth:`_converged` for details.
 
     Attributes
     ----------

@@ -144,6 +144,28 @@ class TruncationError:
 def truncate(S, options):
     """Given a Schmidt spectrum `S`, determine which values to keep.
 
+    Parameters
+    ----------
+    S : 1D array
+        Schmidt values (as returned by an SVD), not necessarily sorted.
+        Should be normalized to ``np.sum(S*S) == 1.``.
+    options: dict-like
+        Config with constraints for the truncation, see :cfg:config:`truncation`.
+        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+        A value ``None`` indicates that the constraint should be ignored.
+
+    Returns
+    -------
+    mask : 1D bool array
+        Index mask, True for indices which should be kept.
+    norm_new : float
+        The norm of the truncated Schmidt values, ``np.linalg.norm(S[mask])``.
+        Useful for re-normalization.
+    err : :class:`TruncationError`
+        The error of the represented state which is introduced due to the truncation.
+
+    Options
+    -------
     .. cfg:config:: truncation
 
         .. deprecated :: 0.5.1
@@ -169,25 +191,6 @@ def truncate(S, options):
             Discard all small Schmidt values as long as
             ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
 
-    Parameters
-    ----------
-    S : 1D array
-        Schmidt values (as returned by an SVD), not necessarily sorted.
-        Should be normalized to ``np.sum(S*S) == 1.``.
-    options: dict-like
-        Config with constraints for the truncation, see :cfg:config:`truncation`.
-        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
-        A value ``None`` indicates that the constraint should be ignored.
-
-    Returns
-    -------
-    mask : 1D bool array
-        Index mask, True for indices which should be kept.
-    norm_new : float
-        The norm of the truncated Schmidt values, ``np.linalg.norm(S[mask])``.
-        Useful for re-normalization.
-    err : :class:`TruncationError`
-        The error of the represented state which is introduced due to the truncation.
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.

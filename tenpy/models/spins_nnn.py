@@ -44,6 +44,13 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`SpinChainNNN` below.
+
+    Options
+    -------
     .. cfg:config :: SpinChainNNN
         :include: CouplingMPOModel
 
@@ -59,11 +66,6 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         bc_MPS : {'finite' | 'infinte'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
-
-    Parameters
-    ----------
-    model_params : dict
-        See :cfg:config:`SpinChainNNN`
     """
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
@@ -143,6 +145,13 @@ class SpinChainNNN2(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`SpinChainNNN2` below.
+
+    Options
+    -------
     .. cfg:config :: SpinChainNNN2
         :include: CouplingMPOModel
 
@@ -153,11 +162,6 @@ class SpinChainNNN2(CouplingMPOModel):
             For ``'best'``, we check the parameters what can be preserved.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
-
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`SpinChainNNN2`
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)

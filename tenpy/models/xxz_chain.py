@@ -29,6 +29,13 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`XXZChain` below.
+
+    Options
+    -------
     .. cfg:config :: XXZChain
         :include: CouplingMPOModel
 
@@ -39,11 +46,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         bc_MPS : {'finite' | 'infinte'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
-
-    Parameters
-    ----------
-    model_params : dict
-        See :cfg:config:`XXZChain`
     """
     def __init__(self, model_params):
         # 0) read out/set default parameters

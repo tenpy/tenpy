@@ -39,17 +39,6 @@ class Engine:
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TDVP_params` to :attr:`options`.
 
-    .. cfg:config :: TDVP
-
-        start_time : float
-            Initial value for :attr:`evolved_time`
-        dt : float
-            Time step of the Trotter error
-        trunc_params : dict
-            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        Lanczos : dict
-            Lanczos options as described in :cfg:config:`Lanczos`.
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -61,6 +50,20 @@ class Engine:
         Use ``verbose>0`` to print the used parameters during runtime.
     environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
+
+    Options
+    -------
+
+    .. cfg:config :: TDVP
+
+        start_time : float
+            Initial value for :attr:`evolved_time`
+        dt : float
+            Time step of the Trotter error
+        trunc_params : dict
+            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
+        Lanczos : dict
+            Lanczos options as described in :cfg:config:`Lanczos`.
 
     Attributes
     ----------

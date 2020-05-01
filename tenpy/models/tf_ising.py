@@ -31,6 +31,13 @@ class TFIModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`TFIModel` below.
+
+    Options
+    -------
     .. cfg:config :: TFIModel
         :include: CouplingMPOModel
 
@@ -39,10 +46,6 @@ class TFIModel(CouplingMPOModel):
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
 
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`TFIModel`
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')

@@ -29,6 +29,13 @@ class SpinModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`SpinModel` below.
+
+    Options
+    -------
     .. cfg:config :: SpinModel
         :include: CouplingMPOModel
 
@@ -40,10 +47,6 @@ class SpinModel(CouplingMPOModel):
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
 
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`SpinModel`
     """
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)

@@ -29,6 +29,13 @@ class BosonicHaldaneModel(CouplingMPOModel):
     in the same sublattice with a sign given by the direction of the hopping.
     This Hamiltonian is translated from [Grushin2015]_.
 
+    Parameters
+    ----------
+    model_params : dict
+        Parameters for the model. See :cfg:config:`BosonicHaldaneModel` below.
+
+    Options
+    -------
     .. cfg:config :: BosonicHaldaneModel
         :include: CouplingMPOModel
 
@@ -38,11 +45,6 @@ class BosonicHaldaneModel(CouplingMPOModel):
         t1, t2, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
-
-    Parameters
-    ----------
-    model_params : dict
-        Parameters for the model. See :cfg:config:`BosonicHaldaneModel`.
     """
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)
@@ -100,6 +102,13 @@ class FermionicHaldaneModel(CouplingMPOModel):
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
+    Parameters
+    ----------
+    model_params : dict
+        Parameters for the model. See :cfg:config:`FermionicHaldaneModel` below.
+
+    Options
+    -------
     .. cfg:config :: FermionicHaldaneModel
         :include: CouplingMPOModel
 
@@ -110,10 +119,6 @@ class FermionicHaldaneModel(CouplingMPOModel):
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
 
-    Parameters
-    ----------
-    model_params : dict
-        Parameters for the model. See :cfg:config:`FermionicHaldaneModel`.
     """
     def __init__(self, model_params):
         model_params = asConfig(model_params, self.__class__.__name__)

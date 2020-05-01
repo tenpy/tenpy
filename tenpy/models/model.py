@@ -1494,22 +1494,23 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             CouplingMPOModel.__init__(self, model_params)
 
 
-    .. cfg:config :: CouplingMPOModel
-
-
-
     Parameters
     ----------
     model_params : dict
         A dictionary with all the model parameters.
         These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`,
         and then set as :attr:`options` and given to the different ``init_...()`` methods.
-        The parameter ``'verbose'`` is read out in the `__init__` of this function
-        and specifies how much status information should be printed during initialization.
-        The parameter ``'sort_mpo_legs'`` specifies whether the virtual legs of the MPO should be
-        sorted by charges (see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`).
-        The parameter ``'explicit_plus_hc'`` specifies whether the Hermitian conjugate of
-        the MPO is computed at runtime, rather than saved in the MPO.
+
+    Options
+    -------
+    .. cfg:config :: CouplingMPOModel
+
+        sort_mpo_legs : bool = False
+            Whether the virtual legs of the MPO should be sorted by charges,
+            see :meth:`~tenpy.networks.mpo.MPO.sort_legcharges`.
+        explicit_plus_hc : bool
+            Whether the Hermitian conjugate of the MPO is computed at runtime,
+            rather than saved in the MPO.
 
     Attributes
     ----------
@@ -1559,6 +1560,18 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         of one of the predefined lattices, which then gets initialized.
         Depending on the dimensionality of the lattice, this requires different model parameters.
 
+        Parameters
+        ----------
+        model_params : dict
+            The model parameters given to ``__init__``.
+
+        Returns
+        -------
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            An initialized lattice.
+
+        Options
+        -------
         .. cfg:configoptions :: CouplingMPOModel
 
             lattice : str | Lattice
@@ -1594,15 +1607,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 (The MPS is still "open", so this will introduce long-range
                 couplings between the first and last sites of the MPS!)
 
-        Parameters
-        ----------
-        model_params : dict
-            The model parameters given to ``__init__``.
-
-        Returns
-        -------
-        lat : :class:`~tenpy.models.lattice.Lattice`
-            An initialized lattice.
         """
         lat = model_params.get('lattice', "Chain")
         if isinstance(lat, str):

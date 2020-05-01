@@ -24,6 +24,13 @@ class BoseHubbardModel(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`BoseHubbardModel` below.
+
+    Options
+    -------
     .. cfg:config :: BoseHubbardModel
         :include: CouplingMPOModel
 
@@ -35,11 +42,6 @@ class BoseHubbardModel(CouplingMPOModel):
             What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
         t, U, V, mu: float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
-
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`BoseHubbardModel`
     """
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3)
@@ -98,6 +100,13 @@ class FermiHubbardModel(CouplingMPOModel):
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`FermiHubbardModel` below.
+
+    Options
+    -------
     .. cfg:config :: FermiHubbardModel
         :include: CouplingMPOModel
 
@@ -109,11 +118,6 @@ class FermiHubbardModel(CouplingMPOModel):
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
         t, U, mu : float | array
             Config as defined for the Hamiltonian above. Note the signs!
-
-    Parameters
-    ----------
-    model_par : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`FermiHubbardModel`
     """
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N')

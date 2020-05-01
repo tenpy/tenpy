@@ -56,15 +56,6 @@ class Engine:
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
-    .. cfg:config :: TEBD
-
-        trunc_params : dict
-            Truncation parameters as described in :cfg:config:`truncate`.
-        start_time : float
-            Initial value for :attr:`evolved_time`.
-        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            Initial truncation error for :attr:`trunc_err`.
-
 
     Parameters
     ----------
@@ -76,6 +67,17 @@ class Engine:
         Further optional parameters as described in the tables in
         :func:`run` and :func:`run_GS` for more details.
         Use ``verbose=1`` to print the used parameters during runtime.
+
+    Options
+    -------
+    .. cfg:config :: TEBD
+
+        trunc_params : dict
+            Truncation parameters as described in :cfg:config:`truncate`.
+        start_time : float
+            Initial value for :attr:`evolved_time`.
+        start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            Initial truncation error for :attr:`trunc_err`.
 
     Attributes
     ----------
@@ -634,6 +636,16 @@ class RandomUnitaryEvolution(Engine):
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
 
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networs.mps.MPS`
+        Initial state to be time evolved. Modified in place.
+    options : dict
+        Use ``verbose=1`` to print the used parameters during runtime.
+        See :func:`run` and :func:`run_GS` for more details.
+
+    Options
+    -------
     .. cfg:config :: RandomUnitaryEvolution
         :include: TEBD
 
@@ -642,13 +654,6 @@ class RandomUnitaryEvolution(Engine):
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncate`
 
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networs.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    options : dict
-        Use ``verbose=1`` to print the used parameters during runtime.
-        See :func:`run` and :func:`run_GS` for more details.
 
     Examples
     --------

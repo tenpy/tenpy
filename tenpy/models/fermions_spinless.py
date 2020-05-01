@@ -32,6 +32,13 @@ class FermionModel(CouplingMPOModel):
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`FermionModel` below.
+
+    Options
+    -------
     .. cfg:config :: FermionModel
         :include: CouplingMPOModel
 
@@ -40,11 +47,6 @@ class FermionModel(CouplingMPOModel):
             For ``'best'``, we check the parameters what can be preserved.
         J, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
-
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        Parameters for the model.
 
     """
     def init_sites(self, model_params):

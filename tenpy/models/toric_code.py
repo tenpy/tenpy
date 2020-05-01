@@ -64,6 +64,13 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`ToricCode` below.
+
+    Options
+    -------
     .. cfg:config :: ToricCode
         :include: CouplingMPOModel
 
@@ -76,10 +83,6 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         order : str
             The order of the lattice sites in the lattice, see :class:`DualSquare`.
 
-    Parameters
-    ----------
-    model_params : :class:`~tenpy.tools.params.Config`
-        See :cfg:config:`ToricCode`
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
