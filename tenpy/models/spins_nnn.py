@@ -21,8 +21,7 @@ import numpy as np
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter, unused_parameters
-from ..tools.misc import any_nonzero
+from ..tools.params import asConfig
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
@@ -42,36 +41,46 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
-    L : int
-        Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
-        i.e. we have ``2*L`` spin sites.
-    S : {0.5, 1, 1.5, 2, ...}
-        The 2S+1 local states range from m = -S, -S+1, ... +S.
-    conserve : 'best' | 'Sz' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-    Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
-        Couplings as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`SpinChainNNN` below.
+
+    Options
+    -------
+    .. cfg:config :: SpinChainNNN
+        :include: CouplingMPOModel
+
+        L : int
+            Length of the chain in terms of :class:`~tenpy.networks.site.GroupedSite`,
+            i.e. we have ``2*L`` spin sites.
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+        conserve : 'best' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+        Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
+            Coupling as defined for the Hamiltonian above.
+        bc_MPS : {'finite' | 'infinte'}
+            MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
-        S = get_parameter(model_params, 'S', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
+        S = model_params.get('S', 0.5)
+        conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
-                               "check Sz conservation"):
+            if not model_params.any_nonzero([('Jx', 'Jy'),
+                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
@@ -82,15 +91,15 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
         return site
 
     def init_terms(self, model_params):
-        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        Jxp = get_parameter(model_params, 'Jxp', 1., self.name, True)
-        Jyp = get_parameter(model_params, 'Jyp', 1., self.name, True)
-        Jzp = get_parameter(model_params, 'Jzp', 1., self.name, True)
-        hx = get_parameter(model_params, 'hx', 0., self.name, True)
-        hy = get_parameter(model_params, 'hy', 0., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        Jx = model_params.get('Jx', 1.)
+        Jy = model_params.get('Jy', 1.)
+        Jz = model_params.get('Jz', 1.)
+        Jxp = model_params.get('Jxp', 1.)
+        Jyp = model_params.get('Jyp', 1.)
+        Jzp = model_params.get('Jzp', 1.)
+        hx = model_params.get('hx', 0.)
+        hy = model_params.get('hy', 0.)
+        hz = model_params.get('hz', 0.)
 
         # Only valid for self.lat being a Chain...
         self.add_onsite(-hx, 0, 'Sx0')
@@ -133,53 +142,36 @@ class SpinChainNNN2(CouplingMPOModel):
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbors and
     :math:`\langle \langle i,j \rangle \rangle, i < j` denotes next nearest neighbors.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
-    S : {0.5, 1, 1.5, 2, ...}
-        The 2S+1 local states range from m = -S, -S+1, ... +S.
-    conserve : 'best' | 'Sz' | 'parity' | None
-        What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
-        For ``'best'``, we check the parameters what can be preserved.
-    Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
-        Couplings as defined for the Hamiltonian above.
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`SpinChainNNN2` below.
 
+    Options
+    -------
+    .. cfg:config :: SpinChainNNN2
+        :include: CouplingMPOModel
+
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+        conserve : 'best' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
+            For ``'best'``, we check the parameters what can be preserved.
+        Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
+            Coupling as defined for the Hamiltonian above.
+    """
     def init_sites(self, model_params):
-        S = get_parameter(model_params, 'S', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'best', self.name)
+        S = model_params.get('S', 0.5)
+        conserve = model_params.get('conserve', 'best')
         if conserve == 'best':
             # check how much we can conserve
-            if not any_nonzero(model_params, [('Jx', 'Jy'), ('Jxp', 'Jyp'), 'hx', 'hy'],
-                               "check Sz conservation"):
+            if not model_params.any_nonzero([('Jx', 'Jy'),
+                                             ('Jxp', 'Jyp'), 'hx', 'hy'], "check Sz conservation"):
                 conserve = 'Sz'
-            elif not any_nonzero(model_params, ['hx', 'hy'], "check parity conservation"):
+            elif not model_params.any_nonzero(['hx', 'hy'], "check parity conservation"):
                 conserve = 'parity'
             else:
                 conserve = None
@@ -190,15 +182,15 @@ class SpinChainNNN2(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) read out/set default parameters
-        Jx = get_parameter(model_params, 'Jx', 1., self.name, True)
-        Jy = get_parameter(model_params, 'Jy', 1., self.name, True)
-        Jz = get_parameter(model_params, 'Jz', 1., self.name, True)
-        Jxp = get_parameter(model_params, 'Jxp', 1., self.name, True)
-        Jyp = get_parameter(model_params, 'Jyp', 1., self.name, True)
-        Jzp = get_parameter(model_params, 'Jzp', 1., self.name, True)
-        hx = get_parameter(model_params, 'hx', 0., self.name, True)
-        hy = get_parameter(model_params, 'hy', 0., self.name, True)
-        hz = get_parameter(model_params, 'hz', 0., self.name, True)
+        Jx = model_params.get('Jx', 1.)
+        Jy = model_params.get('Jy', 1.)
+        Jz = model_params.get('Jz', 1.)
+        Jxp = model_params.get('Jxp', 1.)
+        Jyp = model_params.get('Jyp', 1.)
+        Jzp = model_params.get('Jzp', 1.)
+        hx = model_params.get('hx', 0.)
+        hy = model_params.get('hy', 0.)
+        hz = model_params.get('hz', 0.)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-hx, u, 'Sx')

@@ -21,7 +21,7 @@ from tenpy.networks.site import SpinHalfSite
 from tenpy.models.model import MPOModel
 from tenpy.models.lattice import Chain
 from tenpy.algorithms import dmrg
-from tenpy.tools.params import get_parameter, unused_parameters
+from tenpy.tools.params import asConfig
 
 
 class ExponentiallyDecayingHeisenberg(MPOModel):
@@ -36,8 +36,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
                 + \mathtt{Jz} S^z_i S^z_j                        ) \\
             - \sum_i \mathtt{hz} S^z_i
 
-    All parameters are collected in a single dictionary `model_param` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`.
 
     Parameters
     ----------
@@ -50,21 +49,21 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
     """
-    def __init__(self, model_param):
+    def __init__(self, model_params):
         # model parameters
-        L = get_parameter(model_param, 'L', 2, self.__class__)
-        xi = get_parameter(model_param, 'xi', 0.5, self.__class__)
-        Jxx = get_parameter(model_param, 'Jxx', 1., self.__class__)
-        Jz = get_parameter(model_param, 'Jz', 1.5, self.__class__)
-        hz = get_parameter(model_param, 'hz', 0., self.__class__)
-        conserve = get_parameter(model_param, 'conserve', 'Sz', self.__class__)
+        model_params = asConfig(model_params, "ExponentiallyDecayingHeisenberg")
+        L = model_params.get('L', 2)
+        xi = model_params.get('xi', 0.5)
+        Jxx = model_params.get('Jxx', 1.)
+        Jz = model_params.get('Jz', 1.5)
+        hz = model_params.get('hz', 0.)
+        conserve = model_params.get('conserve', 'Sz')
         if xi == 0.:
             g = 0.
         elif xi == np.inf:
             g = 1.
         else:
             g = np.exp(-1 / (xi))
-        unused_parameters(model_param, self.__class__)
 
         # Define the sites and the lattice, which in this case is a simple uniform chain
         # of spin 1/2 sites

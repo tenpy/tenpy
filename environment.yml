@@ -11,3 +11,4 @@ dependencies:
   - pip
   - setuptools>=30.3.0
   - h5py
+  - pyyaml

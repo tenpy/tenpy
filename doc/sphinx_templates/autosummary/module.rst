@@ -39,5 +39,6 @@
 {% endif %}
 
 .. rubric:: Module description
+
 .. automodule:: {{ fullname }}
     :show-inheritance:

@@ -108,10 +108,6 @@ def read_requ_file(filename):
     return [l.strip() for l in requ if l.strip()]
 
 
-def read_requirements():
-    return extra_requ
-
-
 def setup_cython_extension():
     try:
         from Cython.Build import cythonize
@@ -163,7 +159,7 @@ def setup_package():
 
     extras_require = {
         'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
-        'hdf5': ['h5py'],
+        'io': ['h5py', 'pyyaml'],
         'plot': ['matplotlib>=2.0'],
         'test': ['pytest'],
     }

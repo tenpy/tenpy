@@ -66,7 +66,6 @@ class FlatLinearOperator(ScipyLinearOperator):
 
     Attributes
     ----------
-    charge_sector
     possible_charge_sectors : ndarray[QTYPE, ndim=2]
         Each row corresponds to one possible choice for `charge_sector`.
     shape : (int, int)

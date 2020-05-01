@@ -150,7 +150,7 @@ so your model class should look like this::
         Here is a good place to document the represented Hamiltonian and parameters.
 
         In the models of TeNPy, we usually take a single dictionary `model_params`
-        containing all parameters, and read values out with ``tenpy.tools.params.get_parameter(...)``,
+        containing all parameters, and read values out with ``model_params.get(key, default)``.
         The model needs to provide default values if the parameters was not specified.
         """
         def __init__(self, model_params):
@@ -366,17 +366,17 @@ Some final remarks
 ------------------
 
 - Needless to say that we have also various predefined models under :mod:`tenpy.models`.
-
 - Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`
   or :class:`~tenpy.models.model.CouplingMPOModel`.
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
-
 - If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
-
-- We suggest writing the model to take a single parameter dictionary for the initialization, which is to be read out
-  inside the class with :func:`~tenpy.tools.params.get_parameter`.
-  Read the doc-string of this function for more details on why this is a good idea.
-  The ``CouplingMPOModel.__init__(...)`` calls :func:`~tenpy.tools.params.unused_parameters`, helping to avoid typos in the specified parameters.
-
+- We suggest writing the model to take a single parameter dictionary for the initialization,
+  as the :class:`~tenpy.models.model.CouplingMPOModel` does.
+  The CouplingMPOModel converts the dictionary to a dict-like 
+  :class:`~tenpy.tools.params.Config` with some additional features before passing it on to the `init_lattice`,
+  `init_site`, ... methods.
+  It is recommended to read out providing default values with ``model_params.get("key", default_value)``, 
+  see :meth:`~tenpy.tools.params.Config.get`.
 - When you write a model and want to include a test that it can be at least constructed,
   take a look at ``tests/test_model.py``.
+

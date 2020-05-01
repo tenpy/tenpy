@@ -12,7 +12,6 @@ from tenpy.networks.mps import MPS
 from tenpy.networks import site
 
 from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import get_parameter
 from tenpy.networks.site import FermionSite
 from tenpy.models import lattice
 
@@ -41,26 +40,23 @@ class BipartiteSquare(lattice.Lattice):
 
 
 class FermionicPiFluxModel(CouplingMPOModel):
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
-
     def init_sites(self, model_params):
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        conserve = model_params.get('conserve', 'N')
         site = FermionSite(conserve=conserve)
         return site
 
     def init_lattice(self, model_params):
-        Lx = get_parameter(model_params, 'Lx', 1, self.name)
-        Ly = get_parameter(model_params, 'Ly', 3, self.name)
+        Lx = model_params.get('Lx', 1)
+        Ly = model_params.get('Ly', 3)
         fs = self.init_sites(model_params)
         lat = BipartiteSquare(Lx, Ly, fs)
         return lat
 
     def init_terms(self, model_params):
-        t = get_parameter(model_params, 't', -1., self.name, True)
-        V = get_parameter(model_params, 'V', 0., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
-        phi_ext = 2 * np.pi * get_parameter(model_params, 'phi_ext', 0., self.name)
+        t = np.asarray(model_params.get('t', -1.))
+        V = np.asarray(model_params.get('V', 0.))
+        mu = np.asarray(model_params.get('mu', 0.))
+        phi_ext = 2 * np.pi * model_params.get('phi_ext', 0.)
 
         t1 = t * np.exp(1j * np.pi / 4)
         t2 = t / np.sqrt(2)

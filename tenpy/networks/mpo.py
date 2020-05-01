@@ -76,8 +76,6 @@ class MPO:
 
     Attributes
     ----------
-    L : int
-        ``len(sites)``. For an iMPS, this is the number of sites in the MPS unit cell.
     chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
         The nature of the charge.
     sites : list of :class:`~tenpy.models.lattice.Site`
@@ -350,7 +348,7 @@ class MPO:
         i = self._to_valid_index(i)
         return self.IdR[i + 1]
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
@@ -783,7 +781,6 @@ class MPOGraph:
 
     Attributes
     ----------
-    L
     sites : list of :class:`~tenpy.models.lattice.Site`
         Defines the local Hilbert space for each site.
     chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
