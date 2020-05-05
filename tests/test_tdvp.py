@@ -142,11 +142,6 @@ def test_tdvp():
         'start_time': 0,
         'dt': delta_t,
         'N_steps': 1,
-        'trunc_params': {
-            'chi_max': 50,
-            'svd_min': 1.e-10,
-            'trunc_cut': None
-        }
     }
     tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
     for t in range(10):
