@@ -9,12 +9,12 @@ import numpy as np
 from collections.abc import MutableMapping
 import pprint
 
-from .hdf5_io import Hdf5Exportable
+from .hdf5_io import Hdf5Exportable, ATTR_FORMAT
 
 __all__ = ["Config", "asConfig", "get_parameter", "unused_parameters"]
 
 
-class Config(MutableMapping, Hdf5Exportable):
+class Config(MutableMapping):
     """Dict-like wrapper class for parameter/configuration dictionaries.
 
     This class behaves mostly like a dictionary of option keys/values (together making the whole
@@ -72,6 +72,96 @@ class Config(MutableMapping, Hdf5Exportable):
         if share_unused:
             res.unused = self.unused
         return res
+
+    def save_yaml(self, filename):
+        """Save the parameters to `filename` as a YAML file.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the resulting YAML file.
+        """
+        import yaml
+        with open(filename, 'w') as stream:
+            yaml.dump(self.options, stream)
+
+    @classmethod
+    def from_yaml(cls, filename, name):
+        """Load a `Config` instance from a YAML file containing the :attr:`options`.
+
+        .. warning ::
+            Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
+            file can call any Python function and should thus be treated with extreme caution.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the YAML file
+        name : str
+            Name of the resulting :class:`Config` instance.
+
+        Returns
+        -------
+        obj : Config
+            A `Config` object, loaded from file.
+        """
+        import yaml
+        with open(filename, 'r') as stream:
+            config = yaml.safe_load(stream)
+        return cls(config, name)
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        This implementation saves the content of :attr:`~object.__dict__` with
+        :meth:`~tenpy.tools.hdf5_io.Hdf5Saver.save_dict_content`,
+        storing the format under the attribute ``'format'``.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        type_repr = hdf5_saver.save_dict_content(self.options, h5gr, subpath)
+        h5gr.attrs[ATTR_FORMAT] = type_repr
+        h5gr.attrs["name"] = self.name
+        h5gr.attrs["verbose"] = self.verbose
+        h5gr.attrs["unused"] = [str(u) for u in self.unused]
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        dict_format = hdf5_loader.get_attr(h5gr, ATTR_FORMAT)
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+        obj.options = hdf5_loader.load_dict(h5gr, dict_format, subpath)
+        obj.name = hdf5_loader.get_attr(h5gr, "name")
+        obj.verbose = hdf5_loader.get_attr(h5gr, "verbose")
+        obj.unused = set(hdf5_loader.get_attr(h5gr, "unused"))
+        return obj
 
     def __getitem__(self, key):
         val = self.options[key]
@@ -278,43 +368,6 @@ class Config(MutableMapping, Hdf5Exportable):
         """
         return (key in self.keys() and np.any(np.array(self.options[key])) != 0
                 and self.options[key] is not None)
-
-    def save_yaml(self, filename):
-        """Save the parameters to `filename` as a YAML file.
-
-        Parameters
-        ----------
-        filename : str
-            Name of the resulting YAML file.
-        """
-        import yaml
-        with open(filename, 'w') as stream:
-            yaml.dump(self.options, stream)
-
-    @classmethod
-    def from_yaml(cls, filename, name):
-        """Load a `Config` instance from a YAML file containing the :attr:`options`.
-
-        .. warning ::
-            Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
-            file can call any Python function and should thus be treated with extreme caution.
-
-        Parameters
-        ----------
-        filename : str
-            Name of the YAML file
-        name : str
-            Name of the resulting :class:`Config` instance.
-
-        Returns
-        -------
-        obj : Config
-            A `Config` object, loaded from file.
-        """
-        import yaml
-        with open(filename, 'r') as stream:
-            config = yaml.safe_load(stream)
-        return cls(config, name)
 
 
 def asConfig(config, name):
