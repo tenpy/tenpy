@@ -114,18 +114,16 @@ class Sweep:
     def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        self.options = options = asConfig(options, "MPSSweeps")
+        self.options = options = asConfig(options, "Sweep")
         self.psi = psi
-        self.verbose = options.get('verbose', 1)
+        self.verbose = options.verbose
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
         self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
 
-        self.lanczos_params = options.get('lanczos_params', {})
-        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = options.get('trunc_params', {})
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        self.lanczos_params = options.subconfig('lanczos_params')
+        self.trunc_params = options.subconfig('trunc_params')
 
         self.env = None
         self.ortho_to_envs = []

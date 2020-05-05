@@ -26,6 +26,7 @@ def test_parameters():
         warnings.simplefilter('always')
         assert len(config.unused) == 1
         del config  # catch the warning for 'e'
+        del pars
         assert len(w) == 1
         sub.deprecated_alias('y', 'y_new')
         assert len(w) == 2

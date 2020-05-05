@@ -18,8 +18,9 @@ def test_ToricCode_general():
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
+    # with warnings.catch_warnings():
+    if True:
+        # warnings.simplefilter('ignore')
         model_params = {'Lx': Lx, 'Ly': Ly}
         M = ToricCode(model_params)
         psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite')

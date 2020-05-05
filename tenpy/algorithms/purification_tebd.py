@@ -669,7 +669,7 @@ class NormDisentangler(Disentangler):
     def __init__(self, parent):
         self.max_iter = parent.options.get('disent_max_iter', 20)
         self.eps = parent.options.get('disent_eps', 1.e-10)
-        self.trunc_par = parent.options.get('disent_trunc_par', parent.trunc_params)
+        self.trunc_par = parent.options.subconfig('disent_trunc_par', parent.trunc_params)
         self.chi_max = self.trunc_par.get('chi_max', 100)
         self.trunc_cut = self.trunc_par.get('trunc_cut', None)
         self.chi_range = self.trunc_par.get('disent_norm_chi', range(1, self.chi_max + 1))

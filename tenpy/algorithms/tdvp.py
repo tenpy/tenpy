@@ -96,7 +96,7 @@ class Engine:
         self.psi = psi
         self.L = self.psi.L
         self.dt = options.get('dt', 2)
-        self.trunc_params = options.get('trunc_params', {})
+        self.trunc_params = options.subconfig('trunc_params', {})
         self.N_steps = options.get('N_steps', 10)
 
     @property

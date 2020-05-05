@@ -58,12 +58,20 @@ class Config(MutableMapping, Hdf5Exportable):
         self.unused = set(config.keys())
         self.unused.discard('verbose')
         self.verbose = config.get('verbose', 1)
-        self.documentation = {}
         self.name = name
 
-    def copy(self):
-        """Make a shallow copy, as for a dictionary."""
-        return Config(self.options.copy(), self.name)
+    def copy(self, share_unused=True):
+        """Make a shallow copy, as for a dictionary.
+
+        Parameters
+        ----------
+        share_unused : bool
+            Whether the :attr:`unused` set should be shared.
+        """
+        res = Config(self.options.copy(), self.name)
+        if share_unused:
+            res.unused = self.unused
+        return res
 
     def __getitem__(self, key):
         val = self.options[key]
@@ -72,7 +80,8 @@ class Config(MutableMapping, Hdf5Exportable):
         return val
 
     def __setitem__(self, key, value):
-        self.unused.add(key)
+        if key not in self.keys():
+            self.unused.add(key)
         self.print_if_verbose(key, "Setting")
         self.options[key] = value
 
@@ -133,7 +142,7 @@ class Config(MutableMapping, Hdf5Exportable):
         use_default = key not in self.keys()
         val = self.options.setdefault(key, default)  # get & set default if not existent
         self.print_if_verbose(key, "Reading", use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
     def setdefault(self, key, default):
@@ -149,17 +158,25 @@ class Config(MutableMapping, Hdf5Exportable):
         use_default = key not in self.keys()
         self.options.setdefault(key, default)
         self.print_if_verbose(key, "Set default", not use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         # do no return the value: not added to self.unused!
 
-    def subconfig(self, key):
+    def subconfig(self, key, default=None):
         """Get ``self[key]`` as a :class:`Config`."""
         use_default = key not in self.keys()
-        subconfig = self.options.get(key, {})
-        subconfig.setdefault('verbose', self.verbose / 10.)
+        if use_default:
+            if default is None:
+                subconfig = {}
+            else:
+                subconfig = default.copy()
+        else:
+            subconfig = self.options[key]
+        if 'verbose' not in subconfig:
+            subconfig['verbose'] = self.verbose / 10.
         subconfig = asConfig(subconfig, key)
+        self.options[key] = subconfig
         self.print_if_verbose(key, "Subconfig", use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         return subconfig
 
     def print_if_verbose(self, option, action=None, use_default=False):
@@ -391,9 +408,9 @@ def get_parameter(params, key, default, descr, asarray=False):
     parameter 'dt'=0.1 for TEBD
 
     """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Config` class objects. Use `Config` methods to read out "
-           "parameters.")
+    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
+           "Use `Config` methods to read out parameters. "
+           "In particular, inside models just use `model_params.get(key, default)`.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
         return params.get(key, default)
@@ -429,9 +446,9 @@ def unused_parameters(params, warn=None):
     unused_keys : set
         The set of keys of the params which was not used
     """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Config` class objects. Use `Config.unused` attribute to "
-           "get unused parameters.")
+    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
+           "Using `unused_parameters` to warn about non-used parameters is no longer necessary; "
+           "this is now done during garbage collection.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
         return params.unused

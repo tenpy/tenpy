@@ -782,7 +782,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, options):
-        options = asConfig(options, 'DMRG')
+        options = asConfig(options, 'TwoSiteDMRGEngine')
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, options)
 
@@ -1092,7 +1092,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     """
     def __init__(self, psi, model, options):
         self.EffectiveH = OneSiteH
-        options = asConfig(options, 'DMRG')
+        options = asConfig(options, 'SingleSiteDMRGEngine')
         super(SingleSiteDMRGEngine, self).__init__(psi, model, options)
 
     def prepare_update(self):
@@ -1462,7 +1462,7 @@ class Mixer:
         Level of output vebosity.
     """
     def __init__(self, options):
-        self.options = options = asConfig(options, "Mixer")
+        self.options = options = asConfig(options, 'Mixer')
         self.amplitude = options.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
         self.decay = options.get('decay', 2.)
