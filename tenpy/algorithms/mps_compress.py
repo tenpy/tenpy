@@ -291,6 +291,7 @@ def svd_two_site(i, mps, trunc_par=None):
     trunc_par : None|dict
        If None no truncation is done. Else dict as in :func:`~tenpy.algorithms.truncation.truncate`.
     """
+    # TODO: this is already implemented somewhere else....
     theta = mps.get_theta(i, n=2)
     theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
     if trunc_par is None:
