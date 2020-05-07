@@ -7,7 +7,7 @@ established name for this model...
 
 import numpy as np
 
-from .lattice import Lattice, _parse_sites
+from .lattice import Lattice, get_order, _parse_sites
 from ..networks.site import SpinHalfSite
 from .model import MultiCouplingModel, CouplingMPOModel
 from ..tools.params import asConfig
@@ -37,11 +37,11 @@ class DualSquare(Lattice):
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
-        pos = np.array([[0.5, 0.], [0., 0.5]])
+        pos = np.array([[0., 0.5], [0.5, 0.]])
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [(0, 1, np.array([0, 0])), (0, 1, np.array([1, 0])), (1, 0, np.array([-1, 1])),
-              (1, 0, np.array([0, 1]))]
+        NN = [(1, 0, np.array([0, 0])), (1, 0, np.array([1, 0])), (0, 1, np.array([-1, 1])),
+              (0, 1, np.array([0, 1]))]
         nNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 0]), np.array([0, 1])]]
         nnNN = [(i, i, dx) for i in [0, 1] for dx in [np.array([1, 1]), np.array([-1, 1])]]
         kwargs.setdefault('pairs', {})
@@ -49,6 +49,25 @@ class DualSquare(Lattice):
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
         kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         super().__init__([Lx, Ly], sites, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined in this method compared to
+        :meth:`tenpy.models.lattice.Lattice.ordering`:
+
+        ================== =========================== =============================
+        `order`            equivalent `priority`       equivalent ``snake_winding``
+        ================== =========================== =============================
+        ``'default'``      (0, 2, 1)                   (False, False, False)
+        ================== =========================== =============================
+        """
+        if isinstance(order, str):
+            if order == "default":
+                priority = (0, 2, 1)
+                snake_winding = (False, False, False)
+                return get_order(self.shape, snake_winding, priority)
+        return super().ordering(order)
 
 
 class ToricCode(CouplingMPOModel, MultiCouplingModel):
@@ -104,9 +123,9 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Jv = model_params.get('Jv', 1.)
         Jp = model_params.get('Jp', 1.)
         # vertex/star term
-        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 0), ('Sigmax', [0, 0], 1),
-                                     ('Sigmax', [-1, 0], 0), ('Sigmax', [0, -1], 1)])
+        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
+                                     ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
         # plaquette term
-        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 0), ('Sigmaz', [0, 0], 1),
-                                     ('Sigmaz', [0, 1], 0), ('Sigmaz', [1, 0], 1)])
+        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
+                                     ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
         # done

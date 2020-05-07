@@ -58,7 +58,9 @@ Backwards incompatible changes
   `ortho_to_envs` is not empty, we defined proper wrapper classes :class:`~tenpy.algorithms.mps_sweeps.EffeciveHWrapper`
   and :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. The argument `ortho_to_envs` has been removed from
   :class:`tenpy.algorithms.mps_sweeps.EffectiveH`.
-
+- Switch order of the sites in the unit cell for the :class:`~tenpy.models.toric_code.DualSquare`, and redefine what the
+  ``"default"`` order means. This is a huge optimization of DMRG, reducing the necessary MPS bond dimension for the ground
+  state to the optimal :math:`2^{L-1}` on each bond.
 
 Added
 ^^^^^
