@@ -27,6 +27,7 @@ def test_ToricCode(Lx=1, Ly=2):
             'chi_max': 10,
             'svd_min': 1.e-10
         },
+        'P_tol_to_trunc': None,  # avoid warning about unused "P_tol" lanczos
         'max_E_err': 1.e-10,
         'N_sweeps_check': 4,
         'verbose': 1
@@ -39,5 +40,5 @@ def test_ToricCode(Lx=1, Ly=2):
     assert abs(E - (-1.)) < dmrg_params['max_E_err']
     print("chi=", psi.chi)
     if Ly == 2:
-        assert tuple(psi.chi[:4]) == (2, 4, 4, 4)
+        assert tuple(psi.chi[:4]) == (2, 2, 2, 2)
     assert abs(psi.entanglement_entropy(bonds=[0])[0] - np.log(2) * (Ly - 1)) < 1.e-5
