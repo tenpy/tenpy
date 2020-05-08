@@ -192,7 +192,7 @@ class Config(MutableMapping):
         return res
 
     def __repr__(self):
-        return "Config(name={1!r}, config={0!r})".format(self.options, self.name)
+        return repr(self.options)
 
     def __del__(self):
         self.warn_unused()
@@ -279,19 +279,16 @@ class Config(MutableMapping):
         action : str, optional
             Use to adapt printout message to specific actions (e.g. "Deleting")
         """
-        val = self.options.get(option, "<not set>")
         name = self.name
         verbose = self.verbose
         new_key = option in self.unused
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
-            actionstring = "Option" if action is None else action
+            val = self.options.get(option, "<not set>")
+            if action is None:
+                action = "Option"
             defaultstring = "(default) " if use_default else ""
-            print("{actionstring} {option!r}={val!r} {defaultstring}for config {name!s}".format(
-                actionstring=actionstring,
-                name=name,
-                option=option,
-                val=val,
-                defaultstring=defaultstring))
+            print("{action} {option!r}={val!r} {defaultstring}for config {name!s}".format(
+                action=action, name=name, option=option, val=val, defaultstring=defaultstring))
 
     def deprecated_alias(self, old_key, new_key, extra_msg=""):
         if old_key in self.options.keys():
