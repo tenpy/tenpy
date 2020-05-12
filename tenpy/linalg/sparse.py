@@ -16,6 +16,7 @@ from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 __all__ = [
     'NpcLinearOperator',
     'NpcLinearOperatorWrapper',
+    'SumNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
 ]
@@ -117,6 +118,24 @@ class NpcLinearOperatorWrapper:
         If `self` is hermitian, subclasses *can* choose to implement this to define
         the adjoint operator of `self`."""
         raise NotImplementedError("This function should be implemented in derived classes")
+
+
+class SumNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Sum of two linear operators."""
+    def __init__(self, orig_operator, other_operator):
+        super().__init__(orig_operator)
+        self.other_operator = other_operator
+
+    def matvec(self, theta):
+        """sum of the matvec of both operators."""
+        return self.orig_operator.matvec(theta) + self.other_operator.matvec(theta)
+
+    def to_matrix(self):
+        """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
+        return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
+
+    def adjoint(self):
+        return SumNpcLinearOperator(self.orig_operator.adjoint(), self.other_operator.adjoint())
 
 
 class FlatLinearOperator(ScipyLinearOperator):

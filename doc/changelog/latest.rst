@@ -96,8 +96,8 @@ Added
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.NearestNeighborModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
-- :class:`tenpy.algorithms.mps_sweeps.EffectiveHPlusHC` as a wrapper adding the h.c. during the `matvec`.
-  This requires the new :meth:`tenpy.algorithms.mps_sweeps.OneSiteH.adjoint` and :meth:`tenpy.algorithms.mps_sweeps.TwoSiteH.adjoint`.
+- :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which can be used to add the h.c. during the `matvec` 
+  (in combination with the new :meth:`tenpy.linalg.sparse.NpcLinearOperator.adjoint`).
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
 - attribute :attr:`~tenpy.models.model.options` for the Model.

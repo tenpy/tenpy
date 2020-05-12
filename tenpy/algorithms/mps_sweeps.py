@@ -30,12 +30,10 @@ from ..linalg import np_conserved as npc
 from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, NpcLinearOperatorWrapper
+from ..linalg.sparse import NpcLinearOperator, NpcLinearOperatorWrapper, SumNpcLinearOperator
 from ..tools.params import asConfig
 
-__all__ = [
-    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'OrthogonalEffectiveH', 'EffectiveHPlusHC'
-]
+__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'OrthogonalEffectiveH']
 
 
 class Sweep:
@@ -416,8 +414,9 @@ class Sweep:
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
+        # note: this order of wrapping is most effective.
         if self.env.H.explicit_plus_hc:
-            self.eff_H = EffectiveHPlusHC(self.eff_H, self.eff_H.adjoint())
+            self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
 
@@ -881,18 +880,3 @@ class OrthogonalEffectiveH(NpcLinearOperatorWrapper):
         matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
         matrix.iset_leg_labels(labels)
         return matrix
-
-
-class EffectiveHPlusHC(NpcLinearOperatorWrapper):
-    """Replace ``H -> H + hermitian_conjugate(H)``."""
-    def __init__(self, orig_operator, hc_operator):
-        super().__init__(orig_operator)
-        self.hc_operator = hc_operator
-
-    def matvec(self, theta):
-        """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        return self.orig_operator.matvec(theta) + self.hc_operator.matvec(theta)
-
-    def to_matrix(self):
-        """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
-        return self.orig_operator.to_matrix() + self.hc_operator.to_matrix()
