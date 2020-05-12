@@ -17,6 +17,7 @@ __all__ = [
     'NpcLinearOperator',
     'NpcLinearOperatorWrapper',
     'SumNpcLinearOperator',
+    'OrthogonalNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
 ]
@@ -126,16 +127,62 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
         super().__init__(orig_operator)
         self.other_operator = other_operator
 
-    def matvec(self, theta):
-        """sum of the matvec of both operators."""
-        return self.orig_operator.matvec(theta) + self.other_operator.matvec(theta)
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
 
     def to_matrix(self):
-        """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
         return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
 
     def adjoint(self):
         return SumNpcLinearOperator(self.orig_operator.adjoint(), self.other_operator.adjoint())
+
+
+class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
+
+    Here, ``|o>`` are the vectors from :attr:`ortho_vecs`.
+
+    Parameters
+    ----------
+    orig_operator : :class:`EffectiveH`
+        The original `EffectiveH` instance to wrap around.
+    ortho_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The vectors to orthogonalize against.
+    """
+    def __init__(self, orig_operator, ortho_vecs):
+        if len(ortho_vecs) == 0:
+            warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
+                          stacklevel=2)
+        super().__init__(orig_operator)
+        # TODO: gram_schmidt
+        from .lanczos import gram_schmidt
+        ortho_vecs, _ = gram_schmidt(ortho_vecs)
+        self.ortho_vecs = ortho_vecs
+
+    def matvec(self, vec):
+        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
+        vec = vec.copy()
+        for o in self.ortho_vecs:  # Project out
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        vec = self.orig_operator.matvec(vec)
+        for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        return vec
+
+    def to_matrix(self):
+        matrix = self.orig_operator.to_matrix()
+        labels = matrix.get_leg_labels()
+        proj = npc.eye_like(matrix, 0)
+        for o in self.ortho_vecs:
+            o = o.combine_legs(o.get_leg_labels())
+            proj -= npc.outer(o, o.conj())
+        matrix = npc.tensordot(matrix, proj, len(labels) // 2)
+        matrix = npc.tensordot(proj, matrix, len(labels) // 2)
+        matrix.iset_leg_labels(labels)
+        return matrix
+
+    def adjoint(self):
+        return OrthogonalNpcLinearOperator(self.orig_operator.adjoint(), self.ortho_vecs)
 
 
 class FlatLinearOperator(ScipyLinearOperator):

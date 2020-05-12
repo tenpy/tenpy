@@ -56,7 +56,7 @@ Backwards incompatible changes
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
 - Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
   `ortho_to_envs` is not empty, we defined a proper class :class:`~tenpy.linalg.sparse.NpcLinearOperatorWrapper`,
-  which serves as baseclass for :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. 
+  which serves as baseclass for :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`. 
   The argument `ortho_to_envs` has been removed from :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - Switch order of the sites in the unit cell for the :class:`~tenpy.models.toric_code.DualSquare`, and redefine what the
   ``"default"`` order means. This is a huge optimization of DMRG, reducing the necessary MPS bond dimension for the ground
@@ -96,6 +96,7 @@ Added
   - :class:`~tenpy.models.model.Model`, :class:`~tenpy.models.model.MPOModel`, :class:`~tenpy.models.model.NearestNeighborModel`
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
+- :class:`tenpy.linalg.sparse.OrthogonalNpcLinearOperator` to orthogonalize against vectors.
 - :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which can be used to add the h.c. during the `matvec` 
   (in combination with the new :meth:`tenpy.linalg.sparse.NpcLinearOperator.adjoint`).
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of

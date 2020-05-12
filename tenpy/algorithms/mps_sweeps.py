@@ -30,10 +30,10 @@ from ..linalg import np_conserved as npc
 from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, NpcLinearOperatorWrapper, SumNpcLinearOperator
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
 
-__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'OrthogonalEffectiveH']
+__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 
 
 class Sweep:
@@ -418,7 +418,21 @@ class Sweep:
         if self.env.H.explicit_plus_hc:
             self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
-            self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
+            ortho_vecs = []
+            i0 = self.i0
+            for o_env in self.ortho_to_envs:
+                # environments are of form <psi|ortho>
+                theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
+                LP = o_env.get_LP(i0, store=True)
+                RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
+                theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+                theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                if self.eff_H.combine:
+                    theta = self.eff_H.combine_theta(theta)
+                theta.itranspose(self.eff_H.acts_on)
+                ortho_vecs.append(theta)
+            self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
 
 
 class EffectiveH(NpcLinearOperator):
@@ -816,67 +830,3 @@ class TwoSiteH(EffectiveH):
             for key in ['LHeff', 'RHeff']:
                 getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
-
-
-class OrthogonalEffectiveH(NpcLinearOperatorWrapper):
-    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
-
-    Here, ``|o>`` are the states from :attr:`theta_ortho`, taken from `ortho_to_envs`.
-
-    Parameters
-    ----------
-    orig_operator : :class:`EffectiveH`
-        The original `EffectiveH` instance to wrap around.
-    i0 : int
-        Index of the active site if length=1, or of the left-most active site if length>1.
-    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-        List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
-        against. See :meth:`matvec_theta_ortho` for more details.
-        We implement this by effectively sending
-        ``H -> (1 - sum_o |theta_o><theta_o|) H (1 - sum_o |theta_o><theta_o|)``,
-        where ``|theta_o>`` is ``|psi_o>`` projected into the
-        appropriate basis (in which `self` is given).
-    """
-    def __init__(self, orig_operator, i0, ortho_to_envs):
-        if len(ortho_to_envs) == 0:
-            warnings.warn("Empty `ortho_to_envs`: no need to patch `OrthogonalEffectiveH`",
-                          stacklevel=2)
-        super().__init__(orig_operator)
-        self.ortho_to_envs = ortho_to_envs
-        self.theta_ortho = []
-        for o_env in ortho_to_envs:
-            # environments are of form <psi|ortho>
-            theta = o_env.ket.get_theta(i0, n=orig_operator.length)
-            LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + orig_operator.length - 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            if orig_operator.combine:
-                theta = orig_operator.combine_theta(theta)
-            theta.itranspose(orig_operator.acts_on)
-            self.theta_ortho.append(theta)
-
-    def matvec(self, theta):
-        """Wrapper around :meth:`EffectiveH.matvec`, including the projectors."""
-        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
-        theta = theta.copy()
-        for o in self.theta_ortho:  # Project out
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        theta = self.orig_operator.matvec(theta)
-        for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        return theta
-
-    def to_matrix(self):
-        """Wrapper around :meth:`EffectiveH.to_matrix`, including the projectors."""
-        matrix = self.orig_operator.to_matrix()
-        labels = matrix.get_leg_labels()
-        proj = npc.eye_like(matrix, 0)
-        for th_o in self.theta_ortho:
-            if self.orig_operator.combine:
-                th_o = th_o.combine_legs(th_o.get_leg_labels())
-            proj -= npc.outer(th_o, th_o.conj())
-        matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
-        matrix.iset_leg_labels(labels)
-        return matrix
