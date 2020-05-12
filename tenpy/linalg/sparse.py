@@ -44,7 +44,28 @@ class NpcLinearOperator:
         that they can be added. Note that this excludes a non-trivial `qtotal` for square
         operators.
         """
-        raise NotImplementedError("Derived classes should implement this")
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def to_matrix(self):
+        """Contract `self` to a matrix.
+
+        If `self` represents an operator with very small shape,
+        e.g. because the MPS bond dimension is very small,
+        an algorithm might choose to contract `self` to a single tensor.
+
+        Returns
+        -------
+        matrix : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of the represented operator.
+        """
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("No adjoint defined")
 
 
 class NpcLinearOperatorWrapper:
@@ -65,6 +86,7 @@ class NpcLinearOperatorWrapper:
     """
     def __init__(self, orig_operator):
         self.orig_operator = orig_operator
+        self.acts_on = orig_operator.acts_on
 
     def __getattr__(self, name):
         # default to un-wrapped attributes
@@ -84,6 +106,17 @@ class NpcLinearOperatorWrapper:
         else:
             raise ValueError("maximum recursion depth for unwrapping reached")
         return parent
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`.
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("This function should be implemented in derived classes")
 
 
 class FlatLinearOperator(ScipyLinearOperator):

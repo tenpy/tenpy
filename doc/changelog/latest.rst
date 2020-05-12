@@ -118,6 +118,8 @@ Changed
   - :class:`~tenpy.networks.terms.OnsiteTerms`
   - :class:`~tenpy.networks.terms.CouplingTerms`
   - :class:`~tenpy.models.model.Model`, i.e., all model classes.
+- Instead of just defining `to_matrix` and `adjoint` for :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`, 
+  define the interface directly for :class:`~tenpy.linalg.sparse.NpcLinearOperator`.
 
 
 Fixed

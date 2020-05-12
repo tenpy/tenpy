@@ -471,28 +471,6 @@ class EffectiveH(NpcLinearOperator):
     def __init__(self, env, i0, combine=False, move_right=True):
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-        This function turns :class:`EffectiveH` to a linear operator, which can be
-        used for :func:`~tenpy.linalg.lanczos.lanczos`.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Result of applying the effective Hamiltonian to `theta`, :math:`H |\theta>`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def to_matrix(self):
-        """Contract `self` to a matrix."""
-        raise NotImplementedError("This function should be implemented in derived classes")
-
     def combine_theta(self, theta):
         """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
 
