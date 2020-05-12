@@ -100,6 +100,7 @@ Added
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
 - :class:`tenpy.linalg.sparse.OrthogonalNpcLinearOperator` to orthogonalize against vectors.
+- :class:`tenpy.linalg.sparse.ShiftNpcLinearOperator` to add a constant.
 - :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which serves e.g. to add the h.c. during the `matvec` 
   (in combination with the new :meth:`tenpy.linalg.sparse.NpcLinearOperator.adjoint`).
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of

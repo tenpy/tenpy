@@ -71,11 +71,13 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     for i in range(1, len(E_flat)):
         E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
         qtotal = npc.detect_qtotal(psi1_flat, psi0.legs, cutoff=1.e-10)
-        if not (np.all(qtotal == psi0.qtotal) and E1_flat < -0.01):
+        if np.any(qtotal != psi0.qtotal):
             continue  # not in same charge sector
         print("--- excited state #", len(orthogonal_to))
         ortho_to = [psi.copy() for psi in orthogonal_to]  # (gets modified inplace)
         lanczos_params = {'verbose': 1, 'reortho': True}
+        if E1_flat > -0.01:
+            lanczos_params['E_shift'] = -2. * E1_flat - 0.2
         E1, psi1, N = lanczos.lanczos(sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to), psi_init,
                                       lanczos_params)
         print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
@@ -88,10 +90,10 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
         ov = np.inner(psi1.to_ndarray().conj(), psi1_flat)
         print("|<psi1|psi1_flat>|=", abs(ov))
         assert (abs(1. - abs(ov)) < tol)
-        # and finnally check also orthogonality to psi0
-        ov = npc.inner(psi0, psi1, 'range', do_conj=True)
-        print("|<psi0|psi1>| =", abs(ov))
-        assert (abs(ov) < tol**0.5)
+        # and finnally check also orthogonality to previous states
+        for psi_prev in orthogonal_to:
+            ov = npc.inner(psi_prev, psi1, 'range', do_conj=True)
+            assert (abs(ov) < tol)
         orthogonal_to.append(psi1)
     if len(orthogonal_to) == 1:
         print("warning: test didn't find a second eigenvector in the same charge sector!")

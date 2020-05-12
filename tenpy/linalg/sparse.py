@@ -17,6 +17,7 @@ __all__ = [
     'NpcLinearOperator',
     'NpcLinearOperatorWrapper',
     'SumNpcLinearOperator',
+    'ShiftNpcLinearOperator',
     'OrthogonalNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
@@ -76,6 +77,11 @@ class NpcLinearOperatorWrapper:
     Attributes not explicitly set with `self.attribute = value` (or by defining methods)
     default to the attributes of the wrapped `orig_operator`.
 
+    .. warning ::
+        If there are multiple levels of wrapping operators, the order might be critical to get
+        correct results; e.g. :class:`OrthogonalNpcLinearOperator` needs to be the outer-most
+        wrapper to produce correct results and/or be efficient.
+
     Parameters
     ----------
     orig_operator : NpcLinearOperator
@@ -134,6 +140,28 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
 
     def adjoint(self):
         return SumNpcLinearOperator(self.orig_operator.adjoint(), self.other_operator.adjoint())
+
+
+class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Representes ``original_operator + shift * identity``.
+
+    This can be useful e.g. for better Lanczos convergence.
+    """
+    def __init__(self, orig_operator, shift):
+        if shift == 0.:
+            warnings.warn("shift=0: no need for ShiftNpcLinearOperator", stacklevel=2)
+        super().__init__(orig_operator)
+        self.shift = shift
+
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.shift * vec
+
+    def to_matrix(self):
+        mat = self.orig_operator.to_matrix()
+        return mat + self.shift * npc.eye_like(mat)
+
+    def adjoint(self):
+        return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
 
 
 class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):

@@ -6,7 +6,7 @@ from ..tools.params import asConfig
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
-from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator
+from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.math import speigsh
 import warnings
 
@@ -85,6 +85,14 @@ class LanczosGroundState:
             is too small.
             This is necessary if the rank of `H` is smaller than `N_max` -
             then we get a complete basis of the Krylov space, and `beta` will be zero.
+        E_shift : float
+            Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
+            :class:`~tenpy.linalg.sparse.ShiftNpcLinearOperator`.
+            Since the Lanczos algorithm finds extremal eigenvalues, this can help convergence.
+            Moreover, if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator` is used,
+            the orthogonal vectors are *exact* eigenvectors with eigenvalue 0,
+            so you have to ensure that the energy is smaller than zero to avoid getting those.
+            The ground state energy `E0` returned by :meth:`run` is made independent of the shift.
 
     Attributes
     ----------
@@ -128,12 +136,18 @@ class LanczosGroundState:
         self.N_cache = options.get('N_cache', self.N_max)
         self.min_gap = options.get('min_gap', 1.e-12)
         self.reortho = options.get('reortho', False)
+        self.E_shift = options.get('E_shift', None)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
         self.verbose = options.verbose
+        if self.E_shift is not None:
+            if isinstance(self.H, OrthogonalNpcLinearOperator):
+                self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
+            else:
+                self.H = ShiftNpcLinearOperator(self.H, self.E_shift)
         if len(orthogonal_to) > 0:
             msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
                    "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
@@ -167,6 +181,8 @@ class LanczosGroundState:
             else:
                 msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
                 print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if self.E_shift is not None:
+            E0 -= self.E_shift
         if N == 1:
             return E0, self.psi0.copy(), N  # no better estimate available
         return E0, self._calc_result_full(N), N
@@ -318,7 +334,9 @@ class LanczosEvolution(LanczosGroundState):
         Returns
         -------
         psi_f : :class:`~tenpy.linalg.np_conserved.Array`
-            Best approximation for ``expm(delta H).dot(psi0)``
+            Best approximation for ``expm(delta H).dot(psi0)``.
+            If :cfg:option:`Lanczos.E_shift` is used, it's an approximation for
+            ``expm(delta (H + E_shift)).dot(psi)``.
         N : int
             Krylov space dimension used.
         """
