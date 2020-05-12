@@ -54,13 +54,17 @@ def test_npc_Array_conversion():
     npt.assert_equal(a._get_block_charge([0, 2]), [-2, 0])
     npt.assert_equal(a.to_ndarray(), arr)
     npt.assert_equal(a.qtotal, [0, 0])
-    print("check non-zero total charge")
+    print("empty")
+    a = npc.Array([lc, lc.conj()])
+    a.test_sanity()
+    npt.assert_equal(a.to_ndarray(), np.zeros([lc.ind_len, lc.ind_len]))
+    print("non-zero total charge")
     a = npc.Array.from_ndarray(arr, [lc, lc_add.conj()])
     npt.assert_equal(a.qtotal, [-1, 0])
     npt.assert_equal(a.to_ndarray(), arr)
     a = a.gauge_total_charge(1)
     npt.assert_equal(a.qtotal, [0, 0])
-    print("check type conversion")
+    print("type conversion")
     a_clx = a.astype(np.complex128)
     assert a_clx.dtype == np.complex128
     npt.assert_equal(a_clx.to_ndarray(), arr.astype(np.complex128))
@@ -70,6 +74,8 @@ def test_npc_Array_conversion():
     aflat = np.zeros((5, 5))
     for ind in [(0, 0), (1, 1), (1, 4), (4, 1), (2, 2), (3, 3), (4, 4)]:
         aflat[ind] = 1.
+    npt.assert_equal(a.to_ndarray(), aflat)
+    a = npc.ones([lc, lc.conj()])
     npt.assert_equal(a.to_ndarray(), aflat)
     print("random array")
     a = random_Array((20, 15, 10), chinfo2, sort=False)
