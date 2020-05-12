@@ -88,7 +88,6 @@ class NpcLinearOperatorWrapper:
     """
     def __init__(self, orig_operator):
         self.orig_operator = orig_operator
-        self.acts_on = orig_operator.acts_on
 
     def __getattr__(self, name):
         # default to un-wrapped attributes
@@ -154,7 +153,6 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
             warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
                           stacklevel=2)
         super().__init__(orig_operator)
-        # TODO: gram_schmidt
         from .lanczos import gram_schmidt
         ortho_vecs, _ = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs

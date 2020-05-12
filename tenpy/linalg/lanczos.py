@@ -6,7 +6,7 @@ from ..tools.params import asConfig
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
-from .sparse import FlatHermitianOperator
+from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator
 from ..tools.math import speigsh
 import warnings
 
@@ -27,6 +27,11 @@ class LanczosGroundState:
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `params` to :attr:`options`.
+
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
 
     Parameters
     ----------
@@ -130,9 +135,10 @@ class LanczosGroundState:
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
         self.verbose = options.verbose
         if len(orthogonal_to) > 0:
-            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose=self.verbose / 10)
-        else:
-            self.orthogonal_to = []
+            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
+                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
+            warnings.warn(msg, category=FutureWarning, stacklevel=2)
+            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
         self._cache = []
         self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float)
         # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
@@ -176,7 +182,7 @@ class LanczosGroundState:
         for k in range(self.N_max):
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
-            w = self._apply_H(w)
+            w = self.H.matvec(w)
             alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
@@ -212,7 +218,7 @@ class LanczosGroundState:
         w = self.psi0  # initialize
         for k in range(0, N - len_cache - 1):
             self._to_cache(w)
-            w = self._apply_H(w)
+            w = self.H.matvec(w)
             alpha = T[k, k]
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
@@ -241,18 +247,6 @@ class LanczosGroundState:
         cache.append(psi)
         if len(cache) > self.N_cache:
             cache.pop(0)  # remove *first* entry
-
-    def _apply_H(self, w):
-        """apply H to w, but orthogonalize agains self.orthogonal_to."""
-        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
-        if len(self.orthogonal_to) > 0:
-            w = w.copy()
-            for o in self.orthogonal_to:  # Project out
-                w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
-        w = self.H.matvec(w)
-        for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
-        return w
 
     def _calc_result_krylov(self, k):
         """calculate ground state of _T[:k+1, :k+1]"""
@@ -369,6 +363,11 @@ class LanczosEvolution(LanczosGroundState):
 def lanczos(H, psi, options={}, orthogonal_to=[]):
     """Simple wrapper calling ``LanczosGroundState(H, psi, options, orthogonal_to).run()``
 
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
     Parameters
     ----------
     H, psi, options, orthogonal_to :
@@ -392,6 +391,11 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
     and back during *each* `matvec`-operation!
 
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
     Parameters
     ----------
     H, psi, options, orthogonal_to :
@@ -406,8 +410,10 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
         Ground state vector.
     """
     if len(orthogonal_to) > 0:
-        # TODO: write method to project out orthogonal states from a NpcLinearOperator
-        raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
+        msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
+               "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
+        H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)

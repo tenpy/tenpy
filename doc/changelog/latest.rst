@@ -61,6 +61,9 @@ Backwards incompatible changes
 - Switch order of the sites in the unit cell for the :class:`~tenpy.models.toric_code.DualSquare`, and redefine what the
   ``"default"`` order means. This is a huge optimization of DMRG, reducing the necessary MPS bond dimension for the ground
   state to the optimal :math:`2^{L-1}` on each bond.
+- Deprecated the Lanczos funciton/class argument `orthogonal_to` of in :class:`~tenpy.linalg.lanczos.LanczosGroundState`.
+  Instead, one can use the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
 
 Added
 ^^^^^
@@ -97,7 +100,7 @@ Added
 - :func:`tenpy.tools.misc.to_iterable_of_len` for convenience of handling arguments.
 - :meth:`tenpy.models.lattice.Lattice.mps2lat_values_masked` as generalization of :meth:`tenpy.models.lattice.Lattice.mps2lat_values`.
 - :class:`tenpy.linalg.sparse.OrthogonalNpcLinearOperator` to orthogonalize against vectors.
-- :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which can be used to add the h.c. during the `matvec` 
+- :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which serves e.g. to add the h.c. during the `matvec` 
   (in combination with the new :meth:`tenpy.linalg.sparse.NpcLinearOperator.adjoint`).
 - :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
   :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.

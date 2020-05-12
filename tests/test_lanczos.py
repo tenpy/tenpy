@@ -66,35 +66,35 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     assert (abs(1. - abs(ov)) < tol)
 
     # now repeat, but keep orthogonal to original ground state
+    orthogonal_to = [psi0]
     # -> should give second eigenvector psi1 in the same charge sector
     for i in range(1, len(E_flat)):
         E1_flat, psi1_flat = E_flat[i], psi_flat[:, i]
         qtotal = npc.detect_qtotal(psi1_flat, psi0.legs, cutoff=1.e-10)
-        if np.all(qtotal == psi0.qtotal) and E1_flat < -0.01:
-            break  # found psi1 in same charge sector
-    else:
+        if not (np.all(qtotal == psi0.qtotal) and E1_flat < -0.01):
+            continue  # not in same charge sector
+        print("--- excited state #", len(orthogonal_to))
+        ortho_to = [psi.copy() for psi in orthogonal_to]  # (gets modified inplace)
+        lanczos_params = {'verbose': 1, 'reortho': True}
+        E1, psi1, N = lanczos.lanczos(sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to), psi_init,
+                                      lanczos_params)
+        print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
+        print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
+        psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)
+        print("<psi1|H|psi1> / E1 = 1 + ", psi1_H_psi1 / E1 - 1.)
+        assert (abs(psi1_H_psi1 / E1 - 1.) < tol)
+        print("<psi1_flat|H_flat|psi1_flat> / E1_flat = ", end='')
+        print(np.inner(psi1_flat.conj(), np.dot(H_flat, psi1_flat)) / E1_flat)
+        ov = np.inner(psi1.to_ndarray().conj(), psi1_flat)
+        print("|<psi1|psi1_flat>|=", abs(ov))
+        assert (abs(1. - abs(ov)) < tol)
+        # and finnally check also orthogonality to psi0
+        ov = npc.inner(psi0, psi1, 'range', do_conj=True)
+        print("|<psi0|psi1>| =", abs(ov))
+        assert (abs(ov) < tol**0.5)
+        orthogonal_to.append(psi1)
+    if len(orthogonal_to) == 1:
         print("warning: test didn't find a second eigenvector in the same charge sector!")
-        return  # just ignore the rest....
-    E1, psi1, N = lanczos.lanczos(H_Op,
-                                  psi_init, {
-                                      'verbose': 1,
-                                      'reortho': True
-                                  },
-                                  orthogonal_to=[psi0])
-    print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
-    print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
-    psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)
-    print("<psi1|H|psi1> / E1 = 1 + ", psi1_H_psi1 / E1 - 1.)
-    assert (abs(psi1_H_psi1 / E1 - 1.) < tol)
-    print("<psi1_flat|H_flat|psi1_flat> / E1_flat = ", end=' ')
-    print(np.inner(psi1_flat.conj(), np.dot(H_flat, psi1_flat)) / E1_flat)
-    ov = np.inner(psi1.to_ndarray().conj(), psi1_flat)
-    print("|<psi1|psi1_flat>|=", abs(ov))
-    assert (abs(1. - abs(ov)) < tol)
-    # and finnally check also orthogonality to psi0
-    ov = npc.inner(psi0, psi1, 'range', do_conj=True)
-    print("|<psi0|psi1>| =", abs(ov))
-    assert (abs(ov) < tol**0.5)
 
 
 @pytest.mark.parametrize('n, N_cache', [(10, 20)] + [(n, 6) for n in [1, 2, 4, 20]])
