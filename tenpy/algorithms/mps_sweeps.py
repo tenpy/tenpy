@@ -30,12 +30,11 @@ from ..linalg import np_conserved as npc
 from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator
+from ..linalg.sparse import NpcLinearOperator, NpcLinearOperatorWrapper
 from ..tools.params import asConfig
 
 __all__ = [
-    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper', 'OrthogonalEffectiveH',
-    'EffectiveHPlusHC'
+    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'OrthogonalEffectiveH', 'EffectiveHPlusHC'
 ]
 
 
@@ -418,7 +417,7 @@ class Sweep:
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
         if self.env.H.explicit_plus_hc:
-            self.eff_H = EffectiveHPlusHC(self.eff_H)
+            self.eff_H = EffectiveHPlusHC(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
 
@@ -508,16 +507,6 @@ class EffectiveH(NpcLinearOperator):
             Wave function with labels as given by `self.acts_on`.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
-
-    def unpatched(self):
-        """Return unpatched version of `self`.
-
-        Instances of `self` can be replaced by a :class:`EffectiveHWrapper` for additional
-        behaviour, patching and extending the behaviour of the `matvec` defined in subclasses. This
-        method gives access to the original instance, whether a `EffectiveHWrapper` was used or
-        not.
-        """
-        return self
 
 
 class OneSiteH(EffectiveH):
@@ -852,62 +841,14 @@ class TwoSiteH(EffectiveH):
         return adj
 
 
-class EffectiveHWrapper(EffectiveH):
-    """Baseclass for a wrapper around another :class:`EffectiveH`.
-
-    For some cases, it's usefull to be able to replace an instance of a subclass of
-    :class:`EffectiveH` with a wrapper behaving in the same way, but doing something in addition.
-
-    For example, `EffectiveH_plus_hc` explicitly adds the hermitian conjugate during each
-    :meth:`matvec` call.
-
-    Parameters
-    ----------
-    orig_eff_H : :class:`EffectiveH`
-        The original `EffectiveH` instance to wrap around.
-    """
-    def __init__(self, orig_eff_H):
-        self.orig_eff_H = orig_eff_H
-
-    @property
-    def length(self):
-        return self.orig_eff_H.length
-
-    @property
-    def dtype(self):
-        return self.orig_eff_H.dtype
-
-    @property
-    def N(self):
-        return self.orig_eff_H.N
-
-    @property
-    def acts_on(self):
-        return self.orig_eff_H.acts_on
-
-    @property
-    def combine(self):
-        return self.orig_eff_H.combine
-
-    @property
-    def move_right(self):
-        return self.orig_eff_H.move_right
-
-    def combine_theta(self, theta):
-        return self.orig_eff_H.combine_theta(theta)
-
-    def unpatched(self):
-        return self.orig_eff_H.unpatched()
-
-
-class OrthogonalEffectiveH(EffectiveHWrapper):
+class OrthogonalEffectiveH(NpcLinearOperatorWrapper):
     """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
 
     Here, ``|o>`` are the states from :attr:`theta_ortho`, taken from `ortho_to_envs`.
 
     Parameters
     ----------
-    orig_eff_H : :class:`EffectiveH`
+    orig_operator : :class:`EffectiveH`
         The original `EffectiveH` instance to wrap around.
     i0 : int
         Index of the active site if length=1, or of the left-most active site if length>1.
@@ -919,23 +860,24 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         where ``|theta_o>`` is ``|psi_o>`` projected into the
         appropriate basis (in which `self` is given).
     """
-    def __init__(self, orig_eff_H, i0, ortho_to_envs):
+    def __init__(self, orig_operator, i0, ortho_to_envs):
         if len(ortho_to_envs) == 0:
             warnings.warn("Empty `ortho_to_envs`: no need to patch `OrthogonalEffectiveH`",
                           stacklevel=2)
-        EffectiveHWrapper.__init__(self, orig_eff_H)
+        super().__init__(orig_operator)
         self.ortho_to_envs = ortho_to_envs
         self.theta_ortho = []
         for o_env in ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=self.length)  # environments of form <psi|ortho>
+            # environments are of form <psi|ortho>
+            theta = o_env.ket.get_theta(i0, n=orig_operator.length)
             LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + self.length - 1, store=True)
+            RP = o_env.get_RP(i0 + orig_operator.length - 1, store=True)
             theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
             theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            if self.orig_eff_H.combine:
-                theta = self.orig_eff_H.combine_theta(theta)
-            theta.itranspose(self.acts_on)
+            if orig_operator.combine:
+                theta = orig_operator.combine_theta(theta)
+            theta.itranspose(orig_operator.acts_on)
             self.theta_ortho.append(theta)
 
     def matvec(self, theta):
@@ -944,18 +886,18 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         theta = theta.copy()
         for o in self.theta_ortho:  # Project out
             theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        theta = self.orig_eff_H.matvec(theta)
+        theta = self.orig_operator.matvec(theta)
         for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
             theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
         return theta
 
     def to_matrix(self):
         """Wrapper around :meth:`EffectiveH.to_matrix`, including the projectors."""
-        matrix = self.orig_eff_H.to_matrix()
+        matrix = self.orig_operator.to_matrix()
         labels = matrix.get_leg_labels()
         proj = npc.eye_like(matrix, 0)
         for th_o in self.theta_ortho:
-            if self.orig_eff_H.combine:
+            if self.orig_operator.combine:
                 th_o = th_o.combine_legs(th_o.get_leg_labels())
             proj -= npc.outer(th_o, th_o.conj())
         matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
@@ -963,16 +905,16 @@ class OrthogonalEffectiveH(EffectiveHWrapper):
         return matrix
 
 
-class EffectiveHPlusHC(EffectiveHWrapper):
+class EffectiveHPlusHC(NpcLinearOperatorWrapper):
     """Replace ``H -> H + hermitian_conjugate(H)``."""
-    def __init__(self, orig_eff_H):
-        EffectiveHWrapper.__init__(self, orig_eff_H)
-        self.hc_eff_H = self.orig_eff_H.adjoint()
+    def __init__(self, orig_operator, hc_operator):
+        super().__init__(orig_operator)
+        self.hc_operator = hc_operator
 
     def matvec(self, theta):
         """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
+        return self.orig_operator.matvec(theta) + self.hc_operator.matvec(theta)
 
     def to_matrix(self):
         """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
-        return self.orig_eff_H.to_matrix() + self.hc_eff_H.to_matrix()
+        return self.orig_operator.to_matrix() + self.hc_operator.to_matrix()

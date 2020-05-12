@@ -13,7 +13,12 @@ import numpy as np
 from . import np_conserved as npc
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 
-__all__ = ['NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator']
+__all__ = [
+    'NpcLinearOperator',
+    'NpcLinearOperatorWrapper',
+    'FlatLinearOperator',
+    'FlatHermitianOperator',
+]
 
 
 class NpcLinearOperator:
@@ -29,7 +34,7 @@ class NpcLinearOperator:
     acts_on : list of str
         Labels of the state on which the operator can act. NB: Class attribute.
     """
-    acts_on = None
+    acts_on = None  # Derived classes should set this as a class attribute
 
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
@@ -40,6 +45,45 @@ class NpcLinearOperator:
         operators.
         """
         raise NotImplementedError("Derived classes should implement this")
+
+
+class NpcLinearOperatorWrapper:
+    """Base class for wrapping around another :class:`NpcLinearOperator`.
+
+    Attributes not explicitly set with `self.attribute = value` (or by defining methods)
+    default to the attributes of the wrapped `orig_operator`.
+
+    Parameters
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+
+    Attributes
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+    """
+    def __init__(self, orig_operator):
+        self.orig_operator = orig_operator
+
+    def __getattr__(self, name):
+        # default to un-wrapped attributes
+        return getattr(self.orig_operator, name)
+
+    def unwrapped(self):
+        """Return to the original NpcLinearOperator.
+
+        If multiple levels of wrapping were used, this returns the most unwrapped one.
+        """
+        parent = self.orig_operator
+        for _ in range(10000):
+            if hasattr(parent, "unwrapped"):
+                parent = parent.unwrapped()
+            else:
+                break
+        else:
+            raise ValueError("maximum recursion depth for unwrapping reached")
+        return parent
 
 
 class FlatLinearOperator(ScipyLinearOperator):

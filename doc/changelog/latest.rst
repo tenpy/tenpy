@@ -55,9 +55,9 @@ Backwards incompatible changes
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
 - Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
-  `ortho_to_envs` is not empty, we defined proper wrapper classes :class:`~tenpy.algorithms.mps_sweeps.EffeciveHWrapper`
-  and :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. The argument `ortho_to_envs` has been removed from
-  :class:`tenpy.algorithms.mps_sweeps.EffectiveH`.
+  `ortho_to_envs` is not empty, we defined a proper class :class:`~tenpy.linalg.sparse.NpcLinearOperatorWrapper`,
+  which serves as baseclass for :class:`~tenpy.algorithms.mps_sweeps.OrthogonalEffeciveH`. 
+  The argument `ortho_to_envs` has been removed from :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
 - Switch order of the sites in the unit cell for the :class:`~tenpy.models.toric_code.DualSquare`, and redefine what the
   ``"default"`` order means. This is a huge optimization of DMRG, reducing the necessary MPS bond dimension for the ground
   state to the optimal :math:`2^{L-1}` on each bond.
