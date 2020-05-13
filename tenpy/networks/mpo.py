@@ -526,6 +526,11 @@ class MPO:
 
         Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
 
+        .. todo ::
+            This is a naive, expensive implementation contracting the full network.
+            Try to follow :arXiv:`1711.01104` for a better estimate; would that even work in
+            the infinite limit?
+
         Parameters
         ----------
         psi : :class:`~tenpy.networks.mps.MPS`
