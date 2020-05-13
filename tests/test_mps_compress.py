@@ -77,7 +77,7 @@ def test_U_I(bc_MPS, method, g=1.5):
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     psi.test_sanity()
 
-    U = make_U(M.H_MPO, dt * 1j, which=method)
+    U = make_U(M.H_MPO, dt * -1j, which=method)
 
     if bc_MPS == 'finite':
         ED = tenpy.algorithms.exact_diag.ExactDiag(M)
