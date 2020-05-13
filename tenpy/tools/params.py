@@ -296,7 +296,7 @@ class Config(MutableMapping):
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
                 msg = '\n'.join(msg, extra_msg)
-            warnings.warn(msg, FutureWarning)
+            warnings.warn(msg, FutureWarning, stacklevel=3)
             self.options[new_key] = self.options[old_key]
             self.unused.discard(old_key)
             self.unused.add(new_key)

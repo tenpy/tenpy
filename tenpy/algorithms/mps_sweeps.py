@@ -150,6 +150,10 @@ class Sweep:
 
         Options
         -------
+        .. deprecated :: 0.6.0
+            Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
+            `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
+
         .. cfg:configoptions :: Sweep
 
             chi_list : dict | ``None``
@@ -158,22 +162,11 @@ class Sweep:
                 e.g. ``{0: 50, 20: 100}`` uses ``chi_max=50`` for the first 20 sweeps and
                 ``chi_max=100`` afterwards. Overwrites ``trunc_params['chi_list']``.
                 By default (``None``) this feature is disabled.
-            LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial left-most `LP` ('left part') of the environment. By
-                default (``None``) generate trivial, see
-                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
-            LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the
-                contraction of the left-most `LP` of the environment.)
-            LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial right-most `RP` ('right part') of the environment. By
-                default (``None``) generate trivial, see
-                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
-            LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the
-                contraction of the right-most `RP` of the environment.)
+            init_env_data : dict
+                Dictionary as returned by ``self.env.get_initialization_data()`` from
+                :meth:`~tenpy.networks.mps.MPOEnvironment.get_initialization_data`.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-                List of other matrix produc states to orthogonalize against.
+                List of other matrix product states to orthogonalize against.
                 Works only for finite systems.
                 This parameter can be used to find (a few) excited states as
                 follows. First, run DMRG to find the ground state and then
@@ -191,11 +184,8 @@ class Sweep:
             those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
-        if self.env is None or self.finite:
-            LP = self.options.get('LP', None)
-            RP = self.options.get('RP', None)
-            LP_age = self.options.get('LP_age', 0)
-            RP_age = self.options.get('RP_age', 0)
+        if self.env is None or self.psi.bc == 'finite':
+            init_env_data = self.options.get("init_env_data", {})
         else:  # re-initialize
             compatible = True
             if model is not None:
@@ -206,18 +196,21 @@ class Sweep:
                     warnings.warn("The leg of the new model is incompatible with the previous one."
                                   "Rebuild environment from scratch.")
             if compatible:
-                LP = self.env.get_LP(0, False)
-                LP_age = self.env.get_LP_age(0)
-                RP = self.env.get_RP(self.psi.L - 1, False)
-                RP_age = self.env.get_RP_age(self.psi.L - 1)
+                init_env_data = self.env.get_initialization_data()
             else:
-                LP = self.options.get('LP', None)
-                RP = self.options.get('RP', None)
-                LP_age = self.options.get('LP_age', 0)
-                RP_age = self.options.get('RP_age', 0)
+                init_env_data = self.options.get("init_env_data", {})
             if self.options.get('chi_list', None) is not None:
                 warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
+        replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
+                    ('RP_age', 'age_RP')]
+        if any([key_old in self.options for key_old, _ in replaced]):
+            warnings.warn("Deprecated options LP/RP/LP_age/RP_age: collected in `init_env_data`",
+                          FutureWarning)
+            for key_old, key_new in replaced:
+                if key_old in self.options:
+                    init_env_data[key_new] = self.options[key_old]
+
+        self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
 
         # (re)initialize ortho_to_envs
         orthogonal_to = self.options.get('orthogonal_to', [])
