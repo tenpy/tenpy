@@ -67,6 +67,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- :meth:`tenpy.networks.mpo.MPO.variance` to calculate the variance of an MPO against a finite MPS.
 - Classmethod :meth:`tenpy.networks.MPS.from_lat_product_state` to initialize an MPS from a product state given in
   lattice coordinates (independent of the `order` of the lattice).
 - argument `plus_hc` for :meth:`tenpy.models.model.CouplingModel.add_onsite`, 

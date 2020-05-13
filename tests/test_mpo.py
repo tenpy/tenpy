@@ -4,11 +4,13 @@
 import numpy as np
 import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
-
+from tenpy.models.spins import SpinChain
 from tenpy.linalg import np_conserved as npc
-
+from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps, mpo, site
 from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms, TermList
+
+from random_test import random_MPS
 
 spin_half = site.SpinHalfSite(conserve='Sz')
 
@@ -242,7 +244,11 @@ def test_MPO_expectation_value():
     ev = H.expectation_value(psi1)
     desired_ev = (0.1 * 0.5 + 0.2 * 0. + 1. * 0. + 1.5 * -0.25 + 2.5 * 0.25) / H.L
     assert abs(ev - desired_ev) < 1.e-8
-    grid = [[s.Id, s.Sz, 3 * s.Sz], [None, 0.1 * s.Id, s.Sz], [None, None, s.Id]]
+    grid = [
+        [s.Id, s.Sz, 3 * s.Sz],
+        [None, 0.1 * s.Id, s.Sz],
+        [None, None, s.Id],
+    ]
     L = 1
     exp_dec_H = mpo.MPO.from_grids([s] * L, [grid] * L, bc='infinite', IdL=0, IdR=2)
     ev = exp_dec_H.expectation_value(psi1)
@@ -258,3 +264,32 @@ def test_MPO_expectation_value():
         3 * 0. - 0.25 * 0.1**(5 - 2 - 1)) / 3.
     print("ev = ", ev, "desired", desired_ev)
     assert abs(ev - desired_ev) < 1.e-14
+
+
+def test_MPO_var(L=8, tol=1.e-13):
+    xxz_pars = dict(L=L, Jx=1., Jy=1., Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
+    M = SpinChain(xxz_pars)
+    psi = random_MPS(L, 2, 10)
+    exp_val = M.H_MPO.expectation_value(psi)
+
+    ED = ExactDiag(M)
+    ED.build_full_H_from_mpo()
+    psi_full = ED.mps_to_full(psi)
+    exp_val_full = npc.inner(psi_full,
+                             npc.tensordot(ED.full_H, psi_full, axes=1),
+                             axes='range',
+                             do_conj=True)
+    assert abs(exp_val - exp_val_full) / abs(exp_val_full) < tol
+
+    Hsquared = M.H_MPO.variance(psi, 0.)
+
+    Hsquared_full = npc.inner(psi_full,
+                              npc.tensordot(ED.full_H,
+                                            npc.tensordot(ED.full_H, psi_full, axes=1),
+                                            axes=1),
+                              axes='range',
+                              do_conj=True)
+    assert abs(Hsquared - Hsquared_full) / abs(Hsquared_full) < tol
+    var = M.H_MPO.variance(psi)
+    var_full = Hsquared_full - exp_val_full**2
+    assert abs(var - var_full) / abs(var_full) < tol
