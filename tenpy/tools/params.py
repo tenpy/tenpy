@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 from collections.abc import MutableMapping
 import pprint
+import os
 
 from .hdf5_io import Hdf5Exportable, ATTR_FORMAT
 
@@ -61,7 +62,7 @@ class Config(MutableMapping):
         self.name = name
 
     def copy(self, share_unused=True):
-        """Make a shallow copy, as for a dictionary.
+        """Make a *shallow* copy, as for a dictionary.
 
         Parameters
         ----------
@@ -71,6 +72,17 @@ class Config(MutableMapping):
         res = Config(self.options.copy(), self.name)
         if share_unused:
             res.unused = self.unused
+        return res
+
+    def as_dict(self):
+        """Return a copy of the options as a dictionary.
+
+        Subconfigs are recursivley converted to dict.
+        """
+        res = dict(self.options)
+        for k, v in res.items():
+            if isinstance(v, Config):
+                res[k] = v.as_dict()
         return res
 
     def save_yaml(self, filename):
@@ -83,10 +95,10 @@ class Config(MutableMapping):
         """
         import yaml
         with open(filename, 'w') as stream:
-            yaml.dump(self.options, stream)
+            yaml.dump(self.as_dict(), stream)
 
     @classmethod
-    def from_yaml(cls, filename, name):
+    def from_yaml(cls, filename, name=None):
         """Load a `Config` instance from a YAML file containing the :attr:`options`.
 
         .. warning ::
@@ -97,14 +109,17 @@ class Config(MutableMapping):
         ----------
         filename : str
             Name of the YAML file
-        name : str
+        name : str | None
             Name of the resulting :class:`Config` instance.
+            If ``None``, default to (the basename of) `filename`.
 
         Returns
         -------
         obj : Config
             A `Config` object, loaded from file.
         """
+        if name is None:
+            name = os.path.basename(filename)
         import yaml
         with open(filename, 'r') as stream:
             config = yaml.safe_load(stream)
@@ -192,7 +207,7 @@ class Config(MutableMapping):
         return res
 
     def __repr__(self):
-        return repr(self.options)
+        return "Config(<{0:d} options>, {1!r})".format(len(self.options), self.name)
 
     def __del__(self):
         self.warn_unused()
