@@ -239,8 +239,6 @@ def truncate(S, options):
         good2 = np.empty(len(piv), np.bool)
         good2[0] = True
         good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
-        print(good)
-        print(good2)
         good = _combine_constraints(good, good2, "degeneracy_tol")
 
     if svd_min is not None:
