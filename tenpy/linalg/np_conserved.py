@@ -1261,14 +1261,19 @@ class Array:
             chinfo2 = chinfo
         if charge is None:
             qtotal = None
+            res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
+                        self.dtype, qtotal, self._labels)
+            for block, slices, _, _ in self:  # use __iter__
+                res[slices] = block  # use __setitem__
         else:
+            # keep the very same (sparse) block structure
             if isinstance(charge, str):
                 charge = self.chinfo.names.index(charge)
-            qtotal = np.delete(self.qtotal, charge, 0)
-        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
-                    self.dtype, qtotal, self._labels)
-        for block, slices, _, _ in self:  # use __iter__
-            res[slices] = block  # use __setitem__
+            res = self.copy(deep=True)
+            res.chinfo = chinfo2
+            res.legs = [LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs]
+            res.qtotal = np.delete(self.qtotal, charge, 0)
+        res.test_sanity()
         return res
 
     def change_charge(self, charge, new_qmod, new_name='', chinfo=None):

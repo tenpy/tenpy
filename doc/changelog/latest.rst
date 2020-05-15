@@ -126,6 +126,8 @@ Changed
   - :class:`~tenpy.models.model.Model`, i.e., all model classes.
 - Instead of just defining `to_matrix` and `adjoint` for :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`, 
   define the interface directly for :class:`~tenpy.linalg.sparse.NpcLinearOperator`.
+- Try to keep the charge block structure as far as possible for :meth:`~tenpy.linalg.np_conserved.add_charge` and
+  :meth:`~tenpy.linalg.np_conserved.drop_charge` 
 
 
 Fixed
