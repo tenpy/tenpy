@@ -37,6 +37,7 @@ i.e. between sites ``i-1`` and ``i``.
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+from scipy.linalg import expm
 import warnings
 import sys
 
@@ -758,6 +759,141 @@ class MPO:
         if length == int(IdL is not None) + int(IdR is not None):
             proj_other = None
         return (proj_IdL, proj_other, proj_IdR)
+    
+    def make_U(self, dt, which='II'):
+        r"""Creates the UI or UII propagator
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator.
+            Should be imaginary for real time evolution!
+        which : 'I'|'II'
+            Selects the approximation, :func:`make_U_I` (``'I'``) or :func:`make_U_II` (``'II'``).
+
+        Returns
+        -------
+        U : :class:`~tepy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
+        """
+        if which == 'II':
+            return self.make_U_II(dt)
+        if which == 'I':
+            return self.make_U_I(dt)
+        raise ValueError(repr(which) + " not implemented")
+
+    def make_U_I(self, dt):
+        r"""Creates the :math:`U_I` propagator
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator. Should be imaginary for real time evolution!
+
+        Returns
+        -------
+        UI : :class:`~tenpy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
+
+        """
+        U = [
+            self.get_W(i).astype(np.result_type(dt, self.dtype),
+                            copy=True).itranspose(['wL', 'wR', 'p', 'p*']) for i in range(self.L)
+        ]
+
+        IdLR = []
+        for i in range(0, self.L):  # correct?
+            U1 = U[i]
+            U2 = U[(i + 1) % self.L]
+            IdL = self.IdL[i + 1]
+            IdR = self.IdR[i + 1]
+            assert IdL is not None and IdR is not None
+            U1[:, IdL, :, :] = U1[:, IdL, :, :] + dt * U1[:, IdR, :, :]
+            keep = np.ones(U1.shape[1], dtype=bool)
+            keep[IdR] = False
+            U1.iproject(keep, 1)
+            if self.finite and i + 1 == self.L:
+                keep = np.ones(U2.shape[0], dtype=bool)
+                assert self.IdR[0] is not None
+                keep[self.IdR[0]] = False
+            U2.iproject(keep, 0)
+
+            if IdL > IdR:
+                IdLR.append(IdL - 1)
+            else:
+                IdLR.append(IdL)
+
+        IdL = self.IdL[0]
+        IdR = self.IdR[0]
+        assert IdL is not None and IdR is not None
+        if IdL > IdR:
+            IdLR_0 = IdL - 1
+        else:
+            IdLR_0 = IdL
+        IdLR = [IdLR_0] + IdLR
+
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
+
+
+    def make_U_II(self, dt):
+        r"""Creates the UII propagator
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator. Should be imaginary for real time evolution!
+
+        Returns
+        -------
+        U_II : :class:`~tenpy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`UII ~= exp(H*dt)`
+
+        """
+        dtype = np.result_type(dt, self.dtype)
+        IdL = self.IdL
+        IdR = self.IdR
+
+        chinfo = self.chinfo
+        trivial = chinfo.make_valid()
+        U = []
+        for i in range(0, self.L):
+            labels = ['wL', 'wR', 'p', 'p*']
+            W = self.get_W(i).itranspose(labels)
+            assert np.all(W.qtotal == trivial)
+            DL, DR, _, _ = W.shape
+            Wflat = W.to_ndarray()
+            proj_L = np.ones(DL, dtype=np.bool_)
+            proj_L[IdL[i]] = False
+            proj_L[IdR[i]] = False
+            proj_R = np.ones(DR, dtype=np.bool_)
+            proj_R[IdL[i + 1]] = False
+            proj_R[IdR[i + 1]] = False
+
+            #Extract (A, B, C, D)
+            D = Wflat[IdL[i], IdR[i + 1], :, :]
+            C = Wflat[IdL[i], proj_R, :, :]
+            B = Wflat[proj_L, IdR[i + 1], :, :]
+            A = Wflat[proj_L, :, :, :][:, proj_R, :, :]  # numpy indexing requires two steps
+
+            W_II = make_W_II(dt, A, B, C, D)
+
+            leg_L, leg_R, leg_p, leg_pconj = W.legs
+            new_leg_L = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_L.qconj)
+            new_leg_L = new_leg_L.extend(leg_L.project(proj_L)[2])
+            new_leg_R = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_R.qconj)
+            new_leg_R = new_leg_R.extend(leg_R.project(proj_R)[2])
+
+            W_II = npc.Array.from_ndarray(
+                W_II,
+                [new_leg_L, new_leg_R, leg_p, leg_pconj],
+                dtype=dtype,
+                qtotal=trivial,
+                labels=labels,
+            )
+            # TODO: could sort by charges.
+            U.append(W_II)
+        Id = [0] * (self.L + 1)
+        return MPO(self.sites, U, self.bc, Id, Id)
 
 
 class MPOGraph:
@@ -1597,3 +1733,77 @@ def _mpo_graph_state_order(key):
     # fallback: compare strings
         return (-1, key)
     return (-1, str(key))
+
+
+def make_W_II(t, A, B, C, D):
+    r""" WII approx to exp(t H) from sys (A, B, C, D)
+
+    Parameters
+    ----------
+    t : float
+        The time step per application of the propagator. Should be imaginary for real time evolution!
+    A, B, C, D :  :class:`numpy.ndarray`
+        Blocks of the MPO tensor to be exponentiated, as defined in :arxiv:`1407.1832`.
+        Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
+    """
+    ### Algorithm
+    #
+    # In the paper :arxiv:`1407.1832`, we have two formal parameter "phi_{r/c}" which satisfies phi_r^2 = phi_c^2 = 0
+    # To implement this, we temporarily extend the virtual Hilbert space with two hard-core bosons "br, bl"
+    # The components of Eqn (11) can be computed for each index of the virtual row / column independently
+    # The matrix exponential is done in the hard-core extended Hilbert space
+
+    tB = t / np.sqrt(np.abs(t))  #spread time step across B, C
+    tC = np.sqrt(np.abs(t))
+    d = D.shape[0]
+
+    #The virtual size of W is  (1+Nr, 1+Nc)
+    Nr = A.shape[0]
+    Nc = A.shape[1]
+    W = np.zeros((1 + Nr, 1 + Nc, d, d), dtype=np.result_type(D, t))
+
+    Id_ = np.array([[1, 0], [0, 1]])  #2x2 operators in a hard-core boson space
+    b = np.array([[0, 0], [1, 0]])
+
+    Id = np.kron(Id_, Id_)  #4x4 operators in the 2x hard core boson space
+    Br = np.kron(b, Id_)
+    Bc = np.kron(Id_, b)
+    Brc = np.kron(b, b)
+    for r in range(Nr):  #double loop over row / column of A
+        for c in range(Nc):
+            #Select relevent part of virtual space and extend by hardcore bosons
+            h = np.kron(Brc, A[r, c, :, :]) + np.kron(Br, tB * B[r, :, :]) + np.kron(
+                Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
+            w = expm(h)  #Exponentiate in the extended Hilbert space
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 1 +
+              c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
+            if c == 0:
+                W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 1 + c] = w[0, 1]
+                if c == 0:
+                    W[0, 0] = w[0, 0]
+        if Nc == 0:  #technically only need one boson
+            h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
+            w = expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 0] = w[0, 0]
+
+    if Nr == 0:
+        for c in range(Nc):
+            h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
+            w = expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[0, 1 + c] = w[0, 1]
+            if c == 0:
+                W[0, 0] = w[0, 0]
+        if Nc == 0:
+            W = expm(t * D)
+
+    return W
