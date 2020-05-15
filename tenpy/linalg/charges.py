@@ -655,7 +655,6 @@ class LegCharge:
             chinfo = chargeinfo
         if isinstance(charge, str):
             charge = chinfo.names.index(charge)
-        print("dropping charge ", charge)
         return cls.from_qind(chinfo, leg.slices, np.delete(leg.charges, charge, 1), leg.qconj)
 
     @classmethod
