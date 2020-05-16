@@ -63,6 +63,8 @@ Backwards incompatible changes
   state to the optimal :math:`2^{L-1}` on each bond.
 - Deprecated the Lanczos funciton/class argument `orthogonal_to` of in :class:`~tenpy.linalg.lanczos.LanczosGroundState`.
   Instead, one can use the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+- Deprecation warning for changing the default argument of `shift_ket` for non-zero `shift_bra` of the
+  :class:`~tenpy.networks.mps.TransferMatrix`.
 
 
 Added
