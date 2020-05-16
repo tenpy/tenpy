@@ -15,7 +15,7 @@ if not sys.version_info >= (3, 5):
 MAJOR = 0
 MINOR = 6
 MICRO = 0
-RELEASED = True
+RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
@@ -27,8 +27,8 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      bash ./compile.sh
 #      pytest -m "not slow"  # run at least a quick test!
 #      # python setup.py sdist  # create source package for PyPI, done by github action
-#      # reset RELEASED = False in this module"
-#      git commit -m "reset released=False" setup.py
+#      # reset RELEASED = False in this module and tenpy/version.py, copy changelog template.
+#      git commit -m "reset released=False"
 #      git push
 #      git push origin v0.1.2 # also push the tag
 #      create release with release-notes on github
