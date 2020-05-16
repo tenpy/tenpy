@@ -1,5 +1,5 @@
-[latest]
-========
+[0.6.0] - 2020-05-16
+====================
 
 Release Notes
 -------------
@@ -11,6 +11,10 @@ See :doc:`/intro/input_output` for more details.
 To use that feature, you need to **install** the h5py package (and therefore some version of the HDF5 library).
 This is easy with anaconda, ``conda install h5py``, but might be cumbersome on your local computing cluster.
 (However, many university computing clusters have some version of HDF5 installed already. Check with your local sysadmin.)
+
+Moreover, we changed how we read out parameter dictionaries - instead of the `get_parameter()` function, 
+we have now a :class:`~tenpy.tools.params.Config` class which behaves like a dictionary, you can simpy use
+``options.get(key, default)`` for model parameters - as you would do for a python dictionary.
 
 Changelog
 ---------

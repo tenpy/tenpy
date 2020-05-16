@@ -13,14 +13,14 @@ if not sys.version_info >= (3, 5):
 # hardcode version for people without git
 
 MAJOR = 0
-MINOR = 5
+MINOR = 6
 MICRO = 0
-RELEASED = False
+RELEASED = True
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
 #  To update to a new release:
-#      # update CHANGELOG.rst
+#      # update changelog and release notes
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -s "v0.1.2"  # (sign: requires GPG key)
