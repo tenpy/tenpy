@@ -70,7 +70,7 @@ def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
     }
     eng = tebd.Engine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
-    E = np.sum(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
+    E = np.mean(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.mean(psi.expectation_value(M.H_bond))
     print("E (per site) = {E:.13f}".format(E=E))
     print("final bond dimensions: ", psi.chi)
