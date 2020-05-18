@@ -185,5 +185,5 @@ def test_index_conversion():
         sz2_mps = psi2.expectation_value("Sigmaz")
         sz2_lat = lat.mps2lat_values(sz2_mps)
         expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
-        npt.assert_equal(sz2_lat, expect_sz2)
+        npt.assert_array_almost_equal_nulp(sz2_lat, expect_sz2, 100)
     # doen

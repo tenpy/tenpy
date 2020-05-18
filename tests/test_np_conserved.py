@@ -716,6 +716,7 @@ def test_trace():
 
 def test_eig():
     size = 10
+    max_nulp = 10 * size**3
     ci = chinfo3
     l = gen_random_legcharge(ci, size)
     A = npc.Array.from_func(np.random.random, [l, l.conj()], qtotal=None, shape_kw='size')
@@ -726,11 +727,11 @@ def test_eig():
     V.test_sanity()
     V_W = V.scale_axis(W, axis=-1)
     recalc = npc.tensordot(V_W, V.conj(), axes=[1, 1])
-    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), size**3)
+    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), max_nulp)
     Wflat, Vflat = np.linalg.eigh(Aflat)
-    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, size**3)
+    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, max_nulp)
     W2 = npc.eigvalsh(A, sort='m>')
-    npt.assert_array_almost_equal_nulp(W, W2, size**3)
+    npt.assert_array_almost_equal_nulp(W, W2, max_nulp)
 
     print("check complex B")
     B = 1.j * npc.Array.from_func(np.random.random, [l, l.conj()], shape_kw='size')
@@ -740,14 +741,14 @@ def test_eig():
     W, V = npc.eigh(B, sort='m>')
     V.test_sanity()
     recalc = npc.tensordot(V.scale_axis(W, axis=-1), V.conj(), axes=[1, 1])
-    npt.assert_array_almost_equal_nulp(Bflat, recalc.to_ndarray(), size**3)
+    npt.assert_array_almost_equal_nulp(Bflat, recalc.to_ndarray(), max_nulp)
     Wflat, Vflat = np.linalg.eigh(Bflat)
-    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, size**3)
+    npt.assert_array_almost_equal_nulp(np.sort(W), Wflat, max_nulp)
 
     print("calculate without 'hermitian' knownledge")
     W, V = npc.eig(B, sort='m>')
-    assert (np.max(np.abs(W.imag)) < EPS * size**3)
-    npt.assert_array_almost_equal_nulp(np.sort(W.real), Wflat, size**3)
+    assert (np.max(np.abs(W.imag)) < EPS * max_nulp)
+    npt.assert_array_almost_equal_nulp(np.sort(W.real), Wflat, max_nulp)
 
     print("sparse speigs")
     qi = 1
@@ -757,7 +758,7 @@ def test_eig():
     for W_i, V_i in zip(Wsp, Vsp):
         V_i.test_sanity()
         diff = npc.tensordot(B, V_i, axes=1) - V_i * W_i
-        assert (npc.norm(diff, np.inf) < EPS * size**3)
+        assert (npc.norm(diff, np.inf) < EPS * max_nulp)
 
     print("for trivial charges")
     A = npc.Array.from_func(np.random.random, [lcTr, lcTr.conj()], shape_kw='size')
@@ -765,7 +766,7 @@ def test_eig():
     Aflat = A.to_ndarray()
     W, V = npc.eigh(A)
     recalc = npc.tensordot(V.scale_axis(W, axis=-1), V.conj(), axes=[1, 1])
-    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), 5 * A.shape[0]**3)
+    npt.assert_array_almost_equal_nulp(Aflat, recalc.to_ndarray(), 10 * A.shape[0]**3)
 
 
 def test_expm(size=10):
