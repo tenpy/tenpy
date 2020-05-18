@@ -22,10 +22,10 @@ __all__ = [
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '0.6.0'
+version = '0.6.1'
 
 #: whether this is a released version or modified
-released = False
+released = True
 
 #: same as version, but with 'v' in front
 short_version = 'v' + version
