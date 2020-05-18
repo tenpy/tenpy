@@ -152,6 +152,9 @@ def setup_package():
     src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     os.chdir(src_path)
 
+    # avoid warning from tenpy.tools.optimization.use_cython when we didn't compile yet.
+    os.environ.setdefault("TENPY_NO_CYTHON", "true")
+
     full_version, git_rev = get_version_info()
     write_version_py(full_version, git_rev)
 
