@@ -15,7 +15,7 @@ if not sys.version_info >= (3, 5):
 MAJOR = 0
 MINOR = 6
 MICRO = 1
-RELEASED = True
+RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
