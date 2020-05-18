@@ -85,7 +85,7 @@ import scipy.sparse.linalg.eigen.arpack
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, argsort
+from ..tools.misc import to_iterable, argsort, to_array
 from ..tools.math import lcm, speigs, entropy
 from ..algorithms.truncation import TruncationError, svd_theta
 
@@ -112,10 +112,6 @@ class MPS:
 
     Attributes
     ----------
-    L
-    chi
-    finite
-    nontrivial_bonds
     sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site.
     bc : {'finite', 'segment', 'infinite'}
@@ -317,6 +313,86 @@ class MPS:
         return obj
 
     @classmethod
+    def from_lat_product_state(cls, lat, p_state, **kwargs):
+        """Construct an MPS from a product state given in lattice coordinates.
+
+        This is a wrapper around :meth:`from_product_state`.
+        The purpuse is to make the `p_state` argument independent of the `order` of the `Lattice`,
+        and specify it in terms of lattice indices instead.
+
+        Parameters
+        ----------
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            The underlying lattice defining the geometry and Hilbert Space.
+        p_state : array_like of {int | str | 1D array}
+            Defines the product state to be represented.
+            Should be of dimension `lat.dim`+1, entries are indexed by lattice indices.
+            Entries of the array as for the `p_state` argument of :meth:`from_product_state`.
+            It gets tiled to the shape ``lat.shape``, if it is smaller.
+        **kwargs :
+            Other keyword arguments as definied in :meth:`from_product_state`.
+            `bc` is set by default from ``lat.bc_MPS``.
+
+        Returns
+        -------
+        product_mps : :class:`MPS`
+            An MPS representing the specified product state.
+
+        Examples
+        --------
+        Let's first consider a :class:`~tenpy.models.lattice.Ladder` composed of a
+        :class:`~tenpy.networks.site.SpinHalfSite` and a
+        :class:`~tenpy.networks.site.FermionSite`.
+
+        >>> spin_half = tenpy.networks.site.SpinHalfSite()
+        >>> fermion = tenpy.networks.site.FermionSite()
+        >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
+
+        To initialize a state of up-spins on the spin sites and half-filled ferions, you can use:
+
+        >>> p_state = [["up", "empty"], ["up", "full"]]
+        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_i, p_state)
+
+        Note that the same `p_state` works for a finite lattice of even length, say ``L=10``, as
+        well. We then just "tile" in x-direction, i.e., repeat the specified state 5 times:
+
+        >>> ladder_f = tenpy.models.lattice.Ladder(10, [spin_half, fermion], bc_MPS="finite")
+        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_f, p_state)
+
+        You can also easily half-fill a :class:`~tenpy.models.lattice.Honeycomb`, for example
+        with only the `A` sites occupied, or as stripe parallel to the x-direction (`stripe_x`,
+        alternating along `y` axis),
+        or as stripes parallel to the y-direction (`stripe_y`, alternating along `x` axis).
+
+        >>> honeycomb = tenpy.models.lattice.Honeycomb([4, 4], [fermion, fermion], bc_MPS="finite")
+        >>> p_state_only_A = [[["empty", "full"]]]
+        >>> psi_only_A = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_only_A)
+        >>> p_state_stripe_x = [[["empty", "empty"],
+        ...                      ["full", "full"]]]
+        >>> psi_stripe_x = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_x)
+        >>> p_state_stripe_y = [[["empty", "empty"]],
+        ...                      [["full", "full"]]]
+        >>> psi_stripe_y = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_y)
+        """
+        kwargs.setdefault("bc", lat.bc_MPS)
+        p_state = np.array(p_state, dtype=object)
+        if p_state.ndim == len(lat.shape):  # == lat.dim + 1
+            p_state = to_array(p_state, shape=lat.shape)  # tile to lattice shape
+            p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
+        elif p_state.ndim == len(lat.shape) + 1:
+            # extra dimension could be from purely 1D array entries
+            # make sure this is the case by converting to float
+            p_state = np.array(p_state, kwargs.get("dtype", np.float64))
+            # tile to lattice shape, ignore last dimension
+            p_state = to_array(p_state, shape=lat.shape + (None, ))
+            inds = tuple(lat.order.T) + (slice(None), )
+            p_state_flat = p_state[inds]  # "advanced" numpy indexing
+        else:
+            raise ValueError("wrong dimension of `p_state`. Expected {0:d}-dimensional array of "
+                             "(string, int, or 1D array)".format(d=lat.dim + 1))
+        return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
+
+    @classmethod
     def from_product_state(cls,
                            sites,
                            p_state,
@@ -331,12 +407,13 @@ class MPS:
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
-        p_state : iterable of {int | str | 1D array}
-            Defines the product state to be represented.
-            If ``p_state[i]`` is str, then site ``i`` is in state
-            ``self.sites[i].state_labels(p_state[i])``.
-            If ``p_state[i]`` is int, then site ``i`` is in state ``p_state[i]``.
-            If ``p_state[i]`` is an array, then site ``i`` wavefunction is ``p_state[i]``.
+        p_state : list of {int | str | 1D array}
+            Defines the product state to be represented; one entry for each `site` of the MPS.
+            An entry of `str` type is translated to an `int` with the help of
+            :meth:`~tenpy.networks.site.Site.state_labels`.
+            An entry of `int` type represents the physical index of the state to be used.
+            An entry which is a 1D array defines the complete wavefunction on that site; this
+            allows to make a (local) superposition.
         bc : {'infinite', 'finite', 'segmemt'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
@@ -346,12 +423,12 @@ class MPS:
             conservation gets enabled.
             If `permute` is True (default), we permute the given `p_state` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` argument should then always be given as if `conserve=None` in the Site.
+            The `p_state` entries should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form. See module doc-string.
             A single choice holds for all of the entries.
         chargeL : charges
-            Leg charge at bond 0, which are purely conventional.
+            Leg charges at bond 0, which are purely conventional.
 
         Returns
         -------
@@ -920,7 +997,7 @@ class MPS:
 
         .. deprecated:: 0.5.1
             This method will be removed in version 1.0.0.
-            Use the equivalent ``psi.enlarge_MPS_unit_cell(new_L//psi.L)`` instead of
+            Use the equivalent ``psi.enlarge_mps_unit_cell(new_L//psi.L)`` instead of
             ``psi.increase_L(new_L)``.
 
         Parameters
@@ -936,11 +1013,11 @@ class MPS:
             raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
         factor = new_L // old_L
         warnings.warn(
-            "use `psi.enlarge_MPS_unit_cell(factor=new_L//psi.L)` "
+            "use `psi.enlarge_mps_unit_cell(factor=new_L//psi.L)` "
             "instead of `psi.increase_L(new_L)`.", FutureWarning, 2)
-        self.enlarge_MPS_unit_cell(factor)
+        self.enlarge_mps_unit_cell(factor)
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
@@ -959,6 +1036,27 @@ class MPS:
         self._S = factor * self._S[:-1] + [self._S[-1]]
         self.form = factor * self.form
         self.test_sanity()
+
+    def roll_mps_unit_cell(self, shift=1):
+        """Shift the section we define as unit cellof an infinite MPS; in place.
+
+        Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
+        With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
+        whereas ``shift = -1`` will give ``[B, C, D, A]``.
+
+        Parameters
+        ----------
+        shift : int
+            By how many sites to move the tensors to the right.
+        """
+        if self.finite:
+            raise ValueError("makes only sense for infinite boundary conditions")
+        inds = np.roll(np.arange(self.L), shift)
+        self.sites = [self.sites[i] for i in inds]
+        self.form = [self.form[i] for i in inds]
+        self._B = [self._B[i] for i in inds]
+        self._S = [self._S[i] for i in inds]
+        self._S.append(self._S[0])
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
@@ -1893,6 +1991,7 @@ class MPS:
         Examples
         --------
         For a spin chain:
+
         >>> psi.correlation_function("A", "B")
         [[A0B0,     A0B1, ..., A0B{L-1}],
          [A1B0,     A1B1, ..., A1B{L-1]],
@@ -1901,10 +2000,12 @@ class MPS:
         ]
 
         To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``:
+
         >>> psi.correlation_function("A", "B", [3])
         [[A3B0,     A3B1, ..., A3B{L-1}]]
 
         For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
+
         >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
         >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
         True
@@ -2477,6 +2578,7 @@ class MPS:
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
+        perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
         # => more or less an 'insertion' sort algorithm.
@@ -2787,7 +2889,7 @@ class MPS:
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
         """
-        TM = TransferMatrix(self, self, bond0, transpose=transpose, charge_sector=0)
+        TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0)**2 if transpose else 1.
             guess = TM.initial_guess(diag)
@@ -3379,6 +3481,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
     Note that we keep all M and N as copies.
 
+    .. deprecated :: 0.6.0
+        The default for `shift_ket` was the value of `shift_bra`, this will be changed to 0.
 
     Parameters
     ----------
@@ -3390,7 +3494,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         We start the `N` of the bra at site `shift_bra` (i.e. the `j` in the above network).
     shift_ket : int | None
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
-        ``None`` defaults to `shift_bra`.
+        ``None`` is deprecated, default will be changed to 0 in the future.
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
@@ -3440,6 +3544,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  form='B'):
         L = self.L = lcm(bra.L, ket.L)
         if shift_ket is None:
+            if shift_bra != 0:
+                warnings.warn("default for shift_ket will change to 0. Specify both explicitly!",
+                              FutureWarning, 2)
             shift_ket = shift_bra
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket

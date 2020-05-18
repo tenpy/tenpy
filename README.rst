@@ -48,6 +48,13 @@ where you can post questions and hopefully find answers.
 Once you got some experience with TeNPy, you might also be able to contribute to the community and answer some questions yourself ;-)
 We also use this forum for official annoucements, for example when we release a new version.
 
+I found a bug
+-------------
+You might want to check the `github issues <https://github.com/tenpy/tenpy/issues>`_, if someone else already reported the same problem.
+To report a new bug, just `open a new issue <https://github.com/tenpy/tenpy/issues/new>`_ on github.
+If you already know how to fix it, you can just create a pull request :)
+If you are not sure whether your problem is a bug or a feature, you can also ask for help in the `TeNPy forum <https://tenpy.johannes-hauschild.de/>`_.
+
 Citing TeNPy
 ------------
 When you use TeNPy for a work published in an academic journal, you can cite `this paper <https://dx.doi.org/10.21468/SciPostPhysLectNotes.5>`_  to acknowledge the work put into the development of TeNPy.
@@ -71,12 +78,9 @@ The corresponding BibTex Entry would be the following (the ``\url{...}`` require
     }
 
 
-I found a bug
--------------
-You might want to check the `github issues <https://github.com/tenpy/tenpy/issues>`_, if someone else already reported the same problem.
-To report a new bug, just `open a new issue <https://github.com/tenpy/tenpy/issues/new>`_ on github.
-If you already know how to fix it, you can just create a pull request :)
-If you are not sure whether your problem is a bug or a feature, you can also ask for help in the `TeNPy forum <https://tenpy.johannes-hauschild.de/>`_.
+Acknowledgment
+--------------
+This work was funded by the U.S. Department of Energy, Office of Science, Office of Basic Energy Sciences, Materials Sciences and Engineering Division under Contract No. DE-AC02-05- CH11231 through the Scientific Discovery through Advanced Computing (SciDAC) program (KC23DAC Topological and Correlated Matter via Tensor Networks and Quantum Monte Carlo).
 
 License
 -------

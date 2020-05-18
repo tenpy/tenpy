@@ -50,7 +50,7 @@ def run_out_of_equilibrium():
             'trunc_cut': None
         }
     }
-    tdvp_engine = tdvp.Engine(psi=psi, model=heisenberg, TDVP_params=tdvp_params)
+    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
     times = []
     S_mid = []
     for i in range(30):

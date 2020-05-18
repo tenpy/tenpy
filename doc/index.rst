@@ -35,5 +35,6 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
+* :ref:`cfg-config-index`
+* :ref:`cfg-option-index`
 * :ref:`search`
-

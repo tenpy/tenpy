@@ -4,7 +4,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import get_parameter
+from ..tools.params import asConfig
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain']
@@ -21,50 +21,32 @@ class BoseHubbardModel(CouplingMPOModel):
             + \frac{U}{2} \sum_i n_i (n_i - 1) - \mu \sum_i n_i
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
-
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     Parameters
     ----------
-    n_max : int
-        Maximum number of bosons per site.
-    filling : float
-        Average filling.
-    conserve: {'best' | 'N' | 'parity' | None}
-        What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
-    t, U, V, mu : float | array
-        Couplings as defined in the Hamiltonian above. Note the signs!
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`BoseHubbardModel` below.
 
+    Options
+    -------
+    .. cfg:config :: BoseHubbardModel
+        :include: CouplingMPOModel
+
+        n_max : int
+            Maximum number of bosons per site.
+        filling : float
+            Average filling.
+        conserve: {'best' | 'N' | 'parity' | None}
+            What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
+        t, U, V, mu: float | array
+            Couplings as defined in the Hamiltonian above. Note the signs!
+    """
     def init_sites(self, model_params):
-        n_max = get_parameter(model_params, 'n_max', 3, self.name)
-        filling = get_parameter(model_params, 'filling', 0.5, self.name)
-        conserve = get_parameter(model_params, 'conserve', 'N', self.name)
+        n_max = model_params.get('n_max', 3)
+        filling = model_params.get('filling', 0.5)
+        conserve = model_params.get('conserve', 'N')
         if conserve == 'best':
             conserve = 'N'
             if self.verbose >= 1.:
@@ -74,10 +56,10 @@ class BoseHubbardModel(CouplingMPOModel):
 
     def init_terms(self, model_params):
         # 0) Read and set parameters.
-        t = get_parameter(model_params, 't', 1., self.name, True)
-        U = get_parameter(model_params, 'U', 0., self.name, True)
-        V = get_parameter(model_params, 'V', 0., self.name, True)
-        mu = get_parameter(model_params, 'mu', 0, self.name, True)
+        t = model_params.get('t', 1.)
+        U = model_params.get('U', 0.)
+        V = model_params.get('V', 0.)
+        mu = model_params.get('mu', 0)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
@@ -92,6 +74,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
     See the :class:`BoseHubbardModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
 
@@ -110,8 +93,8 @@ class FermiHubbardModel(CouplingMPOModel):
 
 
     Here, :math:`\langle i,j \rangle, i< j` denotes nearest neighbor pairs.
-    All parameters are collected in a single dictionary `model_params` and read out with
-    :func:`~tenpy.tools.params.get_parameter`.
+    All parameters are collected in a single dictionary `model_params`, which
+    is turned into a :class:`~tenpy.tools.params.Config` object.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -119,52 +102,35 @@ class FermiHubbardModel(CouplingMPOModel):
 
     Parameters
     ----------
-    cons_N : {'N' | 'parity' | None}
-        Whether particle number is conserved,
-        see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
-    cons_Sz : {'Sz' | 'parity' | None}
-        Whether spin is conserved,
-        see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
-    t, U, mu : float | array
-        Parameters as defined for the Hamiltonian above. Note the signs!
-    lattice : str | :class:`~tenpy.models.lattice.Lattice`
-        Instance of a lattice class for the underlaying geometry.
-        Alternatively a string being the name of one of the Lattices defined in
-        :mod:`~tenpy.models.lattice`, e.g. ``"Chain", "Square", "HoneyComb", ...``.
-    bc_MPS : {'finite' | 'infinte'}
-        MPS boundary conditions along the x-direction.
-        For 'infinite' boundary conditions, repeat the unit cell in x-direction.
-        Coupling boundary conditions in x-direction are chosen accordingly.
-        Only used if `lattice` is a string.
-    order : string
-        Ordering of the sites in the MPS, e.g. 'default', 'snake';
-        see :meth:`~tenpy.models.lattice.Lattice.ordering`.
-        Only used if `lattice` is a string.
-    L : int
-        Lenght of the lattice.
-        Only used if `lattice` is the name of a 1D Lattice.
-    Lx, Ly : int
-        Length of the lattice in x- and y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    bc_y : 'ladder' | 'cylinder'
-        Boundary conditions in y-direction.
-        Only used if `lattice` is the name of a 2D Lattice.
-    """
-    def __init__(self, model_params):
-        CouplingMPOModel.__init__(self, model_params)
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`FermiHubbardModel` below.
 
+    Options
+    -------
+    .. cfg:config :: FermiHubbardModel
+        :include: CouplingMPOModel
+
+        cons_N : {'N' | 'parity' | None}
+            Whether particle number is conserved,
+            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+        cons_Sz : {'Sz' | 'parity' | None}
+            Whether spin is conserved,
+            see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
+        t, U, mu : float | array
+            Config as defined for the Hamiltonian above. Note the signs!
+    """
     def init_sites(self, model_params):
-        cons_N = get_parameter(model_params, 'cons_N', 'N', self.name)
-        cons_Sz = get_parameter(model_params, 'cons_Sz', 'Sz', self.name)
+        cons_N = model_params.get('cons_N', 'N')
+        cons_Sz = model_params.get('cons_Sz', 'Sz')
         site = SpinHalfFermionSite(cons_N=cons_N, cons_Sz=cons_Sz)
         return site
 
     def init_terms(self, model_params):
         # 0) Read out/set default parameters.
-        t = get_parameter(model_params, 't', 1., self.name, True)
-        U = get_parameter(model_params, 'U', 0, self.name, True)
-        V = get_parameter(model_params, 'V', 0, self.name, True)
-        mu = get_parameter(model_params, 'mu', 0., self.name, True)
+        t = model_params.get('t', 1.)
+        U = model_params.get('U', 0)
+        V = model_params.get('V', 0)
+        mu = model_params.get('mu', 0.)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
@@ -181,5 +147,6 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, self.__class__.__name__)
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)

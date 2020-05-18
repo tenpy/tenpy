@@ -251,7 +251,7 @@ def test_canonical_form(bc):
     assert np.max(psi.norm_test()) < 1.e-14
 
 
-def test_enlarge_MPS_unit_cell():
+def test_enlarge_mps_unit_cell():
     s = site.SpinHalfSite(conserve='Sz')
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
     psi0 = psi.copy()
@@ -259,12 +259,26 @@ def test_enlarge_MPS_unit_cell():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         psi0.increase_L(9)
-    psi1.enlarge_MPS_unit_cell(3)
+    psi1.enlarge_mps_unit_cell(3)
     for psi in [psi0, psi1]:
         psi.test_sanity()
         expval = psi.expectation_value('Sigmaz')
         npt.assert_equal(expval, [1., -1., 1.] * 3)
     # done
+
+
+def test_roll_mps_unit_cell():
+    s = site.SpinHalfSite(conserve='Sz')
+    psi = mps.MPS.from_product_state([s] * 4, ['down', 'up', 'up', 'up'], bc='infinite')
+    psi1 = psi.copy()
+    psi1.roll_mps_unit_cell(1)
+    psi1.test_sanity()
+    npt.assert_equal(psi.expectation_value('Sigmaz'), [-1., 1., 1., 1.])
+    npt.assert_equal(psi1.expectation_value('Sigmaz'), [1., -1., 1., 1.])
+    psi_m_1 = psi.copy()
+    psi_m_1.roll_mps_unit_cell(-1)
+    psi_m_1.test_sanity()
+    npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
 
 
 def test_group():

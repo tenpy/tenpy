@@ -9,11 +9,14 @@ import sphinx_rtd_theme
 
 # ensure parent folder is in sys.path to allow import of tenpy
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'sphinx_ext')))
 
 if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
     sys.exit(1)
 
+# don't use compiled version to avoid problems with doc-strings of compiled functions
+os.environ['TENPY_OPTIMIZE'] = "0"
 try:
     import tenpy.version
 except:
@@ -24,7 +27,7 @@ except:
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #
-needs_sphinx = '2.0'
+needs_sphinx = '3.0'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -43,6 +46,7 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
+    'sphinx_cfg_options',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -74,7 +78,7 @@ html_theme = 'sphinx_rtd_theme'
 
 html_logo = "images/logo.png"
 html_favicon = "images/logo.ico"
-html_static_path = []
+html_static_path = ['_static']
 #  html_extra_path = []
 html_last_updated_fmt = '%b %d, %Y'
 
@@ -85,6 +89,7 @@ html_context = {
     "github_repo": "tenpy",  # Repo name
     "github_version": "master",  # Version
     "conf_py_path": "/doc/",  # Path in the checkout to the docs root
+    "css_files": ["_static/custom.css"],  # to highlight targets
 }
 
 html_theme_options = {
@@ -118,6 +123,7 @@ todo_include_todos = True  # show todo-boxes in output
 
 napoleon_use_admonition_for_examples = True
 napoleon_use_ivar = False  # otherwise :attr:`...` doesn't work anymore
+napoleon_custom_sections = ['Options']
 
 # -- sphinx.ext.inheritance_diagram ---------------------------------------
 
@@ -196,3 +202,10 @@ def linkcode_resolve(domain, info):
                                                                        linespec)
     else:
         return "https://github.com/tenpy/tenpy/blob/master/tenpy/%s%s" % (fn, linespec)
+
+
+# -- sphinx_cfg_options ---------------------------------------------------
+
+cfg_options_default_in_summary_table = False
+cfg_options_parse_comma_sep_names = True
+cfg_options_always_include = ["Config"]

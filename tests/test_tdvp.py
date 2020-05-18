@@ -116,8 +116,8 @@ def test_tdvp():
     }
 
     psi_tdvp2 = copy.deepcopy(psi)
-    engine = tebd.Engine(psi=psi, model=heisenberg, TEBD_params=tebd_params)
-    tdvp_engine = tdvp.Engine(psi=psi_tdvp2, model=heisenberg, TDVP_params=tdvp_params)
+    engine = tebd.Engine(psi, heisenberg, tebd_params)
+    tdvp_engine = tdvp.Engine(psi_tdvp2, heisenberg, tdvp_params)
     engine.run()
     tdvp_engine.run_two_sites(N_steps)
     ov = psi.overlap(psi_tdvp2)
@@ -130,7 +130,7 @@ def test_tdvp():
 
     # test that the initial conditions are the same
 
-    tdvp_engine = tdvp.Engine(psi=psi, model=heisenberg, TDVP_params=tdvp_params)
+    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
     psit_compare = []
     for i in range(L):
         B_tmp = psi.get_B(i).transpose(['p', 'vL', 'vR']).to_ndarray()
@@ -142,13 +142,8 @@ def test_tdvp():
         'start_time': 0,
         'dt': delta_t,
         'N_steps': 1,
-        'trunc_params': {
-            'chi_max': 50,
-            'svd_min': 1.e-10,
-            'trunc_cut': None
-        }
     }
-    tdvp_engine = tdvp.Engine(psi=psi, model=heisenberg, TDVP_params=tdvp_params)
+    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
     for t in range(10):
         tdvp_engine.run_one_site(N_steps=1)
         psit_compare, Rp_list, spectrum = tdvp_numpy.tdvp(psit_compare,

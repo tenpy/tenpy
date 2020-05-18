@@ -13,7 +13,15 @@ import numpy as np
 from . import np_conserved as npc
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 
-__all__ = ['NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator']
+__all__ = [
+    'NpcLinearOperator',
+    'NpcLinearOperatorWrapper',
+    'SumNpcLinearOperator',
+    'ShiftNpcLinearOperator',
+    'OrthogonalNpcLinearOperator',
+    'FlatLinearOperator',
+    'FlatHermitianOperator',
+]
 
 
 class NpcLinearOperator:
@@ -29,7 +37,7 @@ class NpcLinearOperator:
     acts_on : list of str
         Labels of the state on which the operator can act. NB: Class attribute.
     """
-    acts_on = None
+    acts_on = None  # Derived classes should set this as a class attribute
 
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
@@ -39,7 +47,168 @@ class NpcLinearOperator:
         that they can be added. Note that this excludes a non-trivial `qtotal` for square
         operators.
         """
-        raise NotImplementedError("Derived classes should implement this")
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def to_matrix(self):
+        """Contract `self` to a matrix.
+
+        If `self` represents an operator with very small shape,
+        e.g. because the MPS bond dimension is very small,
+        an algorithm might choose to contract `self` to a single tensor.
+
+        Returns
+        -------
+        matrix : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of the represented operator.
+        """
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("No adjoint defined")
+
+
+class NpcLinearOperatorWrapper:
+    """Base class for wrapping around another :class:`NpcLinearOperator`.
+
+    Attributes not explicitly set with `self.attribute = value` (or by defining methods)
+    default to the attributes of the wrapped `orig_operator`.
+
+    .. warning ::
+        If there are multiple levels of wrapping operators, the order might be critical to get
+        correct results; e.g. :class:`OrthogonalNpcLinearOperator` needs to be the outer-most
+        wrapper to produce correct results and/or be efficient.
+
+    Parameters
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+
+    Attributes
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+    """
+    def __init__(self, orig_operator):
+        self.orig_operator = orig_operator
+
+    def __getattr__(self, name):
+        # default to un-wrapped attributes
+        return getattr(self.orig_operator, name)
+
+    def unwrapped(self):
+        """Return to the original NpcLinearOperator.
+
+        If multiple levels of wrapping were used, this returns the most unwrapped one.
+        """
+        parent = self.orig_operator
+        for _ in range(10000):
+            if hasattr(parent, "unwrapped"):
+                parent = parent.unwrapped()
+            else:
+                break
+        else:
+            raise ValueError("maximum recursion depth for unwrapping reached")
+        return parent
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`.
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+
+class SumNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Sum of two linear operators."""
+    def __init__(self, orig_operator, other_operator):
+        super().__init__(orig_operator)
+        self.other_operator = other_operator
+
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+
+    def to_matrix(self):
+        return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
+
+    def adjoint(self):
+        return SumNpcLinearOperator(self.orig_operator.adjoint(), self.other_operator.adjoint())
+
+
+class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Representes ``original_operator + shift * identity``.
+
+    This can be useful e.g. for better Lanczos convergence.
+    """
+    def __init__(self, orig_operator, shift):
+        if shift == 0.:
+            warnings.warn("shift=0: no need for ShiftNpcLinearOperator", stacklevel=2)
+        super().__init__(orig_operator)
+        self.shift = shift
+
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.shift * vec
+
+    def to_matrix(self):
+        mat = self.orig_operator.to_matrix()
+        return mat + self.shift * npc.eye_like(mat)
+
+    def adjoint(self):
+        return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
+
+
+class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
+
+    Here, ``|o>`` are the vectors from :attr:`ortho_vecs`.
+
+    Parameters
+    ----------
+    orig_operator : :class:`EffectiveH`
+        The original `EffectiveH` instance to wrap around.
+    ortho_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The vectors to orthogonalize against.
+    """
+    def __init__(self, orig_operator, ortho_vecs):
+        if len(ortho_vecs) == 0:
+            warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
+                          stacklevel=2)
+        super().__init__(orig_operator)
+        from .lanczos import gram_schmidt
+        ortho_vecs, _ = gram_schmidt(ortho_vecs)
+        self.ortho_vecs = ortho_vecs
+
+    def matvec(self, vec):
+        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
+        vec = vec.copy()
+        for o in self.ortho_vecs:  # Project out
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        vec = self.orig_operator.matvec(vec)
+        for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        return vec
+
+    def to_matrix(self):
+        matrix = self.orig_operator.to_matrix()
+        labels = matrix.get_leg_labels()
+        proj = npc.eye_like(matrix, 0)
+        for o in self.ortho_vecs:
+            o = o.combine_legs(o.get_leg_labels())
+            proj -= npc.outer(o, o.conj())
+        matrix = npc.tensordot(matrix, proj, len(labels) // 2)
+        matrix = npc.tensordot(proj, matrix, len(labels) // 2)
+        matrix.iset_leg_labels(labels)
+        return matrix
+
+    def adjoint(self):
+        return OrthogonalNpcLinearOperator(self.orig_operator.adjoint(), self.ortho_vecs)
 
 
 class FlatLinearOperator(ScipyLinearOperator):
@@ -66,7 +235,6 @@ class FlatLinearOperator(ScipyLinearOperator):
 
     Attributes
     ----------
-    charge_sector
     possible_charge_sectors : ndarray[QTYPE, ndim=2]
         Each row corresponds to one possible choice for `charge_sector`.
     shape : (int, int)
@@ -208,20 +376,23 @@ class FlatLinearOperator(ScipyLinearOperator):
         if vec.ndim != 1:
             vec = np.squeeze(vec, axis=1)  # need a vector, not a Nx1 matrix
         if self._charge_sector is not None:
-            npc_vec = self.flat_to_npc(vec)  # convert into npc Array
-            npc_vec = self.npc_matvec(npc_vec)  # apply the transfer matrix
+            npc_vec = self.flat_to_npc(vec)  # convert to npc Array
+            npc_vec = self.npc_matvec(npc_vec)  # the expensive part
             self.matvec_count += 1
-            return self.npc_to_flat(npc_vec)  # convert back into numpy ndarray.
+            return self.npc_to_flat(npc_vec)  # convert back
         else:
             result = np.zeros(self.shape[0], self.dtype)
-            # iterator over all charge sectors
-            for sector in self.possible_charge_sectors:
-                self.charge_sector = sector
-                assert self._charge_sector is not None
-                npc_vec = self.flat_to_npc(vec[self._mask])  # convert into npc Array
-                npc_vec = self.npc_matvec(npc_vec)  # apply the transfer matrix
-                self.matvec_count += 1
-                result[self._mask] = self.npc_to_flat(npc_vec)  # convert back into numpy ndarray.
+            try:
+                # iterator over all charge sectors
+                for sector in self.possible_charge_sectors:
+                    self.charge_sector = sector
+                    assert self._charge_sector is not None
+                    npc_vec = self.flat_to_npc(vec[self._mask])  # convert to npc Array
+                    npc_vec = self.npc_matvec(npc_vec)  # the expensive part
+                    self.matvec_count += 1
+                    result[self._mask] = self.npc_to_flat(npc_vec)  # convert back
+            finally:
+                self.charge_sector = None
             return result
 
     def flat_to_npc(self, vec):

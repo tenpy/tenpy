@@ -88,6 +88,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=E_ED))
         print("compare with ED: overlap = ", abs(ov)**2)
         assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
+        var = M.H_MPO.variance(psi)
+        assert var < 1.e-10
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
@@ -114,9 +116,9 @@ def test_dmrg_rerun(L=2):
     assert abs(E1 - -1.67192622) < 1.e-6
     model_params['g'] = 1.3
     M = TFIChain(model_params)
-    del eng.engine_params['chi_list']
+    del eng.options['chi_list']
     new_chi = 15
-    eng.engine_params['trunc_params']['chi_max'] = new_chi
+    eng.options['trunc_params']['chi_max'] = new_chi
     eng.init_env(M)
     E2, psi = eng.run()
     assert max(psi.chi) == new_chi
@@ -223,16 +225,16 @@ def test_dmrg_excited(eps=1.e-12):
 
 
 @pytest.mark.slow
-def test_enlarge_MPS_unit_cell():
+def test_enlarge_mps_unit_cell():
     g = 1.3  # deep in the paramagnetic phase
     bc_MPS = 'infinite'
     model_params = dict(L=2, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
     M_2 = TFIChain(model_params)
     M_4 = TFIChain(model_params)
-    M_4.enlarge_MPS_unit_cell(2)
+    M_4.enlarge_mps_unit_cell(2)
     psi_2 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS)
     psi_4 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS)
-    psi_4.enlarge_MPS_unit_cell(2)
+    psi_4.enlarge_mps_unit_cell(2)
     dmrg_params = {
         'verbose': 1,
         'combine': True,
@@ -247,7 +249,7 @@ def test_enlarge_MPS_unit_cell():
     E_2, _ = dmrg.TwoSiteDMRGEngine(psi_2, M_2, dmrg_params).run()
     E_4, _ = dmrg.TwoSiteDMRGEngine(psi_4, M_4, dmrg_params).run()
     assert abs(E_2 - E_4) < 1.e-12
-    psi_2.enlarge_MPS_unit_cell(2)
+    psi_2.enlarge_mps_unit_cell(2)
     ov = abs(psi_2.overlap(psi_4))
     print("ov = ", ov)
     assert abs(ov - 1.) < 1.e-12
@@ -261,17 +263,16 @@ def test_chi_list():
 
 
 def test_dmrg_explicit_plus_hc(tol=1.e-13):
-    model_params = dict(L=6, Jx=1., Jy=1., Jz=1.25, hz=5.125)
-    M1 = SpinChain(model_params)
+    model_params = dict(L=12, Jx=1., Jy=1., Jz=1.25, hz=5.125)
     dmrg_params = dict(N_sweeps_check=2, mixer=False)
-    psi = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 3)
-
+    M1 = SpinChain(model_params)
     model_params['explicit_plus_hc'] = True
     M2 = SpinChain(model_params)
-    psi = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 3)
-    E1, psi1 = dmrg.TwoSiteDMRGEngine(psi, M1, dmrg_params).run()
-    psi2 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 3)
-    E2, psi2 = dmrg.TwoSiteDMRGEngine(psi, M2, dmrg_params).run()
+    assert M2.H_MPO.explicit_plus_hc
+    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 6)
+    E1, psi1 = dmrg.TwoSiteDMRGEngine(psi1, M1, dmrg_params).run()
+    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * 6)
+    E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
     print(E1, E2, abs(E1 - E2))
     assert abs(E1 - E2) < tol
     ov = abs(psi1.overlap(psi2))

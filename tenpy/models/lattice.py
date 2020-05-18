@@ -51,7 +51,7 @@ class Lattice:
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
 
-    .. deprecated : 0.5.0
+    .. deprecated :: 0.5.0
         The parameters and attributes `nearest_neighbors`, `next_nearest_neighbors` and
         `next_next_nearest_neighbors` are deprecated. Instead, we use a dictionary `pairs`
         with those names as keys and the corresponding values as specified before.
@@ -97,9 +97,6 @@ class Lattice:
 
     Attributes
     ----------
-    dim : int
-    order : ndarray (N_sites, dim+1)
-    boundary_conditions
     Ls : tuple of int
         the length in each direction.
     shape : tuple of int
@@ -430,7 +427,7 @@ class Lattice:
                 self.bc_shift = None
         self.bc = np.array(bc)
 
-    def enlarge_MPS_unit_cell(self, factor=2):
+    def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
         Parameters
@@ -785,7 +782,7 @@ class Lattice:
     def number_nearest_neighbors(self, u=0):
         """Deprecated.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Use :meth:`count_neighbors` instead.
         """
         msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
@@ -795,7 +792,7 @@ class Lattice:
     def number_next_nearest_neighbors(self, u=0):
         """Deprecated.
 
-        .. deprecated : 0.5.0
+        .. deprecated :: 0.5.0
             Use :meth:`count_neighbors` instead.
         """
         msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
