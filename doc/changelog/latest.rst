@@ -14,7 +14,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- nothing yet
+- implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
 
 Changed
 ^^^^^^^
