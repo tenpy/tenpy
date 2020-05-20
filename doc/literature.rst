@@ -67,6 +67,7 @@ Algorithm developments
 [McCulloch2008]_ was a huge step forward to solve convergence problems for infinite DMRG.
 [Singh2009]_, [Singh2010]_ explain how to incorporate Symmetries.
 [Haegeman2011]_ introduced TDVP, again explained more accessible in [Haegeman2016]_.
+[Zaletel2015]_ is another standard method for time-evolution with long-range Hamiltonians.
 [Karrasch2013]_ gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in [Hauschild2018]_.
 [Vidal2007]_ introduced MERA.
 
@@ -99,6 +100,9 @@ Algorithm developments
 .. [Karrasch2013]
     "Reducing the numerical effort of finite-temperature density matrix renormalization group calculations"
     C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), :arxiv:`1303.3942` :doi:`10.1088/1367-2630/15/8/083031`
+.. [Zaletel2015]
+    "Time-evolving a matrix product state with long-ranged interactions"
+    M. P. Zaletel, R. S. K. Mong, C. Karrasch, J. E. Moore, F. Pollmann, Phys. Rev. B 91, 165112 (2015), :arxiv:`1407.1832` :doi:`10.1103/PhysRevB.91.165112`
 .. [Hubig2015]
     "Strictly single-site DMRG algorithm with subspace expansion"
     C. Hubig, I. P. McCulloch, U. Schollwoeck, F. A. Wolf, Phys. Rev. B 91, 155115 (2015), :arxiv:`1501.05504` :doi:`10.1103/PhysRevB.91.155115`

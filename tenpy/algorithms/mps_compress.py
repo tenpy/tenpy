@@ -13,9 +13,7 @@ from ..linalg import np_conserved as npc
 from .truncation import svd_theta
 from ..networks import mps, mpo
 
-__all__ = [
-    'mps_compress', 'svd_two_site', 'apply_mpo'
-]
+__all__ = ['mps_compress', 'svd_two_site', 'apply_mpo']
 
 
 def mps_compress(psi, trunc_par):
