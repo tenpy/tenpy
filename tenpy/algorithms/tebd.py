@@ -59,7 +59,7 @@ class Engine:
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networs.mps.MPS`
+    psi : :class:`~tenpy.networks.mps.MPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.

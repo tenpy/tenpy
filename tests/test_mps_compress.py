@@ -4,6 +4,7 @@ import tenpy.linalg.np_conserved as npc
 import tenpy
 from tenpy.models.spins import SpinChain
 import pytest
+import tenpy.algorithms.mpo_evolution as mpo_evo
 
 
 def test_mps_compress(eps=1.e-13):
@@ -100,6 +101,55 @@ def test_U_I(bc_MPS, method, g=1.5):
         for i in range(30):
             EngTEBD.run()
             psi = apply_mpo(U, psi, {})
+            print(np.abs(psi.overlap(psiTEBD) - 1))
+            print(psi.norm)
+            #This test fails
+            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
+
+
+@pytest.mark.parametrize('bc_MPS, method', [
+    ('finite', 'I'),
+    ('finite', 'II'),
+    ('infinite', 'I'),
+    ('infinite', 'II'),
+])
+def test_U_II_new(bc_MPS, method, g=1.5):
+    # Test a time evolution against exact diagonalization for finite bc
+    dt = 0.01
+    if bc_MPS == 'finite':
+        L = 6
+    else:
+        L = 4
+    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
+    M = SpinChain(model_pars)
+    state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
+    psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
+    psi.test_sanity()
+
+    MPO_Evo_params = {'dt': dt, 'N_steps': 1}
+    eng = mpo_evo.Engine(psi, M, MPO_Evo_params)
+
+    if bc_MPS == 'finite':
+        ED = tenpy.algorithms.exact_diag.ExactDiag(M)
+        ED.build_full_H_from_mpo()
+        ED.full_diagonalization()
+        psiED = ED.mps_to_full(psi)
+        psiED /= psiED.norm()
+
+        UED = ED.exp_H(dt)
+        for i in range(30):
+            eng.run()
+            psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
+            psi_full = ED.mps_to_full(psi)
+            assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < dt)
+
+    if bc_MPS == 'infinite':
+        psiTEBD = psi.copy()
+        TEBD_params = {'dt': dt, 'N_steps': 1}
+        EngTEBD = tenpy.algorithms.tebd.Engine(psiTEBD, M, TEBD_params)
+        for i in range(30):
+            EngTEBD.run()
+            eng.run()
             print(np.abs(psi.overlap(psiTEBD) - 1))
             print(psi.norm)
             #This test fails
