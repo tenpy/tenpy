@@ -1209,8 +1209,8 @@ class MPS:
         if only_physical_legs:
             if self.bc != 'finite':
                 raise ValueError("`only_physical_legs` not supported for bc=" + repr(self.bc))
-            qtotal += self._B[0].get_leg('vL').get_charge(0)
-            qtotal += self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
+            qtotal -= self._B[0].get_leg('vL').get_charge(0)
+            qtotal -= self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):

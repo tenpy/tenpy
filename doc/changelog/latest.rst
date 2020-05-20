@@ -22,4 +22,4 @@ Changed
 
 Fixed
 ^^^^^
-- nothing yet
+- Wrong results of :meth:`tenpy.networks.mps.MPS.get_total_charge` with ``only_physical_legs=True``.
