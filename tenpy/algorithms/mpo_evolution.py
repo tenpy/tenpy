@@ -9,6 +9,7 @@ from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..tools.params import asConfig
 from ..networks import mps, mpo
+from .mps_compress import apply_mpo
 
 __all__ = ['Engine']
 
@@ -94,7 +95,7 @@ class Engine:
                 Energy offset subtracted from the Hamiltonian.
         """
         dt = self.options.get('dt', 0.01)
-        N_steps = self.options.get('N_steps', 10)
+        N_steps = self.options.get('N_steps', 1)
         which = self.options.get('which', 'II')
         order = self.options.get('order', 2)
         E_offset = self.options.get('E_offset', None)
@@ -102,6 +103,8 @@ class Engine:
         self.calc_U(dt, order, which, E_offset = E_offset)
 
         self.update(N_steps)
+
+        return self.psi
 
 
     def calc_U(self, dt, order = 2, which = 'II', E_offset = None):
@@ -160,6 +163,7 @@ class Engine:
         for _ in np.arange(N_steps):
             for U_mpo in self._U:
                 trunc_err += self.apply_mpo(U_mpo)
+                # self.psi = apply_mpo(U_mpo, self.psi, self.trunc_params)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['dt']
         self.trunc_err = self.trunc_err + trunc_err # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)

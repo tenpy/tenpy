@@ -113,7 +113,7 @@ def test_U_I(bc_MPS, method, g=1.5):
     ('infinite', 'I'),
     ('infinite', 'II'),
 ])
-def test_U_II_new(bc_MPS, method, g=1.5):
+def test_U_II_order1(bc_MPS, method, g=1.5):
     # Test a time evolution against exact diagonalization for finite bc
     dt = 0.01
     if bc_MPS == 'finite':
@@ -126,7 +126,7 @@ def test_U_II_new(bc_MPS, method, g=1.5):
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     psi.test_sanity()
 
-    MPO_Evo_params = {'dt': dt, 'N_steps': 1}
+    MPO_Evo_params = {'dt': dt, 'N_steps': 1, 'order': 1}
     eng = mpo_evo.Engine(psi, M, MPO_Evo_params)
 
     if bc_MPS == 'finite':
@@ -138,7 +138,7 @@ def test_U_II_new(bc_MPS, method, g=1.5):
 
         UED = ED.exp_H(dt)
         for i in range(30):
-            eng.run()
+            psi = eng.run()
             psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
             psi_full = ED.mps_to_full(psi)
             assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < dt)
@@ -149,7 +149,7 @@ def test_U_II_new(bc_MPS, method, g=1.5):
         EngTEBD = tenpy.algorithms.tebd.Engine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
-            eng.run()
+            psi = eng.run()
             print(np.abs(psi.overlap(psiTEBD) - 1))
             print(psi.norm)
             #This test fails
