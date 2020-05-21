@@ -592,6 +592,7 @@ class Engine:
         U, S, V, trunc_err, renormalize = svd_theta(theta,
                                                     self.trunc_params,
                                                     inner_labels=['vR', 'vL'])
+        self.psi.norm *= renormalize
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
         A_L = U.split_legs(0).ireplace_label('p0', 'p')
