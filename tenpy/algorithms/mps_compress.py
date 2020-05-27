@@ -36,6 +36,26 @@ class MPSCompression(Sweep):
         raise NotImplementedError("TODO")
 
 
+class MPOMPSCompression(MPSCompression):
+    """Apply an MPO to an MPO and compress it."""
+    def __init__(self, psi, U_MPO, options):
+        self.options = asConfig("MPSCompression", options)
+        self.psi = psi
+        super().__init__(psi, U_MPO, self.options)
+
+    def init_env(self, U_MPO):
+        init_env_data = self.options.get("init_env_data", {})
+        old_psi = self.psi.copy()
+        self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
+        self.reset_stats()
+
+    def update_local(self):
+        raise NotImplementedError("TODO")
+
+    def run(self):
+        raise NotImplementedError("TODO")
+
+
 def mps_compress(psi, trunc_par):
     r"""Takes an MPS and compresses it; in place.
 

@@ -278,44 +278,45 @@ class Engine:
             raise ValueError("Boundary conditions of MPS and MPO are not the same")
         if self.psi.L != U_mpo.L:
             raise ValueError("Length of MPS and MPO not the same")
-        Bs = [
-            npc.tensordot(self.psi.get_B(i, form='B'), U_mpo.get_W(i), axes=('p', 'p*'))
-            for i in range(self.psi.L)
-        ]
-        if bc == 'finite':
-            Bs[0] = npc.tensordot(self.psi.get_theta(0, 1), U_mpo.get_W(0), axes=('p0', 'p*'))
+        # Bs = [
+        #     npc.tensordot(self.psi.get_B(i, form='B'), U_mpo.get_W(i), axes=('p', 'p*'))
+        #     for i in range(self.psi.L)
+        # ]
+        # if bc == 'finite':
+        #     Bs[0] = npc.tensordot(self.psi.get_theta(0, 1), U_mpo.get_W(0), axes=('p0', 'p*'))
         for i in range(self.psi.L):
+            form = 'Th' if i == 0 else 'B'
+            B = npc.tensordot(self.psi.get_B(i, form=form), U_mpo.get_W(i), axes=('p', 'p*'))
             if i == 0 and bc == 'finite':
-                Bs[i] = Bs[i].take_slice(U_mpo.get_IdL(i), 'wL')
-                Bs[i] = Bs[i].combine_legs(['wR', 'vR'], qconj=[-1])
-                Bs[i].ireplace_labels(['(wR.vR)'], ['vR'])
-                Bs[i].legs[Bs[i].get_leg_index('vR')] = Bs[i].get_leg('vR').to_LegCharge()
+                B = B.take_slice(U_mpo.get_IdL(i), 'wL')
+                B = B.combine_legs(['wR', 'vR'], qconj=[-1])
+                B.ireplace_labels(['(wR.vR)'], ['vR'])
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
             elif i == self.psi.L - 1 and bc == 'finite':
-                Bs[i] = Bs[i].take_slice(U_mpo.get_IdR(i), 'wR')
-                Bs[i] = Bs[i].combine_legs(['wL', 'vL'], qconj=[1])
-                Bs[i].ireplace_labels(['(wL.vL)'], ['vL'])
-                Bs[i].legs[Bs[i].get_leg_index('vL')] = Bs[i].get_leg('vL').to_LegCharge()
+                B = B.take_slice(U_mpo.get_IdR(i), 'wR')
+                B = B.combine_legs(['wL', 'vL'], qconj=[1])
+                B.ireplace_labels(['(wL.vL)'], ['vL'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
             else:
-                Bs[i] = Bs[i].combine_legs([['wL', 'vL'], ['wR', 'vR']], qconj=[+1, -1])
-                Bs[i].ireplace_labels(['(wL.vL)', '(wR.vR)'], ['vL', 'vR'])
-                Bs[i].legs[Bs[i].get_leg_index('vL')] = Bs[i].get_leg('vL').to_LegCharge()
-                Bs[i].legs[Bs[i].get_leg_index('vR')] = Bs[i].get_leg('vR').to_LegCharge()
+                B = B.combine_legs([['wL', 'vL'], ['wR', 'vR']], qconj=[+1, -1])
+                B.ireplace_labels(['(wL.vL)', '(wR.vR)'], ['vL', 'vR'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            self.psi.set_B(i, B, form)
 
         if bc == 'infinite':
             #calculate good (rather arbitrary) guess for S[0] (no we don't like it either)
             weight = np.ones(U_mpo.get_W(0).shape[U_mpo.get_W(0).get_leg_index('wL')]) * 0.05
             weight[U_mpo.get_IdL(0)] = 1
             weight = weight / np.linalg.norm(weight)
-            S = [np.kron(weight, self.psi.get_SL(0))]  # order dictated by '(wL,vL)'
+            S0 = np.kron(weight, self.psi.get_SL(0))  # order dictated by '(wL,vL)'
         else:
-            S = [np.ones(Bs[0].get_leg('vL').ind_len)]
-        #Wrong S values but will be calculated in mps_compress
+            S0 = np.ones(self.psi.get_B(0, None).get_leg('vL').ind_len)
         for i in range(self.psi.L):
-            S.append(np.ones(Bs[i].get_leg('vR').ind_len))
+            self.psi.set_SR(i, np.ones(self.psi.get_B(i, None).get_leg('vR').ind_len))
+        self.psi.set_SL(0, S0)
+        #Wrong S values but will be calculated in mps_compress
+        self.psi.test_sanity()
 
-        forms = ['B' for i in range(self.psi.L)]
-        if bc == 'finite':
-            forms[0] = 'Th'
-        self.psi = mps.MPS(self.psi.sites, Bs, S, form=forms, bc=self.psi.bc)
         self.mps_compress()
         return trunc_err
