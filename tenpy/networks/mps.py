@@ -1209,8 +1209,8 @@ class MPS:
         if only_physical_legs:
             if self.bc != 'finite':
                 raise ValueError("`only_physical_legs` not supported for bc=" + repr(self.bc))
-            qtotal += self._B[0].get_leg('vL').get_charge(0)
-            qtotal += self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
+            qtotal -= self._B[0].get_leg('vL').get_charge(0)
+            qtotal -= self._B[-1].get_leg('vR').get_charge(0)  # takes qconj into account
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
@@ -2888,7 +2888,7 @@ class MPS:
 
         Find right (transpose=False) or left (transpose=True) eigenvector of the transfermatrix.
         """
-        TM = TransferMatrix(self, self, bond0, transpose=transpose, charge_sector=0)
+        TM = TransferMatrix(self, self, bond0, bond0, transpose=transpose, charge_sector=0)
         if guess is None:
             diag = self.get_SL(bond0)**2 if transpose else 1.
             guess = TM.initial_guess(diag)
@@ -3480,6 +3480,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
     Note that we keep all M and N as copies.
 
+    .. deprecated :: 0.6.0
+        The default for `shift_ket` was the value of `shift_bra`, this will be changed to 0.
 
     Parameters
     ----------
@@ -3491,7 +3493,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         We start the `N` of the bra at site `shift_bra` (i.e. the `j` in the above network).
     shift_ket : int | None
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
-        ``None`` defaults to `shift_bra`.
+        ``None`` is deprecated, default will be changed to 0 in the future.
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
@@ -3541,6 +3543,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  form='B'):
         L = self.L = lcm(bra.L, ket.L)
         if shift_ket is None:
+            if shift_bra != 0:
+                warnings.warn("default for shift_ket will change to 0. Specify both explicitly!",
+                              FutureWarning, 2)
             shift_ket = shift_bra
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket

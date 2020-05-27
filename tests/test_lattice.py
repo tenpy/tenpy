@@ -81,6 +81,28 @@ def test_TrivialLattice():
     lat.test_sanity()
 
 
+def test_IrregularLattice():
+    s1 = site.SpinHalfSite('Sz')
+    s2 = site.SpinSite(0.5, 'Sz')
+    reg = lattice.Honeycomb(3, 3, [s1, s2], bc=['open', 'periodic'])
+    ir = lattice.IrregularLattice(reg, [[1, 1, 0], [1, 1, 1], [0, 0, 0]],
+                                  [[1, 1, 2, 7], [1, 1, 3, 10]], [s2, s2],
+                                  [[-0.1, 0.0], [0.1, 0.0]])
+    known = {  # written down by hand for this particular case
+        (0, 1, (0, 0)): {'i': [5, 11, 0, 12, 1, 7, 13], 'j': [8, 14, 3, 15, 4, 10, 16]},
+        (1, 0, (1, 0)): {'i': [ 2,  8,  4, 10], 'j': [5, 11, 7, 13]},
+        (1, 0, (0, 1)): {'i': [ 2,  14,  3, 15, 10, 16], 'j': [0, 12, 1, 13, 5, 11]},
+    }
+    for pair, expect in known.items():
+        i, j, lat, sh = ir.possible_couplings(*pair)
+        print(i, j)
+        sort = np.lexsort(lat.T)
+        i = i[sort]
+        j = j[sort]
+        npt.assert_equal(i, np.array(expect['i']))
+        npt.assert_equal(j, np.array(expect['j']))
+
+
 def test_number_nn():
     s = site.SpinHalfSite('Sz')
     chain = lattice.Chain(2, s)
@@ -148,24 +170,26 @@ def test_lattice_order():
 
 
 def test_possible_couplings():
-    lat = lattice.Honeycomb(2, 3, [None, None], order="snake")
+    lat_reg = lattice.Honeycomb(2, 3, [None, None], order="snake", bc="periodic")
+    lat_irreg = lattice.IrregularLattice(lat_reg, remove=[[0, 0, 0]])
     u0, u1 = 0, 1
-    for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
-        print("dx =", dx)
-        mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
-        ops = [(None, [0, 0], u0), (None, dx, u1)]
-        m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
-        assert coupling_shape == m_coupling_shape
-        if len(lat_indices) == 0:
-            continue
-        sort = np.lexsort(lat_indices.T)
-        mps0, mps1, lat_indices = mps0[sort], mps1[sort], lat_indices[sort, :]
-        assert m_ijkl.shape == (len(mps0), 2)
-        m_sort = np.lexsort(m_lat_indices.T)
-        m_ijkl, m_lat_indices = m_ijkl[m_sort, :], m_lat_indices[m_sort, :]
-        npt.assert_equal(m_lat_indices, lat_indices)
-        npt.assert_equal(mps0, m_ijkl[:, 0])
-        npt.assert_equal(mps1, m_ijkl[:, 1])
+    for lat in [lat_reg, lat_irreg]:
+        for dx in [(0, 0), (0, 1), (2, 1), (-1, -1)]:
+            print("dx =", dx)
+            mps0, mps1, lat_indices, coupling_shape = lat.possible_couplings(u0, u1, dx)
+            ops = [(None, [0, 0], u0), (None, dx, u1)]
+            m_ijkl, m_lat_indices, m_coupling_shape = lat.possible_multi_couplings(ops)
+            assert coupling_shape == m_coupling_shape
+            if len(lat_indices) == 0:
+                continue
+            sort = np.lexsort(lat_indices.T)
+            mps0, mps1, lat_indices = mps0[sort], mps1[sort], lat_indices[sort, :]
+            assert m_ijkl.shape == (len(mps0), 2)
+            m_sort = np.lexsort(m_lat_indices.T)
+            m_ijkl, m_lat_indices = m_ijkl[m_sort, :], m_lat_indices[m_sort, :]
+            npt.assert_equal(m_lat_indices, lat_indices)
+            npt.assert_equal(mps0, m_ijkl[:, 0])
+            npt.assert_equal(mps1, m_ijkl[:, 1])
 
 
 def test_index_conversion():
@@ -185,5 +209,5 @@ def test_index_conversion():
         sz2_mps = psi2.expectation_value("Sigmaz")
         sz2_lat = lat.mps2lat_values(sz2_mps)
         expect_sz2 = np.sum(state2**2 * np.array([1., -1]), axis=-1)
-        npt.assert_equal(sz2_lat, expect_sz2)
+        npt.assert_array_almost_equal_nulp(sz2_lat, expect_sz2, 100)
     # doen

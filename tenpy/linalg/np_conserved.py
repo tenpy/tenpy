@@ -102,7 +102,7 @@ from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
-    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
+    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
@@ -469,8 +469,9 @@ class Array:
         func : callable
             A function-like object which is called to generate the data blocks.
             We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
-            If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
-            otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
+            If no `shape_kw` is given, it is called as
+            ``func(shape, *func_args, **func_kwargs)``,
+            otherwise as ``func(*func_args, `shape_kw`=shape, **func_kwargs)``.
             `shape` is a tuple of int.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
@@ -1260,14 +1261,19 @@ class Array:
             chinfo2 = chinfo
         if charge is None:
             qtotal = None
+            res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
+                        self.dtype, qtotal, self._labels)
+            for block, slices, _, _ in self:  # use __iter__
+                res[slices] = block  # use __setitem__
         else:
+            # keep the very same (sparse) block structure
             if isinstance(charge, str):
                 charge = self.chinfo.names.index(charge)
-            qtotal = np.delete(self.qtotal, charge, 0)
-        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
-                    self.dtype, qtotal, self._labels)
-        for block, slices, _, _ in self:  # use __iter__
-            res[slices] = block  # use __setitem__
+            res = self.copy(deep=True)
+            res.chinfo = chinfo2
+            res.legs = [LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs]
+            res.qtotal = np.delete(self.qtotal, charge, 0)
+        res.test_sanity()
         return res
 
     def change_charge(self, charge, new_qmod, new_name='', chinfo=None):
@@ -2769,6 +2775,15 @@ def zeros(legcharges, dtype=np.float64, qtotal=None, labels=None):
     doc-string of :class:`Array`.
     """
     return Array(legcharges, dtype, qtotal, labels)
+
+
+def ones(legcharges, dtype=np.float64, qtotal=None, labels=None):
+    """Short-hand for :meth:`Array.from_func` with function :func:`numpy.ones`.
+
+    .. warning ::
+        For non-trivial charges, only blocks with compatible charges are filled with ones!
+    """
+    return Array.from_func(np.ones, legcharges, dtype, qtotal, labels=labels)
 
 
 def eye_like(a, axis=0, labels=None):

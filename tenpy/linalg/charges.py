@@ -603,13 +603,30 @@ class LegCharge:
             raise ValueError("different length")
         if any([qconj != leg.qconj for leg in legs]):
             raise ValueError("different qconj")
-        qflat = np.empty([ind_len, chinfo.qnumber], dtype=QTYPE)
-        i0 = 0
-        for leg in legs:
-            i1 = i0 + leg.chinfo.qnumber
-            qflat[:, i0:i1] = leg.to_qflat()
-            i0 = i1
-        return cls.from_qflat(chinfo, qflat, qconj)
+
+        slices = [0]
+        qis = [0] * len(legs)
+        charges = []
+
+        def append_charges():
+            ch = []
+            for leg, qi in zip(legs, qis):
+                ch.extend(leg.charges[qi, :])
+            charges.append(ch)
+
+        append_charges()
+        next_inds = [leg.slices[qi + 1] for leg, qi in zip(legs, qis)]
+        while min(next_inds) < ind_len:
+            next_ind = min(next_inds)
+            for i, ind in enumerate(next_inds):
+                if ind == next_ind:
+                    qis[i] = qis[i] + 1
+                    next_inds[i] = legs[i].slices[qis[i] + 1]
+
+            append_charges()
+            slices.append(next_ind)
+        slices.append(ind_len)
+        return cls.from_qind(chinfo, slices, charges, qconj)
 
     @classmethod
     def from_drop_charge(cls, leg, charge=None, chargeinfo=None):
@@ -638,7 +655,7 @@ class LegCharge:
             chinfo = chargeinfo
         if isinstance(charge, str):
             charge = chinfo.names.index(charge)
-        return cls.from_qflat(chinfo, np.delete(leg.to_qflat(), charge, 1), leg.qconj)
+        return cls.from_qind(chinfo, leg.slices, np.delete(leg.charges, charge, 1), leg.qconj)
 
     @classmethod
     def from_change_charge(cls, leg, charge, new_qmod, new_name='', chargeinfo=None):

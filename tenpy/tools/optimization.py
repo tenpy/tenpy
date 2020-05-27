@@ -240,11 +240,12 @@ def use_cython(func=None, replacement=None, check_doc=True):
     the file ``tenpy/linalg/_npc_helper.pyx``, which should have the same signature (i.e. same
     arguments and return values) as the decorated function, and can be used as a replacement for
     the decorated function. However, if the cython code could not be compiled on your system
-    (or if the environment variable ``TENPY_OPTIMIZE`` is set to negative values),
-    we just pass the previous function.
+    (or if the environment variable ``TENPY_OPTIMIZE`` is set to negative values, or
+    the environment variable ``TENPY_NO_CYTHON`` is "true"), we just pass the previous function.
 
-    Note: in case that the decorator is used for a class method, the corresponding Cython version
-    needs to have an ``@cython.binding(True)``.
+    .. note ::
+       In case that the decorator is used for a class method, the corresponding Cython version
+       needs to have an ``@cython.binding(True)``.
 
     Parameters
     ----------
@@ -277,7 +278,9 @@ def use_cython(func=None, replacement=None, check_doc=True):
     global _npc_helper_module
     global have_cython_functions
     if have_cython_functions is None:
-        if optimize(OptimizationFlag.default):
+        if os.getenv("TENPY_NO_CYTHON", "").lower() in ["true", "yes", "y", "1"]:
+            have_cython_functions = False
+        elif optimize(OptimizationFlag.default):
             try:
                 from ..linalg import _npc_helper
                 _npc_helper_module = _npc_helper

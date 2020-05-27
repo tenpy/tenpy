@@ -88,6 +88,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=E_ED))
         print("compare with ED: overlap = ", abs(ov)**2)
         assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
+        var = M.H_MPO.variance(psi)
+        assert var < 1.e-10
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']

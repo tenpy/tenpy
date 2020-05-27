@@ -667,6 +667,55 @@ class MPO:
             warnings.warn(msg, stacklevel=2)
         return np.real_if_close(current_value / L)
 
+    def variance(self, psi, exp_val=None):
+        """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
+
+        Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+
+        .. todo ::
+            This is a naive, expensive implementation contracting the full network.
+            Try to follow :arXiv:`1711.01104` for a better estimate; would that even work in
+            the infinite limit?
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            State for which the variance should be taken.
+        exp_val : float/complex | None
+            The result of ``<psi|self|psi> = self.expectation_value(psi)`` if known;
+            otherwise obtained from :meth:`expectation_value`.
+            (Set this to 0 to obtain only the part ``<psi|self^2|psi>``.)
+        """
+        if self.bc != 'finite':
+            raise ValueError("works only for finite systems")
+        if self.L != psi.L:
+            raise ValueError("expect same L")
+        if psi._p_label != ['p']:
+            raise ValueError("not adjusted for non-standard MPS.")
+        assert self.L >= 1
+        if exp_val is None:
+            exp_val = self.expectation_value(psi)
+
+        th = psi.get_theta(0, n=1)
+        W = self.get_W(0).take_slice(self.get_IdL(0), 'wL')
+        contr = npc.tensordot(th, W.replace_label('wR', 'wR1'), axes=['p0', 'p*'])
+        contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=['p', 'p*'])
+        contr = npc.tensordot(th.conj(), contr, axes=[['vL*', 'p0*'], ['vL', 'p']])
+        for i in range(1, self.L):
+            B = psi.get_B(i, form='B')
+            W = self.get_W(i)
+            contr = npc.tensordot(contr, B, axes=['vR', 'vL'])
+            contr = npc.tensordot(contr,
+                                  W.replace_label('wR', 'wR1'),
+                                  axes=[['wR1', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr,
+                                  W.replace_label('wR', 'wR2'),
+                                  axes=[['wR2', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
+        contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
+        contr = npc.trace(contr, 'vR', 'vR*')
+        return np.real_if_close(contr - exp_val**2)
+
     def dagger(self):
         """Return hermition conjugate copy of self."""
         # complex conjugate and transpose everything

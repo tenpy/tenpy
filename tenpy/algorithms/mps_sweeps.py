@@ -30,13 +30,10 @@ from ..linalg import np_conserved as npc
 from ..linalg.lanczos import gram_schmidt
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
 
-__all__ = [
-    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'EffectiveHWrapper', 'OrthogonalEffectiveH',
-    'EffectiveHPlusHC'
-]
+__all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 
 
 class Sweep:
@@ -114,18 +111,16 @@ class Sweep:
     def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        self.options = options = asConfig(options, "MPSSweeps")
+        self.options = options = asConfig(options, "Sweep")
         self.psi = psi
-        self.verbose = options.get('verbose', 1)
+        self.verbose = options.verbose
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
         self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
 
-        self.lanczos_params = options.get('lanczos_params', {})
-        self.lanczos_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-        self.trunc_params = options.get('trunc_params', {})
-        self.trunc_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+        self.lanczos_params = options.subconfig('lanczos_params')
+        self.trunc_params = options.subconfig('trunc_params')
 
         self.env = None
         self.ortho_to_envs = []
@@ -155,6 +150,10 @@ class Sweep:
 
         Options
         -------
+        .. deprecated :: 0.6.0
+            Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
+            `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
+
         .. cfg:configoptions :: Sweep
 
             chi_list : dict | ``None``
@@ -163,22 +162,11 @@ class Sweep:
                 e.g. ``{0: 50, 20: 100}`` uses ``chi_max=50`` for the first 20 sweeps and
                 ``chi_max=100`` afterwards. Overwrites ``trunc_params['chi_list']``.
                 By default (``None``) this feature is disabled.
-            LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial left-most `LP` ('left part') of the environment. By
-                default (``None``) generate trivial, see
-                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
-            LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the
-                contraction of the left-most `LP` of the environment.)
-            LP : :class:`~tenpy.linalg.np_conserved.Array`
-                Initial right-most `RP` ('right part') of the environment. By
-                default (``None``) generate trivial, see
-                :class:`~tenpy.networks.mpo.MPOEnvironment` for details.
-            LP_age : int
-                The 'age' (i.e. number of physical sites invovled into the
-                contraction of the right-most `RP` of the environment.)
+            init_env_data : dict
+                Dictionary as returned by ``self.env.get_initialization_data()`` from
+                :meth:`~tenpy.networks.mps.MPOEnvironment.get_initialization_data`.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-                List of other matrix produc states to orthogonalize against.
+                List of other matrix product states to orthogonalize against.
                 Works only for finite systems.
                 This parameter can be used to find (a few) excited states as
                 follows. First, run DMRG to find the ground state and then
@@ -196,11 +184,8 @@ class Sweep:
             those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
-        if self.env is None or self.finite:
-            LP = self.options.get('LP', None)
-            RP = self.options.get('RP', None)
-            LP_age = self.options.get('LP_age', 0)
-            RP_age = self.options.get('RP_age', 0)
+        if self.env is None or self.psi.bc == 'finite':
+            init_env_data = self.options.get("init_env_data", {})
         else:  # re-initialize
             compatible = True
             if model is not None:
@@ -211,18 +196,21 @@ class Sweep:
                     warnings.warn("The leg of the new model is incompatible with the previous one."
                                   "Rebuild environment from scratch.")
             if compatible:
-                LP = self.env.get_LP(0, False)
-                LP_age = self.env.get_LP_age(0)
-                RP = self.env.get_RP(self.psi.L - 1, False)
-                RP_age = self.env.get_RP_age(self.psi.L - 1)
+                init_env_data = self.env.get_initialization_data()
             else:
-                LP = self.options.get('LP', None)
-                RP = self.options.get('RP', None)
-                LP_age = self.options.get('LP_age', 0)
-                RP_age = self.options.get('RP_age', 0)
+                init_env_data = self.options.get("init_env_data", {})
             if self.options.get('chi_list', None) is not None:
                 warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        self.env = MPOEnvironment(self.psi, H, self.psi, LP, RP, LP_age, RP_age)
+        replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
+                    ('RP_age', 'age_RP')]
+        if any([key_old in self.options for key_old, _ in replaced]):
+            warnings.warn("Deprecated options LP/RP/LP_age/RP_age: collected in `init_env_data`",
+                          FutureWarning)
+            for key_old, key_new in replaced:
+                if key_old in self.options:
+                    init_env_data[key_new] = self.options[key_old]
+
+        self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
 
         # (re)initialize ortho_to_envs
         orthogonal_to = self.options.get('orthogonal_to', [])
@@ -419,10 +407,25 @@ class Sweep:
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
+        # note: this order of wrapping is most effective.
         if self.env.H.explicit_plus_hc:
-            self.eff_H = EffectiveHPlusHC(self.eff_H)
+            self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
-            self.eff_H = OrthogonalEffectiveH(self.eff_H, self.i0, self.ortho_to_envs)
+            ortho_vecs = []
+            i0 = self.i0
+            for o_env in self.ortho_to_envs:
+                # environments are of form <psi|ortho>
+                theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
+                LP = o_env.get_LP(i0, store=True)
+                RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
+                theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+                theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                if self.eff_H.combine:
+                    theta = self.eff_H.combine_theta(theta)
+                theta.itranspose(self.eff_H.acts_on)
+                ortho_vecs.append(theta)
+            self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
 
 
 class EffectiveH(NpcLinearOperator):
@@ -474,28 +477,6 @@ class EffectiveH(NpcLinearOperator):
     def __init__(self, env, i0, combine=False, move_right=True):
         raise NotImplementedError("This function should be implemented in derived classes")
 
-    def matvec(self, theta):
-        r"""Apply the effective Hamiltonian to `theta`.
-
-        This function turns :class:`EffectiveH` to a linear operator, which can be
-        used for :func:`~tenpy.linalg.lanczos.lanczos`.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function to apply the effective Hamiltonian to.
-
-        Returns
-        -------
-        H_theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Result of applying the effective Hamiltonian to `theta`, :math:`H |\theta>`.
-        """
-        raise NotImplementedError("This function should be implemented in derived classes")
-
-    def to_matrix(self):
-        """Contract `self` to a matrix."""
-        raise NotImplementedError("This function should be implemented in derived classes")
-
     def combine_theta(self, theta):
         """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
 
@@ -510,16 +491,6 @@ class EffectiveH(NpcLinearOperator):
             Wave function with labels as given by `self.acts_on`.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
-
-    def unpatched(self):
-        """Return unpatched version of `self`.
-
-        Instances of `self` can be replaced by a :class:`EffectiveHWrapper` for additional
-        behaviour, patching and extending the behaviour of the `matvec` defined in subclasses. This
-        method gives access to the original instance, whether a `EffectiveHWrapper` was used or
-        not.
-        """
-        return self
 
 
 class OneSiteH(EffectiveH):
@@ -852,129 +823,3 @@ class TwoSiteH(EffectiveH):
             for key in ['LHeff', 'RHeff']:
                 getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
-
-
-class EffectiveHWrapper(EffectiveH):
-    """Baseclass for a wrapper around another :class:`EffectiveH`.
-
-    For some cases, it's usefull to be able to replace an instance of a subclass of
-    :class:`EffectiveH` with a wrapper behaving in the same way, but doing something in addition.
-
-    For example, `EffectiveH_plus_hc` explicitly adds the hermitian conjugate during each
-    :meth:`matvec` call.
-
-    Parameters
-    ----------
-    orig_eff_H : :class:`EffectiveH`
-        The original `EffectiveH` instance to wrap around.
-    """
-    def __init__(self, orig_eff_H):
-        self.orig_eff_H = orig_eff_H
-
-    @property
-    def length(self):
-        return self.orig_eff_H.length
-
-    @property
-    def dtype(self):
-        return self.orig_eff_H.dtype
-
-    @property
-    def N(self):
-        return self.orig_eff_H.N
-
-    @property
-    def acts_on(self):
-        return self.orig_eff_H.acts_on
-
-    @property
-    def combine(self):
-        return self.orig_eff_H.combine
-
-    @property
-    def move_right(self):
-        return self.orig_eff_H.move_right
-
-    def combine_theta(self, theta):
-        return self.orig_eff_H.combine_theta(theta)
-
-    def unpatched(self):
-        return self.orig_eff_H.unpatched()
-
-
-class OrthogonalEffectiveH(EffectiveHWrapper):
-    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
-
-    Here, ``|o>`` are the states from :attr:`theta_ortho`, taken from `ortho_to_envs`.
-
-    Parameters
-    ----------
-    orig_eff_H : :class:`EffectiveH`
-        The original `EffectiveH` instance to wrap around.
-    i0 : int
-        Index of the active site if length=1, or of the left-most active site if length>1.
-    ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-        List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
-        against. See :meth:`matvec_theta_ortho` for more details.
-        We implement this by effectively sending
-        ``H -> (1 - sum_o |theta_o><theta_o|) H (1 - sum_o |theta_o><theta_o|)``,
-        where ``|theta_o>`` is ``|psi_o>`` projected into the
-        appropriate basis (in which `self` is given).
-    """
-    def __init__(self, orig_eff_H, i0, ortho_to_envs):
-        if len(ortho_to_envs) == 0:
-            warnings.warn("Empty `ortho_to_envs`: no need to patch `OrthogonalEffectiveH`",
-                          stacklevel=2)
-        EffectiveHWrapper.__init__(self, orig_eff_H)
-        self.ortho_to_envs = ortho_to_envs
-        self.theta_ortho = []
-        for o_env in ortho_to_envs:
-            theta = o_env.ket.get_theta(i0, n=self.length)  # environments of form <psi|ortho>
-            LP = o_env.get_LP(i0, store=True)
-            RP = o_env.get_RP(i0 + self.length - 1, store=True)
-            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-            if self.orig_eff_H.combine:
-                theta = self.orig_eff_H.combine_theta(theta)
-            theta.itranspose(self.acts_on)
-            self.theta_ortho.append(theta)
-
-    def matvec(self, theta):
-        """Wrapper around :meth:`EffectiveH.matvec`, including the projectors."""
-        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
-        theta = theta.copy()
-        for o in self.theta_ortho:  # Project out
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        theta = self.orig_eff_H.matvec(theta)
-        for o in self.theta_ortho[::-1]:  # reverse: more obviously Hermitian.
-            theta.iadd_prefactor_other(-npc.inner(o, theta, 'range', do_conj=True), o)
-        return theta
-
-    def to_matrix(self):
-        """Wrapper around :meth:`EffectiveH.to_matrix`, including the projectors."""
-        matrix = self.orig_eff_H.to_matrix()
-        labels = matrix.get_leg_labels()
-        proj = npc.eye_like(matrix, 0)
-        for th_o in self.theta_ortho:
-            if self.orig_eff_H.combine:
-                th_o = th_o.combine_legs(th_o.get_leg_labels())
-            proj -= npc.outer(th_o, th_o.conj())
-        matrix = npc.tensordot(proj, npc.tensordot(matrix, proj, 1), 1)
-        matrix.iset_leg_labels(labels)
-        return matrix
-
-
-class EffectiveHPlusHC(EffectiveHWrapper):
-    """Replace ``H -> H + hermitian_conjugate(H)``."""
-    def __init__(self, orig_eff_H):
-        EffectiveHWrapper.__init__(self, orig_eff_H)
-        self.hc_eff_H = self.orig_eff_H.adjoint()
-
-    def matvec(self, theta):
-        """Wrapper around :meth:`EffectiveH.matvec`, adding hermitian conjugate."""
-        return self.orig_eff_H.matvec(theta) + self.hc_eff_H.matvec(theta)
-
-    def to_matrix(self):
-        """Wrapper around :meth:`EffectiveH.to_matrix`, adding hermitian conjugate."""
-        return self.orig_eff_H.to_matrix() + self.hc_eff_H.to_matrix()

@@ -43,7 +43,7 @@ from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.process import memory_usage
-from .mps_sweeps import Sweep, OneSiteH, TwoSiteH, OrthogonalEffectiveH, EffectiveHPlusHC
+from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
@@ -782,7 +782,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     def __init__(self, psi, model, options):
-        options = asConfig(options, 'DMRG')
+        options = asConfig(options, 'TwoSiteDMRGEngine')
         self.EffectiveH = TwoSiteH
         super(TwoSiteDMRGEngine, self).__init__(psi, model, options)
 
@@ -978,7 +978,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            LHeff = self.eff_H.unpatched().LHeff
+            LHeff = self.eff_H.LHeff
             LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)  # Always i0 + 1
@@ -998,7 +998,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine:
-            RHeff = self.eff_H.unpatched().RHeff
+            RHeff = self.eff_H.RHeff
             RP = npc.tensordot(VH, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
             self.env.set_RP(i0, RP, age=self.env.get_RP_age(i0 + self.EffectiveH.length - 1) + 1)
@@ -1092,7 +1092,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     """
     def __init__(self, psi, model, options):
         self.EffectiveH = OneSiteH
-        options = asConfig(options, 'DMRG')
+        options = asConfig(options, 'SingleSiteDMRGEngine')
         super(SingleSiteDMRGEngine, self).__init__(psi, model, options)
 
     def prepare_update(self):
@@ -1333,7 +1333,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine and self.move_right:
-            LHeff = self.eff_H.unpatched().LHeff
+            LHeff = self.eff_H.LHeff
             LP = npc.tensordot(LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
             self.env.set_LP(i0 + 1, LP, age=self.env.get_LP_age(i0) + 1)
@@ -1358,7 +1358,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         """
         i0 = self.i0
         if self.combine and not self.move_right:
-            RHeff = self.eff_H.unpatched().RHeff
+            RHeff = self.eff_H.RHeff
             RP = npc.tensordot(VH, RHeff, axes=['(p0.vR)', '(p0*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
             self.env.set_RP(i0 - 1, RP, age=self.env.get_RP_age(i0) + 1)
@@ -1462,7 +1462,7 @@ class Mixer:
         Level of output vebosity.
     """
     def __init__(self, options):
-        self.options = options = asConfig(options, "Mixer")
+        self.options = options = asConfig(options, 'Mixer')
         self.amplitude = options.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
         self.decay = options.get('decay', 2.)
@@ -1604,7 +1604,7 @@ class SingleSiteMixer(Mixer):
             MPS tensor at site `i0+1` or `i0-1` (depending on sweep direction) after subspace
             expansion.
         """
-        eff_H = engine.eff_H.unpatched()
+        eff_H = engine.eff_H
         if not engine.combine:  # Need to get Heff's even if combine=False
             eff_H.combine_Heff()
 
