@@ -14,10 +14,10 @@ from .truncation import svd_theta
 from ..networks import mps, mpo
 from .mps_sweeps import Sweep
 
-__all__ = ['MPSCompression', 'mps_compress', 'svd_two_site', 'apply_mpo']
+__all__ = ['MpsCompression', 'MpoMpsCompression', 'mps_compress', 'svd_two_site', 'apply_mpo']
 
 
-class MPSCompression(Sweep):
+class MpsCompression(Sweep):
     def __init__(self, psi, options):
         self.options = asConfig("MPSCompression", options)
         self.psi = psi
@@ -36,10 +36,10 @@ class MPSCompression(Sweep):
         raise NotImplementedError("TODO")
 
 
-class MPOMPSCompression(MPSCompression):
+class MpoMpsCompression(MpsCompression):
     """Apply an MPO to an MPO and compress it."""
     def __init__(self, psi, U_MPO, options):
-        self.options = asConfig("MPSCompression", options)
+        self.options = asConfig("MpsCompression", options)
         self.psi = psi
         super().__init__(psi, U_MPO, self.options)
 

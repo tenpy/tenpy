@@ -150,7 +150,9 @@ def test_U_II_order1(bc_MPS, method, g=1.5):
         for i in range(30):
             EngTEBD.run()
             psi = eng.run()
-            print(np.abs(psi.overlap(psiTEBD) - 1))
             print(psi.norm)
+            print(psiTEBD.norm)
+            psi.norm = 1.
+            print(np.abs(psi.overlap(psiTEBD) - 1))
             #This test fails
             assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
