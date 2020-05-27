@@ -85,8 +85,6 @@ class Sweep:
     i0 : int
         Only set during sweep.
         Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
-    mixer : :class:`Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     move_right : bool
         Only set during sweep.
         Whether the next `i0` of the sweep will be right or left of the current one.
@@ -117,7 +115,6 @@ class Sweep:
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
-        self.mixer = None  # means 'ignore mixer'; the mixer is activated in in :meth:`run`.
 
         self.lanczos_params = options.subconfig('lanczos_params')
         self.trunc_params = options.subconfig('trunc_params')
@@ -156,12 +153,6 @@ class Sweep:
 
         .. cfg:configoptions :: Sweep
 
-            chi_list : dict | ``None``
-                A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
-                The key defines starting from which sweep `chi_max` is set to the value,
-                e.g. ``{0: 50, 20: 100}`` uses ``chi_max=50`` for the first 20 sweeps and
-                ``chi_max=100`` afterwards. Overwrites ``trunc_params['chi_list']``.
-                By default (``None``) this feature is disabled.
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
                 :meth:`~tenpy.networks.mps.MPOEnvironment.get_initialization_data`.
@@ -241,8 +232,6 @@ class Sweep:
                 Number of sweeps that have already been performed.
 
         """
-        warnings.warn(
-            "reset_stats() is not overwritten by the engine. No statistics will be collected!")
         self.sweeps = self.options.get('sweep_0', 0)
         self.shelve = False
         self.chi_list = self.options.get('chi_list', None)
@@ -272,7 +261,7 @@ class Sweep:
         if self.verbose >= 1:
             print("", flush=True)  # end line
 
-    def sweep(self, optimize=True, meas_E_trunc=False):
+    def sweep(self, optimize=True):
         """One 'sweep' of a sweeper algorithm.
 
         Iteratate over the bond which is optimized, to the right and
@@ -285,16 +274,11 @@ class Sweep:
         optimize : bool, optional
             Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        meas_E_trunc : bool, optional
-            Whether to measure truncation energies.
 
         Returns
         -------
         max_trunc_err : float
             Maximal truncation error introduced.
-        max_E_trunc : ``None`` | float
-            ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
-            truncation.
         """
         self.E_trunc_list = []
         self.trunc_err_list = []
@@ -319,7 +303,7 @@ class Sweep:
                 self.update_RP(update_data['VH'])
                 for o_env in self.ortho_to_envs:
                     o_env.get_RP(i0, store=True)
-            self.post_update_local(update_data, meas_E_trunc)
+            self.post_update_local(update_data)
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
@@ -329,13 +313,7 @@ class Sweep:
                     self.trunc_params['chi_max'] = new_chi_max
                     if self.verbose >= 1:
                         print("Setting chi_max =", new_chi_max)
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-        if meas_E_trunc:
-            return np.max(self.trunc_err_list), np.max(self.E_trunc_list)
-        else:
-            return np.max(self.trunc_err_list), None
+        return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):
         """Define the schedule of the sweep.
@@ -369,40 +347,20 @@ class Sweep:
                            [[True, True]] * 2 + [[False, True]] * (L-2)
         return zip(i0s, move_right, update_LP_RP)
 
-    def mixer_cleanup(self):
-        """Cleanup the effects of a mixer.
-
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
-
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        It is expected that different algorithms have differen ways of implementing mixers (with
-        different defaults). Thus, this is algorithm-specific.
-        """
-        raise NotImplementedError("needs to be overwritten by subclass")
-
     def prepare_update(self):
         """Prepare everything algorithm-specific to perform a local update."""
-        raise NotImplementedError("needs to be overwritten by subclass")
+        pass  # should usually be overridden by subclassed
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update."""
-        raise NotImplementedError("needs to be overwritten by subclass")
+        raise NotImplementedError("needs to be overridden by subclass")
 
     def post_update_local(self, **kwargs):
         """Algorithm-specific actions to be taken after local update.
 
         An example would be to collect statistics.
         """
-        raise NotImplementedError("needs to be overwritten by subclass")
+        pass  # should usually be overridden by subclassed
 
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
