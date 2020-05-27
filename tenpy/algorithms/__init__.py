@@ -17,9 +17,9 @@
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import truncation, dmrg, mps_sweeps, tebd, tdvp, exact_diag, purification_tebd, \
-    network_contractor, mps_compress
+    network_contractor, mps_compress, mpo_evolution
 
 __all__ = [
     "truncation", "dmrg", "mps_sweeps", "tebd", "tdvp", "exact_diag", "purification_tebd",
-    "network_contractor", "mps_compress"
+    "network_contractor", "mps_compress", "mpo_evolution"
 ]

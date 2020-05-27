@@ -12,8 +12,28 @@ from scipy.linalg import expm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta
 from ..networks import mps, mpo
+from .mps_sweeps import Sweep
 
-__all__ = ['mps_compress', 'svd_two_site', 'apply_mpo']
+__all__ = ['MPSCompression', 'mps_compress', 'svd_two_site', 'apply_mpo']
+
+
+class MPSCompression(Sweep):
+    def __init__(self, psi, options):
+        self.options = asConfig("MPSCompression", options)
+        self.psi = psi
+        super().__init__(psi, None, self.options)
+
+    def init_env(self, _):
+        init_env_data = self.options.get("init_env_data", {})
+        old_psi = self.psi.copy()
+        self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
+        self.reset_stats()
+
+    def update_local(self):
+        raise NotImplementedError("TODO")
+
+    def run(self):
+        raise NotImplementedError("TODO")
 
 
 def mps_compress(psi, trunc_par):

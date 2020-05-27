@@ -1,5 +1,8 @@
-r"""Time evolution using the WI or WII approximation of the time
-evolution operator"""
+"""Time evolution using the WI or WII approximation of the time evolution operator.
+
+"""
+
+# Copyright 2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -13,15 +16,16 @@ from .mps_compress import apply_mpo
 
 __all__ = ['Engine']
 
+
 class Engine:
-    """Time evolution of an MPS using the WI or WII method
+    """Time evolution of an MPS using the WI or WII method.
 
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.MPOModel`
-        The model representing the Hamiltonian which we want to 
+        The model representing the Hamiltonian which we want to
         time evolve psi with.
     options : dict
         Further optional parameters are described in the tables in
@@ -30,7 +34,7 @@ class Engine:
 
     Options
     -------
-    .. cfg:config :: MPO_Evo
+    .. cfg:config :: MPOEvolution
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncate`.
@@ -46,7 +50,7 @@ class Engine:
         Optional parameters, see :meth:`run` for more details
     trunc_params : truncation parameters (cf. Options)
     compression : ``'SVD' | 'VAR'``
-        Specifies by which method the MPS is compressed after each time 
+        Specifies by which method the MPS is compressed after each time
         evolution step.
         For details see :class:`mps_compress`
     evolved_time : float
@@ -78,9 +82,9 @@ class Engine:
 
     def run(self):
         """Time evolution with the WI/WII method.
-        
+
         .. cfg:configoptions :: MPO_Evo
-            
+
             dt : float
                 Time step.
             N_steps : int
@@ -100,17 +104,16 @@ class Engine:
         order = self.options.get('order', 2)
         E_offset = self.options.get('E_offset', None)
 
-        self.calc_U(dt, order, which, E_offset = E_offset)
+        self.calc_U(dt, order, which, E_offset=E_offset)
 
         self.update(N_steps)
 
         return self.psi
 
-
-    def calc_U(self, dt, order = 2, which = 'II', E_offset = None):
+    def calc_U(self, dt, order=2, which='II', E_offset=None):
         """Calculate ``self._U``
-        
-        This function calculates the approximation 
+
+        This function calculates the approximation
         :math: `_U ~= exp(-i dt_ (H - E_offset))` with
 
         * dt_ = `dt` for ``order = 1``
@@ -130,21 +133,21 @@ class Engine:
         """
         U_param = dict(dt=dt, order=order, which=which, E_offset=E_offset)
         if self._U_param == U_param:
-            return # nothing to do: _U is cached
+            return  # nothing to do: _U is cached
         self._U_param = U_param
         if self.verbose >= 1:
             print("Calculate U for ", U_param)
 
         H_MPO = self.model.H_MPO
-
         if order == 1:
             U = H_MPO.make_U(dt * -1j, which=which)
             self._U = [U]
-        
         elif order == 2:
-            U1 = H_MPO.make_U(- (1. + 1j)/2. * dt * 1j, which=which)
-            U2 = H_MPO.make_U(- (1. - 1j)/2. * dt * 1j, which=which)
+            U1 = H_MPO.make_U(-(1. + 1j) / 2. * dt * 1j, which=which)
+            U2 = H_MPO.make_U(-(1. - 1j) / 2. * dt * 1j, which=which)
             self._U = [U1, U2]
+        else:
+            raise ValueError("order {0:d} not implemented".format(order=order))
 
     def update(self, N_steps):
         """Time evolve by N_steps steps
@@ -159,13 +162,12 @@ class Engine:
         trunc_err: :class:`~tenpy.algorithms.truncation.TruncationError'
         """
         trunc_err = TruncationError()
-        
+
         for _ in np.arange(N_steps):
             for U_mpo in self._U:
                 trunc_err += self.apply_mpo(U_mpo)
-                # self.psi = apply_mpo(U_mpo, self.psi, self.trunc_params)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['dt']
-        self.trunc_err = self.trunc_err + trunc_err # not += : make a copy!
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
@@ -188,13 +190,12 @@ class Engine:
         """
         if self.compression == 'SVD':
             return self.apply_mpo_svd(U_mpo)
-
         else:
             raise ValueError("Compression method not implemented.")
 
     def mps_compress(self):
         r"""Takes `self.psi` and compresses it; in place.
-        The truncation is performed according to 
+        The truncation is performed according to
         `self.trunc_params`.
         """
         bc = self.psi.bc
@@ -256,7 +257,6 @@ class Engine:
         mps.set_B((i + 1) % mps.L, vh, form='B')
         mps.set_SR(i, s)
 
-    
     def apply_mpo_svd(self, U_mpo):
         """Applies an MPO and truncates the resulting MPS using SVD in-place.
 
@@ -272,7 +272,7 @@ class Engine:
             The error of the represented state which is introduced due to the truncation
             during this update step.
         """
-        trunc_err = TruncationError()    # TODO: Implement trunc_err
+        trunc_err = TruncationError()  # TODO: Implement trunc_err
         bc = self.psi.bc
         if bc != U_mpo.bc:
             raise ValueError("Boundary conditions of MPS and MPO are not the same")
@@ -319,6 +319,3 @@ class Engine:
         self.psi = mps.MPS(self.psi.sites, Bs, S, form=forms, bc=self.psi.bc)
         self.mps_compress()
         return trunc_err
-
-
-    
