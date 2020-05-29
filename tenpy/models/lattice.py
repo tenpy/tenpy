@@ -7,6 +7,9 @@ Further, we have some predefined lattices, namely
 :class:`Chain`, :class:`Ladder` in 1D and
 :class:`Square`, :class:`Triangular`, :class:`Honeycomb`, and :class:`Kagome` in 2D.
 
+The :class:`IrregularLattice` provides a way to remove or add sites to an existing, regular
+lattice.
+
 See also the :doc:`/intro/model`.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
@@ -45,8 +48,8 @@ class Lattice:
     The **MPS index** `i` corresponds thus to the lattice sites given by
     ``(x_0, ..., x_{dim-1}, u) = tuple(self.order[i])``.
     Infinite boundary conditions of the MPS repeat in the first spatial direction of the lattice,
-    i.e., if the site at (x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
-    at ``(x_0 + a*Ls[0], x_1 ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
+    i.e., if the site at ``(x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
+    at ``(x_0 + Ls[0], x_1, ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
@@ -192,12 +195,10 @@ class Lattice:
         assert self.bc.dtype == np.bool
         chinfo = None
         for site in self.unit_cell:
-            if site is None:
+            if not isinstance(site, Site):
                 continue
             if chinfo is None:
                 chinfo = site.leg.chinfo
-            if not isinstance(site, Site):
-                raise ValueError("element of Unit cell is not Site.")
             if site.leg.chinfo != chinfo:
                 raise ValueError("All sites must have the same ChargeInfo!")
         if self.basis.shape[0] != self.dim:
@@ -1182,7 +1183,9 @@ class Lattice:
 class TrivialLattice(Lattice):
     """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
 
-    This is usefull if you need a valid :class:`Lattice` given just the :meth:`mps_sites`.
+    This is usefull if you need a valid :class:`Lattice` with given :meth:`mps_sites`
+    and don't care about the actual geometry, e.g, because you don't intend to use the
+    :class:`~tenpy.models.model.CouplingModel`.
 
     Parameters
     ----------
@@ -1198,13 +1201,13 @@ class TrivialLattice(Lattice):
 class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
+    .. note ::
+        The lattice defines only the geometry of the sites, not the couplings;
+        you can have position-dependent couplings/onsite terms despite having a regular lattice.
+
     By adjusting the :attr:`order` and a few private attributes and methods, we can
     make functions like :meth:`possible_couplings` work with a more "irregular" lattice structure,
-    where some of the sites are missing and possibly replace by other sites.
-
-    To remove a site, you simply specify the "lattice index" of the site to be removed.
-
-
+    where some of the sites are missing and other sites added instead.
 
     Parameters
     ----------
@@ -1229,7 +1232,7 @@ class IrregularLattice(Lattice):
     ----------
     regular_lattice : :class:`Lattice`
         The lattice this is based on.
-    remove, remove : 2D array | None
+    remove, add : 2D array | None
         See above.  Used in :meth:`ordering` only.
     """
     _REMOVED = -123456  # value in self._perm indicating removed sites.
@@ -1282,6 +1285,20 @@ class IrregularLattice(Lattice):
         return obj
 
     def ordering(self, order):
+        """Provide possible orderings of the lattice sites.
+
+        Parameters
+        ----------
+        order :
+            Argument for the :meth:`Lattice.ordering` of the :attr:`regular_lattice`, or
+            2D ndarray providing the order of the *regular lattice*.
+
+        Returns
+        -------
+        order : array, shape (N, D+1)
+            The order to be used for :attr:`order`, i.e. `order` with added/removed sites
+            as specified by :attr:`remove` and :attr:`add`.
+        """
         order_ = self.regular_lattice.ordering(order)
         mps_reg = np.arange(len(order_))
         if self.remove is not None:
@@ -1304,9 +1321,6 @@ class IrregularLattice(Lattice):
 
     @Lattice.order.setter
     def order(self, order_):
-        """Takes `order_` from regular lattice.
-
-        Adds/removes rows according to :attr:`remove`, :attr:`add`."""
         self._order = np.array(order_, dtype=np.intp)
 
         # this defines `self._perm`
@@ -1406,7 +1420,22 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
-    .. image :: /images/lattices/Chain.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 1.4))
+        ax = plt.gca()
+        lat = lattice.Chain(4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_ylim([-0.5, 0.5])
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1470,7 +1499,21 @@ class Chain(SimpleLattice):
 class Ladder(Lattice):
     """A ladder coupling two chains.
 
-    .. image :: /images/lattices/Ladder.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 1.4))
+        ax = plt.gca()
+        lat = lattice.Ladder(4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1504,7 +1547,21 @@ class Ladder(Lattice):
 class Square(SimpleLattice):
     """A square lattice.
 
-    .. image :: /images/lattices/Square.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 5))
+        ax = plt.gca()
+        lat = lattice.Square(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1535,7 +1592,21 @@ class Square(SimpleLattice):
 class Triangular(SimpleLattice):
     """A triangular lattice.
 
-    .. image :: /images/lattices/Triangular.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(4, 5))
+        ax = plt.gca()
+        lat = lattice.Square(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1569,7 +1640,21 @@ class Triangular(SimpleLattice):
 class Honeycomb(Lattice):
     """A honeycomb lattice.
 
-    .. image :: /images/lattices/Honeycomb.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 6))
+        ax = plt.gca()
+        lat = lattice.Honeycomb(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1650,7 +1735,21 @@ class Honeycomb(Lattice):
 class Kagome(Lattice):
     """A Kagome lattice.
 
-    .. image :: /images/lattices/Kagome.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 4))
+        ax = plt.gca()
+        lat = lattice.Kagome(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, color='g', linewidth=2.)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------

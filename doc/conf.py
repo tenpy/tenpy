@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
     'sphinx_cfg_options',
+    'matplotlib.sphinxext.plot_directive',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
