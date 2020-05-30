@@ -1077,7 +1077,7 @@ class Lattice:
                 raise ValueError("can only plot in 2 dimensions.")
             ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
 
-    def plot_basis(self, ax, **kwargs):
+    def plot_basis(self, ax, origin=(0., 0.), shade=None, **kwargs):
         """Plot arrows indicating the basis vectors of the lattice.
 
         Parameters
@@ -1085,16 +1085,26 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         **kwargs :
-            Keyword arguments specifying the "arrowprops" of ``ax.annotate``.
+            Keyword arguments for ``ax.arrow``.
         """
-        kwargs.setdefault("arrowstyle", "->")
-        for i in range(self.dim):
-            vec = self.basis[i]
-            if vec.shape[0] == 1:
-                vec = vec * np.array([1., 0])
-            if vec.shape[0] != 2:
+        kwargs.setdefault("length_includes_head", True)
+        kwargs.setdefault("width", 0.03)
+        kwargs.setdefault("color", 'g')
+        origin = np.array(origin)
+        basis = np.array([self.basis[i] for i in range(self.dim)])
+        if basis.shape[1] == 1:
+            basis = basis * np.array([[1., 0]])
+            if basis.shape[1] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
-            ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
+        if shade is None:
+            shade = True if self.dim == 2 else False
+        if shade:
+            from matplotlib.patches import Polygon
+            xy = [origin, origin + basis[0], origin + basis[0] + basis[1], origin + basis[1]]
+            ax.add_patch(Polygon(xy, fill=True, color='palegreen'))
+        for i in range(self.dim):
+            vec = basis[i]
+            ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
     def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
         """Mark two sites indified by periodic boundary conditions.
@@ -1461,10 +1471,9 @@ class Chain(SimpleLattice):
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-        ax.set_ylim([-0.5, 0.5])
+        lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
+        ax.set_xlim(-1.)
+        ax.set_ylim(-0.5, 0.5)
         ax.set_aspect('equal')
         plt.show()
 
@@ -1540,10 +1549,10 @@ class Ladder(Lattice):
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
+        lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
+        ax.set_xlim(-1.)
+        ax.set_ylim(-1.)
         plt.show()
 
     Parameters
@@ -1588,10 +1597,10 @@ class Square(SimpleLattice):
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
         plt.show()
 
     Parameters
@@ -1629,13 +1638,11 @@ class Triangular(SimpleLattice):
         from tenpy.models import lattice
         plt.figure(figsize=(4, 5))
         ax = plt.gca()
-        lat = lattice.Square(4, 4, None, bc='periodic')
+        lat = lattice.Triangular(4, 4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
         plt.show()
 
@@ -1681,10 +1688,10 @@ class Honeycomb(Lattice):
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
         plt.show()
 
     Parameters
@@ -1776,10 +1783,10 @@ class Kagome(Lattice):
         lat.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
-        lat.plot_basis(ax, color='g', linewidth=2.)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
+        lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
         plt.show()
 
     Parameters
