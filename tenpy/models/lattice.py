@@ -1216,12 +1216,13 @@ class IrregularLattice(Lattice):
     remove : 2D array | None
         Each row is a lattice index ``(x_0, ..., x_{dim-1}, u)`` of a site to be removed.
         If ``None``, don't remove something.
-    add : 2D array | None
-        Each row is ``(x_0, ..., x_{dim-1}, u_add_unit_cell, i)``, with the
-        ``x_0, ..., x_{dim-1}`` giving space coordinates as for a lattice index,
-        `u_add_unit_cell` is the index of a site within `add_unit_cell` to be added, and
-        `i` is the MPS index to be used.
-        If ``None``, don't remove something.
+    add : Tuple[2D array, 1D array] | None
+        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifiying
+        where a site is to be added; `u` is the index of the site within the final
+        :attr:`unit_cell` of the irregular lattice.
+        For each row of the 2D array, there is one entry in the 1D array specifying where the site
+        is inserted in the MPS; the values are compared to the MPS indices of the *regular* lattice
+        and sorted in there, so "2.5" goes between what was site 2 and 3 in the regular lattice.
     add_unit_cell : list of :class:`~tenpy.networks.site.Site`
         Extra sites to be added to the unit cell.
     add_positions : iterable of 1D arrays
@@ -1234,6 +1235,35 @@ class IrregularLattice(Lattice):
         The lattice this is based on.
     remove, add : 2D array | None
         See above.  Used in :meth:`ordering` only.
+
+    Examples
+    --------
+    Let's imagine that we have two different sites; for concreteness we can thing of a
+    fermion site, which we represent with ``'F'``, and a spin site ``'S'``.
+
+    You could now imagine that to have fermion chain with spins on the "bonds".
+    In the periodic/infinite case, you would simply define
+    >>> lat = Lattice([2], unit_cell=['F', 'S'], bc='periodic', bc_MPS='infinite')
+    >>> lat.mps_sites()
+    ['F', 'S', 'F', 'S']
+
+    For a finite system, you don't want to terminate with a spin on the right, so you need to
+    remove the very last site by specifying the lattice index ``[L-1, 1]`` of that site:
+    >>> L = 4
+    >>> reg_lat = Lattice([L], unit_cell=['F', 'S'], bc='open', bc_MPS='finite')
+    >>> irr_lat = IrregularLattice(reg_lat, remove=[[L-1, 1]])
+    >>> irr_lat.mps_sites()
+    ['F', 'S', 'F', 'S', 'F', 'S', 'F']
+
+    Another simple example would be to add a spin in the center of a fermion chain.
+    In that case, we add another site to the unit cell and specify the lattice index as
+    ``[L//2, 1]``, where the 1 is the index of 'S' in the resulting unit cell ['F', 'S'],
+    and the MPS index ``(L-1)/2``, such hat it is betw.
+    >>> reg_lat = Lattice([L], unit_cell=['F'])
+    >>> irr_lat = IrregularLattice(reg_lat, add=([[L//2, 1]], [(L-1)/2]), add_unit_cell=['S'])
+    >>> irr_lat.mps_sites()
+    ['F', 'F', 'S', 'F', 'F']
+
     """
     _REMOVED = -123456  # value in self._perm indicating removed sites.
 
@@ -1270,7 +1300,8 @@ class IrregularLattice(Lattice):
         super().save_hdf5(hdf5_saver, h5gr, subpath)
         hdf5_saver.save(self.regular_lattice, subpath + "regular_lattice")
         hdf5_saver.save(self.remove, subpath + "remove")
-        hdf5_saver.save(self.add, subpath + "add")
+        hdf5_saver.save(self.add[0], subpath + "add_lat_idx")
+        hdf5_saver.save(self.add[1], subpath + "add_mps_idx")
         add_unit_cell = self.unit_cell[len(self.regular_lattice.unit_cell):]
         add_positions = self.unit_cell_positions[len(self.regular_lattice.unit_cell_positions):]
         hdf5_saver.save(add_unit_cell, subpath + "add_unit_cell")
@@ -1280,7 +1311,9 @@ class IrregularLattice(Lattice):
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
         obj = super().from_hdf5(hdf5_loader, h5gr, subpath)
         obj.regular_lattice = hdf5_loader.load(subpath + "regular_lattice")
-        obj.add = hdf5_loader.load(subpath + "add")
+        lat_idx = hdf5_loader.load(subpath + "add_lat_idx")
+        mps_idx = hdf5_loader.load(subpath + "add_mps_idx")
+        obj.add = (lat_idx, mps_idx)
         obj.remove = hdf5_loader.load(subpath + "remove")
         return obj
 
@@ -1310,12 +1343,10 @@ class IrregularLattice(Lattice):
             mps_reg = mps_reg[keep]
         if self.add is not None:
             # sort such that MPS indices are ascending
-            add = np.array(self.add)
-            mps_add = add[:, -1]
-            mps_add[mps_add < 0] += len(mps_reg) + len(add)  # wrap negative indices
+            lat_idx, mps_add = self.add
+            mps_add = np.array(mps_add)
             sort = np.argsort(np.concatenate((mps_reg, mps_add)), kind="stable")
-            lat_idx = add[:, :-1]
-            order_ = np.concatenate((order_, lat_idx), axis=0)
+            order_ = np.concatenate((order_, np.array(lat_idx)), axis=0)
             order_ = order_[sort, :]
         return order_
 

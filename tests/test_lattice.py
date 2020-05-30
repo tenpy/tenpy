@@ -86,21 +86,26 @@ def test_IrregularLattice():
     s2 = site.SpinSite(0.5, 'Sz')
     reg = lattice.Honeycomb(3, 3, [s1, s2], bc=['open', 'periodic'])
     ir = lattice.IrregularLattice(reg, [[1, 1, 0], [1, 1, 1], [0, 0, 0]],
-                                  [[1, 1, 2, 7], [1, 1, 3, 10]], [s2, s2],
+                                  ([[1, 1, 2], [1, 1, 3]], [7, 10]), [s2, s2],
                                   [[-0.1, 0.0], [0.1, 0.0]])
     known = {  # written down by hand for this particular case
         (0, 1, (0, 0)): {'i': [5, 11, 0, 12, 1, 7, 13], 'j': [8, 14, 3, 15, 4, 10, 16]},
         (1, 0, (1, 0)): {'i': [ 2,  8,  4, 10], 'j': [5, 11, 7, 13]},
         (1, 0, (0, 1)): {'i': [ 2,  14,  3, 15, 10, 16], 'j': [0, 12, 1, 13, 5, 11]},
     }
-    for pair, expect in known.items():
-        i, j, lat, sh = ir.possible_couplings(*pair)
+    for (u0, u1, dx), expect in known.items():
+        i, j, lat, sh = ir.possible_couplings(u0, u1, dx)
         print(i, j)
         sort = np.lexsort(lat.T)
         i = i[sort]
         j = j[sort]
         npt.assert_equal(i, np.array(expect['i']))
         npt.assert_equal(j, np.array(expect['j']))
+
+        ops = [(None, dx, u1), (None, [0, 0], u0)]
+        m_ji, m_lat_indices, m_coupling_shape = ir.possible_multi_couplings(ops)
+        # npt.assert_equal(m_ji[1, :], np.array(expect['i']))
+        # npt.assert_equal(m_ji[0, :], np.array(expect['j']))
 
 
 def test_number_nn():
