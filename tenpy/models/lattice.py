@@ -1033,7 +1033,7 @@ class Lattice:
             for i, p in enumerate(pos):
                 ax.text(p[0], p[1], str(i), **textkwargs)
 
-    def plot_coupling(self, ax, coupling=None, **kwargs):
+    def plot_coupling(self, ax, coupling=None, wrap=False, **kwargs):
         """Plot lines connecting nearest neighbors of the lattice.
 
         Parameters
@@ -1045,6 +1045,8 @@ class Lattice:
             Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
+        wrap : bool
+            If True, wrap
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
         """
@@ -1053,22 +1055,19 @@ class Lattice:
         kwargs.setdefault('color', 'k')
         Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
-            # could use `possible_couplings` somehow,
-            # but then periodic boundary conditions screw up the image
-            dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
-            lat_idx_1 = self.order[self._mps_fix_u[u1], :]
-            lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
-            lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
-            # handle boundary conditions
-            if self.bc_shift is not None:
-                shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
-                               axis=1)
-                lat_idx_2[:, 0] -= shift
-                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2[:, 0], self.Ls[0])
-            keep = self._keep_possible_couplings(lat_idx_2_mod, lat_idx_2[:, :-1], u2)
-            # get positions
-            pos1 = self.position(lat_idx_1[keep, :])
-            pos2 = self.position(lat_idx_2[keep, :])
+            if wrap:
+                mps_i, mps_j, _, _ = self.possible_couplings(u1, u2, dx)
+                pos1 = self.position(self.mps2lat_idx(mps_i))
+                pos2 = self.position(self.mps2lat_idx(mps_j))
+            else:
+                dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
+                lat_idx_1 = self.order[self._mps_fix_u[u1], :]
+                lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
+                lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
+                keep = self._keep_possible_couplings(lat_idx_2_mod, lat_idx_2[:, :-1], u2)
+                # get positions
+                pos1 = self.position(lat_idx_1[keep, :])
+                pos2 = self.position(lat_idx_2[keep, :])
             pos = np.stack((pos1, pos2), axis=0)
             # ax.plot connects columns of 2D array by lines
             if pos.shape[2] == 1:
@@ -1106,7 +1105,7 @@ class Lattice:
             vec = basis[i]
             ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
-    def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
+    def plot_bc_identified(self, ax, direction=-1, shift=None, cylinder_axis=False, **kwargs):
         """Mark two sites indified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
@@ -1118,6 +1117,8 @@ class Lattice:
         direction : int
             The direction of the lattice along which we should mark the idenitified sites.
             If ``None``, mark it along all directions with periodic boundary conditions.
+        cylinder_axis : bool
+            Whether to plot the cylinder axis as well.
         shift : None | np.ndarray
             The origin starting from where we mark the identified sites.
             Defaults to the first entry of :attr:`unit_cell_positions`.
@@ -1141,13 +1142,21 @@ class Lattice:
             x_y.append(shift)
             x_y.append(shift + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
-                x_y[-1] = x_y[-1] - self.bc_shift[i - 1] * self.basis[0]
+                x_y[-1] = x_y[-1] + self.bc_shift[i - 1] * self.basis[0]
         x_y = np.array(x_y)
-        if x_y.shape[1] == 1:
-            x_y = np.hstack([x_y, np.zeros_like(x_y)])
         if x_y.shape[1] != 2:
             raise ValueError("can only plot in 2D")
         ax.plot(x_y[:, 0], x_y[:, 1], **kwargs)
+        if cylinder_axis:
+            if len(x_y) != 2 or self.dim != 2:
+                raise ValueError("can't plot cylinder axis for multiple directions")
+            center = np.mean(x_y, axis=0)
+            diff = x_y[1, :] - x_y[0]
+            perp = np.array([diff[1], -diff[0]])
+            x_y_cyl = np.array([center - perp, center + perp])
+            kwargs.setdefault('linestyle', '--')
+            kwargs['marker'] = None
+            ax.plot(x_y_cyl[:, 0], x_y_cyl[:, 1], **kwargs)
 
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
