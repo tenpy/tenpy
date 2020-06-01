@@ -22,17 +22,43 @@ Note that a few things are defined more or less implicitly.
 
 Obviously, these things need to be specified in TeNPy in one way or another, if we want to define a model.
 
-Ultimately, our goal is to run some algorithm. Each algorithm requires the model and Hamiltonian to be specified in a particular form.
+Ultimately, our goal is to run some algorithm. However, different algorithm requires the model and Hamiltonian to be specified in different forms.
 We have one class for each such required form.
 For example :mod:`~tenpy.algorithms.dmrg` requires an :class:`~tenpy.models.model.MPOModel`,
 which contains the Hamiltonian written as an :class:`~tenpy.networks.mpo.MPO`.
+So a new model class suitable for DMRG should have this general structure::
+
+    class MyNewModel(MPOModel):
+        def __init__(self, model_params):
+            lattice = somehow_generate_lattice(model_params)
+            H_MPO = somehow_generate_MPO(lattice, model_params)
+            # initialize MPOModel
+            MPOModel.__init__(self, lattice, H_MPO)
+
+
 On the other hand, if we want to evolve a state with :mod:`~tenpy.algorithms.tebd`
 we need a :class:`~tenpy.models.model.NearestNeighborModel`, in which the Hamiltonian is written in terms of
-two-site bond-terms to allow a Suzuki-Trotter decomposition of the time-evolution operator.
+two-site bond-terms to allow a Suzuki-Trotter decomposition of the time-evolution operator::
 
-Implmenting you own model ultimatley means to get an instance of :class:`~tenpy.models.model.MPOModel` or :class:`~tenpy.models.model.NearestNeighborModel`.
-The predefined classes in the other modules under :mod:`~tenpy.models` are subclasses of at least one of those,
-you will see examples later down below.
+    class MyNewModel2(NearestNeighborModel):
+        """General strucutre for a model suitable for TEBD."""
+        def __init__(self, model_params):
+            lattice = somehow_generate_lattice(model_params)
+            H_bond = somehow_generate_H_bond(lattice, model_params)
+            # initialize MPOModel
+            NearestNeighborModel.__init__(self, lattice, H_bond)
+
+.. note :
+
+    The :class:`~tenpy.models.model.NearestNeighborModel` is only suitable for models which are "nearest-neighbor"
+    in the sense of the 1D MPS "snake", not in the sense of the lattice,
+    i.e., it only works for nearest-neighbor models on a 1D chain.
+
+Of course, the difficult part in these examples is to generate the ``H_MPO`` and ``H_bond`` in the required form.
+If you want to write it down by hand, you can of course do that.
+But it can be quite tedious to write every model multiple times, just because we need different representations of the same Hamiltonian.
+Luckily, there is a way out in TeNPy: the :class:`~tenpy.models.model.CouplingModel`. Before we describe this class, let's
+discuss the background of the :class:`~tenpy.networks.site.Site` and :class:`~tenpy.models.lattice.Site` class.
 
 The Hilbert space
 -----------------
@@ -68,8 +94,8 @@ Another use case of this function would be a model with a $U(1)$ symmetry involv
     Alternatively, you can find some introduction to the charges in the :doc:`/intro/npc`.
 
 
-The geometry : lattices
------------------------
+The geometry : lattice class
+----------------------------
 
 The geometry is usually given by some kind of **lattice** structure how the sites are arranged,
 e.g. implicitly with the sum over nearest neighbours :math:`\sum_{<i, j>}`.
@@ -79,113 +105,18 @@ Again, we have pre-defined some basic lattices like a :class:`~tenpy.models.latt
 two chains coupled as a :class:`~tenpy.models.lattice.Ladder` or 2D lattices like the
 :class:`~tenpy.models.lattice.Square`, :class:`~tenpy.models.lattice.Honeycomb` and
 :class:`~tenpy.models.lattice.Kagome` lattices; but you are also free to define your own generalizations.
-(More details on that can be found in the doc-string of :class:`~tenpy.models.lattice.Lattice`, read it!)
-
-**Visualization** of the lattice can help a lot to understand which sites are connected by what couplings.
-The methods ``plot_...`` of the :class:`~tenpy.models.lattice.Lattice` can do a good job for a quick illustration.
-We include a small image in the documation of each of the lattices.
-For example, the following small script can generate the image of the Kagome lattice shown below::
-
-    import matplotlib.pyplot as plt
-    from tenpy.models.lattice import Kagome
-
-    ax = plt.gca()
-    lat = Kagome(4, 4, None, bc='periodic')
-    lat.plot_coupling(ax, lat.nearest_neighbors, linewidth=3.)
-    lat.plot_order(ax=ax, linestyle=':')
-    lat.plot_sites()
-    lat.plot_basis(ax, color='g', linewidth=2.)
-    ax.set_aspect('equal')
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-    plt.show()
-
-.. image :: /images/lattices/Kagome.*
-
-The lattice contains also the **boundary conditions** `bc` in each direction. It can be one of the usual ``'open'`` or
-``'periodic'`` in each direcetion. Instead of just saying "periodic", you can also specify a `shift` (except in the
-first direction). This is easiest to understand at its standard usecase: DMRG on a infinite cylinder.
-Going around the cylinder, you have a degree of freedom which sites to connect.
-The orange markers in the following figures illustrates sites identified for a Square lattice with ``bc=['periodic', shift]`` (see :meth:`~tenpy.models.lattice.Lattice.plot_bc_shift`):
-
-.. image :: /images/lattices/square_bc_shift.*
-
-Note that the "cylinder" axis (and direction for :math:`k_x`) is perpendicular to the orange line connecting these
-sites. The line where the cylinder is "cut open" therefore winds around the the cylinder for a non-zero `shift` (or
-more complicated lattices without perpendicular basis).
-
 
 MPS based algorithms like DMRG always work on purely 1D systems. Even if our model "lives" on a 2D lattice,
 these algorithms require to map it onto a 1D chain (probably at the cost of longer-range interactions).
-This mapping is also done in by the lattice, as it defines an **order** (:attr:`~tenpy.models.lattice.Lattice.order`) of the sites.
-The methods :meth:`~tenpy.models.lattice.Lattice.mps2lat_idx` and :meth:`~tenpy.models.lattice.Lattice.lat2mps_idx` map
-indices of the MPS to and from indices of the lattice. If you obtained and array with expectation values for a given MPS,
-you can use :meth:`~tenpy.models.lattice.Lattice.mps2lat_values` to map it to lattice indices, thereby reverting the ordering.
-
-Performing this mapping of the Hamiltonain from a 2D lattice to a 1D chain by hand can be a tideous process.
-Therefore, we have automated this mapping in TeNPy as explained in the next section.
-(Nevertheless it's a good exercise you should do at least once in your life to understand how it works!)
+This mapping is also done by the lattice by defining the **order** (:attr:`~tenpy.models.lattice.Lattice.order`) of the sites.
 
 .. note ::
 
-    A suitable order is critical for the efficiency of MPS-based algorithms.
-    On one hand, different orderings can lead to different MPO bond-dimensions, with direct impact on the complexity scaling.
-    On the other hand, it influences how much entanglement needs to go through each bonds of the underlying MPS,
-    e.g., the ground strate to be found in DMRG, and therefore influences the required MPS bond dimensions.
-    For the latter reason, the "optimal" ordering can not be known a priori and might even depend on your coupling
-    parameters (and the phase you are in).
-    In the end, you can just try different orderings and see which one works best.
-
-Implementing you own model
---------------------------
-When you want to simulate a model not provided in :mod:`~tenpy.models`, you need to implement your own model class,
-lets call it ``MyNewModel``.
-The idea is that you define a new subclass of one or multiple of the model base classes.
-For example, when you plan to do DMRG, you have to provide an MPO in a :class:`~tenpy.models.MPOModel`,
-so your model class should look like this::
-
-    class MyNewModel(MPOModel):
-        """General strucutre for a model suitable for DMRG.
-
-        Here is a good place to document the represented Hamiltonian and parameters.
-
-        In the models of TeNPy, we usually take a single dictionary `model_params`
-        containing all parameters, and read values out with ``model_params.get(key, default)``.
-        The model needs to provide default values if the parameters was not specified.
-        """
-        def __init__(self, model_params):
-            # some code here to read out model parameters and generate H_MPO
-            lattice = somehow_generate_lattice(model_params)
-            H_MPO = somehow_generate_MPO(lattice, model_params)
-            # initialize MPOModel
-            MPOModel.__init__(self, lattice, H_MPO)
-
-TEBD requires another representation of H in terms of bond terms `H_bond` given to a
-:class:`~tenpy.models.NearestNeighborModel`, so in this case it would look so like this instead::
-
-    class MyNewModel2(NearestNeighborModel):
-        """General strucutre for a model suitable for TEBD."""
-        def __init__(self, model_params):
-            # some code here to read out model parameters and generate H_bond
-            lattice = somehow_generate_lattice(model_params)
-            H_bond = somehow_generate_H_bond(lattice, model_params)
-            # initialize MPOModel
-            NearestNeighborModel.__init__(self, lattice, H_bond)
-
-.. note :
-
-    The :class:`~tenpy.models.model.NearestNeighborModel` is only suitable for models which are "nearest-neighbor"
-    in the sense of the 1D MPS "snake", not in the sense of the lattice,
-    i.e., it only works for nearest-neigbor models on a 1D chain.
-
-Of course, the difficult part in these examples is to generate the ``H_MPO`` and ``H_bond``.
-Moreover, it's quite annoying to write every model multiple times,
-just because we need different representations of the same Hamiltonian.
-Luckily, there is a way out in TeNPy: the `CouplingModel`!
+    Further details on the lattice geometry can be found in :doc:`intro/lattices`.
 
 
-The easy way to new models: the (Multi)CouplingModel
-----------------------------------------------------
+The CouplingModel: general structure
+------------------------------------
 
 The :class:`~tenpy.models.model.CouplingModel` provides a general, quite abstract way to specify a Hamiltonian
 of two-site couplings on a given lattice.
@@ -245,7 +176,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
    :meth:`~tenpy.models.model.CouplingModel.calc_H_MPO` to build the MPO and use it for the initialization
    as ``MPOModel.__init__(self, lat, self.calc_H_MPO())``.
 8. Similarly, if you derived from the :class:`~tenpy.models.model.NearestNeighborModel`, you can call
-   :meth:`~tenpy.models.model.CouplingModel.calc_H_MPO` to initialze it
+   :meth:`~tenpy.models.model.CouplingModel.calc_H_bond` to initialze it
    as ``NearestNeighborModel.__init__(self, lat, self.calc_H_bond())``.
    Calling ``self.calc_H_bond()`` will fail for models which are not nearest-neighbors (with respect to the MPS ordering),
    so you should only subclass the :class:`~tenpy.models.model.NearestNeighborModel` if the lattice is a simple
@@ -271,11 +202,11 @@ The easy easy way: the CouplingMPOModel
 ---------------------------------------
 Since many of the basic steps above are always the same, we don't need to repeat them all the time.
 So we have yet another class helping to structure the initialization of models: the :class:`~tenpy.models.model.CouplingMPOModel`.
-The general structure of the  class is like this::
+The general structure of this class is like this::
 
     class CouplingMPOModel(CouplingModel,MPOModel):
         def __init__(self, model_param):
-            # ... follow the basic steps 1-8 using the methods
+            # ... follows the basic steps 1-8 using the methods
             lat = self.init_lattice(self, model_param)  # for step 4
             # ...
             self.init_terms(self, model_param) # for step 6
@@ -362,8 +293,8 @@ Finally, if you wanted a reduction in MPO bond dimension, you would need to set 
     self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
 
-Some final remarks
-------------------
+Some random remarks on models
+-----------------------------
 
 - Needless to say that we have also various predefined models under :mod:`tenpy.models`.
 - Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`
@@ -379,4 +310,3 @@ Some final remarks
   see :meth:`~tenpy.tools.params.Config.get`.
 - When you write a model and want to include a test that it can be at least constructed,
   take a look at ``tests/test_model.py``.
-
