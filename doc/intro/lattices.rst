@@ -21,7 +21,7 @@ Let's look at the Honeycomb lattice as an example.
     plt.figure(figsize=(5, 6))
     ax = plt.gca()
     lat = lattice.Honeycomb(Lx=4, Ly=4, sites=None, bc='periodic')
-    lat.plot_coupling(ax, linewidth=3.)
+    lat.plot_coupling(ax)
     lat.plot_order(ax, linestyle=':')
     lat.plot_sites(ax)
     lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
@@ -150,5 +150,36 @@ In the second row, we directly draw lines between all sites connected by nearest
         lat.plot_coupling(ax2, wrap=True)
         ax1.set_title('shift = ' + str(shift))
         ax.set_xlim(-1.5)
+
+    plt.show()
+
+
+Irregular Lattices
+------------------
+The :class:`~tenpy.models.lattice.IrregularLattice` allows to add or remove sites from/to an existing regular lattice.
+The doc-string of :class:`~tenpy.models.lattice.IrregularLattice` contains several examples, let us consider another one
+here, where we use the IrregularLattice to "fix" the boundary of the Honeycomb lattice:
+when we use ``"open"`` boundary conditions for a finite system, there are two sites (on the lower left, and upper right),
+wich are not included into any hexagonal. The following example shows how to remove them from the system:
+
+.. plot ::
+    :include-source:
+
+    import matplotlib.pyplot as plt
+    from tenpy.models import lattice
+
+    Lx, Ly = 3, 3
+    fig, axes = plt.subplots(1, 2, True, True, figsize=(6, 4))
+
+    reg_lat = lattice.Honeycomb(Lx=Lx, Ly=Ly, sites=None, bc='open')
+    irr_lat = lattice.IrregularLattice(reg_lat, remove=[[0, 0, 0], [-1, -1, 1]])
+    for lat, label, ax in zip([reg_lat, irr_lat],
+                              ["regular", "irregular"],
+                              axes.flatten()):
+        lat.plot_coupling(ax)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        ax.set_aspect('equal')
+        ax.set_title(label)
 
     plt.show()

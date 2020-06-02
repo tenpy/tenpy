@@ -15,7 +15,7 @@ Backwards incompatible changes
 Added
 ^^^^^
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
-- extended user guide on lattices, :doc:`intro/lattices`.
+- extended user guide on lattices, :doc:`/intro/lattices`.
 
 Changed
 ^^^^^^^
