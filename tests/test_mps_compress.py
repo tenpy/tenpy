@@ -1,4 +1,4 @@
-from tenpy.algorithms.mps_compress import *
+from tenpy.algorithms import mps_compress
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 import tenpy
@@ -17,10 +17,12 @@ def test_mps_compress(eps=1.e-13):
     psiOrth = tenpy.networks.mps.MPS.from_product_state(sites, [minus_x for i in range(L)],
                                                         bc='finite')
     psiSum = psi.add(psi, .5, .5)
-    mps_compress(psiSum, {})
+    # mps_compress(psiSum, {})
+    mps_compress.MpsCompression(psi, {'N_sweeps': 5}).run()
+
     assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
     psiSum2 = psi.add(psiOrth, .5, .5)
-    mps_compress(psiSum2, {})
+    mps_compress.mps_compress(psiSum2, {})
     psiSum2.test_sanity()
     assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
@@ -37,7 +39,7 @@ def test_svd_two_theta(bc_MPS):
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     psi2 = psi.copy()
     for i in range(L if bc_MPS == 'infinite' else L - 1):  # test for every non trivial bond
-        svd_two_site(i, psi, {})
+        mps_compress.svd_two_site(i, psi, {})
     assert (np.abs(psi2.norm - 1) < 1e-5)
     assert (np.abs(psi2.overlap(psi) - 1) < 1e-5)
 
@@ -54,7 +56,7 @@ def test_apply_mpo():
     psi = tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     H = M.H_MPO
     Eexp = H.expectation_value(psi)
-    psi2 = apply_mpo(H, psi, {})
+    psi2 = mps_compress.apply_mpo(H, psi, {})
     Eapply = psi2.overlap(psi)
     assert abs(Eexp - Eapply) < 1e-5
 
@@ -89,7 +91,7 @@ def test_U_I(bc_MPS, method, g=1.5):
 
         UED = ED.exp_H(dt)
         for i in range(30):
-            psi = apply_mpo(U, psi, {})
+            psi = mps_compress.apply_mpo(U, psi, {})
             psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
             psi_full = ED.mps_to_full(psi)
             assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < dt)
@@ -100,7 +102,7 @@ def test_U_I(bc_MPS, method, g=1.5):
         EngTEBD = tenpy.algorithms.tebd.Engine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
-            psi = apply_mpo(U, psi, {})
+            psi = mps_compress.apply_mpo(U, psi, {})
             print(np.abs(psi.overlap(psiTEBD) - 1))
             print(psi.norm)
             #This test fails

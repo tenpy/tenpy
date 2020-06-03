@@ -355,12 +355,12 @@ class Sweep:
         """Perform algorithm-specific local update."""
         raise NotImplementedError("needs to be overridden by subclass")
 
-    def post_update_local(self, **kwargs):
+    def post_update_local(self, update_data):
         """Algorithm-specific actions to be taken after local update.
 
         An example would be to collect statistics.
         """
-        pass  # should usually be overridden by subclassed
+        self.trunc_err_list.append(update_data['err'].eps)
 
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""

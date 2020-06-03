@@ -497,7 +497,7 @@ class DMRGEngine(Sweep):
         Parameters
         ----------
         update_data : dict
-            Data computed during the local update, as described in the following list.
+            What was returned by :meth:`update_local`.
         """
         E0 = update_data['E0']
         i0 = self.i0
@@ -1154,7 +1154,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         theta = self.eff_H.combine_theta(theta)
         return theta
 
-    def update_local(self, theta, optimize=True, meas_E_trunc=False):
+    def update_local(self, theta, optimize=True):
         """Perform site-update on the site ``i0``.
 
         Parameters
@@ -1164,8 +1164,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
         optimize : bool
             Wheter we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
 
         Returns
         -------
