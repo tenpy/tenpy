@@ -1235,13 +1235,15 @@ class IrregularLattice(Lattice):
     remove : 2D array | None
         Each row is a lattice index ``(x_0, ..., x_{dim-1}, u)`` of a site to be removed.
         If ``None``, don't remove something.
-    add : Tuple[2D array, 1D array] | None
+    add : Tuple[2D array, list] | None
         Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifiying
         where a site is to be added; `u` is the index of the site within the final
         :attr:`unit_cell` of the irregular lattice.
-        For each row of the 2D array, there is one entry in the 1D array specifying where the site
+        For each row of the 2D array, there is one entry in the list specifying where the site
         is inserted in the MPS; the values are compared to the MPS indices of the *regular* lattice
-        and sorted in there, so "2.5" goes between what was site 2 and 3 in the regular lattice.
+        and sorted into it, so "2.5" goes between what was site 2 and 3 in the regular lattice.
+        An entry `None` indicates that the site should be inserted after the lattice site
+        ``(x_0, ..., x_{dim-1}, -1)`` of the `regular_lattice`.
     add_unit_cell : list of :class:`~tenpy.networks.site.Site`
         Extra sites to be added to the unit cell.
     add_positions : iterable of 1D arrays
@@ -1262,12 +1264,14 @@ class IrregularLattice(Lattice):
 
     You could now imagine that to have fermion chain with spins on the "bonds".
     In the periodic/infinite case, you would simply define
+
     >>> lat = Lattice([2], unit_cell=['F', 'S'], bc='periodic', bc_MPS='infinite')
     >>> lat.mps_sites()
     ['F', 'S', 'F', 'S']
 
     For a finite system, you don't want to terminate with a spin on the right, so you need to
     remove the very last site by specifying the lattice index ``[L-1, 1]`` of that site:
+
     >>> L = 4
     >>> reg_lat = Lattice([L], unit_cell=['F', 'S'], bc='open', bc_MPS='finite')
     >>> irr_lat = IrregularLattice(reg_lat, remove=[[L-1, 1]])
@@ -1276,11 +1280,13 @@ class IrregularLattice(Lattice):
 
     Another simple example would be to add a spin in the center of a fermion chain.
     In that case, we add another site to the unit cell and specify the lattice index as
-    ``[L//2, 1]``, where the 1 is the index of 'S' in the resulting unit cell ['F', 'S'],
-    and the MPS index ``(L-1)/2``, such hat it is betw.
+    ``[(L-1)//2, 1]`` (where the 1 is the index of ``'S'`` in the unit cell ``['F', 'S']`` of the
+    irregular lattice).
+    The `None` for the MPS index is equivalent to ``(L-1)/2`` in this case.
+
     >>> reg_lat = Lattice([L], unit_cell=['F'])
-    >>> irr_lat = IrregularLattice(reg_lat, add=([[L//2, 1]], [(L-1)/2]), add_unit_cell=['S'])
-    >>> irr_lat.mps_sites()
+    >>> irr_lat = IrregularLattice(reg_lat, add=([[(L-1)//2, 1]], [None]),
+    ...                            add_unit_cell=['S'])
     ['F', 'F', 'S', 'F', 'F']
 
     """
@@ -1363,6 +1369,12 @@ class IrregularLattice(Lattice):
         if self.add is not None:
             # sort such that MPS indices are ascending
             lat_idx, mps_add = self.add
+            mps_add = list(mps_add)
+            for i in range(len(mps_add)):
+                if mps_add[i] is None:
+                    close_to = np.array(lat_idx[i])
+                    close_to[-1] = len(self.regular_lattice.unit_cell) - 1
+                    mps_add[i] = self.regular_lattice.lat2mps_idx(close_to)
             mps_add = np.array(mps_add)
             sort = np.argsort(np.concatenate((mps_reg, mps_add)), kind="stable")
             order_ = np.concatenate((order_, np.array(lat_idx)), axis=0)

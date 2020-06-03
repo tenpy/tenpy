@@ -22,7 +22,21 @@ class DualSquare(Lattice):
     The sites in this lattice correspond to the vertical and horizontal (nearest neighbor) bonds
     of a common :class:`~tenpy.models.lattice.Square` lattice with the same dimensions `Lx, Ly`.
 
-    .. image :: /images/lattices/DualSquare.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 5))
+        ax = plt.gca()
+        lat = lattice.DualSquare(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        plt.show()
 
     Parameters
     ----------
