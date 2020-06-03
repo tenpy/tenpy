@@ -100,9 +100,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
         See :cfg:config:`XXZChain`
     """
     def __init__(self, model_params):
+        model_params = asConfig(model_params, "XXZChain2")
         model_params.setdefault('lattice', "Chain")
-        if not isinstance(model_params, Config):
-            model_params = Config(model_params, "XXZChain2")
         CouplingMPOModel.__init__(self, model_params)
 
     def init_sites(self, model_params):
