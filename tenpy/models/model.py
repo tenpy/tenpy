@@ -400,7 +400,6 @@ class NearestNeighborModel(Model):
             X = X.split_legs([0])
             YZ = Z.iscale_axis(Y, axis=0).split_legs([1])
             bond_XYZ[i] = (X, YZ)
-            chinfo = Hb.chinfo
         # construct the legs
         legs = [None] * (L + 1)  # legs[i] is leg 'wL' left of site i with qconj=+1
         for i in range(L + 1):
@@ -408,11 +407,11 @@ class NearestNeighborModel(Model):
                 legs[i] = legs[0]
                 break
             chi = chis[i]
-            qflat = np.zeros((chi, chinfo.qnumber), dtype=QTYPE)
+            triv_1 = LegCharge.from_trivial(1, chinfo, qconj=+1)
+            leg = triv_1
             if chi > 2:
-                YZ = bond_XYZ[i][1]
-                qflat[1:-1, :] = Z.legs[0].to_qflat()
-            leg = LegCharge.from_qflat(chinfo, qflat, qconj=+1)
+                leg = leg.extend(bond_XYZ[i][1].get_leg('wL'))
+            leg = leg.extend(triv_1)
             legs[i] = leg
         # now construct the W tensors
         Ws = [None] * L
