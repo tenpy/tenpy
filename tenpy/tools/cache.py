@@ -1,5 +1,6 @@
 """Tools to temporarily cache parts of data to disk in order to free RAM.
 
+
 """
 
 # Copyright 2020 TeNPy Developers, GNU GPLv3
@@ -8,6 +9,7 @@ import pickle
 
 from . import hdf5_io
 import collections
+import os
 
 try:
     import h5py
@@ -15,18 +17,31 @@ except ImportError:
     h5py = None
 
 
-class Hdf5CachedList(collections.abc.Sequence):
+class Hdf5CacheFile(h5py.File):
+    def __init__(self, filename="cache.h5"):
+        self.h5file = h5py.File(filename, 'w')
+
+    def make_ListCache(self, data, subgroup):
+        subgr = self.h5file.create_group(subgroup)
+        return CachedList.from_list(data, subgr)
+
+    def __del__(self):
+        fn = str(self.h5file.filename)
+        self.h5file.close()
+        os.remove(fn)
+
+
+class CachedList(collections.abc.Sequence):
     """List-like container caching data to disc instead of keeping it in RAM.
 
     Instance of this class can replace lists.
-
 
     Parameters
     ----------
     L : int
         Desired length of the list, as returned by ``len(self)``.
-    h5file : str | h5py.Group
-        Filename for the file or directly the hdf5 file to be used for caching.
+    h5file : :class:`h5py.Group`
+        The hdf5 file to be used for caching.
     keystring :
         Template for the keys of the different data sets
 
@@ -36,23 +51,34 @@ class Hdf5CachedList(collections.abc.Sequence):
         Length.
     h5file : h5py.Group
         Hdf5 file/group to save the data in.
-
+    keystring : str
+        Template for `keys`.
+    keys : List[str]
+        Keys for the different data sets.
+    saver : :class:`~tenpy.tools.hdf_io.Hdf5Saver`
+        Loading class.
+    loader : :class:`~tenpy.tools.hdf_io.Hdf5Loader`
+        Saving class.
     """
-    def __init__(self, L, h5file=None, keystring="data{0:d}"):
+    def __init__(self, L, h5file, keystring="{0:d}"):
         L = int(L)
         self.L = L
         self.keystring = keystring
         self.keys = [keystring.format(i) for i in range(L)]
-        if h5file is None:
-            h5file = "cache.h5"
-        if not isinstance(h5file, h5py.Group):
-            h5file = h5py.File(h5file, 'w')
         self.h5file = h5file
         self.saver = hdf5_io.Hdf5Saver(self.h5file)
         self.loader = hdf5_io.Hdf5Loader(self.h5file)
 
+    @classmethod
+    def from_list(cls, data, h5file=None, keystring="{0:d}"):
+        res = cls(len(data), h5file, keystring)
+        for i, entry in enumerate(data):
+            res[i] = entry
+        return res
+
     def __getitem__(self, i):
         obj = self.loader.load(self.keys[i])
+        print("get", "/".join([self.h5file.name, self.keys[i]]), repr(obj)[:30])
         self.loader.memo_load.clear()
         return obj
 
@@ -62,6 +88,7 @@ class Hdf5CachedList(collections.abc.Sequence):
             del self.h5file[key]
         self.saver.save(obj, key)
         self.saver.memo_save.clear()
+        print("set", "/".join([self.h5file.name, key]), repr(obj)[:30])
 
     def __delitem__(self, i):
         del self.h5file[self.keys[i]]
@@ -78,8 +105,3 @@ class Hdf5CachedList(collections.abc.Sequence):
         self.L = self.L + 1
         self.saver.save(self.keys[i], value)
         self.saver.memo_save.clear()
-
-    def __del__(self):
-        fn = self.h5file.filename
-        self.h5file.close()
-        os.path.remove(filename)

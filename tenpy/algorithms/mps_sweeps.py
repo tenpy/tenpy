@@ -32,6 +32,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
+from ..tools.cache import Hdf5CacheFile
 
 __all__ = ['Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH']
 
@@ -218,6 +219,16 @@ class Sweep:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
             self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
+
+        if self.options.get("cache_env", False):
+            import h5py
+            fn = self.options.get("cache_env_filename", "cache.h5")
+            self.cache = cache = Hdf5CacheFile(fn)
+            self.env._LP = cache.make_ListCache(self.env._LP, "/env/LP")
+            self.env._RP = cache.make_ListCache(self.env._RP, "/env/RP")
+            for i, env in enumerate(self.ortho_to_envs):
+                env._LP = cache.make_ListCache(env._LP, "/ortho_{0:d}/LP".format(i))
+                env._RP = cache.make_ListCache(env._RP, "/ortho_{0:d}/RP".format(i))
 
         self.reset_stats()
 
