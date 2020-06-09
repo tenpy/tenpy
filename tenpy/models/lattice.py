@@ -857,7 +857,6 @@ class Lattice:
         if any([s == 0 for s in coupling_shape]):
             return [], [], np.zeros([0, self.dim]), coupling_shape
         Ls = np.array(self.Ls)
-        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls)  # assuming PBC
@@ -874,7 +873,8 @@ class Lattice:
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
         if self.bc_MPS == 'infinite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * N_sites_per_ring
+            # N_sites_per_ring might not be set for IrregularLattice
+            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * self.N_sites // self.N_rings
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -967,7 +967,9 @@ class Lattice:
         u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1, ))
         mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
         if self.bc_MPS == 'infinite':
-            mps_ijkl += (lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites_per_ring
+            # N_sites_per_ring might not be set for IrregularLattice
+            mps_ijkl += ((lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites //
+                         self.N_rings)
         return mps_ijkl, lat_indices, coupling_shape
 
     def _keep_possible_multi_couplings(self, lat_ijkl, lat_ijkl_shifted, u_ijkl):
@@ -1433,7 +1435,7 @@ class IrregularLattice(Lattice):
     def _set_Ls(self, Ls):
         super()._set_Ls(Ls)
         # N_sites, N_sites_per_ring set by order setter
-        self.N_sites = None
+        # self.N_sites = None
         self.N_sites_per_ring = None
 
 
