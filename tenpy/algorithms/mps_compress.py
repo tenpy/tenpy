@@ -33,7 +33,6 @@ class MpsCompression(Sweep):
         self.reset_stats()
 
     def update_local(self, _, optimize=True):
-        """Perform algorithm-specific local update."""
         i0 = self.i0
         th = self.env.ket.get_theta(i0, n=2)  # ket is old psi
         LP = self.env.get_LP(i0)
@@ -52,7 +51,7 @@ class MpsCompression(Sweep):
                                                self.trunc_params,
                                                qtotal_LR=[qtotal_i0, None],
                                                inner_labels=['vR', 'vL'])
-        new_psi.norm *= renormalize
+        new_psi.norm = renormalize  #TODO: desired?   multiply?
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
         new_psi.set_B(i0, B0, form='A')  # left-canonical
@@ -78,28 +77,32 @@ class MpsCompression(Sweep):
     def update_LP(self, _):
         self.env.get_LP(self.i0 + 1, store=True)
 
-    def update_RP(self, VH):
+    def update_RP(self, _):
         self.env.get_RP(self.i0, store=True)
 
 
 class MpoMpsCompression(MpsCompression):
     """Apply an MPO to an MPO and compress it."""
     def __init__(self, psi, U_MPO, options):
-        self.options = asConfig("MpsCompression", options)
+        self.options = asConfig(options, "MpoMpsCompression")
         self.psi = psi
-        super().__init__(psi, U_MPO, self.options)
+        Sweep.__init__(self, psi, U_MPO, self.options)
 
     def init_env(self, U_MPO):
         init_env_data = self.options.get("init_env_data", {})
         old_psi = self.psi.copy()
-        self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
+        self.env = mpo.MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         self.reset_stats()
 
-    def update_local(self):
-        raise NotImplementedError("TODO")
-
-    def run(self):
-        raise NotImplementedError("TODO")
+    def update_local(self, _, optimize=True):
+        i0 = self.i0
+        self.make_eff_H()
+        th = self.env.ket.get_theta(i0, n=2)  # ket is old psi
+        th = self.eff_H.combine_theta(th)
+        th = self.eff_H.matvec(th)
+        if not self.eff_H.combine:
+            th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+        return self.update_new_psi(th)
 
 
 def mps_compress(psi, trunc_par):

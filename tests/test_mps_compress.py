@@ -18,7 +18,7 @@ def test_mps_compress(eps=1.e-13):
                                                         bc='finite')
     psiSum = psi.add(psi, .5, .5)
     # mps_compress(psiSum, {})
-    mps_compress.MpsCompression(psi, {'N_sweeps': 5}).run()
+    mps_compress.MpsCompression(psiSum, {'N_sweeps': 5}).run()
 
     assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
     psiSum2 = psi.add(psiOrth, .5, .5)
@@ -59,6 +59,9 @@ def test_apply_mpo():
     psi2 = mps_compress.apply_mpo(H, psi, {})
     Eapply = psi2.overlap(psi)
     assert abs(Eexp - Eapply) < 1e-5
+    psi3 = mps_compress.MpoMpsCompression(psi.copy(), H, {'N_sweeps': 5}).run()
+    Eapply3 = psi3.overlap(psi)
+    assert abs(Eexp - Eapply3) < 1e-5
 
 
 @pytest.mark.parametrize('bc_MPS, method', [
