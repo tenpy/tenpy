@@ -146,7 +146,8 @@ The following are not physics-related, but are good to know if you want to work 
 
 .. [conda]
     "conda package manger", https://docs.conda.io/en/latest/
-    A package and environment management system that allows to easily install (multiple version of) various software.
+    A package and environment management system that allows to easily install (multiple version of) various software,
+    and in particular python packages like TeNPy.
 
 .. [pip]
     "pip - the Python Package installer", https://pip.pypa.io/en/stable/

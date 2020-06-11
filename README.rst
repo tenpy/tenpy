@@ -24,7 +24,11 @@ For good readability, we include an extensive documentation next to the code, bo
 
 How do I get set up?
 --------------------
-Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.readthedocs.io/en/latest/INSTALL.html.
+If you have the `conda` package manager, you can install the latest released version of TeNPy with::
+
+    conda install --channel=conda-forge physics-tenpy
+
+Further details and alternative methods can be found the file `doc/INSTALL.rst <https://tenpy.readthedocs.io/en/latest/INSTALL.html>`_.
 The latest version of the source code can be obtained from https://github.com/tenpy/tenpy.
 
 How to read the documentation
