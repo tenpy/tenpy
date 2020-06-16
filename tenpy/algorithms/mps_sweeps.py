@@ -223,8 +223,8 @@ class Sweep:
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            print("Initial sweeps...")
-            # print(self.options['start_env'])
+            if self.verbose >= 1:
+                print("Initial sweeps...")
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
 

@@ -478,6 +478,7 @@ class Engine:
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(theta,
                                                     self.trunc_params,
+                                                    [self.psi.get_B(i0, None).qtotal, None],
                                                     inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices

@@ -29,3 +29,4 @@ Fixed
 - Wrong results of :meth:`tenpy.networks.mps.MPS.get_total_charge` with ``only_physical_legs=True``.
 - :meth:`tenpy.models.lattice.Lattice.plot_bc_identified` had a sign error for the `bc_shift`.
 - :meth:`~tenpy.models.lattie.Lattice.calc_H_MPO_from_bond` didn't work for charges with blocks > 1.
+- TEBD: keep qtotal of the B tensors constant
