@@ -278,14 +278,9 @@ class Engine:
             raise ValueError("Boundary conditions of MPS and MPO are not the same")
         if self.psi.L != U_mpo.L:
             raise ValueError("Length of MPS and MPO not the same")
-        # Bs = [
-        #     npc.tensordot(self.psi.get_B(i, form='B'), U_mpo.get_W(i), axes=('p', 'p*'))
-        #     for i in range(self.psi.L)
-        # ]
-        # if bc == 'finite':
-        #     Bs[0] = npc.tensordot(self.psi.get_theta(0, 1), U_mpo.get_W(0), axes=('p0', 'p*'))
         for i in range(self.psi.L):
-            form = 'Th' if i == 0 else 'B'
+            # form = 'Th' if i == 0 and bc == "finite" else 'B' # TODO
+            form = "B"
             B = npc.tensordot(self.psi.get_B(i, form=form), U_mpo.get_W(i), axes=('p', 'p*'))
             if i == 0 and bc == 'finite':
                 B = B.take_slice(U_mpo.get_IdL(i), 'wL')

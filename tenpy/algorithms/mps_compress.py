@@ -51,7 +51,7 @@ class MpsCompression(Sweep):
                                                self.trunc_params,
                                                qtotal_LR=[qtotal_i0, None],
                                                inner_labels=['vR', 'vL'])
-        new_psi.norm = renormalize  #TODO: desired?   multiply?
+        self.renormalize = renormalize
         B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
         new_psi.set_B(i0, B0, form='A')  # left-canonical
@@ -72,6 +72,7 @@ class MpsCompression(Sweep):
         for i in range(N_sweeps):
             self.sweep()
         # TODO: more fancy stopping criteria?
+        self.psi.norm *= self.renormalize
         return self.psi
 
     def update_LP(self, _):
@@ -175,7 +176,7 @@ def svd_two_site(i, mps, trunc_par=None):
     mps.set_SR(i, s)
 
 
-def apply_mpo(U_mpo, psi, trunc_par):
+def apply_mpo_svd(U_mpo, psi, trunc_par):
     """Applies an mpo and truncates the resulting MPS using SVD.
 
     Parameters

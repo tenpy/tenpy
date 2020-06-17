@@ -22,7 +22,7 @@ def test_mps_compress(eps=1.e-13):
 
     assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
     psiSum2 = psi.add(psiOrth, .5, .5)
-    mps_compress.mps_compress(psiSum2, {})
+    mps_compress.MpsCompression(psiSum2, {}).run()
     psiSum2.test_sanity()
     assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
@@ -157,7 +157,7 @@ def test_U_II_order1(bc_MPS, method, g=1.5):
             psi = eng.run()
             print(psi.norm)
             print(psiTEBD.norm)
-            psi.norm = 1.
+            # psi.norm = 1.
             print(np.abs(psi.overlap(psiTEBD) - 1))
             #This test fails
             assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
