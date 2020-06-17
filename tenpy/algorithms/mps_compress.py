@@ -176,7 +176,7 @@ def svd_two_site(i, mps, trunc_par=None):
     mps.set_SR(i, s)
 
 
-def apply_mpo_svd(U_mpo, psi, trunc_par):
+def apply_mpo(U_mpo, psi, trunc_par):
     """Applies an mpo and truncates the resulting MPS using SVD.
 
     Parameters
