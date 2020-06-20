@@ -82,32 +82,35 @@ def exact_expectation(L, g, t=1., dt=0.01):
         npt.assert_almost_equal(np.abs(LA.det(X))*np.sqrt(LA.det(S)), 1, 7)
 
         #measure z-magnetization
-        mz = 0
+        mz = []
         for i in range(L):
             ni = Delta[i+L, i]
             assert abs(ni.imag) < 1e-10
-            mz += 1-2*ni.real
-        mag.append(mz/L)
+            mz.append(1-2*ni.real)
+        mag.append(mz)
 
         #measure sigmaz-sigmaz correlations
-        i,j = 0, 5
-        ninj =  -0.25*(-Delta[j+L, i+3*L] + Delta[i+L, j+3*L])*(-Delta[j+2*L, i] + Delta[i+2*L, j]) \
-                +0.25*(-Delta[j+L, j] + Delta[j+2*L, j+3*L])*(-Delta[i+L, i] + Delta[i+2*L, i+3*L]) \
-                -0.25*(-Delta[j+L, i] + Delta[i+2*L, j+3*L])*(-Delta[i+L, j] + Delta[j+2*L, i+3*L])
-        ni = Delta[i+L, i]
-        nj = Delta[j+L, j]
-        s = 1-2*ni-2*nj+4*ninj
-        assert abs(s.imag) < 1e-10
-        szsz.append(s.real)
+        s = np.zeros((L,L))
+        for i in range(L):
+            for j in range(L):
+                ninj =  -0.25*(-Delta[j+L, i+3*L] + Delta[i+L, j+3*L])*(-Delta[j+2*L, i] + Delta[i+2*L, j]) \
+                        +0.25*(-Delta[j+L, j] + Delta[j+2*L, j+3*L])*(-Delta[i+L, i] + Delta[i+2*L, i+3*L]) \
+                        -0.25*(-Delta[j+L, i] + Delta[i+2*L, j+3*L])*(-Delta[i+L, j] + Delta[j+2*L, i+3*L])
+                ni = Delta[i+L, i]
+                nj = Delta[j+L, j]
+                sij = 1-2*ni-2*nj+4*ninj
+                assert abs(sij.imag) < 1e-10
+                s[i,j] = sij.real if i!=j else 1.
+        szsz.append(s)
 
         #measure sigma+sigma- correlatios
-        s = 0
+        s = []
         for i in range(L-1):
             j = i+1
             ci = 0.5*(Delta[j+L, i] - Delta[i+2*L, j+3*L] + Delta[i+L, j] - Delta[j+2*L, i+3*L])
             assert abs(ci.imag) < 1e-10
-            s += ci.real
-        spsm.append(s/(L-1))
+            s.append(ci.real)
+        spsm.append(s)
     return np.array(mag), np.array(szsz), np.array(spsm)
 
 @pytest.mark.parametrize('algorithm', [
@@ -143,23 +146,21 @@ def test_time_methods(algorithm):
     else:
         raise ValueError("test works only for TEDB and TDVP so far")
 
-    mag = [np.mean(psi.expectation_value("Sigmaz"))]
-    i,j = 0, 5
-    szsz = [psi.correlation_function("Sigmaz", "Sigmaz", [i], [j])[0,0]]
-    spsm = [np.mean(psi.correlation_function("Sp", "Sm").diagonal(1)+psi.correlation_function("Sp", "Sm").diagonal(-1))]
+    mag = [psi.expectation_value("Sigmaz")]
+    szsz = [psi.correlation_function("Sigmaz", "Sigmaz")]
+    spsm = [psi.correlation_function("Sp", "Sm").diagonal(1)+psi.correlation_function("Sp", "Sm").diagonal(-1)]
     
     for ti in np.arange(0, t, dt*N_steps):
         eng.run()
 
-        mag.append(np.mean(psi.expectation_value("Sigmaz")))
-        i,j = 0, 5
-        szsz.append(psi.correlation_function("Sigmaz", "Sigmaz", [i], [j])[0,0])
-        spsm.append(np.mean(psi.correlation_function("Sp", "Sm").diagonal(1)+psi.correlation_function("Sp", "Sm").diagonal(-1)))
+        mag.append(psi.expectation_value("Sigmaz"))
+        szsz.append(psi.correlation_function("Sigmaz", "Sigmaz"))
+        spsm.append(psi.correlation_function("Sp", "Sm").diagonal(1)+psi.correlation_function("Sp", "Sm").diagonal(-1))
     
     m_exact, szsz_exact, spsm_exact = exact_expectation(L, g, t, dt*N_steps)
-    npt.assert_almost_equal(np.array(mag)[:-1], m_exact, 4)
-    npt.assert_almost_equal(np.array(szsz)[:-1], szsz_exact, 4)
-    npt.assert_almost_equal(np.array(spsm)[:-1], spsm_exact, 4)
+    npt.assert_almost_equal(np.array(mag)[:-1,:], m_exact, 4)
+    npt.assert_almost_equal(np.array(szsz)[:-1,:,:], szsz_exact, 4)
+    npt.assert_almost_equal(np.array(spsm)[:-1,:], spsm_exact, 4)
 
     #TODO add MPO evolution
     #TODO add infinite MPS (?)
