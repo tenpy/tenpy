@@ -2784,7 +2784,7 @@ class MPS:
         if method == 'SVD':
             return self.compress_svd(trunc_params)
         elif method == 'variational':
-            from ..algorithms.mps_compress import VariationalCompression
+            from ..algorithms.mps_common import VariationalCompression
             return VariationalCompression(self, options).run()
         raise ValueError("Unknown compression method: " + repr(method))
 

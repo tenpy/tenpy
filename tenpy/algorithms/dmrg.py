@@ -43,7 +43,7 @@ from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.process import memory_usage
-from .mps_sweeps import Sweep, OneSiteH, TwoSiteH
+from .mps_common import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
     'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
@@ -102,7 +102,7 @@ def run(psi, model, options):
 class DMRGEngine(Sweep):
     """DMRG base class.'Engine' for the DMRG algorithm.
 
-    This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_sweeps.Sweep`.
+    This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between
     :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
 
@@ -118,12 +118,12 @@ class DMRGEngine(Sweep):
     ----------
     EffectiveH : class type
         Class for the effective Hamiltonian, i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
     chi_list : dict | ``None``
         See :cfg:option:`DMRGEngine.chi_list`
-    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
@@ -736,7 +736,7 @@ class DMRGEngine(Sweep):
             ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
             truncation.
         """
-        # wrapper around tenpy.algorithms.mps_sweeps.Sweep.sweep()
+        # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
         res = super().sweep(optimize)
         if optimize:
@@ -767,7 +767,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     ----------
     EffectiveH : class type
         Class for the effective Hamiltonian (i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
     chi_list : dict | ``None``
@@ -775,7 +775,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
         uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
         `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
-    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
@@ -1073,7 +1073,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     ----------
     EffectiveH : class type
         Class for the effective Hamiltonian (i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`. Has a `length` class attribute which
+        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
         specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
         DMRG).
     chi_list : dict | ``None``
@@ -1081,7 +1081,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
         uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
         `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
-    eff_H : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
@@ -2022,7 +2022,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
 
     Parameters
     ----------
-    effH : :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`
+    effH : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         The effective Hamiltonian.
     theta_guess : :class:`~tenpy.linalg.np_conserved.Array`
         Current guess to select the charge sector. Labels as specified by ``effH.acts_on``.

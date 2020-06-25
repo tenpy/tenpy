@@ -796,7 +796,24 @@ class MPO:
     def apply(self, psi, options):
         """Apply `self` to an MPS `psi` and compress `psi` in place.
 
-        TODO: document parameters/options
+        Options
+        -------
+        .. cfg:config :: MPO_apply
+            :include: VariationalApplyMPO
+
+            compression_method : ``'SVD' | 'variational'``
+                Mandatory.
+                Selects the method to be used for compression.
+                For the `SVD` compression, `trunc_params` is the only other option used.
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The state to which `self` should be applied, in place.
+        options : dict
+            See above.
         """
         options = asConfig(options, "MPO_apply")
         method = options['compression_method']
@@ -805,7 +822,7 @@ class MPO:
             self.apply_naively(psi)
             return psi.compress_svd(trunc_params)
         elif method == 'variational':
-            from ..algorithms.mps_compress import VariationalApplyMPO
+            from ..algorithms.mps_common import VariationalApplyMPO
             return VariationalApplyMPO(psi, self, options).run()
         # TODO: zipup method?
         raise ValueError("Unknown compression method: " + repr(method))

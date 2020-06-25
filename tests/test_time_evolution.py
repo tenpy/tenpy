@@ -7,9 +7,72 @@ import scipy.linalg as LA
 import numpy.testing as npt
 import pytest
 
+import tenpy.linalg.np_conserved as npc
 from tenpy.networks.mps import MPS
 from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms import tebd, tdvp, mpo_evolution
+from tenpy.models.spins import SpinChain
+from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
+
+
+@pytest.mark.parametrize('bc_MPS, approximation, compression', [
+    ('finite', 'I', 'SVD'),
+    ('finite', 'I', 'variational'),
+    ('finite', 'II', 'variational'),
+    ('infinite', 'I', 'SVD'),
+    ('infinite', 'II', 'SVD'),
+    ('infinite', 'II', 'variational'),
+])
+@pytest.mark.slow
+def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
+    # Test a time evolution against exact diagonalization for finite bc
+    dt = 0.01
+    if bc_MPS == 'finite':
+        L = 6
+    else:
+        L = 2
+    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
+    M = SpinChain(model_pars)
+    state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
+    state = ['up'] * L  # pointing in (-z)-direction
+    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
+
+    options = {
+        'dt': dt,
+        'N_steps': 1,
+        'order': 1,
+        'approximation': approximation,
+        'compression_method': compression,
+        'trunc_params': {
+            'chi_max': 30
+        }
+    }
+    eng = mpo_evolution.ExpMPOEvolution(psi, M, options)
+
+    if bc_MPS == 'finite':
+        ED = exact_diag.ExactDiag(M)
+        ED.build_full_H_from_mpo()
+        ED.full_diagonalization()
+        psiED = ED.mps_to_full(psi)
+        psiED /= psiED.norm()
+
+        UED = ED.exp_H(dt)
+        for i in range(30):
+            psi = eng.run()
+            psiED = npc.tensordot(UED, psiED, ('ps*', [0]))
+            psi_full = ED.mps_to_full(psi)
+            assert (abs(abs(npc.inner(psiED, psi_full, [0, 0], True)) - 1) < dt)
+
+    if bc_MPS == 'infinite':
+        psiTEBD = psi.copy()
+        TEBD_params = {'dt': dt, 'N_steps': 1}
+        EngTEBD = tebd.Engine(psiTEBD, M, TEBD_params)
+        for i in range(30):
+            EngTEBD.run()
+            psi = eng.run()
+            print(psi.norm)
+            print(np.abs(psi.overlap(psiTEBD) - 1))
+            #This test fails
+            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
 
 
 def fermion_TFI_H(L, g=1.5, J=1.):
@@ -34,11 +97,12 @@ def fermion_TFI_H(L, g=1.5, J=1.):
 
 
 def exact_expectation(L, g, t=1., dt=0.01):
-    r'''
-    Prepare system in the ground state of H(J=0) and do time evolution with full H
+    """Prepare system in the ground state of H(J=0) and do time evolution with full H.
+
     Perform a generalized Boguliobov transformation, see e.g.:
-    J.-P. Blaizot and G. Ripka, “Quantum Theory of Finite Systems,” The MIT Press, Cambridge, Massachusetts(1986)
-    '''
+    J.-P. Blaizot and G. Ripka, “Quantum Theory of Finite Systems,”
+    The MIT Press, Cambridge, Massachusetts(1986)
+    """
     gamma = np.kron(np.array([[0, 1], [1, 0]]), np.identity(L))
 
     H0 = fermion_TFI_H(L, g=g, J=0.)
@@ -122,6 +186,7 @@ def exact_expectation(L, g, t=1., dt=0.01):
 
 
 @pytest.mark.parametrize('algorithm', ['TEBD', 'TDVP', 'ExpMPO'])
+@pytest.mark.slow
 def test_time_methods(algorithm):
     L = 6
     g = 1.2

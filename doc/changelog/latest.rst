@@ -3,7 +3,8 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+Implement the ``W_I`` and ``W_II`` method for approximating exponentials of an MPO with an MPO, and MPS compression /
+MPO application to an MPS, to allow time evolution with :meth:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
 
 Changelog
 ---------
@@ -12,10 +13,15 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPOGraph.build_MPO`.
 - Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPO.from_grids`, instead optionally give *all* `legs` as argument.
+- Moved/renamed the module :mod:`tenpy.algorithms.mps_sweeps` to :mod:`tenpy.algorithms.mps_common`.
+  The old `mps_sweeps` still exists for compatibility, but raises a warning upon import.
+
 
 
 Added
 ^^^^^
+- :class:`~tenpy.algorithms.mps_common.VariationalCompression` and
+  :class:`~tenpy.algorithms.mps_common.VariationalApplyMPO` for variational compression
 - Argument `insert_all_id` for :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`~tenpy.networks.mpo.MPOGraph.from_term_list`
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
 - extended user guide on lattices, :doc:`/intro/lattices`.

@@ -31,9 +31,9 @@ Changed
 
 Added
 ^^^^^
-- :mod:`tenpy.algorithms.mps_sweeps` with the :class:`~tenpy.algorithms.mps_sweeps.Sweep` class and 
-  :class:`~tenpy.algorithms.mps_sweeps.EffectiveH` to be a 
-  :class:`~tenpy.algorithms.mps_sweeps.OneSiteH` or  :class:`~tenpy.algorithms.mps_sweeps.TwoSiteH`.
+- :mod:`tenpy.algorithms.mps_common`  with the :class:`~tenpy.algorithms.mps_common.Sweep` class and 
+  :class:`~tenpy.algorithms.mps_common.EffectiveH` to be a 
+  :class:`~tenpy.algorithms.mps_common.OneSiteH` or  :class:`~tenpy.algorithms.mps_common.TwoSiteH`.
 - Single-Site DMRG with the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG`.
 - Example function in ``examples/c_tebd.py`` how to run TEBD with a model originally having next-nearest neighbors.
 - :meth:`~tenpy.networks.mps.MPS.increase_L` to allow increasing the unit cell of an MPS.
@@ -50,10 +50,10 @@ Added
 - :func:`tenpy.algorithms.dmrg.full_diag_effH` as another replacement of :func:`~tenpy.linalg.lanczos.lanczos`.
 - The new DMRG parameter ``'diag_method'`` allows to select a method for the diagonalization of the effective Hamiltonian.
   See :meth:`tenpy.algorithms.dmrg.DMRGEngine.diag` for details.
-- dtype attribute in :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
+- dtype attribute in :class:`~tenpy.algorithms.mps_common.EffectiveH`.
 - :meth:`tenpy.linalg.charges.LegCharge.get_qindex_of_charges` to allow selecting a block of an Array from the charges.
-- :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
-  metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_sweeps.EffectiveH.N`.
+- :attr:`tenpy.algorithms.mps_common.EffectiveH.to_matrix` to allow contracting an `EffectiveH` to a matrix, as well as
+  metadata :attr:`tenpy.linalg.sparse.NpcLinearOperator.acts_on` and :attr:`tenpy.algorithms.mps_common.EffectiveH.N`.
 - argument `only_physical_legs` in :meth:`tenpy.networks.mps.MPS.get_total_charge`
 
 Fixed
