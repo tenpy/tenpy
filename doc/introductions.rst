@@ -13,5 +13,6 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     intro/examples
     intro/npc
     intro/model
+    intro/lattices
     intro/JordanWigner
     intro/input_output

@@ -7,6 +7,9 @@ Further, we have some predefined lattices, namely
 :class:`Chain`, :class:`Ladder` in 1D and
 :class:`Square`, :class:`Triangular`, :class:`Honeycomb`, and :class:`Kagome` in 2D.
 
+The :class:`IrregularLattice` provides a way to remove or add sites to an existing, regular
+lattice.
+
 See also the :doc:`/intro/model`.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
@@ -45,8 +48,8 @@ class Lattice:
     The **MPS index** `i` corresponds thus to the lattice sites given by
     ``(x_0, ..., x_{dim-1}, u) = tuple(self.order[i])``.
     Infinite boundary conditions of the MPS repeat in the first spatial direction of the lattice,
-    i.e., if the site at (x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
-    at ``(x_0 + a*Ls[0], x_1 ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
+    i.e., if the site at ``(x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
+    at ``(x_0 + Ls[0], x_1, ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
@@ -192,12 +195,10 @@ class Lattice:
         assert self.bc.dtype == np.bool
         chinfo = None
         for site in self.unit_cell:
-            if site is None:
+            if not isinstance(site, Site):
                 continue
             if chinfo is None:
                 chinfo = site.leg.chinfo
-            if not isinstance(site, Site):
-                raise ValueError("element of Unit cell is not Site.")
             if site.leg.chinfo != chinfo:
                 raise ValueError("All sites must have the same ChargeInfo!")
         if self.basis.shape[0] != self.dim:
@@ -856,7 +857,6 @@ class Lattice:
         if any([s == 0 for s in coupling_shape]):
             return [], [], np.zeros([0, self.dim]), coupling_shape
         Ls = np.array(self.Ls)
-        N_sites_per_ring = self.N_sites_per_ring
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
         lat_j = np.mod(lat_j_shifted, Ls)  # assuming PBC
@@ -873,7 +873,8 @@ class Lattice:
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
         if self.bc_MPS == 'infinite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
-            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * N_sites_per_ring
+            # N_sites_per_ring might not be set for IrregularLattice
+            mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * self.N_sites // self.N_rings
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
@@ -966,7 +967,9 @@ class Lattice:
         u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1, ))
         mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
         if self.bc_MPS == 'infinite':
-            mps_ijkl += (lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites_per_ring
+            # N_sites_per_ring might not be set for IrregularLattice
+            mps_ijkl += ((lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites //
+                         self.N_rings)
         return mps_ijkl, lat_indices, coupling_shape
 
     def _keep_possible_multi_couplings(self, lat_ijkl, lat_ijkl_shifted, u_ijkl):
@@ -1032,7 +1035,7 @@ class Lattice:
             for i, p in enumerate(pos):
                 ax.text(p[0], p[1], str(i), **textkwargs)
 
-    def plot_coupling(self, ax, coupling=None, **kwargs):
+    def plot_coupling(self, ax, coupling=None, wrap=False, **kwargs):
         """Plot lines connecting nearest neighbors of the lattice.
 
         Parameters
@@ -1044,6 +1047,8 @@ class Lattice:
             Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
+        wrap : bool
+            If True, wrap
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
         """
@@ -1052,22 +1057,19 @@ class Lattice:
         kwargs.setdefault('color', 'k')
         Ls = np.array(self.Ls)
         for u1, u2, dx in coupling:
-            # could use `possible_couplings` somehow,
-            # but then periodic boundary conditions screw up the image
-            dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
-            lat_idx_1 = self.order[self._mps_fix_u[u1], :]
-            lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
-            lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
-            # handle boundary conditions
-            if self.bc_shift is not None:
-                shift = np.sum(((lat_idx_2[:, :-1] - lat_idx_2_mod) // Ls)[:, 1:] * self.bc_shift,
-                               axis=1)
-                lat_idx_2[:, 0] -= shift
-                lat_idx_2_mod[:, 0] = np.mod(lat_idx_2[:, 0], self.Ls[0])
-            keep = self._keep_possible_couplings(lat_idx_2_mod, lat_idx_2[:, :-1], u2)
-            # get positions
-            pos1 = self.position(lat_idx_1[keep, :])
-            pos2 = self.position(lat_idx_2[keep, :])
+            if wrap:
+                mps_i, mps_j, _, _ = self.possible_couplings(u1, u2, dx)
+                pos1 = self.position(self.mps2lat_idx(mps_i))
+                pos2 = self.position(self.mps2lat_idx(mps_j))
+            else:
+                dx = np.r_[np.array(dx), u2 - u1]  # append the difference in u to dx
+                lat_idx_1 = self.order[self._mps_fix_u[u1], :]
+                lat_idx_2 = lat_idx_1 + dx[np.newaxis, :]
+                lat_idx_2_mod = np.mod(lat_idx_2[:, :-1], Ls)
+                keep = self._keep_possible_couplings(lat_idx_2_mod, lat_idx_2[:, :-1], u2)
+                # get positions
+                pos1 = self.position(lat_idx_1[keep, :])
+                pos2 = self.position(lat_idx_2[keep, :])
             pos = np.stack((pos1, pos2), axis=0)
             # ax.plot connects columns of 2D array by lines
             if pos.shape[2] == 1:
@@ -1076,7 +1078,7 @@ class Lattice:
                 raise ValueError("can only plot in 2 dimensions.")
             ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
 
-    def plot_basis(self, ax, **kwargs):
+    def plot_basis(self, ax, origin=(0., 0.), shade=None, **kwargs):
         """Plot arrows indicating the basis vectors of the lattice.
 
         Parameters
@@ -1084,18 +1086,28 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         **kwargs :
-            Keyword arguments specifying the "arrowprops" of ``ax.annotate``.
+            Keyword arguments for ``ax.arrow``.
         """
-        kwargs.setdefault("arrowstyle", "->")
-        for i in range(self.dim):
-            vec = self.basis[i]
-            if vec.shape[0] == 1:
-                vec = vec * np.array([1., 0])
-            if vec.shape[0] != 2:
+        kwargs.setdefault("length_includes_head", True)
+        kwargs.setdefault("width", 0.03)
+        kwargs.setdefault("color", 'g')
+        origin = np.array(origin)
+        basis = np.array([self.basis[i] for i in range(self.dim)])
+        if basis.shape[1] == 1:
+            basis = basis * np.array([[1., 0]])
+            if basis.shape[1] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
-            ax.annotate("", vec, [0., 0.], arrowprops=kwargs)
+        if shade is None:
+            shade = True if self.dim == 2 else False
+        if shade:
+            from matplotlib.patches import Polygon
+            xy = [origin, origin + basis[0], origin + basis[0] + basis[1], origin + basis[1]]
+            ax.add_patch(Polygon(xy, fill=True, color='palegreen'))
+        for i in range(self.dim):
+            vec = basis[i]
+            ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
-    def plot_bc_identified(self, ax, direction=-1, shift=None, **kwargs):
+    def plot_bc_identified(self, ax, direction=-1, shift=None, cylinder_axis=False, **kwargs):
         """Mark two sites indified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
@@ -1107,6 +1119,8 @@ class Lattice:
         direction : int
             The direction of the lattice along which we should mark the idenitified sites.
             If ``None``, mark it along all directions with periodic boundary conditions.
+        cylinder_axis : bool
+            Whether to plot the cylinder axis as well.
         shift : None | np.ndarray
             The origin starting from where we mark the identified sites.
             Defaults to the first entry of :attr:`unit_cell_positions`.
@@ -1130,13 +1144,21 @@ class Lattice:
             x_y.append(shift)
             x_y.append(shift + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
-                x_y[-1] = x_y[-1] - self.bc_shift[i - 1] * self.basis[0]
+                x_y[-1] = x_y[-1] + self.bc_shift[i - 1] * self.basis[0]
         x_y = np.array(x_y)
-        if x_y.shape[1] == 1:
-            x_y = np.hstack([x_y, np.zeros_like(x_y)])
         if x_y.shape[1] != 2:
             raise ValueError("can only plot in 2D")
         ax.plot(x_y[:, 0], x_y[:, 1], **kwargs)
+        if cylinder_axis:
+            if len(x_y) != 2 or self.dim != 2:
+                raise ValueError("can't plot cylinder axis for multiple directions")
+            center = np.mean(x_y, axis=0)
+            diff = x_y[1, :] - x_y[0]
+            perp = np.array([diff[1], -diff[0]])
+            x_y_cyl = np.array([center - perp, center + perp])
+            kwargs.setdefault('linestyle', '--')
+            kwargs['marker'] = None
+            ax.plot(x_y_cyl[:, 0], x_y_cyl[:, 1], **kwargs)
 
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
@@ -1182,7 +1204,9 @@ class Lattice:
 class TrivialLattice(Lattice):
     """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
 
-    This is usefull if you need a valid :class:`Lattice` given just the :meth:`mps_sites`.
+    This is usefull if you need a valid :class:`Lattice` with given :meth:`mps_sites`
+    and don't care about the actual geometry, e.g, because you don't intend to use the
+    :class:`~tenpy.models.model.CouplingModel`.
 
     Parameters
     ----------
@@ -1198,13 +1222,13 @@ class TrivialLattice(Lattice):
 class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
+    .. note ::
+        The lattice defines only the geometry of the sites, not the couplings;
+        you can have position-dependent couplings/onsite terms despite having a regular lattice.
+
     By adjusting the :attr:`order` and a few private attributes and methods, we can
     make functions like :meth:`possible_couplings` work with a more "irregular" lattice structure,
-    where some of the sites are missing and possibly replace by other sites.
-
-    To remove a site, you simply specify the "lattice index" of the site to be removed.
-
-
+    where some of the sites are missing and other sites added instead.
 
     Parameters
     ----------
@@ -1213,12 +1237,15 @@ class IrregularLattice(Lattice):
     remove : 2D array | None
         Each row is a lattice index ``(x_0, ..., x_{dim-1}, u)`` of a site to be removed.
         If ``None``, don't remove something.
-    add : 2D array | None
-        Each row is ``(x_0, ..., x_{dim-1}, u_add_unit_cell, i)``, with the
-        ``x_0, ..., x_{dim-1}`` giving space coordinates as for a lattice index,
-        `u_add_unit_cell` is the index of a site within `add_unit_cell` to be added, and
-        `i` is the MPS index to be used.
-        If ``None``, don't remove something.
+    add : Tuple[2D array, list] | None
+        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifiying
+        where a site is to be added; `u` is the index of the site within the final
+        :attr:`unit_cell` of the irregular lattice.
+        For each row of the 2D array, there is one entry in the list specifying where the site
+        is inserted in the MPS; the values are compared to the MPS indices of the *regular* lattice
+        and sorted into it, so "2.5" goes between what was site 2 and 3 in the regular lattice.
+        An entry `None` indicates that the site should be inserted after the lattice site
+        ``(x_0, ..., x_{dim-1}, -1)`` of the `regular_lattice`.
     add_unit_cell : list of :class:`~tenpy.networks.site.Site`
         Extra sites to be added to the unit cell.
     add_positions : iterable of 1D arrays
@@ -1229,8 +1256,41 @@ class IrregularLattice(Lattice):
     ----------
     regular_lattice : :class:`Lattice`
         The lattice this is based on.
-    remove, remove : 2D array | None
+    remove, add : 2D array | None
         See above.  Used in :meth:`ordering` only.
+
+    Examples
+    --------
+    Let's imagine that we have two different sites; for concreteness we can thing of a
+    fermion site, which we represent with ``'F'``, and a spin site ``'S'``.
+
+    You could now imagine that to have fermion chain with spins on the "bonds".
+    In the periodic/infinite case, you would simply define
+
+    >>> lat = Lattice([2], unit_cell=['F', 'S'], bc='periodic', bc_MPS='infinite')
+    >>> lat.mps_sites()
+    ['F', 'S', 'F', 'S']
+
+    For a finite system, you don't want to terminate with a spin on the right, so you need to
+    remove the very last site by specifying the lattice index ``[L-1, 1]`` of that site:
+
+    >>> L = 4
+    >>> reg_lat = Lattice([L], unit_cell=['F', 'S'], bc='open', bc_MPS='finite')
+    >>> irr_lat = IrregularLattice(reg_lat, remove=[[L-1, 1]])
+    >>> irr_lat.mps_sites()
+    ['F', 'S', 'F', 'S', 'F', 'S', 'F']
+
+    Another simple example would be to add a spin in the center of a fermion chain.
+    In that case, we add another site to the unit cell and specify the lattice index as
+    ``[(L-1)//2, 1]`` (where the 1 is the index of ``'S'`` in the unit cell ``['F', 'S']`` of the
+    irregular lattice).
+    The `None` for the MPS index is equivalent to ``(L-1)/2`` in this case.
+
+    >>> reg_lat = Lattice([L], unit_cell=['F'])
+    >>> irr_lat = IrregularLattice(reg_lat, add=([[(L-1)//2, 1]], [None]),
+    ...                            add_unit_cell=['S'])
+    ['F', 'F', 'S', 'F', 'F']
+
     """
     _REMOVED = -123456  # value in self._perm indicating removed sites.
 
@@ -1267,7 +1327,8 @@ class IrregularLattice(Lattice):
         super().save_hdf5(hdf5_saver, h5gr, subpath)
         hdf5_saver.save(self.regular_lattice, subpath + "regular_lattice")
         hdf5_saver.save(self.remove, subpath + "remove")
-        hdf5_saver.save(self.add, subpath + "add")
+        hdf5_saver.save(self.add[0], subpath + "add_lat_idx")
+        hdf5_saver.save(self.add[1], subpath + "add_mps_idx")
         add_unit_cell = self.unit_cell[len(self.regular_lattice.unit_cell):]
         add_positions = self.unit_cell_positions[len(self.regular_lattice.unit_cell_positions):]
         hdf5_saver.save(add_unit_cell, subpath + "add_unit_cell")
@@ -1277,11 +1338,27 @@ class IrregularLattice(Lattice):
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
         obj = super().from_hdf5(hdf5_loader, h5gr, subpath)
         obj.regular_lattice = hdf5_loader.load(subpath + "regular_lattice")
-        obj.add = hdf5_loader.load(subpath + "add")
+        lat_idx = hdf5_loader.load(subpath + "add_lat_idx")
+        mps_idx = hdf5_loader.load(subpath + "add_mps_idx")
+        obj.add = (lat_idx, mps_idx)
         obj.remove = hdf5_loader.load(subpath + "remove")
         return obj
 
     def ordering(self, order):
+        """Provide possible orderings of the lattice sites.
+
+        Parameters
+        ----------
+        order :
+            Argument for the :meth:`Lattice.ordering` of the :attr:`regular_lattice`, or
+            2D ndarray providing the order of the *regular lattice*.
+
+        Returns
+        -------
+        order : array, shape (N, D+1)
+            The order to be used for :attr:`order`, i.e. `order` with added/removed sites
+            as specified by :attr:`remove` and :attr:`add`.
+        """
         order_ = self.regular_lattice.ordering(order)
         mps_reg = np.arange(len(order_))
         if self.remove is not None:
@@ -1293,20 +1370,21 @@ class IrregularLattice(Lattice):
             mps_reg = mps_reg[keep]
         if self.add is not None:
             # sort such that MPS indices are ascending
-            add = np.array(self.add)
-            mps_add = add[:, -1]
-            mps_add[mps_add < 0] += len(mps_reg) + len(add)  # wrap negative indices
+            lat_idx, mps_add = self.add
+            mps_add = list(mps_add)
+            for i in range(len(mps_add)):
+                if mps_add[i] is None:
+                    close_to = np.array(lat_idx[i])
+                    close_to[-1] = len(self.regular_lattice.unit_cell) - 1
+                    mps_add[i] = self.regular_lattice.lat2mps_idx(close_to)
+            mps_add = np.array(mps_add)
             sort = np.argsort(np.concatenate((mps_reg, mps_add)), kind="stable")
-            lat_idx = add[:, :-1]
-            order_ = np.concatenate((order_, lat_idx), axis=0)
+            order_ = np.concatenate((order_, np.array(lat_idx)), axis=0)
             order_ = order_[sort, :]
         return order_
 
     @Lattice.order.setter
     def order(self, order_):
-        """Takes `order_` from regular lattice.
-
-        Adds/removes rows according to :attr:`remove`, :attr:`add`."""
         self._order = np.array(order_, dtype=np.intp)
 
         # this defines `self._perm`
@@ -1357,7 +1435,7 @@ class IrregularLattice(Lattice):
     def _set_Ls(self, Ls):
         super()._set_Ls(Ls)
         # N_sites, N_sites_per_ring set by order setter
-        self.N_sites = None
+        # self.N_sites = None
         self.N_sites_per_ring = None
 
 
@@ -1406,7 +1484,21 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
-    .. image :: /images/lattices/Chain.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 1.4))
+        ax = plt.gca()
+        lat = lattice.Chain(4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
+        ax.set_xlim(-1.)
+        ax.set_ylim(-0.5, 0.5)
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1470,7 +1562,21 @@ class Chain(SimpleLattice):
 class Ladder(Lattice):
     """A ladder coupling two chains.
 
-    .. image :: /images/lattices/Ladder.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 1.4))
+        ax = plt.gca()
+        lat = lattice.Ladder(4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
+        ax.set_aspect('equal')
+        ax.set_xlim(-1.)
+        ax.set_ylim(-1.)
+        plt.show()
 
     Parameters
     ----------
@@ -1504,7 +1610,21 @@ class Ladder(Lattice):
 class Square(SimpleLattice):
     """A square lattice.
 
-    .. image :: /images/lattices/Square.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 5))
+        ax = plt.gca()
+        lat = lattice.Square(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        plt.show()
 
     Parameters
     ----------
@@ -1535,7 +1655,19 @@ class Square(SimpleLattice):
 class Triangular(SimpleLattice):
     """A triangular lattice.
 
-    .. image :: /images/lattices/Triangular.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(4, 5))
+        ax = plt.gca()
+        lat = lattice.Triangular(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        plt.show()
 
     Parameters
     ----------
@@ -1569,7 +1701,21 @@ class Triangular(SimpleLattice):
 class Honeycomb(Lattice):
     """A honeycomb lattice.
 
-    .. image :: /images/lattices/Honeycomb.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 6))
+        ax = plt.gca()
+        lat = lattice.Honeycomb(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        plt.show()
 
     Parameters
     ----------
@@ -1650,7 +1796,21 @@ class Honeycomb(Lattice):
 class Kagome(Lattice):
     """A Kagome lattice.
 
-    .. image :: /images/lattices/Kagome.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 4))
+        ax = plt.gca()
+        lat = lattice.Kagome(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        plt.show()
 
     Parameters
     ----------

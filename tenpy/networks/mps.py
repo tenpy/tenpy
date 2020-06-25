@@ -1310,7 +1310,7 @@ class MPS:
             # check that the charges match
             self._B[-1].get_leg('vR').test_equal(vR_leg)
         if self.bc == 'infinite':
-            self._B[0].get_leg('vL').test_contractable(self._B[-1].get_leg('vR'))
+            self._B[0].get_leg('vL').test_contractible(self._B[-1].get_leg('vR'))
         # done
 
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
@@ -3244,7 +3244,7 @@ class MPSEnvironment:
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.finite == self.ket.finite == self._finite)
-        # check that the network is contractable
+        # check that the network is contractible
         for i in range(self.L):
             b_s = self.bra.sites[i % self.bra.L]
             k_s = self.ket.sites[i % self.ket.L]
@@ -3615,7 +3615,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
     charge_sector : None | charges | ``0``
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-        Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+        Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
     form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
 
