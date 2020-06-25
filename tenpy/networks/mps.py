@@ -2764,14 +2764,27 @@ class MPS:
         return "\n".join(res)
 
     def compress(self, options):
-        """Compresss an MPS"""
+        """Compresss an MPS.
+
+        Options
+        -------
+        .. cfg:config :: MPS_compress
+            :include: VariationalCompression
+
+            compression_method : ``'SVD' | 'variational'``
+                Mandatory.
+                Selects the method to be used for compression.
+                For the `SVD` compression, `trunc_params` is the only other option used.
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+        """
         options = asConfig(options, "MPS_compress")
         method = options['compression_method']
         trunc_params = options.subconfig('trunc_params')
         if method == 'SVD':
             return self.compress_svd(trunc_params)
         elif method == 'variational':
-            from tenpy.algorithms.mps_compress import VariationalCompression
+            from ..algorithms.mps_compress import VariationalCompression
             return VariationalCompression(self, options).run()
         raise ValueError("Unknown compression method: " + repr(method))
 

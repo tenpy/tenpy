@@ -16,8 +16,7 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 1-site and 2-site optimization are implemented.
 
 .. todo ::
-    Rebuild TDVP engine as subclasses of sweep
-    Do testing
+    Rebuild TDVP engine as subclasses of sweep.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
@@ -40,7 +39,7 @@ class Sweep:
     r"""Prototype class for a 'sweeping' algorithm.
 
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
-    includes DMRG, TDVP, TEBD, etc. Only DMRG is currently implemented in this way.
+    includes DMRG, TDVP, etc. Only DMRG is currently implemented in this way.
 
 
     Parameters
@@ -67,8 +66,7 @@ class Sweep:
             Lanczos parameters as described in
             :func:`~tenpy.linalg.lanczos.lanczos`
         trunc_params : dict
-            Truncation parameters as described in
-            :func:`~tenpy.algorithms.truncation.truncate`
+            Truncation parameters as described in :cfg:config:`truncation`.
         verbose : bool | int
             Level of verbosity (i.e. how much status information to print); higher=more output.
 

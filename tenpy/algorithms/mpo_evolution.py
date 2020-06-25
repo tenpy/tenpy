@@ -29,9 +29,7 @@ class ExpMPOEvolution:
         The model representing the Hamiltonian which we want to
         time evolve psi with.
     options : dict
-        Further optional parameters are described in the tables in
-        :func: `run`.
-        Use ``verbose=1`` to print the used parameters during runtime.
+        Further optional parameters are described in :cfg:config:`ExpMPOEvolution`.
 
     Options
     -------
@@ -86,7 +84,8 @@ class ExpMPOEvolution:
             N_steps : int
                 Number of time steps `dt` to evolve
             approximation : 'I' or 'II'
-                Specifies which approximation is applied. Generally, 'II' is preferable.
+                Specifies which approximation is applied. The default 'II' is more precise.
+                See [Zaletel2015]_ and :meth:`~tenpy.networks.mps.MPO.make_U` for more details.
             order : int
                 Order of the algorithm. The total error scales as ``O(t*dt^order)``.
                 Implemented are order = 1 and order = 2.
@@ -106,8 +105,8 @@ class ExpMPOEvolution:
         """Calculate ``self._U_MPO``
 
         This function calculates the approximation ``U ~= exp(-i dt_ H)`` with
-        `dt_` = `dt` for ``order = 1``
-        * dt_ = (1 - 1j)/2 `dt`  and dt_ = (1 + 1j)/2 `dt` for ``order = 2``
+        `dt_` = `dt` for ``order=1``, or
+        `dt_` = (1 - 1j)/2 `dt` and dt_ = (1 + 1j)/2 `dt` for ``order=2``.
 
         Parameters
         ----------
@@ -116,7 +115,7 @@ class ExpMPOEvolution:
         order : int
             1 or 2
         approximation : 'I' or 'II'
-            Type of approximation for the time evolution operator
+            Type of approximation for the time evolution operator.
         """
         U_param = dict(dt=dt, order=order, approximation=approximation)
         if self._U_param == U_param:
@@ -152,8 +151,7 @@ class ExpMPOEvolution:
 
         for _ in np.arange(N_steps):
             for U_MPO in self._U_MPO:
-                # trunc_err += ... # TODO
-                U_MPO.apply(self.psi, self.options)
+                trunc_err += U_MPO.apply(self.psi, self.options)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['dt']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)

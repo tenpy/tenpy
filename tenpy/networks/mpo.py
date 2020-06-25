@@ -483,13 +483,13 @@ class MPO:
         Parameters
         ----------
         dt : float|complex
-            The time step per application of the propagator. Should be imaginary for real time evolution!
+            The time step per application of the propagator.
+            Should be imaginary for real time evolution!
 
         Returns
         -------
         UI : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
-
         """
         U = [
             self.get_W(i).astype(np.result_type(dt, self.dtype),
@@ -805,7 +805,7 @@ class MPO:
             self.apply_naively(psi)
             return psi.compress_svd(trunc_params)
         elif method == 'variational':
-            from tenpy.algorithms.mps_compress import VariationalApplyMPO
+            from ..algorithms.mps_compress import VariationalApplyMPO
             return VariationalApplyMPO(psi, self, options).run()
         # TODO: zipup method?
         raise ValueError("Unknown compression method: " + repr(method))
