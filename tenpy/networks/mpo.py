@@ -49,8 +49,9 @@ from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
+from ..tools.params import asConfig
 
-__all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops', 'make_W_II']
+__all__ = ['MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
 
 class MPO:
@@ -452,7 +453,7 @@ class MPO:
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
         # done
 
-    def make_U(self, dt, which='II'):
+    def make_U(self, dt, approximation='II'):
         r"""Creates the U_I or U_II propagator.
 
         Approximations of MPO exponentials following [Zaletel2015]_.
@@ -462,22 +463,22 @@ class MPO:
         dt : float|complex
             The time step per application of the propagator.
             Should be imaginary for real time evolution!
-        which : 'I'|'II'
-            Selects the approximation, :func:`make_U_I` (``'I'``) or :func:`make_U_II` (``'II'``).
+        approximation : ``'I' | 'II'``
+            Selects the approximation, :meth:`make_U_I` (``'I'``) or :meth:`make_U_II` (``'II'``).
 
         Returns
         -------
         U : :class:`~tepy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
         """
-        if which == 'II':
+        if approximation == 'II':
             return self.make_U_II(dt)
-        if which == 'I':
+        elif approximation == 'I':
             return self.make_U_I(dt)
         raise ValueError(repr(which) + " not implemented")
 
     def make_U_I(self, dt):
-        r"""Creates the :math:`U_I` propagator
+        r"""Creates the :math:`U_I` propagator with `W_I` tensors.
 
         Parameters
         ----------
@@ -530,7 +531,7 @@ class MPO:
         return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
 
     def make_U_II(self, dt):
-        r"""Creates the UII propagator
+        r"""Creates the :math:`U_II` propagator.
 
         Parameters
         ----------
@@ -792,6 +793,76 @@ class MPO:
         norms = overlap(self, self) + overlap(other, other)
         return abs(norms - self_other) < eps * abs(norms)
 
+    def apply(self, psi, options):
+        """Apply `self` to an MPS `psi` and compress `psi` in place.
+
+        TODO: document parameters/options
+        """
+        options = asConfig(options, "MPO_apply")
+        method = options['compression_method']
+        trunc_params = options.subconfig('trunc_params')
+        if method == 'SVD':
+            self.apply_naively(psi)
+            return psi.compress_svd(trunc_params)
+        elif method == 'variational':
+            from tenpy.algorithms.mps_compress import VariationalApplyMPO
+            return VariationalApplyMPO(psi, self, options).run()
+        # TODO: zipup method?
+        raise ValueError("Unknown compression method: " + repr(method))
+
+    def apply_naively(self, psi):
+        """Applies an MPO to an MPS (in place) naively, without compression.
+
+        This function simply contracts the `W` tensors of the MPO to the `B` tensors of the
+        MPS, resulting in an MPS with bond dimension `self.chi * psi.chi`.
+
+        .. warning ::
+            This function sets only a wild *guess* for the new singular values.
+            You should either compress the MPS or at least call
+            :meth:`~tenpy.networks.mps.MPS.canonical_form`.
+            If you use :meth:`apply` instead, this will be done automatically.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS to which `self` should be applied. Modified in place!
+        """
+        bc = psi.bc
+        if bc != self.bc:
+            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+        if psi.L != self.L:
+            raise ValueError("Length of MPS and MPO not the same")
+        for i in range(psi.L):
+            B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
+            if i == 0 and bc == 'finite':
+                B = B.take_slice(self.get_IdL(i), 'wL')
+                B = B.combine_legs(['wR', 'vR'], qconj=[-1])
+                B.ireplace_labels(['(wR.vR)'], ['vR'])
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            elif i == psi.L - 1 and bc == 'finite':
+                B = B.take_slice(self.get_IdR(i), 'wR')
+                B = B.combine_legs(['wL', 'vL'], qconj=[1])
+                B.ireplace_labels(['(wL.vL)'], ['vL'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+            else:
+                B = B.combine_legs([['wL', 'vL'], ['wR', 'vR']], qconj=[+1, -1])
+                B.ireplace_labels(['(wL.vL)', '(wR.vR)'], ['vL', 'vR'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            psi.set_B(i, B, 'B')
+
+        if bc == 'infinite':
+            # calculate (rather arbitrary) guess for S[0] (no we don't like it either)
+            weight = np.ones(self.get_W(0).shape[self.get_W(0).get_leg_index('wL')]) * 0.05
+            weight[self.get_IdL(0)] = 1
+            weight = weight / np.linalg.norm(weight)
+            S0 = np.kron(weight, psi.get_SL(0))  # order dictated by '(wL,vL)'
+        else:
+            S0 = np.ones(psi.get_B(0, None).get_leg('vL').ind_len)
+        psi.set_SL(0, S0)
+        for i in range(psi.L):
+            psi.set_SR(i, np.ones(psi.get_B(i, None).get_leg('vR').ind_len))
+
     def get_grouped_mpo(self, blocklen):
         """group each `blocklen` subsequent tensors and  return result as a new MPO.
 
@@ -849,6 +920,8 @@ class MPO:
         """Return an MPO representing `self + other`.
 
         Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
+
+        This is a naive, block-wise addition without any compression!
 
         Parameters
         ----------
