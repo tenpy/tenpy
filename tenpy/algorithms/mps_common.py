@@ -809,7 +809,7 @@ class VariationalCompression(Sweep):
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
         N_sweeps : int
-            Number of sweeps to do in :meth:`run`.
+            Number of sweeps to perform.
 
     Attributes
     ----------
@@ -833,7 +833,7 @@ class VariationalCompression(Sweep):
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
         """
-        N_sweeps = self.options.get("N_sweeps", 3)
+        N_sweeps = self.options.get("N_sweeps", 2)
 
         for i in range(N_sweeps):  # TODO: more fancy stopping criteria?
             self.renormalize = []
@@ -851,7 +851,26 @@ class VariationalCompression(Sweep):
         init_env_data = self.options.get("init_env_data", {})
         old_psi = self.psi.copy()
         self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
+        if (not self.psi.finite and 'init_LP' not in init_env_data
+                and 'init_RP' not in init_env_data):
+            start_env_sites = self.options.get("start_env_sites", 0)
+            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
+
+    def _init_env_from_start_env_sites(self, start_env_sites):
+        """initialize LP[0] and RP[L-1] to already include `start_env_sites` sites."""
+        if start_env_sites is None or start_env_sites == 0 or start_env_sites == np.inf:
+            return
+        env = self.env
+        L = env.L
+        LP = env.init_LP(-start_env_sites)
+        for i in range(-start_env_sites, 0):
+            LP = env._contract_LP(i, LP)
+        env.set_LP(0, LP, age=start_env_sites)
+        RP = env.init_RP(L - 1 + start_env_sites)
+        for i in range(L - 1 + start_env_sites, L - 1, -1):
+            RP = env._contract_RP(i, RP)
+        env.set_RP(L - 1, RP, age=start_env_sites)
 
     def update_local(self, _, optimize=True):
         """Perform local update.
@@ -971,6 +990,9 @@ class VariationalApplyMPO(VariationalCompression):
         init_env_data = self.options.get("init_env_data", {})
         old_psi = self.psi.copy()
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
+        if not self.psi.finite:
+            start_env_sites = self.options.get("start_env_sites", 1)
+            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
 
     def update_local(self, _, optimize=True):

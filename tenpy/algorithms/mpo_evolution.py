@@ -34,6 +34,7 @@ class ExpMPOEvolution:
     Options
     -------
     .. cfg:config :: ExpMPOEvolution
+        :include: MPO_apply
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncate`.
@@ -71,6 +72,7 @@ class ExpMPOEvolution:
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
         self._U_param = {}
+        options.setdefault('start_env_sites', model.H_MPO.max_range)
 
     def run(self):
         """Run the real-time evolution with the WI/WII approximation.
