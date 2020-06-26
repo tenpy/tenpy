@@ -112,7 +112,7 @@ This mapping is also done by the lattice by defining the **order** (:attr:`~tenp
 
 .. note ::
 
-    Further details on the lattice geometry can be found in :doc:`intro/lattices`.
+    Further details on the lattice geometry can be found in :doc:`/intro/lattices`.
 
 
 The CouplingModel: general structure

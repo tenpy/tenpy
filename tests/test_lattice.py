@@ -104,8 +104,9 @@ def test_IrregularLattice():
 
         ops = [(None, dx, u1), (None, [0, 0], u0)]
         m_ji, m_lat_indices, m_coupling_shape = ir.possible_multi_couplings(ops)
-        # npt.assert_equal(m_ji[1, :], np.array(expect['i']))
-        # npt.assert_equal(m_ji[0, :], np.array(expect['j']))
+        sort = np.lexsort(m_lat_indices.T)
+        npt.assert_equal(m_ji[sort, 1], np.array(expect['i']))
+        npt.assert_equal(m_ji[sort, 0], np.array(expect['j']))
 
 
 def test_number_nn():
@@ -175,7 +176,11 @@ def test_lattice_order():
 
 
 def test_possible_couplings():
-    lat_reg = lattice.Honeycomb(2, 3, [None, None], order="snake", bc="periodic")
+    lat_reg = lattice.Honeycomb(2,
+                                3, [None, None],
+                                order="snake",
+                                bc="periodic",
+                                bc_MPS="infinite")
     lat_irreg = lattice.IrregularLattice(lat_reg, remove=[[0, 0, 0]])
     u0, u1 = 0, 1
     for lat in [lat_reg, lat_irreg]:
