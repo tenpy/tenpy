@@ -6,9 +6,9 @@
     :toctree: .
 
     truncation
-    dmrg
-    mps_sweeps
     tebd
+    mps_common
+    dmrg
     tdvp
     purification_tebd
     network_contractor
@@ -16,10 +16,10 @@
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
-from . import truncation, dmrg, mps_sweeps, tebd, tdvp, exact_diag, purification_tebd, \
-    network_contractor
+from . import truncation, dmrg, mps_common, tebd, tdvp, exact_diag, purification_tebd, \
+    network_contractor, mpo_evolution
 
 __all__ = [
-    "truncation", "dmrg", "mps_sweeps", "tebd", "tdvp", "exact_diag", "purification_tebd",
-    "network_contractor"
+    "truncation", "dmrg", "mps_common", "tebd", "tdvp", "exact_diag", "purification_tebd",
+    "network_contractor", "mpo_evolution"
 ]

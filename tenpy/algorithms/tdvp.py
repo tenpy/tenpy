@@ -33,9 +33,6 @@ __all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 class Engine:
     """Time dependent variational principle 'Engine'.
 
-    You can call :meth:`run_one_site` for single-site TDVP, or
-    :meth:`run_two_sites` for two-site TDVP.
-
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TDVP_params` to :attr:`options`.
 
@@ -56,10 +53,16 @@ class Engine:
 
     .. cfg:config :: TDVP
 
+        active_sites
+            The number of active sites to be used for the time evolution.
+            If set to 1, :meth:`run_one_site` is used. The bond dimension will not increase!
+            If set to 2, :meth:`run_two_sites` is used.
         start_time : float
             Initial value for :attr:`evolved_time`
         dt : float
             Time step of the Trotter error
+        N_steps : int
+            Number of time steps `dt` to evolve.
         trunc_params : dict
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
         Lanczos : dict
@@ -104,7 +107,17 @@ class Engine:
         warnings.warn("renamed self.TDVP_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
 
-    # Actual calculation
+    def run(self):
+        """(Real-)time evolution with TDVP.
+        """
+        active_sites = self.options.get('active_sites', 2)
+        if active_sites == 1:
+            self.run_one_site(self.N_steps)
+        elif active_sites == 2:
+            self.run_two_sites(self.N_steps)
+        else:
+            raise ValueError("TDVP can only use 1 or 2 active sites, not {}".format(active_sites))
+
     def run_one_site(self, N_steps=None):
         """Run the TDVP algorithm with the one site algorithm.
 

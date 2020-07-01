@@ -86,6 +86,7 @@ from ..linalg import sparse
 from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, argsort, to_array
 from ..tools.math import lcm, speigs, entropy
+from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'build_initial_state']
@@ -881,6 +882,46 @@ class MPS:
         self.dtype = np.find_common_type([self.dtype, B.dtype], [])
         self._B[i] = B.itranspose(self._B_labels)
 
+    def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
+        """SVD a two-site wave function `theta` and save it in `self`.
+
+        Parameters
+        ----------
+        i : int
+            `theta` is the wave function on sites `i`, `i`+1.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The two-site wave function with labels combined into ``"(vL.p0)", "(p1.vR)"``,
+            ready for svd.
+        trunc_par : None | dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+            If ``None``, no truncation is done.
+        update_norm : bool
+            If ``True``, multiply the norm of `theta` into :attr:`norm`.
+        """
+        i0 = self._to_valid_index(i)
+        i1 = self._to_valid_index(i0 + 1)
+        self.dtype = np.find_common_type([self.dtype, theta.dtype], [])
+        qtotal_LR = [self._B[i0].qtotal, None]
+        if trunc_par is None:
+            U, S, VH = npc.svd(theta, qtotal_LR=qtotal_LR, inner_labels=['vR', 'vL'])
+            renorm = np.linalg.norm(S)
+            S /= renorm
+            err = None
+            if update_norm:
+                self.norm *= renorm
+        else:
+            U, S, VH, err, renorm = svd_theta(theta, trunc_par, qtotal_LR)
+            if update_norm:
+                self.norm *= renorm
+        U = U.split_legs().ireplace_label('p0', 'p')
+        VH = VH.split_legs().ireplace_label('p1', 'p')
+        self._B[i0] = U.itranspose(self._B_labels)
+        self.form[i0] = self._valid_forms['A']
+        self._B[i1] = VH.itranspose(self._B_labels)
+        self.form[i1] = self._valid_forms['B']
+        self.set_SR(i, S)
+        return err
+
     def get_SL(self, i):
         """Return singular values on the left of site `i`"""
         i = self._to_valid_index(i)
@@ -1108,7 +1149,7 @@ class MPS:
         Parameters
         ----------
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation, see :cfg:config:`truncation`.
             Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
@@ -2151,9 +2192,8 @@ class MPS:
         S = self.get_SL(0)
         if self.bc == 'segment':
             if S is None:
-                raise ValueError("Need S[0] for segment boundary conditions.")
-            self.set_SL(0,
-                        S / np.linalg.norm(S))  # must have correct singular values to the left...
+                raise ValueError("Need S[0] and S[L] for segment boundary conditions.")
+            self.set_SL(0, S / np.linalg.norm(S))
             S = self.get_SR(L - 1)
             self.set_SR(L - 1, S / np.linalg.norm(S))
         else:  # bc == 'finite':
@@ -2502,8 +2542,8 @@ class MPS:
             which represents the full operator used for the swap.
             Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Parameters for truncation, see :cfg:config:`truncation`.
+            Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
         -------
@@ -2567,8 +2607,8 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Parameters for truncation, see :cfg:config:`truncation`.
+            Defaults to ``{'chi_max': max(self.chi)}``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
 
@@ -2632,7 +2672,7 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation, see :cfg:config:`truncation`.
             If not set, `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
@@ -2722,6 +2762,82 @@ class MPS:
             res.append("sites: " + " ".join([repr(s) for s in self.sites]))
             res.append("forms: " + " ".join([repr(f) for f in self.form]))
         return "\n".join(res)
+
+    def compress(self, options):
+        """Compresss an MPS.
+
+        Options
+        -------
+        .. cfg:config :: MPS_compress
+            :include: VariationalCompression
+
+            compression_method : ``'SVD' | 'variational'``
+                Mandatory.
+                Selects the method to be used for compression.
+                For the `SVD` compression, `trunc_params` is the only other option used.
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+        """
+        options = asConfig(options, "MPS_compress")
+        method = options['compression_method']
+        trunc_params = options.subconfig('trunc_params')
+        if method == 'SVD':
+            return self.compress_svd(trunc_params)
+        elif method == 'variational':
+            from ..algorithms.mps_common import VariationalCompression
+            return VariationalCompression(self, options).run()
+        raise ValueError("Unknown compression method: " + repr(method))
+
+    def compress_svd(self, trunc_par):
+        """Compress `self` with a single sweep of SVDs; in place.
+
+        Perform a single right-sweep of QR/SVD without truncation, followed by a left-sweep with
+        truncation, very much like :meth:`canonical_form_finite`.
+
+        .. warning ::
+            In case of a strong compression, this does not find the optimal, global solution.
+
+        Parameters
+        ----------
+        trunc_par : dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+        """
+        trunc_err = TruncationError()
+        if self.bc == 'finite':
+            # Do QR starting from the left
+            B = self.get_B(0, form='Th')
+            for i in range(self.L - 1):
+                B = B.combine_legs(['vL', 'p'])
+                q, r = npc.qr(B, inner_labels=['vR', 'vL'])
+                B = q.split_legs()
+                self.set_B(i, B, form=None)
+                B = self.get_B(i + 1, form='B')
+                B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            # Do SVD from right to left & truncate
+            for i in range(self.L - 1, 0, -1):
+                B = B.combine_legs(['p', 'vR'])
+                U, S, VH, err, norm_new = svd_theta(B, trunc_par)
+                trunc_err += err
+                self.norm *= norm_new
+                VH = VH.split_legs()
+                self.set_B(i, VH, form='B')
+                B = self.get_B(i - 1, form=None)
+                B = npc.tensordot(B, U, axes=('vR', 'vL'))
+                B.iscale_axis(S, 'vR')
+                self.set_SL(i, S)
+            self.set_B(0, B, form='Th')
+        elif self.bc == 'infinite':
+            for i in range(self.L):
+                theta = self.get_theta(i, n=2)
+                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                self.set_svd_theta(i, theta, update_norm=False)
+            for i in range(self.L - 1, -1, -1):
+                theta = self.get_theta(i, n=2)
+                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                trunc_err += self.set_svd_theta(i, theta, trunc_par, update_norm=False)
+        else:
+            raise NotImplementedError("unsupported boundary conditions " + repr(self.bc))
+        return trunc_err
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
