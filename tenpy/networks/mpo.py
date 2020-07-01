@@ -50,6 +50,7 @@ from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
+from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = ['MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
@@ -475,7 +476,7 @@ class MPO:
             return self.make_U_II(dt)
         elif approximation == 'I':
             return self.make_U_I(dt)
-        raise ValueError(repr(which) + " not implemented")
+        raise ValueError(repr(approximation) + " not implemented")
 
     def make_U_I(self, dt):
         r"""Creates the :math:`U_I` propagator with `W_I` tensors.
@@ -800,13 +801,15 @@ class MPO:
         -------
         .. cfg:config :: MPO_apply
             :include: VariationalApplyMPO
+            :include: zip_up
 
-            compression_method : ``'SVD' | 'variational'``
+            compression_method : ``'SVD' | 'variational' | 'zip_up'``
                 Mandatory.
                 Selects the method to be used for compression.
                 For the `SVD` compression, `trunc_params` is the only other option used.
             trunc_params : dict
                 Truncation parameters as described in :cfg:config:`truncation`.
+            
 
         Parameters
         ----------
@@ -824,7 +827,10 @@ class MPO:
         elif method == 'variational':
             from ..algorithms.mps_common import VariationalApplyMPO
             return VariationalApplyMPO(psi, self, options).run()
-        # TODO: zipup method?
+        elif method == 'zip_up':
+            trunc_err = self.apply_zipup(psi, options)
+            return trunc_err + psi.compress_svd(trunc_params)
+        # TODO: zipup method infinite?
         raise ValueError("Unknown compression method: " + repr(method))
 
     def apply_naively(self, psi):
@@ -879,6 +885,92 @@ class MPO:
         psi.set_SL(0, S0)
         for i in range(psi.L):
             psi.set_SR(i, np.ones(psi.get_B(i, None).get_leg('vR').ind_len))
+    
+    def apply_zipup(self, psi, options):
+        """Applies an MPO to an MPS (in place) with the zip-up method described 
+        in Ref. [Stoudenmire2010]_
+    
+        The 'W' tensors are contracted to the 'B' tensors with intermediate SVD
+        compressions, truncated to bond dimensions `chi_max * m_temp`.
+        
+        .. warning ::
+            The MPS afterwards is only approximately in canonical form 
+    		(under the assumption that self is close to unity).
+            You should either compress the MPS or at least call
+            :meth:`~tenpy.networks.mps.MPS.canonical_form`.
+            If you use :meth:`apply` instead, this will be done automatically.
+    
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS to which `self` should be applied. Modified in place!
+        trunc_params : dict
+            Truncation parameters as described in :cfg:config:`truncation`.
+        
+        
+        Options
+        -------
+        .. cfg:config :: zip_up
+    
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+            m_temp: int
+                bond dimension will be truncated to `m_temp * chi_max`
+            trunc_weight: float
+                reduces cut for Schmidt values to `trunc_weight * svd_min`
+        """
+        options = asConfig(options, "zip_up")
+        m_temp = options.get('m_temp', 2)
+        trunc_weight = options.get('trunc_weight', 1.)
+        trunc_params = options.subconfig('trunc_params')
+        relax_trunc = trunc_params.copy() # relaxed truncation criteria
+        relax_trunc['chi_max'] *= m_temp
+        if 'svd_min' in relax_trunc.keys():
+            relax_trunc['svd_min'] *= trunc_weight 
+        trunc_err = TruncationError()
+        bc = psi.bc
+        if bc != self.bc:
+            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+        if psi.L != self.L:
+            raise ValueError("Length of MPS and MPO not the same")
+        if bc != 'finite':
+            raise ValueError("Only finite boundary conditions implemented")
+        for i in range(psi.L):
+            B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
+            if i == 0 and bc == 'finite':
+                B = B.take_slice(self.get_IdL(i), 'wL')
+                B = B.combine_legs([['vL', 'p'],['wR','vR']], qconj=[+1,-1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                VH = VH.split_legs()
+                VH.iscale_axis(S, 'vL')
+                psi.set_SR(i,S)
+                psi.set_B(i, U, 'A')
+            elif i == psi.L - 1 and bc == 'finite':
+                B = npc.tensordot(VH, B, axes =(['wR','vR'],['wL','vL']))
+                B = B.take_slice(self.get_IdR(i), 'wR')
+                B = B.combine_legs(['vL', 'p'], qconj=[-1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                psi.set_SR(i,S)
+                psi.set_B(i, U, 'A')
+            else:
+                B = npc.tensordot(VH, B, axes =(['wR','vR'],['wL','vL']))
+                B = B.combine_legs([['vL', 'p'],['wR','vR']], qconj=[1,-1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                VH = VH.split_legs()
+                VH.iscale_axis(S, 'vL')
+                psi.set_SR(i,S)
+                psi.set_B(i, U, 'A')
+      
+        return trunc_err
 
     def get_grouped_mpo(self, blocklen):
         """group each `blocklen` subsequent tensors and  return result as a new MPO.

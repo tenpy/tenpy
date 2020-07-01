@@ -91,6 +91,10 @@ Algorithm developments
 .. [Singh2009]
     "Tensor network decompositions in the presence of a global symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), :arxiv:`0907.2994` :doi:`10.1103/PhysRevA.82.050301`
+.. [Stoudenmire2010]
+    "Minimally Entangled Typical Thermal State Algorithms"
+    E.M. Stoudenmire, Steven R. White, 2010 New J. Phys. 12, 055026,
+    :arxiv:`1002.1305` :doi:`10.1088/1367-2630/12/5/055026`
 .. [Singh2010]
     "Tensor network states and algorithms in the presence of a global U(1) symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, :arxiv:`1008.4774` :doi:`10.1103/PhysRevB.83.115125`

@@ -296,7 +296,7 @@ def test_MPO_var(L=8, tol=1.e-13):
     assert abs(var - var_full) / abs(var_full) < tol
 
 
-@pytest.mark.parametrize('method', ['SVD', 'variational'])
+@pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
 def test_apply_mpo(method):
     bc_MPS = "finite"
     # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!

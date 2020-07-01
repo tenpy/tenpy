@@ -18,6 +18,8 @@ from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
     ('finite', 'I', 'SVD'),
     ('finite', 'I', 'variational'),
     ('finite', 'II', 'variational'),
+    ('finite', 'I', 'zip_up'),
+    ('finite', 'II', 'zip_up'),
     ('infinite', 'I', 'SVD'),
     ('infinite', 'II', 'SVD'),
     ('infinite', 'II', 'variational'),
