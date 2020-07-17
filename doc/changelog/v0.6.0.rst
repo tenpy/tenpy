@@ -34,7 +34,7 @@ Backwards incompatible changes
   Note that this affects also derived classes (for example the :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine`).
 
    * ``tenpy.algorithms.dmrg.DMRGEngine.DMRG_params``  (was already renamed to `engine_params` in versin 0.5.0)
-   * ``tenpy.algorithms.mps_sweeps.Sweep.engine_params``
+   * ``tenpy.algorithms.mps_common.Sweep.engine_params``
    * ``tenpy.algorithms.tebd.Engine.TEBD_params``
    * ``tenpy.algorithms.tdvp.Engine.TDVP_params``
    * ``tenpy.linalg.lanczos.Lanczos``
@@ -58,10 +58,10 @@ Backwards incompatible changes
   :meth:`tenpy.networks.mps.MPS.enlarge_mps_unit_cell` (taking ``factor`` instead of ``new_L=factor*L`` as argument).
 - :meth:`tenpy.networks.mps.MPS.correlation_function` now auto-determines whether a Jordan-Wigner string is necessary.
   If any of the given operators is directly an npc Array, it will now raise an error; set ``autoJW=False`` in that case.
-- Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_sweeps.EffectiveH` for the case that 
+- Instead of "monkey-patching" `matvec` of the :class:`tenpy.algorithms.mps_common.EffectiveH` for the case that 
   `ortho_to_envs` is not empty, we defined a proper class :class:`~tenpy.linalg.sparse.NpcLinearOperatorWrapper`,
   which serves as baseclass for :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`. 
-  The argument `ortho_to_envs` has been removed from :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`.
+  The argument `ortho_to_envs` has been removed from :class:`~tenpy.algorithms.mps_common.EffectiveH`.
 - Switch order of the sites in the unit cell for the :class:`~tenpy.models.toric_code.DualSquare`, and redefine what the
   ``"default"`` order means. This is a huge optimization of DMRG, reducing the necessary MPS bond dimension for the ground
   state to the optimal :math:`2^{L-1}` on each bond.
@@ -110,8 +110,8 @@ Added
 - :class:`tenpy.linalg.sparse.ShiftNpcLinearOperator` to add a constant.
 - :class:`tenpy.linalg.sparse.SumNpcLinearOperator` which serves e.g. to add the h.c. during the `matvec` 
   (in combination with the new :meth:`tenpy.linalg.sparse.NpcLinearOperator.adjoint`).
-- :meth:`tenpy.algorithms.mps_sweeps.make_eff_H` to simplify implementations of
-  :meth:`~tenpy.algorithms.mps_sweeps.prepare_update`.
+- :meth:`tenpy.algorithms.mps_common.make_eff_H` to simplify implementations of
+  :meth:`~tenpy.algorithms.mps_common.prepare_update`.
 - attribute :attr:`~tenpy.models.model.options` for the Model.
 - :meth:`tenpy.networks.mps.MPS.roll_mps_unit_cell`.
 
@@ -130,7 +130,7 @@ Changed
   - :class:`~tenpy.networks.terms.OnsiteTerms`
   - :class:`~tenpy.networks.terms.CouplingTerms`
   - :class:`~tenpy.models.model.Model`, i.e., all model classes.
-- Instead of just defining `to_matrix` and `adjoint` for :class:`~tenpy.algorithms.mps_sweeps.EffectiveH`, 
+- Instead of just defining `to_matrix` and `adjoint` for :class:`~tenpy.algorithms.mps_common.EffectiveH`, 
   define the interface directly for :class:`~tenpy.linalg.sparse.NpcLinearOperator`.
 - Try to keep the charge block structure as far as possible for :meth:`~tenpy.linalg.np_conserved.add_charge` and
   :meth:`~tenpy.linalg.np_conserved.drop_charge` 

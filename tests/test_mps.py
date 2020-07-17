@@ -57,22 +57,20 @@ def test_mps_add():
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite')
     psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite')
+    npt.assert_equal(psi1.get_total_charge(True), [2])
     psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum.norm, 1.)
     npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
     npt.assert_almost_equal(psi_sum.overlap(psi2), -0.5**0.5)
     # check overlap with singlet state
     psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=u, down=d, bc='finite')
-    #  ov = psi.overlap(psi_sum.copy())
-    print("total charge psi1", psi1.get_total_charge())
-    print("total charge psi2", psi2.get_total_charge())
-    print("total charge psi_sum", psi_sum.get_total_charge())
-    print("total charge psi", psi.get_total_charge())
     npt.assert_almost_equal(psi_sum.overlap(psi), 1.)
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite')
+    npt.assert_equal(psi2_prime.get_total_charge(True), [4])
     psi2_prime.apply_local_op(1, 'Sm', False, False)
     # now psi2_prime is psi2 up to gauging of charges.
+    npt.assert_equal(psi2_prime.get_total_charge(True), [2])
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
@@ -357,3 +355,24 @@ def test_expectation_value_multisite():
     env1 = mps.MPSEnvironment(psi1, psi)
     ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
     npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+
+
+@pytest.mark.parametrize('method', ['SVD', 'variational'])
+def test_mps_compress(method, eps=1.e-13):
+    # Test compression of a sum of a state with itself
+    L = 5
+    sites = [site.SpinHalfSite(conserve=None) for i in range(L)]
+    plus_x = np.array([1., 1.]) / np.sqrt(2)
+    minus_x = np.array([1., -1.]) / np.sqrt(2)
+    psi = mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
+    psiOrth = mps.MPS.from_product_state(sites, [minus_x for i in range(L)], bc='finite')
+    options = {'compression_method': method, 'trunc_params': {'chi_max': 30}}
+    psiSum = psi.add(psi, .5, .5)
+    psiSum.compress(options)
+
+    assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
+    psiSum2 = psi.add(psiOrth, .5, .5)
+    psiSum2.compress(options)
+    psiSum2.test_sanity()
+    assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
+    assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)

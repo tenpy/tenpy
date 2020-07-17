@@ -67,6 +67,7 @@ Algorithm developments
 [McCulloch2008]_ was a huge step forward to solve convergence problems for infinite DMRG.
 [Singh2009]_, [Singh2010]_ explain how to incorporate Symmetries.
 [Haegeman2011]_ introduced TDVP, again explained more accessible in [Haegeman2016]_.
+[Zaletel2015]_ is another standard method for time-evolution with long-range Hamiltonians.
 [Karrasch2013]_ gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in [Hauschild2018]_.
 [Vidal2007]_ introduced MERA.
 
@@ -90,6 +91,10 @@ Algorithm developments
 .. [Singh2009]
     "Tensor network decompositions in the presence of a global symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), :arxiv:`0907.2994` :doi:`10.1103/PhysRevA.82.050301`
+.. [Stoudenmire2010]
+    "Minimally Entangled Typical Thermal State Algorithms"
+    E.M. Stoudenmire, Steven R. White, 2010 New J. Phys. 12, 055026,
+    :arxiv:`1002.1305` :doi:`10.1088/1367-2630/12/5/055026`
 .. [Singh2010]
     "Tensor network states and algorithms in the presence of a global U(1) symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, :arxiv:`1008.4774` :doi:`10.1103/PhysRevB.83.115125`
@@ -99,6 +104,9 @@ Algorithm developments
 .. [Karrasch2013]
     "Reducing the numerical effort of finite-temperature density matrix renormalization group calculations"
     C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), :arxiv:`1303.3942` :doi:`10.1088/1367-2630/15/8/083031`
+.. [Zaletel2015]
+    "Time-evolving a matrix product state with long-ranged interactions"
+    M. P. Zaletel, R. S. K. Mong, C. Karrasch, J. E. Moore, F. Pollmann, Phys. Rev. B 91, 165112 (2015), :arxiv:`1407.1832` :doi:`10.1103/PhysRevB.91.165112`
 .. [Hubig2015]
     "Strictly single-site DMRG algorithm with subspace expansion"
     C. Hubig, I. P. McCulloch, U. Schollwoeck, F. A. Wolf, Phys. Rev. B 91, 155115 (2015), :arxiv:`1501.05504` :doi:`10.1103/PhysRevB.91.155115`
@@ -146,7 +154,8 @@ The following are not physics-related, but are good to know if you want to work 
 
 .. [conda]
     "conda package manger", https://docs.conda.io/en/latest/
-    A package and environment management system that allows to easily install (multiple version of) various software.
+    A package and environment management system that allows to easily install (multiple version of) various software,
+    and in particular python packages like TeNPy.
 
 .. [pip]
     "pip - the Python Package installer", https://pip.pypa.io/en/stable/

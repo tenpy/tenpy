@@ -22,7 +22,21 @@ class DualSquare(Lattice):
     The sites in this lattice correspond to the vertical and horizontal (nearest neighbor) bonds
     of a common :class:`~tenpy.models.lattice.Square` lattice with the same dimensions `Lx, Ly`.
 
-    .. image :: /images/lattices/DualSquare.*
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models.toric_code import DualSquare
+        plt.figure(figsize=(5, 5))
+        ax = plt.gca()
+        lat = DualSquare(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
+        ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        plt.show()
 
     Parameters
     ----------
@@ -101,7 +115,17 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
             Couplings as defined for the Hamiltonian above.
         order : str
             The order of the lattice sites in the lattice, see :class:`DualSquare`.
-
+        bc_y : ``"open" | "periodic"``
+            The boundary conditions in y-direction.
+        bc_x : ``"open" | "periodic"``
+            Can be used to force "periodic" boundaries for the lattice,
+            i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
+            Defaults to ``"open"`` for ``bc_MPS="finite"`` and
+            ``"periodic"`` for ``bc_MPS="infinite``.
+            If you are not aware of the consequences, you should probably
+            *not* use "periodic" boundary conditions:
+            The MPS is still "open", so this will introduce long-range couplings between the
+            first and last sites of the MPS, and require **squared** MPS bond-dimensions.
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
@@ -114,8 +138,11 @@ class ToricCode(CouplingMPOModel, MultiCouplingModel):
         Ly = model_params.get('Ly', 2)
         order = model_params.get('order', 'default')
         bc_MPS = model_params.get('bc_MPS', 'infinite')
-        bc = [None, 'periodic']
-        bc[0] = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc_x = model_params.get('bc_x', bc_x)
+        bc_y = model_params.get('bc_y', 'periodic')
+        assert bc_y in ['open', 'periodic']
+        bc = [bc_x, bc_y]
         lat = DualSquare(Lx, Ly, site, order=order, bc=bc, bc_MPS=bc_MPS)
         return lat
 

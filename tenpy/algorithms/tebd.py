@@ -59,7 +59,7 @@ class Engine:
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networs.mps.MPS`
+    psi : :class:`~tenpy.networks.mps.MPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
@@ -478,6 +478,7 @@ class Engine:
         # Perform the SVD and truncate the wavefunction
         U, S, V, trunc_err, renormalize = svd_theta(theta,
                                                     self.trunc_params,
+                                                    [self.psi.get_B(i0, None).qtotal, None],
                                                     inner_labels=['vR', 'vL'])
 
         # Split tensor and update matrices
@@ -592,6 +593,7 @@ class Engine:
         U, S, V, trunc_err, renormalize = svd_theta(theta,
                                                     self.trunc_params,
                                                     inner_labels=['vR', 'vL'])
+        self.psi.norm *= renormalize
         # Split legs and update matrices
         B_R = V.split_legs(1).ireplace_label('p1', 'p')
         A_L = U.split_legs(0).ireplace_label('p0', 'p')

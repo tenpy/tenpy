@@ -118,8 +118,16 @@ def check_same_operators(sites):
 
 
 def test_spin_half_site():
-    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
-               Sigmay='Sigmay', Sigmaz='Sigmaz')
+    hcs = dict(Id='Id',
+               JW='JW',
+               Sx='Sx',
+               Sy='Sy',
+               Sz='Sz',
+               Sp='Sm',
+               Sm='Sp',
+               Sigmax='Sigmax',
+               Sigmay='Sigmay',
+               Sigmaz='Sigmaz')
     sites = []
     for conserve in [None, 'Sz', 'parity']:
         S = site.SpinHalfSite(conserve)
@@ -233,7 +241,7 @@ def test_boson_site():
             for op in S.onsite_ops:
                 assert S.hc_ops[op] == hcs[op]
             npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
-                                           S.N.to_ndarray(), 2)
+                                               S.N.to_ndarray(), 2)
             sites.append(S)
         check_same_operators(sites)
 

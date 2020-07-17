@@ -16,7 +16,7 @@ if not sys.version_info >= (3, 5):
     sys.exit(1)
 
 # don't use compiled version to avoid problems with doc-strings of compiled functions
-os.environ['TENPY_OPTIMIZE'] = "0"
+os.environ["TENPY_NO_CYTHON"] = "true"
 try:
     import tenpy.version
 except:
@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
     'sphinx_cfg_options',
+    'matplotlib.sphinxext.plot_directive',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
