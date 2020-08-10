@@ -10,6 +10,7 @@
     mps_common
     dmrg
     tdvp
+    mpo_evolution
     purification_tebd
     network_contractor
     exact_diag
