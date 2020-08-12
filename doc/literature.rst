@@ -121,6 +121,9 @@ Related theory
 --------------
 The following are referenced from somewhere in the algorithms.
 
+.. [Suzuki1991]
+   "General theory of fractal path integrals with applications to many-body theories and statistical physics",
+   M. Suzuki,  Journal of Mathematical Physics 32, 400 (1991); :doi:`10.1063/1.529425`
 .. [Resta1997]
     "Quantum-Mechanical Position Operator in Extended Systems"
     R. Resta, Phys. Rev. Lett. 80, 1800 (1997) :doi:`10.1103/PhysRevLett.80.1800`
@@ -142,6 +145,9 @@ The following are referenced from somewhere in the algorithms.
 .. [Grushin2015]
     "Characterization and stability of a fermionic ν=1/3 fractional Chern insulator"
     Adolfo G. Grushin, Johannes Motruk, Michael P. Zaletel, and Frank Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
+.. [Barthel2020]
+    "Optimized Lie–Trotter–Suzuki decompositions for two and three non-commuting terms"
+    T. Barthel, Y. Zhang, Annals of Physics 418, 168165 (2020), :arxiv:`1901.04974` :doi:`10.1016/j.aop.2020.168165`
 
 
 Software-related
