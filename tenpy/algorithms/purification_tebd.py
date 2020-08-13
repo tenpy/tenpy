@@ -791,7 +791,7 @@ class GradientDescentDisentangler(Disentangler):
         and then ``U(t) = exp(-t*dS)``, where we choose the `t` from stepsizes which
         minimizes the entropy of ``U(t) theta``.
 
-        When ``R[i]`` is the derivative :math:`\partial S(Y, n) \partial Y_i` of the (n-th Renyi)
+        When ``R[i]`` is the derivative :math:`\partial S(Y, n)/ \partial Y_i` of the (n-th Renyi)
         entropy, ``dS`` is given by::
 
             |     .----X--R--Z----.

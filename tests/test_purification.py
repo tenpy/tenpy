@@ -9,6 +9,7 @@ from tenpy.models.xxz_chain import XXZChain
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
 from tenpy.algorithms.purification_tebd import PurificationTEBD
+from tenpy.algorithms.purification import PurificationApplyMPO
 import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
 import pytest
@@ -74,6 +75,17 @@ def test_purification_TEBD(L=3):
             eng.disentangle_global()
 
 
+def test_purification_MPO(L=6):
+    xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite')
+    M = XXZChain(xxz_pars)
+    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
+    options = {'trunc_params': {'chi_max': 50, 'svd_min': 1.e-8}}
+    U = M.H_MPO.make_U_II(dt=0.1)
+    PurificationApplyMPO(psi, U, options).run()
+    N = psi.expectation_value('Id')  # check normalization : <1> =?= 1
+    npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
+
+
 def test_renyi_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
@@ -111,7 +123,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     assert (S < S_0)  # this should always be true...
     if S > 100 * eps:
         print("final S =", S)
-        assert (False)  # test of purification failed to find the optimum.
+        assert False  # test of purification failed to find the optimum.
         # This may happen for some random seeds! Why?
         # If the optimal U is 'too far away' from U0=eye?
 

@@ -1894,9 +1894,9 @@ class MPOEnvironment(MPSEnvironment):
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(),
-                           LP,
-                           axes=(['p*', 'vL*'], ['p', 'vR*']))
+        axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
@@ -1904,9 +1904,9 @@ class MPOEnvironment(MPSEnvironment):
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
-        RP = npc.tensordot(RP,
-                           self.bra.get_B(i, form='B').conj(),
-                           axes=(['p', 'vL*'], ['p*', 'vR*']))
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
 
 

@@ -16,16 +16,15 @@ Backwards incompatible changes
 - Moved/renamed the module :mod:`tenpy.algorithms.mps_sweeps` to :mod:`tenpy.algorithms.mps_common`.
   The old `mps_sweeps` still exists for compatibility, but raises a warning upon import.
 
-
-
 Added
 ^^^^^
 - :class:`~tenpy.algorithms.mps_common.VariationalCompression` and
   :class:`~tenpy.algorithms.mps_common.VariationalApplyMPO` for variational compression
+- :class:`~tenpy.algorithms.purification.PurificationApplyMPO` and :class:`~tenpy.algorithms.purification.PurificationTwoSiteU` 
+  for variational compression with purifications.
 - Argument `insert_all_id` for :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`~tenpy.networks.mpo.MPOGraph.from_term_list`
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
 - extended user guide on lattices, :doc:`/intro/lattices`.
-
 
 Changed
 ^^^^^^^

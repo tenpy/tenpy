@@ -158,7 +158,7 @@ class Sweep:
 
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
-                :meth:`~tenpy.networks.mps.MPOEnvironment.get_initialization_data`.
+                :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
                 List of other matrix product states to orthogonalize against.
                 Works only for finite systems.
@@ -387,6 +387,12 @@ class Sweep:
                 theta.itranspose(self.eff_H.acts_on)
                 ortho_vecs.append(theta)
             self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
+
+    def update_LP(self, _):
+        self.env.get_LP(self.i0 + 1, store=True)
+
+    def update_RP(self, _):
+        self.env.get_RP(self.i0, store=True)
 
 
 class EffectiveH(NpcLinearOperator):
@@ -911,12 +917,6 @@ class VariationalCompression(Sweep):
         self.env.del_LP(i0 + 1)
         self.env.del_RP(i0)
         return {'U': U, 'VH': VH, 'err': err}
-
-    def update_LP(self, _):
-        self.env.get_LP(self.i0 + 1, store=True)
-
-    def update_RP(self, _):
-        self.env.get_RP(self.i0, store=True)
 
 
 class VariationalApplyMPO(VariationalCompression):
