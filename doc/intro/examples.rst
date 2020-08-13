@@ -17,5 +17,6 @@ TeNPy is installed correctly).
     examples/d_dmrg
     examples/e_tdvp
     examples/tfi_exact
+    examples/purification
     examples/z_exact_diag
     examples/advanced
