@@ -1107,7 +1107,7 @@ class Lattice:
             vec = basis[i]
             ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
-    def plot_bc_identified(self, ax, direction=-1, shift=None, cylinder_axis=False, **kwargs):
+    def plot_bc_identified(self, ax, direction=-1, origin=None, cylinder_axis=False, **kwargs):
         """Mark two sites indified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
@@ -1121,7 +1121,7 @@ class Lattice:
             If ``None``, mark it along all directions with periodic boundary conditions.
         cylinder_axis : bool
             Whether to plot the cylinder axis as well.
-        shift : None | np.ndarray
+        origin : None | np.ndarray
             The origin starting from where we mark the identified sites.
             Defaults to the first entry of :attr:`unit_cell_positions`.
         **kwargs :
@@ -1133,7 +1133,8 @@ class Lattice:
             if direction < 0:
                 direction += self.dim
             dirs = [direction]
-        shift = self.unit_cell_positions[0]
+        if origin is None:
+            origin = self.unit_cell_positions[0]
         kwargs.setdefault("marker", "o")
         kwargs.setdefault("markersize", 10)
         kwargs.setdefault("color", "orange")
@@ -1141,8 +1142,8 @@ class Lattice:
         for i in dirs:
             if self.bc[i]:
                 raise ValueError("Boundary conditons are not periodic for given direction")
-            x_y.append(shift)
-            x_y.append(shift + self.Ls[i] * self.basis[i])
+            x_y.append(origin)
+            x_y.append(origin + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
                 x_y[-1] = x_y[-1] + self.bc_shift[i - 1] * self.basis[0]
         x_y = np.array(x_y)

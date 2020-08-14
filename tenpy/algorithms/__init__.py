@@ -11,6 +11,7 @@
     dmrg
     tdvp
     purification
+    mpo_evolution
     network_contractor
     exact_diag
 """
