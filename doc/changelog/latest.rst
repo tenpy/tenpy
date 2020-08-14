@@ -15,6 +15,8 @@ Backwards incompatible changes
 - Remove argument `leg0` from :class:`~tenpy.networks.mpo.MPO.from_grids`, instead optionally give *all* `legs` as argument.
 - Moved/renamed the module :mod:`tenpy.algorithms.mps_sweeps` to :mod:`tenpy.algorithms.mps_common`.
   The old `mps_sweeps` still exists for compatibility, but raises a warning upon import.
+- Moved/renamed the module :mod:`tenpy.algorithms.purification_tebd` to `tenpy.algorithms.purification` (for the
+  `PurificaitonTEBD` and `PurificationTEBD2`) and `tenpy.algorithms.disentangler` (for the disentanglers).
 
 Added
 ^^^^^

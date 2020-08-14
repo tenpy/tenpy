@@ -8,8 +8,7 @@ from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import purification_mps, site
 from tenpy.networks.mps import MPS
-from tenpy.algorithms.purification_tebd import PurificationTEBD
-from tenpy.algorithms.purification import PurificationApplyMPO
+from tenpy.algorithms.purification import PurificationTEBD, PurificationApplyMPO
 import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
 import pytest
