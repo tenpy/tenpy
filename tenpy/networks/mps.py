@@ -3646,8 +3646,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Complex conjugated matrices of the bra, transposed for fast `matvec`.
     _ket_M : list of npc.Array
         The matrices of the ket, transposed for fast `matvec`.
-    _contract_legs : int
-        Number of physical legs per site + 1.
     """
     def __init__(self,
                  bra,
@@ -3669,9 +3667,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
         form = ket._to_valid_form(form)
-        p = ket._p_label  # for ususal MPS just ['p']
+        self._p_label = p = ket._p_label  # for ususal MPS just ['p']
         assert p == bra._p_label
-        pstar = ket._get_p_label('*')  # ['p*']
+        self._pstar_label = pstar = ket._get_p_label('*')  # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
@@ -3701,7 +3699,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.label_split = label_split
         self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
         self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        self._contract_legs = len(ket._p_label) + 1  # for a ususal MPS: 2
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -3720,21 +3717,22 @@ class TransferMatrix(sparse.NpcLinearOperator):
             The tranfer matrix acted on `vec`, in the same form as given.
         """
         pipe = None
-        if vec.rank == 1:
+        if self.label_split[0] not in vec._labels:
             vec = vec.split_legs(0)
             pipe = self.pipe
-        vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
+        # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
         qtotal = vec.qtotal
         legs = vec.legs
-        contract = self._contract_legs  # number of physical legs per site + 1
         # the actual work
         if not self.transpose:  # right to left
+            contract = [self._p_label + ['vL*'], self._pstar_label + ['vR*']]
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=1)  # axes=['vR', 'vL']
+                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
         else:  # left to right
+            contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(vec, M, axes=1)  # axes=['vR', 'vL']
+                vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
         if np.any(self.qtotal != 0):
             # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
@@ -3742,7 +3740,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             vec.legs = legs
             vec.test_sanity()  # Should be fine, but who knows...
         if pipe is not None:
-            vec = vec.combine_legs([0, 1], pipes=pipe)
+            vec = vec.combine_legs(self.label_split, pipes=pipe)
         return vec
 
     def initial_guess(self, diag=1.):
@@ -3797,33 +3795,29 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if max_num_ev is None:
             max_num_ev = num_ev + 2
         flat_linop = self.flat_linop
-        if flat_linop.charge_sector is None:
-            # Try for all charge sectors
-            eta = []
-            A = []
-            for chsect in flat_linop.possible_charge_sectors:
-                flat_linop.charge_sector = chsect
-                eta_cs, A_cs = self.eigenvectors(num_ev, max_num_ev, max_tol, which, **kwargs)
-                eta.extend(eta_cs)
-                A.extend(A_cs)
-            flat_linop.charge_sector = None
-        else:
-            if v0 is not None:
+        if v0 is not None:
+            if flat_linop.charge_sector is None:
+                raise ValueError("specifying v0 with charge_sector None not supported right now")
+            else:
                 kwargs['v0'] = self.flat_linop.npc_to_flat(v0)
-            # for given charge sector
-            for k in range(num_ev, max_num_ev + 1):
-                if k > num_ev:
-                    warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
-                try:
-                    eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
-                    A = np.real_if_close(A)
-                    A = [flat_linop.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
-                    break
-                except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
-                    if k == max_num_ev:
-                        raise
-                # just retry with larger k and 'tol'
-                kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        # for given charge sector
+        for k in range(num_ev, max_num_ev + 1):
+            if k > num_ev:
+                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
+            try:
+                eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
+                A = np.real_if_close(A)
+                if flat_linop.charge_sector is None:
+                    convert = flat_linop.flat_to_npc_all_sectors
+                else:
+                    convert = flat_linop.flat_to_npc
+                A = [convert(A[:, j]) for j in range(A.shape[1])]
+                break
+            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+                if k == max_num_ev:
+                    raise
+            # just retry with larger k and 'tol'
+            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
