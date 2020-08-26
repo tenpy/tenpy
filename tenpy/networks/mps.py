@@ -3699,6 +3699,21 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.label_split = label_split
         self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
         self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
+        if not ket.finite and np.any(self.qtotal != 0):
+            # for non-zero U(1) qtotal, we can immediately say that `self` is nilpotent.
+            # In contrast, nonzero Z_N qtotal does not imply that, since the transfer-matrix
+            # doesn't have to be hermitian: it could be circulant, with arbitrary eigenvalues!
+            # The eigenvectors will *not* conserve the charge in this case!
+            enlarge_factors = []
+            for i in np.nonzero(self.qtotal)[0]:
+                if ket.chinfo.mod[i] == 1:  # U(1) qtotal
+                    raise ValueError("TransferMatrix is nil-potent due to charges")
+                enlarge_factors.append(ket.chinfo.mod[i])  # get N of Z_N charge
+
+            raise ValueError("TransferMatrix has non-zero qtotal for Z_N charges. "
+                             "It can have valid eigenvectors, but they will break the Z_N charge. "
+                             "To avoid that, you can enlarge the unit cell of the MPS "
+                             "by a factor of " + str(lcm(enlarge_factors)))
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -3734,11 +3749,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-        if np.any(self.qtotal != 0):
-            # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
-            vec.qtotal = qtotal
-            vec.legs = legs
-            vec.test_sanity()  # Should be fine, but who knows...
         if pipe is not None:
             vec = vec.combine_legs(self.label_split, pipes=pipe)
         return vec

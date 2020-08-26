@@ -36,6 +36,7 @@ Changed
 - Don't use `bc_shift` in :meth:`tenpy.models.lattice.Lattice.plot_couplings` any more - it lead to confusing figures.
   Instead, the new keyword `wrap=True` allows to directly connect all sites.
   This is done to avoid confusing in combination with :meth:`~tenpy.models.lattice.Lattice.plot_bc_identified`.
+- Error handling of non-zero qtotal for :class:`~tenpy.networks.mps.TransferMatrix`.
 
 Fixed
 ^^^^^
