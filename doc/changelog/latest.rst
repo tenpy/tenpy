@@ -27,6 +27,7 @@ Added
 - Argument `insert_all_id` for :meth:`tenpy.networks.mpo.MPOGraph.from_terms` and :meth:`~tenpy.networks.mpo.MPOGraph.from_term_list`
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
 - extended user guide on lattices, :doc:`/intro/lattices`.
+- Function to approximate a decaying function by a sum of exponentials.
 
 Changed
 ^^^^^^^
