@@ -6,7 +6,7 @@ import scipy.optimize as optimize
 
 __all__ = [
     'alg_decay', 'linear_fit', 'lin_fit_res', 'alg_decay_fit_res', 'alg_decay_fit',
-    'alg_decay_fits', 'plot_alg_decay_fit'
+    'alg_decay_fits', 'plot_alg_decay_fit', 'fit_with_sum_of_exp', 'sum_of_exp'
 ]
 
 
@@ -135,11 +135,9 @@ def fit_with_sum_of_exp(f, n, N=50):
     MPOs can naturally represent long-range interactions with an exponential decay.
     A common technique for other (e.g. powerlaw) long-range interactions is to approximate them
     by sums of exponentials and to include them into the MPOs.
-    This function allows the expon
+    This funciton allows to do that.
 
-    , if they have terms on the diagonal.
-    This function allows to approximate a decaying functions
-    # see appendix of arxiv:0804.3976
+    The algorithm/implementation follows the appendix of [Murg2010]_.
 
     Parameters
     ----------

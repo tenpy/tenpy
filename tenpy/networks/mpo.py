@@ -1252,7 +1252,7 @@ class MPOGraph:
         `L+1` enries.
     graph : list of dict of dict of list of tuples
         For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
-        ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
+        ``keyL in states[i]`` and ``keyR in states[i+1]``.
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """

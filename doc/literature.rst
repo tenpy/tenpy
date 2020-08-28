@@ -127,9 +127,12 @@ The following are referenced from somewhere in the algorithms.
 .. [Resta1997]
     "Quantum-Mechanical Position Operator in Extended Systems"
     R. Resta, Phys. Rev. Lett. 80, 1800 (1997) :doi:`10.1103/PhysRevLett.80.1800`
+.. [Murg2010]
+    "Matrix product operator representations"
+    V. Murg, J.I. Cirac, B. Pirvu, F. Verstraete, New J. Phys. 12 025012 (2010), :arxiv:`0804.3976`, :doi:`10.1088/1367-2630/12/2/025012`
 .. [Neupert2011]
     "Fractional quantum Hall states at zero magnetic field"
-    Titus Neupert, Luiz Santos, Claudio Chamon, and Christopher Mudry, Phys. Rev. Lett. 106, 236804 (2011), :arxiv:`1012.4723` :doi:`10.1103/PhysRevLett.106.236804`
+    T. Neupert, L. Santos, C. Chamon, and C. Mudry, Phys. Rev. Lett. 106, 236804 (2011), :arxiv:`1012.4723` :doi:`10.1103/PhysRevLett.106.236804`
 .. [Yang2012]
     "Topological flat band models with arbitrary Chern numbers"
     Shuo Yang, Zheng-Cheng Gu, Kai Sun, and S. Das Sarma, Phys. Rev. B 86, 241112(R) (2012), :arxiv:`1205.5792`, :doi:`10.1103/PhysRevB.86.241112`
@@ -144,7 +147,7 @@ The following are referenced from somewhere in the algorithms.
     F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), :arxiv:`1204.0704` :doi:`10.1103/PhysRevB.86.125441`
 .. [Grushin2015]
     "Characterization and stability of a fermionic ν=1/3 fractional Chern insulator"
-    Adolfo G. Grushin, Johannes Motruk, Michael P. Zaletel, and Frank Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
+    A. G. Grushin, J. Motruk, M. P. Zaletel, and F. Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
 .. [Barthel2020]
     "Optimized Lie–Trotter–Suzuki decompositions for two and three non-commuting terms"
     T. Barthel, Y. Zhang, Annals of Physics 418, 168165 (2020), :arxiv:`1901.04974` :doi:`10.1016/j.aop.2020.168165`
