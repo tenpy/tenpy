@@ -28,6 +28,7 @@ Added
 - implemented the :class:`~tenpy.models.lattice.IrregularLattice`.
 - extended user guide on lattices, :doc:`/intro/lattices`.
 - Function to approximate a decaying function by a sum of exponentials.
+- :meth:`~tenpy.networks.mps.MPS.spatial_inversion` to perform an explicit spatial inversion of the MPS.
 
 Changed
 ^^^^^^^

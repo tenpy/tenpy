@@ -277,6 +277,11 @@ def test_roll_mps_unit_cell():
     psi_m_1.roll_mps_unit_cell(-1)
     psi_m_1.test_sanity()
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
+    psi3 = psi.copy()
+    psi3.spatial_inversion()
+    psi3.test_sanity()
+    ov = psi3.overlap(psi_m_1)
+    assert abs(ov - 1.) < 1.e-14
 
 
 def test_group():

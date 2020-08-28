@@ -1098,6 +1098,25 @@ class MPS:
         self._S = [self._S[i] for i in inds]
         self._S.append(self._S[0])
 
+    def spatial_inversion(self):
+        """Perform a spatial inversion along the MPS.
+
+        Exchanges the first with the last tensor and so on,
+        i.e., exchange site `i` with site ``L-1 - i``.
+        This is equivalent to a mirror/reflection with the bond left of L/2 (even L) or the site
+        (L-1)/2 (odd L) as a fixpoint.
+        For infinite MPS, the bond between MPS unit cells is another fix point.
+        """
+        self.sites = self.sites[::-1]
+        self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
+        self._B = [
+            B.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._B_labels)
+            for B in self._B[::-1]
+        ]
+        self._S = self._S[::-1]
+        self.test_sanity()
+        return self
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
