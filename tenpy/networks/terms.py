@@ -15,7 +15,10 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
 
-__all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'order_combine_term']
+__all__ = [
+    'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentialCouplingTerms',
+    'order_combine_term'
+]
 
 
 class TermList(Hdf5Exportable):
@@ -239,6 +242,7 @@ class OnsiteTerms(Hdf5Exportable):
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`onsite_terms` should be added.
         """
+        assert self.L == graph.L
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
                 graph.add(i, 'IdL', 'IdR', opname, strength)
@@ -583,6 +587,7 @@ class CouplingTerms(Hdf5Exportable):
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`coupling_terms` should be added.
         """
+        assert self.L == graph.L
         # structure of coupling terms:
         # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
         for i, d1 in self.coupling_terms.items():
@@ -887,6 +892,7 @@ class MultiCouplingTerms(CouplingTerms):
         _i, _d1, _label_left : None
             Should not be given; only needed for recursion.
         """
+        assert self.L == graph.L
         # nested structure of coupling_terms:
         # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
         if _i is None:  # beginning of recursion
@@ -1029,3 +1035,143 @@ class MultiCouplingTerms(CouplingTerms):
                     if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
         # done
+
+
+class ExponentialCouplingTerms(Hdf5Exportable):
+    r"""Represent a sum of exponentially decaying (long-range) couplings.
+
+    MPOs can represent translation invariant, exponentially decaying long-range terms of the
+    following form with a single extra index of the virtual bonds:
+
+    .. math ::
+        sum_{i \neq j} lambda^{|i-j|} A_i B_j
+
+    For 2D cylinders (or ladders), we need a slight generalization of this, where the operators
+    act only on a subset of the sites in each unit cell, given by a 1D array `subsites`:
+
+    .. math ::
+        strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+    Note that we still have ``|i-j|``, such that this will give uniformly decaying interactions,
+    independent of the way the MPS winds through the 2D lattice, as long as `subsites` is sorted.
+
+    Parameters
+    ----------
+    L : int
+        Number of sites.
+
+    Attributes
+    ----------
+    L : int
+        Number of sites.
+    exp_decaying_terms : list of tuples
+        Each tuple ``(strength, opname_i, opname_j, lambda, subsites, opname_string)`` represents
+        one of the terms as described above; see :meth:`add_exponentially_decaying_coupling` for
+        more details.
+    """
+    def __init__(self, L):
+        assert L > 0
+        self.L = L
+        self.exp_decaying_terms = []
+
+    def add_exponentially_decaying_coupling(self,
+                                            strenght,
+                                            lambda_,
+                                            op_i,
+                                            op_j,
+                                            subsites,
+                                            op_string='Id'):
+        """Add an exponentially decaying long-range coupling.
+
+        .. math ::
+            strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+        Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
+        Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float
+            Decay-rate
+        op_i, op_j : string
+            Names for the operators.
+        subsites : 1D array
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+        op_string : string
+            The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
+        """
+        self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, op_string))
+
+    def add_to_graph(self, graph, key="exp-decay"):
+        """Add terms from :attr:`onsite_terms` to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`exp_decaying_terms` should be added.
+        key : string
+            Key to distinguish from other `states` in the :class:`~tenpy.networks.mpo.MPOGraph`.
+            We find integers `key_nr` and use ``(key, key_nr)`` as `state` for the different
+            entries in :attr:`exp_decaying_terms`.
+        """
+        assert self.L == graph.L
+        # get set of states with `key` to find unique `key_nr` for each of the terms
+        all_states = set()
+        for states in graph.states:
+            for label in states:
+                try:
+                    if label[0] == key:
+                        all_states += label
+                except:  # not a tuple / wrong types
+                    pass
+        key_nr = 0
+        finite = (graph.bc == 'finite')
+
+        for (strength, lambda_, op_i, op_j, subsites, op_string) in self.exp_decaying_terms:
+            while (key, key_nr) in all_states:
+                key_nr += 1
+            label = (key, key_nr)
+            all_states.add(label)
+            if subsites is None:
+                in_subsites = np.ones(self.L, dtype=np.bool_)
+                first_subsite = 0
+                last_subsite = self.L - 1
+            else:
+                subsites = np.sorted(subsites)
+                in_subsites = np.zeros(self.L, dtype=np.bool_)
+                in_subsites[subsites] = True
+                first_subsite = np.min(subsites)
+                last_subsite = np.max(subsites)
+                assert last_subsite < self.L
+            if not finite:
+                for i in range(self.L):
+                    if in_subsites[i]:
+                        graph.add(i, 'IdL', label, opname_i, lambda_)
+                        graph.add(i, label, label, op_string, lambda_)
+                        graph.add(i, label, 'IdR', opname_j, strength)
+                    else:
+                        graph.add(i, label, label, op_string, 1.)
+            else:
+                for i in range(first_subsite, last_subsite):
+                    if in_subsites[i]:
+                        if i < last_subsite:
+                            graph.add(i, 'IdL', label, opname_i, lambda_)
+                        graph.add(i, label, label, op_string, lambda_)
+                        if i > first_subsite:
+                            graph.add(i, label, 'IdR', opname_j, strength)
+                    else:
+                        graph.add(i, label, label, op_string, 1.)
+        # done
+
+    def __iadd__(self, other):
+        if not isinstance(other, ExponentialCouplingTerms):
+            return NotImplemented  # unknown type of other
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        self.exp_decaying_terms += other.exp_decaying_terms
+        return self
+
+    def max_range(self):
+        return np.inf
