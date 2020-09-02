@@ -48,3 +48,5 @@ Fixed
 - :meth:`tenpy.models.lattice.Lattice.plot_bc_identified` had a sign error for the `bc_shift`.
 - :meth:`~tenpy.models.lattie.Lattice.calc_H_MPO_from_bond` didn't work for charges with blocks > 1.
 - TEBD: keep qtotal of the B tensors constant
+- `order` model parameter was read out but not used in :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` for 1D
+  lattices.

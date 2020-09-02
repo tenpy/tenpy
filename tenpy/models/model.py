@@ -1620,7 +1620,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             if LatticeClass.dim == 1:  # 1D lattice
                 L = model_params.get('L', 2)
                 # 4) lattice
-                lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
+                lat = LatticeClass(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)
