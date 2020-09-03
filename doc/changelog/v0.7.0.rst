@@ -1,10 +1,10 @@
-[latest]
-========
+[0.7.0] - 2020-09-03
+====================
 
 Release Notes
 -------------
-Implement the ``W_I`` and ``W_II`` method for approximating exponentials of an MPO with an MPO, and MPS compression /
-MPO application to an MPS, to allow time evolution with :meth:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
+The big new feature is the implementation of the ``W_I`` and ``W_II`` method for approximating exponentials of an MPO with an MPO, 
+and MPS compression / MPO application to an MPS, to allow time evolution with :meth:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
 
 Changelog
 ---------
