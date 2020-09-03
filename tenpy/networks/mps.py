@@ -388,7 +388,7 @@ class MPS:
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
-            raise ValueError("wrong dimension of `p_state`. Expected {0:d}-dimensional array of "
+            raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
                              "(string, int, or 1D array)".format(d=lat.dim + 1))
         return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
 
