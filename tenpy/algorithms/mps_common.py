@@ -215,6 +215,7 @@ class Sweep:
 
         if self.options.get("cache_env", False):
             import h5py
+            from ..tools.cache import Hdf5CacheFile
             fn = self.options.get("cache_env_filename", "cache.h5")
             self.cache = cache = Hdf5CacheFile(fn)
             self.env._LP = cache.make_ListCache(self.env._LP, "/env/LP")

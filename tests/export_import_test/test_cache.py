@@ -3,9 +3,9 @@
 import numpy as np
 import tempfile
 import os
+import pytest
 
-import io_test
-from tenpy.tools.cache import Hdf5CachedList
+from tenpy.tools.cache import Hdf5CacheFile
 
 try:
     import h5py
@@ -13,17 +13,20 @@ except ImportError:
     h5py = None
 
 
-def test_hdf5_export_import():
-    """Try subsequent export and import to pickle."""
+@pytest.mark.skipif(h5py is None, reason="h5py not available")
+def test_hdf5_cached_list():
     L = 10
     data = [{'eye': np.eye(d), 'random': np.random.random([d])} for d in range(1, L + 1)]
+    result = [np.linalg.norm(d['random']) for d in data]
 
-    data_recoverd = []
     with tempfile.TemporaryDirectory() as tdir:
-        filename = os.path.join(tdir, 'test_cache.hdf5')
-        cache = Hdf5CachedList(L, filename)
+        filename = os.path.join(tdir, 'hdf5_cached_list.hdf5')
+        cache = Hdf5CacheFile(filename)
+        lst = cache.make_ListCache(data, "/data")
         for i in range(L):
-            cache[i] = data[i]
-        for i in range(L):
-            data_recoverd.append(cache[i])
-    io_test.assert_equal_data(data_recoverd, data)
+            data = lst[i]
+            data['norm'] = np.linalg.norm(data['random'])
+            lst[i] = data
+            lst[i] = data
+            assert lst[i]['norm'] == result[i]
+    # done

@@ -16,8 +16,11 @@ try:
 except ImportError:
     h5py = None
 
+__all__ = ["Hdf5CacheFile", "CachedList"]
+
 
 class Hdf5CacheFile(h5py.File):
+    """Temporary HDF5 file that gets deleted when cleared out of Memory."""
     def __init__(self, filename="cache.h5"):
         self.h5file = h5py.File(filename, 'w')
 

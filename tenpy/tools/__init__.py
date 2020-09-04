@@ -20,6 +20,8 @@ Common to all tools is that they are not just useful for a single algorithm but 
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
-from . import fit, hdf5_io, math, misc, params, process, string, optimization
+from . import fit, hdf5_io, math, misc, params, process, string, optimization, cache
 
-__all__ = ['fit', 'hdf5_io', 'math', 'misc', 'params', 'process', 'string', 'optimization']
+__all__ = [
+    'fit', 'hdf5_io', 'math', 'misc', 'params', 'process', 'string', 'optimization', 'cache'
+]
