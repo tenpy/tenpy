@@ -444,7 +444,8 @@ class FlatLinearOperator(ScipyLinearOperator):
                                           self.possible_charge_sectors,
                                           qconj=-leg.qconj)
         res = npc.zeros([self.leg, ch_leg], vec.dtype, labels=[self.vec_label, 'charge'])
-        res._qdata = np.hstack([np.arange(leg.block_number)[:, np.newaxis]] * 2)
+        res._qdata = np.asarray(np.hstack([np.arange(leg.block_number)[:, np.newaxis]] * 2),
+                                dtype=np.intp)
         for b in range(leg.block_number):
             i = leg.slices[b]
             j = leg.slices[b + 1]
