@@ -68,7 +68,7 @@ For example, you could add the sentence ``"Calculations were performed using the
 The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)::
 
     @Article{tenpy,
-        title={{Efficient numerical simulations with Tensor Networks: Tensor Network  Python (TeNPy)}},
+        title={{Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)}},
         author={Johannes Hauschild and Frank Pollmann},
         journal={SciPost Phys. Lect. Notes},
         pages={5},

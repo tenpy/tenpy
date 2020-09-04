@@ -7,6 +7,9 @@ Michael P. Zaletel
 Maximilian Schulz
 Leon Schoonderwoerd
 Kévin Hémery
+Samuel Scalet
+Markus Drescher
+Wilhelm Kadow
 Gunnar Moeller
 Jakob Unfried
 Yu-Chin Tzeng

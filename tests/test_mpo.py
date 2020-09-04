@@ -3,6 +3,7 @@
 
 import numpy as np
 import numpy.testing as npt
+import pytest
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.spins import SpinChain
 from tenpy.linalg import np_conserved as npc
@@ -110,7 +111,7 @@ def test_MPO_conversion():
     ]
     prefactors = [0.25, 10., 11., 101., 102., 103.]
     term_list = TermList(terms, prefactors)
-    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite')
+    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False)
     ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")
@@ -293,3 +294,27 @@ def test_MPO_var(L=8, tol=1.e-13):
     var = M.H_MPO.variance(psi)
     var_full = Hsquared_full - exp_val_full**2
     assert abs(var - var_full) / abs(var_full) < tol
+
+
+@pytest.mark.parametrize('method', ['SVD', 'variational', 'zip_up'])
+def test_apply_mpo(method):
+    bc_MPS = "finite"
+    # NOTE: overlap doesn't work for calculating the energy (density) in infinite systems!
+    # energy is extensive, overlap exponential....
+    L = 5
+    g = 0.5
+    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
+    M = SpinChain(model_pars)
+    state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
+    H = M.H_MPO
+    Eexp = H.expectation_value(psi)
+    psi2 = psi.copy()
+    options = {'compression_method': method, 'trunc_params': {'chi_max': 50}}
+    H.apply(psi2, options)
+    Eapply = psi2.overlap(psi)
+    assert abs(Eexp - Eapply) < 1e-5
+    psi3 = psi.copy()
+    H.apply(psi3, options)
+    Eapply3 = psi3.overlap(psi)
+    assert abs(Eexp - Eapply3) < 1e-5

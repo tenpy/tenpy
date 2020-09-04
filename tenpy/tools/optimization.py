@@ -289,8 +289,6 @@ def use_cython(func=None, replacement=None, check_doc=True):
                 warnings.warn("Couldn't load compiled cython code. Code will run a bit slower.")
                 have_cython_functions = False
         else:
-            warnings.warn("Don't load compiled cython code due to TENPY_OPTMIZE. "
-                          "Code will run a bit slower.")
             have_cython_functions = False
     if not have_cython_functions:
         # can't provide a faster version: cython module not available

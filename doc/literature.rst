@@ -67,6 +67,7 @@ Algorithm developments
 [McCulloch2008]_ was a huge step forward to solve convergence problems for infinite DMRG.
 [Singh2009]_, [Singh2010]_ explain how to incorporate Symmetries.
 [Haegeman2011]_ introduced TDVP, again explained more accessible in [Haegeman2016]_.
+[Zaletel2015]_ is another standard method for time-evolution with long-range Hamiltonians.
 [Karrasch2013]_ gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in [Hauschild2018]_.
 [Vidal2007]_ introduced MERA.
 
@@ -90,6 +91,10 @@ Algorithm developments
 .. [Singh2009]
     "Tensor network decompositions in the presence of a global symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. A 82, 050301(R), :arxiv:`0907.2994` :doi:`10.1103/PhysRevA.82.050301`
+.. [Stoudenmire2010]
+    "Minimally Entangled Typical Thermal State Algorithms"
+    E.M. Stoudenmire, Steven R. White, 2010 New J. Phys. 12, 055026,
+    :arxiv:`1002.1305` :doi:`10.1088/1367-2630/12/5/055026`
 .. [Singh2010]
     "Tensor network states and algorithms in the presence of a global U(1) symmetry"
     S. Singh, R. Pfeifer, G. Vidal, Phys. Rev. B 83, 115125, :arxiv:`1008.4774` :doi:`10.1103/PhysRevB.83.115125`
@@ -99,6 +104,9 @@ Algorithm developments
 .. [Karrasch2013]
     "Reducing the numerical effort of finite-temperature density matrix renormalization group calculations"
     C. Karrasch, J. H. Bardarson, J. E. Moore, New J. Phys. 15, 083031 (2013), :arxiv:`1303.3942` :doi:`10.1088/1367-2630/15/8/083031`
+.. [Zaletel2015]
+    "Time-evolving a matrix product state with long-ranged interactions"
+    M. P. Zaletel, R. S. K. Mong, C. Karrasch, J. E. Moore, F. Pollmann, Phys. Rev. B 91, 165112 (2015), :arxiv:`1407.1832` :doi:`10.1103/PhysRevB.91.165112`
 .. [Hubig2015]
     "Strictly single-site DMRG algorithm with subspace expansion"
     C. Hubig, I. P. McCulloch, U. Schollwoeck, F. A. Wolf, Phys. Rev. B 91, 155115 (2015), :arxiv:`1501.05504` :doi:`10.1103/PhysRevB.91.155115`
@@ -113,12 +121,18 @@ Related theory
 --------------
 The following are referenced from somewhere in the algorithms.
 
+.. [Suzuki1991]
+   "General theory of fractal path integrals with applications to many-body theories and statistical physics",
+   M. Suzuki,  Journal of Mathematical Physics 32, 400 (1991); :doi:`10.1063/1.529425`
 .. [Resta1997]
     "Quantum-Mechanical Position Operator in Extended Systems"
     R. Resta, Phys. Rev. Lett. 80, 1800 (1997) :doi:`10.1103/PhysRevLett.80.1800`
+.. [Murg2010]
+    "Matrix product operator representations"
+    V. Murg, J.I. Cirac, B. Pirvu, F. Verstraete, New J. Phys. 12 025012 (2010), :arxiv:`0804.3976`, :doi:`10.1088/1367-2630/12/2/025012`
 .. [Neupert2011]
     "Fractional quantum Hall states at zero magnetic field"
-    Titus Neupert, Luiz Santos, Claudio Chamon, and Christopher Mudry, Phys. Rev. Lett. 106, 236804 (2011), :arxiv:`1012.4723` :doi:`10.1103/PhysRevLett.106.236804`
+    T. Neupert, L. Santos, C. Chamon, and C. Mudry, Phys. Rev. Lett. 106, 236804 (2011), :arxiv:`1012.4723` :doi:`10.1103/PhysRevLett.106.236804`
 .. [Yang2012]
     "Topological flat band models with arbitrary Chern numbers"
     Shuo Yang, Zheng-Cheng Gu, Kai Sun, and S. Das Sarma, Phys. Rev. B 86, 241112(R) (2012), :arxiv:`1205.5792`, :doi:`10.1103/PhysRevB.86.241112`
@@ -133,7 +147,10 @@ The following are referenced from somewhere in the algorithms.
     F. Pollmann, A. Turner, Phys. Rev. B 86, 125441 (2012), :arxiv:`1204.0704` :doi:`10.1103/PhysRevB.86.125441`
 .. [Grushin2015]
     "Characterization and stability of a fermionic ν=1/3 fractional Chern insulator"
-    Adolfo G. Grushin, Johannes Motruk, Michael P. Zaletel, and Frank Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
+    A. G. Grushin, J. Motruk, M. P. Zaletel, and F. Pollmann, Phys. Rev. B 91, 035136 (2015), :arxiv:`1407.6985` :doi:`10.1103/PhysRevB.91.035136`
+.. [Barthel2020]
+    "Optimized Lie–Trotter–Suzuki decompositions for two and three non-commuting terms"
+    T. Barthel, Y. Zhang, Annals of Physics 418, 168165 (2020), :arxiv:`1901.04974` :doi:`10.1016/j.aop.2020.168165`
 
 
 Software-related

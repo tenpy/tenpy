@@ -6,6 +6,7 @@ import numpy.testing as npt
 import itertools as it
 import tenpy.tools as tools
 import warnings
+import pytest
 
 
 def test_inverse_permutation(N=10):
@@ -123,3 +124,23 @@ def test_optimization():
     with tools.optimization.temporary_level(level_change):
         assert tools.optimization.get_level() == level_change
     assert tools.optimization.get_level() == level_now
+
+
+def three_exp(x):
+    lam = np.array([0.9, 0.4, 0.2])
+    pref = np.array([0.01, 0.4, 20])
+    return tools.fit.sum_of_exp(lam, pref, x)
+
+
+def screened_coulomb(x):
+    return np.exp(-0.1 * x) / x**2
+
+
+def test_approximate_sum_of_exp(N=100):
+    x = np.arange(1, N + 1)
+    for n, f, max_err in [(3, three_exp, 1.e-13), (5, three_exp, 1.e-13), (2, three_exp, 0.04),
+                          (1, three_exp, 0.1), (4, screened_coulomb, 7.e-4)]:
+        lam, pref = tools.fit.fit_with_sum_of_exp(f, n=n, N=N)
+        err = np.sum(np.abs(f(x) - tools.fit.sum_of_exp(lam, pref, x)))
+        print(n, f.__name__, err)
+        assert err < max_err

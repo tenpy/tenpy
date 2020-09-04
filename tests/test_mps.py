@@ -277,6 +277,11 @@ def test_roll_mps_unit_cell():
     psi_m_1.roll_mps_unit_cell(-1)
     psi_m_1.test_sanity()
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
+    psi3 = psi.copy()
+    psi3.spatial_inversion()
+    psi3.test_sanity()
+    ov = psi3.overlap(psi_m_1)
+    assert abs(ov - 1.) < 1.e-14
 
 
 def test_group():
@@ -355,3 +360,24 @@ def test_expectation_value_multisite():
     env1 = mps.MPSEnvironment(psi1, psi)
     ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
     npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+
+
+@pytest.mark.parametrize('method', ['SVD', 'variational'])
+def test_mps_compress(method, eps=1.e-13):
+    # Test compression of a sum of a state with itself
+    L = 5
+    sites = [site.SpinHalfSite(conserve=None) for i in range(L)]
+    plus_x = np.array([1., 1.]) / np.sqrt(2)
+    minus_x = np.array([1., -1.]) / np.sqrt(2)
+    psi = mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
+    psiOrth = mps.MPS.from_product_state(sites, [minus_x for i in range(L)], bc='finite')
+    options = {'compression_method': method, 'trunc_params': {'chi_max': 30}}
+    psiSum = psi.add(psi, .5, .5)
+    psiSum.compress(options)
+
+    assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
+    psiSum2 = psi.add(psiOrth, .5, .5)
+    psiSum2.compress(options)
+    psiSum2.test_sanity()
+    assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
+    assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)

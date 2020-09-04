@@ -86,6 +86,7 @@ from ..linalg import sparse
 from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, argsort, to_array
 from ..tools.math import lcm, speigs, entropy
+from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'build_initial_state']
@@ -387,7 +388,7 @@ class MPS:
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
-            raise ValueError("wrong dimension of `p_state`. Expected {0:d}-dimensional array of "
+            raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
                              "(string, int, or 1D array)".format(d=lat.dim + 1))
         return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
 
@@ -881,6 +882,46 @@ class MPS:
         self.dtype = np.find_common_type([self.dtype, B.dtype], [])
         self._B[i] = B.itranspose(self._B_labels)
 
+    def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
+        """SVD a two-site wave function `theta` and save it in `self`.
+
+        Parameters
+        ----------
+        i : int
+            `theta` is the wave function on sites `i`, `i`+1.
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The two-site wave function with labels combined into ``"(vL.p0)", "(p1.vR)"``,
+            ready for svd.
+        trunc_par : None | dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+            If ``None``, no truncation is done.
+        update_norm : bool
+            If ``True``, multiply the norm of `theta` into :attr:`norm`.
+        """
+        i0 = self._to_valid_index(i)
+        i1 = self._to_valid_index(i0 + 1)
+        self.dtype = np.find_common_type([self.dtype, theta.dtype], [])
+        qtotal_LR = [self._B[i0].qtotal, None]
+        if trunc_par is None:
+            U, S, VH = npc.svd(theta, qtotal_LR=qtotal_LR, inner_labels=['vR', 'vL'])
+            renorm = np.linalg.norm(S)
+            S /= renorm
+            err = None
+            if update_norm:
+                self.norm *= renorm
+        else:
+            U, S, VH, err, renorm = svd_theta(theta, trunc_par, qtotal_LR)
+            if update_norm:
+                self.norm *= renorm
+        U = U.split_legs().ireplace_label('p0', 'p')
+        VH = VH.split_legs().ireplace_label('p1', 'p')
+        self._B[i0] = U.itranspose(self._B_labels)
+        self.form[i0] = self._valid_forms['A']
+        self._B[i1] = VH.itranspose(self._B_labels)
+        self.form[i1] = self._valid_forms['B']
+        self.set_SR(i, S)
+        return err
+
     def get_SL(self, i):
         """Return singular values on the left of site `i`"""
         i = self._to_valid_index(i)
@@ -1057,6 +1098,25 @@ class MPS:
         self._S = [self._S[i] for i in inds]
         self._S.append(self._S[0])
 
+    def spatial_inversion(self):
+        """Perform a spatial inversion along the MPS.
+
+        Exchanges the first with the last tensor and so on,
+        i.e., exchange site `i` with site ``L-1 - i``.
+        This is equivalent to a mirror/reflection with the bond left of L/2 (even L) or the site
+        (L-1)/2 (odd L) as a fixpoint.
+        For infinite MPS, the bond between MPS unit cells is another fix point.
+        """
+        self.sites = self.sites[::-1]
+        self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
+        self._B = [
+            B.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._B_labels)
+            for B in self._B[::-1]
+        ]
+        self._S = self._S[::-1]
+        self.test_sanity()
+        return self
+
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
 
@@ -1108,7 +1168,7 @@ class MPS:
         Parameters
         ----------
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation, see :cfg:config:`truncation`.
             Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
@@ -2151,9 +2211,8 @@ class MPS:
         S = self.get_SL(0)
         if self.bc == 'segment':
             if S is None:
-                raise ValueError("Need S[0] for segment boundary conditions.")
-            self.set_SL(0,
-                        S / np.linalg.norm(S))  # must have correct singular values to the left...
+                raise ValueError("Need S[0] and S[L] for segment boundary conditions.")
+            self.set_SL(0, S / np.linalg.norm(S))
             S = self.get_SR(L - 1)
             self.set_SR(L - 1, S / np.linalg.norm(S))
         else:  # bc == 'finite':
@@ -2502,8 +2561,8 @@ class MPS:
             which represents the full operator used for the swap.
             Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Parameters for truncation, see :cfg:config:`truncation`.
+            Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
         -------
@@ -2567,8 +2626,8 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
-            `chi_max` defaults to ``max(self.chi)``.
+            Parameters for truncation, see :cfg:config:`truncation`.
+            Defaults to ``{'chi_max': max(self.chi)}``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
 
@@ -2632,7 +2691,7 @@ class MPS:
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
-            Parameters for truncation, see :func:`~tenpy.algorithms.truncation.truncate`.
+            Parameters for truncation, see :cfg:config:`truncation`.
             If not set, `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
@@ -2722,6 +2781,82 @@ class MPS:
             res.append("sites: " + " ".join([repr(s) for s in self.sites]))
             res.append("forms: " + " ".join([repr(f) for f in self.form]))
         return "\n".join(res)
+
+    def compress(self, options):
+        """Compresss an MPS.
+
+        Options
+        -------
+        .. cfg:config :: MPS_compress
+            :include: VariationalCompression
+
+            compression_method : ``'SVD' | 'variational'``
+                Mandatory.
+                Selects the method to be used for compression.
+                For the `SVD` compression, `trunc_params` is the only other option used.
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+        """
+        options = asConfig(options, "MPS_compress")
+        method = options['compression_method']
+        trunc_params = options.subconfig('trunc_params')
+        if method == 'SVD':
+            return self.compress_svd(trunc_params)
+        elif method == 'variational':
+            from ..algorithms.mps_common import VariationalCompression
+            return VariationalCompression(self, options).run()
+        raise ValueError("Unknown compression method: " + repr(method))
+
+    def compress_svd(self, trunc_par):
+        """Compress `self` with a single sweep of SVDs; in place.
+
+        Perform a single right-sweep of QR/SVD without truncation, followed by a left-sweep with
+        truncation, very much like :meth:`canonical_form_finite`.
+
+        .. warning ::
+            In case of a strong compression, this does not find the optimal, global solution.
+
+        Parameters
+        ----------
+        trunc_par : dict
+            Parameters for truncation, see :cfg:config:`truncation`.
+        """
+        trunc_err = TruncationError()
+        if self.bc == 'finite':
+            # Do QR starting from the left
+            B = self.get_B(0, form='Th')
+            for i in range(self.L - 1):
+                B = B.combine_legs(['vL', 'p'])
+                q, r = npc.qr(B, inner_labels=['vR', 'vL'])
+                B = q.split_legs()
+                self.set_B(i, B, form=None)
+                B = self.get_B(i + 1, form='B')
+                B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            # Do SVD from right to left & truncate
+            for i in range(self.L - 1, 0, -1):
+                B = B.combine_legs(['p', 'vR'])
+                U, S, VH, err, norm_new = svd_theta(B, trunc_par)
+                trunc_err += err
+                self.norm *= norm_new
+                VH = VH.split_legs()
+                self.set_B(i, VH, form='B')
+                B = self.get_B(i - 1, form=None)
+                B = npc.tensordot(B, U, axes=('vR', 'vL'))
+                B.iscale_axis(S, 'vR')
+                self.set_SL(i, S)
+            self.set_B(0, B, form='Th')
+        elif self.bc == 'infinite':
+            for i in range(self.L):
+                theta = self.get_theta(i, n=2)
+                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                self.set_svd_theta(i, theta, update_norm=False)
+            for i in range(self.L - 1, -1, -1):
+                theta = self.get_theta(i, n=2)
+                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                trunc_err += self.set_svd_theta(i, theta, trunc_par, update_norm=False)
+        else:
+            raise NotImplementedError("unsupported boundary conditions " + repr(self.bc))
+        return trunc_err
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
@@ -3530,8 +3665,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Complex conjugated matrices of the bra, transposed for fast `matvec`.
     _ket_M : list of npc.Array
         The matrices of the ket, transposed for fast `matvec`.
-    _contract_legs : int
-        Number of physical legs per site + 1.
     """
     def __init__(self,
                  bra,
@@ -3553,9 +3686,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
         form = ket._to_valid_form(form)
-        p = ket._p_label  # for ususal MPS just ['p']
+        self._p_label = p = ket._p_label  # for ususal MPS just ['p']
         assert p == bra._p_label
-        pstar = ket._get_p_label('*')  # ['p*']
+        self._pstar_label = pstar = ket._get_p_label('*')  # ['p*']
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
@@ -3585,7 +3718,21 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.label_split = label_split
         self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
         self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        self._contract_legs = len(ket._p_label) + 1  # for a ususal MPS: 2
+        if not ket.finite and np.any(self.qtotal != 0):
+            # for non-zero U(1) qtotal, we can immediately say that `self` is nilpotent.
+            # In contrast, nonzero Z_N qtotal does not imply that, since the transfer-matrix
+            # doesn't have to be hermitian: it could be circulant, with arbitrary eigenvalues!
+            # The eigenvectors will *not* conserve the charge in this case!
+            enlarge_factors = []
+            for i in np.nonzero(self.qtotal)[0]:
+                if ket.chinfo.mod[i] == 1:  # U(1) qtotal
+                    raise ValueError("TransferMatrix is nil-potent due to charges")
+                enlarge_factors.append(ket.chinfo.mod[i])  # get N of Z_N charge
+
+            raise ValueError("TransferMatrix has non-zero qtotal for Z_N charges. "
+                             "It can have valid eigenvectors, but they will break the Z_N charge. "
+                             "To avoid that, you can enlarge the unit cell of the MPS "
+                             "by a factor of " + str(lcm(enlarge_factors)))
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -3604,29 +3751,25 @@ class TransferMatrix(sparse.NpcLinearOperator):
             The tranfer matrix acted on `vec`, in the same form as given.
         """
         pipe = None
-        if vec.rank == 1:
+        if self.label_split[0] not in vec._labels:
             vec = vec.split_legs(0)
             pipe = self.pipe
-        vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
+        # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
         qtotal = vec.qtotal
         legs = vec.legs
-        contract = self._contract_legs  # number of physical legs per site + 1
         # the actual work
         if not self.transpose:  # right to left
+            contract = [self._p_label + ['vL*'], self._pstar_label + ['vR*']]
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(M, vec, axes=1)  # axes=['vR', 'vL']
+                vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
         else:  # left to right
+            contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
             for N, M in zip(self._bra_N, self._ket_M):
-                vec = npc.tensordot(vec, M, axes=1)  # axes=['vR', 'vL']
+                vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-        if np.any(self.qtotal != 0):
-            # Hack: replace leg charges and qtotal -> effectively gauge `self.qtotal` away.
-            vec.qtotal = qtotal
-            vec.legs = legs
-            vec.test_sanity()  # Should be fine, but who knows...
         if pipe is not None:
-            vec = vec.combine_legs([0, 1], pipes=pipe)
+            vec = vec.combine_legs(self.label_split, pipes=pipe)
         return vec
 
     def initial_guess(self, diag=1.):
@@ -3681,33 +3824,29 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if max_num_ev is None:
             max_num_ev = num_ev + 2
         flat_linop = self.flat_linop
-        if flat_linop.charge_sector is None:
-            # Try for all charge sectors
-            eta = []
-            A = []
-            for chsect in flat_linop.possible_charge_sectors:
-                flat_linop.charge_sector = chsect
-                eta_cs, A_cs = self.eigenvectors(num_ev, max_num_ev, max_tol, which, **kwargs)
-                eta.extend(eta_cs)
-                A.extend(A_cs)
-            flat_linop.charge_sector = None
-        else:
-            if v0 is not None:
+        if v0 is not None:
+            if flat_linop.charge_sector is None:
+                raise ValueError("specifying v0 with charge_sector None not supported right now")
+            else:
                 kwargs['v0'] = self.flat_linop.npc_to_flat(v0)
-            # for given charge sector
-            for k in range(num_ev, max_num_ev + 1):
-                if k > num_ev:
-                    warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
-                try:
-                    eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
-                    A = np.real_if_close(A)
-                    A = [flat_linop.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
-                    break
-                except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
-                    if k == max_num_ev:
-                        raise
-                # just retry with larger k and 'tol'
-                kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        # for given charge sector
+        for k in range(num_ev, max_num_ev + 1):
+            if k > num_ev:
+                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
+            try:
+                eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
+                A = np.real_if_close(A)
+                if flat_linop.charge_sector is None:
+                    convert = flat_linop.flat_to_npc_all_sectors
+                else:
+                    convert = flat_linop.flat_to_npc
+                A = [convert(A[:, j]) for j in range(A.shape[1])]
+                break
+            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+                if k == max_num_ev:
+                    raise
+            # just retry with larger k and 'tol'
+            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]

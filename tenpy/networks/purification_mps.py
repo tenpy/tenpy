@@ -70,6 +70,8 @@ An additional real-time evolution allows to calculate time correlation functions
 .. math ::
     <A(t)B(0)> \propto <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>
 
+Time evolution algorithms (TEBD and MPO application) are adjusted in the module
+:mod:`~tenpy.algorithms.purification`.
 
 See also [Karrasch2013]_ for additional tricks! On of their crucial observations is, that
 one can apply arbitrary unitaries on the auxiliar space (i.e. the `q`) without changing the result.
@@ -80,7 +82,7 @@ From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to t
 If the state is modified (e.g. by applying `A` or `B` to calculate correlation functions),
 this is not true any more. However, we still can find unitaries, which are 'optimal' in the sense
 of reducing the entanglement of the MPS/MPO to the minimal value.
-For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.purification_tebd`),
+For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.disentanglers`),
 see [Hauschild2018]_.
 
 .. note ::

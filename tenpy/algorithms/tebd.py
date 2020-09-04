@@ -59,7 +59,7 @@ class Engine:
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networs.mps.MPS`
+    psi : :class:`~tenpy.networks.mps.MPS`
         Initial state to be time evolved. Modified in place.
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
@@ -264,6 +264,13 @@ class Engine:
             t1 = 1. / (4. - 4.**(1 / 3.))
             t3 = 1. - 4. * t1
             return [t1 / 2., t1, (t1 + t3) / 2., t3]
+        elif order == '4_opt':
+            # Eq (30a) of arXiv:1901.04974
+            a1 = 0.095848502741203681182
+            b1 = 0.42652466131587616168
+            a2 = -0.078111158921637922695
+            b2 = -0.12039526945509726545
+            return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2)]  # a1 b1 a2 b2 a3 b3
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
@@ -277,8 +284,13 @@ class Engine:
 
         Parameters
         ----------
-        order : int
+        order : ``1, 2, 4, '4_opt'``
             The desired order of the Suzuki-Trotter decomposition.
+            Order ``1`` approximation is simply :math:`e^A a^B`.
+            Order ``2`` is the "leapfrog" `e^{A/2} e^B e^{A/2}`.
+            Order ``4`` is the fourth-order from [Suzuki1991]_ (also referenced in
+            [Schollwoeck2011]_), and ``'4_opt'`` gives the optmized version of Equ. (30a) in
+            [Barthel2020]_.
 
         Returns
         -------
@@ -311,13 +323,18 @@ class Engine:
             # From Schollwoeck 2011 (:arxiv:`1008.3477`):
             # U = U(t1) U(t2) U(t3) U(t2) U(t1)
             # with U(dt) = U(dt/2, odd) U(dt, even) U(dt/2, odd) and t1 == t2
-            # Uusing above definitions, we arrive at:
+            # Using above definitions, we arrive at:
             # U = [a b a2 b c d c b a2 b a] * N
             #   = [a b a2 b c d c b a2 b] + [a2 b a2 b c d c b a2 b a] * (N-1) + [a]
             steps = [a, b, a2, b, c, d, c, b, a2, b]
             steps = steps + [a2, b, a2, b, c, d, c, b, a2, b] * (N_steps - 1)
             steps = steps + [a]
             return steps
+        elif order == '4_opt':
+            # symmetric: a1 b1 a2 b2 a3 b3 a2 b2 a2 b1 a1
+            steps = [(0, odd), (1, even), (2, odd), (3, even), (4, odd),  (5, even),
+                     (4, odd), (3, even), (2, odd), (1, even), (0, odd)]  # yapf: disable
+            return steps * N_steps
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
