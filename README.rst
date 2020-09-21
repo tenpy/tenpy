@@ -13,9 +13,13 @@ Tensor Network Python (TeNPy)
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
+.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy
+    :alt: conda
+    :target: https://anaconda.org/conda-forge/physics-tenpy
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
+
 
 TeNPy (short for 'Tensor Network Python') is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 

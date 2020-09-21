@@ -8,12 +8,20 @@ but sometimes, there's no way around them. If you skip some intermediate version
 notes of those!
 
 How to update depends a little bit on the way you installed TeNPy. 
-Of course, you have always the option to just remove the TeNPy files (possibly with a ``pip uninstall physics-tenpy``),
+Of course, you have always the option to just remove the TeNPy files (possibly with a ``pip uninstall physics-tenpy`` or
+``conda uninstall physics-tenpy``),
 and to start over with downloading and installing the newest version.
+
+When installed with `conda`
+-------------------------
+When you installed TeNPy with [conda]_, you just need to activate the corresponding environment 
+(e.g. ``conda activate tenpy``) and do a::
+
+    conda update physics-tenpy
 
 When installed with `pip`
 -------------------------
-When you installed TeNPy with [pip]_, you just need to do a ::
+When you installed TeNPy with [pip]_, you just need to do a::
     
     pip install --upgrade physics-tenpy
 
