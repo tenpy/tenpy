@@ -158,12 +158,12 @@ def truncate(S, options):
             Keep at least `chi_min` Schmidt values.
         degeneracy_tol: float
             Don't cut between neighboring Schmidt values with
-            ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
-            ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
-            for small `symmetry_tol`.
+            ``|log(S[i]/S[j])| < degeneracy_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(degeneracy_tol) - 1 ~= degeneracy_tol``
+            for small `degeneracy_tol`.
             In other words, keep either both `i` and `j` or none, if the
             Schmidt values are degenerate with a relative error smaller
-            than `symmetry_tol`, which we expect to happen in the case
+            than `degeneracy_tol`, which we expect to happen in the case
             of symmetries.
         svd_min : float
             Discard all small Schmidt values ``S[i] < svd_min``.
