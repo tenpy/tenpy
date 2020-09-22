@@ -10,7 +10,9 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
+- The :class:`~tenpy.models.lattice.Kagome` lattice did not include all `next_next_nearest_neighbors`.
+  (It had only the ones across the hexagon, missing those maiking up a bow-tie.)
+
 
 Added
 ^^^^^

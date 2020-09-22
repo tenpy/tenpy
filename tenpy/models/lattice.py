@@ -1828,10 +1828,12 @@ class Kagome(Lattice):
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 3)
+        #   \   /
+        #    \ /
         #     2
         #    / \
         #   /   \
-        #  0-----1
+        #  0-----1-----
         pos = np.array([[0, 0], [1, 0], [0.5, 0.5 * 3**0.5]])
         basis = [2 * pos[1], 2 * pos[2]]
         kwargs.setdefault('basis', basis)
@@ -1840,7 +1842,9 @@ class Kagome(Lattice):
               (1, 0, np.array([1, 0])), (2, 0, np.array([0, 1])), (2, 1, np.array([-1, 1]))]
         nNN = [(0, 1, np.array([0, -1])), (0, 2, np.array([1, -1])), (1, 0, np.array([1, -1])),
                (1, 2, np.array([1, 0])), (2, 0, np.array([1, 0])), (2, 1, np.array([0, 1]))]
-        nnNN = [(0, 0, np.array([1, -1])), (1, 1, np.array([0, 1])), (2, 2, np.array([1, 0]))]
+        nnNN = [(0, 0, np.array([1, -1])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, 0])),
+                (1, 1, np.array([1, -1])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, 0])),
+                (2, 2, np.array([1, -1])), (2, 2, np.array([0, 1])), (2, 2, np.array([1, 0]))]
         kwargs.setdefault('pairs', {})
         kwargs['pairs'].setdefault('nearest_neighbors', NN)
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
