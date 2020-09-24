@@ -765,11 +765,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian (i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        DMRG).
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
@@ -1071,11 +1066,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
     Attributes
     ----------
-    EffectiveH : class type
-        Class for the effective Hamiltonian (i.e., a subclass of
-        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
-        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
-        DMRG).
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``

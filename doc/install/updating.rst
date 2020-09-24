@@ -13,7 +13,7 @@ Of course, you have always the option to just remove the TeNPy files (possibly w
 and to start over with downloading and installing the newest version.
 
 When installed with `conda`
--------------------------
+---------------------------
 When you installed TeNPy with [conda]_, you just need to activate the corresponding environment 
 (e.g. ``conda activate tenpy``) and do a::
 

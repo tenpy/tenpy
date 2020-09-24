@@ -1,7 +1,4 @@
 """Algorithms for using Purification.
-
-An example is shown in :doc:`/intro/examples/purification/`.
-
 """
 
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
