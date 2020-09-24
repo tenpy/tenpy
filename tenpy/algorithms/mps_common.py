@@ -939,7 +939,7 @@ class VariationalApplyMPO(VariationalCompression):
     Here `LP` and `RP` are the environments with partial contractions,
     see also :class:`~tenpy.networks.mpo.MPOEnvironment`.
     This algorithms sweeps through the sites, updating 2 `N` tensors in each :meth:`update_local`,
-    say on sites `i0` and `i1`=`i0`+1. We need to maximize:
+    say on sites `i0` and `i1` = `i0` +1. We need to maximize::
 
         |     .-------M[i0]---M[i1]---.
         |     |       |       |       |

@@ -888,7 +888,7 @@ class MPS:
         Parameters
         ----------
         i : int
-            `theta` is the wave function on sites `i`, `i`+1.
+            `theta` is the wave function on sites `i`, `i` + 1.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The two-site wave function with labels combined into ``"(vL.p0)", "(p1.vR)"``,
             ready for svd.

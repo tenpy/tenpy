@@ -799,9 +799,8 @@ class MPO:
 
         Options
         -------
-        .. cfg:config :: MPO_apply
-            :include: VariationalApplyMPO
-            :include: zip_up
+        .. cfg:config :: ApplyMPO
+            :include: VariationalApplyMPO, ZipUpApplyMPO
 
             compression_method : ``'SVD' | 'variational' | 'zip_up'``
                 Mandatory.
@@ -911,7 +910,7 @@ class MPO:
 
         Options
         -------
-        .. cfg:config :: zip_up
+        .. cfg:config :: ZipUpApplyMPO
 
             trunc_params : dict
                 Truncation parameters as described in :cfg:config:`truncation`.

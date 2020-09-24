@@ -34,7 +34,7 @@ class ExpMPOEvolution:
     Options
     -------
     .. cfg:config :: ExpMPOEvolution
-        :include: MPO_apply
+        :include: ApplyMPO
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncate`.
@@ -79,7 +79,7 @@ class ExpMPOEvolution:
 
         Options
         -------
-        .. cfg:configoptions :: MpoEvolution
+        .. cfg:configoptions :: ExpMPOEvolution
 
             dt : float
                 Time step.
@@ -107,8 +107,8 @@ class ExpMPOEvolution:
         """Calculate ``self._U_MPO``
 
         This function calculates the approximation ``U ~= exp(-i dt_ H)`` with
-        `dt_` = `dt` for ``order=1``, or
-        `dt_` = (1 - 1j)/2 `dt` and dt_ = (1 + 1j)/2 `dt` for ``order=2``.
+        ``dt_ = dt` for ``order=1``, or
+        ``dt_ = (1 - 1j)/2 dt`` and ``dt_ = (1 + 1j)/2 dt`` for ``order=2``.
 
         Parameters
         ----------
@@ -147,7 +147,8 @@ class ExpMPOEvolution:
 
         Returns
         -------
-        trunc_err: :class:`~tenpy.algorithms.truncation.TruncationError'
+        trunc_err: :class:`~tenpy.algorithms.truncation.TruncationError`
+            Truncation error induced during the update.
         """
         trunc_err = TruncationError()
 
