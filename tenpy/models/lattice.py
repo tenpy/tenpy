@@ -344,6 +344,28 @@ class Lattice:
         ``'snakeFstyle'``  (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
         ================== =========================== =============================
 
+        .. plot ::
+
+            import matplotlib.pyplot as plt
+            from tenpy.models import lattice
+            fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+            orders = ['Cstyle', 'snakeCstyle', 'Fstyle', 'snakeFstyle']
+            lat = lattice.Square(5, 3, None, bc='periodic')
+            for order, ax in zip(orders, axes.flatten()):
+                lat.order = lat.ordering(order)
+                lat.plot_order(ax, linestyle=':')
+                lat.plot_sites(ax)
+                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+                ax.set_title(repr(order))
+                ax.set_aspect('equal')
+                ax.set_xlim(-1)
+                ax.set_ylim(-1)
+            plt.show()
+
+        .. note ::
+            For lattices with a non-trivial unit cell (e.g. Honeycomb, Kagome), the
+            grouped order might be more appropriate, see :func:`get_order_grouped`
+
         Parameters
         ----------
         order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
@@ -1767,6 +1789,25 @@ class Honeycomb(Lattice):
         ``'default'``      (0, 2, 1)                   (False, False, False)
         ``'snake'``        (0, 2, 1)                   (False, True, False)
         ================== =========================== =============================
+
+        .. plot ::
+
+            import matplotlib.pyplot as plt
+            from tenpy.models import lattice
+            fig, axes = plt.subplots(1, 2, True, True, figsize=(5, 6))
+            orders = ['default', 'snake']
+            lat = lattice.Honeycomb(4, 3, None, bc='periodic')
+            for order, ax in zip(orders, axes.flatten()):
+                lat.order = lat.ordering(order)
+                lat.plot_order(ax, linestyle=':')
+                lat.plot_sites(ax)
+                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+                ax.set_title(repr(order))
+                ax.set_aspect('equal')
+                ax.set_xlim(-1)
+                ax.set_ylim(-1)
+            plt.show()
+
         """
         if isinstance(order, str):
             if order == "default":
@@ -1976,6 +2017,7 @@ def get_order_grouped(shape, groups):
             lat.plot_order(ax, linestyle=':')
             lat.plot_sites(ax)
             lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+            ax.set_title('("grouped", ' + str(gr) + ')')
             ax.set_aspect('equal')
             ax.set_xlim(-1)
             ax.set_ylim(-1)
