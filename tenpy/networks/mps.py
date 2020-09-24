@@ -47,7 +47,7 @@ Valid MPS boundary conditions (not to confuse with `bc_coupling` of
             bond is identified with the first one.
 ==========  ===================================================================================
 
-An MPS can be in different 'canonical forms' (see [Vidal2004]_, [Schollwoeck2011]_).
+An MPS can be in different 'canonical forms' (see :cite:`vidal2004,schollwoeck2011`).
 To take care of the different canonical forms, algorithms should use functions like
 :meth:`~tenpy.networks.mps.MPS.get_theta`, :meth:`~tenpy.networks.mps.MPS.get_B`
 and :meth:`~tenpy.networks.mps.MPS.set_B` instead of accessing them directly,
@@ -2675,8 +2675,8 @@ class MPS:
         momentum quantum numbers of it. (The rotation is nothing more than a translation in `y`.)
         This function permutes some sites (on a copy of `self`) to enact the rotation, and then
         finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
-        along the lines of [PollmannTurner2012]_, see also (the appendix and Fig. 11 in the arXiv
-        version of) [CincioVidal2013]_.
+        along the lines of :cite:`pollmann2012`, see also (the appendix and Fig. 11 in the arXiv
+        version of) :cite:`cincio2013`.
 
 
         Parameters

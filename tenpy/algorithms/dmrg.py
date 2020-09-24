@@ -1,10 +1,10 @@
 """Density Matrix Renormalization Group (DMRG).
 
 Although it was originally not formulated with tensor networks,
-the DMRG algorithm (invented by Steven White in 1992 [White1992]_) opened the whole field
+the DMRG algorithm (invented by Steven White in 1992 :cite:`white1992`) opened the whole field
 with its enormous success in finding ground states in 1D.
 
-We implement DMRG in the modern formulation of matrix product states [Schollwoeck2011]_,
+We implement DMRG in the modern formulation of matrix product states :cite:`schollwoeck2011`,
 both for finite systems (``'finite'`` or ``'segment'`` boundary conditions)
 and in the thermodynamic limit (``'infinite'`` b.c.).
 
@@ -1454,8 +1454,8 @@ class Mixer:
     A good strategy is to choose an initially significant amplitude and let it decay until
     the perturbation becomes completely irrelevant and the mixer gets disabled.
 
-    This original idea of the mixer was introduced in [White2005]_.
-    [Hubig2015]_ discusses the mixer and provides an improved version.
+    This original idea of the mixer was introduced in :cite:`white2005`.
+    :cite:`hubig2015` discusses the mixer and provides an improved version.
 
 
     Parameters
@@ -1559,7 +1559,7 @@ class Mixer:
 class SingleSiteMixer(Mixer):
     """Mixer for single-site DMRG.
 
-    Performs a subspace expansion following [Hubig2015]_.
+    Performs a subspace expansion following :cite:`hubig2015`.
     """
     def perturb_svd(self, engine, theta, i0, move_right, next_B):
         """Mix extra terms to theta and perform an SVD.
@@ -1610,7 +1610,7 @@ class SingleSiteMixer(Mixer):
     def subspace_expand(self, engine, theta, i0, move_right, next_B):
         """Expand the MPS subspace, to allow the bond dimension to increase.
 
-        This is the subspace expansion following [Hubig2015]_.
+        This is the subspace expansion following :cite:`hubig2015`.
 
         Parameters
         ----------
@@ -1659,7 +1659,7 @@ class SingleSiteMixer(Mixer):
 class TwoSiteMixer(SingleSiteMixer):
     """Mixer for two-site DMRG.
 
-    This is the two-site version of the mixer described in [Hubig2015]_.
+    This is the two-site version of the mixer described in :cite:`hubig2015`.
     Equivalent to the :class:`DensityMatrixMixer`, but never construct the full density matrix.
 
     .. todo :
@@ -1713,7 +1713,7 @@ class TwoSiteMixer(SingleSiteMixer):
 class DensityMatrixMixer(Mixer):
     """Mixer based on density matrices.
 
-    This mixer constructs density matrices as described in the original paper [White2005]_.
+    This mixer constructs density matrices as described in the original paper :cite:`white2005`.
     """
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.

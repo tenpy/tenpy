@@ -27,7 +27,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
     respectively, where :math:`\pm\phi` is the phase acquired by a boson hopping between atoms
     in the same sublattice with a sign given by the direction of the hopping.
-    This Hamiltonian is translated from [Grushin2015]_.
+    This Hamiltonian is translated from :cite:`grushin2015`.
 
     Parameters
     ----------
@@ -96,7 +96,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
     respectively, where :math:`\pm\phi` is the phase acquired by an electron hopping
     between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
+    given by the direction of the hopping. This Hamiltonian is described in :cite:`grushin2015`.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!

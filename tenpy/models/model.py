@@ -1170,7 +1170,7 @@ class CouplingModel(Model):
 
         When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
         through the cylinder. This means that a particle hopping around the cylinder should
-        pick up a phase given by the external flux [Resta1997]_.
+        pick up a phase given by the external flux :cite:`resta1998`.
         This is also called "twisted boundary conditions" in literature.
         This function adds a complex phase to the `strength` array on some bonds, such that
         particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.

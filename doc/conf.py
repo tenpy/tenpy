@@ -45,6 +45,7 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram',
+    'sphinxcontrib.bibtex',
     'sphinx_rtd_theme',
     'sphinx_cfg_options',
     'matplotlib.sphinxext.plot_directive',

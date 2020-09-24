@@ -457,7 +457,7 @@ class MPO:
     def make_U(self, dt, approximation='II'):
         r"""Creates the U_I or U_II propagator.
 
-        Approximations of MPO exponentials following [Zaletel2015]_.
+        Approximations of MPO exponentials following :cite:`zaletel2015`.
 
         Parameters
         ----------
@@ -888,7 +888,7 @@ class MPO:
     def apply_zipup(self, psi, options):
         """Applies an MPO to an MPS (in place) with the zip-up method.
 
-        Described in Ref. [Stoudenmire2010]_.
+        Described in Ref. :cite:`stoudenmire2010`.
 
         The 'W' tensors are contracted to the 'B' tensors with intermediate SVD
         compressions, truncated to bond dimensions `chi_max * m_temp`.
@@ -1132,7 +1132,7 @@ class MPO:
 def make_W_II(t, A, B, C, D):
     r"""W_II approx to exp(t H) from MPO parts (A, B, C, D).
 
-    Get the W_II approximation of [Zaletel2015]_.
+    Get the W_II approximation of :cite:`zaletel2015`.
 
     In the paper, we have two formal parameter "phi_{r/c}" which satisfies
     :math:`\phi_r^2 = phi_c^2 = 0`.  To implement this, we temporarily extend the virtual Hilbert
@@ -1146,7 +1146,7 @@ def make_W_II(t, A, B, C, D):
         The time step per application of the propagator.
         Should be imaginary for real time evolution!
     A, B, C, D :  :class:`numpy.ndarray`
-        Blocks of the MPO tensor to be exponentiated, as defined in [Zaletel2015]_.
+        Blocks of the MPO tensor to be exponentiated, as defined in :cite:`zaletel2015`.
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
     """
 

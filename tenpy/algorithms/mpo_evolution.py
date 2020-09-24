@@ -16,7 +16,7 @@ __all__ = ['ExpMPOEvolution']
 class ExpMPOEvolution:
     """Time evolution of an MPS using the W_I or W_II approximation for ``exp(H dt)``.
 
-    Ref. [Zaletel2015]_ described a method to obtain MPO approximations :math:`W_I` and
+    :cite:`zaletel2015` described a method to obtain MPO approximations :math:`W_I` and
     :math:`W_{II}` for the exponential ``U = exp(i H dt)`` of an MPO `H`, implemented in
     :meth:`~tenpy.networks.mpo.MPO.make_U_I` and :meth:`~tenpy.networks.mpo.MPO.make_U_II`.
     This class uses it for real-time evolution.
@@ -87,7 +87,7 @@ class ExpMPOEvolution:
                 Number of time steps `dt` to evolve
             approximation : 'I' or 'II'
                 Specifies which approximation is applied. The default 'II' is more precise.
-                See [Zaletel2015]_ and :meth:`~tenpy.networks.mps.MPO.make_U` for more details.
+                See :cite:`zaletel2015` and :meth:`~tenpy.networks.mps.MPO.make_U` for more details.
             order : int
                 Order of the algorithm. The total error scales as ``O(t*dt^order)``.
                 Implemented are order = 1 and order = 2.
