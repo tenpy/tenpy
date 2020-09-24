@@ -1874,8 +1874,9 @@ def get_lattice(lattice_name):
 def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
-    In this function, the word 'direction' referst to a physical direction of the lattice or the
-    index `u` of the unit cell as an "artificial direction".
+    .. note ::
+        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
     ----------
@@ -1953,29 +1954,36 @@ def get_order(shape, snake_winding, priority=None):
 def get_order_grouped(shape, groups):
     """Variant of :func:`get_order`, grouping some sites of the unit cell.
 
-    In this function, the word 'direction' referst to a physical direction of the lattice or the
-    index `u` of the unit cell as an "artificial direction".
     This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
-    The argument `group` is a
-    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape
-    (Lx, Ly, Lu).
-    Calling this function with groups=((1,), (2, 0)) returns an order of the following form::
+    For 2D lattices with a unit cell, the ordering goes
+    first within a group , then along y,
+    then the next group (for the same x-value), again along y,
+    and finally along x when all groups are done.
 
-        # columns: [x, y, u]
-        [0, 0, 1]  # first for u = 1 along y
-        [0, 1, 1]
-            :
-        [0, Ly-1, 1]
-        [0, 0, 2]  # then for u = 2 and 0
-        [0, 0, 0]
-        [0, 1, 2]
-        [0, 1, 0]
-            :
-        [0, Ly-1, 2]
-        [0, Ly-1, 0]
-        # and then repeat the above for increasing `x`.
+    As an example, consider the Kagome lattice.
 
+    .. plot ::
 
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+        groups = [[(0, 1, 2)], [(0, 2, 1)],
+                [(0, 1), (2,)], [(0, 2), (1,)]]
+        lat = lattice.Kagome(3, 3, None, bc='periodic')
+        for gr, ax in zip(groups, axes.flatten()):
+            order = lattice.get_order_grouped(lat.shape, gr)
+            lat.order = order
+            lat.plot_order(ax, linestyle=':')
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+            ax.set_aspect('equal')
+            ax.set_xlim(-1)
+            ax.set_ylim(-1)
+        plt.show()
+
+    .. note ::
+        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
     ----------
