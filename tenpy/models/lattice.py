@@ -1344,6 +1344,7 @@ class IrregularLattice(Lattice):
             positions=positions,
             pairs=self.regular_lattice.pairs,
         )
+        self.order = self._ordering_irreg(regular_lattice.order)
         # done
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -1382,14 +1383,18 @@ class IrregularLattice(Lattice):
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
         """
-        order_ = self.regular_lattice.ordering(order)
-        mps_reg = np.arange(len(order_))
+        order_reg = self.regular_lattice.ordering(order)
+        return self._ordering_irreg(order_reg)
+
+    def _ordering_irreg(self, order):
+        """Remove and add irregular sites to the order of the regular lattice."""
+        mps_reg = np.arange(len(order))
         if self.remove is not None:
-            self._perm = np.lexsort(order_.T)  # allow to temporarily use lat2mps_idx for lattice
+            self._perm = np.lexsort(order.T)  # allow to temporarily use lat2mps_idx for lattice
             # indices with u from regular lattice
-            keep = np.ones([len(order_)], np.bool_)
+            keep = np.ones([len(order)], np.bool_)
             keep[self.lat2mps_idx(self.remove)] = False
-            order_ = order_[keep]
+            order = order[keep]
             mps_reg = mps_reg[keep]
         if self.add is not None:
             # sort such that MPS indices are ascending
@@ -1402,9 +1407,9 @@ class IrregularLattice(Lattice):
                     mps_add[i] = self.regular_lattice.lat2mps_idx(close_to)
             mps_add = np.array(mps_add)
             sort = np.argsort(np.concatenate((mps_reg, mps_add)), kind="stable")
-            order_ = np.concatenate((order_, np.array(lat_idx)), axis=0)
-            order_ = order_[sort, :]
-        return order_
+            order = np.concatenate((order, np.array(lat_idx)), axis=0)
+            order = order[sort, :]
+        return order
 
     @Lattice.order.setter
     def order(self, order_):
