@@ -1,9 +1,11 @@
-Literature
-==========
+Literature and References
+=========================
 
 This is a (by far non-exhaustive) list of some references for the various ideas behind the code.
-They can be cited from the python doc-strings using the format ``[Author####]_``.
-Within each category, we sort the references by year and author.
+They can be cited like this:
+
+- [TeNPyNotes]_ for TeNPy/software related sources
+- :cite:`white1992` (lowercase first-author + year) for entries from `literature.bib`.
 
 .. comment
     When you add something, please also add a reference to it, i.e., give a short comment in the top of the subsection.
@@ -16,14 +18,15 @@ the scientific community by giving examples how to call the algorithms in TeNPy.
 [TeNPyDoc]_ is where the location is hosted online.
 [TeNPyForum]_ is the place where you can ask questions and look for help, when you are stuck with implementing something.
 
-.. [TeNPyNotes] 
+.. [TeNPyNotes]
     "Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)"
     J. Hauschild, F. Pollmann, SciPost Phys. Lect. Notes 5 (2018), :arxiv:`1805.00055`, :doi:`10.21468/SciPostPhysLectNotes.5`
-.. [TeNPySource] 
+    also below as :cite:`hauschild2018a`.
+.. [TeNPySource]
     https://github.com/tenpy/tenpy
-.. [TeNPyDoc] 
+.. [TeNPyDoc]
     Online documentation, https://tenpy.readthedocs.io/
-.. [TeNPyForum] 
+.. [TeNPyForum]
     Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
 
 Software-related
@@ -72,7 +75,7 @@ Algorithm developments
 :cite:`singh2010,singh2011` explain how to incorporate Symmetries.
 :cite:`haegeman2011` introduced TDVP, again explained more accessible in :cite:`haegeman2016`.
 :cite:`zaletel2015` is another standard method for time-evolution with long-range Hamiltonians.
-:cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018`.
+:cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018a`.
 :cite:`vidal2007` introduced MERA.
 
 
