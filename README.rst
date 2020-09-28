@@ -85,6 +85,8 @@ The corresponding BibTex Entry would be the following (the ``\url{...}`` require
         note={Code available from \url{https://github.com/tenpy/tenpy}},
     }
 
+To keep us motivated, you can also include your work into the list of `papers using TeNPy <https://tenpy.readthedocs.io/en/latest/papers_using_tenpy.html>`_.
+
 
 Acknowledgment
 --------------

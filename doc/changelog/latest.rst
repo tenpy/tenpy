@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+Added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
 
 Changelog
 ---------
