@@ -2163,11 +2163,12 @@ class MPS:
             autoJW = False
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
-        if ((len(sites1) > 2 * len(sites2) and min(sites2) > max(sites1) - len(sites2)) or
-            (len(sites2) > 2 * len(sites1) and min(sites1) > max(sites2) - len(sites1)):
-            warnings.warn("Inefficent evaluation of MPS.correlation_function(), "
-                          "it's probably faster to use MPS.term_correlation_function_left()",
-                          stracklevel=2)
+        if ((len(sites1) > 2 * len(sites2) and min(sites2) > max(sites1) - len(sites2))
+                or (len(sites2) > 2 * len(sites1) and min(sites1) > max(sites2) - len(sites1))):
+            warnings.warn(
+                "Inefficent evaluation of MPS.correlation_function(), "
+                "it's probably faster to use MPS.term_correlation_function_left()",
+                stracklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
             warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
             autoJW = False
