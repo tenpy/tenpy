@@ -2067,6 +2067,13 @@ class MPS:
         operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
         Each operator should have the two legs ``'p', 'p*'``.
 
+
+        .. warning ::
+            This function is only evaluating correlation functions by moving right, and hence
+            can be inefficient if you try to vary the left and while fixing the right end.
+            In that case, you might be better of (=faster evaluation) by using
+            :meth:`term_correlation_function_left` with a small for loop over the right indices.
+
         Parameters
         ----------
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
@@ -2131,6 +2138,13 @@ class MPS:
         >>> psi.correlation_function("A", "B", [3])
         [[A3B0,     A3B1, ..., A3B{L-1}]]
 
+        Alternatively, you can use :meth:`term_correlation_function_right`
+        (or :meth:`term_correlation_function_left`):
+
+        >>> corr1 = psi.correlation_function("A", "B", [0], range(1, 10))
+        >>> corr2 = psi.term_correlation_function_right([("A", 0), [("B", 0)], 0, range(1, 10))
+        >>> assert np.all(np.abs(corr2 - corr1) < 1.e-12)
+
         For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
 
         >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
@@ -2142,13 +2156,18 @@ class MPS:
         See also
         --------
         expectation_value_term : for a single combination of `i` and `j` of ``A_i B_j```.
-        term_correlation_function_right : for multi-site terms on the left and right, vary `j`.
-        term_correlation_function_left : for multi-site terms on the left and right, vary `i`.
+        term_correlation_function_right : for correlations between multi-site terms, fix left term.
+        term_correlation_function_left : for correlations between multi-site terms, fix right term.
         """
         if opstr is not None:
             autoJW = False
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
+        if ((len(sites1) > 2 * len(sites2) and min(sites2) > max(sites1) - len(sites2)) or
+            (len(sites2) > 2 * len(sites1) and min(sites1) > max(sites2) - len(sites1)):
+            warnings.warn("Inefficent evaluation of MPS.correlation_function(), "
+                          "it's probably faster to use MPS.term_correlation_function_left()",
+                          stracklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
             warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
             autoJW = False
@@ -2200,7 +2219,7 @@ class MPS:
                                         j_R=None,
                                         autoJW=True,
                                         opstr=None):
-        """Correlation function between (multi-site) terms, moving the right term.
+        """Correlation function between (multi-site) terms, moving the right term, fix left term.
 
         For ``term_L = [('A', 0), ('B', 1)]`` and ``term_R = [('C', 0), ('D', 1)]``,
         calculate the correlation function :math:`A_{i+0} B_{i+1} C_{j+0} D_{j+1}`
@@ -2284,7 +2303,7 @@ class MPS:
                                        j_R=0,
                                        autoJW=True,
                                        opstr=None):
-        """Correlation function between (multi-site) terms, moving the left term.
+        """Correlation function between (multi-site) terms, moving the left term, fix right term.
 
         For ``term_L = [('A', 0), ('B', 1)]`` and ``term_R = [('C', 0), ('D', 1)]``,
         calculate the correlation function :math:`A_{i+0} B_{i+1} C_{j+0} D_{j+1}`
