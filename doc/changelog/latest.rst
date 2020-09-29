@@ -15,7 +15,9 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- nothing yet
+- :meth:`~tenpy.networks.mps.MPS.term_correlation_function_right` and 
+  :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
+  for correlation functions with more than one operator on each end.
 
 Changed
 ^^^^^^^

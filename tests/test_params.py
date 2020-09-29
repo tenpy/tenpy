@@ -45,5 +45,5 @@ def test_parameters():
         sub.deprecated_alias('y', 'y_new')
         # assert len(w) == 2
         assert len(sub.unused) == 2
-        # del sub  # catch warnings for 'x', y'
+        del sub  # catch warnings for 'x', y'
         # assert len(w) == 3
