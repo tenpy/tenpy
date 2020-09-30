@@ -27,7 +27,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
     respectively, where :math:`\pm\phi` is the phase acquired by a boson hopping between atoms
     in the same sublattice with a sign given by the direction of the hopping.
-    This Hamiltonian is translated from [Grushin2015]_.
+    This Hamiltonian is translated from :cite:`grushin2015`.
 
     Parameters
     ----------
@@ -64,9 +64,8 @@ class BosonicHaldaneModel(CouplingMPOModel):
         mu = np.asarray(model_params.get('mu', 0.))
         phi_ext = 2 * np.pi * model_params.get('phi_ext', 0.)
 
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 1, 'N', category='mu N')
+        self.add_onsite(mu, 0, 'N', category='mu N')
+        self.add_onsite(-mu, 1, 'N', category='mu N')
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
@@ -95,8 +94,9 @@ class FermionicHaldaneModel(CouplingMPOModel):
     Hopping is allowed to nearest and next-nearest neighbor sites with amplitudes
     :math:`t_{\langle ij \rangle}=t_1 \in \mathbb{R}` and
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
-    respectively, where :math:`\pm\phi` is the phase acquired by an electron hopping between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
+    respectively, where :math:`\pm\phi` is the phase acquired by an electron hopping
+    between atoms in the same sublattice with a sign
+    given by the direction of the hopping. This Hamiltonian is described in :cite:`grushin2015`.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -138,10 +138,8 @@ class FermionicHaldaneModel(CouplingMPOModel):
         mu = np.asarray(model_params.get('mu', 0.))
         phi_ext = 2 * np.pi * model_params.get('phi_ext', 0.)
 
-        for u in range(len(self.lat.unit_cell)):
-
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 1, 'N', category='mu N')
+        self.add_onsite(mu, 0, 'N', category='mu N')
+        self.add_onsite(-mu, 1, 'N', category='mu N')
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])

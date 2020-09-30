@@ -282,7 +282,7 @@ Consider the :class:`~tenpy.models.fermions_spinless.FermionModel`.
 If you do not care about the MPO bond dimension, and want to add Hermitian conjugate terms manually, you would set `model_par['explicit_plus_hc'] = False` and write::
 
     self.add_coupling(-J, u1, 'Cd', u2, 'C', dx)
-    self.add_coupling(np.conj(-J), u2, 'C', u1, 'Cd', -dx)
+    self.add_coupling(np.conj(-J), u2, 'Cd', u1, 'C', -dx)
 
 If you wanted to save the trouble of the extra line of code (but still did not care about MPO bond dimension), you would keep the `model_par`, but instead write::
 

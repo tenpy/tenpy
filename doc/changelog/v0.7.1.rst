@@ -1,0 +1,6 @@
+[0.7.1] - 2020-09-04
+====================
+
+Release Notes
+-------------
+This is just a minor fix to allow building the conda package

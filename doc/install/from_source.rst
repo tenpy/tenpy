@@ -90,6 +90,11 @@ After that, go to the root directory of TeNPy (``$HOME/TeNPy``) and simply run :
 
     bash ./compile.sh
 
+.. note ::
+
+   There is no need to compile if you installed TeNPy directly with conda or pip.
+   (You can verify this with `tenpy.show_config()` as illustrated below.)
+
 Note that it is not required to separately download (and install) Intel MKL: the compilation just obtains the includes 
 from numpy. In other words, if your current numpy version uses MKL (as the one provided by anaconda),
 the compiled TeNPy code will also use it.

@@ -13,7 +13,7 @@ if not sys.version_info >= (3, 5):
 # hardcode version for people without git
 
 MAJOR = 0
-MINOR = 6
+MINOR = 7
 MICRO = 1
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
@@ -34,6 +34,7 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      create release with release-notes on github
 #      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
+#      # wait for conda-forge bot to create a pull request with the new version and merge it
 
 
 def get_git_revision():

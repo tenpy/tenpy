@@ -8,6 +8,7 @@
     releases
     introductions
     literature
+    papers_using_tenpy
     contributing
 
 .. toctree::
