@@ -27,3 +27,4 @@ Fixed
 ^^^^^
 - The :class:`~tenpy.models.lattice.IrregularLattice` used the ``'default'`` order of the regular lattice instead of
   whatever the order of the regular lattice was.
+- :meth:`~tenpy.networks.mps.MPS.charge_variance` did not work for more than 1 charge.

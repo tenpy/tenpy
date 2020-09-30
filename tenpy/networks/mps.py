@@ -1597,7 +1597,7 @@ class MPS:
         """
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[:, np.newaxis])**2, axis=0)
+        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :])**2, axis=0)
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
