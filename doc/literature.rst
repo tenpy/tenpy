@@ -77,6 +77,7 @@ Algorithm developments
 :cite:`zaletel2015` is another standard method for time-evolution with long-range Hamiltonians.
 :cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018a`.
 :cite:`vidal2007` introduced MERA.
+The scaling :math:`S=c/6 log(\chi)` at a 1D critical point is explained in :cite:`pollmann2009`.
 
 
 References
