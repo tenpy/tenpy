@@ -84,5 +84,5 @@ References
 ----------
 
 .. bibliography:: literature.bib
-    :style: unsrt
+    :style: custom1
     :all:

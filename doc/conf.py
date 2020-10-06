@@ -211,3 +211,43 @@ def linkcode_resolve(domain, info):
 cfg_options_default_in_summary_table = False
 cfg_options_parse_comma_sep_names = True
 cfg_options_always_include = ["Config"]
+
+# -- sphinxcontrib.bibtex -------------------------------------------------
+
+from pybtex.style.formatting.unsrt import Style as UnsrtStyle
+from pybtex.style.labels import BaseLabelStyle
+from pybtex.style.sorting.author_year_title import SortingStyle
+from pybtex.plugin import register_plugin
+
+
+class CustomBibtexStyle1(UnsrtStyle):
+    default_sorting_style = 'key'
+    default_label_style = 'key'
+
+
+class CustomBibtexStyle2(UnsrtStyle):
+    default_sorting_style = 'year_author_title'
+    default_label_style = 'key'
+
+
+class KeyLabelStyle(BaseLabelStyle):
+    def format_labels(self, sorted_entries):
+        return [entry.key for entry in sorted_entries]
+
+
+class YearAuthorTitleSort(SortingStyle):
+    def sorting_key(self, entry):
+        author_key, year, title = super().sorting_key(entry)
+        return (year, author_key, title)
+
+
+class KeySort(SortingStyle):
+    def sorting_key(self, entry):
+        return entry.key
+
+
+register_plugin('pybtex.style.formatting', 'custom1', CustomBibtexStyle1)
+register_plugin('pybtex.style.formatting', 'custom2', CustomBibtexStyle2)
+register_plugin('pybtex.style.labels', 'key', KeyLabelStyle)
+register_plugin('pybtex.style.sorting', 'key', KeySort)
+register_plugin('pybtex.style.sorting', 'year_author_title', YearAuthorTitleSort)
