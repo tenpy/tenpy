@@ -3,7 +3,11 @@ Bulding the documentation
 
 You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats (including HTML or PDF) yourself, as described in the following.
-First, install the extra requirements, i.e., `Sphinx`_, with::
+First of all, I will assume that you installed TeNPy from source, see :doc:`/install/from_source`.
+
+In addition to the packages required by TeNPy, you need the packages specified in ``/doc/requirements.txt``.
+Assuming that you are in the top folder of the git repository and have `pip`, you can install `Sphinx`_ and further
+requirements with::
 
     pip install -r doc/requirements.txt
 
@@ -24,5 +28,6 @@ Other output formats are available as other make targets, e.g., ``make latexpdf`
 
 .. note ::
 
-   Building the documentation with sphinx requires loading the modules.
-   The `conf.py` adjusts the python path to include the `tenpy` from root directory of the repository.
+   Building the documentation with sphinx requires loading the TeNPy modules.
+   The `conf.py` adjusts the python `sys.path` to include the `/tenpy` folder from root directory of the git repository.
+   It will not use the cython-compiled parts.
