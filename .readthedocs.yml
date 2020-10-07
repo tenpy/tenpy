@@ -13,5 +13,8 @@ formats:
     - htmlzip
     - pdf
 
+submodules:
+    include: all
+
 conda:
     environment: doc/environment.yml
