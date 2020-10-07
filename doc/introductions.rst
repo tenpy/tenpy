@@ -9,8 +9,6 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     :maxdepth: 1
 
     intro/overview
-    intro/toycodes
-    intro/examples
     intro/npc
     intro/model
     intro/lattices

@@ -2,3 +2,6 @@ Sphinx
 sphinx-rtd-theme
 sphinxcontrib-bibtex
 matplotlib
+ipykernel
+nbsphinx
+sphinx_copybutton

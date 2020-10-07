@@ -3,18 +3,21 @@ Bulding the documentation
 
 You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats (including HTML or PDF) yourself, as described in the following.
-First of all, I will assume that you installed TeNPy from source, see :doc:`/install/from_source`.
 
-In addition to the packages required by TeNPy, you need the packages specified in ``/doc/requirements.txt``.
-Assuming that you are in the top folder of the git repository and have `pip`, you can install `Sphinx`_ and further
-requirements with::
+First, I will assume that you downloaded the [TeNPySource]_ repository with::
 
-    pip install -r doc/requirements.txt
+    git clone --recursive https://github.com/tenpy/tenpy
 
-.. note ::
+This includes the [TeNPyNotebooks]_ as a git submodule; you might need to `git submodule update` if it is out of date.
 
-    Plotting the inheritance graphs also requires `Graphviz <https://graphviz.org/>`_.
-    If you have `conda`, installing it requires just ``conda install graphviz``.
+Building the documentation requires a few more packages (including `Sphinx`_).
+The recommended way is to create a separate conda environment for it with::
+
+    conda env create -f doc/environment.yml  # make sure to use the file from the doc/ subfolder!
+    conda activate tenpydoc
+
+Alternatively, you can use `pip` and ``pip install -r doc/requirements.txt``, but this will not be able to install 
+all dependencies: some packages like `Graphviz <https://graphviz.org/>`_ are not available from pip alone.
 
 Afterwards, simply go to the folder ``doc/`` and run the following command::
 

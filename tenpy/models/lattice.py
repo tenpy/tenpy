@@ -348,7 +348,7 @@ class Lattice:
 
             import matplotlib.pyplot as plt
             from tenpy.models import lattice
-            fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+            fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
             orders = ['Cstyle', 'snakeCstyle', 'Fstyle', 'snakeFstyle']
             lat = lattice.Square(5, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
@@ -1799,7 +1799,7 @@ class Honeycomb(Lattice):
 
             import matplotlib.pyplot as plt
             from tenpy.models import lattice
-            fig, axes = plt.subplots(1, 2, True, True, figsize=(5, 6))
+            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(5, 6))
             orders = ['default', 'snake']
             lat = lattice.Honeycomb(4, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
@@ -2012,7 +2012,7 @@ def get_order_grouped(shape, groups):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+        fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
         groups = [[(0, 1, 2)], [(0, 2, 1)],
                 [(0, 1), (2,)], [(0, 2), (1,)]]
         lat = lattice.Kagome(3, 3, None, bc='periodic')
