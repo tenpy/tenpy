@@ -16,3 +16,4 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     intro/lattices
     intro/JordanWigner
     intro/input_output
+    intro/protocol

@@ -27,6 +27,8 @@ A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck
 minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`, using a mixer is
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
+A generic protocol for approaching a physics question using DMRG is given in :doc:`/intro/protocol`.
+
 .. todo ::
     Write UserGuide!!!
 """
@@ -105,6 +107,8 @@ class DMRGEngine(Sweep):
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between
     :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
+
+    A generic protocol for approaching a physics question using DMRG is given in :doc:`/intro/protocol`.
 
     .. deprecated :: 0.5.0
         Renamed parameter/attribute `DMRG_params` to :attr:`options`.
