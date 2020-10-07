@@ -148,7 +148,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
 
 4. Initialize the lattice (or if you got the lattice as a parameter, set the sites in the unit cell).
 5. Initialize the :class:`~tenpy.models.model.CouplingModel` with ``CouplingModel.__init__(self, lat)``.
-6. Use :meth:`~tenpy.models.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+6. Use :meth:`~tenpy.models.model.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`
    to add all terms of the Hamiltonian. Here, the :attr:`~tenpy.models.lattice.Lattice.pairs` of the lattice
    can come in handy, for example::
 
