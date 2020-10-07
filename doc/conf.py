@@ -75,7 +75,9 @@ release = tenpy.__full_version__  # The full version, including alpha/beta/rc ta
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['sphinx_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    'sphinx_build', 'Thumbs.db', '.DS_Store', 'notebooks/README.rst', 'notebooks/_template.ipynb'
+]
 
 
 def create_example_stubs():
@@ -147,6 +149,18 @@ html_sidebars = {
 # -- nbsphinx -------------------------------------------------------------
 
 nbsphinx_execute = 'never'
+
+# This is processed by Jinja2 and inserted before each notebook
+nbsphinx_prolog = r"""
+{% set docname = env.doc2path(env.docname, base=False)[10:] %}
+
+.. raw :: html
+
+    <div class="admonition note">
+      This page was generated from
+      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/tree/main/{{ docname|e }}">{{ docname|e }}</a>.
+    </div>
+"""
 
 # -- sphinx.ext.autodoc ---------------------------------------------------
 

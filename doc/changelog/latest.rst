@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-Added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
+We've added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
 
 Changelog
 ---------
@@ -18,6 +18,7 @@ Added
 - :meth:`~tenpy.networks.mps.MPS.term_correlation_function_right` and 
   :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
   for correlation functions with more than one operator on each end.
+- Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
 
 Changed
 ^^^^^^^
