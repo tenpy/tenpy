@@ -432,6 +432,8 @@ class Site(Hdf5Exportable):
             A valid operator name
             Operatorname representing the product of operators in `names`.
         """
+        if len(names) == 0:
+            return 'Id'
         return ' '.join(names)
 
     def __repr__(self):

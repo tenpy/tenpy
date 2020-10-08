@@ -4,7 +4,7 @@ Overview
 Repository
 ----------
 
-The root directory of this git repository contains the following folders:
+The root directory of the `git repository <https://github.com/tenpy/tenpy>`_ contains the following folders:
 
 tenpy
     The actual source code of the library.

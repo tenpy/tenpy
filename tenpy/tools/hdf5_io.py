@@ -134,11 +134,11 @@ def load(filename):
     """
     filename = str(filename)
     if filename.endswith('.pkl'):
-        with open(filename, mode) as f:
-            data = pickle.load(f, 'rb')
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
     elif filename.endswith('.pklz'):
-        with gzip.open(filename, mode) as f:
-            data = pickle.load(f, 'rb')
+        with gzip.open(filename, 'rb') as f:
+            data = pickle.load(f)
     elif filename.endswith('.hdf5') or filename.endswith('.h5'):
         import h5py
         with h5py.File(filename, 'r') as f:

@@ -47,7 +47,7 @@ Valid MPS boundary conditions (not to confuse with `bc_coupling` of
             bond is identified with the first one.
 ==========  ===================================================================================
 
-An MPS can be in different 'canonical forms' (see [Vidal2004]_, [Schollwoeck2011]_).
+An MPS can be in different 'canonical forms' (see :cite:`vidal2004,schollwoeck2011`).
 To take care of the different canonical forms, algorithms should use functions like
 :meth:`~tenpy.networks.mps.MPS.get_theta`, :meth:`~tenpy.networks.mps.MPS.get_B`
 and :meth:`~tenpy.networks.mps.MPS.set_B` instead of accessing them directly,
@@ -388,7 +388,7 @@ class MPS:
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
-            raise ValueError("wrong dimension of `p_state`. Expected {0:d}-dimensional array of "
+            raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
                              "(string, int, or 1D array)".format(d=lat.dim + 1))
         return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
 
@@ -888,7 +888,7 @@ class MPS:
         Parameters
         ----------
         i : int
-            `theta` is the wave function on sites `i`, `i`+1.
+            `theta` is the wave function on sites `i`, `i` + 1.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The two-site wave function with labels combined into ``"(vL.p0)", "(p1.vR)"``,
             ready for svd.
@@ -1597,7 +1597,7 @@ class MPS:
         """
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
-        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[:, np.newaxis])**2, axis=0)
+        return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :])**2, axis=0)
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
@@ -1794,7 +1794,7 @@ class MPS:
             named `op` acts on.
             The order inside `term` determines the order in which they act
             (in the mathematical convention: the last operator in `term` is right-most,
-            so it acts first on a Ket).
+            so it acts first on a ket).
         autoJW : bool
             If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
 
@@ -1817,32 +1817,61 @@ class MPS:
         >>> assert a == b == c
         """
         # strategy: translate term into a list "ops" to be used for `expectation_value_multi_sites`
+        ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW)
+        if has_extra_JW:
+            raise ValueError("Odd number of operators which need a Jordan Wigner string")
+        return self.expectation_value_multi_sites(ops, i_min)
+
+    def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
+        """Translate a `term` to a list of operators (one per site).
+
+        Parameters
+        ----------
+        term : list of (str, int)
+            List of tuples ``op, i`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+            The order inside `term` determines the order in which they act
+            (in the mathematical convention: the last operator in `term` is right-most,
+            so it acts first on a ket).
+        autoJW : bool
+            If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
+        i_offset : int
+            Offset to be added to the site-indices in the `term`.
+        JW_from_right : bool
+            If set, a JW-string is coming in from the right.
+            The operators
+
+        Returns
+        -------
+        ops : list of str
+            Operators, one per site starting with `i_min`, i.e. ``ops[i]`` acts on `i_min`+`i`.
+        i_min : int
+            Index of the left-most site on which `ops` act (including the `i_offset`).
+        has_extra_JW : bool
+            True if there is an odd number of terms which require a Jordan-Wigner string,
+            i.e., if there is a JW string coming out to the left.
+        """
+        assert not (JW_from_right and not autoJW)
         term = list(term)
         i_min = min([t[1] for t in term])
         i_max = max([t[1] for t in term])
-        ops = [None] * (i_max - i_min + 1)
+        ops = [[] for i in range((i_max - i_min + 1))]
         count_JW = 0
         for op, i in term:
             j = i - i_min  # index in ops
-            if ops[j] is not None:
-                ops[j] = ops[j] + " " + op
-            else:
-                ops[j] = op
-            if autoJW and self.sites[self._to_valid_index(i)].op_needs_JW(op):
+            ops[j].append(op)
+            if autoJW and self.sites[self._to_valid_index(i + i_offset)].op_needs_JW(op):
                 count_JW += 1
                 for k in range(j):
-                    if ops[k] is not None:
-                        ops[k] = ops[k] + ' JW'
-                        if ops[k].endswith(' JW JW'):
-                            ops[k] = ops[k][:-len(' JW JW')]
-                    else:
-                        ops[k] = 'JW'
+                    ops[k].append('JW')
+        if JW_from_right:
+            count_JW += 1
+            for op_i in ops:
+                op_i.append('JW')
         for i in range(len(ops)):
-            if ops[i] is None:
-                ops[i] = 'Id'
-        if count_JW % 2 == 1:
-            raise ValueError("Odd number of operators which need a Jordan Wigner string")
-        return self.expectation_value_multi_sites(ops, i_min)
+            site = self.sites[self._to_valid_index(i + i_offset)]
+            ops[i] = site.multiply_op_names(ops[i])
+        return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def expectation_value_multi_sites(self, operators, i0):
         r"""Expectation value  ``<psi|op0_{i0}op1_{i0+1}...opN_{i0+N}|psi>/<psi|psi>``.
@@ -1850,7 +1879,15 @@ class MPS:
         Calculates the expectation value of a tensor product of single-site operators
         acting on different sites next to each other.
         In other words, evaluate the expectation value of a term
-        ``op0_i0 op1_{i0+1} op2_{i0+2} ...``.
+        ``op0_i0 op1_{i0+1} op2_{i0+2} ...``, looking like this (with `op` short for `operators`,
+        for ``len(operators)=3``):
+
+            |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
+            |          |     |       |        |        |        |
+            |          |     op[0]   op[1]    op[2]    op[3]    |
+            |          |     |       |        |        |        |
+            |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
+
 
         .. warning ::
             This function does *not* automatically add Jordan-Wigner strings!
@@ -1873,6 +1910,16 @@ class MPS:
             ``<psi|operators[0]_{i0} operators[1]_{i0+1} ... |psi>/<psi|psi>``,
             where ``|psi>`` is the represented MPS.
         """
+        C = self._corr_ops_LP(operators, i0)
+        exp_val = npc.trace(C, 'vR*', 'vR')
+        return np.real_if_close(exp_val)
+
+    def _corr_ops_LP(self, operators, i0):
+        """Contract the left part of a correlation function.
+
+        Same as :meth:`expectation_value_multi_sites`, but with the right-most legs left open,
+        with labels ``'vR*', 'vR'``.
+        """
         op = operators[0]
         if (isinstance(op, str)):
             op = self.sites[self._to_valid_index(i0)].get_op(op)
@@ -1887,12 +1934,33 @@ class MPS:
             B = self.get_B(i, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if op != 'Id':
-                if (isinstance(op, str)):
+                if isinstance(op, str):
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             C = npc.tensordot(B.conj(), C, axes=axes)
-        exp_val = npc.trace(C, 'vR*', 'vR')
-        return np.real_if_close(exp_val)
+        return C
+
+    def _corr_ops_RP(self, operators, i0):
+        """Contract the right part of a correlation function.
+
+        Same as :meth:`expectation_value_multi_sites`, but with the left-most part open
+        and **excluding** the singular values `S`, with legs ``'vL', 'vL*'``.
+        """
+        op = operators[-1]
+        imax = i0 + len(operators) - 1
+        C = npc.eye_like(self.get_B(imax, 'B'), 'vR', ['vL*', 'vL'])
+        axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
+        for j in reversed(range(len(operators))):
+            op = operators[j]  # the operator
+            i = i0 + j  # the site it acts on
+            B = self.get_B(i, form='B')
+            C = npc.tensordot(B, C, axes=['vR', 'vL'])
+            if op != 'Id':
+                if isinstance(op, str):
+                    op = self.sites[self._to_valid_index(i)].get_op(op)
+                C = npc.tensordot(op, C, axes=['p*', 'p'])
+            C = npc.tensordot(C, B.conj(), axes=axes)
+        return C
 
     def expectation_value_terms_sum(self, term_list, prefactors=None):
         """Calculate expectation values for a bunch of terms and sum them up.
@@ -1999,6 +2067,13 @@ class MPS:
         operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
         Each operator should have the two legs ``'p', 'p*'``.
 
+
+        .. warning ::
+            This function is only evaluating correlation functions by moving right, and hence
+            can be inefficient if you try to vary the left and while fixing the right end.
+            In that case, you might be better of (=faster evaluation) by using
+            :meth:`term_correlation_function_left` with a small for loop over the right indices.
+
         Parameters
         ----------
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
@@ -2063,6 +2138,13 @@ class MPS:
         >>> psi.correlation_function("A", "B", [3])
         [[A3B0,     A3B1, ..., A3B{L-1}]]
 
+        Alternatively, you can use :meth:`term_correlation_function_right`
+        (or :meth:`term_correlation_function_left`):
+
+        >>> corr1 = psi.correlation_function("A", "B", [0], range(1, 10))
+        >>> corr2 = psi.term_correlation_function_right([("A", 0), [("B", 0)], 0, range(1, 10))
+        >>> assert np.all(np.abs(corr2 - corr1) < 1.e-12)
+
         For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
 
         >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
@@ -2073,12 +2155,20 @@ class MPS:
 
         See also
         --------
-        expectation_value_term : best for a single combination of `i` and `j`.
+        expectation_value_term : for a single combination of `i` and `j` of ``A_i B_j```.
+        term_correlation_function_right : for correlations between multi-site terms, fix left term.
+        term_correlation_function_left : for correlations between multi-site terms, fix right term.
         """
         if opstr is not None:
             autoJW = False
         ops1, ops2, sites1, sites2, opstr = self._correlation_function_args(
             ops1, ops2, sites1, sites2, opstr)
+        if ((len(sites1) > 2 * len(sites2) and min(sites2) > max(sites1) - len(sites2))
+                or (len(sites2) > 2 * len(sites1) and min(sites1) > max(sites2) - len(sites1))):
+            warnings.warn(
+                "Inefficent evaluation of MPS.correlation_function(), "
+                "it's probably faster to use MPS.term_correlation_function_left()",
+                stracklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
             warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
             autoJW = False
@@ -2093,7 +2183,7 @@ class MPS:
                     raise ValueError("Some, but not any operators need 'JW' string!")
                 if not str_on_first:
                     raise ValueError("Need Jordan Wigner string, but `str_on_first`=False`")
-                opstr = 'JW'
+                opstr = ['JW']
         if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
             hermitian = False
@@ -2122,6 +2212,170 @@ class MPS:
                     # exchange ops1 and ops2 : they commute on different sites,
                     # but we apply opstr after op1 (using the last argument = False)
         return np.real_if_close(C)
+
+    def term_correlation_function_right(self,
+                                        term_L,
+                                        term_R,
+                                        i_L=0,
+                                        j_R=None,
+                                        autoJW=True,
+                                        opstr=None):
+        """Correlation function between (multi-site) terms, moving the right term, fix left term.
+
+        For ``term_L = [('A', 0), ('B', 1)]`` and ``term_R = [('C', 0), ('D', 1)]``,
+        calculate the correlation function :math:`A_{i+0} B_{i+1} C_{j+0} D_{j+1}`
+        for fixed `i` and varying `j` according to `i_L`/`j_R`.
+        The terms may not overlap.
+        For fermions, the order of the terms is following the usual mathematical convention,
+        where term_R acts first on a physical ket.
+
+        Parameters
+        ----------
+        term_L, term_R : list of (str, int)
+            Each a term representing a sum of operators on different sites, e.g.,
+            ``[('Sz', 0), ('Sz', 1)]`` or ``[('Cd', 0), ('C', 1)]``.
+        i_L : int
+            Offset added to the indices of `term_L`.
+        j_R : list of int | None
+            List of offsets to be added to the indices of `term_R`.
+            Is sorted before use, i.e. the order is ignored.
+            For **finite** MPS, `None` defaults to ``range(j0, L)``,
+            where `j0` is chosen such that `term_R` starts one site right of the `term_L`.
+            For **infinite** MPS, `None` defaults to ``range(L, 11*L, L)``, i.e.,
+            one term per MPS unit cell for a distance of up to 10 unit cells.
+        autoJW : bool
+            Whether to automatically take care of Jordan-Wigner strings.
+        opstr : str
+            Force an intermediate operator string to used inbetween the terms.
+            Can only be used in combination with ``autoJW=False``.
+
+        Returns
+        -------
+        corrs : 1D array
+            Values of the correlation function, one for each entry in the list `j_R`.
+
+        See also
+        --------
+        correlation_function : varying both `i` and `j` at once.
+        """
+        assert opstr is None or not autoJW
+        if j_R is None:
+            if self.finite:
+                j0 = i_L + max([t[1] for t in term_L]) + 1 - min([t[1] for t in term_R])
+                j_R = range(j0, self.L - max([t[1] for t in term_R] + [0]))
+            else:
+                j_R = range(self.L, 11 * self.L, self.L)
+        else:
+            j_R = np.sort(j_R)
+        ops_R, j_min, has_extra_JW = self._term_to_ops_list(term_R, autoJW, j_R[0])
+        j_min = j_min - j_R[0]
+        if autoJW:
+            opstr = 'JW' if has_extra_JW else None
+        ops_L, i_min, has_extra_JW = self._term_to_ops_list(term_L, autoJW, i_L, has_extra_JW)
+        if autoJW and has_extra_JW:
+            raise ValueError("Odd total number of operators which need a Jordan Wigner string")
+        CL = self._corr_ops_LP(ops_L, i_min)
+        i = i_min + len(ops_L)  # CL is contraction strictly left of site `i`
+        if i > j_R[0] + j_min:
+            raise ValueError("i_L/i_R not such that term_L is left of term_R")
+        axes = [['vL*'] + self._get_p_label('*'), ['vR*'] + self._p_label]
+        result = []
+        for j in j_R:
+            j = j + j_min  # start ops_R on site `j`
+            assert i <= j
+            for k in range(i, j):
+                assert i == k
+                # contract CL with tensors on site `k`
+                B = self.get_B(k, form='B')
+                CL = npc.tensordot(CL, B, axes=['vR', 'vL'])
+                if opstr is not None:
+                    opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
+                    CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
+                CL = npc.tensordot(B.conj(), CL, axes=axes)
+                i = k + 1
+            CR = self._corr_ops_RP(ops_R, j)
+            result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
+        return np.real_if_close(result)
+
+    def term_correlation_function_left(self,
+                                       term_L,
+                                       term_R,
+                                       i_L=None,
+                                       j_R=0,
+                                       autoJW=True,
+                                       opstr=None):
+        """Correlation function between (multi-site) terms, moving the left term, fix right term.
+
+        For ``term_L = [('A', 0), ('B', 1)]`` and ``term_R = [('C', 0), ('D', 1)]``,
+        calculate the correlation function :math:`A_{i+0} B_{i+1} C_{j+0} D_{j+1}`
+        for varying `i` and fixed `j` according to `i_L`/`j_R`.
+        The terms may not overlap.
+        For fermions, the order of the terms is following the usual mathematical convention,
+        where term_R acts first on a physical ket.
+
+        Parameters
+        ----------
+        term_L, term_R : list of (str, int)
+            Each a term representing a sum of operators on different sites, e.g.,
+            ``[('Sz', 0), ('Sz', 1)]`` or ``[('Cd', 0), ('C', 1)]``.
+        i_L : list of int | None
+            List of offsets to be added to the indices of `term_L`.
+            Is sorted descending before use, i.e., the order is ignored.
+            For **infinite** MPS, `None` defaults to ``range(-L, -11*L, -L)``, i.e.,
+            one term per MPS unit cell for a distance of up to 10 unit cells.
+        j_R : int
+            Offset added to the indices of `term_R`.
+        autoJW : bool
+            Whether to automatically take care of Jordan-Wigner strings.
+        opstr : str
+            Force an intermediate operator string to used inbetween the terms.
+            Can only be used in combination with ``autoJW=False``.
+
+        Returns
+        -------
+        corrs : 1D array
+            Values of the correlation function, one for each entry in the list `j_R`.
+
+        See also
+        --------
+        correlation_function : varying both `i` and `j` at once.
+        """
+        assert opstr is None or not autoJW
+        if i_L is None:
+            if self.finite:
+                raise ValueError("No default set for finite MPS")
+            else:
+                i_L = range(-self.L, -11 * self.L, -self.L)
+        else:
+            i_L = np.sort(i_L)[::-1]
+        ops_R, j_min, has_extra_JW = self._term_to_ops_list(term_R, autoJW, j_R)
+        if autoJW:
+            opstr = 'JW' if has_extra_JW else None
+        ops_L, i_min, has_extra_JW = self._term_to_ops_list(term_L, autoJW, i_L[0], has_extra_JW)
+        i_min = i_min - i_L[0]
+        if autoJW and has_extra_JW:
+            raise ValueError("Odd total number of operators which need a Jordan Wigner string")
+        CR = self._corr_ops_RP(ops_R, j_min)
+        j = j_min  # CR is contraction including site `j`
+        if i_L[0] + i_min + len(ops_L) - 1 > j:
+            raise ValueError("i_L not such that term_L is left of term_R")
+        axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
+        result = []
+        for i in i_L:
+            i0 = i + i_min + len(ops_L) - 1  # CL of term_L includes site `i0` as right-most
+            assert i0 <= j
+            for k in range(j - 1, i0, -1):
+                # contract CR with tensors on site `k`
+                B = self.get_B(k, form='B')
+                CR = npc.tensordot(B, CR, axes=['vR', 'vL'])
+                if opstr is not None:
+                    opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
+                    CR = npc.tensordot(opstr_k, CR, axes=['p*', 'p'])
+                CR = npc.tensordot(CR, B.conj(), axes=axes)
+                j = k
+            CL = self._corr_ops_LP(ops_L, i + i_min)
+            result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
+        return np.real_if_close(result)
 
     def norm_test(self):
         """Check that self is in canonical form.
@@ -2675,8 +2929,8 @@ class MPS:
         momentum quantum numbers of it. (The rotation is nothing more than a translation in `y`.)
         This function permutes some sites (on a copy of `self`) to enact the rotation, and then
         finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
-        along the lines of [PollmannTurner2012]_, see also (the appendix and Fig. 11 in the arXiv
-        version of) [CincioVidal2013]_.
+        along the lines of :cite:`pollmann2012`, see also (the appendix and Fig. 11 in the arXiv
+        version of) :cite:`cincio2013`.
 
 
         Parameters

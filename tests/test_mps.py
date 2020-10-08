@@ -331,15 +331,68 @@ def test_expectation_value_term():
     assert abs(ev) == 1.
     # terms_sum
     pref = np.random.random([5])
-    term_list = TermList(
-        [[('Nd', 0)], [('Nu', 1), ('Nd', 2)], [('Nd', 2),
-                                               ('Nu', 5)], [('Nu Nd', 3)], [('Nu', 1),
-                                                                            ('Nu', 5)]], pref)
+    term_list = TermList([[('Nd', 0)],
+                          [('Nu', 1), ('Nd', 2)],
+                          [('Nd', 2), ('Nu', 5)],
+                          [('Nu Nd', 3)],
+                          [('Nu', 1), ('Nu', 5)]], pref)  # yapf: disable
     desired = sum(pref[1:])
     assert desired == sum(
         [psi2.expectation_value_term(term) * strength for term, strength in term_list])
     evsum, _ = psi2.expectation_value_terms_sum(term_list)
     assert abs(evsum - desired) < 1.e-14
+
+
+def test_correlation_function():
+    s = spin_half
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
+    corr1 = psi1.correlation_function('Sz', 'Sz')
+    corr1_exact = 0.25 * np.array([[ 1.,  0.,  0.,  0.,  1.,  0.],
+                                   [ 0.,  1.,  0., -1.,  0.,  0.],
+                                   [ 0.,  0.,  1.,  0.,  0., -1.],
+                                   [ 0., -1.,  0.,  1.,  0.,  0.],
+                                   [ 1.,  0.,  0.,  0.,  1.,  0.],
+                                   [ 0.,  0., -1.,  0.,  0.,  1.]])  # yapf: disable
+    npt.assert_almost_equal(corr1, corr1_exact)
+    corr1 = psi1.term_correlation_function_right([('Sz', 0)], [('Sz', 0)])
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 0)], [('Sz', 1)])
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 1)], [('Sz', 1)])
+    npt.assert_almost_equal(corr1, corr1_exact[1, 2:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 1)], [('Sz', -1)])
+    npt.assert_almost_equal(corr1, corr1_exact[1, 2:-1])
+
+    corr1 = psi1.term_correlation_function_left([('Sz', 0)], [('Sz', 0)], range(0, 5), 5)
+    npt.assert_almost_equal(corr1[::-1], corr1_exact[:-1, 5])
+    corr1 = psi1.term_correlation_function_left([('Sz', 1)], [('Sz', 1)], range(0, 4), 4)
+    npt.assert_almost_equal(corr1[::-1], corr1_exact[1:-1, 5])
+
+    # check fermionic signs
+    fs = site.SpinHalfFermionSite()
+    psi2 = mps.MPS.from_product_state([fs] * 4, ['empty', 'up', 'down', 'full'], bc="infinite")
+    corr2 = psi2.correlation_function('Cdu', 'Cu')
+    corr2_exact = np.array([[ 0.,  0.,  0.,  0.],
+                            [ 0.,  1.,  0.,  0.],
+                            [ 0.,  0.,  0.,  0.],
+                            [ 0.,  0.,  0.,  1.]])  # yapf: disable
+    npt.assert_almost_equal(corr2, corr2_exact)
+    psi3 = psi2.copy()
+    from tenpy.algorithms.tebd import RandomUnitaryEvolution
+    RandomUnitaryEvolution(psi3, {'N_steps': 4}).run()
+
+    corr3 = psi3.correlation_function('Cdu', 'Cu')
+    corr3_d = psi3.correlation_function('Cu', 'Cdu')
+    npt.assert_almost_equal(np.diag(corr3) + np.diag(corr3_d), 1.)
+    corr3 = corr3 - np.diag(np.diag(corr3))  # remove diagonal
+    corr3_d = corr3_d - np.diag(np.diag(corr3_d))
+    npt.assert_array_almost_equal(corr3, -corr3_d.T)  # check anti-commutation of operators
+
+    corr = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)], j_R=range(1, 4))
+    npt.assert_almost_equal(corr, corr3[0, 1:])
+    corr3_long = psi3.correlation_function('Cdu', 'Cu', [0], range(4, 11 * 4, 4)).flatten()
+    corr3_long2 = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)])
+    npt.assert_array_almost_equal(corr3_long, corr3_long2)
 
 
 def test_expectation_value_multisite():
@@ -381,3 +434,7 @@ def test_mps_compress(method, eps=1.e-13):
     psiSum2.test_sanity()
     assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
+
+
+if __name__ == "__main__":
+    test_correlation_function()

@@ -42,8 +42,9 @@ class TermList(Hdf5Exportable):
         of an operator name and a site `i` it acts on.
         For Fermions, the order is the order in the mathematic sense, i.e., the right-most/last
         operator in the list acts last.
-    strengths : list of float/complex
-        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+    strengths : (list of) float/complex
+        For each term in `terms` an associated prefactor or strength.
+        A single number holds for all terms equally.
 
     Attributes
     ----------
@@ -51,13 +52,80 @@ class TermList(Hdf5Exportable):
         List of terms where each `term` is a tuple ``(opname, i)`` of an operator name and a site
         `i` it acts on.
     strengths : 1D ndarray
-        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+        For each term in `terms` an associated prefactor or strength.
+
+    Examples
+    --------
+
+    For fermions, the term :math:`0.5(c^\dagger_0 c_2 + h.c.) + 1.3 * n_1` can be represented by:
+
+    >>> t = TermList([[('Cd', 0), ('C', 2)], [('Cd', 2), ('C', 0)], [('N', 1)]],
+    ...              [0.5,                   0.5,                   1.3])
+    >>> print(t)
+    0.50000 * Cd_0 C_2 +
+    0.50000 * Cd_2 C_0 +
+    1.30000 * N_1
+
+    If you have a :class:`~tenpy.models.lattice.Lattice`, you might also want to specify
+    the location of the operators by lattice indices insted of MPS indices.
+    For example, you can obtain the nearest-neighbor density terms
+    **without double counting each pair**) on a :class:`~tenpy.models.lattice.TriangularLattice`:
+
+    >>> lat = tenpy.models.lattice.Triangular(6, 6, None, bc_MPS='infinite', bc='periodic')
+    >>> t2_terms = [[('N', [0, 0, u1]), ('N', [dx[0], dx[1], u2])]
+    ...             for (u1, u2, dx) in lat.pairs['nearest_neighbors']]
+    >>> t2 = TermList.from_lattice_locations(lat, t2_terms)
+    >>> print(t2)
+    1.00000 * N_0 N_6 +
+    1.00000 * N_0 N_-5 +
+    1.00000 * N_0 N_5
+
+    The negative index -5 here indicates a tensor left of the current MPS unit cell.
     """
-    def __init__(self, terms, strength):
+    def __init__(self, terms, strength=1.):
         self.terms = list(terms)
         self.strength = np.array(strength)
+        if self.strength.ndim == 0:
+            self.strength = np.ones([len(self.terms)]) * self.strength
         if (len(self.terms), ) != self.strength.shape:
             raise ValueError("different length of terms and strength")
+
+    @classmethod
+    def from_lattice_locations(cls, lattice, terms, strength=1., shift=None):
+        """Initialize from a list of terms given in lattice indices instead of MPS indices.
+
+        Parameters
+        ----------
+        lattice : :class:`~tenpy.models.lattice.Lattice`
+            The underlying lattice to be used for conversion, e.g. `M.lat` from a
+            :class:`~tenpy.models.model.Model`.
+        terms : list of list of (str, tuple)
+            List of terms, where each `term` is a tuple ``(opname, lat_idx)`` with
+            `lat_idx` itself being a tuple ``(x, y, u)`` (for a 2D lattice) of the lattice
+            corrdinates.
+        strengths : (list of) float/complex
+            For each term in `terms` an associated prefactor or strength.
+            A single number holds for all terms equally.
+        shift : None | tuple of int
+            Overall shift added to all lattice coordinates `lat_idx` in `terms` before conversion.
+            None defaults to no shift.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms.
+        """
+        converted_terms = []
+        if shift is None:
+            shift = np.zeros(lat.dim + 1, np.intp)
+        else:
+            shift = np.array(shift, np.intp)
+            if len(shift) != lat.dim + 1:
+                raise ValueError("wrong length of `shift`: " + repr(shift))
+        for term in terms:
+            new_term = [(op, lattice.lat2mps_idx(shift + idx)) for (op, idx) in term]
+            converted_terms.append(new_term)
+        return cls(converted_terms, strength)
 
     def to_OnsiteTerms_CouplingTerms(self, sites):
         """Convert to :class:`OnsiteTerms` and :class:`CouplingTerms`

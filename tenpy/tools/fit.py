@@ -137,7 +137,7 @@ def fit_with_sum_of_exp(f, n, N=50):
     by sums of exponentials and to include them into the MPOs.
     This funciton allows to do that.
 
-    The algorithm/implementation follows the appendix of [Murg2010]_.
+    The algorithm/implementation follows the appendix of :cite:`murg2010`.
 
     Parameters
     ----------

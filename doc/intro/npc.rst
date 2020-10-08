@@ -11,7 +11,7 @@ be non-zero. Only those blocks need to be saved, which ultimately (= for large e
 This introduction covers our implementation of charges; explaining mathematical details of the underlying symmetry is beyond its scope.
 We refer you to the corresponding chapter in our [TeNPyNotes]_ for a more general introduction of the idea (also stating
 the "charge rule" introduced below).
-Ref. [Singh2009]_ explains why it works form a mathematical point of view, [Singh2010]_ has the focus on a :math:`U(1)` symmetry and might be easier to read.
+:cite:`singh2010` explains why it works form a mathematical point of view, :cite:`singh2011` has the focus on a :math:`U(1)` symmetry and might be easier to read.
 
 Notations
 ---------

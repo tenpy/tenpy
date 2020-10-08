@@ -344,6 +344,28 @@ class Lattice:
         ``'snakeFstyle'``  (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
         ================== =========================== =============================
 
+        .. plot ::
+
+            import matplotlib.pyplot as plt
+            from tenpy.models import lattice
+            fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
+            orders = ['Cstyle', 'snakeCstyle', 'Fstyle', 'snakeFstyle']
+            lat = lattice.Square(5, 3, None, bc='periodic')
+            for order, ax in zip(orders, axes.flatten()):
+                lat.order = lat.ordering(order)
+                lat.plot_order(ax, linestyle=':')
+                lat.plot_sites(ax)
+                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+                ax.set_title(repr(order))
+                ax.set_aspect('equal')
+                ax.set_xlim(-1)
+                ax.set_ylim(-1)
+            plt.show()
+
+        .. note ::
+            For lattices with a non-trivial unit cell (e.g. Honeycomb, Kagome), the
+            grouped order might be more appropriate, see :func:`get_order_grouped`
+
         Parameters
         ----------
         order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
@@ -1322,6 +1344,7 @@ class IrregularLattice(Lattice):
             positions=positions,
             pairs=self.regular_lattice.pairs,
         )
+        self.order = self._ordering_irreg(regular_lattice.order)
         # done
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -1360,14 +1383,18 @@ class IrregularLattice(Lattice):
             The order to be used for :attr:`order`, i.e. `order` with added/removed sites
             as specified by :attr:`remove` and :attr:`add`.
         """
-        order_ = self.regular_lattice.ordering(order)
-        mps_reg = np.arange(len(order_))
+        order_reg = self.regular_lattice.ordering(order)
+        return self._ordering_irreg(order_reg)
+
+    def _ordering_irreg(self, order):
+        """Remove and add irregular sites to the order of the regular lattice."""
+        mps_reg = np.arange(len(order))
         if self.remove is not None:
-            self._perm = np.lexsort(order_.T)  # allow to temporarily use lat2mps_idx for lattice
+            self._perm = np.lexsort(order.T)  # allow to temporarily use lat2mps_idx for lattice
             # indices with u from regular lattice
-            keep = np.ones([len(order_)], np.bool_)
+            keep = np.ones([len(order)], np.bool_)
             keep[self.lat2mps_idx(self.remove)] = False
-            order_ = order_[keep]
+            order = order[keep]
             mps_reg = mps_reg[keep]
         if self.add is not None:
             # sort such that MPS indices are ascending
@@ -1380,9 +1407,9 @@ class IrregularLattice(Lattice):
                     mps_add[i] = self.regular_lattice.lat2mps_idx(close_to)
             mps_add = np.array(mps_add)
             sort = np.argsort(np.concatenate((mps_reg, mps_add)), kind="stable")
-            order_ = np.concatenate((order_, np.array(lat_idx)), axis=0)
-            order_ = order_[sort, :]
-        return order_
+            order = np.concatenate((order, np.array(lat_idx)), axis=0)
+            order = order[sort, :]
+        return order
 
     @Lattice.order.setter
     def order(self, order_):
@@ -1767,6 +1794,25 @@ class Honeycomb(Lattice):
         ``'default'``      (0, 2, 1)                   (False, False, False)
         ``'snake'``        (0, 2, 1)                   (False, True, False)
         ================== =========================== =============================
+
+        .. plot ::
+
+            import matplotlib.pyplot as plt
+            from tenpy.models import lattice
+            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(5, 6))
+            orders = ['default', 'snake']
+            lat = lattice.Honeycomb(4, 3, None, bc='periodic')
+            for order, ax in zip(orders, axes.flatten()):
+                lat.order = lat.ordering(order)
+                lat.plot_order(ax, linestyle=':')
+                lat.plot_sites(ax)
+                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+                ax.set_title(repr(order))
+                ax.set_aspect('equal')
+                ax.set_xlim(-1)
+                ax.set_ylim(-1)
+            plt.show()
+
         """
         if isinstance(order, str):
             if order == "default":
@@ -1828,10 +1874,12 @@ class Kagome(Lattice):
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 3)
+        #   \   /
+        #    \ /
         #     2
         #    / \
         #   /   \
-        #  0-----1
+        #  0-----1-----
         pos = np.array([[0, 0], [1, 0], [0.5, 0.5 * 3**0.5]])
         basis = [2 * pos[1], 2 * pos[2]]
         kwargs.setdefault('basis', basis)
@@ -1840,7 +1888,9 @@ class Kagome(Lattice):
               (1, 0, np.array([1, 0])), (2, 0, np.array([0, 1])), (2, 1, np.array([-1, 1]))]
         nNN = [(0, 1, np.array([0, -1])), (0, 2, np.array([1, -1])), (1, 0, np.array([1, -1])),
                (1, 2, np.array([1, 0])), (2, 0, np.array([1, 0])), (2, 1, np.array([0, 1]))]
-        nnNN = [(0, 0, np.array([1, -1])), (1, 1, np.array([0, 1])), (2, 2, np.array([1, 0]))]
+        nnNN = [(0, 0, np.array([1, -1])), (0, 0, np.array([0, 1])), (0, 0, np.array([1, 0])),
+                (1, 1, np.array([1, -1])), (1, 1, np.array([0, 1])), (1, 1, np.array([1, 0])),
+                (2, 2, np.array([1, -1])), (2, 2, np.array([0, 1])), (2, 2, np.array([1, 0]))]
         kwargs.setdefault('pairs', {})
         kwargs['pairs'].setdefault('nearest_neighbors', NN)
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
@@ -1870,8 +1920,9 @@ def get_lattice(lattice_name):
 def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
-    In this function, the word 'direction' referst to a physical direction of the lattice or the
-    index `u` of the unit cell as an "artificial direction".
+    .. note ::
+        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
     ----------
@@ -1949,29 +2000,37 @@ def get_order(shape, snake_winding, priority=None):
 def get_order_grouped(shape, groups):
     """Variant of :func:`get_order`, grouping some sites of the unit cell.
 
-    In this function, the word 'direction' referst to a physical direction of the lattice or the
-    index `u` of the unit cell as an "artificial direction".
     This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
-    The argument `group` is a
-    To explain the order, assume we have a 3-site unit cell in a 2D lattice with shape
-    (Lx, Ly, Lu).
-    Calling this function with groups=((1,), (2, 0)) returns an order of the following form::
+    For 2D lattices with a unit cell, the ordering goes
+    first within a group , then along y,
+    then the next group (for the same x-value), again along y,
+    and finally along x when all groups are done.
 
-        # columns: [x, y, u]
-        [0, 0, 1]  # first for u = 1 along y
-        [0, 1, 1]
-            :
-        [0, Ly-1, 1]
-        [0, 0, 2]  # then for u = 2 and 0
-        [0, 0, 0]
-        [0, 1, 2]
-        [0, 1, 0]
-            :
-        [0, Ly-1, 2]
-        [0, Ly-1, 0]
-        # and then repeat the above for increasing `x`.
+    As an example, consider the Kagome lattice.
 
+    .. plot ::
 
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
+        groups = [[(0, 1, 2)], [(0, 2, 1)],
+                [(0, 1), (2,)], [(0, 2), (1,)]]
+        lat = lattice.Kagome(3, 3, None, bc='periodic')
+        for gr, ax in zip(groups, axes.flatten()):
+            order = lattice.get_order_grouped(lat.shape, gr)
+            lat.order = order
+            lat.plot_order(ax, linestyle=':')
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+            ax.set_title('("grouped", ' + str(gr) + ')')
+            ax.set_aspect('equal')
+            ax.set_xlim(-1)
+            ax.set_ylim(-1)
+        plt.show()
+
+    .. note ::
+        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
     ----------

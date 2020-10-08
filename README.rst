@@ -5,17 +5,21 @@ Tensor Network Python (TeNPy)
     :alt: GitHub last commit
     :target: https://github.com/tenpy/tenpy
 .. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
-    :alt: Documentation Status
-    :target: https://tenpy.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation
+    :target: https://tenpy.readthedocs.io/en/latest/
 .. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
     :alt: Build
     :target: https://travis-ci.org/tenpy/tenpy
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
+.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy
+    :alt: conda
+    :target: https://anaconda.org/conda-forge/physics-tenpy
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
+
 
 TeNPy (short for 'Tensor Network Python') is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 
@@ -80,6 +84,8 @@ The corresponding BibTex Entry would be the following (the ``\url{...}`` require
         eprint={1805.00055},
         note={Code available from \url{https://github.com/tenpy/tenpy}},
     }
+
+To keep us motivated, you can also include your work into the list of `papers using TeNPy <https://tenpy.readthedocs.io/en/latest/papers_using_tenpy.html>`_.
 
 
 Acknowledgment

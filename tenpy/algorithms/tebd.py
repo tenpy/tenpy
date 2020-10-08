@@ -1,6 +1,6 @@
 r"""Time evolving block decimation (TEBD).
 
-The TEBD algorithm (proposed in [Vidal2004]_) uses a trotter decomposition of the
+The TEBD algorithm (proposed in :cite:`vidal2004`) uses a trotter decomposition of the
 Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neighbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.model.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
@@ -288,9 +288,9 @@ class Engine:
             The desired order of the Suzuki-Trotter decomposition.
             Order ``1`` approximation is simply :math:`e^A a^B`.
             Order ``2`` is the "leapfrog" `e^{A/2} e^B e^{A/2}`.
-            Order ``4`` is the fourth-order from [Suzuki1991]_ (also referenced in
-            [Schollwoeck2011]_), and ``'4_opt'`` gives the optmized version of Equ. (30a) in
-            [Barthel2020]_.
+            Order ``4`` is the fourth-order from :cite:`suzuki1991` (also referenced in
+            :cite:`schollwoeck2011`), and ``'4_opt'`` gives the optmized version of Equ. (30a) in
+            :cite:`barthel2020`.
 
         Returns
         -------

@@ -159,7 +159,7 @@ class Sweep:
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
                 :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
-            orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
+            orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
                 List of other matrix product states to orthogonalize against.
                 Works only for finite systems.
                 This parameter can be used to find (a few) excited states as
@@ -939,7 +939,7 @@ class VariationalApplyMPO(VariationalCompression):
     Here `LP` and `RP` are the environments with partial contractions,
     see also :class:`~tenpy.networks.mpo.MPOEnvironment`.
     This algorithms sweeps through the sites, updating 2 `N` tensors in each :meth:`update_local`,
-    say on sites `i0` and `i1`=`i0`+1. We need to maximize:
+    say on sites `i0` and `i1` = `i0` +1. We need to maximize::
 
         |     .-------M[i0]---M[i1]---.
         |     |       |       |       |

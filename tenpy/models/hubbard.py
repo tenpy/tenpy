@@ -117,7 +117,7 @@ class FermiHubbardModel(CouplingMPOModel):
             Whether spin is conserved,
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
         t, U, mu : float | array
-            Config as defined for the Hamiltonian above. Note the signs!
+            Couplings as defined for the Hamiltonian above. Note the signs!
     """
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N')

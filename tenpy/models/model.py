@@ -1170,7 +1170,7 @@ class CouplingModel(Model):
 
         When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
         through the cylinder. This means that a particle hopping around the cylinder should
-        pick up a phase given by the external flux [Resta1997]_.
+        pick up a phase given by the external flux :cite:`resta1998`.
         This is also called "twisted boundary conditions" in literature.
         This function adds a complex phase to the `strength` array on some bonds, such that
         particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
@@ -1620,7 +1620,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             if LatticeClass.dim == 1:  # 1D lattice
                 L = model_params.get('L', 2)
                 # 4) lattice
-                lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
+                lat = LatticeClass(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)

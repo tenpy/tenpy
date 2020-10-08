@@ -1,7 +1,7 @@
 """Time Dependant Variational Principle (TDVP) with MPS (finite version only).
 
-The TDVP MPS algorithm was first proposed by [Haegeman2011]_. However the stability of the
-algorithm was later improved in [Haegeman2016]_, that we are following in this implementation.
+The TDVP MPS algorithm was first proposed by :cite:`haegeman2011`. However the stability of the
+algorithm was later improved in :cite:`haegeman2016`, that we are following in this implementation.
 The general idea of the algorithm is to project the quantum time evolution in the manyfold of MPS
 with a given bond dimension. Compared to e.g. TEBD, the algorithm has several advantages:
 e.g. it conserves the unitarity of the time evolution and the energy (for the single-site version),
