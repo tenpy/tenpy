@@ -5,11 +5,16 @@ Release Notes
 -------------
 We've added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
 
+Simplification: using the `MultiCouplingModel` is no longer necessary, just use the :class:`tenpy.models.model.CouplingModel`.
+
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Deprecated the :class:`tenpy.models.model.MultiCouplingModel`. 
+  The functionality is fully merged into the :class:`~tenpy.models.model.CouplingModel`, no need to subclass the
+  `MultiCouplingModel` anymore.
 - The :class:`~tenpy.models.lattice.Kagome` lattice did not include all `next_next_nearest_neighbors`.
   (It had only the ones across the hexagon, missing those maiking up a bow-tie.)
 
@@ -19,6 +24,7 @@ Added
   :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
   for correlation functions with more than one operator on each end.
 - Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
+- :class:`~tenpy.networks.terms.ExponentialCouplingTerms` for constructing MPOs with exponential decay.
 
 Changed
 ^^^^^^^

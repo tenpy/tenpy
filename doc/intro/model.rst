@@ -119,7 +119,7 @@ The CouplingModel: general structure
 ------------------------------------
 
 The :class:`~tenpy.models.model.CouplingModel` provides a general, quite abstract way to specify a Hamiltonian
-of two-site couplings on a given lattice.
+of couplings on a given lattice.
 Once initialized, its methods :meth:`~tenpy.models.CouplingModel.add_onsite` and
 :meth:`~tenpy.models.model.CouplingModel.add_coupling` allow to add onsite and coupling terms repeated over the different
 unit cells of the lattice.
@@ -182,12 +182,13 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
    so you should only subclass the :class:`~tenpy.models.model.NearestNeighborModel` if the lattice is a simple
    :class:`~tenpy.models.lattice.Chain`.
 
-The :class:`~tenpy.models.model.CouplingModel` works for Hamiltonians which are a sum of terms involving at most two sites.
-The generalization :class:`~tenpy.models.model.MultiCouplingModel` can be used for Hamlitonians with
-coupling terms acting on more than 2 sites at once. Follow the exact same steps in the initialization, and just use the
-:meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` instead or in addition to the
-:meth:`~tenpy.models.model.CouplingModel.add_coupling`.
-A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
+.. note ::
+
+    The method :meth:`~tenpy.models.model.CouplingModel.add_coupling` works only for terms involving operators on 2
+    sites. If you have couplings involving more than two sites, you can use the
+    :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` instead.
+    A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
+
 
 The code of the module :mod:`tenpy.models.xxz_chain` is included below as an illustrative example how to implement a
 Model. The implementation of the :class:`~tenpy.models.xxz_chain.XXZChain` directly follows the steps
@@ -198,8 +199,8 @@ The :class:`~tenpy.models.xxz_chain.XXZChain2` implements the very same model, b
 
 .. literalinclude:: /../tenpy/models/xxz_chain.py
 
-The easy easy way: the CouplingMPOModel
----------------------------------------
+The easiest way: the CouplingMPOModel
+-------------------------------------
 Since many of the basic steps above are always the same, we don't need to repeat them all the time.
 So we have yet another class helping to structure the initialization of models: the :class:`~tenpy.models.model.CouplingMPOModel`.
 The general structure of this class is like this::
@@ -235,7 +236,7 @@ Steps 5,7,8 and calls to the `init_...` methods for the other steps are done aut
 
 The :class:`~tenpy.models.xxz_chain.XXZChain` and :class:`~tenpy.models.xxz_chain.XXZChain2` work only with the
 :class:`~tenpy.models.lattice.Chain` as lattice, since they are derived from the :class:`~tenpy.models.model.NearestNeighborModel`.
-This allows to use them for TEBD in 1D (yeah!), but we can't get the MPO for DMRG on a e.g. a :class:`~tenpy.models.lattice.Square`
+This allows to use them for TEBD in 1D (yeah!), but we can't get the MPO for DMRG on (for example) a :class:`~tenpy.models.lattice.Square`
 lattice cylinder - although it's intuitively clear, what the Hamiltonian there should be: just put the nearest-neighbor
 coupling on each bond of the 2D lattice.
 
@@ -262,7 +263,7 @@ As most physical Hamiltonians are Hermitian, these Hamiltonians are fully determ
 
 is fully determined by the term :math:`c^{\dagger}_i c_j` if we demand that Hermitian conjugates are included automatically.
 In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_onsite`,
-:meth:`~tenpy.models.model.CouplingModel.add_coupling()`, or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`,
+:meth:`~tenpy.models.model.CouplingModel.add_coupling()`, or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`,
 you can use the optional argument `plus_hc` to automatically create and add the Hermitian conjugate of that coupling term - as shown above.
 
 Additionally, in an MPO, explicitly adding both a non-Hermitian term and its conjugate increases the bond dimension of the MPO, which increases the memory requirements of the :class:`~tenpy.networks.mpo.MPOEnvironment`.
@@ -274,7 +275,7 @@ Instead of adding the conjugate terms explicitly, you can set a flag `explicit_p
 
 .. note ::
 
-    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`.
+    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`.
     If `plus_hc` is `False` while `explicit_plus_hc` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
 
 Thus, we end up with several use cases, depending on your preferences. 

@@ -22,10 +22,6 @@ by explicitly specifying the couplings in a general way, and providing functiona
 for converting them into `H_MPO` and `H_bond`.
 This allows to quickly generate new model classes for a very broad class of Hamiltonians.
 
-For simplicity, the :class:`CouplingModel` is limited to interactions involving only two sites.
-Yet, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
-involving couplings between multiple sites.
-
 The :class:`CouplingMPOModel` aims at structuring the initialization for most models and is used
 as base class in (most of) the predefined models in TeNPy.
 
@@ -622,7 +618,8 @@ class CouplingModel(Model):
         The :class:`~tenpy.networks.terms.OnsiteTerms` ordered by category.
     coupling_terms : {'category': :class:`~tenpy.networks.terms.CouplingTerms`}
         The :class:`~tenpy.networks.terms.CouplingTerms` ordered by category.
-        In a :class:`MultiCouplingModel`, values may also be
+        In case we've added terms with more than 2 operators,
+        e.g. with :meth:`add_multi_coupling`, the values of the dictionary may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
     explicit_plus_hc : bool
         If `True`, `self` represents the terms in :attr:`onsite_terms` and :attr:`coupling_terms`
@@ -698,11 +695,6 @@ class CouplingModel(Model):
             args = ct.coupling_term_handle_JW(strength, term, sites)
             ct.add_coupling_term(*args)
         elif len(term) > 2:
-            # this case belongs into the MultiCouplingModel,
-            # but then we would need to copy-paste the above parts...
-            if not isinstance(self, MultiCouplingModel):
-                raise ValueError("term has too many operators for CouplingModel, "
-                                 "make it a MultiCouplingModel!")
             ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(N))
             if not isinstance(ct, MultiCouplingTerms):
                 # convert ct to MultiCouplingTerms
@@ -930,7 +922,7 @@ class CouplingModel(Model):
         See also
         --------
         add_onsite : Add terms acting on one site only.
-        MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
+        add_multi_coupling_term : for terms on more than two sites.
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
@@ -1068,6 +1060,233 @@ class CouplingModel(Model):
         for t in self.coupling_terms.values():
             ct += t
         return ct
+
+    def add_multi_coupling(self,
+                           strength,
+                           ops,
+                           _deprecate_1=_DEPRECATED_ARG_NOT_SET,
+                           _deprecate_2=_DEPRECATED_ARG_NOT_SET,
+                           op_string=None,
+                           category=None,
+                           plus_hc=False):
+        r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
+
+        Represents couplings of the form
+        :math:`sum_{\vec{x}} strength[shift(\vec{x})] * OP_0 * OP_1 * ... * OP_{M-1}`,
+        involving `M` operators.
+        Here, :math:`OP_m` stands for the operator defined by the `m`-th tuple
+        ``(opname, dx, u)`` given in the argument `ops`, which determines the position
+        :math:`\vec{x} + \vec{dx}` and unit-cell index `u` of the site it acts on;
+        the actual operator is given by `self.lat.unit_cell[u].get_op(opname)`.
+
+        The coupling `strength` may vary spatially if the given `strength` is a numpy array.
+        The correct shape of this array is the `coupling_shape` returned by
+        :meth:`tenpy.models.lattice.possible_multi_couplings` and depends on the boundary
+        conditions. The ``shift(...)`` depends on the `dx` entries of `ops`
+        and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
+        is the prefactor for the first possible coupling
+        fitting into the lattice if you imagine open boundary conditions.
+
+        The necessary terms are just added to :attr:`coupling_terms`;
+        this function does not rebuild the MPO.
+
+        .. deprecated:: 0.6.0
+            We switched from the three arguments `u0`, `op0` and `other_op` with
+            ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
+            to a single, equivalent argment `ops` which should now read
+            ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
+            ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
+
+        Parameters
+        ----------
+        strength : scalar | array
+            Prefactor of the coupling. May vary spatially, and is tiled to the required shape.
+        ops : list of ``(opname, dx, u)``
+            Each tuple determines one operator of the coupling, see the description above.
+            `opname` (str) is the name of the operator,
+            `dx` (list of length `lat.dim`) is a translation vector, and
+            `u` (int) is the index of `lat.unit_cell` on which the operator acts.
+            The first entry of `ops` corresponds to :math:`OP_0` and acts last in the physical
+            sense.
+        op_string : str | None
+            If a string is given, we use this as the name of an operator to be used inbetween
+            the operators, *excluding* the sites on which any operators act.
+            This operator should be defined on all sites in the unit cell.
+
+            If ``None``, auto-determine whether a Jordan-Wigner string is needed
+            (using :meth:`~tenpy.networks.site.Site.op_needs_JW`) for each of the segments
+            inbetween the operators and also on the sites of the left operators.
+
+            .. warning :
+                ``None`` figures out for each segment between the operators, whether a
+                Jordan-Wigner string is needed.
+                This is different from a plain ``'JW'``, which just applies a string on
+                *each* segment and gives wrong results e.g. for Cd-C-Cd-C terms!
+
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the terms is added automatically.
+
+        Examples
+        --------
+        A call to :meth:`add_coupling` with arguments
+        ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
+
+        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
+        >>> self.add_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
+
+        To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
+        `strength`, reverse the order of the operators and take the hermitian conjugates of the
+        individual operator names:
+
+        >>> self.add_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
+
+        See also
+        --------
+        add_onsite : Add terms acting on one site only.
+        add_coupling : Add terms acting on two sites.
+        add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
+        """
+        if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
+                _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
+            msg = ("Deprecated arguments of CouplingModel.add_multi_coupling:\n"
+                   "switch to using a single argument \n"
+                   "     ops=[(op0, [0]*self.lat.dim, u0), (op1, dx1, u1), (op2, dx2, u2), ...]\n"
+                   "instead of the three arguments \n"
+                   "     u0\n"
+                   "     op0\n"
+                   "     other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]\n"
+                   "Note the reordering ``(u, op, dx) -> (op, dx, u)`` in the tuples!")
+            warnings.warn(msg, FutureWarning, stacklevel=2)
+            u0 = ops
+            op0 = _deprecate_1
+            dx0 = [0] * self.lat.dim
+            other_ops = _deprecate_2
+            # new argument:
+            ops = [(op0, dx0, u0)] + [(op, dx, u) for (u, op, dx) in other_ops]
+        # split `ops` into separate groups
+        all_ops = [t[0] for t in ops]
+        all_us = np.array([t[2] for t in ops], np.intp)
+        all_dxs = np.array([t[1] for t in ops], np.intp).reshape([len(ops), self.lat.dim])
+        if not np.any(np.asarray(strength) != 0.):
+            return  # nothing to do: can even accept non-defined onsite operators
+        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops],
+                           dtype=np.bool_)
+        if not np.sum(need_JW) % 2 == 0:
+            raise ValueError("Invalid coupling: odd number of operators which need 'JW' string")
+        if op_string is None and not any(need_JW):
+            op_string = 'Id'
+        for op, _, u in ops:
+            if not self.lat.unit_cell[u].valid_opname(op):
+                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                                 "{2!r}".format(op, u, self.lat.unit_cell[u]))
+        if op_string is not None:
+            for u in range(len(self.lat.unit_cell)):
+                if not self.lat.unit_cell[u].valid_opname(op_string):
+                    raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
+                                     "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
+        if np.all(all_dxs == all_dxs[0, :]) and np.all(all_us[0] == all_us):
+            # note: we DO allow couplings with some onsite terms, but not all of them
+            raise ValueError("Coupling shouldn't be purely onsite!")
+
+        # prepare: figure out the necessary mps indices
+        mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
+        strength = to_array(strength, strength_shape)  # tile to correct shape
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+        if category is None:
+            category = " ".join(
+                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
+        ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(self.lat.N_sites))
+        if not isinstance(ct, MultiCouplingTerms):
+            # convert ct to MultiCouplingTerms
+            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
+            new_ct += ct
+            ct = new_ct
+        N_sites = self.lat.N_sites
+        sites = self.lat.mps_sites()
+        # loop to perform the sum over {x_0, x_1, ...}
+        for ijkl, i_lat in zip(mps_ijkl, lat_indices):
+            current_strength = strength[tuple(i_lat)]
+            if current_strength == 0.:
+                continue
+            term = list(zip(all_ops, ijkl))
+            term, sign = order_combine_term(term, sites)
+            args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
+                                                    op_string)
+            ct.add_multi_coupling_term(*args)
+
+        # add h.c. term
+        if plus_hc:
+            hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
+                      for (opname, dx, u) in reversed(ops)]
+            self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
+        # done
+
+    def add_multi_coupling_term(self,
+                                strength,
+                                ijkl,
+                                ops_ijkl,
+                                op_string,
+                                category=None,
+                                plus_hc=False):
+        """Add a general M-site coupling term on given MPS sites.
+
+        Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
+
+        .. warning ::
+            This function does not handle Jordan-Wigner strings!
+            You might want to use :meth:`add_local_term` instead.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        ijkl : list of int
+            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            we require that they are ordered ascending, ``i < j < k < ...`` and
+            that ``0 <= i < N_sites``.
+            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+        ops_ijkl : list of str
+            Names of the involved operators on sites `i, j, k, ...`.
+        op_string : list of str
+            Names of the operator to be inserted between the operators,
+            e.g., op_string[0] is inserted between `i` and `j`.
+        category : str
+            Descriptive name used as key for :attr:`coupling_terms`.
+            Defaults to a string of the form ``"{op0}_i {op1}_j {op2}_k ..."``.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+        """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+        if category is None:
+            category = " ".join(
+                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(ops_ijkl)])
+        ct = self.coupling_terms.get(category, None)
+        if ct is None:
+            self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
+        elif not isinstance(ct, MultiCouplingTerms):
+            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
+            new_ct += ct
+            ct = new_ct
+        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
+        if plus_hc:
+            sites_ijkl = [
+                self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl
+            ]
+            hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
+            # NB: op_string should be defined on all sites in the unit cell...
+            hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
+            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
 
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
@@ -1238,238 +1457,19 @@ class CouplingModel(Model):
 
 
 class MultiCouplingModel(CouplingModel):
-    """Generalizes :class:`CouplingModel` to allow couplings involving more than two sites.
+    """Deprecated class which was a generalization of the `CouplingModel`.
 
-    The corresponding couplings can be added with :meth:`add_multi_coupling` and
-    :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
-    instances of :class:`~tenpy.networks.terms.MultiCouplingTerms`.
+    .. deprecated:: 0.8.0
+        In earlier versions of TeNPy, this class contained the methods
+        :meth:`add_multi_coupling` and :meth:`add_multi_coupling_term`.
+        However, since we introduced the :class:`~tenpy.networks.terms.MultiCouplingTerms`,
+        this separation within the Model class is no longer necessary.
+        We hence merged the `MultiCouplingModel` with the `CouplingModel`.
     """
-    def add_multi_coupling(self,
-                           strength,
-                           ops,
-                           _deprecate_1=_DEPRECATED_ARG_NOT_SET,
-                           _deprecate_2=_DEPRECATED_ARG_NOT_SET,
-                           op_string=None,
-                           category=None,
-                           plus_hc=False):
-        r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
-
-        Represents couplings of the form
-        :math:`sum_{\vec{x}} strength[shift(\vec{x})] * OP_0 * OP_1 * ... * OP_{M-1}`,
-        involving `M` operators.
-        Here, :math:`OP_m` stands for the operator defined by the `m`-th tuple
-        ``(opname, dx, u)`` given in the argument `ops`, which determines the position
-        :math:`\vec{x} + \vec{dx}` and unit-cell index `u` of the site it acts on;
-        the actual operator is given by `self.lat.unit_cell[u].get_op(opname)`.
-
-        The coupling `strength` may vary spatially if the given `strength` is a numpy array.
-        The correct shape of this array is the `coupling_shape` returned by
-        :meth:`tenpy.models.lattice.possible_multi_couplings` and depends on the boundary
-        conditions. The ``shift(...)`` depends on the `dx` entries of `ops`
-        and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
-        is the prefactor for the first possible coupling
-        fitting into the lattice if you imagine open boundary conditions.
-
-        The necessary terms are just added to :attr:`coupling_terms`;
-        this function does not rebuild the MPO.
-
-        .. deprecated:: 0.6.0
-            We switched from the three arguments `u0`, `op0` and `other_op` with
-            ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
-            to a single, equivalent argment `ops` which should now read
-            ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
-            ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
-
-        Parameters
-        ----------
-        strength : scalar | array
-            Prefactor of the coupling. May vary spatially, and is tiled to the required shape.
-        ops : list of ``(opname, dx, u)``
-            Each tuple determines one operator of the coupling, see the description above.
-            `opname` (str) is the name of the operator,
-            `dx` (list of length `lat.dim`) is a translation vector, and
-            `u` (int) is the index of `lat.unit_cell` on which the operator acts.
-            The first entry of `ops` corresponds to :math:`OP_0` and acts last in the physical
-            sense.
-        op_string : str | None
-            If a string is given, we use this as the name of an operator to be used inbetween
-            the operators, *excluding* the sites on which any operators act.
-            This operator should be defined on all sites in the unit cell.
-
-            If ``None``, auto-determine whether a Jordan-Wigner string is needed
-            (using :meth:`~tenpy.networks.site.Site.op_needs_JW`) for each of the segments
-            inbetween the operators and also on the sites of the left operators.
-
-            .. warning :
-                ``None`` figures out for each segment between the operators, whether a
-                Jordan-Wigner string is needed.
-                This is different from a plain ``'JW'``, which just applies a string on
-                *each* segment and gives wrong results e.g. for Cd-C-Cd-C terms!
-
-        category : str
-            Descriptive name used as key for :attr:`coupling_terms`.
-            Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
-        plus_hc : bool
-            If `True`, the hermitian conjugate of the terms is added automatically.
-
-        Examples
-        --------
-        A call to :meth:`add_coupling` with arguments
-        ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
-
-        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
-        >>> self.add_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
-
-        To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
-        `strength`, reverse the order of the operators and take the hermitian conjugates of the
-        individual operator names:
-
-        >>> self.add_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
-
-        See also
-        --------
-        add_onsite : Add terms acting on one site only.
-        add_coupling : Add terms acting on two sites.
-        add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
-        """
-        if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
-                _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
-            msg = ("Deprecated arguments of MultiCouplingModel.add_multi_coupling:\n"
-                   "switch to using a single argument \n"
-                   "     ops=[(op0, [0]*self.lat.dim, u0), (op1, dx1, u1), (op2, dx2, u2), ...]\n"
-                   "instead of the three arguments \n"
-                   "     u0\n"
-                   "     op0\n"
-                   "     other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]\n"
-                   "Note the reordering ``(u, op, dx) -> (op, dx, u)`` in the tuples!")
-            warnings.warn(msg, FutureWarning, stacklevel=2)
-            u0 = ops
-            op0 = _deprecate_1
-            dx0 = [0] * self.lat.dim
-            other_ops = _deprecate_2
-            # new argument:
-            ops = [(op0, dx0, u0)] + [(op, dx, u) for (u, op, dx) in other_ops]
-        # split `ops` into separate groups
-        all_ops = [t[0] for t in ops]
-        all_us = np.array([t[2] for t in ops], np.intp)
-        all_dxs = np.array([t[1] for t in ops], np.intp).reshape([len(ops), self.lat.dim])
-        if not np.any(np.asarray(strength) != 0.):
-            return  # nothing to do: can even accept non-defined onsite operators
-        need_JW = np.array([self.lat.unit_cell[u].op_needs_JW(op) for op, _, u in ops],
-                           dtype=np.bool_)
-        if not np.sum(need_JW) % 2 == 0:
-            raise ValueError("Invalid coupling: odd number of operators which need 'JW' string")
-        if op_string is None and not any(need_JW):
-            op_string = 'Id'
-        for op, _, u in ops:
-            if not self.lat.unit_cell[u].valid_opname(op):
-                raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                 "{2!r}".format(op, u, self.lat.unit_cell[u]))
-        if op_string is not None:
-            for u in range(len(self.lat.unit_cell)):
-                if not self.lat.unit_cell[u].valid_opname(op_string):
-                    raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
-                                     "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
-        if np.all(all_dxs == all_dxs[0, :]) and np.all(all_us[0] == all_us):
-            # note: we DO allow couplings with some onsite terms, but not all of them
-            raise ValueError("Coupling shouldn't be purely onsite!")
-
-        # prepare: figure out the necessary mps indices
-        mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
-        strength = to_array(strength, strength_shape)  # tile to correct shape
-        if self.explicit_plus_hc:
-            if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
-            else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
-        if category is None:
-            category = " ".join(
-                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
-        ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(self.lat.N_sites))
-        if not isinstance(ct, MultiCouplingTerms):
-            # convert ct to MultiCouplingTerms
-            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
-            new_ct += ct
-            ct = new_ct
-        N_sites = self.lat.N_sites
-        sites = self.lat.mps_sites()
-        # loop to perform the sum over {x_0, x_1, ...}
-        for ijkl, i_lat in zip(mps_ijkl, lat_indices):
-            current_strength = strength[tuple(i_lat)]
-            if current_strength == 0.:
-                continue
-            term = list(zip(all_ops, ijkl))
-            term, sign = order_combine_term(term, sites)
-            args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
-                                                    op_string)
-            ct.add_multi_coupling_term(*args)
-
-        # add h.c. term
-        if plus_hc:
-            hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
-                      for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
-        # done
-
-    def add_multi_coupling_term(self,
-                                strength,
-                                ijkl,
-                                ops_ijkl,
-                                op_string,
-                                category=None,
-                                plus_hc=False):
-        """Add a general M-site coupling term on given MPS sites.
-
-        Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
-
-        .. warning ::
-            This function does not handle Jordan-Wigner strings!
-            You might want to use :meth:`add_local_term` instead.
-
-        Parameters
-        ----------
-        strength : float
-            The strength of the coupling term.
-        ijkl : list of int
-            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
-            we require that they are ordered ascending, ``i < j < k < ...`` and
-            that ``0 <= i < N_sites``.
-            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
-        ops_ijkl : list of str
-            Names of the involved operators on sites `i, j, k, ...`.
-        op_string : list of str
-            Names of the operator to be inserted between the operators,
-            e.g., op_string[0] is inserted between `i` and `j`.
-        category : str
-            Descriptive name used as key for :attr:`coupling_terms`.
-            Defaults to a string of the form ``"{op0}_i {op1}_j {op2}_k ..."``.
-        plus_hc : bool
-            If `True`, the hermitian conjugate of the term is added automatically.
-        """
-        if self.explicit_plus_hc:
-            if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
-            else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
-        if category is None:
-            category = " ".join(
-                ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(ops_ijkl)])
-        ct = self.coupling_terms.get(category, None)
-        if ct is None:
-            self.coupling_terms[category] = ct = MultiCouplingTerms(self.lat.N_sites)
-        elif not isinstance(ct, MultiCouplingTerms):
-            self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
-            new_ct += ct
-            ct = new_ct
-        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
-        if plus_hc:
-            sites_ijkl = [
-                self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl
-            ]
-            hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
-            # NB: op_string should be defined on all sites in the unit cell...
-            hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
+    def __init_subclass__(cls):
+        msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
+               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` andymore!")
+        warnings.warn(msg, DeprecationWarning, 2)
 
 
 class CouplingMPOModel(CouplingModel, MPOModel):

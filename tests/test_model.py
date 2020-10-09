@@ -23,10 +23,7 @@ __all__ = ["check_model_sanity", "check_general_model"]
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
     if isinstance(M, model.CouplingModel):
-        if isinstance(M, model.MultiCouplingModel):
-            model.MultiCouplingModel.test_sanity(M)
-        else:
-            model.CouplingModel.test_sanity(M)
+        model.CouplingModel.test_sanity(M)
     if isinstance(M, model.NearestNeighborModel):
         model.NearestNeighborModel.test_sanity(M)
         if hermitian:
@@ -119,10 +116,10 @@ def test_ext_flux():
                 npt.assert_array_almost_equal_nulp(strength_hop_y_2, np.conj(expect_y_2), 10)
 
 
-def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
+def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
-    M = model.MultiCouplingModel(spin_half_square)
+    M = model.CouplingModel(spin_half_square)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
@@ -191,9 +188,9 @@ def test_CouplingModel_explicit():
 
 
 @pytest.mark.parametrize("use_plus_hc, JW", [(False, 'JW'), (False, None), (True, None)])
-def test_MultiCouplingModel_explicit(use_plus_hc, JW):
+def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.MultiCouplingModel(fermion_lat_cyl)
+    M = model.CouplingModel(fermion_lat_cyl)
     # create a wired fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
@@ -245,7 +242,7 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
+class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve)

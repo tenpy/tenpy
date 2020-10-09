@@ -920,7 +920,7 @@ class Lattice:
         dx : 2D array, shape (N_ops, :attr:`dim`)
             ``dx[i, :]`` is the translation vector in the lattice for the `i`-th operator.
             Corresponds to the `dx` of each operator given in the argument `ops` of
-            :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+            :meth:`tenpy.models.model.CouplingModel.add_multi_coupling`.
 
         Returns
         -------
@@ -950,7 +950,7 @@ class Lattice:
         ----------
         ops : list of ``(opname, dx, u)``
             Same as the argument `ops` of
-            :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+            :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
 
         Returns
         -------
