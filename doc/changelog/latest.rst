@@ -28,6 +28,7 @@ Added
   for correlation functions with more than one operator on each end.
 - :class:`tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay,
   and :meth:`tenpy.networks.model.CouplingModel.add_exponentially_decaying_coupling` for using it.
+  This closes :issue:`78`.
 
 Changed
 ^^^^^^^

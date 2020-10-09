@@ -907,7 +907,7 @@ class CouplingModel(Model):
         Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
         order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
-        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)` is
+        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)`` is
         ``add_coupling(np.conj(t), u2, hc('B'), u1, hc('A'), -dx)``, where `hc` takes the hermitian
         conjugate of the operator names, see :meth:`~tenpy.networks.site.Site.get_hc_op_name`.
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
@@ -1309,7 +1309,7 @@ class CouplingModel(Model):
         """Add an exponentially decaying long-range coupling.
 
         .. math ::
-            strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+            strength \sum_{i < j} \lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
 
         Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
         Note that the sum over i,j is long-range, for infinite systems going beyond the MPS
@@ -1555,7 +1555,7 @@ class CouplingModel(Model):
 class MultiCouplingModel(CouplingModel):
     """Deprecated class which was a generalization of the `CouplingModel`.
 
-    .. deprecated:: 0.8.0
+    .. deprecated:: 0.7.2
         In earlier versions of TeNPy, this class contained the methods
         :meth:`add_multi_coupling` and :meth:`add_multi_coupling_term`.
         However, since we introduced the :class:`~tenpy.networks.terms.MultiCouplingTerms`,
