@@ -286,6 +286,10 @@ class OnsiteTerms(Hdf5Exportable):
         self.L = L
         self.onsite_terms = [dict() for _ in range(L)]
 
+    def max_range(self):
+        """Maximum range of the terms. In this case ``0``."""
+        return 0
+
     def add_onsite_term(self, strength, i, op):
         """Add a onsite term on a given MPS site.
 
@@ -1298,6 +1302,7 @@ class ExponentialCouplingTerms(Hdf5Exportable):
         return self
 
     def max_range(self):
+        """Maximum range of the couplings. In this case ``np.inf``."""
         return np.inf
 
     def _test_terms(self, sites):

@@ -17,6 +17,8 @@ Backwards incompatible changes
   `MultiCouplingModel` anymore.
 - The :class:`~tenpy.models.lattice.Kagome` lattice did not include all `next_next_nearest_neighbors`.
   (It had only the ones across the hexagon, missing those maiking up a bow-tie.)
+- Combined arguments `onsite_terms` and `coupling_terms` of :meth:`tenpy.networks.mpo.MPOGraph.from_terms` into
+  a single argument `terms`.
 
 Added
 ^^^^^
