@@ -1333,6 +1333,25 @@ class CouplingModel(Model):
             given operators; in this case the right `op_j` acts first.
         plus_hc : bool
             If `True`, the hermitian conjugate of the term is added automatically.
+
+        Examples
+        --------
+        At least for simple enough 1D chains (or ladders), you can use
+        :func:`~tenpy.tools.fit.fit_with_sum_of_exp` to approximate a long-range function
+        with a few sum of exponentials and then add them with this function.
+
+        >>> def decay(x):
+        ...     return np.exp(-0.1*x) / x**2
+        >>> from tenpy.tools.fit import fit_with_sum_of_exp, sum_of_exp
+        >>> n_exp = 5
+        >>> fit_range = 50
+        >>> lam, pref = fit_with_sum_of_exp(decay, n_exp, fit_range)
+        >>> x = np.arange(1, fit_range + 1)
+        >>> print('error in fit:', np.sum(np.abs(decay(x) - sum_of_exp(lam, pref, x))))
+        error in fit: 0.00010731105234095347
+        >>> for pr, la in zip(pref, lam):
+        ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
+
         """
         if self.explicit_plus_hc:
             if plus_hc:

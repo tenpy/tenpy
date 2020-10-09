@@ -22,11 +22,12 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
 - :meth:`~tenpy.networks.mps.MPS.term_correlation_function_right` and 
   :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
   for correlation functions with more than one operator on each end.
-- Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
-- :class:`~tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay.
+- :class:`tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay,
+  and :meth:`tenpy.networks.model.CouplingModel.add_exponentially_decaying_coupling` for using it.
 
 Changed
 ^^^^^^^
