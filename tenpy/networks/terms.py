@@ -22,7 +22,7 @@ __all__ = [
 
 
 class TermList(Hdf5Exportable):
-    """A list of terms (=operator names and sites they act on) and associated strengths.
+    r"""A list of terms (=operator names and sites they act on) and associated strengths.
 
     A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
     and :class:`MultiCouplingTerms`.
@@ -1122,6 +1122,8 @@ class ExponentialCouplingTerms(Hdf5Exportable):
 
     Note that we still have ``|i-j|``, such that this will give uniformly decaying interactions,
     independent of the way the MPS winds through the 2D lattice, as long as `subsites` is sorted.
+    An easy example would be a ladder, where we want the long-range interactions on the first rung
+    only, ``subsites = lat.mps_idx_fix_u(u=0)``, see :meth:`~tenpy.models.lattice.mps_idx_fix_u`.
 
     Parameters
     ----------
@@ -1143,11 +1145,11 @@ class ExponentialCouplingTerms(Hdf5Exportable):
         self.exp_decaying_terms = []
 
     def add_exponentially_decaying_coupling(self,
-                                            strenght,
+                                            strength,
                                             lambda_,
                                             op_i,
                                             op_j,
-                                            subsites,
+                                            subsites=None,
                                             op_string='Id'):
         """Add an exponentially decaying long-range coupling.
 
@@ -1165,11 +1167,20 @@ class ExponentialCouplingTerms(Hdf5Exportable):
             Decay-rate
         op_i, op_j : string
             Names for the operators.
-        subsites : 1D array
+        subsites : None | 1D array
             Selects a subset of sites within the MPS unit cell on which the operators act.
+            Needs to be sorted. ``None`` selects all sites.
         op_string : string
             The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
         """
+        if subsites is None:
+            subsites = np.arange(self.L)
+        else:
+            subsites = np.array(subsites)
+            if len(subsites) > 1 and np.any(subsites[1:] < subsites[:-1]):
+                raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
+            assert subsites[0] >= 0
+            assert subsites[-1] < self.L
         self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, op_string))
 
     def add_to_graph(self, graph, key="exp-decay"):
@@ -1179,9 +1190,9 @@ class ExponentialCouplingTerms(Hdf5Exportable):
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`exp_decaying_terms` should be added.
-        key : string
+        key : str
             Key to distinguish from other `states` in the :class:`~tenpy.networks.mpo.MPOGraph`.
-            We find integers `key_nr` and use ``(key, key_nr)`` as `state` for the different
+            We find integers `key_nr` and use ``(key_nr, key)`` as `state` for the different
             entries in :attr:`exp_decaying_terms`.
         """
         assert self.L == graph.L
@@ -1190,48 +1201,93 @@ class ExponentialCouplingTerms(Hdf5Exportable):
         for states in graph.states:
             for label in states:
                 try:
-                    if label[0] == key:
+                    if label[1] == key:
                         all_states += label
                 except:  # not a tuple / wrong types
                     pass
-        key_nr = 0
+        key_nr = 1000  # start with high value such that they get added in the end of the MPO
         finite = (graph.bc == 'finite')
 
         for (strength, lambda_, op_i, op_j, subsites, op_string) in self.exp_decaying_terms:
-            while (key, key_nr) in all_states:
+            while (key_nr, key) in all_states:
                 key_nr += 1
-            label = (key, key_nr)
+            label = (key_nr, key)
             all_states.add(label)
-            if subsites is None:
-                in_subsites = np.ones(self.L, dtype=np.bool_)
-                first_subsite = 0
-                last_subsite = self.L - 1
-            else:
-                subsites = np.sorted(subsites)
-                in_subsites = np.zeros(self.L, dtype=np.bool_)
-                in_subsites[subsites] = True
-                first_subsite = np.min(subsites)
-                last_subsite = np.max(subsites)
-                assert last_subsite < self.L
+            in_subsites = np.zeros(self.L, dtype=np.bool_)
+            in_subsites[subsites] = True
+            first_subsite = subsites[0]
+            last_subsite = subsites[-1]
+            assert last_subsite < self.L
             if not finite:
                 for i in range(self.L):
                     if in_subsites[i]:
-                        graph.add(i, 'IdL', label, opname_i, lambda_)
+                        graph.add(i, 'IdL', label, op_i, lambda_)
                         graph.add(i, label, label, op_string, lambda_)
-                        graph.add(i, label, 'IdR', opname_j, strength)
+                        graph.add(i, label, 'IdR', op_j, strength)
                     else:
                         graph.add(i, label, label, op_string, 1.)
             else:
-                for i in range(first_subsite, last_subsite):
+                # first subsite
+                graph.add(first_subsite, 'IdL', label, op_i, lambda_)
+                for i in range(first_subsite + 1, last_subsite):
                     if in_subsites[i]:
-                        if i < last_subsite:
-                            graph.add(i, 'IdL', label, opname_i, lambda_)
+                        graph.add(i, 'IdL', label, op_i, lambda_)
                         graph.add(i, label, label, op_string, lambda_)
-                        if i > first_subsite:
-                            graph.add(i, label, 'IdR', opname_j, strength)
+                        graph.add(i, label, 'IdR', op_j, strength)
                     else:
                         graph.add(i, label, label, op_string, 1.)
+                graph.add(last_subsite, label, 'IdR', op_j, strength)
+
         # done
+
+    def to_TermList(self, cutoff=0.01, bc="finite"):
+        """Convert self into a :class:`TermList`.
+
+        Parameters
+        ----------
+        cutoff : float
+            Drop terms where the overall prefactor is smaller then `cutoff`.
+        bc : "finite" | "infinite"
+            Boundary conditions to be used.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+            For "infinite" `bc`, only terms starting in the first MPS unit cell are included.
+        """
+        terms = []
+        strengths = []
+        L = self.L
+        for term in self.exp_decaying_terms:
+            strength, lambda_, op_i, op_j, subsites, op_string = term
+            N = len(subsites)
+            if bc == 'finite':
+                for i2, i in enumerate(subsites):
+                    for d, j in enumerate(subsites[i2:]):
+                        if d == 0:
+                            continue
+                        pref = strength * lambda_**d
+                        if abs(pref) < cutoff:
+                            break
+                        terms.append([(op_i, i), (op_j, j)])
+                        strengths.append(pref)
+            elif bc == 'infinite':
+                for i2, i in enumerate(subsites):
+                    for d in range(1, 1000):
+                        j2 = i2 + d
+                        j = subsites[j2 % N] + (j2 // N) * L
+                        pref = strength * lambda_**d
+                        if abs(pref) < cutoff:
+                            break
+                        terms.append([(op_i, i), (op_j, j)])
+                        strengths.append(pref)
+                    else:
+                        raise ValueError("distance of 1000 not enough to reach precision cutoff")
+
+            else:
+                raise ValueError("unknown boundary conditions: " + repr(bc))
+        return TermList(terms, strengths)
 
     def __iadd__(self, other):
         if not isinstance(other, ExponentialCouplingTerms):
@@ -1243,3 +1299,14 @@ class ExponentialCouplingTerms(Hdf5Exportable):
 
     def max_range(self):
         return np.inf
+
+    def _test_terms(self, sites):
+        """Check the format of self.exp_decaying_terms."""
+        L = self.L
+        for term in self.exp_decaying_terms:
+            strength, lambda_, op_i, op_j, subsites, op_string = term
+            for i in subsites:
+                for op in op_i, op_j:
+                    if not sites[i].valid_opname(op):
+                        raise ValueError("Operator {op!r} not in site {i:d}".format(op=op, i=i))
+        # done
