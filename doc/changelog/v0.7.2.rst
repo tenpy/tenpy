@@ -1,11 +1,12 @@
-[latest]
-========
+[0.7.2] - 2020-10-09
+====================
 
 Release Notes
 -------------
 We've added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
 
-Simplification: using the `MultiCouplingModel` is no longer necessary, just use the :class:`tenpy.models.model.CouplingModel`.
+And a slight simplicifation, which might affect your code: 
+using the `MultiCouplingModel` is no longer necessary, just use the :class:`tenpy.models.model.CouplingModel` directly.
 
 Changelog
 ---------
@@ -29,10 +30,6 @@ Added
 - :class:`tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay,
   and :meth:`tenpy.networks.model.CouplingModel.add_exponentially_decaying_coupling` for using it.
   This closes :issue:`78`.
-
-Changed
-^^^^^^^
-- nothing yet
 
 Fixed
 ^^^^^
