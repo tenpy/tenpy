@@ -16,7 +16,7 @@ from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
-    'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentialCouplingTerms',
+    'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentiallyDecayingTerms',
     'order_combine_term'
 ]
 
@@ -1109,7 +1109,7 @@ class MultiCouplingTerms(CouplingTerms):
         # done
 
 
-class ExponentialCouplingTerms(Hdf5Exportable):
+class ExponentiallyDecayingTerms(Hdf5Exportable):
     r"""Represent a sum of exponentially decaying (long-range) couplings.
 
     MPOs can represent translation invariant, exponentially decaying long-range terms of the
@@ -1294,7 +1294,7 @@ class ExponentialCouplingTerms(Hdf5Exportable):
         return TermList(terms, strengths)
 
     def __iadd__(self, other):
-        if not isinstance(other, ExponentialCouplingTerms):
+        if not isinstance(other, ExponentiallyDecayingTerms):
             return NotImplemented  # unknown type of other
         if other.L != self.L:
             raise ValueError("incompatible lengths")

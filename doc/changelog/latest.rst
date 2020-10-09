@@ -26,7 +26,7 @@ Added
   :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
   for correlation functions with more than one operator on each end.
 - Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
-- :class:`~tenpy.networks.terms.ExponentialCouplingTerms` for constructing MPOs with exponential decay.
+- :class:`~tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay.
 
 Changed
 ^^^^^^^

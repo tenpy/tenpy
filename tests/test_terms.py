@@ -242,11 +242,11 @@ def test_exp_decaying_terms():
     spin.add_op("X", 2. * np.eye(2))
     spin.add_op("Y", 3. * np.eye(2))
     sites = [spin] * L
-    ect = ExponentialCouplingTerms(L)
+    edt = ExponentiallyDecayingTerms(L)
     p, l = 3., 0.5
-    ect.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
-    ect._test_terms(sites)
-    ts = ect.to_TermList(bc='finite', cutoff=0.01)
+    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
+    edt._test_terms(sites)
+    ts = edt.to_TermList(bc='finite', cutoff=0.01)
     ts_desired = [
         [("X", 0), ("Y", 2)],
         [("X", 0), ("Y", 4)],
@@ -262,7 +262,7 @@ def test_exp_decaying_terms():
     # constructed from ts vs. directly
     H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
     G = mpo.MPOGraph(sites, bc='finite')
-    ect.add_to_graph(G)
+    edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
@@ -272,7 +272,7 @@ def test_exp_decaying_terms():
     cutoff = 0.01
     cutoff_range = 8
     assert p * l**cutoff_range > cutoff > p * l**(cutoff_range + 1)
-    ts = ect.to_TermList(bc='infinite', cutoff=cutoff)
+    ts = edt.to_TermList(bc='infinite', cutoff=cutoff)
     ts_desired = ([[("X", 0), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 2), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
                   [[("X", 4), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
@@ -281,7 +281,7 @@ def test_exp_decaying_terms():
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
     G = mpo.MPOGraph(sites, bc='infinite')
-    ect.add_to_graph(G)
+    edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()

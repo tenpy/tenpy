@@ -320,7 +320,8 @@ def test_model_plus_hc(L=6):
     params['explicit_plus_hc'] = True
     m3 = MyMod(params)
     nu = np.random.random(L)
-    m1.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    m1.add_onsite(nu, 0, 'Sp')
+    m1.add_onsite(nu, 0, 'Sm')
     m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
     m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
     t = np.random.random(L - 1)
@@ -333,23 +334,36 @@ def test_model_plus_hc(L=6):
     m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
     m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
     m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-    for m in [m1, m2, m3]:
-        # added extra terms: need to re-calculate H_bond and H_MPO
-        m.H_bond = m.calc_H_bond()
-        m.H_MPO = m.calc_H_MPO()
-    assert m1.H_MPO.is_hermitian()
-    assert m2.H_MPO.is_hermitian()
-    assert not m3.H_MPO.is_hermitian()
-    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
-    ED1 = ExactDiag(m1)
-    ED2 = ExactDiag(m2)
-    ED3 = ExactDiag(m3)
-    for ED in [ED1, ED2, ED3]:
-        ED.build_full_H_from_bonds()
-    assert ED1.full_H == ED2.full_H
-    assert ED1.full_H == ED3.full_H
-    for ED in [ED1, ED2, ED3]:
-        ED.full_H = None
-        ED.build_full_H_from_mpo()
-    assert ED1.full_H == ED2.full_H
-    assert ED1.full_H == ED3.full_H
+
+    def compare(m1, m2, m3, use_bonds=True):
+        for m in [m1, m2, m3]:
+            # added extra terms: need to re-calculate H_bond and H_MPO
+            if use_bonds:
+                m.H_bond = m.calc_H_bond()
+            m.H_MPO = m.calc_H_MPO()
+        assert m1.H_MPO.is_hermitian()
+        assert m2.H_MPO.is_hermitian()
+        assert not m3.H_MPO.is_hermitian()
+        assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
+        ED1 = ExactDiag(m1)
+        ED2 = ExactDiag(m2)
+        ED3 = ExactDiag(m3)
+        if use_bonds:
+            for ED in [ED1, ED2, ED3]:
+                ED.build_full_H_from_bonds()
+            assert ED1.full_H == ED2.full_H
+            assert ED1.full_H == ED3.full_H
+        for ED in [ED1, ED2, ED3]:
+            ED.full_H = None
+            ED.build_full_H_from_mpo()
+        assert ED1.full_H == ED2.full_H
+        assert ED1.full_H == ED3.full_H
+
+    compare(m1, m2, m3, use_bonds=True)
+
+    m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
+    m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
+    m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+    m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+
+    compare(m1, m2, m3, use_bonds=False)

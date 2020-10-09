@@ -39,7 +39,7 @@ from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..networks.terms import order_combine_term
+from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import group_sites
 from ..tools.hdf5_io import Hdf5Exportable
 
@@ -621,11 +621,16 @@ class CouplingModel(Model):
         In case we've added terms with more than 2 operators,
         e.g. with :meth:`add_multi_coupling`, the values of the dictionary may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
+    exp_decaying_terms : :class:`~tenpy.networks.terms.ExponentiallyDecayingTerms`
+        Collection of coupling terms with exponentially decaying long-range interactions.
+        Filled by :meth:`add_exponentially_decaying_coupling`.
     explicit_plus_hc : bool
-        If `True`, `self` represents the terms in :attr:`onsite_terms` and :attr:`coupling_terms`
-        *and* their hermitian conjugate added. The flag will be carried on the MPO, which will
-        have a reduced bond dimension if ``self.add_coupling(..., plus_hc=True)`` was used.
-        Note that :meth:`add_onsite` and :meth:`add_coupling` respect this flag, ensuring that the
+        If `True`, `self` represents the terms in :attr:`onsite_terms`, :attr:`coupling_terms`
+        and :attr:`exp_decaying_terms` *plus* their hermitian conjugate added.
+        The flag will be carried on to the MPO, which will have a reduced bond dimension if
+        ``self.add_coupling(..., plus_hc=True)`` was used.
+        Note that :meth:`add_onsite`, :meth:`add_coupling`, :meth:`add_multi_coupling`
+        and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
         *represented* Hamiltonian is indepentent of the `explicit_plus_hc` flag.
     """
     def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
@@ -638,6 +643,7 @@ class CouplingModel(Model):
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
+        self.exp_decaying_terms = ExponentiallyDecayingTerms(L)
         self.explicit_plus_hc = explicit_plus_hc
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
@@ -1135,13 +1141,13 @@ class CouplingModel(Model):
         ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
 
         >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
-        >>> self.add_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
+        >>> self.add_multi_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
 
         To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
         `strength`, reverse the order of the operators and take the hermitian conjugates of the
         individual operator names:
 
-        >>> self.add_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
+        >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
 
         See also
         --------
@@ -1225,7 +1231,11 @@ class CouplingModel(Model):
         if plus_hc:
             hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
                       for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
+            self.add_multi_coupling(np.conj(strength),
+                                    hc_ops,
+                                    op_string=op_string,
+                                    category=category,
+                                    plus_hc=False)
         # done
 
     def add_multi_coupling_term(self,
@@ -1288,6 +1298,69 @@ class CouplingModel(Model):
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
             ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
 
+    def add_exponentially_decaying_coupling(self,
+                                            strength,
+                                            lambda_,
+                                            op_i,
+                                            op_j,
+                                            subsites=None,
+                                            op_string=None,
+                                            plus_hc=False):
+        """Add an exponentially decaying long-range coupling.
+
+        .. math ::
+            strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+        Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
+        Note that the sum over i,j is long-range, for infinite systems going beyond the MPS
+        unit cell.
+        Moreover, note that the distance in the exponent is the distance within `subsites`.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float
+            Decay-rate
+        op_i, op_j : string
+            Names for the operators.
+        subsites : None | 1D array
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+            Needs to be sorted. ``None`` selects all sites.
+        op_string : None | str
+            The operator to be inserted between `A` and `B`;
+            If ``None``, this function checks whether a fermionic ``"JW"`` string is needed for the
+            given operators; in this case the right `op_j` acts first.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+        """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+        if subsites is None:
+            site0 = self.lat.unit_cell[0]
+        else:
+            site0 = self.lat.mps_sites()[subsites[0]]
+        if op_string is None:
+            need_JW_i = site0.op_needs_JW(op_i)
+            need_JW_j = site0.op_needs_JW(op_j)
+            if need_JW_i != need_JW_j:
+                raise ValueError("only one of the operators need JW string!")
+            if need_JW_i:
+                op_string = 'JW'
+                op_i = site0.multiply_op_names([op_i, 'JW'])
+            else:
+                op_string = 'Id'
+        self.exp_decaying_terms.add_exponentially_decaying_coupling(strength, lambda_, op_i, op_j,
+                                                                    subsites, op_string)
+        if plus_hc:
+            hc_op_i = site0.get_hc_op_name(op_i)
+            hc_op_j = site0.get_hc_op_name(op_j)
+            self.exp_decaying_terms.add_exponentially_decaying_coupling(
+                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, op_string)
+
     def calc_H_onsite(self, tol_zero=1.e-15):
         """Calculate `H_onsite` from `self.onsite_terms`.
 
@@ -1336,6 +1409,9 @@ class CouplingModel(Model):
         ------
         ValueError : if the Hamiltonian contains longer-range terms.
         """
+        if len(self.exp_decaying_terms.exp_decaying_terms):
+            raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
+
         sites = self.lat.mps_sites()
         finite = (self.lat.bc_MPS != 'infinite')
 
@@ -1360,7 +1436,7 @@ class CouplingModel(Model):
     def calc_H_MPO(self, tol_zero=1.e-15):
         """Calculate MPO representation of the Hamiltonian.
 
-        Uses :attr:`onsite_terms` and :attr:`coupling_terms` to build an MPO graph
+        Uses :attr:`onsite_terms` and :attr:`coupling_terms` to build an MPOGraph
         (and then an MPO).
 
         Parameters
@@ -1377,8 +1453,9 @@ class CouplingModel(Model):
         ot.remove_zeros(tol_zero)
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
+        edt = self.exp_decaying_terms
 
-        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct), self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
