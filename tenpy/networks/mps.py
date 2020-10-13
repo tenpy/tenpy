@@ -1391,6 +1391,8 @@ class MPS:
 
         This is acchieved by explicitly calculating the reduced density matrix of `A`
         and thus works only for small segments.
+        The alternative :meth:`entanglement_entropy_segment2` might work for larger segments
+        at small enough bond dimensions.
 
         Parameters
         ----------
@@ -1410,13 +1412,6 @@ class MPS:
         entropies : 1D ndarray
             ``entropies[i]`` contains the entropy for the the region ``A_i`` defined above.
         """
-        # Side-Remark: there is a trick to calculate the entanglement for large regions `A_i`
-        # of consecutive sites (in our notation, ``segment = range(La)``)
-        # To get the entanglement entropy, diagonalize:
-        #     --theta---
-        #       | | |
-        #     --theta*--
-        #  Diagonalization is O(chi^6), compared to O(d^{3*La})
         segment = np.sort(segment)
         if first_site is None:
             if self.finite:
@@ -1434,6 +1429,64 @@ class MPS:
             p = npc.eigvalsh(rho)
             res.append(entropy(p, n))
         return np.array(res)
+
+    def entanglement_entropy_segment2(self, segment, n=1):
+        r"""Calculate entanglement entropy for general geometry of the bipartition.
+
+        This function is similar to :meth:`entanglement_entropy_segment`,
+        but allows more sites in `segment`.
+        The trick is to exploit that for a pure state (which the MPS represents) and a bipartition
+        into regions A and B, the entropy is the same in both regions, :math:`S(A) = S(B)`.
+        Hence we can trace out the specified segment and obtain :math:`\rho_B = tr_A(rho)`, where
+        A is the specified `segment`.
+        The price is a *huge* computation cost of :math:`O(chi^6 d^{3x})` where `x` is the number
+        of physical legs not included into `segment` between `min(segment)` and `max(segment)`.
+
+        Parameters
+        ----------
+        segment : list of int
+            The site indices specifying region `A`. We calculate and diagonalize
+            the full reduced density matrix of the *complement* of `A`.
+        n : int | float
+            Selects which entropy to calculate;
+            `n=1` (default) is the ususal von-Neumann entanglement entropy,
+            otherwise the `n`-th Renyi entropy.
+
+        Returns
+        -------
+        entropy : float
+            The entropy for the the region defined by the `segment`
+            (or equivalently it's complement).
+        """
+        segment = np.sort(segment)
+        if len(segment) < 8:
+            warnings.warn("inefficient: use `entanglement_entropy_segment` instead!", stacklevel=2)
+        assert np.all(segment[1:] != segment[:-1])  # duplicates in segment
+        N_ol = 0  # number of open legs within the segment
+        i0 = segment[0]
+        rho = self.get_theta(i0, 1)
+        rho = npc.tensordot(rho,
+                            rho.conj(),
+                            axes=(self._get_p_labels(1), self._get_p_labels(1, True)))
+        not_in_segment = 0
+        ax_p = self._get_p_label('')
+        ax_pstar = self._get_p_label('*')
+        for i in range(i0 + 1, segment[-1] + 1):
+            is_in_segment = (segment[i - i0 - not_in_segment] == i)
+            if is_in_segment:
+                B = self.get_B(i, form='B')
+                rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
+                rho = npc.tensordot(rho, B.conj(), axes=(['vR*'] + ax_p, ['vL*'] + ax_pstar))
+            else:
+                B = self.get_B(i, form='B', label_p=str(not_in_segment))
+                rho = npc.tensordot(rho, B, axes=['vR', 'vL'])
+                rho = npc.tensordot(rho, B.conj(), axes=['vR*', 'vL*'])
+                not_in_segment += 1
+        comb_legs = (['vL', 'vR'] + self._get_p_labels(not_in_segment),
+                     ['vL*', 'vR*'] + self._get_p_labels(not_in_segment, star=True))
+        rho = rho.combine_legs(comb_legs, qconj=[+1, -1])
+        p = npc.eigvalsh(rho)
+        return entropy(p, n)
 
     def entanglement_spectrum(self, by_charge=False):
         r"""return entanglement energy spectrum.

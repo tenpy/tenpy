@@ -14,7 +14,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- nothing yet
+- :meth:`~tenpy.networks.mps.MPS.entanglement_entropy_segment2`
 
 Changed
 ^^^^^^^

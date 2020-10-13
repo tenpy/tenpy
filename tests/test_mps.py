@@ -117,9 +117,18 @@ def test_singlet_mps():
     print("Sz_vals = ", Sz_vals)
     print("expected_Sz_vals = ", expected_Sz_vals)
     npt.assert_almost_equal(Sz_vals, expected_Sz_vals)
+
     ent_segm = psi.entanglement_entropy_segment(list(range(4))) / np.log(2)
-    print(ent_segm)
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
+    ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
+    npt.assert_array_almost_equal_nulp(ent_segm, [1, 1, 2, 2], 5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 3, 4]) / np.log(2)
+        assert abs(ent_segm2 - 3) < 1.e-12
+        ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 4, 5]) / np.log(2)
+        assert abs(ent_segm2 - 1) < 1.e-12
+
     coord, mutinf = psi.mutinf_two_site()
     coord = [(i, j) for i, j in coord]
     mutinf[np.abs(mutinf) < 1.e-14] = 0.

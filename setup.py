@@ -32,7 +32,8 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      git push
 #      git push origin v0.1.2 # also push the tag
 #      create release with release-notes on github
-#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
+#      # (the release triggers the github action for uploading the package to PyPi like this:
+#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
 #      # wait for conda-forge bot to create a pull request with the new version and merge it
 
