@@ -298,7 +298,7 @@ class DMRGEngine(Sweep):
             e_tol_max = options.get('E_tol_max', 1.e-4)
 
         # parameters for DMRG convergence criteria
-        N_sweeps_check = options.get('N_sweeps_check', 10)
+        N_sweeps_check = options.get('N_sweeps_check', 1 if self.psi.finite else 10)
         min_sweeps = int(1.5 * N_sweeps_check)
         if self.chi_list is not None:
             min_sweeps = max(max(self.chi_list.keys()), min_sweeps)

@@ -18,7 +18,8 @@ Added
 
 Changed
 ^^^^^^^
-- nothing yet
+- For finite DMRG, :cfg:option:`DMRGEngine.N_sweeps_check` now defaults to 1 instead of 10 (which is still the default for infinite MPS).
+
 
 Fixed
 ^^^^^
