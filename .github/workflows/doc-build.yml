@@ -1,4 +1,4 @@
-name: Build documentation and run doctest
+name: sphinx-doctest
 
 on: [push]
 

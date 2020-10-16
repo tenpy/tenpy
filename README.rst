@@ -7,9 +7,9 @@ Tensor Network Python (TeNPy)
 .. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
     :alt: Documentation
     :target: https://tenpy.readthedocs.io/en/latest/
-.. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
+.. image:: https://github.com/tenpy/tenpy/workflows/pytest/badge.svg
     :alt: Build
-    :target: https://travis-ci.org/tenpy/tenpy
+    :target: https://github.com/tenpy/tenpy/actions/
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
