@@ -4,4 +4,5 @@ sphinxcontrib-bibtex
 matplotlib
 ipykernel
 nbsphinx
+pandoc
 sphinx_copybutton
