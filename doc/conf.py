@@ -184,6 +184,7 @@ import scipy
 import scipy.linalg
 import tenpy.linalg.np_conserved as npc
 import tenpy
+np.set_printoptions(suppress=True)
 """
 
 trim_doctest_flag = True
