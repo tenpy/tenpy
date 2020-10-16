@@ -3,7 +3,7 @@ Installation from source
 
 Minimal Requirements
 ^^^^^^^^^^^^^^^^^^^^
-This code works with a minimal requirement of pure Python>=3.5 
+This code works with a minimal requirement of pure Python>=3.6
 and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
 
 Getting the source

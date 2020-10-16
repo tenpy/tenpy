@@ -10,7 +10,7 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
+- Drop official support for Python 3.5, support Python 3.9
 
 Added
 ^^^^^
