@@ -344,35 +344,43 @@ class MPS:
         :class:`~tenpy.networks.site.SpinHalfSite` and a
         :class:`~tenpy.networks.site.FermionSite`.
 
-        >>> spin_half = tenpy.networks.site.SpinHalfSite()
-        >>> fermion = tenpy.networks.site.FermionSite()
-        >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
+        .. doctest : MPS.from_lat_product_state
+
+            >>> spin_half = tenpy.networks.site.SpinHalfSite()
+            >>> fermion = tenpy.networks.site.FermionSite()
+            >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
 
         To initialize a state of up-spins on the spin sites and half-filled ferions, you can use:
 
-        >>> p_state = [["up", "empty"], ["up", "full"]]
-        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_i, p_state)
+        .. doctest : MPS.from_lat_product_state
+
+            >>> p_state = [["up", "empty"], ["up", "full"]]
+            >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_i, p_state)
 
         Note that the same `p_state` works for a finite lattice of even length, say ``L=10``, as
         well. We then just "tile" in x-direction, i.e., repeat the specified state 5 times:
 
-        >>> ladder_f = tenpy.models.lattice.Ladder(10, [spin_half, fermion], bc_MPS="finite")
-        >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_f, p_state)
+        .. doctest : MPS.from_lat_product_state
+
+            >>> ladder_f = tenpy.models.lattice.Ladder(10, [spin_half, fermion], bc_MPS="finite")
+            >>> psi = tenpy.networks.MPS.from_lat_product_state(ladder_f, p_state)
 
         You can also easily half-fill a :class:`~tenpy.models.lattice.Honeycomb`, for example
         with only the `A` sites occupied, or as stripe parallel to the x-direction (`stripe_x`,
         alternating along `y` axis),
         or as stripes parallel to the y-direction (`stripe_y`, alternating along `x` axis).
 
-        >>> honeycomb = tenpy.models.lattice.Honeycomb([4, 4], [fermion, fermion], bc_MPS="finite")
-        >>> p_state_only_A = [[["empty", "full"]]]
-        >>> psi_only_A = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_only_A)
-        >>> p_state_stripe_x = [[["empty", "empty"],
-        ...                      ["full", "full"]]]
-        >>> psi_stripe_x = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_x)
-        >>> p_state_stripe_y = [[["empty", "empty"]],
-        ...                      [["full", "full"]]]
-        >>> psi_stripe_y = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_y)
+        .. doctest : MPS.from_lat_product_state
+
+            >>> honeycomb = tenpy.models.lattice.Honeycomb([4, 4], [fermion, fermion], bc_MPS="finite")
+            >>> p_state_only_A = [[["empty", "full"]]]
+            >>> psi_only_A = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_only_A)
+            >>> p_state_stripe_x = [[["empty", "empty"],
+            ...                      ["full", "full"]]]
+            >>> psi_stripe_x = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_x)
+            >>> p_state_stripe_y = [[["empty", "empty"]],
+            ...                      [["full", "full"]]]
+            >>> psi_stripe_y = tenpy.networks.MPS.from_lat_product_state(honeycomb, p_state_stripe_y)
         """
         kwargs.setdefault("bc", lat.bc_MPS)
         p_state = np.array(p_state, dtype=object)
@@ -439,21 +447,31 @@ class MPS:
         --------
         Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TIChain`:
 
-        >>> M = TFIChain({'L': 10})
-        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
-        >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
+        .. doctest :: MPS.from_product_state
+
+            >>> from tenpy.networks.mps import MPS
+            >>> L = 10
+            >>> M = tenpy.models.tf_ising.TFIChain({'L': L, 'verbose': 0})
+            >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
+            >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
 
         The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
         in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
 
         Extending the example, we can replace the spin in the center with one with arbitrary
-        angles ``theta, phi`` in the bloch sphere:
+        angles ``theta, phi`` in the bloch sphere.
+        However, note that you can not write this bloch state (for ``theta != 0, pi``) when
+        conserving symmetries, as the two physical basis states correspond to different symmetry
+        sectors.
 
-        >>> M = TFIChain({'L': 8, 'conserve': None})
-        >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
-        >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
-        >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
-        >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, dtype=np.complex)
+        .. doctest :: MPS.from_product_state
+
+            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
+            >>> theta, phi = np.pi/4, np.pi/6
+            >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
+            >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
+            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=np.complex)
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
@@ -462,10 +480,6 @@ class MPS:
         where the states are orderd ascending from ``'down'`` to ``'up'``.
         The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
         ``'up', 'down'`` where that the Pauli matrices look as usual.
-
-        Moreover, note that you can not write this bloch state (for ``theta != 0, pi``) when
-        conserving symmetries, as the two physical basis states correspond to different symmetry
-        sectors.
         """
         sites = list(sites)
         L = len(sites)
@@ -1788,29 +1802,47 @@ class MPS:
 
         Examples
         --------
+        Let's prepare a state in alternating ``|+z>, |+x>`` states:
+
+        .. doctest :: MPS.expectation_value
+
+            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]]*3
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state)
+
         One site examples (n=1):
 
-        >>> psi.expectation_value('Sz')
-        [Sz0, Sz1, ..., Sz{L-1}]
-        >>> psi.expectation_value(['Sz', 'Sx'])
-        [Sz0, Sx1, Sz2, Sx3, ... ]
-        >>> psi.expectation_value('Sz', sites=[0, 3, 4])
-        [Sz0, Sz3, Sz4]
+        .. doctest :: MPS.expectation_value
+
+            >>> Sz = psi.expectation_value('Sz')
+            >>> print(Sz)
+            [0.5 0.  0.5 0.  0.5 0. ]
+            >>> Sx = psi.expectation_value('Sx')
+            >>> print(Sx)
+            [ 0.  -0.5  0.  -0.5  0.  -0.5]
+            >>> print(psi.expectation_value(['Sz', 'Sx']))
+            [ 0.5 -0.5  0.5 -0.5  0.5 -0.5]
+            >>> print(psi.expectation_value('Sz', sites=[0, 3, 4]))
+            [0.5 0.  0.5]
 
         Two site example (n=2), assuming homogeneous sites:
 
-        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        >>> psi.expectation_value(SzSx)
-        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len L-1 for finite bc, or L for infinite
+        .. doctest :: MPS.expectation_value
+
+            >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+            ...                  psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+            >>> print(psi.expectation_value(SzSx))  # note: len L-1 for finite bc, or L for infinite
+            [-0.25  0.   -0.25  0.   -0.25]
 
         Example measuring <psi|SzSx|psi2> on each second site, for inhomogeneous sites:
 
-        >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                                   psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-                         for i in range(0, psi.L-1, 2)]
-        >>> psi.expectation_value(SzSx_list, range(0, psi.L-1, 2))
-        [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
+        .. doctest :: MPS.expectation_value
+
+            >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+            ...                        psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+            ...              for i in range(0, psi.L-1, 2)]
+            >>> print(psi.expectation_value(SzSx_list, range(0, psi.L-1, 2)))
+            [-0.25 -0.25 -0.25]
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -1864,10 +1896,18 @@ class MPS:
 
         Examples
         --------
-        >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
-        >>> b = psi.expectation_value_term([('Sz', 4), ('Sx', 2)])
-        >>> c = psi.expectation_value_multi_sites(['Sz', 'Id', 'Sz'], i0=2)
-        >>> assert a == b == c
+
+        .. testsetup :: MPS.expectation_value_term
+
+            spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*8, ['up']*8)
+
+        .. doctest :: MPS.expectation_value_term
+
+            >>> a = psi.expectation_value_term([('Sx', 2), ('Sz', 4)])
+            >>> b = psi.expectation_value_term([('Sz', 4), ('Sx', 2)])
+            >>> c = psi.expectation_value_multi_sites(['Sz', 'Id', 'Sx'], i0=2)
+            >>> assert a == b == c
         """
         # strategy: translate term into a list "ops" to be used for `expectation_value_multi_sites`
         ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW)
@@ -2177,34 +2217,46 @@ class MPS:
 
         Examples
         --------
-        For a spin chain:
+        Let's prepare a state in alternating ``|+z>, |+x>`` states:
 
-        >>> psi.correlation_function("A", "B")
-        [[A0B0,     A0B1, ..., A0B{L-1}],
-         [A1B0,     A1B1, ..., A1B{L-1]],
-         ...,
-         [A{L-1}B0, ALB1, ..., A{L-1}B{L-1}],
-        ]
+        .. doctest :: MPS.correlation_function
 
-        To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``:
+            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]]*3
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state, "infinite")
 
-        >>> psi.correlation_function("A", "B", [3])
-        [[A3B0,     A3B1, ..., A3B{L-1}]]
-
+        Default arguments calculate correlations for all `i` and `j` within the MPS unit cell.
+        To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``.
         Alternatively, you can use :meth:`term_correlation_function_right`
         (or :meth:`term_correlation_function_left`):
 
-        >>> corr1 = psi.correlation_function("A", "B", [0], range(1, 10))
-        >>> corr2 = psi.term_correlation_function_right([("A", 0), [("B", 0)], 0, range(1, 10))
-        >>> assert np.all(np.abs(corr2 - corr1) < 1.e-12)
+        .. doctest :: MPS.correlation_function
+
+            >>> psi.correlation_function("Sz", "Sx")
+            array([[ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25],
+                   [ 0.  ,  0.  ,  0.  ,  0.  ,  0.  ,  0.  ],
+                   [ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25],
+                   [ 0.  ,  0.  ,  0.  ,  0.  ,  0.  ,  0.  ],
+                   [ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25],
+                   [ 0.  ,  0.  ,  0.  ,  0.  ,  0.  ,  0.  ]])
+            >>> psi.correlation_function("Sz", "Sx", [0])
+            array([[ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25]])
+            >>> corr1 = psi.correlation_function("Sz", "Sx", [0], range(1, 10))
+            >>> corr2 = psi.term_correlation_function_right([("Sz", 0)], [("Sx", 0)], 0, range(1, 10))
+            >>> assert np.all(np.abs(corr2 - corr1) < 1.e-12)
 
         For fermions, it auto-determines that/whether a Jordan Wigner string is needed:
 
-        >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
-        >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
-        True
-        >>> np.all(np.diag(CdC) == psi.expectation_value("Cd C"))  # "Cd C" is equivalent to "N"
-        True
+        .. doctest :: MPS.correlation_function
+
+            >>> fermion = tenpy.networks.site.FermionSite(conserve='N')
+            >>> p_state = ['empty', 'full'] * 3
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion]*6, p_state, "finite")
+            >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
+            >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
+            True
+            >>> np.all(np.diag(CdC) == psi.expectation_value("Cd C"))  # "Cd C" is equivalent to "N"
+            True
 
         See also
         --------
@@ -3801,7 +3853,8 @@ class MPSEnvironment:
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
         The call structure is the same as for :meth:`MPS.expectation_value`.
 
-        .. warning :
+        .. warning ::
+
             In contrast to :meth:`MPS.expectation_value`, this funciton does not normalize,
             thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
@@ -3829,31 +3882,6 @@ class MPSEnvironment:
             Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
 
-        Examples
-        --------
-        One site examples (n=1):
-
-        >>> env.expectation_value('Sz')
-        [Sz0, Sz1, ..., Sz{L-1}]
-        >>> env.expectation_value(['Sz', 'Sx'])
-        [Sz0, Sx1, Sz2, Sx3, ... ]
-        >>> env.expectation_value('Sz', sites=[0, 3, 4])
-        [Sz0, Sz3, Sz4]
-
-        Two site example (n=2), assuming homogeneous sites:
-
-        >>> SzSx = npc.outer(psi.sites[0].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                             psi.sites[1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        >>> env.expectation_value(SzSx)
-        [Sz0Sx1, Sz1Sx2, Sz2Sx3, ... ]   # with len L-1 for finite bc, or L for infinite
-
-        Example measuring <bra|SzSx|ket> on each second site, for inhomogeneous sites:
-
-        >>> SzSx_list = [npc.outer(psi.sites[i].Sz.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-        ...                        psi.sites[i+1].Sx.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-        ...              for i in range(0, psi.L-1, 2)]
-        >>> env.expectation_value(SzSx_list, range(0, psi.L-1, 2))
-        [Sz0Sx1, Sz2Sx3, Sz4Sx5, ...]
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]

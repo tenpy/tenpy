@@ -30,7 +30,8 @@ class TermList(Hdf5Exportable):
     This class does not store operator strings between the sites.
     Jordan-Wigner strings of fermions are added during conversion to (Multi)CouplingTerms.
 
-    .. warning :
+    .. warning ::
+
         Since this class does **not** store the operator string between the sites,
         conversion from :class:`CouplingTerms` or :class:`MultiCouplingTerms`
         to :class:`TermList` is lossy!
@@ -57,28 +58,36 @@ class TermList(Hdf5Exportable):
     Examples
     --------
 
+    .. testsetup :: TermList
+
+        from tenpy.networks.terms import TermList
+
     For fermions, the term :math:`0.5(c^\dagger_0 c_2 + h.c.) + 1.3 * n_1` can be represented by:
 
-    >>> t = TermList([[('Cd', 0), ('C', 2)], [('Cd', 2), ('C', 0)], [('N', 1)]],
-    ...              [0.5,                   0.5,                   1.3])
-    >>> print(t)
-    0.50000 * Cd_0 C_2 +
-    0.50000 * Cd_2 C_0 +
-    1.30000 * N_1
+    .. doctest :: TermList
+
+        >>> t = TermList([[('Cd', 0), ('C', 2)], [('Cd', 2), ('C', 0)], [('N', 1)]],
+        ...              [0.5,                   0.5,                   1.3])
+        >>> print(t)
+        0.50000 * Cd_0 C_2 +
+        0.50000 * Cd_2 C_0 +
+        1.30000 * N_1
 
     If you have a :class:`~tenpy.models.lattice.Lattice`, you might also want to specify
     the location of the operators by lattice indices insted of MPS indices.
     For example, you can obtain the nearest-neighbor density terms
     **without double counting each pair**) on a :class:`~tenpy.models.lattice.TriangularLattice`:
 
-    >>> lat = tenpy.models.lattice.Triangular(6, 6, None, bc_MPS='infinite', bc='periodic')
-    >>> t2_terms = [[('N', [0, 0, u1]), ('N', [dx[0], dx[1], u2])]
-    ...             for (u1, u2, dx) in lat.pairs['nearest_neighbors']]
-    >>> t2 = TermList.from_lattice_locations(lat, t2_terms)
-    >>> print(t2)
-    1.00000 * N_0 N_6 +
-    1.00000 * N_0 N_-5 +
-    1.00000 * N_0 N_5
+    .. doctest :: TermList
+
+        >>> lat = tenpy.models.lattice.Triangular(6, 6, None, bc_MPS='infinite', bc='periodic')
+        >>> t2_terms = [[('N', [0, 0, u1]), ('N', [dx[0], dx[1], u2])]
+        ...             for (u1, u2, dx) in lat.pairs['nearest_neighbors']]
+        >>> t2 = TermList.from_lattice_locations(lat, t2_terms)
+        >>> print(t2)
+        1.00000 * N_0 N_6 +
+        1.00000 * N_0 N_-5 +
+        1.00000 * N_0 N_5
 
     The negative index -5 here indicates a tensor left of the current MPS unit cell.
     """
@@ -117,10 +126,10 @@ class TermList(Hdf5Exportable):
         """
         converted_terms = []
         if shift is None:
-            shift = np.zeros(lat.dim + 1, np.intp)
+            shift = np.zeros(lattice.dim + 1, np.intp)
         else:
             shift = np.array(shift, np.intp)
-            if len(shift) != lat.dim + 1:
+            if len(shift) != lattice.dim + 1:
                 raise ValueError("wrong length of `shift`: " + repr(shift))
         for term in terms:
             new_term = [(op, lattice.lat2mps_idx(shift + idx)) for (op, idx) in term]
@@ -524,7 +533,8 @@ class CouplingTerms(Hdf5Exportable):
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
 
-            .. warning :
+            .. warning ::
+
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on
@@ -891,7 +901,8 @@ class MultiCouplingTerms(CouplingTerms):
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
 
-            .. warning :
+            .. warning ::
+
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on

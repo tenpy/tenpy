@@ -31,8 +31,8 @@ Examples
 The idea is that you just import the `svd` from this module and use it as replacement for
 ``np.linalg.svd`` or ``scipy.linalg.svd``:
 
->>> from svd_robust import svd
->>> U, S, VT = svd([[1., 1.], [0., [1.]])
+>>> from tenpy.linalg.svd_robust import svd
+>>> U, S, VT = svd([[1., 1.], [0., 1.]])
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 

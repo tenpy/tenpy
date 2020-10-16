@@ -37,6 +37,7 @@ needs_sphinx = '3.2'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
+    'sphinx.ext.doctest',
     'sphinx.ext.extlinks',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
@@ -174,6 +175,18 @@ autosummary_generate = True
 # -- sphinx.ext.todo ------------------------------------------------------
 
 todo_include_todos = True  # show todo-boxes in output
+
+# -- sphinx.ext.doctest ---------------------------------------------------
+
+doctest_global_setup = """
+import numpy as np
+import scipy
+import scipy.linalg
+import tenpy.linalg.np_conserved as npc
+import tenpy
+"""
+
+trim_doctest_flag = True
 
 # -- sphinx.ext.napoleon --------------------------------------------------
 # numpy-like doc strings

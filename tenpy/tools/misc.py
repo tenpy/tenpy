@@ -227,12 +227,16 @@ def atleast_2d_pad(a, pad_item=0):
 
     Examples
     --------
+    .. testsetup ::
+
+        from tenpy.tools.misc import atleast_2d_pad
+
     >>> atleast_2d_pad([3, 4, 0])
     array([[3, 4, 0]])
 
-    >>> atleast_2d_pad([[3, 4],[1, 6, 7]])
-    array([[ 3.,  4.,  0.],
-           [ 1.,  6.,  7.]])
+    >>> atleast_2d_pad([[3, 4], [1, 6, 7]])
+    array([[3., 4., 0.],
+           [1., 6., 7.]])
     """
     iter(a)  # check that a is at least 1D iterable
     if len(a) == 0:

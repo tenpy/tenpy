@@ -1891,6 +1891,10 @@ class MPOEnvironment(MPSEnvironment):
         RP = self.get_RP(i0, store=False)
         return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
 
+    def expectation_value(self, ops, sites=None, axes=None):
+        """(doesn't make sense)"""
+        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
+
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`

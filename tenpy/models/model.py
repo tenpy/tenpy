@@ -183,24 +183,35 @@ class NearestNeighborModel(Model):
         --------
         The `SpinChainNNN2` has next-nearest-neighbor couplings and thus only implements an MPO:
 
-        >>> from tenpy.models.spins_nnn import SpinChainNNN2
-        >>> nnn_chain = SpinChainNNN2({'L': 20})
-        parameter 'L'=20 for SpinChainNNN2
-        >>> print(isinstance(nnn_chain, NearestNeighborModel))
-        False
-        >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
-        range before grouping: 2
+        .. testsetup :: from_MPOModel
+
+            from tenpy.models.model import NearestNeighborModel
+
+        .. doctest :: from_MPOModel
+
+            >>> from tenpy.models.spins_nnn import SpinChainNNN2
+            >>> nnn_chain = SpinChainNNN2({'L': 20, 'verbose': 0})
+            >>> print(isinstance(nnn_chain, NearestNeighborModel))
+            False
+            >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
+            range before grouping: 2
 
         By grouping each two neighboring sites, we can bring it down to nearest neighbors.
 
-        >>> nnn_chain.group_sites(2)
-        >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
-        range after grouping: 1
+        .. doctest :: from_MPOModel
+
+            >>> grouped_sites = nnn_chain.group_sites(2)
+            >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
+            range after grouping: 1
 
         Yet, TEBD will not yet work, as the model doesn't define `H_bond`.
         However, we can initialize a NearestNeighborModel from the MPO:
 
-        >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
+        .. doctest :: from_MPOModel
+
+            >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
+            >>> isinstance(nnn_chain_for_tebd, NearestNeighborModel)
+            True
         """
         return cls(mpo_model.lat, mpo_model.calc_H_bond_from_MPO())
 
@@ -888,21 +899,34 @@ class CouplingModel(Model):
         When initializing a model, you can add a term :math:`J \sum_{<i,j>} S^z_i S^z_j`
         on all nearest-neighbor bonds of the lattice like this:
 
-        >>> J = 1.  # the strength
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
+        .. testsetup :: add_coupling
+
+            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, verbose=0, cons_Sz=None))
+            # make it look like both a SpinChain and a FermionChain
+            # Sz and Sx operator already exists
+            site = self.lat.unit_cell[0]
+            site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
+
+        .. doctest :: add_coupling
+
+            >>> J = 1.  # the strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         The strength can be an array, which gets tiled to the correct shape.
         For example, in a 1D :class:`~tenpy.models.lattice.Chain` with an even number of sites and
         periodic (or infinite) boundary conditions, you can add alternating strong and weak
         couplings with a line like::
 
-        >>> self.add_coupling([1.5, 1.], 0, 'Sz', 0, 'Sz', dx)
+        >>> self.add_coupling([1.5, 1.], u1, 'Sz', u2, 'Sz', dx)  # doctest: +SKIP
 
         Make sure to use the `plus_hc` argument if necessary, e.g. for hoppings:
 
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
+        .. doctest :: add_coupling
+
+            >>> t = 1.  # hopping strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
         Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
@@ -912,16 +936,19 @@ class CouplingModel(Model):
         conjugate of the operator names, see :meth:`~tenpy.networks.site.Site.get_hc_op_name`.
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
 
-        >>> t = 1.  # hopping strength
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
-        ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
+        .. doctest :: add_coupling
+
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
+            ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
 
         With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
 
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
-        ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
+        .. doctest :: add_coupling
+
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
+            ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
         Note that the Jordan-Wigner strings for the fermions are added automatically!
 
@@ -1140,14 +1167,16 @@ class CouplingModel(Model):
         A call to :meth:`add_coupling` with arguments
         ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
 
-        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
-        >>> self.add_multi_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
+        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D  # doctest: +SKIP
+        >>> self.add_multi_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])  # doctest: +SKIP
 
-        To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
+        To explicitly add the hermitian conjugate (instead of simply using `plus_hc = True`),
+        you need to take the complex conjugate of the
         `strength`, reverse the order of the operators and take the hermitian conjugates of the
-        individual operator names:
+        individual operator names (indicated by the ``hc(...)``, see
+        :meth:`~tenpy.networks.site.Site.get_hc_op_name`):
 
-        >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
+        >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # doctest: +SKIP
 
         See also
         --------
@@ -1340,17 +1369,23 @@ class CouplingModel(Model):
         :func:`~tenpy.tools.fit.fit_with_sum_of_exp` to approximate a long-range function
         with a few sum of exponentials and then add them with this function.
 
-        >>> def decay(x):
-        ...     return np.exp(-0.1*x) / x**2
-        >>> from tenpy.tools.fit import fit_with_sum_of_exp, sum_of_exp
-        >>> n_exp = 5
-        >>> fit_range = 50
-        >>> lam, pref = fit_with_sum_of_exp(decay, n_exp, fit_range)
-        >>> x = np.arange(1, fit_range + 1)
-        >>> print('error in fit:', np.sum(np.abs(decay(x) - sum_of_exp(lam, pref, x))))
-        error in fit: 0.00010731105234095347
-        >>> for pr, la in zip(pref, lam):
-        ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
+        .. testsetup :: add_exponentially_decaying_coupling
+
+            self = tenpy.models.spins.SpinChain(dict(L=30, verbose=0))
+
+        .. doctest :: add_exponentially_decaying_coupling
+
+            >>> def decay(x):
+            ...     return np.exp(-0.1*x) / x**2
+            >>> from tenpy.tools.fit import fit_with_sum_of_exp, sum_of_exp
+            >>> n_exp = 5
+            >>> fit_range = 50
+            >>> lam, pref = fit_with_sum_of_exp(decay, n_exp, fit_range)
+            >>> x = np.arange(1, fit_range + 1)
+            >>> print('error in fit: {0:.3e}'.format(np.sum(np.abs(decay(x) - sum_of_exp(lam, pref, x)))))
+            error in fit: 1.073e-04
+            >>> for pr, la in zip(pref, lam):
+            ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
 
         """
         if self.explicit_plus_hc:
@@ -1521,12 +1556,18 @@ class CouplingModel(Model):
         cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
         given by the external flux.
 
-        >>> strength = 1. # hopping strength without external flux
-        >>> phi = np.pi/4 # determines the external flux strength
-        >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
-        ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
+        .. testsetup :: coupling_strength_add_ext_flux
+
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3, verbose=0))
+
+        .. doctest :: coupling_strength_add_ext_flux
+
+            >>> strength = 1. # hopping strength without external flux
+            >>> phi = np.pi/4 # determines the external flux strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+            ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
+            ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
