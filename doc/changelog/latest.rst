@@ -11,6 +11,10 @@ Changelog
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Drop official support for Python 3.5
+- :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
+  non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
+
+
 
 Added
 ^^^^^

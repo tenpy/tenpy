@@ -402,8 +402,14 @@ class Array:
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None,
-                     labels=None):
+    def from_ndarray(cls,
+                     data_flat,
+                     legcharges,
+                     dtype=None,
+                     qtotal=None,
+                     cutoff=None,
+                     labels=None,
+                     raise_wrong_sector=True):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -422,6 +428,9 @@ class Array:
             Defaults to :data:`QCUTOFF`.
         labels : list of {str | None}
             Labels associated to each leg, ``None`` for non-named labels.
+        raise_wrong_sector : bool
+            If True, raise a ValueError in case of non-zero entries (larger than `cutoff`) in the
+            wrong blocks of `data_flat`. If `False`, just raise a warning.
 
         Returns
         -------
@@ -452,6 +461,8 @@ class Array:
                 data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
                 qdata.append(qindices)
             elif np.any(np.abs(data_flat[sl]) > cutoff):
+                if raise_wrong_sector:
+                    raise ValueError("wrong sector with non-zero entries")
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge",
                               stacklevel=2)
         res._data = data
