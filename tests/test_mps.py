@@ -207,23 +207,25 @@ def test_TransferMatrix(chi=4, d=2):
     sort = np.argsort(np.abs(eta_full))[::-1]
     eta_full = eta_full[sort]
     w_full = w_full[:, sort]
-    TM = mps.TransferMatrix(psi, psi, charge_sector=0, form=None)
-    eta, w = TM.eigenvectors(3)
-    print("transfer matrix yields eigenvalues ", eta)
-    print(eta.shape, eta_full.shape)
-    print(psi.dtype)
-    # note: second and third eigenvalue are complex conjugates
-    if bool(eta[2].imag > 0.) == bool(eta_full[2].imag > 0.):
-        npt.assert_allclose(eta[:3], eta_full[:3])
-    else:
-        npt.assert_allclose(eta[:3], eta_full[:3].conj())
-    # compare largest eigenvector
     w0_full = w_full[:, 0]
-    w0 = w[0].to_ndarray()
-    assert (abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
     w0_full /= np.sum(w0_full)  # fixes norm & phase
-    w0 /= np.sum(w0)
-    npt.assert_allclose(w0, w0_full)
+    assert (abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
+    for charge_sector in [0, None]:
+        # charge_sector = None uses other parts of FlatLinearOperator.npc_to_flat / flat_to_npc
+        TM = mps.TransferMatrix(psi, psi, charge_sector=charge_sector, form=None)
+        eta, w = TM.eigenvectors(3)
+        print("transfer matrix yields eigenvalues ", eta)
+        print(eta.shape, eta_full.shape)
+        print(psi.dtype)
+        # note: second and third eigenvalue are complex conjugates
+        if bool(eta[2].imag > 0.) == bool(eta_full[2].imag > 0.):
+            npt.assert_allclose(eta[:3], eta_full[:3])
+        else:
+            npt.assert_allclose(eta[:3], eta_full[:3].conj())
+        # compare largest eigenvector
+        w0 = w[0].to_ndarray()
+        w0 /= np.sum(w0)
+        npt.assert_allclose(w0, w0_full)
 
 
 def test_compute_K():

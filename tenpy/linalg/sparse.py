@@ -375,19 +375,19 @@ class FlatLinearOperator(ScipyLinearOperator):
         vec = np.asarray(vec)
         if vec.ndim != 1:
             vec = np.squeeze(vec, axis=1)  # need a vector, not a Nx1 matrix
-        if self._charge_sector is not None:
-            npc_vec = self.flat_to_npc(vec)  # convert to npc Array
-            npc_vec = self.npc_matvec(npc_vec)  # the expensive part
-            self.matvec_count += 1
-            return self.npc_to_flat(npc_vec)  # convert back
-        else:
-            npc_vec = self.flat_to_npc_all_sectors(vec)  # convert to npc Array with extra leg
-            npc_vec = self.npc_matvec(npc_vec)  # the expensive part
-            self.matvec_count += 1
-            return self.npc_to_flat_all_sectors(npc_vec)  # convert back
+            assert vec.ndim == 1
+        npc_vec = self.flat_to_npc(vec)  # convert to npc Array
+        npc_vec = self.npc_matvec(npc_vec)  # the expensive part, wrapped matvec function
+        self.matvec_count += 1
+        vec = self.npc_to_flat(npc_vec)  # convert back to numpy Array
+        return vec
 
     def flat_to_npc(self, vec):
-        """Convert flat vector of selected charge sector into npc Array.
+        """Convert flat numpy vector of selected charge sector into npc Array.
+
+        If :attr:`charge_sector` is not None, convert to a 1D npc vector with leg `self.leg`.
+        Otherwise convert `vec`, which can be non-zero in *all* charge sectors, to a npc matrix
+        with an additional ``'charge'`` leg to allow representing the full vector at once.
 
         Parameters
         ----------
@@ -399,34 +399,62 @@ class FlatLinearOperator(ScipyLinearOperator):
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
             Same as `vec`, but converted into a npc array.
         """
-        if self._charge_sector is None:
-            raise ValueError("By definition, this can't work for all charges at once!")
-        res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
-        res[self._mask] = vec
-        return res
+        if self._charge_sector is not None:
+            res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
+            res[self._mask] = vec
+            return res
+        else:
+            leg = self.leg
+            ch_leg = npc.LegCharge.from_qflat(leg.chinfo,
+                                              self.possible_charge_sectors,
+                                              qconj=-leg.qconj)
+            res = npc.zeros([self.leg, ch_leg], vec.dtype, labels=[self.vec_label, 'charge'])
+            res._qdata = np.repeat(np.arange(leg.block_number, dtype=np.intp),
+                                   2).reshape(leg.block_number, 2)
+            for qi in range(leg.block_number):
+                res._data.append(vec[leg.get_slice(qi)].reshape((-1, 1)))
+            res.test_sanity()
+            return res
 
     def npc_to_flat(self, npc_vec):
-        """Convert npc Array with qtotal = self.charge_sector into ndarray.
+        """Convert npc Array into a 1D ndarray, inverse of :meth:`flat_to_npc`.
 
         Parameters
         ----------
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Npc Array to be converted. Should only have entries in `self.charge_sector`.
+            Npc Array to be converted.
+            If `self.charge_sector` is not None, this should be a 1D array with that `qtotal`.
+            If `self.charge_sector` is not None, it should have an additional ``"charge"`` leg,
+            (as returned by :meth:`flat_to_npc`).
 
         Returns
         -------
         vec : 1D ndarray
-            Same as `npc_vec`, but converted into a flat Numpy array.
+            Same entries as `npc_vec`, but converted into a flat Numpy array.
         """
-        if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
-            raise ValueError("npc_vec.qtotal and charge sector don't match!")
-        if isinstance(npc_vec.legs[0], npc.LegPipe):
-            npc_vec = npc_vec.copy(deep=False)
-            npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
-        return npc_vec[self._mask].to_ndarray()
+        if self._charge_sector is not None:
+            assert npc_vec.rank == 1
+            if np.any(npc_vec.qtotal != self._charge_sector):
+                raise ValueError("npc_vec.qtotal and charge sector don't match!")
+            if isinstance(npc_vec.legs[0], npc.LegPipe):
+                npc_vec = npc_vec.copy(deep=False)
+                npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
+            return npc_vec[self._mask].to_ndarray()
+        else:
+            npc_vec.itranspose([self.vec_label, 'charge'])
+            res = np.zeros([self.leg.ind_len], npc_vec.dtype)
+            leg = self.leg
+            for qinds, data in zip(npc_vec._qdata, npc_vec._data):
+                qi = qinds[0]
+                assert qi == qinds[1]
+                res[leg.get_slice(qi)] = data.reshape((-1, ))
+            return res
 
     def flat_to_npc_all_sectors(self, vec):
         """Convert flat vector of *all* charge sectors into npc Array with extra "charge" leg.
+
+        .. deprecated :: 0.7.3
+            This is merged into :meth:`flat_to_npc` with ``self.charge_sector = None``.
 
         Parameters
         ----------
@@ -439,21 +467,14 @@ class FlatLinearOperator(ScipyLinearOperator):
             Same as `vec`, but converted into a npc array.
         """
         assert self._charge_sector is None
-        leg = self.leg
-        ch_leg = npc.LegCharge.from_qflat(leg.chinfo,
-                                          self.possible_charge_sectors,
-                                          qconj=-leg.qconj)
-        res = npc.zeros([self.leg, ch_leg], vec.dtype, labels=[self.vec_label, 'charge'])
-        res._qdata = np.asarray(np.hstack([np.arange(leg.block_number)[:, np.newaxis]] * 2),
-                                dtype=np.intp)
-        for b in range(leg.block_number):
-            i = leg.slices[b]
-            j = leg.slices[b + 1]
-            res._data.append(vec[i:j].reshape((-1, 1)))
-        res.test_sanity()
-        return res
+        warnings.warn(
+            "Deprecated access of FlatLinearOperator.flat_to_npc_all_sectors.\n"
+            "directly use flat_to_npc instead!",
+            category=FutureWarning,
+            stacklevel=2)
+        return self.flat_to_npc(vec)
 
-    def flat_to_npc_None_sector(self, vec):
+    def flat_to_npc_None_sector(self, vec, cutoff=1.e-10):
         """Convert flat vector of undetermined charge sectors into npc Array.
 
         The charge sector to be used is chosen as the block with the maximal norm,
@@ -469,10 +490,14 @@ class FlatLinearOperator(ScipyLinearOperator):
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
             Same as `vec`, but converted into a npc array.
         """
-        return npc.Array.from_ndarray(vec, [self.leg], cutoff=1.e-5, labels=[self.vec_label])
+        assert self._charge_sector is None
+        return npc.Array.from_ndarray(vec, [self.leg], cutoff=cutoff, labels=[self.vec_label])
 
     def npc_to_flat_all_sectors(self, npc_vec):
         """Convert npc Array with qtotal = self.charge_sector into ndarray.
+
+        .. deprecated :: 0.7.3
+            This is merged into :meth:`npc_to_flat` with ``self.charge_sector = None``.
 
         Parameters
         ----------
@@ -485,16 +510,12 @@ class FlatLinearOperator(ScipyLinearOperator):
             Same as `npc_vec`, but converted into a flat Numpy array.
         """
         assert self._charge_sector is None
-        npc_vec.itranspose([self.vec_label, 'charge'])
-        res = np.zeros([self.leg.ind_len], npc_vec.dtype)
-        leg = self.leg
-        for qdata, data in zip(npc_vec._qdata, npc_vec._data):
-            b = qdata[0]
-            assert b == qdata[1]
-            i = leg.slices[b]
-            j = leg.slices[b + 1]
-            res[i:j] = data.reshape((-1, ))
-        return res
+        warnings.warn(
+            "Deprecated access of FlatLinearOperator.npc_to_flat_all_sectors.\n"
+            "directly use npc_to_flat instead!",
+            category=FutureWarning,
+            stacklevel=2)
+        return self.npc_to_flat(npc_vec)
 
     def _npc_matvec_wrapper(self, vec):
         """Wrapper around ``self._npc_matvec_multileg`` acting on a LegPipe.

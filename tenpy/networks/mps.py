@@ -2232,7 +2232,7 @@ class MPS:
 
         .. doctest :: MPS.correlation_function
 
-            >>> psi.correlation_function("Sz", "Sx")
+            >>> psi.correlation_function("Sz", "Sx")  # doctest: +SKIP
             array([[ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25],
                    [ 0.  ,  0.  ,  0.  ,  0.  ,  0.  ,  0.  ],
                    [ 0.  , -0.25,  0.  , -0.25,  0.  , -0.25],
@@ -4170,18 +4170,17 @@ class TransferMatrix(sparse.NpcLinearOperator):
                 warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
             try:
                 eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
-                A = np.real_if_close(A)
-                if flat_linop.charge_sector is None:
-                    convert = flat_linop.flat_to_npc_all_sectors
-                else:
-                    convert = flat_linop.flat_to_npc
-                A = [convert(A[:, j]) for j in range(A.shape[1])]
                 break
             except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
                 if k == max_num_ev:
                     raise
-            # just retry with larger k and 'tol'
             kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        A = np.real_if_close(A)
+        if flat_linop.charge_sector is None:
+            convert = flat_linop.flat_to_npc_None_sector
+        else:
+            convert = flat_linop.flat_to_npc
+        A = [convert(A[:, j]) for j in range(A.shape[1])]
         # sort
         perm = argsort(eta, which)
         return np.array(eta)[perm], [A[j] for j in perm]
