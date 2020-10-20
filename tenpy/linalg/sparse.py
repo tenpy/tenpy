@@ -11,7 +11,11 @@ to convert flat numpy arrays to and from np_conserved arrays.
 
 import numpy as np
 from . import np_conserved as npc
+import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
+from ..tools.math import speigs, speigsh
+from ..tools.misc import argsort, group_by_degeneracy
+import warnings
 
 __all__ = [
     'NpcLinearOperator',
@@ -551,6 +555,151 @@ class FlatLinearOperator(ScipyLinearOperator):
             vec = vec.combine_legs(self._labels_split, pipes=self.leg)
         return vec
 
+    def eigenvectors(self,
+                     num_ev=1,
+                     max_num_ev=None,
+                     max_tol=1.e-12,
+                     which='LM',
+                     v0=None,
+                     v0_npc=None,
+                     cutoff=1.e-12,
+                     hermitian=False,
+                     **kwargs):
+        """Find (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
+
+        If no charge_sector was selected, we look in *all* charge sectors.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for.
+        max_num_ev : int
+            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
+            we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
+            ``None`` defaults to ``num_ev + 2``.
+        max_tol : float
+            After the first `NoConvergenceError` we increase the `tol` argument to that value.
+        which : str
+            Which eigenvalues to look for, see :func:`scipy.sparse.linalg.eigs`.
+            More details also in :func:`~tenpy.tools.misc.argsort`.
+        v0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess as a "flat" numpy array.
+        v0_npc : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess, to be converted by :meth:`npc_to_flat`.
+        cutoff : float
+            Only used if ``self.charge_sector is None``; in that case it determines when entries in
+            a given charge-block are considered nonzero, and what counts as degenerate.
+        hermitian : bool
+            If False (default), use :func:`scipy.sparse.linalg.eigs`
+            If True, assume that self is hermitian and use :func:`scipy.sparse.linalg.eigsh`.
+        **kwargs :
+            Further keyword arguments given to :func:`scipy.sparse.linalg.eigsh` or
+            :func:`scipy.sparse.linalg.eigs`, respectively.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted according to `which`.
+        w : list of :class:`~tenpy.linalg.np_conserved.Array`
+            The eigenvectors corresponding to `eta`, as npc.Array with LegPipe.
+        """
+        if max_num_ev is None:
+            max_num_ev = num_ev + 2
+        if v0_npc is not None:
+            assert v0 is None
+            v0 = self.npc_to_flat(v0_npc)
+        if v0 is not None:
+            kwargs['v0'] = v0
+        # for given charge sector
+        for k in range(num_ev, max_num_ev + 1):
+            if k > num_ev:
+                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
+            try:
+                if hermitian:
+                    eta, A = speigsh(self, k=k, which=which, **kwargs)
+                else:
+                    eta, A = speigs(self, k=k, which=which, **kwargs)
+                break
+            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+                if k == max_num_ev:
+                    raise
+            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        from_ndarray_args = dict(legcharges=[self.leg],
+                                 cutoff=cutoff,
+                                 labels=[self.vec_label],
+                                 raise_wrong_sector=True)
+        A = np.real_if_close(A)
+        if self._charge_sector is not None:
+            vecs = [self.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
+        else:
+            k = A.shape[1]
+            vecs = [None] * k
+            multi_sectors = []
+            for j in range(k):
+                vec = A[:, j]
+                try:
+                    vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
+                except ValueError as e:
+                    if not e.args[0].startswith(''):
+                        raise
+                    multi_sectors.append(j)
+            from_ndarray_args['raise_wrong_sector'] = False
+            for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
+                # really, we would need to diagonalize the charges within the subspace of
+                # degenerace eigenvectors of the transfermatrix.
+                # However, we (might) only know a subset of the degenerate eigenvectors,
+                # and diagonalizing the charges in that subspace might not yield real
+                # charge eigenvectors (which is obvious if we have only one of them).
+                # Instead we just project onto different blocks:
+                # within a block it will for sure be an eigenvector of both the charge
+                # and the transfer matrix!
+                # This can fail, however, if there are less non-zero blocks than eigenvectors,
+                # in which case we don't return an array with definite charge but with an
+                # additional `charge` leg.
+                if len(degenerate) == 1:
+                    # degenerate eigenvalues but we didn't find enough eigenvectors to see that
+                    j = degenerate[0]
+                    qi = np.argmax([
+                        np.linalg.norm(vec[self.leg.get_slice(qi)])
+                        for qi in range(self.leg.block_number)
+                    ])
+                    qtotal = self.leg.get_charge(qi)
+                    vecs[i] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
+                else:
+                    used_blocks = {}
+                    for j in degenerate:
+                        vec = A[:, j]
+                        block_norms = [
+                            np.linalg.norm(vec[self.leg.get_slice(qi)])
+                            for qi in range(self.leg.block_number)
+                        ]
+                        for qi in np.argsort(block_norms):
+                            if qi in used_blocks or block_norms[qi] < cutoff:
+                                continue
+                            used_blocks.add(qi)
+                            qtotal = self.leg.get_charge(qi)
+                            vecs[i] = npc.Array.from_ndarray(vec,
+                                                             qtotal=qtotal,
+                                                             **from_ndarray_args)
+                            vecs[i] /= npc.norm(vecs[i])
+                            break
+                        else:
+                            # didn't break, so didn't set vecs[i]
+                            # -> can't guarantee orthogonality to previous eigenvectors
+                            msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
+                                   "charge block uniquely; would need to diagonalize again "
+                                   "with given `charge_sector`.\n"
+                                   "Will return eigenvector with extra `charge` leg instead, "
+                                   "which might not be orthogonal to other eigenvectors.")
+                            warnings.warn(msg, stacklevel=2)
+                            vecs[j] = self.flat_to_npc(vec)
+                            for qi in range(self.leg.used_block_number):
+                                if block_norms[qi] > cutoff:
+                                    used_blocks.add(qi)
+        perm = argsort(eta, which)
+        return np.array(eta)[perm], [vecs[j] for j in perm]
+
 
 class FlatHermitianOperator(FlatLinearOperator):
     """Hermitian variant of :class:`FlatLinearOperator`.
@@ -560,3 +709,8 @@ class FlatHermitianOperator(FlatLinearOperator):
     """
     def _adjoint(self):
         return self
+
+    def eigenvectors(self, *args, **kwargs):
+        """Same as FlatLinearOperator(..., hermitian=True)."""
+        kwargs['hermitian'] = True
+        return FlatLinearOperator.eigenvectors(self, *args, **kwargs)

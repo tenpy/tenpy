@@ -14,8 +14,8 @@ import warnings
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'build_initial_state',
-    'setup_executable'
+    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
+    'build_initial_state', 'setup_executable'
 ]
 
 
@@ -119,7 +119,7 @@ def argsort(a, sort=None, **kwargs):
         -------------------- -----------------------------
         ``'LI'``             Largest imaginary part first
         -------------------- -----------------------------
-        ``'Si'``             Smallest imaginary part first
+        ``'SI'``             Smallest imaginary part first
         -------------------- -----------------------------
         ``None``             numpy default: same as '<'
         ==================== =============================
@@ -229,7 +229,8 @@ def atleast_2d_pad(a, pad_item=0):
     --------
     .. testsetup ::
 
-        from tenpy.tools.misc import atleast_2d_pad
+        from tenpy.tools.misc import *
+
 
     >>> atleast_2d_pad([3, 4, 0])
     array([[3, 4, 0]])
@@ -420,6 +421,60 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
         print("chi_list = ")
         pprint.pprint(chi_list)
     return chi_list
+
+
+def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
+    """Find groups of indices for which (energy) values are degenerate.
+
+    Parameters
+    ----------
+    values : 1D array
+        Values (e.g. energies) which need to be close to count as degenerate.
+    *args : 1D array
+        Additional vectors (with same length as `values`),
+        which also need to be close (up to cutoff) to count as degenerate.
+    subset : 1D array
+        Optionally selects a subset of the indices
+    cutoff : float
+        Precision up to which values still count as degenerate.
+
+    Returns
+    -------
+    idx_groups : list of tuple of int
+        Each tuple `group` contains indices ``i, j, k, ...`` for which the values are closer than
+        `cutoff`, i.e., ``|E[j, k, ...] - E[i]| <= cutoff``.
+        Each index appears exactly once (if it is containted in `subset`).
+
+    .. testsetup ::
+
+        from tenpy.tools.misc import *
+
+    >>> E = [2., 2.4, 1.9999, 1.8, 2.3999, 5, 1.8]
+    ... # -> 0   1    2       3    4       5  6
+    >>> k = [0,  1,   2,      2,   1,      2, 1]
+    >>> group_by_degeneracy(E, cutoff=0.001)
+    [(0, 2), (1, 4), (3, 6), (5,)]
+    >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
+    [(0,), (1, 4), (2,), (3,), (5,), (6,)]
+
+    """
+    assert cutoff >= 0.
+    E = np.asarray(E)
+    args = [np.asarray(arg) for arg in args]
+    N, = E.shape
+    groups = []
+    if subset is None:
+        subset = np.arange(N, dtype=np.intp)
+    else:
+        subset = np.asarray(subset, dtype=np.intp)
+    while len(subset) > 0:
+        x = subset[0]
+        group = np.abs(E[subset] - E[x]) <= cutoff
+        for arg in args:
+            group = np.logical_and(group, np.abs(arg[subset] - arg[x]) <= cutoff)
+        groups.append(tuple(subset[group]))
+        subset = subset[np.logical_not(group)]
+    return groups
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

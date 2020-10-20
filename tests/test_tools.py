@@ -115,6 +115,19 @@ def test_mkl(n=2):
             print("test_mkl failed to import the shared MKL libaray.")
 
 
+def test_group_by_degeneracy():
+    group_by_degeneracy = tools.misc.group_by_degeneracy
+    #    0     1       2    3       4  5    6
+    E = [2., 2.4, 1.9999, 1.8, 2.3999, 5, 1.8]
+    k = [0,    1,      2,   2,      1, 2,   1]  # yapf: disable
+    g = group_by_degeneracy(E)
+    assert g == [(0, ), (1, ), (2, ), (3, 6), (4, ), (5, )]
+    g = group_by_degeneracy(E, cutoff=0.01)
+    assert g == [(0, 2), (1, 4), (3, 6), (5, )]
+    g = group_by_degeneracy(E, k, cutoff=0.01)
+    assert g == [(0, ), (1, 4), (2, ), (3, ), (5, ), (6, )]
+
+
 def test_optimization():
     level_now = tools.optimization.get_level()
     level_change = "none" if level_now == 1 else "default"

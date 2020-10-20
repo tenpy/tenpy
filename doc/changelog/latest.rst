@@ -13,12 +13,15 @@ Backwards incompatible changes
 - Drop official support for Python 3.5
 - :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
   non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
-
+- Argument `v0` of :meth:`tenpy.networks.mps.MPS.TransferMatrix.eigenvectors` is renamed to `v0_npc`; `v0` now serves for non-np_conserved guess.
 
 
 Added
 ^^^^^
 - :meth:`~tenpy.networks.mps.MPS.entanglement_entropy_segment2`
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` and :meth:`~tenpy.linalg.sparse.FlatHermitianOperator.eigenvectors` to unify
+  code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
+- :meth:`tenpy.tools.misc.group_by_degeneracy`
 
 Changed
 ^^^^^^^
@@ -28,4 +31,5 @@ Changed
 
 Fixed
 ^^^^^
-- nothing yet
+- The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
+  was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).

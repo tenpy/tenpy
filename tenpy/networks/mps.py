@@ -79,12 +79,11 @@ import numpy as np
 import warnings
 import random
 from functools import reduce
-import scipy.sparse.linalg.eigen.arpack
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, argsort, to_array
+from ..tools.misc import to_iterable, to_array
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
@@ -3387,7 +3386,7 @@ class MPS:
             diag = self.get_SL(bond0)**2 if transpose else 1.
             guess = TM.initial_guess(diag)
         guess = guess.combine_legs([0, 1], pipes=TM.pipe)
-        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0=guess, which='LM')
+        eta, V = TM.eigenvectors(self._transfermatrix_keep, v0_npc=guess, which='LM')
         self._transfermatrix_keep = len(eta)
         if len(eta) > 1:
             if np.abs(eta[0]) > np.abs(eta[1]):
@@ -4122,68 +4121,15 @@ class TransferMatrix(sparse.NpcLinearOperator):
         """
         return npc.diag(diag, self.pipe.legs[0], labels=self.label_split)
 
-    def eigenvectors(self,
-                     num_ev=1,
-                     max_num_ev=None,
-                     max_tol=1.e-12,
-                     which='LM',
-                     v0=None,
-                     **kwargs):
+    def eigenvectors(self, *args, **kwargs):
         """Find (dominant) eigenvector(s) of self using :mod:`scipy.sparse`.
 
-        If no charge_sector was selected, we look in *all* charge sectors.
+        For arguments see :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
 
-        Parameters
-        ----------
-        num_ev : int
-            Number of eigenvalues/vectors to look for.
-        max_num_ev : int
-            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
-            `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
-            we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
-            ``None`` defaults to ``num_ev + 2``.
-        max_tol : float
-            After the first `NoConvergenceError` we increase the `tol` argument to that value.
-        which : str
-            Which eigenvalues to look for, see `scipy.sparse.linalg.speigs`.
-        **kwargs :
-            Further keyword arguments given to :func:`~tenpy.tools.math.speigs`.
-
-        Returns
-        -------
-        eta : 1D ndarray
-            The eigenvalues, sorted according to `which`.
-        w : list of :class:`~tenpy.linalg.np_conserved.Array`
-            The eigenvectors corresponding to `eta`, as npc.Array with LegPipe.
+        If no :attr:`charge_sector` was selected, we look in *all* charge sectors.
+        The returned eigenvectors have combined legs ``'(vL.vL*)'`` or ``(vR*.vR)``.
         """
-        if max_num_ev is None:
-            max_num_ev = num_ev + 2
-        flat_linop = self.flat_linop
-        if v0 is not None:
-            if flat_linop.charge_sector is None:
-                raise ValueError("specifying v0 with charge_sector None not supported right now")
-            else:
-                kwargs['v0'] = self.flat_linop.npc_to_flat(v0)
-        # for given charge sector
-        for k in range(num_ev, max_num_ev + 1):
-            if k > num_ev:
-                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
-            try:
-                eta, A = speigs(flat_linop, k=k, which='LM', **kwargs)
-                break
-            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
-                if k == max_num_ev:
-                    raise
-            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
-        A = np.real_if_close(A)
-        if flat_linop.charge_sector is None:
-            convert = flat_linop.flat_to_npc_None_sector
-        else:
-            convert = flat_linop.flat_to_npc
-        A = [convert(A[:, j]) for j in range(A.shape[1])]
-        # sort
-        perm = argsort(eta, which)
-        return np.array(eta)[perm], [A[j] for j in perm]
+        return self.flat_linop.eigenvectors(*args, **kwargs)
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

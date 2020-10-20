@@ -436,16 +436,8 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)
     N_min = options.get('N_min', None)
-    try:
-        Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
-    except scipy.sparse.linalg.ArpackNoConvergence:
-        # simply try again with larger "k", that often helps
-        new_k = min(6, H_flat.shape[1])
-        if new_k <= 1:
-            raise
-        Es, Vs = speigsh(H_flat, k=new_k, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
-    psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
-    psi0.itranspose(psi.get_leg_labels())
+    Es, Vs = H_flat.eigenvectors(num_ev=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    psi0 = Vs[0].split_legs(0).itranspose(psi.get_leg_labels())
     return Es[0], psi0
 
 
