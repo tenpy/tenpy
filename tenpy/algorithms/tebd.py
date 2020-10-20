@@ -678,28 +678,40 @@ class RandomUnitaryEvolution(Engine):
     --------
     One can initialize a "random" state with total Sz = L//2 as follows:
 
-    >>> L = 8
-    >>> spin_half = SpinHalfSite(conserve='Sz')
-    >>> psi = MPS.from_product_state([spin_half]*L, [0, 1]*(L//2), bc='finite')  # Neel state
-    >>> print(psi.chi)
-    [1, 1, 1, 1, 1, 1, 1]
-    >>> options = dict(N_steps=2, trunc_params={'chi_max':10})
-    >>> eng = RandomUnitaryEvolution(psi, options)
-    >>> eng.run()
-    >>> print(psi.chi)
-    [2, 4, 8, 10, 8, 4, 2]
-    >>> psi.canonical_form()  # necessary if you need to truncate (strongly) during the evolution
+    .. testcode :: RandomUnitaryEvolution
+
+        from tenpy.algorithms.tebd import RandomUnitaryEvolution
+        from tenpy.networks.mps import MPS
+        L = 8
+        spin_half = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+        psi = MPS.from_product_state([spin_half]*L, ["up", "down"]*(L//2), bc='finite')  # Neel state
+        print(psi.chi)
+        options = dict(N_steps=2, trunc_params={'chi_max':10}, verbose=0)
+        eng = RandomUnitaryEvolution(psi, options)
+        eng.run()
+        print(psi.chi)
+        psi.canonical_form()  # necessary if you need to truncate (strongly) during the evolution
+
+    which will print:
+
+    .. testoutput :: RandomUnitaryEvolution
+
+        [1, 1, 1, 1, 1, 1, 1]
+        [2, 4, 8, 10, 8, 4, 2]
 
     The "random" unitaries preserve the specified charges, e.g. here we have Sz-conservation.
     If you start in a sector of all up spins, the random unitaries can only apply a phase:
 
-    >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
-    >>> print(psi2.chi)
-    [1, 1, 1, 1, 1, 1, 1]
-    >>> eng2 = RandomUnitaryEvolution(psi2, options)
-    >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
-    >>> print(psi2.chi)  # still a product state, not really random!!!
-    [1, 1, 1, 1, 1, 1, 1]
+    .. doctest :: RandomUnitaryEvolution
+
+        >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
+        >>> print(psi2.chi)
+        [1, 1, 1, 1, 1, 1, 1]
+        >>> eng2 = RandomUnitaryEvolution(psi2, options)
+        >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
+        >>> print(psi2.chi)  # still a product state, not really random!!!
+        [1, 1, 1, 1, 1, 1, 1]
+
     """
     def __init__(self, psi, options):
         Engine.__init__(self, psi, None, options)

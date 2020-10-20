@@ -77,11 +77,6 @@ class TruncationError:
         This is probably the quantity you are actually interested in.
         Takes into account the factor 2 explained in the section on Errors in the
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
-
-    Examples
-    --------
-    >>> TE = TruncationError()
-    >>> TE += tebd.time_evolution(...)  # add `eps`, multiply `ov`
     """
     def __init__(self, eps=0., ov=1.):
         self.eps = eps

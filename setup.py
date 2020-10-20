@@ -14,13 +14,13 @@ if not sys.version_info >= (3, 5):
 
 MAJOR = 0
 MINOR = 7
-MICRO = 1
+MICRO = 2
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
 #  To update to a new release:
-#      # update changelog and release notes, make sure they're included in doc/releases.rst
+#      # update changelog and release notes
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -s "v0.1.2"  # (sign: requires GPG key)
@@ -32,7 +32,8 @@ VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 #      git push
 #      git push origin v0.1.2 # also push the tag
 #      create release with release-notes on github
-#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
+#      # (the release triggers the github action for uploading the package to PyPi like this:
+#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
 #      # wait for conda-forge bot to create a pull request with the new version and merge it
 

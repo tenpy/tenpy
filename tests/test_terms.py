@@ -4,9 +4,9 @@
 import numpy as np
 import copy
 
-from tenpy.networks.terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from tenpy.networks.terms import order_combine_term
+from tenpy.networks.terms import *
 from tenpy.networks import site
+from tenpy.networks import mpo
 from tenpy.linalg.np_conserved import LegCharge
 
 spin_half = site.SpinHalfSite(conserve='Sz')
@@ -177,9 +177,6 @@ def test_coupling_terms():
     assert mc.max_range() == 3 - 0
 
 
-# TODO: test order_and_combine
-
-
 def test_coupling_terms_handle_JW():
     strength = 0.25
     sites = []
@@ -237,3 +234,56 @@ def test_coupling_terms_handle_JW():
     assert args == (strength, [0, 1, 3, 4, 6,
                                7], ["Y_0 JW", "X_1 JW", "Y_3", "X_0", "Y_2 JW",
                                     "Y_3"], ["JW", "JW", "Id", "Id", "JW"])
+
+
+def test_exp_decaying_terms():
+    L = 8
+    spin = site.Site(spin_half.leg)
+    spin.add_op("X", 2. * np.eye(2))
+    spin.add_op("Y", 3. * np.eye(2))
+    sites = [spin] * L
+    edt = ExponentiallyDecayingTerms(L)
+    p, l = 3., 0.5
+    edt.add_exponentially_decaying_coupling(p, l, 'X', 'Y', subsites=[0, 2, 4, 6])
+    edt._test_terms(sites)
+    ts = edt.to_TermList(bc='finite', cutoff=0.01)
+    ts_desired = [
+        [("X", 0), ("Y", 2)],
+        [("X", 0), ("Y", 4)],
+        [("X", 0), ("Y", 6)],
+        [("X", 2), ("Y", 4)],
+        [("X", 2), ("Y", 6)],
+        [("X", 4), ("Y", 6)],
+    ]
+    assert ts.terms == ts_desired
+    assert np.all(ts.strength == p * np.array([l, l**2, l**3, l, l**2, l]))
+
+    # check whether the MPO construction works by comparing MPOs
+    # constructed from ts vs. directly
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite').build_MPO()
+    G = mpo.MPOGraph(sites, bc='finite')
+    edt.add_to_graph(G)
+    G.test_sanity()
+    G.add_missing_IdL_IdR()
+    H2 = G.build_MPO()
+    assert H1.is_equal(H2)
+
+    # check infinite versions
+    cutoff = 0.01
+    cutoff_range = 8
+    assert p * l**cutoff_range > cutoff > p * l**(cutoff_range + 1)
+    ts = edt.to_TermList(bc='infinite', cutoff=cutoff)
+    ts_desired = ([[("X", 0), ("Y", 0 + 2 * i)] for i in range(1, cutoff_range + 1)] +
+                  [[("X", 2), ("Y", 2 + 2 * i)] for i in range(1, cutoff_range + 1)] +
+                  [[("X", 4), ("Y", 4 + 2 * i)] for i in range(1, cutoff_range + 1)] +
+                  [[("X", 6), ("Y", 6 + 2 * i)] for i in range(1, cutoff_range + 1)])  # yapf: disable
+    assert ts.terms == ts_desired
+    strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
+    assert np.all(ts.strength == strength_desired)
+    G = mpo.MPOGraph(sites, bc='infinite')
+    edt.add_to_graph(G)
+    G.test_sanity()
+    G.add_missing_IdL_IdR()
+    H2 = G.build_MPO()
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite').build_MPO()
+    assert H1.is_equal(H2, cutoff)

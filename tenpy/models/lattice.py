@@ -348,7 +348,7 @@ class Lattice:
 
             import matplotlib.pyplot as plt
             from tenpy.models import lattice
-            fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+            fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
             orders = ['Cstyle', 'snakeCstyle', 'Fstyle', 'snakeFstyle']
             lat = lattice.Square(5, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
@@ -634,37 +634,48 @@ class Lattice:
         `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
         Then this function gives you the expectation values ordered by the lattice:
 
-        >>> print(lat.shape, A.shape)
-        (10, 3, 2) (60,)
-        >>> A_res = lat.mps2lat_values(A)
-        >>> A_res.shape
-        (10, 3, 2)
-        >>> A_res[lat.mps2lat_idx(5)] == A[5]
-        True
+        .. testsetup :: mps2lat_values
+
+            lat = tenpy.models.lattice.Honeycomb(10, 3, None)
+            A = np.arange(60)
+            C = np.arange(60*60).reshape(60, 60)
+            A_res = lat.mps2lat_values(A)
+
+        .. doctest :: mps2lat_values
+
+            >>> print(lat.shape, A.shape)
+            (10, 3, 2) (60,)
+            >>> A_res = lat.mps2lat_values(A)
+            >>> A_res.shape
+            (10, 3, 2)
+            >>> A_res[tuple(lat.mps2lat_idx(5))] == A[5]
+            True
 
         If you have a correlation function ``C[i, j]``, it gets just slightly more complicated:
 
-        >>> print(lat.shape, C.shape)
-        (10, 3, 2) (60, 60)
-        >>> lat.mps2lat_values(C, axes=[0, 1]).shape
-        (10, 3, 2, 10, 3, 2)
+        .. doctest :: mps2lat_values
+
+            >>> print(lat.shape, C.shape)
+            (10, 3, 2) (60, 60)
+            >>> lat.mps2lat_values(C, axes=[0, 1]).shape
+            (10, 3, 2, 10, 3, 2)
 
         If the unit cell consists of different physical sites, an onsite operator might be defined
         only on one of the sites in the unit cell. Then you can use :meth:`mps_idx_fix_u` to get
         the indices of sites it is defined on, measure the operator on these sites, and use
         the argument `u` of this function.
 
-        >>> u = 0
-        >>> idx_subset = lat.mps_idx_fix_u(u)
-        >>> A_u = A[idx_subset]
-        >>> A_u_res = lat.mps2lat_values(A_u, u=u)
-        >>> A_u_res.shape
-        (10, 3)
-        >>> np.all(A_res[:, :, u] == A_u_res[:, :])
-        True
+        .. doctest :: mps2lat_values
 
-        .. todo ::
-            make sure this function is used for expectation values...
+            >>> u = 0
+            >>> idx_subset = lat.mps_idx_fix_u(u)
+            >>> A_u = A[idx_subset]
+            >>> A_u_res = lat.mps2lat_values(A_u, u=u)
+            >>> A_u_res.shape
+            (10, 3)
+            >>> np.all(A_res[:, :, u] == A_u_res[:, :])
+            True
+
         """
         axes = to_iterable(axes)
         if len(axes) > 1:
@@ -920,7 +931,7 @@ class Lattice:
         dx : 2D array, shape (N_ops, :attr:`dim`)
             ``dx[i, :]`` is the translation vector in the lattice for the `i`-th operator.
             Corresponds to the `dx` of each operator given in the argument `ops` of
-            :meth:`tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+            :meth:`tenpy.models.model.CouplingModel.add_multi_coupling`.
 
         Returns
         -------
@@ -950,7 +961,7 @@ class Lattice:
         ----------
         ops : list of ``(opname, dx, u)``
             Same as the argument `ops` of
-            :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling`.
+            :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`.
 
         Returns
         -------
@@ -1284,24 +1295,33 @@ class IrregularLattice(Lattice):
 
     Examples
     --------
+
+    .. testsetup :: IrregularLattice
+
+        from tenpy.models.lattice import *
+
     Let's imagine that we have two different sites; for concreteness we can thing of a
     fermion site, which we represent with ``'F'``, and a spin site ``'S'``.
 
     You could now imagine that to have fermion chain with spins on the "bonds".
     In the periodic/infinite case, you would simply define
 
-    >>> lat = Lattice([2], unit_cell=['F', 'S'], bc='periodic', bc_MPS='infinite')
-    >>> lat.mps_sites()
-    ['F', 'S', 'F', 'S']
+    .. doctest :: IrregularLattice
+
+        >>> lat = Lattice([2], unit_cell=['F', 'S'], bc='periodic', bc_MPS='infinite')
+        >>> lat.mps_sites()
+        ['F', 'S', 'F', 'S']
 
     For a finite system, you don't want to terminate with a spin on the right, so you need to
     remove the very last site by specifying the lattice index ``[L-1, 1]`` of that site:
 
-    >>> L = 4
-    >>> reg_lat = Lattice([L], unit_cell=['F', 'S'], bc='open', bc_MPS='finite')
-    >>> irr_lat = IrregularLattice(reg_lat, remove=[[L-1, 1]])
-    >>> irr_lat.mps_sites()
-    ['F', 'S', 'F', 'S', 'F', 'S', 'F']
+    .. doctest :: IrregularLattice
+
+        >>> L = 4
+        >>> reg_lat = Lattice([L], unit_cell=['F', 'S'], bc='open', bc_MPS='finite')
+        >>> irr_lat = IrregularLattice(reg_lat, remove=[[L - 1, 1]])
+        >>> irr_lat.mps_sites()
+        ['F', 'S', 'F', 'S', 'F', 'S', 'F']
 
     Another simple example would be to add a spin in the center of a fermion chain.
     In that case, we add another site to the unit cell and specify the lattice index as
@@ -1309,10 +1329,13 @@ class IrregularLattice(Lattice):
     irregular lattice).
     The `None` for the MPS index is equivalent to ``(L-1)/2`` in this case.
 
-    >>> reg_lat = Lattice([L], unit_cell=['F'])
-    >>> irr_lat = IrregularLattice(reg_lat, add=([[(L-1)//2, 1]], [None]),
-    ...                            add_unit_cell=['S'])
-    ['F', 'F', 'S', 'F', 'F']
+    .. doctest :: IrregularLattice
+
+        >>> reg_lat = Lattice([L], unit_cell=['F'])
+        >>> irr_lat = IrregularLattice(reg_lat, add=([[(L - 1)//2, 1]], [None]),
+        ...                            add_unit_cell=['S'])
+        >>> irr_lat.mps_sites()
+        ['F', 'F', 'S', 'F', 'F']
 
     """
     _REMOVED = -123456  # value in self._perm indicating removed sites.
@@ -1799,7 +1822,7 @@ class Honeycomb(Lattice):
 
             import matplotlib.pyplot as plt
             from tenpy.models import lattice
-            fig, axes = plt.subplots(1, 2, True, True, figsize=(5, 6))
+            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(5, 6))
             orders = ['default', 'snake']
             lat = lattice.Honeycomb(4, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
@@ -2012,7 +2035,7 @@ def get_order_grouped(shape, groups):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        fig, axes = plt.subplots(2, 2, True, True, figsize=(8, 6))
+        fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
         groups = [[(0, 1, 2)], [(0, 2, 1)],
                 [(0, 1), (2,)], [(0, 2), (1,)]]
         lat = lattice.Kagome(3, 3, None, bc='periodic')

@@ -84,16 +84,16 @@ class Site(Hdf5Exportable):
     >>> Sp = [[0, 1.], [0, 0]]
     >>> Sm = [[0, 0], [1., 0]]
     >>> Sz = [[0.5, 0], [0, -0.5]]
-    >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
+    >>> site = tenpy.networks.site.Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
     >>> print(site.Splus.to_ndarray())
-    array([[ 0.,  1.],
-           [ 0.,  0.]])
+    [[0. 1.]
+     [0. 0.]]
     >>> print(site.get_op('Sminus').to_ndarray())
-    array([[ 0.,  0.],
-           [ 1.,  0.]])
+    [[0. 0.]
+     [1. 0.]]
     >>> print(site.get_op('Splus Sminus').to_ndarray())
-    array([[ 1.,  0.],
-           [ 0.,  0.]])
+    [[1. 0.]
+     [0. 0.]]
     """
     def __init__(self, leg, state_labels=None, **site_ops):
         self.leg = leg
@@ -638,27 +638,33 @@ def multi_sites_combine_charges(sites, same_charges=[]):
 
     Examples
     --------
-    >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-    >>> spin = SpinSite(1.0, 'Sz')
-    >>> ferm.leg.chinfo is spin.leg.chinfo
-    False
-    >>> print(spin.leg)
-    +1
-    0 [[-1]
-    1  [ 1]]
-    2
-    >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, 0)]])
-    [array([0, 1, 2, 3]), array([0, 1])]
-    >>> # no permutations where needed
-    >>> ferm.leg.chinfo is spin.leg.chinfo
-    True
-    >> ferm.leg.chinfo.names
-    ['N', 'Sz']
-    >>> print(spin.leg)
-    +1
-    0 [[ 0 -1]
-    1  [ 0  1]]
-    2
+    .. doctest :: multi_sites_combine_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> from tenpy.networks.site import *
+        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+        >>> spin = SpinSite(1.0, 'Sz')
+        >>> ferm.leg.chinfo is spin.leg.chinfo
+        False
+        >>> print(spin.leg)
+         +1
+        0 [[-2]
+        1  [ 0]
+        2  [ 2]]
+        3
+        >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, 0)]])
+        [array([0, 1, 2, 3]), array([0, 1, 2])]
+        >>> # no permutations where needed
+        >>> ferm.leg.chinfo is spin.leg.chinfo
+        True
+        >>> ferm.leg.chinfo.names
+        ['N', 'Sz']
+        >>> print(spin.leg)
+         +1
+        0 [[ 0 -2]
+        1  [ 0  0]
+        2  [ 0  2]]
+        3
     """
     # parse same_charges argument
     same_charges = list(same_charges)  # need to modify elements...

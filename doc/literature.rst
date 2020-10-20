@@ -15,8 +15,9 @@ TeNPy related sources
 [TeNPyNotes]_ are lecture notes, meant as an introduction to tensor networks (focusing on MPS), and introduced TeNPy to
 the scientific community by giving examples how to call the algorithms in TeNPy.
 [TeNPySource]_ is the location of the source code, and the place where you can report bugs.
-[TeNPyDoc]_ is where the location is hosted online.
-[TeNPyForum]_ is the place where you can ask questions and look for help, when you are stuck with implementing something.
+We have split example notebooks into [TeNPyNotebooks]_ to keep the git history of the original repository clean.
+[TeNPyDoc]_ is where the documentation is hosted online.
+[TeNPyForum]_ is the place where you can ask questions and look for help when you are stuck with implementing something.
 
 .. [TeNPyNotes]
     "Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)"
@@ -24,6 +25,8 @@ the scientific community by giving examples how to call the algorithms in TeNPy.
     also below as :cite:`hauschild2018a`.
 .. [TeNPySource]
     https://github.com/tenpy/tenpy
+.. [TeNPyNotebooks]
+    Collection of example [jupyter]_ notebooks using TeNPy: https://github.com/tenpy/tenpy_notebooks
 .. [TeNPyDoc]
     Online documentation, https://tenpy.readthedocs.io/
 .. [TeNPyForum]
@@ -55,6 +58,11 @@ The following links are not physics-related, but are good to know if you want to
     A file format and library for saving data (including metadata).
     We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`, see :doc:`/intro/input_output`.
 
+.. [jupyter]
+    Jupyter notebooks, https://jupyter.org/
+    An amazing interface for (python) notebooks which can contain both source code, text and outputs in a single file.
+    They provide a good way to get started with python, we use them for examples.
+
 General reading
 ---------------
 :cite:`schollwoeck2011` is an extensive introduction to MPS, DMRG and TEBD with lots of details on the implementations, and a classic read, although a bit lengthy.
@@ -77,11 +85,12 @@ Algorithm developments
 :cite:`zaletel2015` is another standard method for time-evolution with long-range Hamiltonians.
 :cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018a`.
 :cite:`vidal2007` introduced MERA.
+The scaling :math:`S=c/6 log(\chi)` at a 1D critical point is explained in :cite:`pollmann2009`.
 
 
 References
 ----------
 
 .. bibliography:: literature.bib
-    :style: unsrt
+    :style: custom1
     :all:

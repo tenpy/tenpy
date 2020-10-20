@@ -28,4 +28,4 @@ At least the stable releases should run these tests without any failures.
 
 If you can run the examples but not the tests, check whether `pytest` actually uses the correct python version.
 
-The test suite is also run automatically by github actions and with `travis-ci <https://travis-ci.org>`_, results can be inspected `here <https://travis-ci.org/tenpy/tenpy>`_.
+The test suite is also run automatically by `github actions <https://github.com/tenpy/tenpy/actions>`_ and with `travis-ci <https://travis-ci.org>`_, results can be inspected `here <https://travis-ci.org/tenpy/tenpy>`_.

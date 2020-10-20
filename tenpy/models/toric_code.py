@@ -9,7 +9,7 @@ import numpy as np
 
 from .lattice import Lattice, get_order, _parse_sites
 from ..networks.site import SpinHalfSite
-from .model import MultiCouplingModel, CouplingMPOModel
+from .model import CouplingMPOModel
 from ..tools.params import asConfig
 from ..tools.misc import any_nonzero
 
@@ -84,7 +84,7 @@ class DualSquare(Lattice):
         return super().ordering(order)
 
 
-class ToricCode(CouplingMPOModel, MultiCouplingModel):
+class ToricCode(CouplingMPOModel):
     r"""Toric code model.
 
     The Hamiltonian reads:

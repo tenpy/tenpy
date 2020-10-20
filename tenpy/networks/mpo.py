@@ -1267,15 +1267,17 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc, insert_all_id=True):
+    def from_terms(cls, terms, sites, bc, insert_all_id=True):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
         ----------
-        onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
-            Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms : :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
-            Coupling terms to be added to the new :class:`MPOGraph`.
+        terms : iterable of ``tenpy.networks.terms.*Terms`` classes
+            Entries can be :class:`~tenpy.networks.terms.OnsiteTerms`,
+            :class:`~tenpy.networks.terms.CouplingTerms`,
+            :class:`~tenpy.networks.terms.MultiCouplingTerms` or
+            :class:`~tenpy.networks.terms.ExponentialCouplingTerms`.
+            All the entries get added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
@@ -1292,17 +1294,18 @@ class MPOGraph:
         See also
         --------
         from_term_list :
-            equivalent for other representation terms.
+            equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
-        graph = cls(sites, bc, coupling_terms.max_range())
-        onsite_terms.add_to_graph(graph)
-        coupling_terms.add_to_graph(graph)
+        max_range = max([t.max_range() for t in terms])
+        graph = cls(sites, bc, max_range)
+        for term in terms:
+            term.add_to_graph(graph)
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
     def from_term_list(cls, term_list, sites, bc, insert_all_id=True):
-        """Initialize form a list of operator terms and prefactors.
+        """Initialize from a list of operator terms and prefactors.
 
         Parameters
         ----------
@@ -1325,8 +1328,8 @@ class MPOGraph:
         --------
         from_terms : equivalent for other representation of terms.
         """
-        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc, insert_all_id)
+        ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
+        return cls.from_terms(ot_ct, sites, bc, insert_all_id)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1887,6 +1890,10 @@ class MPOEnvironment(MPSEnvironment):
         LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
         RP = self.get_RP(i0, store=False)
         return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+
+    def expectation_value(self, ops, sites=None, axes=None):
+        """(doesn't make sense)"""
+        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""

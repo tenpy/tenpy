@@ -453,24 +453,33 @@ def get_parameter(params, key, default, descr, asarray=False):
     Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
     with the dictionary as argument, which looks similar like:
 
-    >>> def model_calc_U(U_param):
-    >>>    dt = get_parameter(U_param, 'dt', 0.01, 'TEBD')
-    >>>    # ... calculate exp(-i * dt* H) ....
+    >>> from tenpy.tools.params import get_parameter
+    >>> def model_calc_U(params):
+    ...    dt = get_parameter(params, 'dt', 0.01, 'TEBD')
+    ...    order = get_parameter(params, 'order', 1, 'TEBD')
+    ...    print("calc U with dt =", dt, "and order =", order )
+    ...    # ... calculate exp(-i * dt* H) ....
 
-    Then, when you call `time_evolution` without any parameters, it just uses the default value:
+    Then, when you call it without any parameters, it just uses the default value:
 
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict())  # uses dt=0.01
-
-    If you provide the special keyword ``'verbose'`` you can triger this function to print the
-    used parameter values:
-
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict(verbose=1))
-    parameter 'dt'=0.01 (default) for TEBD
+    >>> model_calc_U(dict())
+    calc U with dt = 0.01 and order = 1
 
     Of course you can also provide the parameter to use a non-default value:
 
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
-    parameter 'dt'=0.1 for TEBD
+    >>> model_calc_U(dict(dt=0.02))
+    calc U with dt = 0.02 and order = 1
+
+
+    Increasing the special keyword ``'verbose'`` generally prints more:
+
+    >>> model_calc_U(dict(dt=0.02, verbose=1))
+    parameter 'dt'=0.02 for TEBD
+    calc U with dt = 0.02 and order = 1
+    >>> model_calc_U(dict(dt=0.02, verbose=2))
+    parameter 'dt'=0.02 for TEBD
+    parameter 'order'=1 (default) for TEBD
+    calc U with dt = 0.02 and order = 1
 
     """
     msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "

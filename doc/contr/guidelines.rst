@@ -39,6 +39,7 @@ However, these are just guidelines - it still helps if you contribute something,
         Moreover, you can link to github issues, arXiv papers, dois, and topics in the community forum with
         e.g. :issue:`5`, :arxiv:`1805.00055`, :doi:`10.1000/1` and :forum:`3`.
 
+        Citations from the literature list can be cited as :cite:`white1992` using the bibtex key.
 
         Write inline formulas as :math:`H |\Psi\rangle = E |\Psi\rangle` or displayed equations as
         .. math ::

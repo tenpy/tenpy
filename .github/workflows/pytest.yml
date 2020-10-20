@@ -1,4 +1,4 @@
-name: Python package
+name: pytest
 
 on: [push]
 
@@ -9,7 +9,7 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
 
     steps:
     - uses: actions/checkout@v1
@@ -23,7 +23,7 @@ jobs:
         pip install -r requirements.txt
     - name : Build
       run: |
-        pip install .[all]  # include all extra dependencies
+        pip install .
 #    - name: Lint with flake8
 #      run: |
 #        pip install flake8
