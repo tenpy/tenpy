@@ -45,13 +45,14 @@ is the discarded part (orthogonal to the kept part) and the
 
 import numpy as np
 from ..linalg import np_conserved as npc
+from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
-class TruncationError:
+class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
 
     The default initialization represents "no truncation".
