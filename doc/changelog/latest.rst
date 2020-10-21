@@ -22,6 +22,7 @@ Added
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` and :meth:`~tenpy.linalg.sparse.FlatHermitianOperator.eigenvectors` to unify
   code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
 - :meth:`tenpy.tools.misc.group_by_degeneracy`
+- :meth:`tenpy.tools.fit.entropy_profile_from_CFT` and :meth:`tenpy.tools.fit.central_charge_from_S_profile`
 
 Changed
 ^^^^^^^
