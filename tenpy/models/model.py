@@ -1515,7 +1515,7 @@ class CouplingModel(Model):
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
         return H_MPO
 
-    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+    def coupling_strength_add_ext_flux(self, strength, dx, phase, mode='cut'):
         """Add an external flux to the coupling strength.
 
         When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
@@ -1541,6 +1541,9 @@ class CouplingModel(Model):
             E.g., if you want flux through the cylinder on which you have an infinite MPS,
             you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
             hopping around the cylinder.
+        mode : allowed values 'cut' (default) or 'uniform'
+            If 'cut', phase is applied only at the boundary of the simulation cell
+            If 'uniform', phase is uniformly spread out among all couplings
 
         Returns
         -------
@@ -1569,9 +1572,11 @@ class CouplingModel(Model):
             ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
             ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """
+        if mode is not 'cut' and mode is not 'uniform':
+            raise ValueError("Unknown mode for applying flux insertion in model.coupling_strength_add_ext_flux")
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
-        # make strenght complex
+        # make strength complex
         complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
@@ -1581,15 +1586,20 @@ class CouplingModel(Model):
                 continue
             if abs(dx[ax]) == 0:
                 continue  # nothing to do
-            slices = [slice(None) for _ in range(self.lat.dim)]
-            slices[ax] = slice(-abs(dx[ax]), None)
-            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
-            # accross the periodic b.c.
-            slices = tuple(slices)
-            if dx[ax] > 0:
-                strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
-            else:
-                strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
+            if mode is 'cut':
+                slices = [slice(None) for _ in range(self.lat.dim)]
+                slices[ax] = slice(-abs(dx[ax]), None)
+                # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+                # accross the periodic b.c.
+                slices = tuple(slices)
+                if dx[ax] > 0:
+                    strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
+                else:
+                    strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
+            else: # mode is uniform
+                assert(mode is 'uniform')
+                # hoppings pick up a fraction -dx[ax]/c_shape[ax] of the total phase (sign conventions as above)
+                strength *= np.exp(-1.j * dx[ax] * phase[ax]/c_shape[ax])
         return strength
 
 
