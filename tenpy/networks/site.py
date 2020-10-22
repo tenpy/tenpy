@@ -771,7 +771,7 @@ class SpinHalfSite(Site):
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
-                chinfo = npc.ChargeInfo([2], ['parity'])
+                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
                 leg = npc.LegCharge.from_qflat(chinfo, [1, 0])  # ([1, -1] would need ``qmod=[4]``)
             else:
                 leg = npc.LegCharge.from_trivial(2)
@@ -864,7 +864,7 @@ class SpinSite(Site):
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
-                chinfo = npc.ChargeInfo([2], ['parity'])
+                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
                 leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
             else:
                 leg = npc.LegCharge.from_trivial(d)
@@ -937,7 +937,7 @@ class FermionSite(Site):
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
         elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
+            chinfo = npc.ChargeInfo([2], ['parity_N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
         else:
             leg = npc.LegCharge.from_trivial(2)
@@ -1013,9 +1013,6 @@ class SpinHalfFermionSite(Site):
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
-    .. todo ::
-        Check if Jordan-Wigner strings for 4x4 operators are correct.
-
     Parameters
     ----------
     cons_N : ``'N' | 'parity' | None``
@@ -1086,17 +1083,17 @@ class SpinHalfFermionSite(Site):
             qmod.append(1)
             charges.append([0, 1, 1, 2])
         elif cons_N == 'parity':
-            qnames.append('N')
+            qnames.append('parity_N')
             qmod.append(2)
             charges.append([0, 1, 1, 0])
         if cons_Sz == 'Sz':
-            qnames.append('Sz')
+            qnames.append('2*Sz')
             qmod.append(1)
             charges.append([0, 1, -1, 0])
             del ops['Sx']
             del ops['Sy']
         elif cons_Sz == 'parity':
-            qnames.append('Sz')
+            qnames.append('parity_Sz')
             qmod.append(4)  # difference between up and down is 2!
             charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
             # chosen s.t. Cu, Cd have well-defined charges!
@@ -1200,7 +1197,7 @@ class BosonSite(Site):
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
+            chinfo = npc.ChargeInfo([2], ['parity_N'])
             leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
             # sort by charges
             perm_qind, leg = leg_unsorted.sort()

@@ -254,7 +254,7 @@ def test_multi_sites_combine_charges():
     spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
     ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
     site.multi_sites_combine_charges([spin, ferm])
-    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
+    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', '2*Sz')
     spin.test_sanity()
     ferm.test_sanity()
     for op_name, op_flat in spin_ops.items():
@@ -266,8 +266,8 @@ def test_multi_sites_combine_charges():
 
     spin = site.SpinSite(0.5, 'Sz')
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-    site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, '2*Sz')]])
-    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz')
+    site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, '2*Sz'), (1, '2*Sz')]])
+    assert tuple(ferm.leg.chinfo.names) == ('N', '2*Sz')
     spin.test_sanity()
     ferm.test_sanity()
     for op_name, op_flat in spin_ops.items():
@@ -281,8 +281,9 @@ def test_multi_sites_combine_charges():
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
     spin = site.SpinSite(0.5, 'Sz')
     spin1 = site.SpinSite(1, 'Sz')
-    site.multi_sites_combine_charges([ferm, spin1, spin], same_charges=[[(0, 'Sz'), (2, '2*Sz')]])
-    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz', '2*Sz')
+    site.multi_sites_combine_charges([ferm, spin1, spin],
+                                     same_charges=[[(0, '2*Sz'), (2, '2*Sz')]])
+    assert tuple(ferm.leg.chinfo.names) == ('N', '2*Sz', '2*Sz')
     spin.test_sanity()
     ferm.test_sanity()
     spin1.test_sanity()
