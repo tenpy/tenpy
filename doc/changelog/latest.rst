@@ -35,3 +35,4 @@ Fixed
 ^^^^^
 - The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
+- The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was wired.

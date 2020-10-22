@@ -1094,10 +1094,9 @@ class SpinHalfFermionSite(Site):
             del ops['Sy']
         elif cons_Sz == 'parity':
             qnames.append('parity_Sz')
-            qmod.append(4)  # difference between up and down is 2!
-            charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
+            qmod.append(2)  # the charge is (2*Sz) % 2
+            charges.append([0, 1, 1, 0])  # == [0, 1, -1, 0] mod 4
             # chosen s.t. Cu, Cd have well-defined charges!
-
         if len(qmod) == 0:
             leg = npc.LegCharge.from_trivial(d)
         else:
