@@ -780,7 +780,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
+        terminate with ``shelve = True``.
     sweeps : int
         The number of sweeps already performed. (Useful for re-start).
     time0 : float

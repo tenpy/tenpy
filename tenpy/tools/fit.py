@@ -6,7 +6,8 @@ import scipy.optimize as optimize
 
 __all__ = [
     'alg_decay', 'linear_fit', 'lin_fit_res', 'alg_decay_fit_res', 'alg_decay_fit',
-    'alg_decay_fits', 'plot_alg_decay_fit', 'fit_with_sum_of_exp', 'sum_of_exp'
+    'alg_decay_fits', 'plot_alg_decay_fit', 'fit_with_sum_of_exp', 'sum_of_exp',
+    'entropy_profile_from_CFT', 'central_charge_from_S_profile'
 ]
 
 
