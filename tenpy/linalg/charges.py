@@ -37,7 +37,7 @@ QTYPE = np.int_
 
 
 class ChargeInfo:
-    """Meta-data about the charge of a tensor.
+    r"""Meta-data about the charge of a tensor.
 
     Saves info about the nature of the charge of a tensor.
     Provides :meth:`make_valid` for taking modulo `m`.
@@ -49,8 +49,9 @@ class ChargeInfo:
     ----------
     mod : iterable of QTYPE
         The len gives the number of charges, `qnumber`.
-        For each charge one entry `m`: the charge is conserved modulo `m`.
-        Defaults to trivial, i.e., no charge.
+        Each entry is a positive integer, where
+        1 implies a :math:`U(1)` charge and `N`>1 implies a :math:`Z_N` symmetry.
+        Defaults to "trivial", i.e., no charge.
     names : list of str
         Descriptive names for the charges.  Defaults to ``['']*qnumber``.
 
@@ -237,7 +238,7 @@ class ChargeInfo:
     def mod(self):
         """Modulo how much each of the charges is taken.
 
-        1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
+        Entries are 1 for a :math:`U(1)` charge, and N for a :math:`Z_N` symmetry.
         """
         # The property makes `mod` readonly.
         return self._mod
