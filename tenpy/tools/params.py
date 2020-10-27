@@ -296,7 +296,7 @@ class Config(MutableMapping):
         """
         name = self.name
         verbose = self.verbose
-        new_key = option in self.unused
+        new_key = option in self.unused or use_default
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
             val = self.options.get(option, "<not set>")
             if action is None:
