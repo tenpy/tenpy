@@ -1572,7 +1572,7 @@ class CouplingModel(Model):
             ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
             ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """
-        if mode is not 'cut' and mode is not 'uniform':
+        if ((mode != 'cut') and (mode != 'uniform')):
             raise ValueError("Unknown mode for applying flux insertion in model.coupling_strength_add_ext_flux")
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
@@ -1586,7 +1586,7 @@ class CouplingModel(Model):
                 continue
             if abs(dx[ax]) == 0:
                 continue  # nothing to do
-            if mode is 'cut':
+            if (mode == 'cut'):
                 slices = [slice(None) for _ in range(self.lat.dim)]
                 slices[ax] = slice(-abs(dx[ax]), None)
                 # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
@@ -1597,9 +1597,10 @@ class CouplingModel(Model):
                 else:
                     strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
             else: # mode is uniform
-                assert(mode is 'uniform')
+                assert(mode == 'uniform')
                 # hoppings pick up a fraction -dx[ax]/c_shape[ax] of the total phase (sign conventions as above)
                 strength *= np.exp(-1.j * dx[ax] * phase[ax]/c_shape[ax])
+        print ("Hopping strengths: ",strength)
         return strength
 
 
