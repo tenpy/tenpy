@@ -22,14 +22,18 @@ Added
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` and :meth:`~tenpy.linalg.sparse.FlatHermitianOperator.eigenvectors` to unify
   code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
 - :meth:`tenpy.tools.misc.group_by_degeneracy`
+- :meth:`tenpy.tools.fit.entropy_profile_from_CFT` and :meth:`tenpy.tools.fit.central_charge_from_S_profile`
 
 Changed
 ^^^^^^^
 - For finite DMRG, :cfg:option:`DMRGEngine.N_sweeps_check` now defaults to 1 instead of 10 (which is still the default for infinite MPS).
 - Merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.npc_to_flat_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.npc_to_flat`,
   merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc`.
+- Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
+- Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
 
 Fixed
 ^^^^^
 - The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
+- The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was wired.

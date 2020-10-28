@@ -6,7 +6,8 @@ import scipy.optimize as optimize
 
 __all__ = [
     'alg_decay', 'linear_fit', 'lin_fit_res', 'alg_decay_fit_res', 'alg_decay_fit',
-    'alg_decay_fits', 'plot_alg_decay_fit', 'fit_with_sum_of_exp', 'sum_of_exp'
+    'alg_decay_fits', 'plot_alg_decay_fit', 'fit_with_sum_of_exp', 'sum_of_exp',
+    'entropy_profile_from_CFT', 'central_charge_from_S_profile'
 ]
 
 
@@ -21,7 +22,7 @@ def linear_fit(x, y):
     Returns a, b, res.
     """
     assert x.ndim == 1 and y.ndim == 1
-    fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y)
+    fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y, rcond=None)
     return fit[0][0], fit[0][1], fit[1][0]
 
 
@@ -180,3 +181,59 @@ def sum_of_exp(lambdas, prefactors, x):
     See :func:`fit_sum_of_exp` for more details.
     """
     return np.real_if_close(np.dot(np.power.outer(lambdas, x).T, prefactors))
+
+
+def entropy_profile_from_CFT(size_A, L, central_charge, const):
+    r"""Expected profile for the entanglement entropy at a critical point.
+
+    Conformal field theory predicts the entanglement entropy for cutting
+    a ground state of a finite, critical (i.e. gapless) system of length `L`
+    into the left `l` and right `L-l` sites to be (eq. 2 of :cite:`calabrese2004`):
+
+    .. math ::
+
+        S(l, L) = \frac{c}{6} \log\left(\frac{2L}{\pi a} \sin\left(\frac{\pi l}{L}\right)\right)
+                 + \textrm{const}
+
+    Here, `c` is the central charge of the system, and `a` is the lattice spacing, which we set to
+    1, and `const` is a non-universal constant.
+
+    Returns exactly that formula.
+    """
+    return central_charge / 6 * np.log(2 * L / np.pi * np.sin(np.pi * size_A / L)) + const
+
+
+def central_charge_from_S_profile(psi, exclude=None):
+    """Fit the entanglement entropy of a finite MPS to the expected profile for critical models.
+
+    See :func:`entropy_profile_from_CFT` for the function we fit to.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Ground state of a *finite* system at a critical point (i.e. gapless!).
+        The bond dimension should be large enough to be converged!
+    exclude : int
+        How many sites at the left (and at the right) boundary to exclude from the fit
+        (to avoid boundary effects). Defaults to ``psi.L // 4``
+
+    Returns
+    -------
+    central_charge, const : float
+        Central charge and constant offset as in :func:`entropy_profile_from_CFT`.
+    res : float
+        Residuum of the error.
+    """
+    if not psi.bc == 'finite':
+        raise ValueError("works only for finite MPS at a critical point")
+    L = psi.L
+    if exclude is None:
+        exclude = L // 4
+    if 2 * exclude >= L - 8:
+        raise ValueError("Not enough points for a reasonable fit left")
+    S = psi.entanglement_entropy()
+    size_A = np.arange(1, psi.L)[exclude:-exclude]
+    expected = entropy_profile_from_CFT(size_A, L, 1., 0.)
+    # fit S ~=~ central_charge * expected + const
+    c, const, res = linear_fit(expected, S[exclude:-exclude])
+    return c, const, res

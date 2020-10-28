@@ -1335,7 +1335,7 @@ class CouplingModel(Model):
                                             subsites=None,
                                             op_string=None,
                                             plus_hc=False):
-        """Add an exponentially decaying long-range coupling.
+        r"""Add an exponentially decaying long-range coupling.
 
         .. math ::
             strength \sum_{i < j} \lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
@@ -1795,6 +1795,9 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             All pre-defined sites accept ``conserve=None`` to disable using quantum numbers.
             Many models in TeNPy read out the `conserve` model parameter, which can be set
             to ``"best"`` to indicate the optimal parameters.
+
+        If you need to initialize more than one site, the function
+        :func:`tenpy.networks.site.set_common_charges` should be helpful.
 
         Parameters
         ----------
