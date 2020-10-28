@@ -186,7 +186,10 @@ class MPS:
         self._B = [B.astype(dtype, copy=True).itranspose(self._B_labels) for B in Bs]
         self._S = [None] * (self.L + 1)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
-            self._S[i] = np.array(SVs[i], dtype=np.float)
+            if isinstance(SVs[i], npc.Array):
+                self._S[i] = SVs[i].copy()
+            else:
+                self._S[i] = np.array(SVs[i], dtype=np.float)
         if self.bc == 'infinite':
             self._S[-1] = self._S[0]
         elif self.bc == 'finite':
