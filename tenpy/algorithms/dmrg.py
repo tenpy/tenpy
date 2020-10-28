@@ -335,6 +335,8 @@ class DMRGEngine(Sweep):
                 warnings.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
             # --------- the main work --------------
+            if self.verbose >= 1:
+                print('Running sweep with optimization', flush=True)
             for i in range(N_sweeps_check - 1):
                 self.sweep(meas_E_trunc=False)
             max_trunc_err = self.sweep(meas_E_trunc=True)

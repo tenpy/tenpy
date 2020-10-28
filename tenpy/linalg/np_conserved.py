@@ -812,11 +812,13 @@ class Array:
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.Array shape={0!s} charge={1!s} labels={2!s}>".format(
-            self.shape, self.chinfo, self.get_leg_labels())
+        return "<npc.Array shape={0!s} labels={1!s}>".format(self.shape, self.get_leg_labels())
 
     def __str__(self):
-        res = [repr(self)[:-1], vert_join([str(l) for l in self.legs], delim='|')]
+        res = [
+            repr(self)[:-1], "charge=" + str(self.chinfo),
+            vert_join([str(l) for l in self.legs], delim='|')
+        ]
         if np.prod(self.shape) < 100:
             res.append(str(self.to_ndarray()))
         res.append('>')
