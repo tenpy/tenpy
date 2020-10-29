@@ -28,9 +28,6 @@ minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
 A generic protocol for approaching a physics question using DMRG is given in :doc:`/intro/protocol`.
-
-.. todo ::
-    Write UserGuide!!!
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
@@ -189,10 +186,16 @@ class DMRGEngine(Sweep):
         ============= ===================================================================
     """
     EffectiveH = None
+    DefaultMixer = None
 
     def __init__(self, psi, model, options):
         options = asConfig(options, self.__class__.__name__)
         self.mixer = None
+        if isinstance(self, TwoSiteDMRGEngine):
+            self.DefaultMixer = DensityMatrixMixer
+        else:
+            self.DefaultMixer = SingleSiteMixer
+
         super().__init__(psi, model, options)
 
     @property
@@ -494,6 +497,75 @@ class DMRGEngine(Sweep):
                 print("Setting chi_max =", chi_max)
         self.time0 = time.time()
 
+    def prepare_update(self):
+        """Prepare `self` for calling :meth:`update_local` on sites ``i0 : i0+n_optimize``.
+
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
+            For single-site DMRG, the ``'p1'`` label is missing.
+        """
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=cutoff)
+        theta = self.eff_H.combine_theta(theta)
+        return theta
+
+    def update_local(self, theta, optimize=True):
+        """Perform site-update on the site ``i0``.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess for the ground state of the effective Hamiltonian.
+        optimize : bool
+            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            (If False, just update the environments).
+
+        Returns
+        -------
+        update_data : dict
+            Data computed during the local update, as described in the following:
+
+            E0 : float
+                Total energy, obtained *before* truncation (if ``optimize=True``),
+                or *after* truncation (if ``optimize=False``) (but never ``None``).
+            N : int
+                Dimension of the Krylov space used for optimization in the lanczos algorithm.
+                0 if ``optimize=False``.
+            age : int
+                Current size of the DMRG simulation: number of physical sites involved
+                into the contraction.
+            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
+                `U` and `VH` returned by :meth:`mixed_svd`.
+            ov_change: float
+                Change in the wave function ``1. - abs(<theta_guess|theta>)``
+                induced by :meth:`diag`, *not* including the truncation!
+        """
+        i0 = self.i0
+        n_opt = self.n_optimize
+        age = self.env.get_LP_age(i0) + n_opt + self.env.get_RP_age(i0 + n_opt - 1)
+        if optimize:
+            E0, theta, N, ov_change = self.diag(theta)
+        else:
+            E0, N, ov_change = None, 0, 0.
+        theta = self.prepare_svd(theta)
+        U, S, VH, err = self.mixed_svd(theta)
+        self.set_B(U, S, VH)
+        update_data = {
+            'E0': E0,
+            'err': err,
+            'N': N,
+            'age': age,
+            'U': U,
+            'VH': VH,
+            'ov_change': ov_change
+        }
+        return update_data
+
     def post_update_local(self, update_data):
         """Perform post-update actions.
 
@@ -708,6 +780,37 @@ class DMRGEngine(Sweep):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `options['mixer']`.
+
+        .. cfg:configoptions :: TwoSiteDMRGEngine
+
+            mixer : str | class | bool
+                Chooses the :class:`Mixer` to be used.
+                A string stands for one of the mixers defined in this module,
+                a class is used as custom mixer.
+                Default (``None``) uses no mixer, ``True`` uses
+                :class:`DensityMatrixMixer` for the 2-site case and
+                :class:`SingleSiteMixer` for the 1-site case.
+            mixer_params : dict
+                Mixer parameters as described in :cfg:config:`Mixer`.
+
+        """
+        Mixer_class = self.options.get('mixer', None)
+        if Mixer_class:
+            if Mixer_class is True:
+                Mixer_class = self.DefaultMixer
+            if isinstance(Mixer_class, str):
+                if Mixer_class == "Mixer":
+                    msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
+                    warnings.warn(msg, FutureWarning)
+                    Mixer_class = self.DefaultMixer
+                else:
+                    Mixer_class = globals()[Mixer_class]
+            mixer_params = self.options.subconfig('mixer_params')
+            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
+            self.mixer = Mixer_class(mixer_params)
+
     def mixer_cleanup(self):
         """Cleanup the effects of a mixer.
 
@@ -833,75 +936,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
     """
     EffectiveH = TwoSiteH
 
-    def prepare_update(self):
-        """Prepare `self` for calling :meth:`update_local` on sites ``(i0, i0+1)``.
-
-        Returns
-        -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR', 'p1'``.
-        """
-        self.make_eff_H()  # self.eff_H represents tensors LP, W0, W1, RP
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(self.i0, n=2, cutoff=cutoff)  # 'vL', 'p0', 'p1', 'vR'
-        theta = self.eff_H.combine_theta(theta)
-        return theta
-
-    def update_local(self, theta, optimize=True, meas_E_trunc=False):
-        """Perform bond-update on the sites ``(i0, i0+1)``.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Initial guess for the ground state of the effective Hamiltonian.
-        optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool
-            Wheter to measure the energy after truncation.
-
-        Returns
-        -------
-        update_data : dict
-            Data computed during the local update, as described in the following:
-
-            E0 : float
-                Total energy, obtained *before* truncation (if ``optimize=True``),
-                or *after* truncation (if ``optimize=False``) (but never ``None``).
-            N : int
-                Dimension of the Krylov space used for optimization in the lanczos algorithm.
-                0 if ``optimize=False``.
-            age : int
-                Current size of the DMRG simulation: number of physical sites involved
-                into the contraction.
-            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
-                `U` and `VH` returned by :meth:`mixed_svd`.
-            ov_change: float
-                Change in the wave function ``1. - abs(<theta_guess|theta>)``
-                induced by :meth:`diag`, *not* including the truncation!
-        """
-        i0 = self.i0
-        age = self.env.get_LP_age(i0) + 2 + self.env.get_RP_age(i0 + 1)
-        if optimize:
-            E0, theta, N, ov_change = self.diag(theta)
-        else:
-            E0, N, ov_change = None, 0, 0.
-        theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta)
-        self.set_B(U, S, VH)
-        update_data = {
-            'E0': E0,
-            'err': err,
-            'N': N,
-            'age': age,
-            'U': U,
-            'VH': VH,
-            'ov_change': ov_change
-        }
-        return update_data
-
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
         if self.combine:
@@ -980,37 +1014,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
             o_env.del_RP(i0)
         self.env.del_LP(i0 + 1)
         self.env.del_RP(i0)
-
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        .. cfg:configoptions :: TwoSiteDMRGEngine
-
-            mixer : str | class | bool
-                Chooses the :class:`Mixer` to be used.
-                A string stands for one of the mixers defined in this module,
-                a class is used as custom mixer.
-                Default (``None``) uses no mixer, ``True`` uses
-                :class:`DensityMatrixMixer` for the 2-site case and
-                :class:`SingleSiteMixer` for the 1-site case.
-            mixer_params : dict
-                Mixer parameters as described in :cfg:config:`Mixer`.
-
-        """
-        Mixer_class = self.options.get('mixer', None)
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = DensityMatrixMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
-                           'for Sweep parameter "mixer"')
-                    warnings.warn(msg, FutureWarning)
-                    Mixer = "DensityMatrixMixer"
-                Mixer_class = globals()[Mixer_class]
-            mixer_params = self.options.subconfig('mixer_params')
-            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-            self.mixer = Mixer_class(mixer_params)
 
     def update_LP(self, U):
         """Update left part of the environment.
@@ -1134,77 +1137,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
     """
     EffectiveH = OneSiteH
 
-    def prepare_update(self):
-        """Prepare `self` for calling :meth:`update_local` on site ``i0``.
-
-        Returns
-        -------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Current best guess for the ground state, which is to be optimized.
-            Labels ``'vL', 'p0', 'vR'``, or combined versions of it (if `self.combine`).
-        """
-        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
-        # make theta
-        cutoff = 1.e-16 if self.mixer is None else 1.e-8
-        theta = self.psi.get_theta(self.i0, n=1, cutoff=cutoff)  # 'vL', 'p0', 'vR'
-        theta = self.eff_H.combine_theta(theta)
-        return theta
-
-    def update_local(self, theta, optimize=True):
-        """Perform site-update on the site ``i0``.
-
-        Parameters
-        ----------
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Initial guess for the ground state of the effective Hamiltonian.
-        optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-
-        Returns
-        -------
-        update_data : dict
-            Data computed during the local update, as described in the following:
-
-            E0 : float
-                Total energy, obtained *before* truncation (if ``optimize=True``),
-                or *after* truncation (if ``optimize=False``) (but never ``None``).
-            N : int
-                Dimension of the Krylov space used for optimization in the lanczos algorithm.
-                0 if ``optimize=False``.
-            age : int
-                Current size of the DMRG simulation: number of physical sites involved
-                into the contraction.
-            U, VH: :class:`~tenpy.linalg.np_conserved.Array`
-                `U` and `VH` returned by :meth:`mixed_svd`.
-            ov_change: float
-                Change in the wave function ``1. - abs(<theta_guess|theta>)``
-                induced by :meth:`diag`, *not* including the truncation!
-        """
-        i0 = self.i0
-        age = self.env.get_LP_age(i0) + 1 + self.env.get_RP_age(i0)
-        if optimize:
-            E0, theta, N, ov_change = self.diag(theta)
-        else:
-            E0, N, ov_change = None, 0, 0.
-        theta = self.prepare_svd(theta)
-        if self.move_right:
-            next_B = self.env.bra.get_B(i0 + 1, form='B')
-        else:
-            next_B = self.env.bra.get_B(i0 - 1, form='A')
-        U, S, VH, err = self.mixed_svd(theta, next_B)
-        self.set_B(U, S, VH)
-        update_data = {
-            'E0': E0,
-            'err': err,
-            'N': N,
-            'age': age,
-            'U': U,
-            'VH': VH,
-            'ov_change': ov_change
-        }
-        return update_data
-
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd.
 
@@ -1223,7 +1155,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         return theta
 
-    def mixed_svd(self, theta, next_B):
+    def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
         The goal is to split theta and truncate it. For a move to the right::
@@ -1264,6 +1196,10 @@ class SingleSiteDMRGEngine(DMRGEngine):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
+        if self.move_right:
+            next_B = self.env.bra.get_B(self.i0 + 1, form='B')
+        else:
+            next_B = self.env.bra.get_B(self.i0 - 1, form='A')
         # get qtotal_LR from i0
         if self.mixer is None:
             # simple case: real svd, defined elsewhere.
@@ -1324,36 +1260,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 o_env.del_RP(i0 - 1)
             self.env.del_LP(i0)
             self.env.del_RP(i0 - 1)
-
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        .. cfg:configoptions :: SingleSiteDMRGEngine
-
-            mixer : str | class | bool
-                Chooses the :class:`Mixer` to be used.
-                A string stands for one of the mixers defined in this module,
-                a class is used as custom mixer.
-                Default (``None``) uses no mixer, ``True`` uses
-                :class:`DensityMatrixMixer` for the 2-site case and
-                :class:`SingleSiteMixer` for the 1-site case.
-            mixer_params : dict
-                Mixer parameters as described in :cfg:config:`Mixer`.
-        """
-        Mixer_class = self.options.get('mixer', None)
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = SingleSiteMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = ('Use `True` or `"DensityMatrixMixer"` instead of "Mixer" '
-                           'for Sweep parameter "mixer"')
-                    warnings.warn(msg, FutureWarning)
-                    Mixer = "SingleSiteMixer"
-                Mixer_class = globals()[Mixer_class]
-            mixer_params = self.options.get('mixer_params', {})
-            mixer_params.setdefault('verbose', self.verbose / 10)  # reduced verbosity
-            self.mixer = Mixer_class(mixer_params)
 
     def update_LP(self, U):
         """Update left part of the environment.

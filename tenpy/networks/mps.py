@@ -3671,7 +3671,7 @@ class MPSEnvironment:
         return init_RP
 
     def get_LP(self, i, store=True):
-        """Calculate LP at given site from nearest available one (including `i`).
+        """Calculate LP at given site from nearest available one.
 
         The returned ``LP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'A' form::
@@ -3711,7 +3711,7 @@ class MPSEnvironment:
         return LP
 
     def get_RP(self, i, store=True):
-        """Calculate RP at given site from nearest available one (including `i`).
+        """Calculate RP at given site from nearest available one.
 
         The returned ``RP_i`` corresponds to the following contraction,
         where the M's and the N's are in the 'B' form::
