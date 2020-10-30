@@ -1600,7 +1600,6 @@ class CouplingModel(Model):
                 assert(mode == 'uniform')
                 # hoppings pick up a fraction -dx[ax]/c_shape[ax] of the total phase (sign conventions as above)
                 strength *= np.exp(-1.j * dx[ax] * phase[ax]/c_shape[ax])
-        print ("Hopping strengths: ",strength)
         return strength
 
 

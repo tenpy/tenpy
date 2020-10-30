@@ -640,7 +640,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     # Attempt to shorten the identifier
     identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
     if len(identifier) >= 144:
-        print("Warning: identifier has a lenght longer than max filename on encrypted Ubuntu!")
+        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu!")
 
     run_par.update({
         'ncores': args.ncores,

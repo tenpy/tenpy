@@ -59,8 +59,10 @@ def gauge_hopping(model_params):
     Jx, Jy: float
         'Bare' hopping amplitudes (without phase).
         Without any flux we have ``hop_x = -Jx`` and ``hop_y = -Jy``.
-    phi_pq : tuple (int, int)
-        Magnetic flux as a fraction p/q, defined as (p, q)
+    flux_p : int
+        Numerator of magnetic flux density
+    flux_q : int
+        Denominator of magnetic flux density
 
     Returns
     -------
@@ -78,7 +80,15 @@ def gauge_hopping(model_params):
     my = model_params.get('my', None)
     Jx = model_params.get('Jx', 1.)
     Jy = model_params.get('Jy', 1.)
-    phi_p, phi_q = model_params.get('phi', (1, 3))
+# old doc-string and code for parameter 'phi'
+#     phi : tuple (int, int)
+#        Magnetic flux as a fraction p/q, defined as (p, q) (overriding flux_p, flux_q if present)
+#    if (model_params.has_nonzero('phi')):
+#        phi_p, phi_q = model_params.get('phi', (1, 3))
+#    else:
+#        if (model_params.has_nonzero('flux_p') and model_params.has_nonzero('flux_q')):
+    phi_p = model_params.get('flux_p', 1)
+    phi_q = model_params.get('flux_q', 3)
     phi = 2 * np.pi * phi_p / phi_q
 
     if gauge == 'landau_x':
@@ -145,8 +155,10 @@ class HofstadterFermions(CouplingMPOModel):
             Hamiltonian parameter as defined above.
         conserve : {'N' | 'parity' | None}
             What quantum number to conserve.
-        phi : tuple
-            Magnetic flux density, defined as a fraction ``(numerator, denominator)``
+        flux_p : int
+            Numerator of magnetic flux density
+        flux_q : int
+            Denominator of magnetic flux density
         phi_ext : float
             External magnetic flux 'threaded' through the cylinder.
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
