@@ -144,6 +144,9 @@ def test_events():
     counters = []
     event_counter = [0]
 
+    ev1 = tools.events.EventHandler("event_name, expected_event_counter")
+
+    @ev1.connect
     def note_event(event_name, expected_event_counter):
         noted.append(event_name)
         counters.append(expected_event_counter)
@@ -158,10 +161,9 @@ def test_events():
     def check_event_counter_after(event_name, expected_event_counter):
         assert expected_event_counter + 1 == event_counter[0]
 
-    ev1 = tools.events.EventHandler("event_name, expected_event_counter")
     ev2 = tools.events.EventHandler("event_name, expected_event_counter")
-    for ev in [ev1, ev2]:
-        note_id = ev.connect(note_event, 0)
+    ev2.connect(note_event, 0)
+    note_id = ev2.id_of_last_connected
     for ev in [ev1, ev2]:
         ev.connect(check_event_counter_before, 2)  # called before `increase_counter`
         ev.connect(check_event_counter_after, -1)  # called after `increase_counter`
