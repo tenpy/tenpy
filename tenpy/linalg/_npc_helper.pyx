@@ -583,6 +583,28 @@ cdef np.ndarray _partial_qtotal(QTYPE_t[::1] chinfo_mod, legs, intp_t[:, :] qdat
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
+cpdef np.ndarray _map_blocks(np.ndarray[intp_t, ndim=1, mode='c'] blocksizes):
+    """Create an index array mapping 1D blocks of given sizes to a new array.
+
+    Equivalent to ``np.concatenate([np.ones(s, np.intp)*i for i, s in enumerate(blocksizes)])``.
+    """
+    cdef intp_t len_blocksizes = len(blocksizes)
+    cdef intp_t total_size = 0
+    cdef intp_t i, j, N
+    for i in range(len_blocksizes):
+        total_size += blocksizes[i]
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] result = _np_empty_1D(total_size, intp_num)
+    cdef intp_t s = 0
+    for i in range(len_blocksizes):
+        N = blocksizes[i]
+        for j in range(s, s + N):
+            result[j] = i
+        s += N
+    return result
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
 cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, intp_t[::1] src_beg,
                        intp_t[::1] slice_shape):
     """Copy slices from `src` into slices of `dest`.
@@ -1023,7 +1045,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         q_map_slices_shape[:, j] = q_map_slices[qinds + 1] # - q_map_slices[qinds] # one line below # TODO: in pipe
     q_map_slices_shape -= q_map_slices_beg
     new_data_blocks_per_old_block = np.prod(q_map_slices_shape, axis=1)
-    cdef np.ndarray[intp_t, ndim=1, mode='c'] old_block_inds = _charges._map_blocks(new_data_blocks_per_old_block)
+    cdef np.ndarray[intp_t, ndim=1, mode='c'] old_block_inds = _map_blocks(new_data_blocks_per_old_block)
     cdef intp_t res_stored_blocks = old_block_inds.shape[0]
     q_map_rows = []
     for beg, shape in zip(q_map_slices_beg, q_map_slices_shape):
