@@ -1680,7 +1680,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.verbose = model_params.get('verbose', 1)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
-        # 1-4) iniitalize lattice
+        # 1-4) initialize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)

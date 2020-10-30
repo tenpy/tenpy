@@ -559,6 +559,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     parser.add_argument('-seed', default=None)  # For anything random
 
     # The sim_par bit (for DMRG-related parameters). These don't vary, so we'll just define here.
+    parser.add_argument('-active_sites', type=int, default=2)
     parser.add_argument('-chi', type=int, default=100)
     parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
     parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
@@ -586,8 +587,10 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         run_par[label] = par_dict[label]
 
     try:
+        from ..algorithms import dmrg
         sim_par = {
-            'chi_list': chi_list(args.chi, args.dchi, args.dsweeps),
+            'active_sites': args.active_sites,
+            'chi_list': dmrg.chi_list(args.chi, args.dchi, args.dsweeps),
             'N_sweeps_check': 10,
             'min_sweeps': args.min_sweeps,
             'max_sweeps': args.max_sweeps,

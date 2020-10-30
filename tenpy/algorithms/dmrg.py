@@ -48,11 +48,50 @@ from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
+    'get_engine', 'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
     'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list',
     'full_diag_effH'
 ]
+    
 
+def get_engine(psi, model, options):
+    r"""Construct an engine underlying the DMRG algorithm and return it immediately
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    options : dict
+        Further optional parameters as described in :cfg:config:`DMRGEngine`.
+        Use ``verbose>0`` to print the used parameters during runtime.
+
+    Returns
+    -------
+    engine : engine object corresponding to the choice of active_sites
+
+    Options
+    -------
+    .. cfg:config :: DMRG
+        :include: SingleSiteDMRGEngine, TwoSiteDMRGEngine
+
+        active_sites
+            The number of active sites to be used by DMRG.
+            If set to 1, :class:`SingleSiteDMRGEngine` is used.
+            If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
+
+    """
+    # create the engine
+    options = asConfig(options, 'DMRG')
+    active_sites = options.get('active_sites', 2)
+    if active_sites == 1:
+        engine = SingleSiteDMRGEngine(psi, model, options)
+    elif active_sites == 2:
+        engine = TwoSiteDMRGEngine(psi, model, options)
+    else:
+        raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
+    return engine
 
 def run(psi, model, options):
     r"""Run the DMRG algorithm to find the ground state of the given model.
@@ -84,14 +123,7 @@ def run(psi, model, options):
 
     """
     # initialize the engine
-    options = asConfig(options, 'DMRG')
-    active_sites = options.get('active_sites', 2)
-    if active_sites == 1:
-        engine = SingleSiteDMRGEngine(psi, model, options)
-    elif active_sites == 2:
-        engine = TwoSiteDMRGEngine(psi, model, options)
-    else:
-        raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
+    engine = get_engine(psi, model, options)
     E, _ = engine.run()
     return {
         'E': E,
@@ -117,6 +149,7 @@ class DMRGEngine(Sweep):
     -------
     .. cfg:config :: DMRGEngine
         :include: Sweep
+
 
     Attributes
     ----------
