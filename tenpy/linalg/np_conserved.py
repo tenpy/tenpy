@@ -102,7 +102,7 @@ from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
-    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'eye_like', 'diag',
+    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
@@ -251,15 +251,27 @@ class Array:
 
         Examples
         --------
-        Be (very!) careful when making non-deep copies: In the following example,
+        Be **very** careful when making non-deep copies: In the following example,
         the original `a` is changed if and only if the corresponding block existed in `a` before.
-        >>> b = a.copy(deep=False)  # shallow copy
-        >>> b[1, 2] = 4.
 
-        Other `inplace` operations might have no effect at all (although we don't guarantee that):
+        .. doctest :: A.copy
 
-        >>> a *= 2  # has no effect on `b`
-        >>> b.iconj()  # nor does this change `a`
+            >>> a = npc.Array.from_ndarray_trivial(np.arange(6.).reshape(2, 3))
+            >>> print(a.to_ndarray())
+            [[0. 1. 2.]
+             [3. 4. 5.]]
+            >>> b = a.copy(deep=False)  # shallow copy
+            >>> b[1, 2] = 8.
+            >>> a[1, 2]  # changed!
+            8.0
+
+        Other `inplace` operations **might*** have no effect at all (although we don't guarantee that):
+
+        .. doctest :: A.copy
+            :options: +SKIP
+
+            >>> a *= 2  # has no effect on `b`
+            >>> b.iconj()  # nor does this change `a`
         """
         cp = Array.__new__(Array)
         cp.__setstate__(self.__getstate__())
@@ -390,8 +402,14 @@ class Array:
         return res
 
     @classmethod
-    def from_ndarray(cls, data_flat, legcharges, dtype=None, qtotal=None, cutoff=None,
-                     labels=None):
+    def from_ndarray(cls,
+                     data_flat,
+                     legcharges,
+                     dtype=None,
+                     qtotal=None,
+                     cutoff=None,
+                     labels=None,
+                     raise_wrong_sector=True):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -410,6 +428,9 @@ class Array:
             Defaults to :data:`QCUTOFF`.
         labels : list of {str | None}
             Labels associated to each leg, ``None`` for non-named labels.
+        raise_wrong_sector : bool
+            If True, raise a ValueError in case of non-zero entries (larger than `cutoff`) in the
+            wrong blocks of `data_flat`. If `False`, just raise a warning.
 
         Returns
         -------
@@ -440,6 +461,8 @@ class Array:
                 data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
                 qdata.append(qindices)
             elif np.any(np.abs(data_flat[sl]) > cutoff):
+                if raise_wrong_sector:
+                    raise ValueError("wrong sector with non-zero entries")
                 warnings.warn("flat array has non-zero entries in blocks incompatible with charge",
                               stacklevel=2)
         res._data = data
@@ -469,8 +492,9 @@ class Array:
         func : callable
             A function-like object which is called to generate the data blocks.
             We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
-            If no `shape_kw` is given, it is called like ``func(shape, *fargs, **fkwargs)``,
-            otherwise as ``func(*fargs, `shape_kw`=shape, **fkwargs)``.
+            If no `shape_kw` is given, it is called as
+            ``func(shape, *func_args, **func_kwargs)``,
+            otherwise as ``func(*func_args, `shape_kw`=shape, **func_kwargs)``.
             `shape` is a tuple of int.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
@@ -788,11 +812,13 @@ class Array:
     # string output ===========================================================
 
     def __repr__(self):
-        return "<npc.Array shape={0!s} charge={1!s} labels={2!s}>".format(
-            self.shape, self.chinfo, self.get_leg_labels())
+        return "<npc.Array shape={0!s} labels={1!s}>".format(self.shape, self.get_leg_labels())
 
     def __str__(self):
-        res = [repr(self)[:-1], vert_join([str(l) for l in self.legs], delim='|')]
+        res = [
+            repr(self)[:-1], "charge=" + str(self.chinfo),
+            vert_join([str(l) for l in self.legs], delim='|')
+        ]
         if np.prod(self.shape) < 100:
             res.append(str(self.to_ndarray()))
         res.append('>')
@@ -1260,14 +1286,19 @@ class Array:
             chinfo2 = chinfo
         if charge is None:
             qtotal = None
+            res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
+                        self.dtype, qtotal, self._labels)
+            for block, slices, _, _ in self:  # use __iter__
+                res[slices] = block  # use __setitem__
         else:
+            # keep the very same (sparse) block structure
             if isinstance(charge, str):
                 charge = self.chinfo.names.index(charge)
-            qtotal = np.delete(self.qtotal, charge, 0)
-        res = Array([LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs],
-                    self.dtype, qtotal, self._labels)
-        for block, slices, _, _ in self:  # use __iter__
-            res[slices] = block  # use __setitem__
+            res = self.copy(deep=True)
+            res.chinfo = chinfo2
+            res.legs = [LegCharge.from_drop_charge(leg, charge, chinfo2) for leg in self.legs]
+            res.qtotal = np.delete(self.qtotal, charge, 0)
+        res.test_sanity()
         return res
 
     def change_charge(self, charge, new_qmod, new_name='', chinfo=None):
@@ -1442,21 +1473,30 @@ class Array:
 
         Examples
         --------
-        >>> oldarray.iset_leg_labels(['a', 'b', 'c', 'd', 'e'])
-        >>> c1 = oldarray.combine_legs([1, 2], qconj=-1)  # only single output pipe
-        >>> c1.get_leg_labels()
-        ['a', '(b.c)', 'd', 'e']
+        .. doctest :: Array.combine_legs
+
+            >>> orig_array = npc.Array.from_ndarray_trivial(np.arange(60).reshape([2, 3, 2, 1, 5]),
+            ...                                             labels=['a', 'b', 'c', 'd', 'e'])
+            >>> c1 = orig_array.combine_legs([1, 2], qconj=-1)  # only single output pipe
+            >>> c1.get_leg_labels()
+            ['a', '(b.c)', 'd', 'e']
+            >>> c1.shape
+            (2, 6, 1, 5)
 
         Indices of `combine_legs` refer to the original array.
         If transposing is necessary, it is performed automatically:
 
-        >>> c2 = oldarray.combine_legs([[0, 3], [4, 1]], qconj=[+1, -1]) # two output pipes
-        >>> c2.get_leg_labels()
-        ['(a.d)', 'c', '(e.b)']
-        >>> c3 = oldarray.combine_legs([['a', 'd'], ['e', 'b']], new_axes=[2, 1],
-        >>>                            pipes=[c2.legs[0], c2.legs[2]])
-        >>> c3.get_leg_labels()
-        ['c', '(e.b)', '(a.d)']
+        .. doctest :: Array.combine_legs
+
+            >>> c2 = orig_array.combine_legs([[0, 3], [4, 1]], qconj=[+1, -1]) # two output pipes
+            >>> c2.get_leg_labels()
+            ['(a.d)', 'c', '(e.b)']
+            >>> c2.shape
+            (2, 2, 15)
+            >>> c3 = orig_array.combine_legs([['a', 'd'], ['e', 'b']], new_axes=[2, 1],
+            ...                            pipes=[c2.legs[0], c2.legs[2]])
+            >>> c3.get_leg_labels()
+            ['c', '(e.b)', '(a.d)']
         """
         # bring arguments into a standard form
         combine_legs = list(combine_legs)  # convert iterable to list
@@ -1565,15 +1605,24 @@ class Array:
 
         Examples
         --------
-        Given a rank-5 Array `old_array`, you can combine it and split it again:
+        Given a rank-5 Array `orig_array`, you can combine it and split it again:
 
-        >>> old_array.iset_leg_labels(['a', 'b', 'c', 'd', 'e'])
-        >>> comb_array = old_array.combine_legs([[0, 3], [2, 4]] )
-        >>> comb_array.get_leg_labels()
-        ['(a.d)', 'b', '(c.e)']
-        >>> split_array = comb_array.split_legs([0, 2])
-        >>> split_array.get_leg_labels()
-        ['a', 'd', 'b', 'c', 'e']
+        .. doctest :: Array.split_legs
+
+            >>> orig_array = npc.Array.from_ndarray_trivial(np.arange(60).reshape([2, 3, 2, 1, 5]),
+            ...                                           labels=['a', 'b', 'c', 'd', 'e'])
+            >>> orig_array.shape
+            (2, 3, 2, 1, 5)
+            >>> comb_array = orig_array.combine_legs([['a', 'd'], ['c', 'e']] )
+            >>> comb_array.get_leg_labels()
+            ['(a.d)', 'b', '(c.e)']
+            >>> comb_array.shape
+            (2, 3, 10)
+            >>> split_array = comb_array.split_legs()
+            >>> split_array.get_leg_labels()
+            ['a', 'd', 'b', 'c', 'e']
+            >>> npc.norm(split_array.transpose(orig_array.get_leg_labels()) - orig_array)
+            0.0
         """
         if axes is None:
             axes = [i for i, l in enumerate(self.legs) if isinstance(l, LegPipe)]
@@ -1984,8 +2033,13 @@ class Array:
 
         Examples
         --------
-        >>> a.iunaray_blockwise(np.real)  # get real part
-        >>> a.iunaray_blockwise(np.conj)  # same data as a.iconj(), but doesn't charge conjugate.
+        .. doctest :: Array.iunary_blockwise
+
+            >>> a = npc.Array.from_ndarray_trivial([1., 2.j])
+            >>> a.iunary_blockwise(np.conj).to_ndarray()  # same data as a.iconj(), but doesn't charge conjugate.
+            array([1.-0.j, 0.-2.j])
+            >>> a.iunary_blockwise(np.real).to_ndarray()  # get real part
+            array([1., 0.])
         """
         if len(args) == 0 == len(kwargs):
             self._data = [func(t) for t in self._data]
@@ -2095,8 +2149,14 @@ class Array:
 
         Examples
         --------
-        >>> a.ibinary_blockwise(np.add, b)  # equivalent to ``a += b``, if ``b`` is an `Array`.
-        >>> a.ibinary_blockwise(np.max, b)  # overwrites ``a`` to ``a = max(a, b)``
+        .. doctest :: Array.ibinary_blockwise
+
+            >>> a = npc.Array.from_ndarray_trivial([1., 3.])
+            >>> b = npc.Array.from_ndarray_trivial([4., 2.])
+            >>> a.ibinary_blockwise(np.maximum, b).to_ndarray()  # a = max(a, b)
+            array([4., 3.])
+            >>> a.ibinary_blockwise(np.add, b).to_ndarray()  # roughly ``a += b``
+            array([8., 5.])
         """
         other = other._transpose_same_labels(self._labels)
         if len(args) > 0 or len(kwargs) > 0:
@@ -2771,6 +2831,15 @@ def zeros(legcharges, dtype=np.float64, qtotal=None, labels=None):
     return Array(legcharges, dtype, qtotal, labels)
 
 
+def ones(legcharges, dtype=np.float64, qtotal=None, labels=None):
+    """Short-hand for :meth:`Array.from_func` with function :func:`numpy.ones`.
+
+    .. warning ::
+        For non-trivial charges, only blocks with compatible charges are filled with ones!
+    """
+    return Array.from_func(np.ones, legcharges, dtype, qtotal, labels=labels)
+
+
 def eye_like(a, axis=0, labels=None):
     """Return an identity matrix contractible with the leg `axis` of the :class:`Array` `a`."""
     axis = a.get_leg_index(axis)
@@ -2907,20 +2976,54 @@ def grid_concat(grid, axes, copy=True):
 
     Examples
     --------
-    Assume we have rank 2 Arrays ``A, B, C, D`` of shapes
-    ``(1, 2), (1, 4), (3, 2), (3, 4)`` sharing the legs of equal sizes.
+    Assume we have prepared rank 2 Arrays ``A, B, C, D`` sharing the legs of equal sizes
+    and looking like this:
+
+    .. testsetup :: grid_concat
+
+        A = npc.Array.from_ndarray_trivial(np.arange(2).reshape(1, 2))
+        B = npc.Array.from_ndarray_trivial(np.arange(10, 14).reshape(1, 4))
+        C = npc.Array.from_ndarray_trivial(np.arange(20, 26).reshape(3, 2))
+        D = npc.Array.from_ndarray_trivial(np.arange(30, 42).reshape(3, 4))
+
+    .. doctest :: grid_concat
+
+        >>> print(A.to_ndarray())
+        [[0 1]]
+        >>> print(B.to_ndarray())
+        [[10 11 12 13]]
+        >>> print(C.to_ndarray())
+        [[20 21]
+         [22 23]
+         [24 25]]
+        >>> print(D.to_ndarray())
+        [[30 31 32 33]
+         [34 35 36 37]
+         [38 39 40 41]]
+
     Then the following grid will result in a ``(1+3, 2+4)`` shaped array:
 
-    >>> g = grid_concat([[A, B], [C, D]], axes=[0, 1])
-    >>> g.shape
-    (4, 6)
+    .. doctest :: grid_concat
+
+        >>> g = npc.grid_concat([[A, B],
+        ...                      [C, D]], axes=[0, 1])
+        >>> g.shape
+        (4, 6)
+        >>> print(g.to_ndarray())
+        [[ 0  1 10 11 12 13]
+         [20 21 30 31 32 33]
+         [22 23 34 35 36 37]
+         [24 25 38 39 40 41]]
 
     If ``A, B, C, D`` were rank 4 arrays, with the first and last leg as before, and sharing
     *common* legs ``1`` and ``2`` of dimensions 1, 2, then you would get a rank-4 array:
 
-    >>> g = grid_concat([[A, B], [C, D]], axes=[0, 3])
-    >>> g.shape
-    (4, 1, 2, 6)
+    .. doctest :: grid_concat
+        :options: +SKIP
+
+        >>> g = grid_concat([[A, B], [C, D]], axes=[0, 3])
+        >>> g.shape
+        (4, 1, 2, 6)
 
     See also
     --------
@@ -2997,14 +3100,23 @@ def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
     Further, you have to define appropriate LegCharges `l_left` and `l_right`.
     Then one 'matrix' of the MPO for a nearest neighbour Heisenberg Hamiltonian could look like:
 
-    >>> W_mpo = grid_outer([[Id, Splus, Sminus, Sz, None],
-    ...                     [None, None, None, None, J*0.5*Sminus],
-    ...                     [None, None, None, None, J*0.5*Splus],
-    ...                     [None, None, None, None, J*Sz],
-    ...                     [None, None, None, None, Id]],
-    ...                    leg_charges=[l_left, l_right])
+    >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+    >>> Id, Splus, Sminus, Sz = s.Id, s.Sp, s.Sm, s.Sz
+    >>> J = 1.
+    >>> leg_wR = npc.LegCharge.from_qflat(s.leg.chinfo,
+    ...                                   [op.qtotal for op in [Id, Splus, Sminus, Sz, Id]],
+    ...                                   qconj=-1)
+    >>> W_mpo = npc.grid_outer([[Id, Splus, Sminus, Sz, None],
+    ...                         [None, None, None, None, J*0.5*Sminus],
+    ...                         [None, None, None, None, J*0.5*Splus],
+    ...                         [None, None, None, None, J*Sz],
+    ...                         [None, None, None, None, Id]],
+    ...                        grid_legs=[leg_wR.conj(), leg_wR],
+    ...                        grid_labels=['wL', 'wR'])
     >>> W_mpo.shape
     (5, 5, 2, 2)
+    >>> W_mpo.get_leg_labels()
+    ['wL', 'wR', 'p', 'p*']
     """
     grid_shape, entries = _nontrivial_grid_entries(grid)
     if len(grid_shape) != len(grid_legs):

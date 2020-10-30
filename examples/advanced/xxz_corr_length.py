@@ -10,7 +10,7 @@ state, and plots it vs. hz in the end.
 import numpy as np
 
 from tenpy.models.spins import SpinChain
-from tenpy.networks.mps import MPS, TransferMatrix
+from tenpy.networks.mps import MPS
 from tenpy.algorithms import dmrg
 import matplotlib.pyplot as plt
 

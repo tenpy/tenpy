@@ -7,7 +7,9 @@
     INSTALL
     releases
     introductions
+    examples
     literature
+    papers_using_tenpy
     contributing
 
 .. toctree::

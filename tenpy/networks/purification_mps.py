@@ -70,8 +70,10 @@ An additional real-time evolution allows to calculate time correlation functions
 .. math ::
     <A(t)B(0)> \propto <\phi|\exp(-\beta H/2) \exp(+i H t) A \exp(-i H t) B \exp(-\beta H/2) |\phi>
 
+Time evolution algorithms (TEBD and MPO application) are adjusted in the module
+:mod:`~tenpy.algorithms.purification`.
 
-See also [Karrasch2013]_ for additional tricks! On of their crucial observations is, that
+See also :cite:`karrasch2013` for additional tricks! On of their crucial observations is, that
 one can apply arbitrary unitaries on the auxiliar space (i.e. the `q`) without changing the result.
 This can actually be used to reduce the necessary virtual bond dimensions:
 From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to the `p` legs of
@@ -80,8 +82,8 @@ From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to t
 If the state is modified (e.g. by applying `A` or `B` to calculate correlation functions),
 this is not true any more. However, we still can find unitaries, which are 'optimal' in the sense
 of reducing the entanglement of the MPS/MPO to the minimal value.
-For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.purification_tebd`),
-see [Hauschild2018]_.
+For a discussion of `Disentanglers` (implemented in :mod:`~tenpy.algorithms.disentanglers`),
+see :cite:`hauschild2018`.
 
 .. note ::
     The classes :class:`~tenpy.linalg.networks.mps.MPSEnvironment` and
@@ -93,8 +95,8 @@ see [Hauschild2018]_.
     to the `bra` and `ket` PurificationMPS.
 
 .. note ::
-    The literature (e.g. section 7.2 of [Schollwoeck2011]_ or [Karrasch2013]_) suggests to use
-    a `singlet` as a maximally entangled state.
+    The literature (e.g. section 7.2 of :cite:`schollwoeck2011` or :cite:`karrasch2013`) suggests
+    to use a `singlet` as a maximally entangled state.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
     conservation with the above `qconj` convention.
@@ -103,7 +105,7 @@ see [Hauschild2018]_.
 
 .. todo ::
     One can also look at the canonical ensembles by defining the conserved quantities
-    differently, see Barthel (2016), :arxiv:`1607.01696` for details.
+    differently, see [barthel2016]_ for details.
     Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
     I think it should suffice to implement another `from_infiniteT`.
 

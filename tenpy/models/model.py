@@ -22,10 +22,6 @@ by explicitly specifying the couplings in a general way, and providing functiona
 for converting them into `H_MPO` and `H_bond`.
 This allows to quickly generate new model classes for a very broad class of Hamiltonians.
 
-For simplicity, the :class:`CouplingModel` is limited to interactions involving only two sites.
-Yet, we also provide the :class:`MultiCouplingModel` to generate Models for Hamiltonians
-involving couplings between multiple sites.
-
 The :class:`CouplingMPOModel` aims at structuring the initialization for most models and is used
 as base class in (most of) the predefined models in TeNPy.
 
@@ -43,7 +39,7 @@ from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..networks.terms import order_combine_term
+from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import group_sites
 from ..tools.hdf5_io import Hdf5Exportable
 
@@ -187,24 +183,35 @@ class NearestNeighborModel(Model):
         --------
         The `SpinChainNNN2` has next-nearest-neighbor couplings and thus only implements an MPO:
 
-        >>> from tenpy.models.spins_nnn import SpinChainNNN2
-        >>> nnn_chain = SpinChainNNN2({'L': 20})
-        parameter 'L'=20 for SpinChainNNN2
-        >>> print(isinstance(nnn_chain, NearestNeighborModel))
-        False
-        >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
-        range before grouping: 2
+        .. testsetup :: from_MPOModel
+
+            from tenpy.models.model import NearestNeighborModel
+
+        .. doctest :: from_MPOModel
+
+            >>> from tenpy.models.spins_nnn import SpinChainNNN2
+            >>> nnn_chain = SpinChainNNN2({'L': 20, 'verbose': 0})
+            >>> print(isinstance(nnn_chain, NearestNeighborModel))
+            False
+            >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
+            range before grouping: 2
 
         By grouping each two neighboring sites, we can bring it down to nearest neighbors.
 
-        >>> nnn_chain.group_sites(2)
-        >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
-        range after grouping: 1
+        .. doctest :: from_MPOModel
+
+            >>> grouped_sites = nnn_chain.group_sites(2)
+            >>> print("range after grouping:", nnn_chain.H_MPO.max_range)
+            range after grouping: 1
 
         Yet, TEBD will not yet work, as the model doesn't define `H_bond`.
         However, we can initialize a NearestNeighborModel from the MPO:
 
-        >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
+        .. doctest :: from_MPOModel
+
+            >>> nnn_chain_for_tebd = NearestNeighborModel.from_MPOModel(nnn_chain)
+            >>> isinstance(nnn_chain_for_tebd, NearestNeighborModel)
+            True
         """
         return cls(mpo_model.lat, mpo_model.calc_H_bond_from_MPO())
 
@@ -400,7 +407,6 @@ class NearestNeighborModel(Model):
             X = X.split_legs([0])
             YZ = Z.iscale_axis(Y, axis=0).split_legs([1])
             bond_XYZ[i] = (X, YZ)
-            chinfo = Hb.chinfo
         # construct the legs
         legs = [None] * (L + 1)  # legs[i] is leg 'wL' left of site i with qconj=+1
         for i in range(L + 1):
@@ -408,11 +414,11 @@ class NearestNeighborModel(Model):
                 legs[i] = legs[0]
                 break
             chi = chis[i]
-            qflat = np.zeros((chi, chinfo.qnumber), dtype=QTYPE)
+            triv_1 = LegCharge.from_trivial(1, chinfo, qconj=+1)
+            leg = triv_1
             if chi > 2:
-                YZ = bond_XYZ[i][1]
-                qflat[1:-1, :] = Z.legs[0].to_qflat()
-            leg = LegCharge.from_qflat(chinfo, qflat, qconj=+1)
+                leg = leg.extend(bond_XYZ[i][1].get_leg('wL'))
+            leg = leg.extend(triv_1)
             legs[i] = leg
         # now construct the W tensors
         Ws = [None] * L
@@ -623,13 +629,19 @@ class CouplingModel(Model):
         The :class:`~tenpy.networks.terms.OnsiteTerms` ordered by category.
     coupling_terms : {'category': :class:`~tenpy.networks.terms.CouplingTerms`}
         The :class:`~tenpy.networks.terms.CouplingTerms` ordered by category.
-        In a :class:`MultiCouplingModel`, values may also be
+        In case we've added terms with more than 2 operators,
+        e.g. with :meth:`add_multi_coupling`, the values of the dictionary may also be
         :class:`~tenpy.networks.terms.MultiCouplingTerms`.
+    exp_decaying_terms : :class:`~tenpy.networks.terms.ExponentiallyDecayingTerms`
+        Collection of coupling terms with exponentially decaying long-range interactions.
+        Filled by :meth:`add_exponentially_decaying_coupling`.
     explicit_plus_hc : bool
-        If `True`, `self` represents the terms in :attr:`onsite_terms` and :attr:`coupling_terms`
-        *and* their hermitian conjugate added. The flag will be carried on the MPO, which will
-        have a reduced bond dimension if ``self.add_coupling(..., plus_hc=True)`` was used.
-        Note that :meth:`add_onsite` and :meth:`add_coupling` respect this flag, ensuring that the
+        If `True`, `self` represents the terms in :attr:`onsite_terms`, :attr:`coupling_terms`
+        and :attr:`exp_decaying_terms` *plus* their hermitian conjugate added.
+        The flag will be carried on to the MPO, which will have a reduced bond dimension if
+        ``self.add_coupling(..., plus_hc=True)`` was used.
+        Note that :meth:`add_onsite`, :meth:`add_coupling`, :meth:`add_multi_coupling`
+        and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
         *represented* Hamiltonian is indepentent of the `explicit_plus_hc` flag.
     """
     def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
@@ -642,6 +654,7 @@ class CouplingModel(Model):
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
+        self.exp_decaying_terms = ExponentiallyDecayingTerms(L)
         self.explicit_plus_hc = explicit_plus_hc
         CouplingModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
@@ -699,11 +712,6 @@ class CouplingModel(Model):
             args = ct.coupling_term_handle_JW(strength, term, sites)
             ct.add_coupling_term(*args)
         elif len(term) > 2:
-            # this case belongs into the MultiCouplingModel,
-            # but then we would need to copy-paste the above parts...
-            if not isinstance(self, MultiCouplingModel):
-                raise ValueError("term has too many operators for CouplingModel, "
-                                 "make it a MultiCouplingModel!")
             ct = self.coupling_terms.setdefault(category, MultiCouplingTerms(N))
             if not isinstance(ct, MultiCouplingTerms):
                 # convert ct to MultiCouplingTerms
@@ -891,47 +899,63 @@ class CouplingModel(Model):
         When initializing a model, you can add a term :math:`J \sum_{<i,j>} S^z_i S^z_j`
         on all nearest-neighbor bonds of the lattice like this:
 
-        >>> J = 1.  # the strength
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
+        .. testsetup :: add_coupling
+
+            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, verbose=0, cons_Sz=None))
+            # make it look like both a SpinChain and a FermionChain
+            # Sz and Sx operator already exists
+            site = self.lat.unit_cell[0]
+            site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
+
+        .. doctest :: add_coupling
+
+            >>> J = 1.  # the strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(J, u1, 'Sz', u2, 'Sz', dx)
 
         The strength can be an array, which gets tiled to the correct shape.
         For example, in a 1D :class:`~tenpy.models.lattice.Chain` with an even number of sites and
         periodic (or infinite) boundary conditions, you can add alternating strong and weak
         couplings with a line like::
 
-        >>> self.add_coupling([1.5, 1.], 0, 'Sz', 0, 'Sz', dx)
+        >>> self.add_coupling([1.5, 1.], u1, 'Sz', u2, 'Sz', dx)  # doctest: +SKIP
 
         Make sure to use the `plus_hc` argument if necessary, e.g. for hoppings:
 
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
+        .. doctest :: add_coupling
+
+            >>> t = 1.  # hopping strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
         Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
         order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
-        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)` is
+        the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)`` is
         ``add_coupling(np.conj(t), u2, hc('B'), u1, hc('A'), -dx)``, where `hc` takes the hermitian
         conjugate of the operator names, see :meth:`~tenpy.networks.site.Site.get_hc_op_name`.
         For spin-less fermions (:class:`~tenpy.networks.site.FermionSite`), this would be
 
-        >>> t = 1.  # hopping strength
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
-        ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
+        .. doctest :: add_coupling
+
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx)
+            ...     self.add_coupling(np.conj(t), u2, 'Cd', u1, 'C', -dx)  # h.c.
 
         With spin-full fermions (:class:`~tenpy.networks.site.SpinHalfFermions`), it could be:
 
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
-        ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
+        .. doctest :: add_coupling
+
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     self.add_coupling(t, u1, 'Cdu', u2, 'Cd', dx)  # Cdagger_up C_down
+            ...     self.add_coupling(np.conj(t), u2, 'Cdd', u1, 'Cu', -dx)  # h.c. Cdagger_down C_up
 
         Note that the Jordan-Wigner strings for the fermions are added automatically!
 
         See also
         --------
         add_onsite : Add terms acting on one site only.
-        MultiCouplingModel.add_multi_coupling_term : for terms on more than two sites.
+        add_multi_coupling_term : for terms on more than two sites.
         add_coupling_term : Add a single term without summing over :math:`vec{x}`.
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
@@ -1070,181 +1094,6 @@ class CouplingModel(Model):
             ct += t
         return ct
 
-    def calc_H_onsite(self, tol_zero=1.e-15):
-        """Calculate `H_onsite` from `self.onsite_terms`.
-
-        .. deprecated:: 0.4.0
-            This function will be removed in 1.0.0.
-            Replace calls to this function by
-            ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
-            You might also want to take :attr:`explicit_plus_hc` into account.
-
-        Parameters
-        ----------
-        tol_zero : float
-            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
-
-        Returns
-        -------
-        H_onsite : list of npc.Array
-        onsite terms of the Hamiltonian. If :attr:`explicit_plus_hc` is True,
-            Hermitian conjugates of the onsite terms will be included.
-        """
-        warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
-        ot = self.all_onsite_terms()
-        ot.remove_zeros(tol_zero)
-        ot_arrays = ot.to_Arrays(self.lat.mps_sites())
-        if self.explicit_plus_hc:
-            for i, op in enumerate(ot_arrays):
-                if op is not None:
-                    ot_arrays[i] = op + op.conj().itranspose(op.get_leg_labels())
-        return ot_arrays
-
-    def calc_H_bond(self, tol_zero=1.e-15):
-        """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
-
-        Parameters
-        ----------
-        tol_zero : float
-            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
-
-        Returns
-        -------
-        H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
-            Bond terms as required by the constructor of :class:`NearestNeighborModel`.
-            Legs are ``['p0', 'p0*', 'p1', 'p1*']``
-
-        Raises
-        ------
-        ValueError : if the Hamiltonian contains longer-range terms.
-        """
-        sites = self.lat.mps_sites()
-        finite = (self.lat.bc_MPS != 'infinite')
-
-        ct = self.all_coupling_terms()
-        ct.remove_zeros(tol_zero)
-        H_bond = ct.to_nn_bond_Arrays(sites)
-
-        ot = self.all_onsite_terms()
-        ot.remove_zeros(tol_zero)
-        ot.add_to_nn_bond_Arrays(H_bond, sites, finite, distribute=(0.5, 0.5))
-
-        if finite:
-            assert H_bond[0] is None
-        if self.explicit_plus_hc:
-            # self representes the terms of `ct` and `ot` + their hermitian conjugates
-            # so we need to explicitly add the hermitian conjugate terms
-            for i, Hb in enumerate(H_bond):
-                if Hb is not None:
-                    H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
-        return H_bond
-
-    def calc_H_MPO(self, tol_zero=1.e-15):
-        """Calculate MPO representation of the Hamiltonian.
-
-        Uses :attr:`onsite_terms` and :attr:`coupling_terms` to build an MPO graph
-        (and then an MPO).
-
-        Parameters
-        ----------
-        tol_zero : float
-            Prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
-
-        Returns
-        -------
-        H_MPO : :class:`~tenpy.networks.mpo.MPO`
-            MPO representation of the Hamiltonian.
-        """
-        ot = self.all_onsite_terms()
-        ot.remove_zeros(tol_zero)
-        ct = self.all_coupling_terms()
-        ct.remove_zeros(tol_zero)
-
-        H_MPO_graph = mpo.MPOGraph.from_terms(ot, ct, self.lat.mps_sites(), self.lat.bc_MPS)
-        H_MPO = H_MPO_graph.build_MPO()
-        H_MPO.max_range = ct.max_range()
-        H_MPO.explicit_plus_hc = self.explicit_plus_hc
-        return H_MPO
-
-    def coupling_strength_add_ext_flux(self, strength, dx, phase):
-        """Add an external flux to the coupling strength.
-
-        When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
-        through the cylinder. This means that a particle hopping around the cylinder should
-        pick up a phase given by the external flux [Resta1997]_.
-        This is also called "twisted boundary conditions" in literature.
-        This function adds a complex phase to the `strength` array on some bonds, such that
-        particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
-
-        .. warning ::
-            For the sign of `phase` it is important that you consistently use the creation
-            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling`.
-
-        Parameters
-        ----------
-        strength : scalar | array
-            The strength to be used in :meth:`add_coupling`, when no external flux would be
-            present.
-        dx : iterable of int
-            Translation vector (of the unit cell) between `op1` and `op2` in :meth:`add_coupling`.
-        phase : iterable of float
-            The phase of the external flux for hopping in each direction of the lattice.
-            E.g., if you want flux through the cylinder on which you have an infinite MPS,
-            you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
-            hopping around the cylinder.
-
-        Returns
-        -------
-        strength : complex array
-            The strength array to be used as `strength` in :meth:`add_coupling`
-            with the given `dx`.
-
-        Examples
-        --------
-        Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
-        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
-        The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
-        cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
-        given by the external flux.
-
-        >>> strength = 1. # hopping strength without external flux
-        >>> phi = np.pi/4 # determines the external flux strength
-        >>> strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
-        >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-        ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
-        ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
-        """
-        c_shape = self.lat.coupling_shape(dx)[0]
-        strength = to_array(strength, c_shape)
-        # make strenght complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
-        strength = np.asarray(strength, complex_dtype)
-        for ax in range(self.lat.dim):
-            if self.lat.bc[ax]:  # open boundary conditions
-                if phase[ax]:
-                    raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
-                continue
-            if abs(dx[ax]) == 0:
-                continue  # nothing to do
-            slices = [slice(None) for _ in range(self.lat.dim)]
-            slices[ax] = slice(-abs(dx[ax]), None)
-            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
-            # accross the periodic b.c.
-            slices = tuple(slices)
-            if dx[ax] > 0:
-                strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
-            else:
-                strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
-        return strength
-
-
-class MultiCouplingModel(CouplingModel):
-    """Generalizes :class:`CouplingModel` to allow couplings involving more than two sites.
-
-    The corresponding couplings can be added with :meth:`add_multi_coupling` and
-    :meth:`add_multi_coupling_term` and are saved in :attr:`coupling_terms`, which can now contain
-    instances of :class:`~tenpy.networks.terms.MultiCouplingTerms`.
-    """
     def add_multi_coupling(self,
                            strength,
                            ops,
@@ -1318,14 +1167,16 @@ class MultiCouplingModel(CouplingModel):
         A call to :meth:`add_coupling` with arguments
         ``add_coupling(strength, u1, 'A', u2, 'B', dx)`` is equivalent to the following::
 
-        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D
-        >>> self.add_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])
+        >>> dx_0 = [0] * self.lat.dim  # = [0] for a 1D lattice, [0, 0] in 2D  # doctest: +SKIP
+        >>> self.add_multi_coupling(strength, [('A', dx_0, u1), ('B', dx, u2)])  # doctest: +SKIP
 
-        To explicitly add the hermitian conjugate, you need to take the complex conjugate of the
+        To explicitly add the hermitian conjugate (instead of simply using `plus_hc = True`),
+        you need to take the complex conjugate of the
         `strength`, reverse the order of the operators and take the hermitian conjugates of the
-        individual operator names:
+        individual operator names (indicated by the ``hc(...)``, see
+        :meth:`~tenpy.networks.site.Site.get_hc_op_name`):
 
-        >>> self.add_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # h.c.
+        >>> self.add_multi_coupling(np.conj(strength), [(hc('B'), dx, u2), (hc('A'), dx_0, u1)])  # doctest: +SKIP
 
         See also
         --------
@@ -1335,7 +1186,7 @@ class MultiCouplingModel(CouplingModel):
         """
         if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
                 _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
-            msg = ("Deprecated arguments of MultiCouplingModel.add_multi_coupling:\n"
+            msg = ("Deprecated arguments of CouplingModel.add_multi_coupling:\n"
                    "switch to using a single argument \n"
                    "     ops=[(op0, [0]*self.lat.dim, u0), (op1, dx1, u1), (op2, dx2, u2), ...]\n"
                    "instead of the three arguments \n"
@@ -1409,7 +1260,11 @@ class MultiCouplingModel(CouplingModel):
         if plus_hc:
             hc_ops = [(self.lat.unit_cell[u].get_hc_op_name(opname), dx, u)
                       for (opname, dx, u) in reversed(ops)]
-            self.add_multi_coupling(np.conj(strength), hc_ops, category=category, plus_hc=False)
+            self.add_multi_coupling(np.conj(strength),
+                                    hc_ops,
+                                    op_string=op_string,
+                                    category=category,
+                                    plus_hc=False)
         # done
 
     def add_multi_coupling_term(self,
@@ -1471,6 +1326,287 @@ class MultiCouplingModel(CouplingModel):
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
             ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
+
+    def add_exponentially_decaying_coupling(self,
+                                            strength,
+                                            lambda_,
+                                            op_i,
+                                            op_j,
+                                            subsites=None,
+                                            op_string=None,
+                                            plus_hc=False):
+        r"""Add an exponentially decaying long-range coupling.
+
+        .. math ::
+            strength \sum_{i < j} \lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+        Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
+        Note that the sum over i,j is long-range, for infinite systems going beyond the MPS
+        unit cell.
+        Moreover, note that the distance in the exponent is the distance within `subsites`.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float
+            Decay-rate
+        op_i, op_j : string
+            Names for the operators.
+        subsites : None | 1D array
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+            Needs to be sorted. ``None`` selects all sites.
+        op_string : None | str
+            The operator to be inserted between `A` and `B`;
+            If ``None``, this function checks whether a fermionic ``"JW"`` string is needed for the
+            given operators; in this case the right `op_j` acts first.
+        plus_hc : bool
+            If `True`, the hermitian conjugate of the term is added automatically.
+
+        Examples
+        --------
+        At least for simple enough 1D chains (or ladders), you can use
+        :func:`~tenpy.tools.fit.fit_with_sum_of_exp` to approximate a long-range function
+        with a few sum of exponentials and then add them with this function.
+
+        .. testsetup :: add_exponentially_decaying_coupling
+
+            self = tenpy.models.spins.SpinChain(dict(L=30, verbose=0))
+
+        .. doctest :: add_exponentially_decaying_coupling
+
+            >>> def decay(x):
+            ...     return np.exp(-0.1*x) / x**2
+            >>> from tenpy.tools.fit import fit_with_sum_of_exp, sum_of_exp
+            >>> n_exp = 5
+            >>> fit_range = 50
+            >>> lam, pref = fit_with_sum_of_exp(decay, n_exp, fit_range)
+            >>> x = np.arange(1, fit_range + 1)
+            >>> print('error in fit: {0:.3e}'.format(np.sum(np.abs(decay(x) - sum_of_exp(lam, pref, x)))))
+            error in fit: 1.073e-04
+            >>> for pr, la in zip(pref, lam):
+            ...     self.add_exponentially_decaying_coupling(pr, la, 'N', 'N')
+
+        """
+        if self.explicit_plus_hc:
+            if plus_hc:
+                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+            else:
+                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+        if subsites is None:
+            site0 = self.lat.unit_cell[0]
+        else:
+            site0 = self.lat.mps_sites()[subsites[0]]
+        if op_string is None:
+            need_JW_i = site0.op_needs_JW(op_i)
+            need_JW_j = site0.op_needs_JW(op_j)
+            if need_JW_i != need_JW_j:
+                raise ValueError("only one of the operators need JW string!")
+            if need_JW_i:
+                op_string = 'JW'
+                op_i = site0.multiply_op_names([op_i, 'JW'])
+            else:
+                op_string = 'Id'
+        self.exp_decaying_terms.add_exponentially_decaying_coupling(strength, lambda_, op_i, op_j,
+                                                                    subsites, op_string)
+        if plus_hc:
+            hc_op_i = site0.get_hc_op_name(op_i)
+            hc_op_j = site0.get_hc_op_name(op_j)
+            self.exp_decaying_terms.add_exponentially_decaying_coupling(
+                np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, op_string)
+
+    def calc_H_onsite(self, tol_zero=1.e-15):
+        """Calculate `H_onsite` from `self.onsite_terms`.
+
+        .. deprecated:: 0.4.0
+            This function will be removed in 1.0.0.
+            Replace calls to this function by
+            ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
+            You might also want to take :attr:`explicit_plus_hc` into account.
+
+        Parameters
+        ----------
+        tol_zero : float
+            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
+
+        Returns
+        -------
+        H_onsite : list of npc.Array
+        onsite terms of the Hamiltonian. If :attr:`explicit_plus_hc` is True,
+            Hermitian conjugates of the onsite terms will be included.
+        """
+        warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        ot_arrays = ot.to_Arrays(self.lat.mps_sites())
+        if self.explicit_plus_hc:
+            for i, op in enumerate(ot_arrays):
+                if op is not None:
+                    ot_arrays[i] = op + op.conj().itranspose(op.get_leg_labels())
+        return ot_arrays
+
+    def calc_H_bond(self, tol_zero=1.e-15):
+        """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
+
+        Parameters
+        ----------
+        tol_zero : float
+            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
+
+        Returns
+        -------
+        H_bond : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Bond terms as required by the constructor of :class:`NearestNeighborModel`.
+            Legs are ``['p0', 'p0*', 'p1', 'p1*']``
+
+        Raises
+        ------
+        ValueError : if the Hamiltonian contains longer-range terms.
+        """
+        if len(self.exp_decaying_terms.exp_decaying_terms):
+            raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
+
+        sites = self.lat.mps_sites()
+        finite = (self.lat.bc_MPS != 'infinite')
+
+        ct = self.all_coupling_terms()
+        ct.remove_zeros(tol_zero)
+        H_bond = ct.to_nn_bond_Arrays(sites)
+
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        ot.add_to_nn_bond_Arrays(H_bond, sites, finite, distribute=(0.5, 0.5))
+
+        if finite:
+            assert H_bond[0] is None
+        if self.explicit_plus_hc:
+            # self representes the terms of `ct` and `ot` + their hermitian conjugates
+            # so we need to explicitly add the hermitian conjugate terms
+            for i, Hb in enumerate(H_bond):
+                if Hb is not None:
+                    H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
+        return H_bond
+
+    def calc_H_MPO(self, tol_zero=1.e-15):
+        """Calculate MPO representation of the Hamiltonian.
+
+        Uses :attr:`onsite_terms` and :attr:`coupling_terms` to build an MPOGraph
+        (and then an MPO).
+
+        Parameters
+        ----------
+        tol_zero : float
+            Prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
+
+        Returns
+        -------
+        H_MPO : :class:`~tenpy.networks.mpo.MPO`
+            MPO representation of the Hamiltonian.
+        """
+        ot = self.all_onsite_terms()
+        ot.remove_zeros(tol_zero)
+        ct = self.all_coupling_terms()
+        ct.remove_zeros(tol_zero)
+        edt = self.exp_decaying_terms
+
+        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO = H_MPO_graph.build_MPO()
+        H_MPO.max_range = ct.max_range()
+        H_MPO.explicit_plus_hc = self.explicit_plus_hc
+        return H_MPO
+
+    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+        """Add an external flux to the coupling strength.
+
+        When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
+        through the cylinder. This means that a particle hopping around the cylinder should
+        pick up a phase given by the external flux :cite:`resta1998`.
+        This is also called "twisted boundary conditions" in literature.
+        This function adds a complex phase to the `strength` array on some bonds, such that
+        particles hopping in positive direction around the cylinder pick up `exp(+i phase)`.
+
+        .. warning ::
+            For the sign of `phase` it is important that you consistently use the creation
+            operator as `op1` and the annihilation operator as `op2` in :meth:`add_coupling`.
+
+        Parameters
+        ----------
+        strength : scalar | array
+            The strength to be used in :meth:`add_coupling`, when no external flux would be
+            present.
+        dx : iterable of int
+            Translation vector (of the unit cell) between `op1` and `op2` in :meth:`add_coupling`.
+        phase : iterable of float
+            The phase of the external flux for hopping in each direction of the lattice.
+            E.g., if you want flux through the cylinder on which you have an infinite MPS,
+            you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
+            hopping around the cylinder.
+
+        Returns
+        -------
+        strength : complex array
+            The strength array to be used as `strength` in :meth:`add_coupling`
+            with the given `dx`.
+
+        Examples
+        --------
+        Let's say you have an infinite MPS on a cylinder, and want to add nearest-neighbor
+        hopping of fermions with the :class:`~tenpy.networks.site.FermionSite`.
+        The cylinder axis is the `x`-direction of the lattice, so to put a flux through the
+        cylinder, you want particles hopping *around* the cylinder to pick up a phase `phi`
+        given by the external flux.
+
+        .. testsetup :: coupling_strength_add_ext_flux
+
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3, verbose=0))
+
+        .. doctest :: coupling_strength_add_ext_flux
+
+            >>> strength = 1. # hopping strength without external flux
+            >>> phi = np.pi/4 # determines the external flux strength
+            >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            ...     strength_with_flux = self.coupling_strength_add_ext_flux(strength, dx, [0, phi])
+            ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
+            ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
+        """
+        c_shape = self.lat.coupling_shape(dx)[0]
+        strength = to_array(strength, c_shape)
+        # make strenght complex
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        strength = np.asarray(strength, complex_dtype)
+        for ax in range(self.lat.dim):
+            if self.lat.bc[ax]:  # open boundary conditions
+                if phase[ax]:
+                    raise ValueError("Nonzero phase for external flux along non-periodic b.c.")
+                continue
+            if abs(dx[ax]) == 0:
+                continue  # nothing to do
+            slices = [slice(None) for _ in range(self.lat.dim)]
+            slices[ax] = slice(-abs(dx[ax]), None)
+            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+            # accross the periodic b.c.
+            slices = tuple(slices)
+            if dx[ax] > 0:
+                strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
+            else:
+                strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
+        return strength
+
+
+class MultiCouplingModel(CouplingModel):
+    """Deprecated class which was a generalization of the `CouplingModel`.
+
+    .. deprecated:: 0.7.2
+        In earlier versions of TeNPy, this class contained the methods
+        :meth:`add_multi_coupling` and :meth:`add_multi_coupling_term`.
+        However, since we introduced the :class:`~tenpy.networks.terms.MultiCouplingTerms`,
+        this separation within the Model class is no longer necessary.
+        We hence merged the `MultiCouplingModel` with the `CouplingModel`.
+    """
+    def __init_subclass__(cls):
+        msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
+               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` andymore!")
+        warnings.warn(msg, DeprecationWarning, 2)
 
 
 class CouplingMPOModel(CouplingModel, MPOModel):
@@ -1621,7 +1757,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             if LatticeClass.dim == 1:  # 1D lattice
                 L = model_params.get('L', 2)
                 # 4) lattice
-                lat = LatticeClass(L, sites, bc=bc_x, bc_MPS=bc_MPS)
+                lat = LatticeClass(L, sites, order=order, bc=bc_x, bc_MPS=bc_MPS)
             elif LatticeClass.dim == 2:  # 2D lattice
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)
@@ -1648,6 +1784,9 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             All pre-defined sites accept ``conserve=None`` to disable using quantum numbers.
             Many models in TeNPy read out the `conserve` model parameter, which can be set
             to ``"best"`` to indicate the optimal parameters.
+
+        If you need to initialize more than one site, the function
+        :func:`tenpy.networks.site.set_common_charges` should be helpful.
 
         Parameters
         ----------

@@ -61,6 +61,28 @@ The `h5py <http://docs.h5py.org>`_ package provides a dictionary-like interface 
 numpy-like data sets, and is quite easy to use. 
 If you don't know about HDF5, read the :ref:`quickstart <h5py:quick>` of the `h5py`_ documentation (and this guide).
 
+The implementation can be found in the :mod:`tenpy.tools.hdf5_io` module with the
+:class:`~tenpy.tools.hdf5_io.Hdf5Saver` and :class:`~tenpy.tools.hdf5_io.Hdf5Loader` classes
+and the wrapper functions :func:`~tenpy.tools.hdf5_io.save_to_hdf5`, :func:`~tenpy.tools.hdf5_io.load_from_hdf5`.
+
+The usage is very similar to pickle::
+
+    import h5py
+    from tenpy.tools import hdf5_io
+
+    data = {"psi": psi,  # e.g. an MPS
+            "model": my_model,
+            "parameters": {"L": 6, "g": 1.3}}
+
+    with h5py.File("file.h5", 'w') as f:
+        hdf5_io.save_to_hdf5(f, data)
+    # ...
+    with h5py.File("file.h5", 'r') as f:
+        data = hdf5_io.load_from_hdf5(f)
+        # or for partial reading:
+        pars = hdf5_io.load_from_hdf5(f, "/parameters")
+
+
 .. note ::
     The `hickle <https://github.com/telegraphic/hickle>`_ package imitates the pickle functionality 
     while saving the data to HDF5 files.
@@ -70,12 +92,14 @@ If you don't know about HDF5, read the :ref:`quickstart <h5py:quick>` of the `h5
     To use the export/import features to HDF5, you need to install the `h5py`_ python package 
     (and hence some version of the HDF5 library).
 
+
 Data format specification for saving to HDF5
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Here, we define a simple format how we save data of TeNPy-defined classes.
+This section motivates and defines the format how we save data of TeNPy-defined classes.
 The goal is to have the :func:`~tenpy.tools.hdf5_io.save_to_hdf5` function for saving sufficiently simple enough python
-objects (supported by the format) to disk in an HDF5 file, such that they can be reconstructed with the :func:`~tenpy.tools.hdf5_io.load_from_hdf5` function.
+objects (supported by the format) to disk in an HDF5 file, such that they can be reconstructed with the
+:func:`~tenpy.tools.hdf5_io.load_from_hdf5` function, as outlined in the example code above.
 
 Guidelines of the format:
 
@@ -104,27 +128,9 @@ Guidelines of the format:
    Also, loading a HDF5 file can import other python modules, so importing
    a manipulated file is not secure if you downloaded a malicious python file as well.
 
-An implementation along those guidelines is given inside TeNPy in the :mod:`tenpy.tools.hdf5_io` module with the
-:class:`~tenpy.tools.hdf5_io.Hdf5Saver` and :class:`~tenpy.tools.hdf5_io.Hdf5Loader` classes
-and the wrapper functions :func:`~tenpy.tools.hdf5_io.save_to_hdf5`, :func:`~tenpy.tools.hdf5_io.load_from_hdf5`.
-The usage is very similar to pickle::
 
-    import h5py
-    from tenpy.tools import hdf5_io
-
-    data = {"psi": psi,  # e.g. an MPS
-            "model": my_model,
-            "parameters": {"L": 6, "g": 1.3}}
-
-    with h5py.File("file.h5", 'w') as f:
-        hdf5_io.save_to_hdf5(f, data)
-    # ...
-    with h5py.File("file.h5", 'r') as f:
-        data = hdf5_io.load_from_hdf5(f)
-        # or for partial reading:
-        pars = hdf5_io.load_from_hdf5(f, "/parameters")
-
-The full format specification is given by the what the code does. Since this is not trivial to see, let me summarize it here:
+The full format specification is given by the what the code in :mod:`~tenpy.tools.hdf5_io` does...
+Since this is not trivial to understand, let me summarize it here:
 
 - Following 1), simple scalars, strings and numpy arrays are saved as :class:`Dataset`. 
   Other objects are saved as a HDF5 :class:`Group`, with the actual data being saved as group members (as sub-groups and
@@ -162,7 +168,7 @@ To see what the exact format for those classes is, look at the `save_hdf5` and `
     but userdefined classes can use the same technique in their `from_hdf5` method.
     The user might also explicitly choose a "lossy" output format (e.g. "flat" for np_conserved Arrays and LegCharges).
 
-.. note ::
+.. tip ::
     The above format specification is quite general and not bound to TeNPy. Feel free to use it in your own projects ;-)
     To separate the development, versions and issues of the format clearly from TeNPy, we maintain the code for it in a separate git repository,
     https://github.com/tenpy/hdf5_io

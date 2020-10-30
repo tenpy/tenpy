@@ -11,9 +11,21 @@ to convert flat numpy arrays to and from np_conserved arrays.
 
 import numpy as np
 from . import np_conserved as npc
+import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
+from ..tools.math import speigs, speigsh
+from ..tools.misc import argsort, group_by_degeneracy
+import warnings
 
-__all__ = ['NpcLinearOperator', 'FlatLinearOperator', 'FlatHermitianOperator']
+__all__ = [
+    'NpcLinearOperator',
+    'NpcLinearOperatorWrapper',
+    'SumNpcLinearOperator',
+    'ShiftNpcLinearOperator',
+    'OrthogonalNpcLinearOperator',
+    'FlatLinearOperator',
+    'FlatHermitianOperator',
+]
 
 
 class NpcLinearOperator:
@@ -29,7 +41,7 @@ class NpcLinearOperator:
     acts_on : list of str
         Labels of the state on which the operator can act. NB: Class attribute.
     """
-    acts_on = None
+    acts_on = None  # Derived classes should set this as a class attribute
 
     def matvec(self, vec):
         """Calculate the action of the operator on a vector `vec`.
@@ -39,7 +51,168 @@ class NpcLinearOperator:
         that they can be added. Note that this excludes a non-trivial `qtotal` for square
         operators.
         """
-        raise NotImplementedError("Derived classes should implement this")
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def to_matrix(self):
+        """Contract `self` to a matrix.
+
+        If `self` represents an operator with very small shape,
+        e.g. because the MPS bond dimension is very small,
+        an algorithm might choose to contract `self` to a single tensor.
+
+        Returns
+        -------
+        matrix : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of the represented operator.
+        """
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("No adjoint defined")
+
+
+class NpcLinearOperatorWrapper:
+    """Base class for wrapping around another :class:`NpcLinearOperator`.
+
+    Attributes not explicitly set with `self.attribute = value` (or by defining methods)
+    default to the attributes of the wrapped `orig_operator`.
+
+    .. warning ::
+        If there are multiple levels of wrapping operators, the order might be critical to get
+        correct results; e.g. :class:`OrthogonalNpcLinearOperator` needs to be the outer-most
+        wrapper to produce correct results and/or be efficient.
+
+    Parameters
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+
+    Attributes
+    ----------
+    orig_operator : NpcLinearOperator
+        The original operator implementing the `matvec`.
+    """
+    def __init__(self, orig_operator):
+        self.orig_operator = orig_operator
+
+    def __getattr__(self, name):
+        # default to un-wrapped attributes
+        return getattr(self.orig_operator, name)
+
+    def unwrapped(self):
+        """Return to the original NpcLinearOperator.
+
+        If multiple levels of wrapping were used, this returns the most unwrapped one.
+        """
+        parent = self.orig_operator
+        for _ in range(10000):
+            if hasattr(parent, "unwrapped"):
+                parent = parent.unwrapped()
+            else:
+                break
+        else:
+            raise ValueError("maximum recursion depth for unwrapping reached")
+        return parent
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`.
+
+        If `self` is hermitian, subclasses *can* choose to implement this to define
+        the adjoint operator of `self`."""
+        raise NotImplementedError("This function should be implemented in derived classes")
+
+
+class SumNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Sum of two linear operators."""
+    def __init__(self, orig_operator, other_operator):
+        super().__init__(orig_operator)
+        self.other_operator = other_operator
+
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+
+    def to_matrix(self):
+        return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
+
+    def adjoint(self):
+        return SumNpcLinearOperator(self.orig_operator.adjoint(), self.other_operator.adjoint())
+
+
+class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Representes ``original_operator + shift * identity``.
+
+    This can be useful e.g. for better Lanczos convergence.
+    """
+    def __init__(self, orig_operator, shift):
+        if shift == 0.:
+            warnings.warn("shift=0: no need for ShiftNpcLinearOperator", stacklevel=2)
+        super().__init__(orig_operator)
+        self.shift = shift
+
+    def matvec(self, vec):
+        return self.orig_operator.matvec(vec) + self.shift * vec
+
+    def to_matrix(self):
+        mat = self.orig_operator.to_matrix()
+        return mat + self.shift * npc.eye_like(mat)
+
+    def adjoint(self):
+        return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
+
+
+class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Replace ``H -> P H P`` with the projector ``P = 1 - sum_o |o> <o|``.
+
+    Here, ``|o>`` are the vectors from :attr:`ortho_vecs`.
+
+    Parameters
+    ----------
+    orig_operator : :class:`EffectiveH`
+        The original `EffectiveH` instance to wrap around.
+    ortho_vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The vectors to orthogonalize against.
+    """
+    def __init__(self, orig_operator, ortho_vecs):
+        if len(ortho_vecs) == 0:
+            warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
+                          stacklevel=2)
+        super().__init__(orig_operator)
+        from .lanczos import gram_schmidt
+        ortho_vecs, _ = gram_schmidt(ortho_vecs)
+        self.ortho_vecs = ortho_vecs
+
+    def matvec(self, vec):
+        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
+        vec = vec.copy()
+        for o in self.ortho_vecs:  # Project out
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        vec = self.orig_operator.matvec(vec)
+        for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
+            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+        return vec
+
+    def to_matrix(self):
+        matrix = self.orig_operator.to_matrix()
+        labels = matrix.get_leg_labels()
+        proj = npc.eye_like(matrix, 0)
+        for o in self.ortho_vecs:
+            o = o.combine_legs(o.get_leg_labels())
+            proj -= npc.outer(o, o.conj())
+        matrix = npc.tensordot(matrix, proj, len(labels) // 2)
+        matrix = npc.tensordot(proj, matrix, len(labels) // 2)
+        matrix.iset_leg_labels(labels)
+        return matrix
+
+    def adjoint(self):
+        return OrthogonalNpcLinearOperator(self.orig_operator.adjoint(), self.ortho_vecs)
 
 
 class FlatLinearOperator(ScipyLinearOperator):
@@ -206,28 +379,19 @@ class FlatLinearOperator(ScipyLinearOperator):
         vec = np.asarray(vec)
         if vec.ndim != 1:
             vec = np.squeeze(vec, axis=1)  # need a vector, not a Nx1 matrix
-        if self._charge_sector is not None:
-            npc_vec = self.flat_to_npc(vec)  # convert to npc Array
-            npc_vec = self.npc_matvec(npc_vec)  # the expensive part
-            self.matvec_count += 1
-            return self.npc_to_flat(npc_vec)  # convert back
-        else:
-            result = np.zeros(self.shape[0], self.dtype)
-            try:
-                # iterator over all charge sectors
-                for sector in self.possible_charge_sectors:
-                    self.charge_sector = sector
-                    assert self._charge_sector is not None
-                    npc_vec = self.flat_to_npc(vec[self._mask])  # convert to npc Array
-                    npc_vec = self.npc_matvec(npc_vec)  # the expensive part
-                    self.matvec_count += 1
-                    result[self._mask] = self.npc_to_flat(npc_vec)  # convert back
-            finally:
-                self.charge_sector = None
-            return result
+            assert vec.ndim == 1
+        npc_vec = self.flat_to_npc(vec)  # convert to npc Array
+        npc_vec = self.npc_matvec(npc_vec)  # the expensive part, wrapped matvec function
+        self.matvec_count += 1
+        vec = self.npc_to_flat(npc_vec)  # convert back to numpy Array
+        return vec
 
     def flat_to_npc(self, vec):
-        """Convert flat vector of selected charge sector into npc Array.
+        """Convert flat numpy vector of selected charge sector into npc Array.
+
+        If :attr:`charge_sector` is not None, convert to a 1D npc vector with leg `self.leg`.
+        Otherwise convert `vec`, which can be non-zero in *all* charge sectors, to a npc matrix
+        with an additional ``'charge'`` leg to allow representing the full vector at once.
 
         Parameters
         ----------
@@ -237,18 +401,107 @@ class FlatLinearOperator(ScipyLinearOperator):
         Returns
         -------
         npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Same as `vec`, but converted into a flat array.
+            Same as `vec`, but converted into a npc array.
         """
-        if self._charge_sector is None:
-            raise ValueError("By definition, this can't work for all charges at once!")
-        res = npc.zeros([self.leg], vec.dtype, self._charge_sector)
-        res[self._mask] = vec
-        if self.vec_label is not None:
-            res.iset_leg_labels([self.vec_label])
-        return res
+        if self._charge_sector is not None:
+            res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
+            res[self._mask] = vec
+            return res
+        else:
+            leg = self.leg
+            ch_leg = npc.LegCharge.from_qflat(leg.chinfo,
+                                              self.possible_charge_sectors,
+                                              qconj=-leg.qconj)
+            res = npc.zeros([self.leg, ch_leg], vec.dtype, labels=[self.vec_label, 'charge'])
+            res._qdata = np.repeat(np.arange(leg.block_number, dtype=np.intp),
+                                   2).reshape(leg.block_number, 2)
+            for qi in range(leg.block_number):
+                res._data.append(vec[leg.get_slice(qi)].reshape((-1, 1)))
+            res.test_sanity()
+            return res
 
     def npc_to_flat(self, npc_vec):
+        """Convert npc Array into a 1D ndarray, inverse of :meth:`flat_to_npc`.
+
+        Parameters
+        ----------
+        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Npc Array to be converted.
+            If `self.charge_sector` is not None, this should be a 1D array with that `qtotal`.
+            If `self.charge_sector` is not None, it should have an additional ``"charge"`` leg,
+            (as returned by :meth:`flat_to_npc`).
+
+        Returns
+        -------
+        vec : 1D ndarray
+            Same entries as `npc_vec`, but converted into a flat Numpy array.
+        """
+        if self._charge_sector is not None:
+            assert npc_vec.rank == 1
+            if np.any(npc_vec.qtotal != self._charge_sector):
+                raise ValueError("npc_vec.qtotal and charge sector don't match!")
+            if isinstance(npc_vec.legs[0], npc.LegPipe):
+                npc_vec = npc_vec.copy(deep=False)
+                npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
+            return npc_vec[self._mask].to_ndarray()
+        else:
+            npc_vec.itranspose([self.vec_label, 'charge'])
+            res = np.zeros([self.leg.ind_len], npc_vec.dtype)
+            leg = self.leg
+            for qinds, data in zip(npc_vec._qdata, npc_vec._data):
+                qi = qinds[0]
+                assert qi == qinds[1]
+                res[leg.get_slice(qi)] = data.reshape((-1, ))
+            return res
+
+    def flat_to_npc_all_sectors(self, vec):
+        """Convert flat vector of *all* charge sectors into npc Array with extra "charge" leg.
+
+        .. deprecated :: 0.7.3
+            This is merged into :meth:`flat_to_npc` with ``self.charge_sector = None``.
+
+        Parameters
+        ----------
+        vec : 1D ndarray
+            Numpy vector to be converted.
+
+        Returns
+        -------
+        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Same as `vec`, but converted into a npc array.
+        """
+        assert self._charge_sector is None
+        warnings.warn(
+            "Deprecated access of FlatLinearOperator.flat_to_npc_all_sectors.\n"
+            "directly use flat_to_npc instead!",
+            category=FutureWarning,
+            stacklevel=2)
+        return self.flat_to_npc(vec)
+
+    def flat_to_npc_None_sector(self, vec, cutoff=1.e-10):
+        """Convert flat vector of undetermined charge sectors into npc Array.
+
+        The charge sector to be used is chosen as the block with the maximal norm,
+        not by `self.charge_sector` (which might be `None`).
+
+        Parameters
+        ----------
+        vec : 1D ndarray
+            Numpy vector to be converted.
+
+        Returns
+        -------
+        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
+            Same as `vec`, but converted into a npc array.
+        """
+        assert self._charge_sector is None
+        return npc.Array.from_ndarray(vec, [self.leg], cutoff=cutoff, labels=[self.vec_label])
+
+    def npc_to_flat_all_sectors(self, npc_vec):
         """Convert npc Array with qtotal = self.charge_sector into ndarray.
+
+        .. deprecated :: 0.7.3
+            This is merged into :meth:`npc_to_flat` with ``self.charge_sector = None``.
 
         Parameters
         ----------
@@ -260,12 +513,13 @@ class FlatLinearOperator(ScipyLinearOperator):
         vec : 1D ndarray
             Same as `npc_vec`, but converted into a flat Numpy array.
         """
-        if self._charge_sector is not None and np.any(npc_vec.qtotal != self._charge_sector):
-            raise ValueError("npc_vec.qtotal and charge sector don't match!")
-        if isinstance(npc_vec.legs[0], npc.LegPipe):
-            npc_vec = npc_vec.copy(deep=False)
-            npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
-        return npc_vec[self._mask].to_ndarray()
+        assert self._charge_sector is None
+        warnings.warn(
+            "Deprecated access of FlatLinearOperator.npc_to_flat_all_sectors.\n"
+            "directly use npc_to_flat instead!",
+            category=FutureWarning,
+            stacklevel=2)
+        return self.npc_to_flat(npc_vec)
 
     def _npc_matvec_wrapper(self, vec):
         """Wrapper around ``self._npc_matvec_multileg`` acting on a LegPipe.
@@ -301,6 +555,151 @@ class FlatLinearOperator(ScipyLinearOperator):
             vec = vec.combine_legs(self._labels_split, pipes=self.leg)
         return vec
 
+    def eigenvectors(self,
+                     num_ev=1,
+                     max_num_ev=None,
+                     max_tol=1.e-12,
+                     which='LM',
+                     v0=None,
+                     v0_npc=None,
+                     cutoff=1.e-12,
+                     hermitian=False,
+                     **kwargs):
+        """Find (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
+
+        If no charge_sector was selected, we look in *all* charge sectors.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for.
+        max_num_ev : int
+            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
+            we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
+            ``None`` defaults to ``num_ev + 2``.
+        max_tol : float
+            After the first `NoConvergenceError` we increase the `tol` argument to that value.
+        which : str
+            Which eigenvalues to look for, see :func:`scipy.sparse.linalg.eigs`.
+            More details also in :func:`~tenpy.tools.misc.argsort`.
+        v0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess as a "flat" numpy array.
+        v0_npc : :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guess, to be converted by :meth:`npc_to_flat`.
+        cutoff : float
+            Only used if ``self.charge_sector is None``; in that case it determines when entries in
+            a given charge-block are considered nonzero, and what counts as degenerate.
+        hermitian : bool
+            If False (default), use :func:`scipy.sparse.linalg.eigs`
+            If True, assume that self is hermitian and use :func:`scipy.sparse.linalg.eigsh`.
+        **kwargs :
+            Further keyword arguments given to :func:`scipy.sparse.linalg.eigsh` or
+            :func:`scipy.sparse.linalg.eigs`, respectively.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted according to `which`.
+        w : list of :class:`~tenpy.linalg.np_conserved.Array`
+            The eigenvectors corresponding to `eta`, as npc.Array with LegPipe.
+        """
+        if max_num_ev is None:
+            max_num_ev = num_ev + 2
+        if v0_npc is not None:
+            assert v0 is None
+            v0 = self.npc_to_flat(v0_npc)
+        if v0 is not None:
+            kwargs['v0'] = v0
+        # for given charge sector
+        for k in range(num_ev, max_num_ev + 1):
+            if k > num_ev:
+                warnings.warn("TransferMatrix: increased `num_ev` to " + str(k + 1))
+            try:
+                if hermitian:
+                    eta, A = speigsh(self, k=k, which=which, **kwargs)
+                else:
+                    eta, A = speigs(self, k=k, which=which, **kwargs)
+                break
+            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+                if k == max_num_ev:
+                    raise
+            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        from_ndarray_args = dict(legcharges=[self.leg],
+                                 cutoff=cutoff,
+                                 labels=[self.vec_label],
+                                 raise_wrong_sector=True)
+        A = np.real_if_close(A)
+        if self._charge_sector is not None:
+            vecs = [self.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
+        else:
+            k = A.shape[1]
+            vecs = [None] * k
+            multi_sectors = []
+            for j in range(k):
+                vec = A[:, j]
+                try:
+                    vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
+                except ValueError as e:
+                    if not e.args[0].startswith(''):
+                        raise
+                    multi_sectors.append(j)
+            from_ndarray_args['raise_wrong_sector'] = False
+            for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
+                # really, we would need to diagonalize the charges within the subspace of
+                # degenerace eigenvectors of the transfermatrix.
+                # However, we (might) only know a subset of the degenerate eigenvectors,
+                # and diagonalizing the charges in that subspace might not yield real
+                # charge eigenvectors (which is obvious if we have only one of them).
+                # Instead we just project onto different blocks:
+                # within a block it will for sure be an eigenvector of both the charge
+                # and the transfer matrix!
+                # This can fail, however, if there are less non-zero blocks than eigenvectors,
+                # in which case we don't return an array with definite charge but with an
+                # additional `charge` leg.
+                if len(degenerate) == 1:
+                    # degenerate eigenvalues but we didn't find enough eigenvectors to see that
+                    j = degenerate[0]
+                    qi = np.argmax([
+                        np.linalg.norm(vec[self.leg.get_slice(qi)])
+                        for qi in range(self.leg.block_number)
+                    ])
+                    qtotal = self.leg.get_charge(qi)
+                    vecs[i] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
+                else:
+                    used_blocks = {}
+                    for j in degenerate:
+                        vec = A[:, j]
+                        block_norms = [
+                            np.linalg.norm(vec[self.leg.get_slice(qi)])
+                            for qi in range(self.leg.block_number)
+                        ]
+                        for qi in np.argsort(block_norms):
+                            if qi in used_blocks or block_norms[qi] < cutoff:
+                                continue
+                            used_blocks.add(qi)
+                            qtotal = self.leg.get_charge(qi)
+                            vecs[i] = npc.Array.from_ndarray(vec,
+                                                             qtotal=qtotal,
+                                                             **from_ndarray_args)
+                            vecs[i] /= npc.norm(vecs[i])
+                            break
+                        else:
+                            # didn't break, so didn't set vecs[i]
+                            # -> can't guarantee orthogonality to previous eigenvectors
+                            msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
+                                   "charge block uniquely; would need to diagonalize again "
+                                   "with given `charge_sector`.\n"
+                                   "Will return eigenvector with extra `charge` leg instead, "
+                                   "which might not be orthogonal to other eigenvectors.")
+                            warnings.warn(msg, stacklevel=2)
+                            vecs[j] = self.flat_to_npc(vec)
+                            for qi in range(self.leg.used_block_number):
+                                if block_norms[qi] > cutoff:
+                                    used_blocks.add(qi)
+        perm = argsort(eta, which)
+        return np.array(eta)[perm], [vecs[j] for j in perm]
+
 
 class FlatHermitianOperator(FlatLinearOperator):
     """Hermitian variant of :class:`FlatLinearOperator`.
@@ -310,3 +709,8 @@ class FlatHermitianOperator(FlatLinearOperator):
     """
     def _adjoint(self):
         return self
+
+    def eigenvectors(self, *args, **kwargs):
+        """Same as FlatLinearOperator(..., hermitian=True)."""
+        kwargs['hermitian'] = True
+        return FlatLinearOperator.eigenvectors(self, *args, **kwargs)

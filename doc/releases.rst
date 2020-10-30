@@ -12,11 +12,9 @@ released.
 source) TeNPy version.
 
 .. toctree ::
+    :glob:
+    :reversed:
     
-    changelog/latest
-    changelog/v0.5.0
-    changelog/v0.4.1
-    changelog/v0.4.0
-    changelog/v0.3.0
-    changelog/v0.2.0
     changelog/prev_tenpy
+    changelog/v*
+    changelog/latest

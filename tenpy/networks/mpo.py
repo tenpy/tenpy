@@ -37,7 +37,9 @@ i.e. between sites ``i-1`` and ``i``.
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+from scipy.linalg import expm
 import warnings
+import sys
 
 from ..linalg import np_conserved as npc
 from .site import group_sites, Site
@@ -47,8 +49,10 @@ from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
+from ..tools.params import asConfig
+from ..algorithms.truncation import TruncationError, svd_theta
 
-__all__ = ['MPO', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
+__all__ = ['MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
 
 
 class MPO:
@@ -209,7 +213,7 @@ class MPO:
                    IdL=None,
                    IdR=None,
                    Ws_qtotal=None,
-                   leg0=None,
+                   legs=None,
                    max_range=None,
                    explicit_plus_hc=False):
         """Initialize an MPO from `grids`.
@@ -230,8 +234,13 @@ class MPO:
             Indices on the bonds, which correpond to 'only identities to the right'.
         Ws_qtotal : (list of) total charge
             The `qtotal` to be used for each grid. Defaults to zero charges.
-        leg0 : :class:`~tenpy.linalg.charge.LegCharge`
-            LegCharge for 'wL' of the left-most `W`. By default, construct it.
+        legs : list of :class:`~tenpy.linalg.charge.LegCharge`
+            List of charges for 'wL' legs left of each `W`, L + 1 entries.
+            The last entry should be the conjugate of the 'wR' leg,
+            i.e. identical to ``legs[0]`` for 'infinite' `bc`.
+            By default, determine the charges automatically. This is limited to cases where
+            there are no "dangling open ends" in the MPO graph. (The :class:`MPOGraph` can handle
+            those cases, though.)
         max_range : int | np.inf | None
             Maximum range of hopping/interactions (in unit of sites) of the MPO.
             ``None`` for unknown.
@@ -256,22 +265,24 @@ class MPO:
                 Ws_qtotal = [Ws_qtotal] * L
         IdL = cls._get_Id(IdL, L)
         IdR = cls._get_Id(IdR, L)
-        if bc != 'infinite':
-            if leg0 is None:
+        if legs is None:
+            if bc != 'infinite':
                 # ensure that we have only a single entry in the first and last leg
                 # i.e. project grids[0][:, :] -> grids[0][IdL[0], :]
                 # and         grids[-1][:, :] -> grids[-1][:,IdR[-1], :]
                 first_grid = grids[0]
                 last_grid = grids[-1]
                 if len(first_grid) > 1:
-                    grids[0] = first_grid[IdL[0]]
+                    grids[0] = [first_grid[IdL[0]]]
                     IdL[0] = 0
+                    IdR[0] = None
                 if len(last_grid[0]) > 1:
-                    grids[0] = [row[IdR[-1]] for row in last_grid]
+                    grids[-1] = [[row[IdR[-1]]] for row in last_grid]
                     IdR[-1] = 0
-            legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0)
-        else:
-            legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL[0])
+                    IdL[-1] = None
+                legs = _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, None)
+            else:
+                legs = _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, None, IdL[0])
         # now build the `W` from the grid
         assert len(legs) == L + 1
         Ws = []
@@ -443,6 +454,143 @@ class MPO:
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
         # done
 
+    def make_U(self, dt, approximation='II'):
+        r"""Creates the U_I or U_II propagator.
+
+        Approximations of MPO exponentials following :cite:`zaletel2015`.
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator.
+            Should be imaginary for real time evolution!
+        approximation : ``'I' | 'II'``
+            Selects the approximation, :meth:`make_U_I` (``'I'``) or :meth:`make_U_II` (``'II'``).
+
+        Returns
+        -------
+        U : :class:`~tepy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
+        """
+        if approximation == 'II':
+            return self.make_U_II(dt)
+        elif approximation == 'I':
+            return self.make_U_I(dt)
+        raise ValueError(repr(approximation) + " not implemented")
+
+    def make_U_I(self, dt):
+        r"""Creates the :math:`U_I` propagator with `W_I` tensors.
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator.
+            Should be imaginary for real time evolution!
+
+        Returns
+        -------
+        UI : :class:`~tenpy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
+        """
+        U = [
+            self.get_W(i).astype(np.result_type(dt, self.dtype),
+                                 copy=True).itranspose(['wL', 'wR', 'p', 'p*'])
+            for i in range(self.L)
+        ]
+
+        IdLR = []
+        for i in range(0, self.L):  # correct?
+            U1 = U[i]
+            U2 = U[(i + 1) % self.L]
+            IdL = self.IdL[i + 1]
+            IdR = self.IdR[i + 1]
+            assert IdL is not None and IdR is not None
+            U1[:, IdL, :, :] = U1[:, IdL, :, :] + dt * U1[:, IdR, :, :]
+            keep = np.ones(U1.shape[1], dtype=bool)
+            keep[IdR] = False
+            U1.iproject(keep, 1)
+            if self.finite and i + 1 == self.L:
+                keep = np.ones(U2.shape[0], dtype=bool)
+                assert self.IdR[0] is not None
+                keep[self.IdR[0]] = False
+            U2.iproject(keep, 0)
+
+            if IdL > IdR:
+                IdLR.append(IdL - 1)
+            else:
+                IdLR.append(IdL)
+
+        IdL = self.IdL[0]
+        IdR = self.IdR[0]
+        assert IdL is not None and IdR is not None
+        if IdL > IdR:
+            IdLR_0 = IdL - 1
+        else:
+            IdLR_0 = IdL
+        IdLR = [IdLR_0] + IdLR
+
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
+
+    def make_U_II(self, dt):
+        r"""Creates the :math:`U_II` propagator.
+
+        Parameters
+        ----------
+        dt : float|complex
+            The time step per application of the propagator. Should be imaginary for real time evolution!
+
+        Returns
+        -------
+        U_II : :class:`~tenpy.networks.mpo.MPO`
+            The propagator, i.e. approximation :math:`UII ~= exp(H*dt)`
+
+        """
+        dtype = np.result_type(dt, self.dtype)
+        IdL = self.IdL
+        IdR = self.IdR
+
+        chinfo = self.chinfo
+        trivial = chinfo.make_valid()
+        U = []
+        for i in range(0, self.L):
+            labels = ['wL', 'wR', 'p', 'p*']
+            W = self.get_W(i).itranspose(labels)
+            assert np.all(W.qtotal == trivial)
+            DL, DR, _, _ = W.shape
+            Wflat = W.to_ndarray()
+            proj_L = np.ones(DL, dtype=np.bool_)
+            proj_L[IdL[i]] = False
+            proj_L[IdR[i]] = False
+            proj_R = np.ones(DR, dtype=np.bool_)
+            proj_R[IdL[i + 1]] = False
+            proj_R[IdR[i + 1]] = False
+
+            #Extract (A, B, C, D)
+            D = Wflat[IdL[i], IdR[i + 1], :, :]
+            C = Wflat[IdL[i], proj_R, :, :]
+            B = Wflat[proj_L, IdR[i + 1], :, :]
+            A = Wflat[proj_L, :, :, :][:, proj_R, :, :]  # numpy indexing requires two steps
+
+            W_II = make_W_II(dt, A, B, C, D)
+
+            leg_L, leg_R, leg_p, leg_pconj = W.legs
+            new_leg_L = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_L.qconj)
+            new_leg_L = new_leg_L.extend(leg_L.project(proj_L)[2])
+            new_leg_R = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid()], leg_R.qconj)
+            new_leg_R = new_leg_R.extend(leg_R.project(proj_R)[2])
+
+            W_II = npc.Array.from_ndarray(
+                W_II,
+                [new_leg_L, new_leg_R, leg_p, leg_pconj],
+                dtype=dtype,
+                qtotal=trivial,
+                labels=labels,
+            )
+            # TODO: could sort by charges.
+            U.append(W_II)
+        Id = [0] * (self.L + 1)
+        return MPO(self.sites, U, self.bc, Id, Id)
+
     def expectation_value(self, psi, tol=1.e-10, max_range=100):
         """Calculate ``<psi|self|psi>/<psi|psi>``.
 
@@ -521,6 +669,55 @@ class MPO:
             warnings.warn(msg, stacklevel=2)
         return np.real_if_close(current_value / L)
 
+    def variance(self, psi, exp_val=None):
+        """Calculate ``<psi|self^2|psi> - <psi|self|psi>^2``.
+
+        Works only for finite systems. Ignores the :attr:`~tenpy.networks.mps.MPS.norm` of `psi`.
+
+        .. todo ::
+            This is a naive, expensive implementation contracting the full network.
+            Try to follow :arXiv:`1711.01104` for a better estimate; would that even work in
+            the infinite limit?
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            State for which the variance should be taken.
+        exp_val : float/complex | None
+            The result of ``<psi|self|psi> = self.expectation_value(psi)`` if known;
+            otherwise obtained from :meth:`expectation_value`.
+            (Set this to 0 to obtain only the part ``<psi|self^2|psi>``.)
+        """
+        if self.bc != 'finite':
+            raise ValueError("works only for finite systems")
+        if self.L != psi.L:
+            raise ValueError("expect same L")
+        if psi._p_label != ['p']:
+            raise ValueError("not adjusted for non-standard MPS.")
+        assert self.L >= 1
+        if exp_val is None:
+            exp_val = self.expectation_value(psi)
+
+        th = psi.get_theta(0, n=1)
+        W = self.get_W(0).take_slice(self.get_IdL(0), 'wL')
+        contr = npc.tensordot(th, W.replace_label('wR', 'wR1'), axes=['p0', 'p*'])
+        contr = npc.tensordot(contr, W.replace_label('wR', 'wR2'), axes=['p', 'p*'])
+        contr = npc.tensordot(th.conj(), contr, axes=[['vL*', 'p0*'], ['vL', 'p']])
+        for i in range(1, self.L):
+            B = psi.get_B(i, form='B')
+            W = self.get_W(i)
+            contr = npc.tensordot(contr, B, axes=['vR', 'vL'])
+            contr = npc.tensordot(contr,
+                                  W.replace_label('wR', 'wR1'),
+                                  axes=[['wR1', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr,
+                                  W.replace_label('wR', 'wR2'),
+                                  axes=[['wR2', 'p'], ['wL', 'p*']])
+            contr = npc.tensordot(contr, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
+        contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
+        contr = npc.trace(contr, 'vR', 'vR*')
+        return np.real_if_close(contr - exp_val**2)
+
     def dagger(self):
         """Return hermition conjugate copy of self."""
         # complex conjugate and transpose everything
@@ -597,26 +794,183 @@ class MPO:
         norms = overlap(self, self) + overlap(other, other)
         return abs(norms - self_other) < eps * abs(norms)
 
-    def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `self.bc`)."""
-        if not self.finite:
-            return i % self.L
-        if i < 0:
-            i += self.L
-        if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPO".format(i))
-        return i
+    def apply(self, psi, options):
+        """Apply `self` to an MPS `psi` and compress `psi` in place.
 
-    @staticmethod
-    def _get_Id(Id, L):
-        """parse the IdL or IdR argument of __init__"""
-        if Id is None:
-            return [None] * (L + 1)
+        Options
+        -------
+        .. cfg:config :: ApplyMPO
+            :include: VariationalApplyMPO, ZipUpApplyMPO
+
+            compression_method : ``'SVD' | 'variational' | 'zip_up'``
+                Mandatory.
+                Selects the method to be used for compression.
+                For the `SVD` compression, `trunc_params` is the only other option used.
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The state to which `self` should be applied, in place.
+        options : dict
+            See above.
+        """
+        options = asConfig(options, "MPO_apply")
+        method = options['compression_method']
+        trunc_params = options.subconfig('trunc_params')
+        if method == 'SVD':
+            self.apply_naively(psi)
+            return psi.compress_svd(trunc_params)
+        elif method == 'variational':
+            from ..algorithms.mps_common import VariationalApplyMPO
+            return VariationalApplyMPO(psi, self, options).run()
+        elif method == 'zip_up':
+            trunc_err = self.apply_zipup(psi, options)
+            return trunc_err + psi.compress_svd(trunc_params)
+        # TODO: zipup method infinite?
+        raise ValueError("Unknown compression method: " + repr(method))
+
+    def apply_naively(self, psi):
+        """Applies an MPO to an MPS (in place) naively, without compression.
+
+        This function simply contracts the `W` tensors of the MPO to the `B` tensors of the
+        MPS, resulting in an MPS with bond dimension `self.chi * psi.chi`.
+
+        .. warning ::
+            This function sets only a wild *guess* for the new singular values.
+            You should either compress the MPS or at least call
+            :meth:`~tenpy.networks.mps.MPS.canonical_form`.
+            If you use :meth:`apply` instead, this will be done automatically.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS to which `self` should be applied. Modified in place!
+        """
+        bc = psi.bc
+        if bc != self.bc:
+            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+        if psi.L != self.L:
+            raise ValueError("Length of MPS and MPO not the same")
+        for i in range(psi.L):
+            B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
+            if i == 0 and bc == 'finite':
+                B = B.take_slice(self.get_IdL(i), 'wL')
+                B = B.combine_legs(['wR', 'vR'], qconj=[-1])
+                B.ireplace_labels(['(wR.vR)'], ['vR'])
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            elif i == psi.L - 1 and bc == 'finite':
+                B = B.take_slice(self.get_IdR(i), 'wR')
+                B = B.combine_legs(['wL', 'vL'], qconj=[1])
+                B.ireplace_labels(['(wL.vL)'], ['vL'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+            else:
+                B = B.combine_legs([['wL', 'vL'], ['wR', 'vR']], qconj=[+1, -1])
+                B.ireplace_labels(['(wL.vL)', '(wR.vR)'], ['vL', 'vR'])
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
+                B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
+            psi.set_B(i, B, 'B')
+
+        if bc == 'infinite':
+            # calculate (rather arbitrary) guess for S[0] (no we don't like it either)
+            weight = np.ones(self.get_W(0).shape[self.get_W(0).get_leg_index('wL')]) * 0.05
+            weight[self.get_IdL(0)] = 1
+            weight = weight / np.linalg.norm(weight)
+            S0 = np.kron(weight, psi.get_SL(0))  # order dictated by '(wL,vL)'
         else:
-            try:
-                return list(Id)
-            except TypeError:
-                return [Id] * (L + 1)
+            S0 = np.ones(psi.get_B(0, None).get_leg('vL').ind_len)
+        psi.set_SL(0, S0)
+        for i in range(psi.L):
+            psi.set_SR(i, np.ones(psi.get_B(i, None).get_leg('vR').ind_len))
+
+    def apply_zipup(self, psi, options):
+        """Applies an MPO to an MPS (in place) with the zip-up method.
+
+        Described in Ref. :cite:`stoudenmire2010`.
+
+        The 'W' tensors are contracted to the 'B' tensors with intermediate SVD
+        compressions, truncated to bond dimensions `chi_max * m_temp`.
+
+        .. warning ::
+            The MPS afterwards is only approximately in canonical form
+            (under the assumption that self is close to unity).
+            You should either compress the MPS or at least call
+            :meth:`~tenpy.networks.mps.MPS.canonical_form`.
+            If you use :meth:`apply` instead, this will be done automatically.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS to which `self` should be applied. Modified in place!
+        trunc_params : dict
+            Truncation parameters as described in :cfg:config:`truncation`.
+
+
+        Options
+        -------
+        .. cfg:config :: ZipUpApplyMPO
+
+            trunc_params : dict
+                Truncation parameters as described in :cfg:config:`truncation`.
+            m_temp: int
+                bond dimension will be truncated to `m_temp * chi_max`
+            trunc_weight: float
+                reduces cut for Schmidt values to `trunc_weight * svd_min`
+        """
+        options = asConfig(options, "zip_up")
+        m_temp = options.get('m_temp', 2)
+        trunc_weight = options.get('trunc_weight', 1.)
+        trunc_params = options.subconfig('trunc_params')
+        relax_trunc = trunc_params.copy()  # relaxed truncation criteria
+        relax_trunc['chi_max'] *= m_temp
+        if 'svd_min' in relax_trunc.keys():
+            relax_trunc['svd_min'] *= trunc_weight
+        trunc_err = TruncationError()
+        bc = psi.bc
+        if bc != self.bc:
+            raise ValueError("Boundary conditions of MPS and MPO are not the same")
+        if psi.L != self.L:
+            raise ValueError("Length of MPS and MPO not the same")
+        if bc != 'finite':
+            raise ValueError("Only finite boundary conditions implemented")
+        for i in range(psi.L):
+            B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
+            if i == 0 and bc == 'finite':
+                B = B.take_slice(self.get_IdL(i), 'wL')
+                B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[+1, -1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                VH = VH.split_legs()
+                VH.iscale_axis(S, 'vL')
+                psi.set_SR(i, S)
+                psi.set_B(i, U, 'A')
+            elif i == psi.L - 1 and bc == 'finite':
+                B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
+                B = B.take_slice(self.get_IdR(i), 'wR')
+                B = B.combine_legs(['vL', 'p'], qconj=[-1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                psi.set_SR(i, S)
+                psi.set_B(i, U, 'A')
+            else:
+                B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
+                B = B.combine_legs([['vL', 'p'], ['wR', 'vR']], qconj=[1, -1])
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                trunc_err += err
+                psi.norm *= norm_new
+                U = U.split_legs()
+                VH = VH.split_legs()
+                VH.iscale_axis(S, 'vL')
+                psi.set_SR(i, S)
+                psi.set_B(i, U, 'A')
+
+        return trunc_err
 
     def get_grouped_mpo(self, blocklen):
         """group each `blocklen` subsequent tensors and  return result as a new MPO.
@@ -647,10 +1001,36 @@ class MPO:
         # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `self.bc`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise ValueError("i = {0:d} out of bounds for finite MPO".format(i))
+        return i
+
+    @staticmethod
+    def _get_Id(Id, L):
+        """parse the IdL or IdR argument of __init__"""
+        if Id is None:
+            return [None] * (L + 1)
+        else:
+            try:
+                Id = list(Id)
+                if len(Id) != L + 1:
+                    raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
+                return Id
+            except TypeError:
+                return [Id] * (L + 1)
+
     def __add__(self, other):
         """Return an MPO representing `self + other`.
 
         Requires both `self` and `other` to be in standard sum form with `IdL` and `IdR` being set.
+
+        This is a naive, block-wise addition without any compression!
 
         Parameters
         ----------
@@ -749,6 +1129,83 @@ class MPO:
         return (proj_IdL, proj_other, proj_IdR)
 
 
+def make_W_II(t, A, B, C, D):
+    r"""W_II approx to exp(t H) from MPO parts (A, B, C, D).
+
+    Get the W_II approximation of :cite:`zaletel2015`.
+
+    In the paper, we have two formal parameter "phi_{r/c}" which satisfies
+    :math:`\phi_r^2 = phi_c^2 = 0`.  To implement this, we temporarily extend the virtual Hilbert
+    space with two hard-core bosons "br, bl". The components of Eqn (11) can be computed for each
+    index of the virtual row/column independently
+    The matrix exponential is done in the hard-core extended Hilbert space
+
+    Parameters
+    ----------
+    t : float
+        The time step per application of the propagator.
+        Should be imaginary for real time evolution!
+    A, B, C, D :  :class:`numpy.ndarray`
+        Blocks of the MPO tensor to be exponentiated, as defined in :cite:`zaletel2015`.
+        Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
+    """
+
+    tB = t / np.sqrt(np.abs(t))  #spread time step across B, C
+    tC = np.sqrt(np.abs(t))
+    d = D.shape[0]
+
+    #The virtual size of W is  (1+Nr, 1+Nc)
+    Nr = A.shape[0]
+    Nc = A.shape[1]
+    W = np.zeros((1 + Nr, 1 + Nc, d, d), dtype=np.result_type(D, t))
+
+    Id_ = np.array([[1, 0], [0, 1]])  #2x2 operators in a hard-core boson space
+    b = np.array([[0, 0], [1, 0]])
+
+    Id = np.kron(Id_, Id_)  #4x4 operators in the 2x hard core boson space
+    Br = np.kron(b, Id_)
+    Bc = np.kron(Id_, b)
+    Brc = np.kron(b, b)
+    for r in range(Nr):  #double loop over row / column of A
+        for c in range(Nc):
+            #Select relevent part of virtual space and extend by hardcore bosons
+            h = np.kron(Brc, A[r, c, :, :]) + np.kron(Br, tB * B[r, :, :]) + np.kron(
+                Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
+            w = expm(h)  #Exponentiate in the extended Hilbert space
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 1 +
+              c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
+            if c == 0:
+                W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 1 + c] = w[0, 1]
+                if c == 0:
+                    W[0, 0] = w[0, 0]
+        if Nc == 0:  #technically only need one boson
+            h = np.kron(Br, tB * B[r, :, :]) + t * np.kron(Id, D)
+            w = expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[1 + r, 0] = w[1, 0]
+            if r == 0:
+                W[0, 0] = w[0, 0]
+
+    if Nr == 0:
+        for c in range(Nc):
+            h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
+            w = expm(h)
+            w = w.reshape((2, 2, d, 2, 2, d))
+            w = w[:, :, :, 0, 0, :]
+            W[0, 1 + c] = w[0, 1]
+            if c == 0:
+                W[0, 0] = w[0, 0]
+        if Nc == 0:
+            W = expm(t * D)
+
+    return W
+
+
 class MPOGraph:
     """Representation of an MPO by a graph, based on a 'finite state machine'.
 
@@ -791,9 +1248,10 @@ class MPOGraph:
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     states : list of set of keys
         ``states[i]`` gives the possible keys at the virtual bond ``(i-1, i)`` of the MPO.
+        `L+1` enries.
     graph : list of dict of dict of list of tuples
         For each site `i` a dictionary ``{keyL: {keyR: [(opname, strength)]}}`` with
-        ``keyL in vertices[i]`` and ``keyR in vertices[i+1]``.
+        ``keyL in states[i]`` and ``keyR in states[i+1]``.
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
@@ -809,19 +1267,24 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, onsite_terms, coupling_terms, sites, bc):
+    def from_terms(cls, terms, sites, bc, insert_all_id=True):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
         ----------
-        onsite_terms : :class:`~tenpy.networks.terms.OnsiteTerms`
-            Onsite terms to be added to the new :class:`MPOGraph`.
-        coupling_terms : :class:`~tenpy.networks.terms.CouplingTerms` | :class:`~tenpy.networks.terms.MultiCouplingTerms`
-            Coupling terms to be added to the new :class:`MPOGraph`.
+        terms : iterable of ``tenpy.networks.terms.*Terms`` classes
+            Entries can be :class:`~tenpy.networks.terms.OnsiteTerms`,
+            :class:`~tenpy.networks.terms.CouplingTerms`,
+            :class:`~tenpy.networks.terms.MultiCouplingTerms` or
+            :class:`~tenpy.networks.terms.ExponentialCouplingTerms`.
+            All the entries get added to the new :class:`MPOGraph`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
+            See :meth:`add_missing_IdL_IdR`.
 
         Returns
         -------
@@ -831,17 +1294,18 @@ class MPOGraph:
         See also
         --------
         from_term_list :
-            equivalent for other representation terms.
+            equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
-        graph = cls(sites, bc, coupling_terms.max_range())
-        onsite_terms.add_to_graph(graph)
-        coupling_terms.add_to_graph(graph)
-        graph.add_missing_IdL_IdR()
+        max_range = max([t.max_range() for t in terms])
+        graph = cls(sites, bc, max_range)
+        for term in terms:
+            term.add_to_graph(graph)
+        graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc):
-        """Initialize form a list of operator terms and prefactors.
+    def from_term_list(cls, term_list, sites, bc, insert_all_id=True):
+        """Initialize from a list of operator terms and prefactors.
 
         Parameters
         ----------
@@ -851,6 +1315,9 @@ class MPOGraph:
             Local sites of the Hilbert space.
         bc : ``'finite' | 'infinite'``
             MPO boundary conditions.
+        insert_all_id : bool
+            Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
+            See :meth:`add_missing_IdL_IdR`.
 
         Returns
         -------
@@ -861,8 +1328,8 @@ class MPOGraph:
         --------
         from_terms : equivalent for other representation of terms.
         """
-        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot, ct, sites, bc)
+        ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
+        return cls.from_terms(ot_ct, sites, bc, insert_all_id)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -970,17 +1437,22 @@ class MPOGraph:
             keyL = keyR
         return keyL
 
-    def add_missing_IdL_IdR(self):
+    def add_missing_IdL_IdR(self, insert_all_id=True):
         """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
 
-        For ``bc='infinite'``, insert missing identities at *all* bonds.
-        For ``bc='finite' | 'segment'`` only insert
-        ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
-        ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
-
         This function should be called *after* all other operators have been inserted.
+
+        Parameters
+        ----------
+        insert_all_id : bool
+            If ``True``, insert 'Id' edges on *all* bonds.
+            If ``False`` and boundary conditions are finite, only insert
+            ``'IdL'->'IdL'`` to the left of the rightmost existing 'IdL' and
+            ``'IdR'->'IdR'`` to the right of the leftmost existing 'IdR'.
+            The latter avoid "dead ends" in the MPO, but some functions (like `make_WI`) expect
+            'IdL'/'IdR' to exist on all bonds.
         """
-        if self.bc == 'infinite':
+        if self.bc == 'infinite' or insert_all_id:
             max_IdL = self.L  # add identities for all sites
             min_IdR = 0
         else:
@@ -998,17 +1470,14 @@ class MPOGraph:
         """True if there is an edge from `keyL` on bond (i-1, i) to `keyR` on bond (i, i+1)."""
         return keyR in self.graph[i].get(keyL, [])
 
-    def build_MPO(self, Ws_qtotal=None, leg0=None):
+    def build_MPO(self, Ws_qtotal=None):
         """Build the MPO represented by the graph (`self`).
 
         Parameters
         ----------
         Ws_qtotal : None | (list of) charges
-            The `qtotal` for each of the Ws to be generated., default (``None``) means 0 charge.
+            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
-        leg0 : None | :class:`npc.LegCharge`
-            The charges to be used for the very first leg (which is a gauge freedom).
-            If ``None`` (default), use zeros.
 
         Returns
         -------
@@ -1021,7 +1490,8 @@ class MPOGraph:
         grids = self._build_grids()
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, leg0, self.max_range)
+        legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range)
         return H
 
     def __repr__(self):
@@ -1077,6 +1547,123 @@ class MPOGraph:
                 grid[a] = row
             grids.append(grid)
         return grids
+
+    def _calc_legcharges(self, Ws_qtotal):
+        """Obtain charges for the virtual legs of the MPO.
+
+        Should only be called after :meth:`_set_ordered_states`.
+
+        Parameters
+        ----------
+        Ws_qtotal : None | (list of) charges
+            The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
+            A single qtotal holds for each site.
+
+        Returns
+        -------
+        legs : list of :class:`~tenpy.linalg.charge.LegCharge`
+            LegCharges to be used on each bond, `L+1` entries.
+            Entry `i` contains the 'wL' leg of `W[i]`,
+            entry `i+1` needs to be conjugated to be used as `wR` leg of `W[i]`.
+        Ws_qtotal :  list of qtotal
+            Same as argument, but parsed to a list of L charges defaulting to zeros.
+        """
+        L = self.L
+        states = self._ordered_states
+        sites = self.sites
+        infinite = (self.bc == 'infinite')
+        chinfo = self.chinfo
+
+        if Ws_qtotal is None:
+            Ws_qtotal = [chinfo.make_valid()] * L
+        else:
+            Ws_qtotal = chinfo.make_valid(Ws_qtotal)
+            if Ws_qtotal.ndim == 1:
+                Ws_qtotal = [Ws_qtotal] * L
+
+        charges = [[None] * len(st) for st in states]
+        charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
+        if infinite:
+            charges[-1] = charges[0]  # bond is identical
+
+        def travel_q_LR(i, keyL):
+            """Transport charges from left to right through the MPO graph.
+
+            Inspect graph edges on site `i` starting on the left with `keyL` and add charges
+            for all connections to the right.
+            Recursively transport charges from there."""
+            l = states[i][keyL]
+            site = sites[i]
+            st_r = states[i + 1]
+            ch_r = charges[i + 1]
+            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+            qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
+            edges = self.graph[i][keyL]
+            for keyR, ops in edges.items():
+                r = st_r[keyR]
+                qR = ch_r[r]
+                if qR is None:
+                    op_qtotal = site.get_op(ops[0][0]).qtotal
+                    ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
+                    if infinite or i + 1 < L:
+                        travel_q_LR((i + 1) % L, keyR)
+
+        travel_q_LR(0, 'IdL')
+
+        # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
+
+        def travel_q_RL(i, keyL):
+            """Transport charges from the right to left through the MPO graph.
+
+            Inspect graph edges on site `i` starting on the left with 'keyL', where
+            the charge needs to be determined. If one of them has a charge defined on the right,
+            use it to determine the charge for keyL and return True.
+            If none of them has the charge defined, return False.
+            """
+            l = states[i][keyL]
+            site = sites[i]
+            st_r = states[i + 1]
+            ch_r = charges[i + 1]
+            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+            Wq = Ws_qtotal[i]  # q_left - Ws_qtotal
+            edges = self.graph[i][keyL]
+            for keyR, ops in edges.items():
+                r = st_r[keyR]
+                qR = ch_r[r]
+                if qR is not None:
+                    op_qtotal = site.get_op(ops[0][0]).qtotal
+                    charges[i][l] = Wq + qR - op_qtotal  # solve chargerule for q_left
+                    break
+            else:  # no break
+                return False
+            return True
+
+        if not infinite and any([ch is None for ch in charges[-1]]):
+            raise ValueError("can't determine all charges on the very right leg of the MPO!")
+
+        max_checks = sys.getrecursionlimit()  # I don't expect interactions with larger range...
+        for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
+            repeat = False
+            for i in reversed(range(L)):
+                ch = charges[i]
+                for keyL, l in states[i].items():
+                    if ch[l] is None:
+                        if not travel_q_RL(i, keyL):
+                            repeat = True  # couldn't find it out.
+            if not repeat:
+                break
+        else:  # no break
+            raise ValueError("MPOGraph with dead ends: can't determine charges")
+        # have all charges determined
+        # convert to LegCharges
+        legs = []
+        for ch in charges:
+            ch = chinfo.make_valid(ch)
+            leg = npc.LegCharge.from_qflat(chinfo, ch, qconj=+1)
+            legs.append(leg)
+        if infinite:
+            legs[-1] = legs[0]  # identical charges
+        return legs, Ws_qtotal
 
 
 class MPOEnvironment(MPSEnvironment):
@@ -1304,14 +1891,18 @@ class MPOEnvironment(MPSEnvironment):
         RP = self.get_RP(i0, store=False)
         return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
 
+    def expectation_value(self, ops, sites=None, axes=None):
+        """(doesn't make sense)"""
+        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
+
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(),
-                           LP,
-                           axes=(['p*', 'vL*'], ['p', 'vR*']))
+        axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
@@ -1319,9 +1910,9 @@ class MPOEnvironment(MPSEnvironment):
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
-        RP = npc.tensordot(RP,
-                           self.bra.get_B(i, form='B').conj(),
-                           axes=(['p', 'vL*'], ['p*', 'vR*']))
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
 
 
@@ -1388,13 +1979,17 @@ def _calc_grid_legs_finite(chinfo, grids, Ws_qtotal, leg0):
 
 
 def _calc_grid_legs_infinite(chinfo, grids, Ws_qtotal, leg0, IdL_0):
-    """calculate LegCharges from `grids` for an iMPO.
+    """Calculate LegCharges from `grids` for an iMPO.
 
-    The hard case. Initially, we do not know all charges of the first leg; and they have to
+    Similar like :func:`_calc_grid_legs_finite`, but the hard case.
+    Initially, we do not know all charges of the first leg; and they have to
     be consistent with the final leg.
 
-    The way this workso: gauge 'IdL' on the very left leg to 0,
-    then gradually calculate the charges by going along the edges of the graph (maybe also over the iMPO boundary).
+    The way this works: gauge 'IdL' on the very left leg to 0,
+    then gradually calculate the charges by going along the edges of the graph
+    (maybe also over the iMPO boundary).
+
+    When initializing from an MPO graph directly, use :meth:`MPOGraph._calc_legcharges` directly.
     """
     if leg0 is not None:
         # have charges of first leg: simple case, can use the _calc_grid_legs_finite version.

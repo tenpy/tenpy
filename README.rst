@@ -5,17 +5,21 @@ Tensor Network Python (TeNPy)
     :alt: GitHub last commit
     :target: https://github.com/tenpy/tenpy
 .. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
-    :alt: Documentation Status
-    :target: https://tenpy.readthedocs.io/en/latest/?badge=latest
-.. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
+    :alt: Documentation
+    :target: https://tenpy.readthedocs.io/en/latest/
+.. image:: https://github.com/tenpy/tenpy/workflows/pytest/badge.svg
     :alt: Build
-    :target: https://travis-ci.org/tenpy/tenpy
+    :target: https://github.com/tenpy/tenpy/actions/
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
+.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy
+    :alt: conda
+    :target: https://anaconda.org/conda-forge/physics-tenpy
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
+
 
 TeNPy (short for 'Tensor Network Python') is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 
@@ -24,7 +28,11 @@ For good readability, we include an extensive documentation next to the code, bo
 
 How do I get set up?
 --------------------
-Follow the instructions in the file ``doc/INSTALL.rst``, online at https://tenpy.readthedocs.io/en/latest/INSTALL.html.
+If you have the `conda` package manager, you can install the latest released version of TeNPy with::
+
+    conda install --channel=conda-forge physics-tenpy
+
+Further details and alternative methods can be found the file `doc/INSTALL.rst <https://tenpy.readthedocs.io/en/latest/INSTALL.html>`_.
 The latest version of the source code can be obtained from https://github.com/tenpy/tenpy.
 
 How to read the documentation
@@ -48,6 +56,13 @@ where you can post questions and hopefully find answers.
 Once you got some experience with TeNPy, you might also be able to contribute to the community and answer some questions yourself ;-)
 We also use this forum for official annoucements, for example when we release a new version.
 
+I found a bug
+-------------
+You might want to check the `github issues <https://github.com/tenpy/tenpy/issues>`_, if someone else already reported the same problem.
+To report a new bug, just `open a new issue <https://github.com/tenpy/tenpy/issues/new>`_ on github.
+If you already know how to fix it, you can just create a pull request :)
+If you are not sure whether your problem is a bug or a feature, you can also ask for help in the `TeNPy forum <https://tenpy.johannes-hauschild.de/>`_.
+
 Citing TeNPy
 ------------
 When you use TeNPy for a work published in an academic journal, you can cite `this paper <https://dx.doi.org/10.21468/SciPostPhysLectNotes.5>`_  to acknowledge the work put into the development of TeNPy.
@@ -57,7 +72,7 @@ For example, you could add the sentence ``"Calculations were performed using the
 The corresponding BibTex Entry would be the following (the ``\url{...}`` requires ``\usepackage{hyperref}`` in the LaTeX preamble.)::
 
     @Article{tenpy,
-        title={{Efficient numerical simulations with Tensor Networks: Tensor Network  Python (TeNPy)}},
+        title={{Efficient numerical simulations with Tensor Networks: Tensor Network Python (TeNPy)}},
         author={Johannes Hauschild and Frank Pollmann},
         journal={SciPost Phys. Lect. Notes},
         pages={5},
@@ -70,13 +85,12 @@ The corresponding BibTex Entry would be the following (the ``\url{...}`` require
         note={Code available from \url{https://github.com/tenpy/tenpy}},
     }
 
+To keep us motivated, you can also include your work into the list of `papers using TeNPy <https://tenpy.readthedocs.io/en/latest/papers_using_tenpy.html>`_.
 
-I found a bug
--------------
-You might want to check the `github issues <https://github.com/tenpy/tenpy/issues>`_, if someone else already reported the same problem.
-To report a new bug, just `open a new issue <https://github.com/tenpy/tenpy/issues/new>`_ on github.
-If you already know how to fix it, you can just create a pull request :)
-If you are not sure whether your problem is a bug or a feature, you can also ask for help in the `TeNPy forum <https://tenpy.johannes-hauschild.de/>`_.
+
+Acknowledgment
+--------------
+This work was funded by the U.S. Department of Energy, Office of Science, Office of Basic Energy Sciences, Materials Sciences and Engineering Division under Contract No. DE-AC02-05- CH11231 through the Scientific Discovery through Advanced Computing (SciDAC) program (KC23DAC Topological and Correlated Matter via Tensor Networks and Quantum Monte Carlo).
 
 License
 -------

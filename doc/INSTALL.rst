@@ -1,9 +1,13 @@
 Installation instructions
 =========================
 
-There are several ways to install TeNPy.
+With the [conda]_ package manager you can install python with::
 
-A very comfortable way is to simply use [pip]_ with::
+    conda install --channel=conda-forge physics-tenpy
+
+More details and tricks in :doc:`/install/conda`.
+
+If you don't have conda, but you have [pip]_, you can::
 
     pip install physics-tenpy
 
@@ -19,6 +23,7 @@ as described in :doc:`/install/from_source`. This is also the recommended way if
 
 .. toctree::
     
+    install/conda
     install/pip
     install/updating
     install/from_source

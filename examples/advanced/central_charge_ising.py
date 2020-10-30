@@ -3,6 +3,8 @@
 This example code evaluate the central charge of the transverse field Ising model using IDMRG.
 The expected value for the central charge c = 1/2. The code always recycle the environment from
 the previous simulation, which can be seen at the "age".
+
+For the theoretical background why :math:`S = c/6 log(xi)`, see :cite:`pollmann2009`.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
@@ -47,7 +49,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         ##   DMRG Calculation    ##
         print("Start IDMRG CALCULATION")
         eng.run()
-        eng.engine_params['mixer'] = None
+        eng.options['mixer'] = None
         psi.canonical_form()
 
         ##   Calculating bond entropy and correlation length  ##

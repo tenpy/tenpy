@@ -15,11 +15,14 @@ from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
 
-__all__ = ['TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'order_combine_term']
+__all__ = [
+    'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentiallyDecayingTerms',
+    'order_combine_term'
+]
 
 
 class TermList(Hdf5Exportable):
-    """A list of terms (=operator names and sites they act on) and associated strengths.
+    r"""A list of terms (=operator names and sites they act on) and associated strengths.
 
     A representation of terms, similar as :class:`OnsiteTerms`, :class:`CouplingTerms`
     and :class:`MultiCouplingTerms`.
@@ -27,7 +30,8 @@ class TermList(Hdf5Exportable):
     This class does not store operator strings between the sites.
     Jordan-Wigner strings of fermions are added during conversion to (Multi)CouplingTerms.
 
-    .. warning :
+    .. warning ::
+
         Since this class does **not** store the operator string between the sites,
         conversion from :class:`CouplingTerms` or :class:`MultiCouplingTerms`
         to :class:`TermList` is lossy!
@@ -39,8 +43,9 @@ class TermList(Hdf5Exportable):
         of an operator name and a site `i` it acts on.
         For Fermions, the order is the order in the mathematic sense, i.e., the right-most/last
         operator in the list acts last.
-    strengths : list of float/complex
-        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+    strengths : (list of) float/complex
+        For each term in `terms` an associated prefactor or strength.
+        A single number holds for all terms equally.
 
     Attributes
     ----------
@@ -48,13 +53,88 @@ class TermList(Hdf5Exportable):
         List of terms where each `term` is a tuple ``(opname, i)`` of an operator name and a site
         `i` it acts on.
     strengths : 1D ndarray
-        For each term in `terms` an associated prefactor or strength (e.g. expectation value).
+        For each term in `terms` an associated prefactor or strength.
+
+    Examples
+    --------
+
+    .. testsetup :: TermList
+
+        from tenpy.networks.terms import TermList
+
+    For fermions, the term :math:`0.5(c^\dagger_0 c_2 + h.c.) + 1.3 * n_1` can be represented by:
+
+    .. doctest :: TermList
+
+        >>> t = TermList([[('Cd', 0), ('C', 2)], [('Cd', 2), ('C', 0)], [('N', 1)]],
+        ...              [0.5,                   0.5,                   1.3])
+        >>> print(t)
+        0.50000 * Cd_0 C_2 +
+        0.50000 * Cd_2 C_0 +
+        1.30000 * N_1
+
+    If you have a :class:`~tenpy.models.lattice.Lattice`, you might also want to specify
+    the location of the operators by lattice indices insted of MPS indices.
+    For example, you can obtain the nearest-neighbor density terms
+    **without double counting each pair**) on a :class:`~tenpy.models.lattice.TriangularLattice`:
+
+    .. doctest :: TermList
+
+        >>> lat = tenpy.models.lattice.Triangular(6, 6, None, bc_MPS='infinite', bc='periodic')
+        >>> t2_terms = [[('N', [0, 0, u1]), ('N', [dx[0], dx[1], u2])]
+        ...             for (u1, u2, dx) in lat.pairs['nearest_neighbors']]
+        >>> t2 = TermList.from_lattice_locations(lat, t2_terms)
+        >>> print(t2)
+        1.00000 * N_0 N_6 +
+        1.00000 * N_0 N_-5 +
+        1.00000 * N_0 N_5
+
+    The negative index -5 here indicates a tensor left of the current MPS unit cell.
     """
-    def __init__(self, terms, strength):
+    def __init__(self, terms, strength=1.):
         self.terms = list(terms)
         self.strength = np.array(strength)
+        if self.strength.ndim == 0:
+            self.strength = np.ones([len(self.terms)]) * self.strength
         if (len(self.terms), ) != self.strength.shape:
             raise ValueError("different length of terms and strength")
+
+    @classmethod
+    def from_lattice_locations(cls, lattice, terms, strength=1., shift=None):
+        """Initialize from a list of terms given in lattice indices instead of MPS indices.
+
+        Parameters
+        ----------
+        lattice : :class:`~tenpy.models.lattice.Lattice`
+            The underlying lattice to be used for conversion, e.g. `M.lat` from a
+            :class:`~tenpy.models.model.Model`.
+        terms : list of list of (str, tuple)
+            List of terms, where each `term` is a tuple ``(opname, lat_idx)`` with
+            `lat_idx` itself being a tuple ``(x, y, u)`` (for a 2D lattice) of the lattice
+            corrdinates.
+        strengths : (list of) float/complex
+            For each term in `terms` an associated prefactor or strength.
+            A single number holds for all terms equally.
+        shift : None | tuple of int
+            Overall shift added to all lattice coordinates `lat_idx` in `terms` before conversion.
+            None defaults to no shift.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms.
+        """
+        converted_terms = []
+        if shift is None:
+            shift = np.zeros(lattice.dim + 1, np.intp)
+        else:
+            shift = np.array(shift, np.intp)
+            if len(shift) != lattice.dim + 1:
+                raise ValueError("wrong length of `shift`: " + repr(shift))
+        for term in terms:
+            new_term = [(op, lattice.lat2mps_idx(shift + idx)) for (op, idx) in term]
+            converted_terms.append(new_term)
+        return cls(converted_terms, strength)
 
     def to_OnsiteTerms_CouplingTerms(self, sites):
         """Convert to :class:`OnsiteTerms` and :class:`CouplingTerms`
@@ -215,6 +295,10 @@ class OnsiteTerms(Hdf5Exportable):
         self.L = L
         self.onsite_terms = [dict() for _ in range(L)]
 
+    def max_range(self):
+        """Maximum range of the terms. In this case ``0``."""
+        return 0
+
     def add_onsite_term(self, strength, i, op):
         """Add a onsite term on a given MPS site.
 
@@ -239,6 +323,7 @@ class OnsiteTerms(Hdf5Exportable):
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`onsite_terms` should be added.
         """
+        assert self.L == graph.L
         for i, terms in enumerate(self.onsite_terms):
             for opname, strength in terms.items():
                 graph.add(i, 'IdL', 'IdR', opname, strength)
@@ -448,7 +533,8 @@ class CouplingTerms(Hdf5Exportable):
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
 
-            .. warning :
+            .. warning ::
+
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on
@@ -583,6 +669,7 @@ class CouplingTerms(Hdf5Exportable):
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`coupling_terms` should be added.
         """
+        assert self.L == graph.L
         # structure of coupling terms:
         # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
         for i, d1 in self.coupling_terms.items():
@@ -814,7 +901,8 @@ class MultiCouplingTerms(CouplingTerms):
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
 
-            .. warning :
+            .. warning ::
+
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on
@@ -887,6 +975,7 @@ class MultiCouplingTerms(CouplingTerms):
         _i, _d1, _label_left : None
             Should not be given; only needed for recursion.
         """
+        assert self.L == graph.L
         # nested structure of coupling_terms:
         # d0 = {i: {('opname_i', 'opname_string_ij'): ... {l: {'opname_l': strength}}}
         if _i is None:  # beginning of recursion
@@ -1028,4 +1117,212 @@ class MultiCouplingTerms(CouplingTerms):
                     op_i = key
                     if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
+        # done
+
+
+class ExponentiallyDecayingTerms(Hdf5Exportable):
+    r"""Represent a sum of exponentially decaying (long-range) couplings.
+
+    MPOs can represent translation invariant, exponentially decaying long-range terms of the
+    following form with a single extra index of the virtual bonds:
+
+    .. math ::
+        sum_{i \neq j} lambda^{|i-j|} A_i B_j
+
+    For 2D cylinders (or ladders), we need a slight generalization of this, where the operators
+    act only on a subset of the sites in each unit cell, given by a 1D array `subsites`:
+
+    .. math ::
+        strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+    Note that we still have ``|i-j|``, such that this will give uniformly decaying interactions,
+    independent of the way the MPS winds through the 2D lattice, as long as `subsites` is sorted.
+    An easy example would be a ladder, where we want the long-range interactions on the first rung
+    only, ``subsites = lat.mps_idx_fix_u(u=0)``, see :meth:`~tenpy.models.lattice.mps_idx_fix_u`.
+
+    Parameters
+    ----------
+    L : int
+        Number of sites.
+
+    Attributes
+    ----------
+    L : int
+        Number of sites.
+    exp_decaying_terms : list of tuples
+        Each tuple ``(strength, opname_i, opname_j, lambda, subsites, opname_string)`` represents
+        one of the terms as described above; see :meth:`add_exponentially_decaying_coupling` for
+        more details.
+    """
+    def __init__(self, L):
+        assert L > 0
+        self.L = L
+        self.exp_decaying_terms = []
+
+    def add_exponentially_decaying_coupling(self,
+                                            strength,
+                                            lambda_,
+                                            op_i,
+                                            op_j,
+                                            subsites=None,
+                                            op_string='Id'):
+        """Add an exponentially decaying long-range coupling.
+
+        .. math ::
+            strength sum_{i < j} lambda^{|i-j|} A_{subsites[i]} B_{subsites[j]}
+
+        Where the operator `A` is given by `op_i`, and `B` is given by `op_j`.
+        Note that the sum over i,j is long-range, for infinite systems beyond the MPS unit cell.
+
+        Parameters
+        ----------
+        strength : float
+            Overall prefactor.
+        lambda_ : float
+            Decay-rate
+        op_i, op_j : string
+            Names for the operators.
+        subsites : None | 1D array
+            Selects a subset of sites within the MPS unit cell on which the operators act.
+            Needs to be sorted. ``None`` selects all sites.
+        op_string : string
+            The operator to be inserted between `A` and `B`; for Fermions this should be ``"JW"``.
+        """
+        if subsites is None:
+            subsites = np.arange(self.L)
+        else:
+            subsites = np.array(subsites)
+            if len(subsites) > 1 and np.any(subsites[1:] < subsites[:-1]):
+                raise ValueError("subsites needs to be sorted; choose a different MPS ordering!")
+            assert subsites[0] >= 0
+            assert subsites[-1] < self.L
+        self.exp_decaying_terms.append((strength, lambda_, op_i, op_j, subsites, op_string))
+
+    def add_to_graph(self, graph, key="exp-decay"):
+        """Add terms from :attr:`onsite_terms` to an MPOGraph.
+
+        Parameters
+        ----------
+        graph : :class:`~tenpy.networks.mpo.MPOGraph`
+            The graph into which the terms from :attr:`exp_decaying_terms` should be added.
+        key : str
+            Key to distinguish from other `states` in the :class:`~tenpy.networks.mpo.MPOGraph`.
+            We find integers `key_nr` and use ``(key_nr, key)`` as `state` for the different
+            entries in :attr:`exp_decaying_terms`.
+        """
+        assert self.L == graph.L
+        # get set of states with `key` to find unique `key_nr` for each of the terms
+        all_states = set()
+        for states in graph.states:
+            for label in states:
+                try:
+                    if label[1] == key:
+                        all_states += label
+                except:  # not a tuple / wrong types
+                    pass
+        key_nr = 1000  # start with high value such that they get added in the end of the MPO
+        finite = (graph.bc == 'finite')
+
+        for (strength, lambda_, op_i, op_j, subsites, op_string) in self.exp_decaying_terms:
+            while (key_nr, key) in all_states:
+                key_nr += 1
+            label = (key_nr, key)
+            all_states.add(label)
+            in_subsites = np.zeros(self.L, dtype=np.bool_)
+            in_subsites[subsites] = True
+            first_subsite = subsites[0]
+            last_subsite = subsites[-1]
+            assert last_subsite < self.L
+            if not finite:
+                for i in range(self.L):
+                    if in_subsites[i]:
+                        graph.add(i, 'IdL', label, op_i, lambda_)
+                        graph.add(i, label, label, op_string, lambda_)
+                        graph.add(i, label, 'IdR', op_j, strength)
+                    else:
+                        graph.add(i, label, label, op_string, 1.)
+            else:
+                # first subsite
+                graph.add(first_subsite, 'IdL', label, op_i, lambda_)
+                for i in range(first_subsite + 1, last_subsite):
+                    if in_subsites[i]:
+                        graph.add(i, 'IdL', label, op_i, lambda_)
+                        graph.add(i, label, label, op_string, lambda_)
+                        graph.add(i, label, 'IdR', op_j, strength)
+                    else:
+                        graph.add(i, label, label, op_string, 1.)
+                graph.add(last_subsite, label, 'IdR', op_j, strength)
+
+        # done
+
+    def to_TermList(self, cutoff=0.01, bc="finite"):
+        """Convert self into a :class:`TermList`.
+
+        Parameters
+        ----------
+        cutoff : float
+            Drop terms where the overall prefactor is smaller then `cutoff`.
+        bc : "finite" | "infinite"
+            Boundary conditions to be used.
+
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+            For "infinite" `bc`, only terms starting in the first MPS unit cell are included.
+        """
+        terms = []
+        strengths = []
+        L = self.L
+        for term in self.exp_decaying_terms:
+            strength, lambda_, op_i, op_j, subsites, op_string = term
+            N = len(subsites)
+            if bc == 'finite':
+                for i2, i in enumerate(subsites):
+                    for d, j in enumerate(subsites[i2:]):
+                        if d == 0:
+                            continue
+                        pref = strength * lambda_**d
+                        if abs(pref) < cutoff:
+                            break
+                        terms.append([(op_i, i), (op_j, j)])
+                        strengths.append(pref)
+            elif bc == 'infinite':
+                for i2, i in enumerate(subsites):
+                    for d in range(1, 1000):
+                        j2 = i2 + d
+                        j = subsites[j2 % N] + (j2 // N) * L
+                        pref = strength * lambda_**d
+                        if abs(pref) < cutoff:
+                            break
+                        terms.append([(op_i, i), (op_j, j)])
+                        strengths.append(pref)
+                    else:
+                        raise ValueError("distance of 1000 not enough to reach precision cutoff")
+
+            else:
+                raise ValueError("unknown boundary conditions: " + repr(bc))
+        return TermList(terms, strengths)
+
+    def __iadd__(self, other):
+        if not isinstance(other, ExponentiallyDecayingTerms):
+            return NotImplemented  # unknown type of other
+        if other.L != self.L:
+            raise ValueError("incompatible lengths")
+        self.exp_decaying_terms += other.exp_decaying_terms
+        return self
+
+    def max_range(self):
+        """Maximum range of the couplings. In this case ``np.inf``."""
+        return np.inf
+
+    def _test_terms(self, sites):
+        """Check the format of self.exp_decaying_terms."""
+        L = self.L
+        for term in self.exp_decaying_terms:
+            strength, lambda_, op_i, op_j, subsites, op_string = term
+            for i in subsites:
+                for op in op_i, op_j:
+                    if not sites[i].valid_opname(op):
+                        raise ValueError("Operator {op!r} not in site {i:d}".format(op=op, i=i))
         # done

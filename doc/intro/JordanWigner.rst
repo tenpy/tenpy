@@ -179,7 +179,7 @@ When **building a model** the Jordan-Wigner strings need to be taken into accoun
 If you just specify the `H_MPO` or `H_bond`, it is *your* responsibility to use the correct mapping.
 However, if you use the :meth:`~tenpy.models.model.CouplingModel.add_coupling` method of the 
 :class:`~tenpy.models.model.CouplingModel` ,
-(or the generalization :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` for more than 2 operators),
+(or the generalization :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` for more than 2 operators),
 TeNPy can use the information from the `Site` class to *automatically add Jordan-Wigner* strings as needed.
 Indeed, with the default argument ``op_string=None``, `add_coupling` will automatically check whether the operators
 need Jordan-Wigner strings and correspondlingly set ``op_string='JW', str_on_first=True``, if necessary.
@@ -189,37 +189,37 @@ For `add_multi_coupling`, you cann't even explicitly specify the correct Jordan-
 Obviously, you should be careful about the convention which of the operators is applied first (in a physical
 sense as an operator acting on a state), as this corresponds to a sign of the prefactor.
 Read the doc-strings of :meth:`~tenpy.models.model.CouplingModel.add_coupling`
-:meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` for details.
+:meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` for details.
 
 As a concrete example, let us specify a hopping
 :math:`\sum_{i} (c^\dagger_i c_{i+1} + h.c.) = \sum_{i} (c^\dagger_i c_{i+1} + c^\dagger_{i} c_{i-1})`
 in a 1D chain of :class:`~tenpy.networks.site.FermionSite` with :meth:`~tenpy.models.model.CouplingModel.add_coupling`.
-The recoomended way is just::
+The recommended way is just::
 
-    add_coupling(strength, 0, 'Cd', 0, 'C', 1, plus_hc=True) 
+    self.add_coupling(strength, 0, 'Cd', 0, 'C', 1, plus_hc=True) 
 
 If you want to specify both the Jordan-Wigner string and the ``h.c.`` term explicitly, you can use::
 
-    add_coupling(strength, 0, 'Cd', 0, 'C', 1, op_string='JW', str_on_first=True) 
-    add_coupling(strength, 0, 'Cd', 0, 'C', -1, op_string='JW', str_on_first=True)
+    self.add_coupling(strength, 0, 'Cd', 0, 'C', 1, op_string='JW', str_on_first=True) 
+    self.add_coupling(strength, 0, 'Cd', 0, 'C', -1, op_string='JW', str_on_first=True)
 
 Slightly more complicated, to specify the hopping
 :math:`\sum_{\langle i, j\rangle, s} (c^\dagger_{s,i} c_{s,j} + h.c.)`
 in the Fermi-Hubbard model on a 2D square lattice, we could use::
 
     for (dx, dy) in [(1, 0), (0, 1)]:
-        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), plus_hc=True)  # spin up
-        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), plus_hc=True)  # spin down
+        self.add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), plus_hc=True)  # spin up
+        self.add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), plus_hc=True)  # spin down
 
     # or without `plus_hc`
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:  # include -dx !
-        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy))  # spin up
-        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy))  # spin down
+        self.add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy))  # spin up
+        self.add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy))  # spin down
 
     # or specifying the 'JW' string explicitly
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-        add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)  # spin up
-        add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)  # spin down
+        self.add_coupling(strength, 0, 'Cdu', 0, 'Cu', (dx, dy), 'JW', True)  # spin up
+        self.add_coupling(strength, 0, 'Cdd', 0, 'Cd', (dx, dy), 'JW', True)  # spin down
 
 
 The most important functions for doing **measurements** are probably :meth:`~tenpy.networks.mps.MPS.expectation_value`

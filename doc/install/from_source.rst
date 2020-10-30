@@ -3,7 +3,7 @@ Installation from source
 
 Minimal Requirements
 ^^^^^^^^^^^^^^^^^^^^
-This code works with a minimal requirement of pure Python>=3.5 
+This code works with a minimal requirement of pure Python>=3.6
 and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
 
 Getting the source
@@ -89,6 +89,11 @@ If you use anaconda, you can also use one ``conda install -c conda-forge cxx-com
 After that, go to the root directory of TeNPy (``$HOME/TeNPy``) and simply run ::
 
     bash ./compile.sh
+
+.. note ::
+
+   There is no need to compile if you installed TeNPy directly with conda or pip.
+   (You can verify this with `tenpy.show_config()` as illustrated below.)
 
 Note that it is not required to separately download (and install) Intel MKL: the compilation just obtains the includes 
 from numpy. In other words, if your current numpy version uses MKL (as the one provided by anaconda),

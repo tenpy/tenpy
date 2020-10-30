@@ -45,13 +45,14 @@ is the discarded part (orthogonal to the kept part) and the
 
 import numpy as np
 from ..linalg import np_conserved as npc
+from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
-class TruncationError:
+class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
 
     The default initialization represents "no truncation".
@@ -77,11 +78,6 @@ class TruncationError:
         This is probably the quantity you are actually interested in.
         Takes into account the factor 2 explained in the section on Errors in the
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
-
-    Examples
-    --------
-    >>> TE = TruncationError()
-    >>> TE += tebd.time_evolution(...)  # add `eps`, multiply `ov`
     """
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
@@ -144,6 +140,33 @@ class TruncationError:
 def truncate(S, options):
     """Given a Schmidt spectrum `S`, determine which values to keep.
 
+    Options
+    -------
+    .. deprecated :: 0.5.1
+        Renamed `symmetry_tol` to `degeneracy_tol`,
+        and don't use log in the condition any more.
+
+    .. cfg:config:: truncation
+
+        chi_max : int
+            Keep at most `chi_max` Schmidt values.
+        chi_min : int
+            Keep at least `chi_min` Schmidt values.
+        degeneracy_tol: float
+            Don't cut between neighboring Schmidt values with
+            ``|log(S[i]/S[j])| < degeneracy_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(degeneracy_tol) - 1 ~= degeneracy_tol``
+            for small `degeneracy_tol`.
+            In other words, keep either both `i` and `j` or none, if the
+            Schmidt values are degenerate with a relative error smaller
+            than `degeneracy_tol`, which we expect to happen in the case
+            of symmetries.
+        svd_min : float
+            Discard all small Schmidt values ``S[i] < svd_min``.
+        trunc_cut : float
+            Discard all small Schmidt values as long as
+            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
+
     Parameters
     ----------
     S : 1D array
@@ -163,33 +186,6 @@ def truncate(S, options):
         Useful for re-normalization.
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
-
-    Options
-    -------
-    .. cfg:config:: truncation
-
-        .. deprecated :: 0.5.1
-            Renamed `symmetry_tol` to `degeneracy_tol`,
-            and don't use log in the condition any more.
-
-        chi_max : int
-            Keep at most `chi_max` Schmidt values.
-        chi_min : int
-            Keep at least `chi_min` Schmidt values.
-        degeneracy_tol: float
-            Don't cut between neighboring Schmidt values with
-            ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
-            ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
-            for small `symmetry_tol`.
-            In other words, keep either both `i` and `j` or none, if the
-            Schmidt values are degenerate with a relative error smaller
-            than `symmetry_tol`, which we expect to happen in the case
-            of symmetries.
-        svd_min : float
-            Discard all small Schmidt values ``S[i] < svd_min``.
-        trunc_cut : float
-            Discard all small Schmidt values as long as
-            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
 
     """
     options = asConfig(options, "truncation")
@@ -239,8 +235,6 @@ def truncate(S, options):
         good2 = np.empty(len(piv), np.bool)
         good2[0] = True
         good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
-        print(good)
-        print(good2)
         good = _combine_constraints(good, good2, "degeneracy_tol")
 
     if svd_min is not None:

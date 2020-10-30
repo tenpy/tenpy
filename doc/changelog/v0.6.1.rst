@@ -1,0 +1,12 @@
+[0.6.1] - 2020-05-18
+====================
+
+Release Notes
+-------------
+This only is a follow-up release to :doc:`/changelog/v0.6.0`.
+It fixes a small bug in the `examples/c_tebd.py` and some roundoff problems in the tests.
+
+It is now possible to install TeNPy with the conda package manager::
+
+    conda install --channel=conda-forge physics-tenpy
+

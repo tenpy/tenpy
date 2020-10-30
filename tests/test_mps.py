@@ -57,22 +57,20 @@ def test_mps_add():
     u, d = 'up', 'down'
     psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite')
     psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite')
+    npt.assert_equal(psi1.get_total_charge(True), [2])
     psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum.norm, 1.)
     npt.assert_almost_equal(psi_sum.overlap(psi1), 0.5**0.5)
     npt.assert_almost_equal(psi_sum.overlap(psi2), -0.5**0.5)
     # check overlap with singlet state
     psi = mps.MPS.from_singlets(s, 4, [(1, 2)], lonely=[0, 3], up=u, down=d, bc='finite')
-    #  ov = psi.overlap(psi_sum.copy())
-    print("total charge psi1", psi1.get_total_charge())
-    print("total charge psi2", psi2.get_total_charge())
-    print("total charge psi_sum", psi_sum.get_total_charge())
-    print("total charge psi", psi.get_total_charge())
     npt.assert_almost_equal(psi_sum.overlap(psi), 1.)
 
     psi2_prime = mps.MPS.from_product_state([s] * 4, [u, u, u, u], bc='finite')
+    npt.assert_equal(psi2_prime.get_total_charge(True), [4])
     psi2_prime.apply_local_op(1, 'Sm', False, False)
     # now psi2_prime is psi2 up to gauging of charges.
+    npt.assert_equal(psi2_prime.get_total_charge(True), [2])
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
@@ -119,9 +117,18 @@ def test_singlet_mps():
     print("Sz_vals = ", Sz_vals)
     print("expected_Sz_vals = ", expected_Sz_vals)
     npt.assert_almost_equal(Sz_vals, expected_Sz_vals)
+
     ent_segm = psi.entanglement_entropy_segment(list(range(4))) / np.log(2)
-    print(ent_segm)
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
+    ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
+    npt.assert_array_almost_equal_nulp(ent_segm, [1, 1, 2, 2], 5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 3, 4]) / np.log(2)
+        assert abs(ent_segm2 - 3) < 1.e-12
+        ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 4, 5]) / np.log(2)
+        assert abs(ent_segm2 - 1) < 1.e-12
+
     coord, mutinf = psi.mutinf_two_site()
     coord = [(i, j) for i, j in coord]
     mutinf[np.abs(mutinf) < 1.e-14] = 0.
@@ -200,23 +207,25 @@ def test_TransferMatrix(chi=4, d=2):
     sort = np.argsort(np.abs(eta_full))[::-1]
     eta_full = eta_full[sort]
     w_full = w_full[:, sort]
-    TM = mps.TransferMatrix(psi, psi, charge_sector=0, form=None)
-    eta, w = TM.eigenvectors(3)
-    print("transfer matrix yields eigenvalues ", eta)
-    print(eta.shape, eta_full.shape)
-    print(psi.dtype)
-    # note: second and third eigenvalue are complex conjugates
-    if bool(eta[2].imag > 0.) == bool(eta_full[2].imag > 0.):
-        npt.assert_allclose(eta[:3], eta_full[:3])
-    else:
-        npt.assert_allclose(eta[:3], eta_full[:3].conj())
-    # compare largest eigenvector
     w0_full = w_full[:, 0]
-    w0 = w[0].to_ndarray()
-    assert (abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
     w0_full /= np.sum(w0_full)  # fixes norm & phase
-    w0 /= np.sum(w0)
-    npt.assert_allclose(w0, w0_full)
+    assert (abs(np.sum(w0_full)) > 1.e-20)  # should be the case for random stuff
+    for charge_sector in [0, None]:
+        # charge_sector = None uses other parts of FlatLinearOperator.npc_to_flat / flat_to_npc
+        TM = mps.TransferMatrix(psi, psi, charge_sector=charge_sector, form=None)
+        eta, w = TM.eigenvectors(3)
+        print("transfer matrix yields eigenvalues ", eta)
+        print(eta.shape, eta_full.shape)
+        print(psi.dtype)
+        # note: second and third eigenvalue are complex conjugates
+        if bool(eta[2].imag > 0.) == bool(eta_full[2].imag > 0.):
+            npt.assert_allclose(eta[:3], eta_full[:3])
+        else:
+            npt.assert_allclose(eta[:3], eta_full[:3].conj())
+        # compare largest eigenvector
+        w0 = w[0].to_ndarray()
+        w0 /= np.sum(w0)
+        npt.assert_allclose(w0, w0_full)
 
 
 def test_compute_K():
@@ -279,6 +288,11 @@ def test_roll_mps_unit_cell():
     psi_m_1.roll_mps_unit_cell(-1)
     psi_m_1.test_sanity()
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
+    psi3 = psi.copy()
+    psi3.spatial_inversion()
+    psi3.test_sanity()
+    ov = psi3.overlap(psi_m_1)
+    assert abs(ov - 1.) < 1.e-14
 
 
 def test_group():
@@ -328,15 +342,68 @@ def test_expectation_value_term():
     assert abs(ev) == 1.
     # terms_sum
     pref = np.random.random([5])
-    term_list = TermList(
-        [[('Nd', 0)], [('Nu', 1), ('Nd', 2)], [('Nd', 2),
-                                               ('Nu', 5)], [('Nu Nd', 3)], [('Nu', 1),
-                                                                            ('Nu', 5)]], pref)
+    term_list = TermList([[('Nd', 0)],
+                          [('Nu', 1), ('Nd', 2)],
+                          [('Nd', 2), ('Nu', 5)],
+                          [('Nu Nd', 3)],
+                          [('Nu', 1), ('Nu', 5)]], pref)  # yapf: disable
     desired = sum(pref[1:])
     assert desired == sum(
         [psi2.expectation_value_term(term) * strength for term, strength in term_list])
     evsum, _ = psi2.expectation_value_terms_sum(term_list)
     assert abs(evsum - desired) < 1.e-14
+
+
+def test_correlation_function():
+    s = spin_half
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
+    corr1 = psi1.correlation_function('Sz', 'Sz')
+    corr1_exact = 0.25 * np.array([[ 1.,  0.,  0.,  0.,  1.,  0.],
+                                   [ 0.,  1.,  0., -1.,  0.,  0.],
+                                   [ 0.,  0.,  1.,  0.,  0., -1.],
+                                   [ 0., -1.,  0.,  1.,  0.,  0.],
+                                   [ 1.,  0.,  0.,  0.,  1.,  0.],
+                                   [ 0.,  0., -1.,  0.,  0.,  1.]])  # yapf: disable
+    npt.assert_almost_equal(corr1, corr1_exact)
+    corr1 = psi1.term_correlation_function_right([('Sz', 0)], [('Sz', 0)])
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 0)], [('Sz', 1)])
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 1)], [('Sz', 1)])
+    npt.assert_almost_equal(corr1, corr1_exact[1, 2:])
+    corr1 = psi1.term_correlation_function_right([('Sz', 1)], [('Sz', -1)])
+    npt.assert_almost_equal(corr1, corr1_exact[1, 2:-1])
+
+    corr1 = psi1.term_correlation_function_left([('Sz', 0)], [('Sz', 0)], range(0, 5), 5)
+    npt.assert_almost_equal(corr1[::-1], corr1_exact[:-1, 5])
+    corr1 = psi1.term_correlation_function_left([('Sz', 1)], [('Sz', 1)], range(0, 4), 4)
+    npt.assert_almost_equal(corr1[::-1], corr1_exact[1:-1, 5])
+
+    # check fermionic signs
+    fs = site.SpinHalfFermionSite()
+    psi2 = mps.MPS.from_product_state([fs] * 4, ['empty', 'up', 'down', 'full'], bc="infinite")
+    corr2 = psi2.correlation_function('Cdu', 'Cu')
+    corr2_exact = np.array([[ 0.,  0.,  0.,  0.],
+                            [ 0.,  1.,  0.,  0.],
+                            [ 0.,  0.,  0.,  0.],
+                            [ 0.,  0.,  0.,  1.]])  # yapf: disable
+    npt.assert_almost_equal(corr2, corr2_exact)
+    psi3 = psi2.copy()
+    from tenpy.algorithms.tebd import RandomUnitaryEvolution
+    RandomUnitaryEvolution(psi3, {'N_steps': 4}).run()
+
+    corr3 = psi3.correlation_function('Cdu', 'Cu')
+    corr3_d = psi3.correlation_function('Cu', 'Cdu')
+    npt.assert_almost_equal(np.diag(corr3) + np.diag(corr3_d), 1.)
+    corr3 = corr3 - np.diag(np.diag(corr3))  # remove diagonal
+    corr3_d = corr3_d - np.diag(np.diag(corr3_d))
+    npt.assert_array_almost_equal(corr3, -corr3_d.T)  # check anti-commutation of operators
+
+    corr = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)], j_R=range(1, 4))
+    npt.assert_almost_equal(corr, corr3[0, 1:])
+    corr3_long = psi3.correlation_function('Cdu', 'Cu', [0], range(4, 11 * 4, 4)).flatten()
+    corr3_long2 = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)])
+    npt.assert_array_almost_equal(corr3_long, corr3_long2)
 
 
 def test_expectation_value_multisite():
@@ -357,3 +424,28 @@ def test_expectation_value_multisite():
     env1 = mps.MPSEnvironment(psi1, psi)
     ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
     npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+
+
+@pytest.mark.parametrize('method', ['SVD', 'variational'])
+def test_mps_compress(method, eps=1.e-13):
+    # Test compression of a sum of a state with itself
+    L = 5
+    sites = [site.SpinHalfSite(conserve=None) for i in range(L)]
+    plus_x = np.array([1., 1.]) / np.sqrt(2)
+    minus_x = np.array([1., -1.]) / np.sqrt(2)
+    psi = mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
+    psiOrth = mps.MPS.from_product_state(sites, [minus_x for i in range(L)], bc='finite')
+    options = {'compression_method': method, 'trunc_params': {'chi_max': 30}}
+    psiSum = psi.add(psi, .5, .5)
+    psiSum.compress(options)
+
+    assert (np.abs(psiSum.overlap(psi) - 1) < 1e-13)
+    psiSum2 = psi.add(psiOrth, .5, .5)
+    psiSum2.compress(options)
+    psiSum2.test_sanity()
+    assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
+    assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
+
+
+if __name__ == "__main__":
+    test_correlation_function()

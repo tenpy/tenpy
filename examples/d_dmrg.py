@@ -2,9 +2,6 @@
 
 The example functions in this class do the same as the ones in `toycodes/d_dmrg.py`,
 but make use of the classes defined in tenpy.
-
-.. todo ::
-Docstrings?
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 

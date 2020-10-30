@@ -6,7 +6,7 @@ from ..tools.params import asConfig
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
-from .sparse import FlatHermitianOperator
+from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.math import speigsh
 import warnings
 
@@ -27,6 +27,11 @@ class LanczosGroundState:
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `params` to :attr:`options`.
+
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
 
     Parameters
     ----------
@@ -80,6 +85,14 @@ class LanczosGroundState:
             is too small.
             This is necessary if the rank of `H` is smaller than `N_max` -
             then we get a complete basis of the Krylov space, and `beta` will be zero.
+        E_shift : float
+            Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
+            :class:`~tenpy.linalg.sparse.ShiftNpcLinearOperator`.
+            Since the Lanczos algorithm finds extremal eigenvalues, this can help convergence.
+            Moreover, if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator` is used,
+            the orthogonal vectors are *exact* eigenvectors with eigenvalue 0,
+            so you have to ensure that the energy is smaller than zero to avoid getting those.
+            The ground state energy `E0` returned by :meth:`run` is made independent of the shift.
 
     Attributes
     ----------
@@ -123,16 +136,23 @@ class LanczosGroundState:
         self.N_cache = options.get('N_cache', self.N_max)
         self.min_gap = options.get('min_gap', 1.e-12)
         self.reortho = options.get('reortho', False)
+        self.E_shift = options.get('E_shift', None)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
         self.verbose = options.verbose
+        if self.E_shift is not None:
+            if isinstance(self.H, OrthogonalNpcLinearOperator):
+                self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
+            else:
+                self.H = ShiftNpcLinearOperator(self.H, self.E_shift)
         if len(orthogonal_to) > 0:
-            self.orthogonal_to, _ = gram_schmidt(orthogonal_to, verbose=self.verbose / 10)
-        else:
-            self.orthogonal_to = []
+            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
+                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
+            warnings.warn(msg, category=FutureWarning, stacklevel=2)
+            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
         self._cache = []
         self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float)
         # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
@@ -161,6 +181,8 @@ class LanczosGroundState:
             else:
                 msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
                 print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if self.E_shift is not None:
+            E0 -= self.E_shift
         if N == 1:
             return E0, self.psi0.copy(), N  # no better estimate available
         return E0, self._calc_result_full(N), N
@@ -176,7 +198,7 @@ class LanczosGroundState:
         for k in range(self.N_max):
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
-            w = self._apply_H(w)
+            w = self.H.matvec(w)
             alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
             T[k, k] = alpha
             self._calc_result_krylov(k)
@@ -212,7 +234,7 @@ class LanczosGroundState:
         w = self.psi0  # initialize
         for k in range(0, N - len_cache - 1):
             self._to_cache(w)
-            w = self._apply_H(w)
+            w = self.H.matvec(w)
             alpha = T[k, k]
             w.iadd_prefactor_other(-alpha, self._cache[-1])
             if self.reortho:
@@ -241,18 +263,6 @@ class LanczosGroundState:
         cache.append(psi)
         if len(cache) > self.N_cache:
             cache.pop(0)  # remove *first* entry
-
-    def _apply_H(self, w):
-        """apply H to w, but orthogonalize agains self.orthogonal_to."""
-        # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
-        if len(self.orthogonal_to) > 0:
-            w = w.copy()
-            for o in self.orthogonal_to:  # Project out
-                w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
-        w = self.H.matvec(w)
-        for o in self.orthogonal_to[::-1]:  # reverse: more obviously Hermitian.
-            w.iadd_prefactor_other(-npc.inner(o, w, 'range', do_conj=True), o)
-        return w
 
     def _calc_result_krylov(self, k):
         """calculate ground state of _T[:k+1, :k+1]"""
@@ -324,7 +334,9 @@ class LanczosEvolution(LanczosGroundState):
         Returns
         -------
         psi_f : :class:`~tenpy.linalg.np_conserved.Array`
-            Best approximation for ``expm(delta H).dot(psi0)``
+            Best approximation for ``expm(delta H).dot(psi0)``.
+            If :cfg:option:`Lanczos.E_shift` is used, it's an approximation for
+            ``expm(delta (H + E_shift)).dot(psi)``.
         N : int
             Krylov space dimension used.
         """
@@ -369,6 +381,11 @@ class LanczosEvolution(LanczosGroundState):
 def lanczos(H, psi, options={}, orthogonal_to=[]):
     """Simple wrapper calling ``LanczosGroundState(H, psi, options, orthogonal_to).run()``
 
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
     Parameters
     ----------
     H, psi, options, orthogonal_to :
@@ -392,6 +409,11 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
     and back during *each* `matvec`-operation!
 
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
     Parameters
     ----------
     H, psi, options, orthogonal_to :
@@ -406,22 +428,16 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
         Ground state vector.
     """
     if len(orthogonal_to) > 0:
-        # TODO: write method to project out orthogonal states from a NpcLinearOperator
-        raise ValueError("TODO: lanczos_arpack not compatible with having `orthogonal_to`.")
+        msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
+               "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
+        H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)
     N_min = options.get('N_min', None)
-    try:
-        Es, Vs = speigsh(H_flat, k=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
-    except scipy.sparse.linalg.ArpackNoConvergence:
-        # simply try again with larger "k", that often helps
-        new_k = min(6, H_flat.shape[1])
-        if new_k <= 1:
-            raise
-        Es, Vs = speigsh(H_flat, k=new_k, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
-    psi0 = H_flat.flat_to_npc(Vs[:, 0]).split_legs(0)
-    psi0.itranspose(psi.get_leg_labels())
+    Es, Vs = H_flat.eigenvectors(num_ev=1, which='SA', v0=psi_flat, tol=tol, ncv=N_min)
+    psi0 = Vs[0].split_legs(0).itranspose(psi.get_leg_labels())
     return Es[0], psi0
 
 

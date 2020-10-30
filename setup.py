@@ -13,27 +13,29 @@ if not sys.version_info >= (3, 5):
 # hardcode version for people without git
 
 MAJOR = 0
-MINOR = 5
-MICRO = 0
+MINOR = 7
+MICRO = 2
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
 #  To update to a new release:
-#      # update CHANGELOG.rst
+#      # update changelog and release notes
 #      # update the version in this module and in tenpy/version.py, set RELEASED=True
 #      git commit -m "VERSION 0.1.2"
 #      git tag -s "v0.1.2"  # (sign: requires GPG key)
 #      bash ./compile.sh
 #      pytest -m "not slow"  # run at least a quick test!
 #      # python setup.py sdist  # create source package for PyPI, done by github action
-#      # reset RELEASED = False in this module"
-#      git commit -m "reset released=False" setup.py
+#      # reset RELEASED = False in this module and tenpy/version.py, copy changelog template.
+#      git commit -m "reset released=False"
 #      git push
 #      git push origin v0.1.2 # also push the tag
 #      create release with release-notes on github
-#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz # done by github action
+#      # (the release triggers the github action for uploading the package to PyPi like this:
+#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
 # or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
+#      # wait for conda-forge bot to create a pull request with the new version and merge it
 
 
 def get_git_revision():
@@ -151,6 +153,9 @@ def setup_package():
     # change directory to root path of the repository
     src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     os.chdir(src_path)
+
+    # avoid warning from tenpy.tools.optimization.use_cython when we didn't compile yet.
+    os.environ.setdefault("TENPY_NO_CYTHON", "true")
 
     full_version, git_rev = get_version_info()
     write_version_py(full_version, git_rev)

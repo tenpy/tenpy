@@ -61,49 +61,24 @@ class FermionicPiFluxModel(CouplingMPOModel):
         t1 = t * np.exp(1j * np.pi / 4)
         t2 = t / np.sqrt(2)
 
-        for u in range(len(self.lat.unit_cell)):
-            self.add_onsite(mu, 0, 'N', category='mu N')
-            self.add_onsite(-mu, 1, 'N', category='mu N')
+        self.add_onsite(mu, 0, 'N', category='mu N')
+        self.add_onsite(-mu, 1, 'N', category='mu N')
 
         for u1, u2, dx in self.lat.NN:
             t1_phi = self.coupling_strength_add_ext_flux(t1, dx, [0, phi_ext])
-            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t1 Cd_i C_j')
-            self.add_coupling(np.conj(t1_phi),
-                              u2,
-                              'Cd',
-                              u1,
-                              'C',
-                              -dx,
-                              'JW',
-                              True,
-                              category='t1 Cd_i C_j h.c.')
+            self.add_coupling(t1_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
+                              category='t1 Cd_i C_j', add_hc=True)  # yapf: disable
             self.add_coupling(V, u1, 'N', u2, 'N', dx, category='V N_i N_j')
 
         for u1, u2, dx in self.lat.nNNdashed:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='t2 Cd_i C_j')
-            self.add_coupling(np.conj(t2_phi),
-                              u2,
-                              'Cd',
-                              u1,
-                              'C',
-                              -dx,
-                              'JW',
-                              True,
-                              category='t2 Cd_i C_j h.c.')
+            self.add_coupling(t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
+                              category='t2 Cd_i C_j', add_hc=True)  # yapf: disable
 
         for u1, u2, dx in self.lat.nNNdotted:
             t2_phi = self.coupling_strength_add_ext_flux(t2, dx, [0, phi_ext])
-            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True, category='-t2 Cd_i C_j')
-            self.add_coupling(-np.conj(t2_phi),
-                              u2,
-                              'Cd',
-                              u1,
-                              'C',
-                              -dx,
-                              'JW',
-                              True,
-                              category='-t2 Cd_i C_j h.c.')
+            self.add_coupling(-t2_phi, u1, 'Cd', u2, 'C', dx, 'JW', True,
+                              category='-t2 Cd_i C_j', add_hc=True)  # yapf: disable
 
 
 def plot_lattice():
@@ -167,7 +142,7 @@ def run(phi_ext=np.linspace(0, 1.0, 7)):
             psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS)
             eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:
-            del eng.engine_params['chi_list']
+            del eng.options['chi_list']
             M = FermionicPiFluxModel(model_params)
             eng.init_env(model=M)
 

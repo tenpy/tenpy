@@ -8,13 +8,14 @@ import warnings
 import numpy as np
 from collections.abc import MutableMapping
 import pprint
+import os
 
-from .hdf5_io import Hdf5Exportable
+from .hdf5_io import Hdf5Exportable, ATTR_FORMAT
 
 __all__ = ["Config", "asConfig", "get_parameter", "unused_parameters"]
 
 
-class Config(MutableMapping, Hdf5Exportable):
+class Config(MutableMapping):
     """Dict-like wrapper class for parameter/configuration dictionaries.
 
     This class behaves mostly like a dictionary of option keys/values (together making the whole
@@ -58,12 +59,124 @@ class Config(MutableMapping, Hdf5Exportable):
         self.unused = set(config.keys())
         self.unused.discard('verbose')
         self.verbose = config.get('verbose', 1)
-        self.documentation = {}
         self.name = name
 
-    def copy(self):
-        """Make a shallow copy, as for a dictionary."""
-        return Config(self.options.copy(), self.name)
+    def copy(self, share_unused=True):
+        """Make a *shallow* copy, as for a dictionary.
+
+        Parameters
+        ----------
+        share_unused : bool
+            Whether the :attr:`unused` set should be shared.
+        """
+        res = Config(self.options.copy(), self.name)
+        if share_unused:
+            res.unused = self.unused
+        return res
+
+    def as_dict(self):
+        """Return a copy of the options as a dictionary.
+
+        Subconfigs are recursivley converted to dict.
+        """
+        res = dict(self.options)
+        for k, v in res.items():
+            if isinstance(v, Config):
+                res[k] = v.as_dict()
+        return res
+
+    def save_yaml(self, filename):
+        """Save the parameters to `filename` as a YAML file.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the resulting YAML file.
+        """
+        import yaml
+        with open(filename, 'w') as stream:
+            yaml.dump(self.as_dict(), stream)
+
+    @classmethod
+    def from_yaml(cls, filename, name=None):
+        """Load a `Config` instance from a YAML file containing the :attr:`options`.
+
+        .. warning ::
+            Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
+            file can call any Python function and should thus be treated with extreme caution.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the YAML file
+        name : str | None
+            Name of the resulting :class:`Config` instance.
+            If ``None``, default to (the basename of) `filename`.
+
+        Returns
+        -------
+        obj : Config
+            A `Config` object, loaded from file.
+        """
+        if name is None:
+            name = os.path.basename(filename)
+        import yaml
+        with open(filename, 'r') as stream:
+            config = yaml.safe_load(stream)
+        return cls(config, name)
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        This implementation saves the content of :attr:`~object.__dict__` with
+        :meth:`~tenpy.tools.hdf5_io.Hdf5Saver.save_dict_content`,
+        storing the format under the attribute ``'format'``.
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
+        type_repr = hdf5_saver.save_dict_content(self.options, h5gr, subpath)
+        h5gr.attrs[ATTR_FORMAT] = type_repr
+        h5gr.attrs["name"] = self.name
+        h5gr.attrs["verbose"] = self.verbose
+        h5gr.attrs["unused"] = [str(u) for u in self.unused]
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
+        dict_format = hdf5_loader.get_attr(h5gr, ATTR_FORMAT)
+        obj = cls.__new__(cls)  # create class instance, no __init__() call
+        hdf5_loader.memorize_load(h5gr, obj)
+        obj.options = hdf5_loader.load_dict(h5gr, dict_format, subpath)
+        obj.name = hdf5_loader.get_attr(h5gr, "name")
+        obj.verbose = hdf5_loader.get_attr(h5gr, "verbose")
+        obj.unused = set(hdf5_loader.get_attr(h5gr, "unused"))
+        return obj
 
     def __getitem__(self, key):
         val = self.options[key]
@@ -72,7 +185,8 @@ class Config(MutableMapping, Hdf5Exportable):
         return val
 
     def __setitem__(self, key, value):
-        self.unused.add(key)
+        if key not in self.keys():
+            self.unused.add(key)
         self.print_if_verbose(key, "Setting")
         self.options[key] = value
 
@@ -93,7 +207,7 @@ class Config(MutableMapping, Hdf5Exportable):
         return res
 
     def __repr__(self):
-        return "Config(name={1!r}, config={0!r})".format(self.options, self.name)
+        return "Config(<{0:d} options>, {1!r})".format(len(self.options), self.name)
 
     def __del__(self):
         self.warn_unused()
@@ -133,7 +247,7 @@ class Config(MutableMapping, Hdf5Exportable):
         use_default = key not in self.keys()
         val = self.options.setdefault(key, default)  # get & set default if not existent
         self.print_if_verbose(key, "Reading", use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
     def setdefault(self, key, default):
@@ -149,17 +263,25 @@ class Config(MutableMapping, Hdf5Exportable):
         use_default = key not in self.keys()
         self.options.setdefault(key, default)
         self.print_if_verbose(key, "Set default", not use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         # do no return the value: not added to self.unused!
 
-    def subconfig(self, key):
+    def subconfig(self, key, default=None):
         """Get ``self[key]`` as a :class:`Config`."""
         use_default = key not in self.keys()
-        subconfig = self.options.get(key, {})
-        subconfig.setdefault('verbose', self.verbose / 10.)
+        if use_default:
+            if default is None:
+                subconfig = {}
+            else:
+                subconfig = default.copy()
+        else:
+            subconfig = self.options[key]
+        if 'verbose' not in subconfig:
+            subconfig['verbose'] = self.verbose / 10.
         subconfig = asConfig(subconfig, key)
+        self.options[key] = subconfig
         self.print_if_verbose(key, "Subconfig", use_default)
-        self.unused.discard(key)  # (does nothing if option not in set)
+        self.unused.discard(key)  # (does nothing if key not in set)
         return subconfig
 
     def print_if_verbose(self, option, action=None, use_default=False):
@@ -172,19 +294,16 @@ class Config(MutableMapping, Hdf5Exportable):
         action : str, optional
             Use to adapt printout message to specific actions (e.g. "Deleting")
         """
-        val = self.options.get(option, "<not set>")
         name = self.name
         verbose = self.verbose
-        new_key = option in self.unused
+        new_key = option in self.unused or use_default
         if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
-            actionstring = "Option" if action is None else action
+            val = self.options.get(option, "<not set>")
+            if action is None:
+                action = "Option"
             defaultstring = "(default) " if use_default else ""
-            print("{actionstring} {option!r}={val!r} {defaultstring}for config {name!s}".format(
-                actionstring=actionstring,
-                name=name,
-                option=option,
-                val=val,
-                defaultstring=defaultstring))
+            print("{action} {option!r}={val!r} {defaultstring}for config {name!s}".format(
+                action=action, name=name, option=option, val=val, defaultstring=defaultstring))
 
     def deprecated_alias(self, old_key, new_key, extra_msg=""):
         if old_key in self.options.keys():
@@ -192,7 +311,7 @@ class Config(MutableMapping, Hdf5Exportable):
             msg = msg.format(name=self.name, old=old_key, new=new_key)
             if extra_msg:
                 msg = '\n'.join(msg, extra_msg)
-            warnings.warn(msg, FutureWarning)
+            warnings.warn(msg, FutureWarning, stacklevel=3)
             self.options[new_key] = self.options[old_key]
             self.unused.discard(old_key)
             self.unused.add(new_key)
@@ -261,43 +380,6 @@ class Config(MutableMapping, Hdf5Exportable):
         """
         return (key in self.keys() and np.any(np.array(self.options[key])) != 0
                 and self.options[key] is not None)
-
-    def save_yaml(self, filename):
-        """Save the parameters to `filename` as a YAML file.
-
-        Parameters
-        ----------
-        filename : str
-            Name of the resulting YAML file.
-        """
-        import yaml
-        with open(filename, 'w') as stream:
-            yaml.dump(self.options, stream)
-
-    @classmethod
-    def from_yaml(cls, filename, name):
-        """Load a `Config` instance from a YAML file containing the :attr:`options`.
-
-        .. warning ::
-            Like pickle, it is not safe to load a yaml file from an untrusted source! A malicious
-            file can call any Python function and should thus be treated with extreme caution.
-
-        Parameters
-        ----------
-        filename : str
-            Name of the YAML file
-        name : str
-            Name of the resulting :class:`Config` instance.
-
-        Returns
-        -------
-        obj : Config
-            A `Config` object, loaded from file.
-        """
-        import yaml
-        with open(filename, 'r') as stream:
-            config = yaml.safe_load(stream)
-        return cls(config, name)
 
 
 def asConfig(config, name):
@@ -371,29 +453,38 @@ def get_parameter(params, key, default, descr, asarray=False):
     Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
     with the dictionary as argument, which looks similar like:
 
-    >>> def model_calc_U(U_param):
-    >>>    dt = get_parameter(U_param, 'dt', 0.01, 'TEBD')
-    >>>    # ... calculate exp(-i * dt* H) ....
+    >>> from tenpy.tools.params import get_parameter
+    >>> def model_calc_U(params):
+    ...    dt = get_parameter(params, 'dt', 0.01, 'TEBD')
+    ...    order = get_parameter(params, 'order', 1, 'TEBD')
+    ...    print("calc U with dt =", dt, "and order =", order )
+    ...    # ... calculate exp(-i * dt* H) ....
 
-    Then, when you call `time_evolution` without any parameters, it just uses the default value:
+    Then, when you call it without any parameters, it just uses the default value:
 
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict())  # uses dt=0.01
-
-    If you provide the special keyword ``'verbose'`` you can triger this function to print the
-    used parameter values:
-
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict(verbose=1))
-    parameter 'dt'=0.01 (default) for TEBD
+    >>> model_calc_U(dict())
+    calc U with dt = 0.01 and order = 1
 
     Of course you can also provide the parameter to use a non-default value:
 
-    >>> tenpy.algorithms.tebd.time_evolution(..., dict(dt=0.1, verbose=1))
-    parameter 'dt'=0.1 for TEBD
+    >>> model_calc_U(dict(dt=0.02))
+    calc U with dt = 0.02 and order = 1
+
+
+    Increasing the special keyword ``'verbose'`` generally prints more:
+
+    >>> model_calc_U(dict(dt=0.02, verbose=1))
+    parameter 'dt'=0.02 for TEBD
+    calc U with dt = 0.02 and order = 1
+    >>> model_calc_U(dict(dt=0.02, verbose=2))
+    parameter 'dt'=0.02 for TEBD
+    parameter 'order'=1 (default) for TEBD
+    calc U with dt = 0.02 and order = 1
 
     """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Config` class objects. Use `Config` methods to read out "
-           "parameters.")
+    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
+           "Use `Config` methods to read out parameters. "
+           "In particular, inside models just use `model_params.get(key, default)`.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
         return params.get(key, default)
@@ -429,9 +520,9 @@ def unused_parameters(params, warn=None):
     unused_keys : set
         The set of keys of the params which was not used
     """
-    msg = ("Old-style parameter dictionaries are deprecated in favor of "
-           "`Config` class objects. Use `Config.unused` attribute to "
-           "get unused parameters.")
+    msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
+           "Using `unused_parameters` to warn about non-used parameters is no longer necessary; "
+           "this is now done during garbage collection.")
     warnings.warn(msg, category=FutureWarning, stacklevel=2)
     if isinstance(params, Config):
         return params.unused

@@ -1,0 +1,38 @@
+[0.7.2] - 2020-10-09
+====================
+
+Release Notes
+-------------
+We've added a list of all papers using (and citing) TeNPy, see :doc:`/papers_using_tenpy`. Feel free to include your own works!
+
+And a slight simplicifation, which might affect your code: 
+using the `MultiCouplingModel` is no longer necessary, just use the :class:`tenpy.models.model.CouplingModel` directly.
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Deprecated the :class:`tenpy.models.model.MultiCouplingModel`. 
+  The functionality is fully merged into the :class:`~tenpy.models.model.CouplingModel`, no need to subclass the
+  `MultiCouplingModel` anymore.
+- The :class:`~tenpy.models.lattice.Kagome` lattice did not include all `next_next_nearest_neighbors`.
+  (It had only the ones across the hexagon, missing those maiking up a bow-tie.)
+- Combined arguments `onsite_terms` and `coupling_terms` of :meth:`tenpy.networks.mpo.MPOGraph.from_terms` into
+  a single argument `terms`.
+
+Added
+^^^^^
+- Allow to include jupyter notebooks into the documentation; collect example notebooks in [TeNPyNotebooks]_.
+- :meth:`~tenpy.networks.mps.MPS.term_correlation_function_right` and 
+  :meth:`~tenpy.networks.mps.MPS.term_correlation_function_left`
+  for correlation functions with more than one operator on each end.
+- :class:`tenpy.networks.terms.ExponentiallyDecayingTerms` for constructing MPOs with exponential decay,
+  and :meth:`tenpy.networks.model.CouplingModel.add_exponentially_decaying_coupling` for using it.
+  This closes :issue:`78`.
+
+Fixed
+^^^^^
+- The :class:`~tenpy.models.lattice.IrregularLattice` used the ``'default'`` order of the regular lattice instead of
+  whatever the order of the regular lattice was.
+- :meth:`~tenpy.networks.mps.MPS.charge_variance` did not work for more than 1 charge.
