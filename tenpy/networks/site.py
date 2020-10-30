@@ -617,7 +617,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
 
 
 def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
-    """Adjust the charges of the given sites *in place* such that they can be used together.
+    r"""Adjust the charges of the given sites *in place* such that they can be used together.
 
     Before we can contract operators (and tensors) corresponding to different :class:`Site`
     instances, we first need to define the overall conserved charges, i.e., we need to merge the
