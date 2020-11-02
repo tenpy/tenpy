@@ -486,7 +486,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     return mps.build_initial_state(size, states, filling, mode, seed)
 
 
-def setup_executable(mod, run_defaults, identifier_list=None):
+def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied=False):
     """Read command line arguments and turn into useable dicts.
 
     Uses default values defined at:
@@ -631,16 +631,22 @@ def setup_executable(mod, run_defaults, identifier_list=None):
                                                         'num').replace('charge',
                                                                        'ch').replace('spin', 'S')
             identifier += shortened + "_"
-        elif model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
-            identifier += varname + "_" + str(model_par[varname]) + "_"
+        else:
+            if (only_list_supplied):
+                if model_par[varname] != model_defaults[varname]:
+                    identifier += varname + "_" + str(model_par[varname]) + "_"
+            else:
+                if model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
+                    identifier += varname + "_" + str(model_par[varname]) + "_"
     if args.mixer:
         identifier += 'mix_({},{},{})'.format(args.mix_str, args.mix_dec, args.mix_len)
     if identifier[-1] == "_":
         identifier = identifier[:-1]
     # Attempt to shorten the identifier
     identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
+    identifier = identifier.replace('flux_p', 'p').replace('flux_q', 'q').replace('phi_ext_mode','pe-mode')
     if len(identifier) >= 144:
-        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu!")
+        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu! Try argument 'only_list_supplied'")
 
     run_par.update({
         'ncores': args.ncores,

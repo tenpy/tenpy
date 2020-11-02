@@ -2008,7 +2008,7 @@ class DensityMatrixMixer(Mixer):
         return x, separate_Id
 
 
-def chi_list(chi_max, dchi=20, nsweeps=20):
+def chi_list(chi_max, dchi=20, nsweeps=20, chi_min=None):
     """Compute a 'ramping-up' chi_list.
 
     The resulting chi_list allows to increases `chi` by `dchi` every `nsweeps` sweeps up to a given
@@ -2022,6 +2022,8 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
         Step size how to increase chi
     nsweeps : int
         Step size for sweeps
+    chi_min : int
+        (Optional) minimal value from which to start the simulation
 
     Returns
     -------
@@ -2034,11 +2036,16 @@ def chi_list(chi_max, dchi=20, nsweeps=20):
     if chi_max < dchi:
         return {0: chi_max}
     chi_list = {}
-    for i in range(chi_max // dchi):
+    if (chi_min != None):
+        i_min = (chi_min // dchi)
+    else:
+        i_min = 0
+    # alternatively, should we start chi_list with entry {0: chi_min} ?
+    for i in range(i_min, chi_max // dchi):
         chi = int(dchi * (i + 1))
-        chi_list[nsweeps * i] = chi
+        chi_list[nsweeps * (i - i_min)] = chi
     if chi < chi_max:
-        chi_list[nsweeps * (i + 1)] = chi_max
+        chi_list[nsweeps * (i - i_min + 1)] = chi_max
     return chi_list
 
 
