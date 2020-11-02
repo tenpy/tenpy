@@ -20,6 +20,11 @@ and the wrapper functions :func:`save_to_hdf5`, :func:`load_from_hdf5`.
     `h5py <http://docs.h5py.org>`_ python package
     (and hence some version of the HDF5 library).
 
+.. warning ::
+    Like loading a pickle file, loading data from a manipulated HDF5 file with the functions
+    provided below has the potential to cause arbitrary code execution.
+    Only load data from trusted sources!
+
 .. rubric:: Global module constants used for our HDF5 format
 
 Names of HDF5 attributes:
@@ -69,6 +74,7 @@ import types
 import numpy as np
 import importlib
 import warnings
+import sys
 
 __all__ = [
     'save', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
@@ -152,8 +158,12 @@ def load(filename):
 # everything below is for our export/import with our self-definded HDF5 format.
 # =================================================================================
 
+REPR_IGNORED = "ignore"  #: ignore the object/dataset during loading and saving
+
 #: saved object is instance of a user-defined class following the :class:`Hdf5Exportable` style.
 REPR_HDF5EXPORTABLE = "instance"
+
+REPR_REDUCE = "reduce"  #: saved object had a __reduce__ method according to pickle protocol
 
 REPR_ARRAY = "array"  #: saved object represents a numpy array
 REPR_INT = "int"  #: saved object represents a (python) int
@@ -176,7 +186,10 @@ REPR_SET = "set"  #: saved object represents a set
 REPR_DICT_GENERAL = "dict"  #: saved object represents a dict with complicated keys
 REPR_DICT_SIMPLE = "simple_dict"  #: saved object represents a dict with simple keys
 REPR_DTYPE = "dtype"  #: saved object represents a np.dtype
-REPR_IGNORED = "ignore"  #: ignore the object/dataset during loading and saving
+
+REPR_FUNCTION = "function"  #: saved object represents a (global) function
+REPR_CLASS = "class"  #: saved object is a (global) class
+REPR_GLOBAL = "global"  #: saved object is a global variable (like a class or function)
 
 #: tuple of (type, type_repr) which h5py can save as datasets; one entry for each type.
 TYPES_FOR_HDF5_DATASETS = tuple([
@@ -422,6 +435,19 @@ class Hdf5Saver:
             obj_save_hdf5(self, h5gr, subpath)  # should save the actual data
             return h5gr
 
+        obj_reduce = getattr(obj, "__reduce__", None)
+        if obj_reduce is not None:
+
+            rv = obj_reduce()
+            if isinstance(rv, str):
+                h5gr = self.save_global(obj, REPR_GLOBAL)
+                return h5gr
+            if not isinstance(rv, tuple) or not 2 <= len(rv) < 7:
+                raise Hdf5ExportError("Wrong return value of {0!r}".format(obj_reduce))
+
+            h5gr = self.save_reduce(*rv, obj=obj, path=path)
+            return h5gr
+
         # unknown case
         msg = "Don't know how to save object of type {0!r}:\n{1!r}".format(type(obj), obj)
         raise Hdf5ExportError(msg)
@@ -480,6 +506,32 @@ class Hdf5Saver:
         obj_id = id(obj)
         assert obj_id not in self.memo_save
         self.memo_save[obj_id] = (h5gr, obj)
+
+    def save_reduce(self,
+                    func,
+                    args,
+                    state=None,
+                    listitems=None,
+                    dictitems=None,
+                    state_setter=None,
+                    obj=None,
+                    path=None):
+        """Save the return values of ``obj.__reduce__`` following the pickle protocol."""
+        h5gr, subpath = self.create_group_for_obj(path, obj)
+        h5gr.attrs[ATTR_TYPE] = REPR_REDUCE
+        self.save(func, subpath + 'func')
+        self.save(args, subpath + 'args')
+        if state is not None:
+            self.save(state, subpath + 'state')
+        if listitems is not None:
+            self.save(state, subpath + 'listitems')
+        if dictitems is not None:
+            self.save(state, subpath + 'dictitems')
+        if state_setter is not None:
+            self.save(state, subpath + 'state_setter')
+        return h5gr
+
+    # save_reduce is called directly from `save()`, not dispatched.
 
     dispatch_save = {}
 
@@ -611,6 +663,33 @@ class Hdf5Saver:
 
     dispatch_save[Hdf5Ignored] = (save_ignored, REPR_IGNORED)
 
+    def save_global(self, obj, path, type_repr):
+        """Save a global object like a function or class."""
+        module = obj.__module__
+        qualname = obj.__qualname__
+        try:
+            obj2 = Hdf5Loader.find_global(module, qualname)
+        except (ImportError, KeyError, AttributeError):
+            raise Hdf5ExportError(
+                "Can't export `{0!r}`: it's not found as {1} in module {2}".format(
+                    obj, module, classname)) from None
+        else:
+            if obj2 is not obj:
+                raise Hdf5ExportError("Can't export `{0!r}`: it's not the same object"
+                                      "as {1} in module {2}".format(obj, module, classname))
+        full_name = qualname + " in " + module
+        self.h5group[path] = full_name  # save as string dataset
+        h5gr = self.h5group[path]
+        h5gr.attrs[ATTR_TYPE] = type_repr
+        h5gr.attrs[ATTR_CLASS] = qualname
+        h5gr.attrs[ATTR_MODULE] = module
+        self.memorize_save(h5gr, obj)
+        return h5gr
+
+    dispatch_save[types.FunctionType] = (save_global, REPR_FUNCTION)
+    dispatch_save[types.BuiltinFunctionType] = (save_global, REPR_FUNCTION)
+    dispatch_save[type] = (save_global, REPR_CLASS)
+
     # clean up temporary variables
     del _t
     del _type_repr
@@ -736,7 +815,7 @@ class Hdf5Loader:
         return res
 
     @staticmethod
-    def find_class(module, classname):
+    def find_global(module, classname):
         """Get the class of the qualified `classname` in a given python `module`.
 
         Imports the module.
@@ -876,7 +955,7 @@ class Hdf5Loader:
         module_name = self.get_attr(h5gr, ATTR_MODULE)
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
-            cls = self.find_class(module_name, class_name)
+            cls = self.find_global(module_name, class_name)
         except (ImportError, AttributeError):
             msg = "Can't import class {0!s} from {1!s}".format(class_name, module_name)
             if self.ignore_unknown:
@@ -893,6 +972,69 @@ class Hdf5Loader:
         return Hdf5Ignored(h5gr.name)
 
     dispatch_load[REPR_IGNORED] = (load_ignored, REPR_IGNORED)
+
+    def load_global(self, h5gr, type_info, subpath):
+        """Load a global object like a class or function from its qualified name and module."""
+        module_name = self.get_attr(h5gr, ATTR_MODULE)
+        class_name = self.get_attr(h5gr, ATTR_CLASS)
+        try:
+            obj = self.find_global(module_name, class_name)
+        except (ImportError, AttributeError):
+            msg = "Can't import global {0!s} from {1!s}".format(class_name, module_name)
+            if self.ignore_unknown:
+                warnings.warn(msg, UserWarning)
+                return Hdf5Ignored(msg)
+            else:
+                raise
+        self.memorize_load(h5gr, obj)
+        return obj
+
+    dispatch_load[REPR_FUNCTION] = (load_global, REPR_FUNCTION)
+    dispatch_load[REPR_CLASS] = (load_global, REPR_CLASS)
+    dispatch_load[REPR_GLOBAL] = (load_global, REPR_GLOBAL)
+
+    def load_reduce(self, h5gr, type_info, subpath):
+        """Load an object where the return values of  ``obj.__reduce__`` has been exported."""
+        func = self.load(subpath + 'func')
+        args = self.load(subpath + 'args')
+        obj = func(*args)
+        self.memorize_load(h5gr, obj)
+        if 'state' in h5gr:
+            state = self.load(subpath + 'state')
+            if 'state_setter' in h5gr:
+                state_setter = self.load(subpath + 'state_setter')
+                obj = state_setter(obj, state)
+                self.memorize_load(h5gr, obj)  # overwrites old memo entry
+            else:
+                # see pickle._Unpickler.load_build
+                setstate = getattr(obj, '__setstate__', None)
+                if setstate is not None:
+                    setstate(state)
+                else:
+                    slotstate = None
+                    if isinstance(state, tuple) and len(state) == 2:
+                        state, slotstate = state
+                    if state:
+                        obj_dict = obj.__dict__
+                        for k, v in state.items():
+                            if type(k) is str:
+                                obj_dict[sys.intern(k)] = v
+                            else:
+                                obj_dict[k] = v
+                    if slotstate:
+                        for k, v in slotstate.items():
+                            setattr(obj, k, v)
+        if 'listitems' in h5gr:
+            listitems = self.load(subpath + 'listitems')
+            for item in listitems:
+                obj.append(item)
+        if 'dictitems' in h5gr:
+            dictitems = self.load(subpath + 'dictitems')
+            for key, val in dictitems:
+                obj[key] = val
+        return obj
+
+    dispatch_load[REPR_REDUCE] = (load_reduce, REPR_REDUCE)
 
     # clean up temporary variables
     del _t
