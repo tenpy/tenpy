@@ -53,7 +53,8 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         psi.canonical_form()
 
         ##   Calculating bond entropy and correlation length  ##
-        s_list.append(np.mean(psi.entanglement_entropy()))
+        s_list.append(psi.entanglement_entropy()[0])
+        # the bond 0 is between MPS unit cells and hence sensible even for 2D lattices.
         xi_list.append(psi.correlation_length())
 
         print(chi,
