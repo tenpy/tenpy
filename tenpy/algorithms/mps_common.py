@@ -32,6 +32,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
+from ..tools.events import EventHandler
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
