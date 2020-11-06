@@ -133,6 +133,7 @@ class Sweep:
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
+        self.checkpoint = EventHandler("engine")
 
     @property
     def engine_params(self):
