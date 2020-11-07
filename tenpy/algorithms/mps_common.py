@@ -147,8 +147,8 @@ class Sweep:
 
         Indirectly set by the class attribute :attr:`EffectiveH` and it's `length`.
         For example, :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` uses the
-        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has `n_optimize`=2,
-        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has `n_optimize`=1.
+        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has ``n_optimize=2``,
+        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has ``n_optimize=1``.
         """
         return self.EffectiveH.length
 

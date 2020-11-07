@@ -39,6 +39,10 @@ class EventHandler:
     The event "happens" each time :meth:`emit` or :meth:`emit_until_result` is called,
     typically inside a method of the class defining the event. Example:
 
+    .. testsetup :: EventHandler
+
+        from tenpy.tools.events import EventHandler
+
     .. doctest :: EventHandler
 
         >>> class MyAlgorithm:
