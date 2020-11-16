@@ -96,7 +96,7 @@ def create_example_stubs():
             outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
             if os.path.exists(outfile):
                 continue
-            sentence = ("`on github <{base}/tree/master/{key!s}/{fn!s}>`_.")
+            sentence = ("`on github <{base}/tree/main/{key!s}/{fn!s}>`_.")
             sentence = sentence.format(key=key, fn=fn, base=GITHUBBASE)
             include = '.. literalinclude:: /../{key!s}/{fn!s}'.format(key=key, fn=fn)
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
@@ -125,7 +125,7 @@ html_context = {
     "github_repo":
     "tenpy",  # Repo name
     "github_version":
-    "master",  # Version
+    "main",  # Version
     "conf_py_path":
     "/doc/",  # Path in the checkout to the docs root
     "css_files": [
@@ -271,7 +271,7 @@ def linkcode_resolve(domain, info):
     if tenpy.version.released:
         return "%s/tree/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
     else:
-        return "%s/tree/master/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
+        return "%s/tree/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
 
 
 # -- sphinx_cfg_options ---------------------------------------------------

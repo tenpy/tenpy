@@ -31,7 +31,7 @@ Optionally, if you don't want to contribute, you can checkout the latest stable 
     
     In case you don't have [git]_ installed, you can download the repository as a ZIP archive.
     You can find it under `releases <https://github.com/tenpy/tenpy/releases>`_,
-    or the `latest development version <https://github.com/tenpy/tenpy/archive/master.zip>`_.
+    or the `latest development version <https://github.com/tenpy/tenpy/archive/main.zip>`_.
 
 
 Minimal installation: Including tenpy into PYTHONPATH

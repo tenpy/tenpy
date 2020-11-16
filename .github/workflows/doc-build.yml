@@ -24,8 +24,8 @@ jobs:
     - name: Build documentation
       # building html is necessary to include the module docstrings with autodoc
       run: |
-        python -msphinx -b html ./doc ./doc/sphinx_build
+        python -m sphinx -b html ./doc ./doc/sphinx_build
     - name: Run doctests
       # building html is necessary to include the module docstrings with autodoc
       run: |
-        python -msphinx -b doctest ./doc ./doc/sphinx_build
+        python -m sphinx -b doctest ./doc ./doc/sphinx_build
