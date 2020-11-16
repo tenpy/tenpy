@@ -3,7 +3,8 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+The default (stable) git branch was renamed from ``master`` to ``main``.
+
 
 Changelog
 ---------
