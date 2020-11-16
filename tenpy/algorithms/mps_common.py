@@ -32,6 +32,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
+from ..tools.events import EventHandler
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
@@ -133,6 +134,7 @@ class Sweep:
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
+        self.checkpoint = EventHandler("engine")
 
     @property
     def engine_params(self):
@@ -145,8 +147,8 @@ class Sweep:
 
         Indirectly set by the class attribute :attr:`EffectiveH` and it's `length`.
         For example, :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` uses the
-        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has `n_optimize`=2,
-        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has `n_optimize`=1.
+        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has ``n_optimize=2``,
+        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has ``n_optimize=1``.
         """
         return self.EffectiveH.length
 

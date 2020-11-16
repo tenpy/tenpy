@@ -139,6 +139,49 @@ def test_optimization():
     assert tools.optimization.get_level() == level_now
 
 
+def test_events():
+    noted = []
+    counters = []
+    event_counter = [0]
+
+    ev1 = tools.events.EventHandler("event_name, expected_event_counter")
+
+    @ev1.connect
+    def note_event(event_name, expected_event_counter):
+        noted.append(event_name)
+        counters.append(expected_event_counter)
+
+    def increase_counter(event_name, expected_event_counter):
+        print("callback from event ", event_name)
+        event_counter[0] += 1
+
+    def check_event_counter_before(event_name, expected_event_counter):
+        assert expected_event_counter == event_counter[0]
+
+    def check_event_counter_after(event_name, expected_event_counter):
+        assert expected_event_counter + 1 == event_counter[0]
+
+    ev2 = tools.events.EventHandler("event_name, expected_event_counter")
+    ev2.connect(note_event, 0)
+    note_id = ev2.id_of_last_connected
+    for ev in [ev1, ev2]:
+        ev.connect(check_event_counter_before, 2)  # called before `increase_counter`
+        ev.connect(check_event_counter_after, -1)  # called after `increase_counter`
+    for ev in [ev1, ev2]:
+        ev.connect(increase_counter, 1)  # high priority
+    print("start events")
+    ev1.emit("a", 0)
+    ev2.emit("b", 1)
+    ev2.emit("c", 2)
+    ev2.disconnect(note_id)
+    ev2.emit("d", 3)
+    ev1.emit("e", 4)
+    print("after calls")
+    assert event_counter[0] == 5
+    assert tuple(counters) == (0, 1, 2, 4)  # disconnected event 2 note before 3
+    assert tuple(noted) == ("a", "b", "c", "e")
+
+
 def three_exp(x):
     lam = np.array([0.9, 0.4, 0.2])
     pref = np.array([0.01, 0.4, 20])

@@ -949,6 +949,7 @@ class DMRGEngine(Sweep):
                                  Eerr=max_E_trunc,
                                  norm_err=norm_err)
                 print(msg, flush=True)
+            self.checkpoint.emit(self)
 
         # clean up from mixer
         self.mixer_cleanup()
