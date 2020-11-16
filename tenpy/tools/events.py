@@ -1,7 +1,8 @@
 """Event handler.
 
-.. todo ::
-    Support HDF5 export -> allow to export functions!
+The :class:`EventHandler` is basically just holds a list of functions
+which can get called once a certain "event" happens.
+Examples are given in the class doc-string.
 """
 # Copyright 2020 TeNPy Developers, GNU GPLv3
 
@@ -30,7 +31,7 @@ class EventHandler:
     ----------
     arg_descr : str
         An informative description how the callback function is called.
-    listeners : list
+    listeners : list of (int, function, int)
         Entries are tuples ``(listener_id, callback, priority)``.
 
     Examples
