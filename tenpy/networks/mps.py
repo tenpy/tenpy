@@ -1928,6 +1928,7 @@ class MPS:
             The order inside `term` determines the order in which they act
             (in the mathematical convention: the last operator in `term` is right-most,
             so it acts first on a ket).
+            If autoJW is False, we also accept npc arrays for `op`.
         autoJW : bool
             If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
         i_offset : int
@@ -1938,7 +1939,7 @@ class MPS:
 
         Returns
         -------
-        ops : list of str
+        ops : list of :class:`~tenpy.linalg.np_conserved.Array`
             Operators, one per site starting with `i_min`, i.e. ``ops[i]`` acts on `i_min`+`i`.
         i_min : int
             Index of the left-most site on which `ops` act (including the `i_offset`).
@@ -1965,7 +1966,7 @@ class MPS:
                 op_i.append('JW')
         for i in range(len(ops)):
             site = self.sites[self._to_valid_index(i + i_offset)]
-            ops[i] = site.multiply_op_names(ops[i])
+            ops[i] = site.multiply_operators(ops[i])
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def expectation_value_multi_sites(self, operators, i0):
@@ -2025,11 +2026,12 @@ class MPS:
         axes[1][0] = 'vR*'
         for j in range(1, len(operators)):
             op = operators[j]  # the operator
+            is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
-            if op != 'Id':
-                if isinstance(op, str):
+            if not (is_str and op == 'Id'):
+                if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             C = npc.tensordot(B.conj(), C, axes=axes)
@@ -2047,11 +2049,12 @@ class MPS:
         axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
         for j in reversed(range(len(operators))):
             op = operators[j]  # the operator
+            is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
             C = npc.tensordot(B, C, axes=['vR', 'vL'])
-            if op != 'Id':
-                if isinstance(op, str):
+            if not (is_str and op == 'Id'):
+                if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             C = npc.tensordot(C, B.conj(), axes=axes)

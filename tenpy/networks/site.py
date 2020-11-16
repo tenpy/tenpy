@@ -437,6 +437,35 @@ class Site(Hdf5Exportable):
             return 'Id'
         return ' '.join(names)
 
+    def multiply_operators(self, operators):
+        """Multiply local operators (possibly given by their names) together.
+
+        Parameters
+        ----------
+        operators : list of {str | :class:`~tenpy.linalg.np_conserved.Array`}
+            List of valid operator names (to be translated with :meth:`get_op`) or
+            directly on-site operators in the form of npc arrays with ``'p', 'p*'`` label.
+            The operators are multiplied left-to-right.
+
+        Returns
+        -------
+        combined_operator : :class:`~tenpy.linalg.np_conserved.Array`
+            The product of the given `operators` in a left-to-right multiplication following the
+            usual mathematical convention. For example, if ``operators=['Sz', 'Sp', 'Sx']``,
+            the final operator is equivalent to ``site.get_op('Sz Sp Sx')``, with the ``'Sx'``
+            operator acting first on any physical state.
+        """
+        if len(operators) == 0:
+            return self.Id
+        op = operators[0]
+        if isinstance(op, str):
+            op = self.get_op(op)
+        for next_op in operators[1:]:
+            if isinstance(next_op, str):
+                next_op = self.get_op(next_op)
+            op = npc.tensordot(op, next_op, axes=['p*', 'p'])
+        return op
+
     def __repr__(self):
         """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
