@@ -89,15 +89,15 @@ def save(data, filename, mode='w'):
     This function guesses the type of the file from the filename ending.
     Supported endings:
 
-    ======== ===============================
-    ending   description
-    ======== ===============================
-    .pkl     Pickle without compression
-    -------- -------------------------------
-    .pklz    Pickle with gzip compression.
-    -------- -------------------------------
-    .hdf5    Hdf5 file (using `h5py`).
-    ======== ===============================
+    ============ ===============================
+    ending       description
+    ============ ===============================
+    .pkl         Pickle without compression
+    ------------ -------------------------------
+    .pklz        Pickle with gzip compression.
+    ------------ -------------------------------
+    .hdf5, .h5   HDF5 file (using `h5py`).
+    ============ ===============================
 
     Parameters
     ----------
@@ -434,6 +434,10 @@ class Hdf5Saver:
             h5gr.attrs[ATTR_MODULE] = obj.__class__.__module__
             obj_save_hdf5(self, h5gr, subpath)  # should save the actual data
             return h5gr
+
+        warnings.warn(
+            "Hdf5Saver: object of type {t!r} without explicit HDF5 format; "
+            "fall back to pickle protocol".format(t=type(obj)), UserWarning)
 
         obj_reduce = getattr(obj, "__reduce__", None)
         if obj_reduce is not None:
