@@ -24,6 +24,7 @@ def export_to_datadir():
         hdf5_io.save_to_hdf5(f, data)
 
 
+@pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
 @pytest.mark.skipif(h5py is None, reason="h5py not available")
 def test_hdf5_export_import():
     """Try subsequent export and import to pickle."""
