@@ -32,5 +32,11 @@ All other modules in this folder contain model classes derived from these base c
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
+from . import tf_ising, xxz_chain, spins, spins_nnn
+from . import fermions_spinless, hubbard, hofstadter, haldane
+from . import toric_code
 
-__all__ = ['lattice', 'model']
+__all__ = [
+    'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',
+    'hubbard', 'hofstadter', 'haldane', 'toric_code'
+]

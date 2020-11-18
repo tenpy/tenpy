@@ -10,13 +10,13 @@ and yet powerful enough for day-to-day research.
 # This file marks this directory as a python package.
 
 # load and provide subpackages on first input
-from . import algorithms
-from . import linalg
-from . import models
-from . import networks
-from . import tools
-
 from . import version
+from . import tools
+from . import linalg
+from . import algorithms
+from . import networks
+from . import models
+from . import simulations
 
 #: hard-coded version string
 __version__ = version.version
@@ -24,7 +24,9 @@ __version__ = version.version
 #: full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
-__all__ = ["algorithms", "linalg", "models", "networks", "tools", "version", "show_config"]
+__all__ = [
+    "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config"
+]
 
 
 def show_config():

@@ -1652,7 +1652,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     ----------
     name : str
         The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
-    options: :class:`~tenpy.tools.params.Config`
+    options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.

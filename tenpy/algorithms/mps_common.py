@@ -69,9 +69,8 @@ class Sweep:
             calculating charge combinations in the contractions, but one
             :meth:`matvec` is formally more expensive,
             :math:`O(2 d^3 \chi^3 D)`.
-        lanczos_params : :class:`Config`
-            Lanczos parameters as described in
-            :func:`~tenpy.linalg.lanczos.lanczos`
+        lanczos_params : dict
+            Lanczos parameters as described in :cfg:config:`Lanczos`.
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
         verbose : bool | int
