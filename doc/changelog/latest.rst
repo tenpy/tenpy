@@ -28,6 +28,7 @@ Added
 - :meth:`tenpy.tools.events.EventHandler` to simplify call-backs e.g. for measurement codes during an algorithms.
 - :func:`tenpy.tools.misc.find_subclass` to recursively find subclasses of a given base class by the name.
   This function is now used e.g. to find lattice classes given the name, hence supporting user-defined lattices defined outside of TeNPy.
+- :func:`tenpy.tools.misc.get_recursive` and :func:`~tenpy.tools.misc.set_recursive` for nested data strucutres, e.g., parameters.
 
 Changed
 ^^^^^^^

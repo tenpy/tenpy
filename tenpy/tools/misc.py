@@ -15,7 +15,7 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'find_subclass', 'build_initial_state', 'setup_executable'
+    'find_subclass', 'get_recursive', 'set_recursive', 'build_initial_state', 'setup_executable'
 ]
 
 
@@ -502,6 +502,42 @@ def find_subclass(base_class, subclass_name):
         if found is not None:
             return found
     return None
+
+
+def get_recursive(nested_data, recursive_key, split="/"):
+    """Extract specific value from a nested data structure.
+
+    Parameters
+    ----------
+    nested_data : dict of dict (-like)
+        Some nested data structure supporting a dict-like interface.
+    recursive_key : str
+        The key(-parts) to be extracted, separated by `split`.
+        A leading `split` is ignored.
+    split : str
+        Separator for splitting `recursive_key` into subkeys.
+
+    Returns
+    -------
+    entry :
+        For example, ``recursive_key="/some/sub/key"`` will result in extracing
+        ``nested_data["some"]["sub"]["key"]``.
+    """
+    if recursive_key.startswith(split):
+        recursive_key = recursive_key[len(split):]
+    for subkey in recursive_key.split(split):
+        nested_data = nested_data[subkey]
+    return nested_data
+
+
+def set_recursive(nested_data, recursive_key, value, split="/"):
+    """Same as :func:`get_recursive`, but set the data entry to `value`."""
+    if recursive_key.startswith(split):
+        recursive_key = recursive_key[len(split):]
+    subkeys = recursive_key.split(split)
+    for subkey in subkeys[:-1]:
+        nested_data = nested_data[subkey]
+    nested_data[subkeys[-1]] = value
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

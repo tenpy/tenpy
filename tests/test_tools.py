@@ -214,3 +214,13 @@ def test_find_subclass():
     assert simple_found is SimpleLattice
     square_found = tools.misc.find_subclass(BaseCls, 'Square')
     assert square_found is Square
+
+
+def test_get_set_recursive():
+    data = {'some': {'nested': {'data': 123, 'other': 456}, 'parts': 789}}
+    assert tools.misc.get_recursive(data, 'some/nested/data') == 123
+    assert tools.misc.get_recursive(data, '/some/nested/data') == 123
+    tools.misc.set_recursive(data, 'some/nested/data', 321)
+    assert tools.misc.get_recursive(data, 'some:nested:data', ':') == 321
+    tools.misc.set_recursive(data, ':some:parts', 987, ':')
+    assert tools.misc.get_recursive(data, 'some/parts') == 987
