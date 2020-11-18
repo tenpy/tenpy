@@ -31,11 +31,25 @@ released = False
 short_version = 'v' + version
 
 
-def _get_git_revision():
-    """get revision hash from git."""
+def _get_git_revision(cwd=None):
+    """Get revision hash from git.
+
+    Parameters
+    ----------
+    cwd : str | None
+        Directory contained in the git repository to be considered.
+        ``None`` defaults to the top directory of the used tenpy source code.
+
+    Returns
+    -------
+    revision : str
+        Revision hash of the git HEAD, i.e, the last git commit to which git compares everything.
+    """
+    if cwd is None:
+        cwd = os.path.dirname(os.path.abspath(__file__)),
     try:
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                      cwd=os.path.dirname(os.path.abspath(__file__)),
+                                      cwd=cwd,
                                       stderr=subprocess.STDOUT).decode().strip()
     except:
         rev = "unknown"
