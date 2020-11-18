@@ -8,12 +8,14 @@ running the actual algorithm, possibly performing measurements and saving the re
 
 import os
 import time
+import importlib
 
 from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass
 from .. import version
+from ..networks.mps import InitialStateBuilder
 
 __all__ = ['Simulation', 'MPSSimulation']
 
@@ -48,6 +50,8 @@ class Simulation:
     ----------
     options : :class:`~tenpy.tools.params.Config`
         Simulation parameters.
+    model : :class:`~tenpy.models.model.Model`
+        The model to be simulated.
     results : dict
         Collection of all the results to be saved in the end.
     output_filename : str
@@ -57,6 +61,8 @@ class Simulation:
         In that way, we still have a non-corrupt version if something fails during saving.
 
     """
+    InitStateBuilder = None  # needs to be set by subclasses
+
     def __init__(self, options):
         self.options = options = asConfig(options, 'Simulation')
         cwd = options.get("directory", None)
@@ -81,17 +87,42 @@ class Simulation:
         self.save_results()
 
     def init_model(self):
+        """Initialize a model from the model parameters.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            model_class : string | class
+                Mandatory. Name or class for the model to be initialized.
+            model_params : dict
+                Dictionary with parameters for the model; see the documentation of the
+                corresponding `model_class`.
+
+        """
         model_class_name = self.options["model_class"]  # no default value!
-        ModelClass = find_subclass(tenpy.models.model.Model, model_class_name)
+        if isinstance(model_class_name, str):
+            ModelClass = find_subclass(tenpy.models.model.Model, model_class_name)
+        else:
+            ModelClass = model_class_name
         model_params = self.options.subconfig('model_params')
-        model = model_class
-        self.model = model
+        self.model = ModelClass(model_params)
 
     def init_state(self):
-        raise NotImplementedError("subclasses should implement this")
+        init_state_builder_class = self.options.get('init_state_builder', 'InitialStateBuilder')
+        if isinstance(init_state_builder_class, str):
+            InitStateBuilder = find_subclass(tenpy.networks.mps.InitialStateBuilder,
+                                             init_state_builder_class)
+        else:
+            InitStateBuilder = init_state_builder_class
+        init_state_params = self.options.subconfig('init_state_params', 'InitialStateBuilder')
+        builder = InitStateBuilder(self.model.lat, init_state_params)
+        self.psi = builder.build()
 
     def init_algorithm(self):
+        # TODO need common algorithm base class
         raise NotImplementedError("subclasses should implement this")
+        self.engine = AlgorithmClass(psi, model, algorithm_params)
 
     def run_algorithm(self):
         self.engine.run()
@@ -110,7 +141,6 @@ class Simulation:
             cwd = os.getcwd()
         else:
             # use the cwd of the file where the simulation class is defined
-            import importlib
             module = importlib.import_module(sim_module)  # get module object
             cwd = os.path.dirname(os.path.abspath(module.__file__)),
         git_rev = version._get_git_revision(cwd)
@@ -210,68 +240,10 @@ class Simulation:
 
 
 class MPSSimulation(Simulation):
-    def run(self):
-        self.load_model()
-
-        self.init_psi()
-
-        self.run_dmrg()
-
-        if self.model.parameters['test']["HartreeFockEnergy"]:
-            hartree_fock_test(self.model, self.sim_args['initial_state'], self.dmrg_params)
-
-        self.save_results()
-
-    def load_model(self):
-        print("loading model.")
-        with h5py.File(self.sim_args["model_filename"], 'r') as f:
-            model = hdf5_io.load_from_hdf5(f, "/model")
-            if 'version_info' in f:
-                version_info = hdf5_io.load_from_hdf5(f, "/version_info")
-                self.results['version_info']['model'] = version_info
-        # pprint(sim_args)
-        # print("model parameters: ")
-        # pprint(model.parameters)
-        self.model = model
-        self.results['model_parameters'] = model.parameters  # these are the yaml parameters
-        MPO_trunc_params = self.sim_args['mpo_truncation']
-        discarded = compress_MPO(model.H_MPO, model.MPO_singular_values_left, model.parameters,
-                                 MPO_trunc_params)
-        print("max. discarded weight during MPO truncation in TeNPy: ", np.max(discarded))
-        print("H_MPO.chi =", model.H_MPO.chi)
-        self.results['H_MPO.chi'] = np.array(model.H_MPO.chi)
-        self.results['MPO_singular_values'] = model.MPO_singular_values_left
-        self.results['MPO_untruncated_singular_values'] = model.MPO_untruncated_singular_values_left
-
-        if 'change_charges' in self.sim_args:
-            drop_charges = self.sim_args['change_charges'].get('drop', [])
-            change_charges = self.sim_args['change_charges'].get('change_ZN', {})
-            assert drop_charges or change_charges
-            last_key = (list(drop_charges) + list(change_charges.keys()))[-1]
-            self.model.H_MPO.sites = self.model.lat.mps_sites()  # ensures shared site-instances
-            chinfo = None
-            for i, W in enumerate(self.model.H_MPO._W):
-                # TODO: TeNPy should allow to give multiple charges to npc.Arrray.drop_charge/change_charge at once
-                for charge in drop_charges:
-                    ch = chinfo if charge == last_key else None
-                    W = W.drop_charge(charge, ch)
-                for charge, new_mod in change_charges.items():
-                    ch = chinfo if charge == last_key else None
-                    new_name = "{0!s}->{1:d}".format(charge, new_mod)
-                    W = W.change_charge(charge, new_mod, new_name, ch)
-                chinfo = W.chinfo
-                self.model.H_MPO._W[i] = W
-                if self.model.H_MPO.sites[i].leg.chinfo != chinfo:
-                    self.model.H_MPO.sites[i].change_charge(W.get_leg('p'))
-            self.model.H_MPO.chinfo = chinfo
-            self.model.test_sanity()
-        print("charges: ", str(self.model.H_MPO.chinfo))
-        factor = self.sim_args.get('enlarge_MPS_unit_cell', 1)
-        if factor != 1:
-            model.enlarge_mps_unit_cell(factor)
+    InitStateBuilder = InitialStateBuilder
 
     def init_psi(self):
-        sim_args = self.sim_args
+        sim_args = self.options
         init_state = sim_args['initial_state']
         model = self.model
         if isinstance(init_state, dict) and init_state.get('category', "") == 'from_file':

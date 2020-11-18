@@ -74,7 +74,7 @@ def run(psi, model, options):
     .. cfg:config :: DMRG
         :include: SingleSiteDMRGEngine, TwoSiteDMRGEngine
 
-        active_sites
+        active_sites : 1 | 2
             The number of active sites to be used by DMRG.
             If set to 1, :class:`SingleSiteDMRGEngine` is used.
             If set to 2, DMRG is handled by :class:`TwoSiteDMRGEngine`.
