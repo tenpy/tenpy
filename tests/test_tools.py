@@ -7,6 +7,7 @@ import itertools as it
 import tenpy.tools as tools
 import warnings
 import pytest
+import tenpy
 
 
 def test_inverse_permutation(N=10):
@@ -200,3 +201,16 @@ def test_approximate_sum_of_exp(N=100):
         err = np.sum(np.abs(f(x) - tools.fit.sum_of_exp(lam, pref, x)))
         print(n, f.__name__, err)
         assert err < max_err
+
+
+def test_find_subclass():
+    BaseCls = tenpy.models.lattice.Lattice
+    SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
+    Square = tenpy.models.lattice.Square  # sublcass of SimpleLattice -> recursion necessary
+
+    unknown_found = tools.misc.find_subclass(BaseCls, 'UnknownSubclass')
+    assert unknown_found is None
+    simple_found = tools.misc.find_subclass(BaseCls, 'SimpleLattice')
+    assert simple_found is SimpleLattice
+    square_found = tools.misc.find_subclass(BaseCls, 'Square')
+    assert square_found is Square

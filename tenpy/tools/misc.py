@@ -15,7 +15,7 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'build_initial_state', 'setup_executable'
+    'find_subclass', 'build_initial_state', 'setup_executable'
 ]
 
 
@@ -475,6 +475,33 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
         groups.append(tuple(subset[group]))
         subset = subset[np.logical_not(group)]
     return groups
+
+
+def find_subclass(base_class, subclass_name):
+    """For a given base class, recursively find the subclass with the given name.
+
+    Parameters
+    ----------
+    base_class : class
+        The base class of which `subclass_name` is supposed to be a subclass.
+    subclass_name : str
+        Name of the class to be found.
+
+    Returns
+    -------
+    subclass : None | class
+        Class with name `subclass_name` which is a subclass of the `base_class`.
+        None, if no subclass of the given name is found.
+    """
+    subclasses = base_class.__subclasses__()
+    for subcls in subclasses:
+        if subcls.__name__ == subclass_name:
+            return subcls
+    for subcls in subclasses:
+        found = find_subclass(subcls, subclass_name)  # recursion
+        if found is not None:
+            return found
+    return None
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

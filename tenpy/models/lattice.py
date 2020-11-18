@@ -19,7 +19,7 @@ import itertools
 import warnings
 
 from ..networks.site import Site
-from ..tools.misc import to_iterable, to_iterable_of_len, inverse_permutation
+from ..tools.misc import to_iterable, to_iterable_of_len, inverse_permutation, find_subclass
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
@@ -1938,8 +1938,9 @@ def get_lattice(lattice_name):
     LatticeClass : :class:`Lattice`
         The lattice class (type, not instance) specified by `lattice_name`.
     """
-    LatticeClass = globals()[lattice_name]
-    assert issubclass(LatticeClass, Lattice)
+    LatticeClass = find_subclass(Lattice, lattice_name)
+    if LatticeClass is None:
+        raise ValueError("No Lattice of the given name {0!r} found!".format(lattice_name))
     return LatticeClass
 
 
