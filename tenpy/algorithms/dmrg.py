@@ -190,7 +190,7 @@ class Mixer:
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`DMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.
@@ -231,7 +231,7 @@ class SingleSiteMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`DMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.
@@ -274,8 +274,8 @@ class SingleSiteMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`SingleSiteDMRGEngine` | :class:`TwoSiteDMRGEngine`
-            'Engine' for the DMRG algorithm
+        engine : :class:`DMRGEngine`
+            The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Optimized guess for the ground state of the effective local Hamiltonian.
         i0 : int
@@ -332,7 +332,7 @@ class TwoSiteMixer(SingleSiteMixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`DMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd.
@@ -465,7 +465,7 @@ class DensityMatrixMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`DMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state of the effective Hamiltonian, prepared for svd.
@@ -527,7 +527,7 @@ class DensityMatrixMixer(Mixer):
 
         Parameters
         ----------
-        engine : :class:`Engine`
+        engine : :class:`DMRGEngine`
             The DMRG engine calling the mixer.
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state of the effective Hamiltonian, prepared for svd.
@@ -632,11 +632,12 @@ class DensityMatrixMixer(Mixer):
 
 
 class DMRGEngine(Sweep):
-    """DMRG base class.'Engine' for the DMRG algorithm.
+    """DMRG base class with common methods for the TwoSiteDMRG and SingleSiteDMRG.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between
     :class:`SingleSiteDMRGEngine` and :class:`TwoSiteDMRGEngine`.
+    Use the latter two classes for actual DMRG runs.
 
     A generic protocol for approaching a physics question using DMRG is given in :doc:`/intro/protocol`.
 
@@ -1390,7 +1391,7 @@ class DMRGEngine(Sweep):
 
 
 class TwoSiteDMRGEngine(DMRGEngine):
-    """'Engine' for the two-site DMRG algorithm.
+    """Engine for the two-site DMRG algorithm.
 
     Parameters
     ----------
@@ -1427,7 +1428,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     update_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.update_bond` is called.
+        added each time :meth:`DMRGEngine.update_bond` is called.
 
         =========== ===================================================================
         key         description
@@ -1446,7 +1447,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     sweep_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
 
         ============= ===================================================================
         key           description
@@ -1592,7 +1593,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
 
 class SingleSiteDMRGEngine(DMRGEngine):
-    """'Engine' for the single-site DMRG algorithm.
+    """Engine for the single-site DMRG algorithm.
 
     Parameters
     ----------
@@ -1629,7 +1630,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     update_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.update_bond` is called.
+        added each time :meth:`DMRGEngine.update_bond` is called.
 
         =========== ===================================================================
         key         description
@@ -1648,7 +1649,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     sweep_stats : dict
         A dictionary with detailed statistics of the convergence.
         For each key in the following table, the dictionary contains a list where one value is
-        added each time :meth:`Engine.sweep` is called (with ``optimize=True``).
+        added each time :meth:`DMRGEngine.sweep` is called (with ``optimize=True``).
 
         ============= ===================================================================
         key           description

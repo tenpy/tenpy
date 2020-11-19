@@ -16,7 +16,7 @@ tebd_params = {
         "svd_min": 1.e-10
     }
 }
-eng = tebd.Engine(psi, M, tebd_params)
+eng = tebd.TEBDEngine(psi, M, tebd_params)
 eng.run_GS()  # imaginary time evolution with TEBD
 print("E =", sum(psi.expectation_value(M.H_bond)) / psi.L)
 print("final bond dimensions: ", psi.chi)

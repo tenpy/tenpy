@@ -21,17 +21,19 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+
+from .algorithm import Algorithm
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import asConfig
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta
 
-__all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
+__all__ = ['TDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
-class Engine:
-    """Time dependent variational principle 'Engine'.
+class TDVPEngine(Algorithm):
+    """Time dependent variational principle algorithm for MPS.
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TDVP_params` to :attr:`options`.
@@ -84,10 +86,10 @@ class Engine:
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     def __init__(self, psi, model, options, environment=None):
+        Algorithm.__init__(self, psi, options)
+        options = self.options
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
-        self.options = options = asConfig(options, "TDVP")
-        self.verbose = options.get('verbose', 1)
         self.lanczos_options = options.subconfig('lanczos_options')
         if environment is None:
             environment = MPOEnvironment(psi, model.H_MPO, psi)
@@ -96,10 +98,8 @@ class Engine:
         self.environment = environment
         if not psi.finite:
             raise ValueError("TDVP is only implemented for finite boundary conditions")
-        self.psi = psi
         self.L = self.psi.L
         self.dt = options.get('dt', 2)
-        self.trunc_params = options.subconfig('trunc_params', {})
         self.N_steps = options.get('N_steps', 10)
 
     @property
@@ -455,6 +455,18 @@ class Engine:
         s_new, N_h0 = lanczos_h0.run(dt)
         s_new = s_new.split_legs(['(vL.vR)'])
         return s_new
+
+
+class Engine(TDVPEngine):
+    """Deprecated old name of :class:`TDVPEngine`.
+
+    .. deprecated : v0.8.0
+        Renamed the `Engine` to `TDVPEngine` to have unique algorithm class names.
+    """
+    def __init__(self, psi, model, options):
+        msg = "Renamed `Engine` class to `TDVPEngine`."
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
+        TDVPEngine.__init__(self, psi, model, options)
 
 
 class H0_mixed:

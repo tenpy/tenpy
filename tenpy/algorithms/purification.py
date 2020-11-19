@@ -76,7 +76,7 @@ class PurificationApplyMPO(VariationalApplyMPO):
         return {'U': U, 'VH': VH, 'err': err}
 
 
-class PurificationTEBD(tebd.Engine):
+class PurificationTEBD(tebd.TEBDEngine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
     .. deprecated :: 0.6.0
@@ -180,7 +180,7 @@ class PurificationTEBD(tebd.Engine):
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
-        # ##### new hook compared to tebd.Engine.calc_U
+        # ##### new hook compared to tebd.TEBDEngine.calc_U
         theta, U_disent = self.disentangle(theta)
         # ####
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
@@ -442,8 +442,8 @@ class PurificationTEBD2(PurificationTEBD):
     """Similar as PurificationTEBD, but perform sweeps instead of brickwall.
 
     Instead of the A-B pattern of even/odd bonds used in TEBD, perform sweeps similar as in DMRG
-    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag` does for
-    imaginary time evolution).
+    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_imag` does
+    for imaginary time evolution).
     """
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.

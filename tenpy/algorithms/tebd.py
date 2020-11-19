@@ -9,7 +9,8 @@ In the simplest case, we apply first :math:`U=\exp(-i*dt*H^{even})`,
 then :math:`U=\exp(-i*dt*H^{odd})` for each time step :math:`dt`.
 This is correct up to errors of :math:`O(dt^2)`, but to evolve until a time :math:`T`, we need
 :math:`T/dt` steps, so in total it is only correct up to error of :math:`O(T*dt)`.
-Similarly, there are higher order schemata (in dt) (for more details see :meth:`Engine.update`).
+Similarly, there are higher order schemata (in dt) (for more details see
+:meth:`TEBDEngine.update`).
 
 Remember, that bond `i` is between sites `(i-1, i)`, so for a finite MPS it looks like::
 
@@ -42,15 +43,16 @@ import numpy as np
 import time
 import warnings
 
+from .algorithm import Algorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..tools.params import asConfig
 from ..linalg.random_matrix import CUE
 
-__all__ = ['Engine', 'RandomUnitaryEvolution']
+__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
 
 
-class Engine:
+class TEBDEngine(Algorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
     .. deprecated :: 0.6.0
@@ -70,10 +72,9 @@ class Engine:
 
     Options
     -------
-    .. cfg:config :: TEBD
+    .. cfg:config :: TEBDEngine
+        :include: Algorithm
 
-        trunc_params : dict
-            Truncation parameters as described in :cfg:config:`truncate`.
         start_time : float
             Initial value for :attr:`evolved_time`.
         start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
@@ -82,7 +83,7 @@ class Engine:
     Attributes
     ----------
     verbose : int
-        See :cfg:option:`TEBD.verbose`.
+        See :cfg:option:`TEBDEngine.verbose`.
     options: :class:`~tenpy.tools.params.Config`
         Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
     evolved_time : float | complex
@@ -108,13 +109,10 @@ class Engine:
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
     def __init__(self, psi, model, options):
-        self.options = options = asConfig(options, "TEBD")
-        self.verbose = options.verbose
-        self.trunc_params = options.subconfig('trunc_params')
-        self.psi = psi
+        Algorithm.__init__(self, psi, options)
         self.model = model
-        self.evolved_time = options.get('start_time', 0.)
-        self.trunc_err = options.get('start_trunc_err', TruncationError())
+        self.evolved_time = self.options.get('start_time', 0.)
+        self.trunc_err = self.options.get('start_trunc_err', TruncationError())
         self._U = None
         self._U_param = {}
         self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
@@ -133,7 +131,7 @@ class Engine:
     def run(self):
         """(Real-)time evolution with TEBD (time evolving block decimation).
 
-        .. cfg:configoptions :: TEBD
+        .. cfg:configoptions :: TEBDEngine
 
             dt : float
                 Time step.
@@ -177,7 +175,7 @@ class Engine:
             It is almost always more efficient (and hence advisable) to use DMRG.
             This algorithms can nonetheless be used quite well as a benchmark and for comparison.
 
-        .. cfg:configoptions :: TEBD
+        .. cfg:configoptions :: TEBDEngine
 
             delta_tau_list : list
                 A list of floats: the timesteps to be used.
@@ -643,7 +641,19 @@ class Engine:
         return U.split_legs()
 
 
-class RandomUnitaryEvolution(Engine):
+class Engine(TEBDEngine):
+    """Deprecated old name of :class:`TEBDEngine`.
+
+    .. deprecated : v0.8.0
+        Renamed the `Engine` to `TEBDEngine` to have unique algorithm class names.
+    """
+    def __init__(self, psi, model, options):
+        msg = "Renamed `Engine` class to `TEBDEngine`."
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
+        TEBDEngine.__init__(self, psi, model, options)
+
+
+class RandomUnitaryEvolution(TEBDEngine):
     """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.
 
     Instead of using a model Hamiltonian, this TEBD engine evolves with random two-site unitaries.
@@ -666,7 +676,7 @@ class RandomUnitaryEvolution(Engine):
     Options
     -------
     .. cfg:config :: RandomUnitaryEvolution
-        :include: TEBD
+        :include: TEBDEngine
 
         N_steps : int
             Number of two-site unitaries to be applied on each bond.
@@ -709,7 +719,7 @@ class RandomUnitaryEvolution(Engine):
 
     """
     def __init__(self, psi, options):
-        Engine.__init__(self, psi, None, options)
+        TEBDEngine.__init__(self, psi, None, options)
 
     def run(self):
         """Time evolution with TEBD and random two-site unitaries."""

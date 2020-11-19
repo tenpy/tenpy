@@ -30,7 +30,7 @@ def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
         },
         'verbose': verbose,
     }
-    eng = tebd.Engine(psi, M, tebd_params)
+    eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
 
     # expectation values
@@ -68,7 +68,7 @@ def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
         },
         'verbose': verbose,
     }
-    eng = tebd.Engine(psi, M, tebd_params)
+    eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
     E = np.mean(M.bond_energies(psi))  # M.bond_energies() works only a for NearestNeighborModel
     # alternative: directly measure E2 = np.mean(psi.expectation_value(M.H_bond))
@@ -100,7 +100,8 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
     # apply sigmaz on site i0
     psi.apply_local_op(i0, 'Sigmaz', unitary=True)
     dt_measure = 0.05
-    # tebd.Engine makes 'N_steps' steps of `dt` at once; for second order this is more efficient.
+    # tebd.TEBDEngine makes 'N_steps' steps of `dt` at once;
+    # for second order this is more efficient.
     tebd_params = {
         'order': 2,
         'dt': dt,
@@ -112,7 +113,7 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
         },
         'verbose': verbose,
     }
-    eng = tebd.Engine(psi, M, tebd_params)
+    eng = tebd.TEBDEngine(psi, M, tebd_params)
     S = [psi.entanglement_entropy()]
     for n in range(int(tmax / dt_measure + 0.5)):
         eng.run()
@@ -173,7 +174,7 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp, verbose=True):
         },
         'verbose': verbose,
     }
-    eng = tebd.Engine(psi, M_nn, tebd_params)  # use M_nn and grouped psi
+    eng = tebd.TEBDEngine(psi, M_nn, tebd_params)  # use M_nn and grouped psi
     eng.run_GS()  # the main work...
 
     # expectation values:

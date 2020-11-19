@@ -45,12 +45,12 @@ class Disentangler:
 
     Parameters
     ----------
-    parent : :class:`~tenpy.algorithms.tebd.Engine`
-        The parent class calling the disentangler. Mostly used to read out extra
+    parent : :class:`~tenpy.algorithms.purification.PurificationTEBD`
+        The parent class calling the disentangler. Mostly used to read out extra options.
 
     Attributes
     ----------
-    parent : :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.purification.PurificationTEBD`
         The parent class calling the disentangler.
     """
     def __init__(self, parent):
@@ -533,7 +533,7 @@ class MinDisentangler(Disentangler):
     ----------
     disentanglers : list of :class:`Disentangler`
         The disentanglers to be used.
-    parent : :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.purification.PurificationTEBD`
         The parent class calling the disentangler.
 
     Attributes
@@ -596,7 +596,7 @@ def get_disentangler(method, parent):
         ``composite := min_atom ['-' min_atom ...]``,
         ``min_atom := { 'min(' composite [',' composite ...] ')' } | atom``, and
         ``atom := {any key of `disentanglers_atom_parse_dict`}``.
-    parent : :class:`~tenpy.algorithms.tebd.Engine`
+    parent : :class:`~tenpy.algorithms.purification.PurificationTEBD`
         The parent class calling the disentangler.
 
     Returns

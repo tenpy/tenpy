@@ -40,7 +40,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         'dt': 0.1,
         'verbose': 0.,
     }
-    eng = tebd.Engine(psi, M, tebd_params)
+    eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.verbose = 0.02
     optimization.set_level(3)
     for i in range(5 + int(np.log(size) / np.log(local_dim))):

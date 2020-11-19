@@ -52,6 +52,10 @@ class Simulation:
         Simulation parameters.
     model : :class:`~tenpy.models.model.Model`
         The model to be simulated.
+    psi :
+        The tensor network state updated by the algorithm.
+    engine :
+        The engine of the algorithm.
     results : dict
         Collection of all the results to be saved in the end.
     output_filename : str
@@ -59,10 +63,10 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    _last_save : float
+        Time of the last call to :meth:`save_results`, initialized to startup time.
 
     """
-    InitStateBuilder = None  # needs to be set by subclasses
-
     def __init__(self, options):
         self.options = options = asConfig(options, 'Simulation')
         cwd = options.get("directory", None)

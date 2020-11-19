@@ -17,10 +17,10 @@ from test_dmrg import e0_tranverse_ising
 def test_trotter_decomposition():
     # check that the time steps sum up to what we expect
     for order in [1, 2, 4]:
-        dt = tebd.Engine.suzuki_trotter_time_steps(order)
+        dt = tebd.TEBDEngine.suzuki_trotter_time_steps(order)
         for N in [1, 2, 5]:
             evolved = [0., 0.]
-            for j, k in tebd.Engine.suzuki_trotter_decomposition(order, N):
+            for j, k in tebd.TEBDEngine.suzuki_trotter_decomposition(order, N):
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
@@ -48,7 +48,7 @@ def test_tebd(bc_MPS, g=0.5):
             'trunc_cut': 1.e-13
         }
     }
-    engine = tebd.Engine(psi, M, tebd_param)
+    engine = tebd.TEBDEngine(psi, M, tebd_param)
     engine.run_GS()
 
     print("norm_test", psi.norm_test())

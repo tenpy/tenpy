@@ -30,6 +30,7 @@ Added
   This function is now used e.g. to find lattice classes given the name, hence supporting user-defined lattices defined outside of TeNPy.
 - :func:`tenpy.tools.misc.get_recursive` and :func:`~tenpy.tools.misc.set_recursive` for nested data strucutres, e.g., parameters.
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
+- Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
 
 Changed
 ^^^^^^^
@@ -38,6 +39,8 @@ Changed
   merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc`.
 - Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
 - Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
+- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
+  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
 
 Fixed
 ^^^^^

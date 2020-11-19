@@ -449,7 +449,7 @@ def get_parameter(params, key, default, descr, asarray=False):
     Examples
     --------
     In the algorithm
-    :class:`~tenpy.algorithms.tebd.Engine` gets a dictionary of parameters.
+    :class:`~tenpy.algorithms.tebd.TEBDEngine` gets a dictionary of parameters.
     Beside doing other stuff, it calls :meth:`tenpy.models.model.NearestNeighborModel.calc_U_bond`
     with the dictionary as argument, which looks similar like:
 

@@ -31,15 +31,14 @@ from .truncation import svd_theta, TruncationError
 from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from ..tools.params import asConfig
-from ..tools.events import EventHandler
+from .algorithm import Algorithm
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
 ]
 
 
-class Sweep:
+class Sweep(Algorithm):
     r"""Prototype class for a 'sweeping' algorithm.
 
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
@@ -60,6 +59,7 @@ class Sweep:
     Options
     -------
     .. cfg:config :: Sweep
+        :include: Algorithm
 
         combine : bool
             Whether to combine legs into pipes. This combines the virtual and
@@ -70,10 +70,6 @@ class Sweep:
             :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : dict
             Lanczos parameters as described in :cfg:config:`Lanczos`.
-        trunc_params : dict
-            Truncation parameters as described in :cfg:config:`truncation`.
-        verbose : bool | int
-            Level of verbosity (i.e. how much status information to print); higher=more output.
 
     Attributes
     ----------
@@ -116,15 +112,13 @@ class Sweep:
     def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        self.options = options = asConfig(options, "Sweep")
-        self.psi = psi
-        self.verbose = options.verbose
+        super().__init__(psi, options)
+        options = self.options
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
 
         self.lanczos_params = options.subconfig('lanczos_params')
-        self.trunc_params = options.subconfig('trunc_params')
 
         self.env = None
         self.ortho_to_envs = []
@@ -132,7 +126,6 @@ class Sweep:
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
-        self.checkpoint = EventHandler("engine")
 
     @property
     def engine_params(self):
@@ -841,9 +834,8 @@ class VariationalCompression(Sweep):
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, options):
-        self.options = asConfig(options, "VariationalCompression")
+        super().__init__(psi, None, options)
         self.renormalize = []
-        Sweep.__init__(self, psi, None, self.options)
 
     def run(self):
         """Run the compression.
@@ -976,6 +968,8 @@ class VariationalApplyMPO(VariationalCompression):
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         The state to which
+    U_MPO : :class:`~tenpy.networks.mpo.MPO`
+        MPO to be applied to the state.
     options : dict
         See :cfg:config:`VariationalCompression`.
 
@@ -991,9 +985,8 @@ class VariationalApplyMPO(VariationalCompression):
         Used to keep track of renormalization in the last sweep for `psi.norm`.
     """
     def __init__(self, psi, U_MPO, options):
-        self.options = asConfig(options, "VariationalApplyMPO")
+        Sweep.__init__(self, psi, U_MPO, options)
         self.renormalize = [None] * (psi.L - int(psi.finite))
-        Sweep.__init__(self, psi, U_MPO, self.options)
 
     def init_env(self, U_MPO):
         """Initialize the environment.
