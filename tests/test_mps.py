@@ -5,7 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.lattice import Square
+from tenpy.models.lattice import Square, Chain, Honeycomb
 
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
@@ -445,6 +445,38 @@ def test_mps_compress(method, eps=1.e-13):
     psiSum2.test_sanity()
     assert (np.abs(psiSum2.overlap(psi) - .5) < 1e-13)
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
+
+
+def test_InitialStateBuilder():
+    s0 = site.SpinHalfSite()
+    lat1 = Chain(10, s0, bc_MPS='finite')
+    psi1 = mps.InitialStateBuilder(
+        lat1, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi1.test_sanity()
+    psi2 = mps.InitialStateBuilder(
+        lat1, {
+            'method': 'mps_product_state',
+            'product_state': ['up', 'down'] * 5,
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi2.test_sanity()
+    assert abs(psi1.overlap(psi2) - 1) < 1.e-14
+    psi3 = mps.InitialStateBuilder(
+        lat1, {
+            'method': 'fill_where',
+            'full_empty': ('up', 'down'),
+            'fill_where': "x_ind % 2 == 0",
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi3.test_sanity()
+    assert abs(psi1.overlap(psi3) - 1) < 1.e-14
 
 
 if __name__ == "__main__":

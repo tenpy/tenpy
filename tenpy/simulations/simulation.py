@@ -116,7 +116,7 @@ class Simulation:
         else:
             InitStateBuilder = init_state_builder_class
         init_state_params = self.options.subconfig('init_state_params', 'InitialStateBuilder')
-        builder = InitStateBuilder(self.model.lat, init_state_params)
+        builder = InitStateBuilder(self.model.lat, init_state_params, self.model.dtype)
         self.psi = builder.build()
 
     def init_algorithm(self):

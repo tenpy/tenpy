@@ -4140,12 +4140,16 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
 
 class InitialStateBuilder:
-    """Initial State Builder to provide common sets of MPS initial states.
+    """Class to simplify providing common sets of intial states.
 
     Parameters
     ----------
     lattice : :class:`~tenpy.models.lattice.Lattice`
         The lattice class defining the geometry and sites.
+    options : dict
+        Parameter dictionary which specifies the initial state to be generated.
+    model_dtype : :class:`numpy.dtype`
+        Data type of the model hamiltonian, default for the dtype of the resulting `psi`.
 
     Options
     -------
@@ -4154,18 +4158,22 @@ class InitialStateBuilder:
         method : str
             Selects the category of the initial state, and in particular the
             name of the method called by :meth:`build` to generate the state.
-            The available other parameters depend on
+            The available other parameters depend on the chosen method.
 
     .. todo ::
 
         documentation; more methods; test ...
     """
-    def __init__(self, lattice, options):
+    def __init__(self, lattice, options, model_dtype=np.float64):
         self.lattice = lattice
         self.options = asConfig(options, 'init_state_params')
+        self.model_dtype = model_dtype
 
-    def build(self):
-        """Build an initial state of a given category.
+    def run(self):
+        """Build an initial state from a specified method.
+
+        Reads out the option :cfg:option:`InitialStateBuilder.method` to chooce a method of the
+        class which generates the state.
 
         Returns
         -------
@@ -4189,17 +4197,20 @@ class InitialStateBuilder:
 
             filename : str
                 The filename from which to load the state
-            recursive_key : str
+            key : str
                 Key within the file to be used for loading the data.
-                See :func:`tenpy.tools.misc.get_recursive`.
+                Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
-        key = self.options.get('key', "/psi")
-        print("loading initial state from", repr(filename), "with subkey", subkey)
-        # TODO load only the subkey from the data
-        # if filename.endswith('.h5') or filename.endswith('.hdf5'):
-        data = hdf5_io.load(filename)
-        psi = get_recursive(data, key)
+        key = self.options.get('key', "psi")
+        if self.options.verbose >= 1.:
+            print("loading initial state from", repr(filename), "with subkey", subkey)
+        if filename.endswith('.h5') or filename.endswith('.hdf5'):
+            with hdf5_io.h5py.File(filename, 'r') as f:
+                psi = hdf5_io.load_from_hdf5(f, key)
+        else:
+            data = hdf5_io.load(filename)
+            psi = get_recursive(data, key)
         psi.test_sanity()
         return psi
 
@@ -4213,42 +4224,149 @@ class InitialStateBuilder:
         .. cfg:configoptions :: InitStateBuilder
 
             product_state : array of str
-                The p_state passed on to :meth:`MPS.from_lat_product_state`.
+                The `p_state` passed on to :meth:`MPS.from_lat_product_state`.
         """
-
         if p_state is None:
             p_state = self.options['product_state']
-        # print("initial state: ", array3D_to_str(p_state)) # TODO
-        # self.check_filling(p_state)
-        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=self.dtype)
+        self.check_filling(p_state)
+        if self.options.verbose >= 1.:
+            print("initialize product state \n", p_state)
+        dtype = self.options.get('dtype', self.model_dtype)
+        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype)
         return psi
 
-    # TODO
-    # def check_filling(self, p_state):
-    #     """Ensure that the filling matches `check_filling` parameter."""
-    #     check_filling = self.options.get("check_filling", None)
-    #     if check_filling is None:
-    #         return
-    #     N_filled = np.sum(p_state == 'full')
-    #     N_total = p_state.size
-    #     if isinstance(check_filling, list):
-    #         p, q = check_filling
-    #     else:
-    #         p, q = int(round(check_filling * N_total)), N_total
-    #         if abs(p - check_filling * N_total) > 1.e-13:
-    #             raise ValueError("check_filling={0:.5f} doesn't fit in p_state.size = {1:d}"
-    #                              .format(check_filling, N_total))
-    #     if N_filled * q != N_total * p:  # int-version of N_filled/N_total != p/q
-    #         raise ValueError("unexpected filling {0:.5f} != check_filling = {1:.5f}"
-    #                          .format(N_filled/N_total, p/q))
-    #     # done
+    def mps_product_state(self, p_state=None):
+        """Initialize from a lattice product state.
+
+        See :meth:`MPS.from_product_state` for details.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitStateBuilder
+
+            product_state : list of str
+                The `p_state` passed on to :meth:`MPS.from_product_state`.
+        """
+        if p_state is None:
+            p_state = self.options['product_state']
+        self.check_filling(p_state)
+        if self.options.verbose >= 1.:
+            print("initialize product state \n", p_state)
+        dtype = self.options.get('dtype', self.model_dtype)
+        lat = self.lattice
+        psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype)
+        return psi
+
+    def check_filling(self, p_state):
+        """Ensure that the filling of the product state matches `check_filling` parameter.
+
+        .. todo ::
+            generalize this to the actual charges of the resulting MPS.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitStateBuilder
+
+            check_filling : None | (int, int) or float
+                The desired filling as float ``p/q``, or by a tuple ``(p, q)``.
+                ``None`` (default) disables the check.
+            full_empty : (str, str)
+                Definition of which local states are "full" and "emtpy".
+                For example you can use ``full_empty=('up', 'down')`` if you have spin sites.
+        """
+        check_filling = self.options.get("check_filling", None)
+        if check_filling is None:
+            return
+        full, empty = self.options.get("full_empty", ('full', 'empty'))
+        p_state = np.asarray(p_state, dtype=np.object)
+        N_filled = np.sum(p_state == full)
+        N_total = p_state.size
+        try:
+            p, q = check_filling
+            check_filling = p / q
+        except:
+            p, q = int(round(check_filling * N_total)), N_total
+        if abs(p - check_filling * N_total) > 1.e-13:
+            raise ValueError(
+                "check_filling={0:.5f} doesn't fit as integer in p_state.size = {1:d}".format(
+                    check_filling, N_total))
+        if N_filled * q != N_total * p:  # int-version of N_filled/N_total != p/q
+            raise ValueError("unexpected filling {0:.5f} != check_filling = {1:.5f}".format(
+                N_filled / N_total, check_filling))
+        # done
 
     def fill_where(self):
+        """Allow to specify a condition where sites should be filled.
+
+        .. warning ::
+            The `fill_where` string is parsed with the python function `eval`;
+            this is unsafe if the variable comes from an untrusted source (e.g. the internet).
+
+        Options
+        -------
+        .. cfg:configoptions :: InitStateBuilder
+
+            fill_where : str
+                A string specifying the condition where to fill sites.
+                See examples in :meth:`fill_where`.
+            full_empty : (str, str)
+                Definition of which local states are "full" and "emtpy".
+                For example you can use ``full_empty=('up', 'down')`` if you have spin sites.
+
+        Examples
+        --------
+        Possible variables for conditions are specified in :meth:`fill_where__get_variables`,
+        for example `x_ind, y_ind, u_ind`.
+
+        You can do arbitrary logical expressions. Example conditions:
+        - ``"x_ind == 0"``
+        - ``"AND(x_ind == 0, y_ind == 0)"``
+        - ``"AND(x_ind == 0, IN(y_ind, [0, 2])"``
+        - ``"WITHIN(x_ind, 0.25*Lx, 0.75*Lx )"`` # 0.25*Lx <= x <= 0.75&Lx
+        """
+        variables = self.fill_where__get_variables()
+        shape = variables['x_ind'].shape
+        condition = self.options["fill_where"]
+        full, empty = self.options.get('full_empty', ('full', 'empty'))
+        try:
+            fill_array = eval(condition, variables)
+        except:
+            print("Error in InitialStateBuilder.fill_where condition")
+            print(">>> condition:")
+            print(condition)
+            print(">>> available variables:")
+            print(sorted(variables.keys()))
+            raise  # re-throw the error, we just print usefull debugging info
+        p_state = np.where(fill_array, to_array([full], shape=shape, dtype=np.object),
+                           to_array([empty], shape=shape, dtype=np.object))
+        return self.lat_product_state(p_state)
+
+    def fill_where__get_variables(self):
+        """Define the variables which can be used in the condition of :meth:`fill_where`.
+
+        Here, the following variables get defined.
+
+        x_ind, y_ind, u_ind : int
+            Lattice indices of the
+        eps : float
+            Cutoff ``1.e-12`` that can get used when it is necessary to compare floats
+        np :
+            Numpy module, allowing to use any function from numpy.
+        AND, OR, XOR, NOT, ANY, ALL, CLOSE, EQUAL, IN, WITHIN
+            Function aliases to allow logical combinations.
+            Use for example as ``AND(x_ind == 0, IN(y_ind, [0, 2, 5]))``.
+        """
         lattice = self.lattice
-        assert lattice.dim == 2
-        Lx, Ly, Lu = lattice.shape
-        x, ky, u = np.mgrid[0:Lx, 0:Ly, 0:Lu]
-        variables = {'x_ind': x, 'ky_ind': ky, 'u_ind': u}
+        if lattice.dim == 1:
+            Lx, Lu = lattice.shape
+            x, u = np.mgrid[0:Lx, 0:Lu]
+            variables = {'x_ind': x, 'u_ind': u, 'Lx': Lx, 'L': Lx, 'Lu': Lu}
+        elif lattice.dim == 2:
+            Lx, Ly, Lu = lattice.shape
+            x, y, u = np.mgrid[0:Lx, 0:Ly, 0:Lu]
+            variables = {'x_ind': x, 'y_ind': y, 'u_ind': u, 'Lx': Lx, 'Ly': Ly, 'Lu': Lu}
+        else:
+            raise NotImplementedError("3D lattice not handled...")
 
         def any_(*cond):
             return np.any(cond, axis=0)
@@ -4284,21 +4402,7 @@ class InitialStateBuilder:
             'WITHIN': within,
             'eps': 1.e-12,
         })
-
-        condition = self.options["condition"]
-        full, empty = self.options.get('full_empty_states', ('full', 'empty'))
-        try:
-            fill_array = eval(condition, variables)
-        except:
-            print("Error in InitialStateBuilder.fill_where condition")
-            print(">>> condition:")
-            print(condition)
-            print(">>> available variables:")
-            print(sorted(variables.keys()))
-            raise  # re-throw the error, we just print usefull debugging info
-        p_state = np.where(fill_array, np.array(["full"], dtype=np.object),
-                           np.array(["empty"], dtype=np.object))
-        return self.lat_product_state(p_state)
+        return variables
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

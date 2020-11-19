@@ -48,7 +48,7 @@ def to_iterable_of_len(a, L):
     return a
 
 
-def to_array(a, shape=(None, )):
+def to_array(a, shape=(None, ), dtype=None):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
@@ -64,13 +64,15 @@ def to_array(a, shape=(None, )):
     shape : tuple of {None | int}
         The desired shape of the array. An entry ``None`` indicates arbitrary len >=1.
         For int entries, tile the array periodically to fit the len.
+    dtype :
+        Optionally specifies the data type.
 
     Returns
     -------
     a_array : ndarray
         A copy of `a` converted to a numpy ndarray of desired dimension and shape.
     """
-    a = np.array(a)  # copy
+    a = np.array(a, dtype=dtype)  # copy
     if a.ndim != len(shape):
         if a.size == 1:
             a = np.reshape(a, [1] * len(shape))
