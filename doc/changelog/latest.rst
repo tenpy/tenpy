@@ -23,6 +23,8 @@ Added
   code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
 - :meth:`tenpy.tools.misc.group_by_degeneracy`
 - :meth:`tenpy.tools.fit.entropy_profile_from_CFT` and :meth:`tenpy.tools.fit.central_charge_from_S_profile`
+- :meth:`tenpy.networks.site.Site.multiply_operators` as a variant of :meth:`~tenpy.networks.site.Site.multiply_op_names` accepting both string and npc arrays.
+- :meth:`tenpy.tools.events.EventHandler` to simplify call-backs e.g. for measurement codes during an algorithms.
 
 Changed
 ^^^^^^^
@@ -37,3 +39,5 @@ Fixed
 - The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
 - The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was wired.
+- #116: Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
+  other correlation functions.

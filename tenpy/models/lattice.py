@@ -1302,6 +1302,9 @@ class IrregularLattice(Lattice):
 
     Let's imagine that we have two different sites; for concreteness we can thing of a
     fermion site, which we represent with ``'F'``, and a spin site ``'S'``.
+    If you want to preserve charges, take a look at
+    :func:`~tenpy.networks.site.set_common_charges` for the proper way to initialize the sites.
+
 
     You could now imagine that to have fermion chain with spins on the "bonds".
     In the periodic/infinite case, you would simply define

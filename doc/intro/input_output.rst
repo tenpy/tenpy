@@ -82,6 +82,11 @@ The usage is very similar to pickle::
         # or for partial reading:
         pars = hdf5_io.load_from_hdf5(f, "/parameters")
 
+.. warning ::
+    Like loading a pickle file, loading data from a manipulated HDF5 file with the functions
+    described has the potential to cause arbitrary code execution.
+    Only load data from trusted sources!
+
 
 .. note ::
     The `hickle <https://github.com/telegraphic/hickle>`_ package imitates the pickle functionality 
@@ -121,12 +126,6 @@ Guidelines of the format:
    such that ``/c`` and ``/d`` are the same HDF5 dataset/group.
    Also avoid the copies during the loading, i.e., the loaded dictionary should again have two references to a single object `large_obj`.
    This is also necessary to allow saving and loading of objects with cyclic references.
-7. Loading a dataset should be (fairly) secure and not execute arbitrary python code (even if the dataset was manipulated),
-   as it is the case for pickle.
-
-   *Disclaimer*: I'm not an security expert, so I can't guarantee that...
-   Also, loading a HDF5 file can import other python modules, so importing
-   a manipulated file is not secure if you downloaded a malicious python file as well.
 
 
 The full format specification is given by the what the code in :mod:`~tenpy.tools.hdf5_io` does...

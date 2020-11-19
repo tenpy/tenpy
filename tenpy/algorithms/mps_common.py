@@ -18,8 +18,6 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 The :class:`VariationalCompression` and :class:`VariationalApplyMPO`
 implemented here also directly use the :class:`Sweep` class.
 
-.. todo ::
-    Rebuild TDVP engine as subclasses of sweep.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
@@ -34,6 +32,7 @@ from ..networks.mps import MPSEnvironment
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
+from ..tools.events import EventHandler
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
@@ -44,7 +43,10 @@ class Sweep:
     r"""Prototype class for a 'sweeping' algorithm.
 
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
-    includes DMRG, TDVP, etc. Only DMRG is currently implemented in this way.
+    includes DMRG, TDVP, etc.
+
+    .. todo ::
+        TDVP is currently not implemented in with the sweep class.
 
 
     Parameters
@@ -77,6 +79,10 @@ class Sweep:
 
     Attributes
     ----------
+    EffectiveH : class
+        Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
+        It's length attribute determines how many sites are optimized/updated at once,
+        see also :attr:`n_optimize`.
     options: :class:`~tenpy.tools.params.Config`
         Optional parameters.
     E_trunc_list : list
@@ -128,11 +134,23 @@ class Sweep:
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
+        self.checkpoint = EventHandler("engine")
 
     @property
     def engine_params(self):
         warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
+
+    @property
+    def n_optimize(self):
+        """the number of sites to be optimized over at once.
+
+        Indirectly set by the class attribute :attr:`EffectiveH` and it's `length`.
+        For example, :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` uses the
+        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has ``n_optimize=2``,
+        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has ``n_optimize=1``.
+        """
+        return self.EffectiveH.length
 
     def init_env(self, model=None):
         """(Re-)initialize the environment.

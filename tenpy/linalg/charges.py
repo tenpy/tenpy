@@ -1588,6 +1588,7 @@ def _find_row_differences(qflat):
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
+@use_cython
 def _map_blocks(blocksizes):
     """Create an index array mapping 1D blocks of given sizes to a new array.
 

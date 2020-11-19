@@ -21,6 +21,7 @@ def export_to_datadir():
 def test_pickle():
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
+    io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
     with tempfile.TemporaryDirectory() as tdir:
         filename = 'test.pkl'
         with open(os.path.join(tdir, filename), 'wb') as f:
@@ -28,6 +29,7 @@ def test_pickle():
         with open(os.path.join(tdir, filename), 'rb') as f:
             data_imported = pickle.load(f)
     io_test.assert_equal_data(data_imported, data)
+    io_test.assert_event_handler_example_works(data_imported)
 
 
 @pytest.mark.parametrize('fn', datadir_pkl)
@@ -43,6 +45,7 @@ def test_import_from_datadir(fn):
     else:
         data_expected = io_test.gen_example_data('0.4.0')
     io_test.assert_equal_data(data, data_expected)
+    io_test.assert_event_handler_example_works(data)
 
 
 if __name__ == "__main__":
