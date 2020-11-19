@@ -449,9 +449,9 @@ def test_mps_compress(method, eps=1.e-13):
 
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite()
-    lat1 = Chain(10, s0, bc_MPS='finite')
+    lat = Chain(10, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
-        lat1, {
+        lat, {
             'method': 'lat_product_state',
             'product_state': [['up'], ['down']],
             'check_filling': 0.5,
@@ -459,7 +459,7 @@ def test_InitialStateBuilder():
         }).run()
     psi1.test_sanity()
     psi2 = mps.InitialStateBuilder(
-        lat1, {
+        lat, {
             'method': 'mps_product_state',
             'product_state': ['up', 'down'] * 5,
             'check_filling': 0.5,
@@ -468,7 +468,7 @@ def test_InitialStateBuilder():
     psi2.test_sanity()
     assert abs(psi1.overlap(psi2) - 1) < 1.e-14
     psi3 = mps.InitialStateBuilder(
-        lat1, {
+        lat, {
             'method': 'fill_where',
             'full_empty': ('up', 'down'),
             'fill_where': "x_ind % 2 == 0",
@@ -477,6 +477,15 @@ def test_InitialStateBuilder():
         }).run()
     psi3.test_sanity()
     assert abs(psi1.overlap(psi3) - 1) < 1.e-14
+    psi4 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'randomized',
+            'randomized_from_method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    assert abs(psi4.overlap(psi1)) < 0.1  # randomizing should definitely lead to small overlap!
 
 
 if __name__ == "__main__":

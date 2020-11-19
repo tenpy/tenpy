@@ -527,6 +527,8 @@ def get_recursive(nested_data, recursive_key, split="/"):
     """
     if recursive_key.startswith(split):
         recursive_key = recursive_key[len(split):]
+    if not recursive_key:
+        return nested_data  # return the original data if recursive_key is just "/"
     for subkey in recursive_key.split(split):
         nested_data = nested_data[subkey]
     return nested_data

@@ -46,8 +46,7 @@ class Sweep:
     includes DMRG, TDVP, etc.
 
     .. todo ::
-        TDVP is currently not implemented in with the sweep class.
-
+        TDVP is currently not implemented with the sweep class.
 
     Parameters
     ----------

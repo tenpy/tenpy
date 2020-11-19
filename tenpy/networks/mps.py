@@ -4161,8 +4161,7 @@ class InitialStateBuilder:
             The available other parameters depend on the chosen method.
 
     .. todo ::
-
-        documentation; more methods; test ...
+        provide examples
     """
     def __init__(self, lattice, options, model_dtype=np.float64):
         self.lattice = lattice
@@ -4180,11 +4179,8 @@ class InitialStateBuilder:
         psi : :class:`MPS`
             The generated MPS.
         """
-        method_name = self.options.get('method', 'product_state')
-        method = getattr(self, method_name, None)
-        if method is None:
-            msg = "method {0!r} for initial state not found in {1!s}"
-            raise ValueError(msg.format(method_name, self.__class__.__name__))
+        method_name = self.options['method']
+        method = getattr(self, method_name)
         psi = method()
         return psi
 
@@ -4193,16 +4189,16 @@ class InitialStateBuilder:
 
         Options
         -------
-        .. cfg:configoptions :: InitStateBuilder
+        .. cfg:configoptions :: InitialStateBuilder
 
             filename : str
                 The filename from which to load the state
-            key : str
+            file_data_key : str
                 Key within the file to be used for loading the data.
                 Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
-        key = self.options.get('key', "psi")
+        key = self.options.get('file_data_key', "psi")
         if self.options.verbose >= 1.:
             print("loading initial state from", repr(filename), "with subkey", subkey)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):
@@ -4221,7 +4217,7 @@ class InitialStateBuilder:
 
         Options
         -------
-        .. cfg:configoptions :: InitStateBuilder
+        .. cfg:configoptions :: InitialStateBuilder
 
             product_state : array of str
                 The `p_state` passed on to :meth:`MPS.from_lat_product_state`.
@@ -4242,7 +4238,7 @@ class InitialStateBuilder:
 
         Options
         -------
-        .. cfg:configoptions :: InitStateBuilder
+        .. cfg:configoptions :: InitialStateBuilder
 
             product_state : list of str
                 The `p_state` passed on to :meth:`MPS.from_product_state`.
@@ -4265,7 +4261,7 @@ class InitialStateBuilder:
 
         Options
         -------
-        .. cfg:configoptions :: InitStateBuilder
+        .. cfg:configoptions :: InitialStateBuilder
 
             check_filling : None | (int, int) or float
                 The desired filling as float ``p/q``, or by a tuple ``(p, q)``.
@@ -4304,7 +4300,7 @@ class InitialStateBuilder:
 
         Options
         -------
-        .. cfg:configoptions :: InitStateBuilder
+        .. cfg:configoptions :: InitialStateBuilder
 
             fill_where : str
                 A string specifying the condition where to fill sites.
@@ -4403,6 +4399,44 @@ class InitialStateBuilder:
             'eps': 1.e-12,
         })
         return variables
+
+    def randomized(self):
+        """Initialize a state with another method and then apply a RandomUnitaryEvolution.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitialStateBuilder
+
+            randomized_from_method : str
+                Selects another method to initialize the starting state to be randomized,
+                e.g., ``'lat_product_state'`` for :meth:`lat_product_state`.
+            randomize_params : dict-like
+                Parameters given to the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
+                In particular, you might want to set the `N_steps` and `trunc_params['chi_max']`.
+                The default is {'N_steps': 10, 'trunc_params': {'chi_max': 100}}``.
+
+            randomize_steps : int
+                How many random two-site unitaries to apply to each MPS bond.
+                The maximal range of correlations induced is twice that many sites along the MPS.
+            randomize_max_chi : int
+                Maximum bond dimension to keep during the RandomUnitaryEvolution.
+            randomize_canonicalize : bool
+                Whether to call :meth:`MPS.canonical_form` before returning the state.
+        """
+        method_name = self.options['randomized_from_method']
+        method = getattr(self, method_name)
+        psi = method()
+        steps = self.options.get('randomize_steps', 20)
+        max_chi = self.options.get('randomize_max_chi', 100)
+        canonicalize = self.options.get('randomize_canonicalize', True)
+        from ..algorithms.tebd import RandomUnitaryEvolution
+        params = {'N_steps': 10, 'trunc_params': {'chi_max': 100}}
+        params = self.options.subconfig('randomize_params', params)
+        eng = RandomUnitaryEvolution(psi, params)
+        eng.run()
+        if canonicalize:
+            psi.canonical_form()
+        return psi
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
