@@ -3,6 +3,16 @@
 The "simulation" class tries to put everything need for a simulation in a structured form and
 collects task like initializing the tensor network state, model and algorithm classes,
 running the actual algorithm, possibly performing measurements and saving the results.
+
+
+.. todo ::
+    provide examples.
+
+.. todo ::
+    Not all algorithms have the Algorithm(psi, model, options).run() interface
+
+.. todo ::
+    function to resume simulations
 """
 # Copyright 2020 TeNPy Developers, GNU GPLv3
 
@@ -58,6 +68,22 @@ class Simulation:
         The engine of the algorithm.
     results : dict
         Collection of all the results to be saved in the end.
+        In a standard simulation, it will have the following entries.
+
+        simulation_parameters: nested dict
+            The simulation parameters passed as `options`.
+        version_info : dict
+            Information of the used library/code versions and simulation class.
+            See :meth:`get_version_info`.
+        measurements : dict
+            Data of all the performed measurements.
+        psi :
+            The final tensor network state.
+    measurement_event : :class:`~tenpy.tools.events.EventHandler`
+        An event that gets emitted each time when measurements should be performed.
+        The callback functions should take :attr:`psi`, the simulation class itself,
+        and a dictionary `results` as arguments.
+        They should directly write the results into that dictionary.
     output_filename : str
         Filename for output.
     _backup_filename : str
@@ -67,7 +93,10 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
 
     """
+    #:
     default_algorithm = 'TwoSiteDMRGEngine'
+
+    default_measurements = []
 
     def __init__(self, options):
         self.options = options = asConfig(options, 'Simulation')
@@ -81,6 +110,7 @@ class Simulation:
         }
         self._last_save = time.time()
         self._fix_output_filenames()
+        self.measurement_event = EventHandler("psi, simulation, results")
 
     def run(self):
         """Run the whole simulation."""
@@ -93,7 +123,7 @@ class Simulation:
         self.save_results()
 
     def init_model(self):
-        """Initialize a model from the model parameters.
+        """Initialize a :attr:`model` from the model parameters.
 
         Options
         -------
@@ -104,7 +134,6 @@ class Simulation:
             model_params : dict
                 Dictionary with parameters for the model; see the documentation of the
                 corresponding `model_class`.
-
         """
         model_class_name = self.options["model_class"]  # no default value!
         if isinstance(model_class_name, str):
@@ -115,15 +144,26 @@ class Simulation:
         self.model = ModelClass(model_params)
 
     def init_state(self):
-        init_state_builder_class = self.options.get('init_state_builder', 'InitialStateBuilder')
-        if isinstance(init_state_builder_class, str):
-            InitStateBuilder = find_subclass(tenpy.networks.mps.InitialStateBuilder,
-                                             init_state_builder_class)
+        """Initialize a tensor network :attr:`psi`.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            initial_state_builder_class : string | class
+                Mandatory. Name or class for the model to be initialized.
+            initial_state_params : dict
+                Dictionary with parameters for the model; see the documentation of the
+                corresponding `model_class`.
+        """
+        builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
+        if isinstance(builder_class, str):
+            Builder = find_subclass(tenpy.networks.mps.InitialStateBuilder, builder_class)
         else:
-            InitStateBuilder = init_state_builder_class
-        init_state_params = self.options.subconfig('init_state_params', 'InitialStateBuilder')
-        builder = InitStateBuilder(self.model.lat, init_state_params, self.model.dtype)
-        self.psi = builder.build()
+            InitStateBuilder = builder_class
+        params = self.options.subconfig('initial_state_params', 'InitialStateBuilder')
+        initial_state_builder = Builder(self.model.lat, init_state_params, self.model.dtype)
+        self.psi = initial_state_builder.build()
 
     def init_algorithm(self):
         alg_class_name = self.options("algorithm_class", self.default_algorithm)
@@ -132,17 +172,54 @@ class Simulation:
         else:
             AlgorithmClass = alg_class_name
         algorithm_params = self.options.subconfig('algorithm_params')
-        self.engine = AlgorithmClass(
-            self.psi, self.model, algorithm_params)  # TODO do all algorithms have this interface?!
-
-    def run_algorithm(self):
-        self.engine.run()
+        # TODO not algorithms have this interface!
+        self.engine = AlgorithmClass(self.psi, self.model, algorithm_params)
 
     def init_measurements(self):
-        raise NotImplementedError("TODO")
+        """Initialize and prepare measurements."""
+        # TODO allow to specify measurement functions in parameters
+
+        results = self.perform_measurements()
+        results = {k: [v] for k, v in results}
+        self.results['measurements'] = results
+
+    def run_algorithm(self):
+        """Run the algorithm. Calls ``self.engine.run()``."""
+        self.engine.run()
+
+    def make_measurements(self):
+        """Perform measurements and merge the results into ``self.results['measurements']``."""
+        results = self.perform_measurements()
+        previous_results = self.results['measurements']
+        for k, v in results:
+            previous_results[k].append(v)
+        # done
+
+    def perform_measurements(self):
+        """Emits the :attr:`measurement_event` to call measurement functions and collect results.
+
+        Returns
+        -------
+        results : dict
+            The results from calling the measurement functions.
+        """
+        # TODO: save-guard measurements with try-except?
+        results = {}
+        returned = self.measurement_event.emit(results=results,
+                                               simulation=self,
+                                               psi=simulation.psi)
+        # still save the values returned
+        returned = [entry for entry in returned if entry is not None]
+        if len(returned) > 0:
+            msg = ("Some measurement function returned a value instead of writing to `results`.\n"
+                   "Add it to measurement results as 'UNKNOWN'.")
+            warnings.warn(msg)
+            results['UNKNOWN'] = returned
+        return results
 
     def final_measurements(self):
-        raise NotImplementedError("TODO")
+        self.make_measurements()
+        pass
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducability."""
@@ -252,13 +329,6 @@ class Simulation:
 
 class MPSSimulation(Simulation):
     def init_psi(self):
-        sim_args = self.options
-        init_state = sim_args['initial_state']
-        model = self.model
-        if isinstance(init_state, dict) and init_state.get('category', "") == 'from_file':
-            changed = dmrg_submit.get_changed_parameters(sim_args, sim_args["change_parameters"])
-            init_state['filename'] = init_state['filename'].format(**changed)
-        self.psi = prepare_initial_state(init_state, lattice=model.lat, dtype=model.H_MPO.dtype)
 
         E_initial = self.results['E_initial'] = model.H_MPO.expectation_value(self.psi)
         print(f"E_initial = <psi_init|H|psi_init> = {E_initial:.12f}")

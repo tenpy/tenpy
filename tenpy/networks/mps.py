@@ -4193,12 +4193,12 @@ class InitialStateBuilder:
 
             filename : str
                 The filename from which to load the state
-            file_data_key : str
+            data_key : str
                 Key within the file to be used for loading the data.
                 Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
-        key = self.options.get('file_data_key', "psi")
+        key = self.options.get('data_key', "psi")
         if self.options.verbose >= 1.:
             print("loading initial state from", repr(filename), "with subkey", subkey)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):

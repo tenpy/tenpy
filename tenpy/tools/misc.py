@@ -496,6 +496,8 @@ def find_subclass(base_class, subclass_name):
         Class with name `subclass_name` which is a subclass of the `base_class`.
         None, if no subclass of the given name is found.
     """
+    if base_class.__name__ == subclass_name:
+        return base_class
     subclasses = base_class.__subclasses__()
     for subcls in subclasses:
         if subcls.__name__ == subclass_name:
