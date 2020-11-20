@@ -4,4 +4,8 @@
 from . import simulation
 from .simulation import *
 
-__all__ = simulation.__all__
+__all__ = simulation.__all__ + ['TimeEvolution']
+
+
+class TimeEvolution(MPSSimulation):
+    default_algorithm = 'TEBDEngine'

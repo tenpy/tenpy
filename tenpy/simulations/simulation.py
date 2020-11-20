@@ -67,6 +67,8 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
 
     """
+    default_algorithm = 'TwoSiteDMRGEngine'
+
     def __init__(self, options):
         self.options = options = asConfig(options, 'Simulation')
         cwd = options.get("directory", None)
@@ -124,9 +126,14 @@ class Simulation:
         self.psi = builder.build()
 
     def init_algorithm(self):
-        # TODO need common algorithm base class
-        raise NotImplementedError("subclasses should implement this")
-        self.engine = AlgorithmClass(psi, model, algorithm_params)
+        alg_class_name = self.options("algorithm_class", self.default_algorithm)
+        if isinstance(alg_class_name, str):
+            AlgorithmClass = find_subclass(tenpy.algorithms.algorithm.Algorithm, alg_class_name)
+        else:
+            AlgorithmClass = alg_class_name
+        algorithm_params = self.options.subconfig('algorithm_params')
+        self.engine = AlgorithmClass(
+            self.psi, self.model, algorithm_params)  # TODO do all algorithms have this interface?!
 
     def run_algorithm(self):
         self.engine.run()
@@ -244,8 +251,6 @@ class Simulation:
 
 
 class MPSSimulation(Simulation):
-    InitStateBuilder = InitialStateBuilder
-
     def init_psi(self):
         sim_args = self.options
         init_state = sim_args['initial_state']

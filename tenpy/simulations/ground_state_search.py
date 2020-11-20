@@ -4,4 +4,8 @@
 from . import simulation
 from .simulation import *
 
-__all__ = simulation.__all__
+__all__ = simulation.__all__ + ['GroundStateSearch']
+
+
+class GroundStateSearch(MPSSimulation):
+    default_algorithm = 'TwoSiteDMRGEngine'
