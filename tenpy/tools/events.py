@@ -107,6 +107,13 @@ class EventHandler:
         self.listeners = []
         self._id_counter = 0
 
+    def copy(self):
+        """Make a (shallow) copy."""
+        cp = EventHandler(self.arg_descr)
+        cp.listeners = self.listeners[:]
+        cp._id_counter = self._id_counter
+        return cp
+
     @property
     def id_of_last_connected(self):
         if self._id_counter == 0:
@@ -156,7 +163,8 @@ class EventHandler:
         Parameters
         ----------
         listener_id : int
-            The id of the listener returned by :meth:`connect`.
+            The id of the listener, as given by :attr:`id_of_last_connected`
+            right after calling :meth:`connect`.
         """
         for i, listener in enumerate(self.listeners):
             if listener.listener_id == 0:
