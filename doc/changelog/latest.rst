@@ -48,5 +48,6 @@ Fixed
 - The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
 - The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was wired.
-- #116: Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
-  other correlation functions.
+- Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
+  other correlation functions (:issue:`116`).
+- :mod:`tenpy.tools.hdf5_io` did not work with h5py version >= (3,0) due to a change in string encoding (:issue:`117`).

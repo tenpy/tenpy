@@ -76,6 +76,12 @@ import importlib
 import warnings
 import sys
 
+try:
+    import h5py
+    h5py_version = h5py.version.version_tuple
+except ImportError:
+    h5py_version = (0, 0)
+
 __all__ = [
     'save', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
     'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver', 'Hdf5Loader', 'save_to_hdf5',
@@ -116,7 +122,6 @@ def save(data, filename, mode='w'):
         with gzip.open(filename, mode + 'b') as f:
             pickle.dump(data, f)
     elif filename.endswith('.hdf5') or filename.endswith('.h5'):
-        import h5py
         with h5py.File(filename, mode) as f:
             save_to_hdf5(f, data)
     else:
@@ -146,7 +151,6 @@ def load(filename):
         with gzip.open(filename, 'rb') as f:
             data = pickle.load(f)
     elif filename.endswith('.hdf5') or filename.endswith('.h5'):
-        import h5py
         with h5py.File(filename, 'r') as f:
             data = load_from_hdf5(f)
     else:
@@ -336,7 +340,7 @@ class Hdf5Ignored:
 
 
 class Hdf5Saver:
-    """Engine to save simple enough objects into a HDF5 file.
+    """Class to save simple enough objects into a HDF5 file.
 
     The intended use of this class is through :func:`save_to_hdf5`, which is simply an alias
     for ``Hdf5Saver(h5group).save(obj, path)``.
@@ -855,6 +859,17 @@ class Hdf5Loader:
 
     for _t, _type_repr in TYPES_FOR_HDF5_DATASETS:
         dispatch_load[_type_repr] = (load_dataset, _t)
+
+    def load_str(self, h5gr, type_info, subpath):
+        """Load a string from a h5py :class:`Dataset`."""
+        # `asstr()` is a new method for handling strings introduced in h5py version 3.0
+        # if asstr() is not used, the returned data is a raw bindary/ascii string.
+        obj = h5gr.asstr()[()]
+        self.memorize_load(h5gr, obj)
+        return obj
+
+    if h5py_version >= (3, 0):  # for older h5py versions, just read the dataset directly.
+        dispatch_load[REPR_STR] = (load_str, str)
 
     def load_list(self, h5gr, type_info, subpath):
         """Load a list."""
