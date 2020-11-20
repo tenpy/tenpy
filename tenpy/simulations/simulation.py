@@ -19,6 +19,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 import os
 import time
 import importlib
+import functools
 
 from ..tools import hdf5_io
 from ..tools.params import asConfig
@@ -93,14 +94,15 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
 
     """
-    #:
+    #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
+    #: default values for :cfg:option:`Simulation.connect_measurements`
     default_measurements = []
 
     def __init__(self, options):
-        self.options = options = asConfig(options, 'Simulation')
-        cwd = options.get("directory", None)
+        self.options = asConfig(options, 'Simulation')
+        cwd = self.options.get("directory", None)
         if cwd is not None:
             print(f"going into directory {cwd!r}")
             os.chdir(cwd)
@@ -172,16 +174,48 @@ class Simulation:
         else:
             AlgorithmClass = alg_class_name
         algorithm_params = self.options.subconfig('algorithm_params')
-        # TODO not algorithms have this interface!
+        # TODO not all algorithms have this interface!
+        # TODO load environment from file?
         self.engine = AlgorithmClass(self.psi, self.model, algorithm_params)
+        self.engine.checkpoint.connect(self.save_at_checkpoint)
 
     def init_measurements(self):
-        """Initialize and prepare measurements."""
-        # TODO allow to specify measurement functions in parameters
+        """Initialize and prepare measurements.
 
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            connect_measurements : list of tuple
+                Each tuple can be of length 2, 3, or 4, with entries
+                ``(module, function, kwargs, priority)``, the last two optionally.
+                The mandatory `module` and `function` specify a callback measurement function.
+                `kwargs` can specify extra keyword-arguments for the function,
+                `priority` allows to tune the order in which the measurement functions get called.
+        """
+        self._connect_measurements()
         results = self.perform_measurements()
         results = {k: [v] for k, v in results}
         self.results['measurements'] = results
+
+    def _connect_measurements(self):
+        con_meas = self.options.get('connect_measurements', self.default_measurements)
+        for entry in con_meas:
+            priority = 0
+            kwargs = {}
+            if len(entry) == 2:
+                module, func = entry
+            elif len(entry) == 3:
+                module, func, kwargs = entry
+            elif len(entry) == 4:
+                module, func, kwargs, priority = entry
+            else:
+                raise ValueError("wrong len for entry of `connect_measurements`:\n" + repr(entry))
+            func = hdf5_io.find_global(module, func)
+            if len(kwargs) > 0:
+                func = functools.partial(func, **kwargs)
+            self.measurement_event.connect(func, priority)
+        # done
 
     def run_algorithm(self):
         """Run the algorithm. Calls ``self.engine.run()``."""
@@ -309,8 +343,7 @@ class Simulation:
         results : dict
             A copy of :attr:`results` containing everything to be saved.
         """
-        self.results['simulation_parameters'] = self.options.as_dict()  # TODO: necessary?
-        # TODO: convert lists to arrays
+        self.results['simulation_parameters'] = self.options.as_dict()
 
     def save_at_checkpoint(self, alg_engine):
         save_every = self.options.get('save_every_x_seconds', None)
@@ -328,23 +361,8 @@ class Simulation:
 
 
 class MPSSimulation(Simulation):
-    def init_psi(self):
-
-        E_initial = self.results['E_initial'] = model.H_MPO.expectation_value(self.psi)
-        print(f"E_initial = <psi_init|H|psi_init> = {E_initial:.12f}")
-
-        if self.sim_args.get('environment_from_file', False) and \
-                isinstance(init_state, dict) and init_state['category'] == 'from_file':
-            filename = init_state['filename']
-            print("loading environment from ", repr(filename))
-            with h5py.File(filename, 'r') as f:
-                env_data = hdf5_io.load_from_hdf5(f, "/env_data")
-            # TODO: this renaming shouldn't be necessary; add corresponding DMRG parameter in TeNPy...
-            self.dmrg_params['init_env_data'] = env_data
-
     def run_dmrg(self):
         self.eng = eng = dmrg.TwoSiteDMRGEngine(self.psi, self.model, self.dmrg_params)
-        eng.checkpoint.connect(self.save_at_checkpoint)
         E, psi = eng.run()
 
         self.results['E_dmrg'] = E
