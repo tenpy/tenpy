@@ -10,7 +10,7 @@ from collections.abc import MutableMapping
 import pprint
 import os
 
-from .hdf5_io import Hdf5Exportable, ATTR_FORMAT
+from .hdf5_io import ATTR_FORMAT
 
 __all__ = ["Config", "asConfig", "get_parameter", "unused_parameters"]
 

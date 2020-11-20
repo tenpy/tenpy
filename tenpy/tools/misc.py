@@ -15,7 +15,8 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'find_subclass', 'get_recursive', 'set_recursive', 'build_initial_state', 'setup_executable'
+    'find_subclass', 'get_recursive', 'set_recursive', 'flatten', 'build_initial_state',
+    'setup_executable'
 ]
 
 
@@ -506,7 +507,7 @@ def find_subclass(base_class, subclass_name):
     return None
 
 
-def get_recursive(nested_data, recursive_key, split="/"):
+def get_recursive(nested_data, recursive_key, separator="/"):
     """Extract specific value from a nested data structure.
 
     Parameters
@@ -514,9 +515,9 @@ def get_recursive(nested_data, recursive_key, split="/"):
     nested_data : dict of dict (-like)
         Some nested data structure supporting a dict-like interface.
     recursive_key : str
-        The key(-parts) to be extracted, separated by `split`.
-        A leading `split` is ignored.
-    split : str
+        The key(-parts) to be extracted, separated by `separator`.
+        A leading `separator` is ignored.
+    separator : str
         Separator for splitting `recursive_key` into subkeys.
 
     Returns
@@ -524,24 +525,78 @@ def get_recursive(nested_data, recursive_key, split="/"):
     entry :
         For example, ``recursive_key="/some/sub/key"`` will result in extracing
         ``nested_data["some"]["sub"]["key"]``.
+
+    See also
+    --------
+    set_recursive : same for changing/setting a value.
+    flatten : Get a completely flat structure.
     """
-    if recursive_key.startswith(split):
-        recursive_key = recursive_key[len(split):]
+    if recursive_key.startswith(separator):
+        recursive_key = recursive_key[len(separator):]
     if not recursive_key:
         return nested_data  # return the original data if recursive_key is just "/"
-    for subkey in recursive_key.split(split):
+    for subkey in recursive_key.split(separator):
         nested_data = nested_data[subkey]
     return nested_data
 
 
-def set_recursive(nested_data, recursive_key, value, split="/"):
+def set_recursive(nested_data, recursive_key, value, separator="/"):
     """Same as :func:`get_recursive`, but set the data entry to `value`."""
-    if recursive_key.startswith(split):
-        recursive_key = recursive_key[len(split):]
-    subkeys = recursive_key.split(split)
+    if recursive_key.startswith(separator):
+        recursive_key = recursive_key[len(separator):]
+    subkeys = recursive_key.split(separator)
     for subkey in subkeys[:-1]:
         nested_data = nested_data[subkey]
     nested_data[subkeys[-1]] = value
+
+
+def flatten(mapping, separator='/'):
+    """Obtain a flat dictionary with all key/value pairs of a nested data structure.
+
+    Parameters
+    ----------
+    separator : str
+        Separator for merging keys to a single string.
+
+    Returns
+    -------
+    flat_config : dict
+        A single dictionary with all key-value pairs.
+
+    Examples
+    --------
+    .. testsetup ::
+
+        from tenpy.tools.misc import *
+
+    >>> sample_data = {'some': {'nested': {'entry': 100, 'structure': 200},
+    ...                         'subkey': 10},
+    ...                'topentry': 1}
+    >>> flat = flatten(sample_data)
+    >>> for k in sorted(flat):
+    ...     print(repr(k), ':', flat[k])
+    'some/nested/entry' : 100
+    'some/nested/structure' : 200
+    'some/subkey' : 10
+    'topentry' : 1
+
+
+    See also
+    --------
+    get_recursive : Useful to obtain a single entry from a nested data structure.
+    """
+    if isinstance(mapping, Config):
+        mapping = mapping.as_dict()
+    result = {}  #mapping.copy()
+    for k1, v1 in mapping.items():
+        if isinstance(v1, dict):
+            flat_submapping = flatten(v1, separator)
+            for k2, v2 in flat_submapping.items():
+                new_key = separator.join((k1, k2))
+                result[new_key] = v2
+        else:
+            result[k1] = v1
+    return result
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

@@ -29,6 +29,7 @@ Added
 - :func:`tenpy.tools.misc.find_subclass` to recursively find subclasses of a given base class by the name.
   This function is now used e.g. to find lattice classes given the name, hence supporting user-defined lattices defined outside of TeNPy.
 - :func:`tenpy.tools.misc.get_recursive` and :func:`~tenpy.tools.misc.set_recursive` for nested data strucutres, e.g., parameters.
+- :func:`tenpy.tools.misc.flatten` to turn a nested data structure into a flat one.
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
 

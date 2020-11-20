@@ -224,3 +224,5 @@ def test_get_set_recursive():
     assert tools.misc.get_recursive(data, 'some:nested:data', ':') == 321
     tools.misc.set_recursive(data, ':some:parts', 987, ':')
     assert tools.misc.get_recursive(data, 'some/parts') == 987
+    flat_data = tools.misc.flatten(data)
+    assert flat_data == {'some/nested/data': 321, 'some/nested/other': 456, 'some/parts': 987}
