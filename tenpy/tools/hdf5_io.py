@@ -219,6 +219,23 @@ ATTR_LEN = "len"  #: Attribute name for the length of iterables, e.g, list, tupl
 ATTR_FORMAT = "format"  #: indicates the `ATTR_TYPE` format used by :class:`Hdf5Exportable`
 
 
+def find_global(module, qualified_name):
+    """Get the object of the `qualified_name` in a given python `module`.
+
+    Parameters
+    ----------
+    module : str
+        Name of the module containing the object. The module gets imported.
+    qualified_name : str
+        Name of the object to be retrieved. May contain dots if the object is part of a class etc.
+    """
+    mod = importlib.import_module(module)
+    obj = mod
+    for subpath in qualified_name.split('.'):
+        obj = getattr(obj, subpath)
+    return obj
+
+
 def valid_hdf5_path_component(name):
     """Determine if `name` is a valid HDF5 path component.
 
@@ -676,7 +693,7 @@ class Hdf5Saver:
         module = obj.__module__
         qualname = obj.__qualname__
         try:
-            obj2 = Hdf5Loader.find_global(module, qualname)
+            obj2 = find_global(module, qualname)
         except (ImportError, KeyError, AttributeError):
             raise Hdf5ExportError(
                 "Can't export `{0!r}`: it's not found as {1} in module {2}".format(
@@ -822,18 +839,6 @@ class Hdf5Loader:
             res = res.decode()
         return res
 
-    @staticmethod
-    def find_global(module, classname):
-        """Get the class of the qualified `classname` in a given python `module`.
-
-        Imports the module.
-        """
-        mod = importlib.import_module(module)
-        cls = mod
-        for subpath in classname.split('.'):
-            cls = getattr(cls, subpath)
-        return cls
-
     dispatch_load = {}
 
     # the methods below are used in the dispatch table
@@ -974,7 +979,7 @@ class Hdf5Loader:
         module_name = self.get_attr(h5gr, ATTR_MODULE)
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
-            cls = self.find_global(module_name, class_name)
+            cls = find_global(module_name, class_name)
         except (ImportError, AttributeError):
             msg = "Can't import class {0!s} from {1!s}".format(class_name, module_name)
             if self.ignore_unknown:
@@ -997,7 +1002,7 @@ class Hdf5Loader:
         module_name = self.get_attr(h5gr, ATTR_MODULE)
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
-            obj = self.find_global(module_name, class_name)
+            obj = find_global(module_name, class_name)
         except (ImportError, AttributeError):
             msg = "Can't import global {0!s} from {1!s}".format(class_name, module_name)
             if self.ignore_unknown:
