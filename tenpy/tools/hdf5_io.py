@@ -83,9 +83,9 @@ except ImportError:
     h5py_version = (0, 0)
 
 __all__ = [
-    'save', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
-    'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver', 'Hdf5Loader', 'save_to_hdf5',
-    'load_from_hdf5'
+    'save', 'load', 'find_global', 'valid_hdf5_path_component', 'Hdf5FormatError',
+    'Hdf5ExportError', 'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver',
+    'Hdf5Loader', 'save_to_hdf5', 'load_from_hdf5'
 ]
 
 
@@ -158,6 +158,23 @@ def load(filename):
     return data
 
 
+def find_global(module, qualified_name):
+    """Get the object of the `qualified_name` in a given python `module`.
+
+    Parameters
+    ----------
+    module : str
+        Name of the module containing the object. The module gets imported.
+    qualified_name : str
+        Name of the object to be retrieved. May contain dots if the object is part of a class etc.
+    """
+    mod = importlib.import_module(module)
+    obj = mod
+    for subpath in qualified_name.split('.'):
+        obj = getattr(obj, subpath)
+    return obj
+
+
 # =================================================================================
 # everything below is for our export/import with our self-definded HDF5 format.
 # =================================================================================
@@ -217,23 +234,6 @@ ATTR_CLASS = "class"  #: Attribute name for the class name of an HDF5Exportable
 ATTR_MODULE = "module"  #: Attribute name for the module where ATTR_CLASS can be retrieved
 ATTR_LEN = "len"  #: Attribute name for the length of iterables, e.g, list, tuple
 ATTR_FORMAT = "format"  #: indicates the `ATTR_TYPE` format used by :class:`Hdf5Exportable`
-
-
-def find_global(module, qualified_name):
-    """Get the object of the `qualified_name` in a given python `module`.
-
-    Parameters
-    ----------
-    module : str
-        Name of the module containing the object. The module gets imported.
-    qualified_name : str
-        Name of the object to be retrieved. May contain dots if the object is part of a class etc.
-    """
-    mod = importlib.import_module(module)
-    obj = mod
-    for subpath in qualified_name.split('.'):
-        obj = getattr(obj, subpath)
-    return obj
 
 
 def valid_hdf5_path_component(name):
