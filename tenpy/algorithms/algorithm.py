@@ -14,6 +14,9 @@ class Algorithm:
     ----------
     psi :
         Tensor network to be updated by the algorithm.
+    model : :class:`~tenpy.models.model.Model` | None
+        Model with the representation of the hamiltonian suitable for the algorithm.
+        None for algorithms which don't require a model.
     options : dict-like
         Optional parameters for the algorithm.
         In the online documentation, you can find the correct set of options in the
@@ -30,6 +33,8 @@ class Algorithm:
     ----------
     psi :
         Tensor network to be updated by the algorithm.
+    model : :class:`~tenpy.models.model.Model`
+        Model with the representation of the hamiltonian suitable for the algorithm.
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
     checkpoint : :class:`~tenpy.tools.events.EventHandler`
@@ -39,10 +44,11 @@ class Algorithm:
     verbose : float
         Level of verboseness, higher=more output.
     """
-    def __init__(self, psi, options):
+    def __init__(self, psi, model, options):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
         self.psi = psi
+        self.model = model
         self.checkpoint = EventHandler("algorithm")
         self.verbose = self.options.verbose
 

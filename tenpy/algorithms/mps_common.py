@@ -112,7 +112,7 @@ class Sweep(Algorithm):
     def __init__(self, psi, model, options):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        super().__init__(psi, options)
+        super().__init__(psi, model, options)
         options = self.options
 
         self.combine = options.get('combine', False)

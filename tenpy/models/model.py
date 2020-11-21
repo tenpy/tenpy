@@ -66,6 +66,8 @@ class Model(Hdf5Exportable):
     ----------
     lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
+    dtype : :class:`~numpy.dtype`
+        The data type of the Hamiltonian
     """
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
@@ -74,6 +76,7 @@ class Model(Hdf5Exportable):
         if not hasattr(self, 'lat'):
             # first call: initialize everything
             self.lat = lattice
+            self.dtype = None
         else:
             # Model.__init__() got called before
             if self.lat is not lattice:  # expect the *same instance*!
@@ -161,6 +164,12 @@ class NearestNeighborModel(Model):
     def __init__(self, lattice, H_bond):
         Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
+        for Hb in H_bond:
+            if Hb is not None:
+                self.dtype = Hb.dtype
+                break
+        else:
+            raise ValueError("All H_bond are `None`!")
         if self.lat.bc_MPS != 'infinite':
             assert self.H_bond[0] is None
         NearestNeighborModel.test_sanity(self)

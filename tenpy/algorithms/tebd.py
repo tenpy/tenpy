@@ -109,8 +109,7 @@ class TEBDEngine(Algorithm):
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
     def __init__(self, psi, model, options):
-        Algorithm.__init__(self, psi, options)
-        self.model = model
+        Algorithm.__init__(self, psi, model, options)
         self.evolved_time = self.options.get('start_time', 0.)
         self.trunc_err = self.options.get('start_trunc_err', TruncationError())
         self._U = None

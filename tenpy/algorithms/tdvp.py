@@ -86,7 +86,7 @@ class TDVPEngine(Algorithm):
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     def __init__(self, psi, model, options, environment=None):
-        Algorithm.__init__(self, psi, options)
+        Algorithm.__init__(self, psi, model, options)
         options = self.options
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")

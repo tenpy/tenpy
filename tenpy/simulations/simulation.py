@@ -21,12 +21,14 @@ import time
 import importlib
 import functools
 
+from ..models.model import Model
+from ..algorithms.algorithm import Algorithm
+from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass
 from .. import version
-from ..networks.mps import InitialStateBuilder
 
 __all__ = ['Simulation', 'MPSSimulation']
 
@@ -107,7 +109,7 @@ class Simulation:
             print(f"going into directory {cwd!r}")
             os.chdir(cwd)
         self.results = {
-            'simulation_parameters': options.as_dict(),
+            'simulation_parameters': self.options.as_dict(),
             'version_info': self.get_version_info(),
         }
         self._last_save = time.time()
@@ -139,11 +141,11 @@ class Simulation:
         """
         model_class_name = self.options["model_class"]  # no default value!
         if isinstance(model_class_name, str):
-            ModelClass = find_subclass(tenpy.models.model.Model, model_class_name)
+            ModelClass = find_subclass(Model, model_class_name)
         else:
             ModelClass = model_class_name
-        model_params = self.options.subconfig('model_params')
-        self.model = ModelClass(model_params)
+        params = self.options.subconfig('model_params')
+        self.model = ModelClass(params)
 
     def init_state(self):
         """Initialize a tensor network :attr:`psi`.
@@ -160,23 +162,23 @@ class Simulation:
         """
         builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
         if isinstance(builder_class, str):
-            Builder = find_subclass(tenpy.networks.mps.InitialStateBuilder, builder_class)
+            Builder = find_subclass(InitialStateBuilder, builder_class)
         else:
             InitStateBuilder = builder_class
-        params = self.options.subconfig('initial_state_params', 'InitialStateBuilder')
-        initial_state_builder = Builder(self.model.lat, init_state_params, self.model.dtype)
-        self.psi = initial_state_builder.build()
+        params = self.options.subconfig('initial_state_params')
+        initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
+        self.psi = initial_state_builder.run()
 
     def init_algorithm(self):
-        alg_class_name = self.options("algorithm_class", self.default_algorithm)
+        alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         if isinstance(alg_class_name, str):
-            AlgorithmClass = find_subclass(tenpy.algorithms.algorithm.Algorithm, alg_class_name)
+            AlgorithmClass = find_subclass(Algorithm, alg_class_name)
         else:
             AlgorithmClass = alg_class_name
-        algorithm_params = self.options.subconfig('algorithm_params')
+        params = self.options.subconfig('algorithm_params')
         # TODO not all algorithms have this interface!
         # TODO load environment from file?
-        self.engine = AlgorithmClass(self.psi, self.model, algorithm_params)
+        self.engine = AlgorithmClass(self.psi, self.model, params)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
 
     def init_measurements(self):
@@ -239,9 +241,7 @@ class Simulation:
         """
         # TODO: save-guard measurements with try-except?
         results = {}
-        returned = self.measurement_event.emit(results=results,
-                                               simulation=self,
-                                               psi=simulation.psi)
+        returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
         # still save the values returned
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -276,8 +276,8 @@ class Simulation:
         return version_info
 
     def _fix_output_filenames(self):
-        self.output_filename = options.get("output_filename", None)
-        overwrite_output = options.get("overwrite_output", False)
+        output_filename = self.options.get("output_filename", None)
+        overwrite_output = self.options.get("overwrite_output", False)
         if output_filename is None:
             self.output_filename = None
             self._backup_filename = None

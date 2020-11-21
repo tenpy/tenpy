@@ -6,6 +6,7 @@ import numpy as np
 import time
 from scipy.linalg import expm
 
+from .algorithm import Algorithm
 from ..linalg import np_conserved as npc
 from .truncation import TruncationError
 from ..tools.params import asConfig
@@ -13,7 +14,7 @@ from ..tools.params import asConfig
 __all__ = ['ExpMPOEvolution']
 
 
-class ExpMPOEvolution:
+class ExpMPOEvolution(Algorithm):
     """Time evolution of an MPS using the W_I or W_II approximation for ``exp(H dt)``.
 
     :cite:`zaletel2015` described a method to obtain MPO approximations :math:`W_I` and
@@ -64,10 +65,9 @@ class ExpMPOEvolution:
         We won't recalculate `_U` if those parameters didn't change.
     """
     def __init__(self, psi, model, options):
-        self.options = options = asConfig(options, "MPO_Evo")
+        super().__init__(psi, model, options)
+        options = self.options
         self.verbose = options.verbose
-        self.psi = psi
-        self.model = model
         self.evolved_time = options.get('start_time', 0.)
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
