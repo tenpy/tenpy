@@ -25,7 +25,8 @@ __version__ = version.version
 __full_version__ = version.full_version
 
 __all__ = [
-    "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config"
+    "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config",
+    "run_simulation"
 ]
 
 

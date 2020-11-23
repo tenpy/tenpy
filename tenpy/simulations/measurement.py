@@ -10,7 +10,8 @@ the measurement results into the `results` dictionary taken as argument.
 # Copyright 2020 TeNPy Developers, GNU GPLv3
 
 __all__ = [
-    'measurement_index', 'bond_energies', 'energy_MPO', 'entropy', 'onsite_expectation_value'
+    'measurement_index', 'bond_energies', 'energy_MPO', 'entropy', 'onsite_expectation_value',
+    'correlation_length'
 ]
 
 
