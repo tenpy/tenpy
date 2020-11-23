@@ -28,6 +28,7 @@
     linalg
     models
     networks
+    simulations
     tools
     version
 

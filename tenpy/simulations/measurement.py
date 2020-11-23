@@ -36,7 +36,7 @@ def measurement_index(results, psi, simulation, key='measurement_index'):
         Other optional keyword arguments for individual measurement functions.
         Those are documented inside each measurement function.
     """
-    index = len(simulation.results['measurements'].get(key, []))
+    index = len(simulation.results.get('measurements', {}).get(key, []))
     results[key] = index
 
 
@@ -51,7 +51,7 @@ def bond_energies(results, psi, simulation, key='bond_energies'):
     results[key] = simulation.model.bond_energies(psi)
 
 
-def energy_MPO(results, psi, simulation, key='bond_energies'):
+def energy_MPO(results, psi, simulation, key='energy_MPO'):
     """Measure the energy of an MPS by evaluating the MPS expectation value.
 
     Parameters
@@ -98,3 +98,17 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None):
     lattice = simulation.model.lat
     exp_vals = lattice.mps2lat_values(exp_vals)
     results[key] = exp_vals
+
+
+def correlation_length(results, psi, simulation, key='correlation_length', **kwargs):
+    """Measure the correlaiton of an infinite MPS.
+
+    Parameters
+    ----------
+    results, psi, simulation, key:
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    **kwargs :
+        Further keywoard arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+    """
+    corr = psi.correlation_length(**kwargs)
+    results[key] = corr

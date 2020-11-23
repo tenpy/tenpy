@@ -6,20 +6,21 @@ running the actual algorithm, possibly performing measurements and saving the re
 
 
 .. todo ::
-    provide examples.
-
-.. todo ::
-    Not all algorithms have the Algorithm(psi, model, options).run() interface
+    provide examples and finish documentation
 
 .. todo ::
     function to resume simulations
+
+.. todo ::
+    update figure displaying the "layers of TeNPy"
 """
 # Copyright 2020 TeNPy Developers, GNU GPLv3
 
 import os
 import time
 import importlib
-import functools
+import warnings
+import numpy as np
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
@@ -30,7 +31,7 @@ from ..tools.events import EventHandler
 from ..tools.misc import find_subclass
 from .. import version
 
-__all__ = ['Simulation', 'MPSSimulation']
+__all__ = ['Simulation']
 
 
 class Simulation:
@@ -41,9 +42,6 @@ class Simulation:
     options : dict-like
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
-        In addition, you should save the used version of the TeNPy library (and of your
-        own model files etc.)
-        (In practice, one should not hard-code parameters in the model files and algorithms.)
 
     Options
     -------
@@ -58,6 +56,7 @@ class Simulation:
             Whether an exisiting file may be overwritten.
             Otherwise, if the file already exists we try to replace
             ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
+
 
     Attributes
     ----------
@@ -82,6 +81,7 @@ class Simulation:
             Data of all the performed measurements.
         psi :
             The final tensor network state.
+            Only included if :cfg:option:`Simulation.keep_psi` is True (default).
     measurement_event : :class:`~tenpy.tools.events.EventHandler`
         An event that gets emitted each time when measurements should be performed.
         The callback functions should take :attr:`psi`, the simulation class itself,
@@ -99,8 +99,13 @@ class Simulation:
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
-    #: default values for :cfg:option:`Simulation.connect_measurements`
-    default_measurements = []
+    #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
+    #: the :cfg:option:`Simulation.use_default_measurements` is True.
+    default_measurements = [
+        ('tenpy.simulations.measurement', 'measurement_index', {}, 1),
+        ('tenpy.simulations.measurement', 'energy_MPO'),
+        ('tenpy.simulations.measurement', 'entropy'),
+    ]
 
     def __init__(self, options):
         self.options = asConfig(options, 'Simulation')
@@ -124,7 +129,8 @@ class Simulation:
         self.init_measurements()
         self.run_algorithm()
         self.final_measurements()
-        self.save_results()
+        results = self.save_results()
+        return results
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
@@ -133,8 +139,8 @@ class Simulation:
         -------
         .. cfg:configoptions :: Simulation
 
-            model_class : string | class
-                Mandatory. Name or class for the model to be initialized.
+            model_class : str | class
+                Mandatory. Class or name of a subclass of :class:`~tenpy.models.model.Model`.
             model_params : dict
                 Dictionary with parameters for the model; see the documentation of the
                 corresponding `model_class`.
@@ -154,11 +160,14 @@ class Simulation:
         -------
         .. cfg:configoptions :: Simulation
 
-            initial_state_builder_class : string | class
-                Mandatory. Name or class for the model to be initialized.
+            initial_state_builder_class : str | class
+                Class or name of a subclass of :class:`~tenpy.networks.mps.InitialStateBuilder`.
+                Used to initialize `psi` according to the `initial_state_params`.
             initial_state_params : dict
-                Dictionary with parameters for the model; see the documentation of the
-                corresponding `model_class`.
+                Dictionary with parameters for building `psi`; see the decoumentation of the
+                `initial_state_builder_class`, e.g. :cfg:config:`InitStateBuilder`.
+            keep_psi : bool
+                Whether the final :attr:`psi` should be included into the output :attr:`results`.
         """
         builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
         if isinstance(builder_class, str):
@@ -168,18 +177,33 @@ class Simulation:
         params = self.options.subconfig('initial_state_params')
         initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
         self.psi = initial_state_builder.run()
+        if self.options.get('keep_psi', True):
+            self.results['psi'] = self.psi
 
     def init_algorithm(self):
+        """Initialize the algortihm.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            algorithm_class : str | class
+                Class or name of a subclass of :class:`~tenpy.algorithms.algorithm.Algorithm`.
+                The engine of the algorithm to be run.
+            algorithm_params : dict
+                Dictionary with parameters for the algortihm; see the decoumentation of the
+                `algorithm_class`.
+        """
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         if isinstance(alg_class_name, str):
             AlgorithmClass = find_subclass(Algorithm, alg_class_name)
         else:
             AlgorithmClass = alg_class_name
         params = self.options.subconfig('algorithm_params')
-        # TODO not all algorithms have this interface!
         # TODO load environment from file?
         self.engine = AlgorithmClass(self.psi, self.model, params)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
+        # TODO allow other functions to connect to the event.
 
     def init_measurements(self):
         """Initialize and prepare measurements.
@@ -189,35 +213,30 @@ class Simulation:
         .. cfg:configoptions :: Simulation
 
             connect_measurements : list of tuple
-                Each tuple can be of length 2, 3, or 4, with entries
+                Each tuple can be of length 2 to 4, with entries
                 ``(module, function, kwargs, priority)``, the last two optionally.
                 The mandatory `module` and `function` specify a callback measurement function.
                 `kwargs` can specify extra keyword-arguments for the function,
                 `priority` allows to tune the order in which the measurement functions get called.
+                See :meth:`~tenpy.tools.events.EventHandler.connect_by_name` for more details.
+            use_default_measurements : bool
+                Each Simulation class defines a list of :attr:`default_measurements` in the same
+                format as :cfg:option:`Simulation.connect_measurements`.
+                This flag allows to explicitly disable them.
         """
         self._connect_measurements()
         results = self.perform_measurements()
-        results = {k: [v] for k, v in results}
+        results = {k: [v] for k, v in results.items()}
         self.results['measurements'] = results
 
     def _connect_measurements(self):
-        con_meas = self.options.get('connect_measurements', self.default_measurements)
-        for entry in con_meas:
-            priority = 0
-            kwargs = {}
-            if len(entry) == 2:
-                module, func = entry
-            elif len(entry) == 3:
-                module, func, kwargs = entry
-            elif len(entry) == 4:
-                module, func, kwargs, priority = entry
-            else:
-                raise ValueError("wrong len for entry of `connect_measurements`:\n" + repr(entry))
-            func = hdf5_io.find_global(module, func)
-            if len(kwargs) > 0:
-                func = functools.partial(func, **kwargs)
-            self.measurement_event.connect(func, priority)
-        # done
+        if self.options.get('use_default_measurements', True):
+            def_meas = self.default_measurements
+        else:
+            def_meas = []
+        con_meas = list(self.options.get('connect_measurements', []))
+        for entry in def_meas + con_meas:
+            self.measurement_event.connect_by_name(*entry)
 
     def run_algorithm(self):
         """Run the algorithm. Calls ``self.engine.run()``."""
@@ -227,7 +246,7 @@ class Simulation:
         """Perform measurements and merge the results into ``self.results['measurements']``."""
         results = self.perform_measurements()
         previous_results = self.results['measurements']
-        for k, v in results:
+        for k, v in results.items():
             previous_results[k].append(v)
         # done
 
@@ -240,6 +259,8 @@ class Simulation:
             The results from calling the measurement functions.
         """
         # TODO: save-guard measurements with try-except?
+        # in case of a failed measurement, we should raise the exception at the end of the
+        # simulation?
         results = {}
         returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
         # still save the values returned
@@ -252,8 +273,8 @@ class Simulation:
         return results
 
     def final_measurements(self):
+        """Perform a last set of measurements."""
         self.make_measurements()
-        pass
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducability."""
@@ -282,16 +303,16 @@ class Simulation:
             self.output_filename = None
             self._backup_filename = None
             return
-        if os.path.exists(self.output_filename):
+        path, filename = os.path.split(output_filename)
+        backup_filename = os.path.join(path, "__old__" + filename)
+        if os.path.exists(output_filename):
             if overwrite_output:
-                path, filename = os.path.split(output_filename)
-                backup_filename = os.path.join(path, "__old__" + filename)
                 os.path.move(output_filename, backup_filename)
             else:
                 # adjust output filename to avoid overwriting stuff
                 root, ext = os.path.splitext(output_filename)
                 for i in range(1, 100):
-                    output_filename = '{0}_{1:2d}.{2}'.format(root, i, ext)
+                    output_filename = '{0}_{1:02d}{2}'.format(root, i, ext)
                     if not os.path.exists(output_filename):
                         break
                 else:
@@ -300,8 +321,12 @@ class Simulation:
                 path, filename = os.path.split(output_filename)
                 backup_filename = os.path.join(path, "__old__" + filename)
         # we made sure that `output_filename` doesn't exist yet,
-        # so create it as empty file to indicated that we want to save something there.
-        open(output_filename, 'w').close()
+        # so create it as empty file to indicated that we want to save something there,
+        # and to ensure that we have write access
+        with open(output_filename, 'w') as f:
+            text = "simulation initialized on {host!r} at {time!s}\n"
+            import socket
+            f.write(text.format(host=socket.gethostname(), time=time.asctime()))
         self.output_filename = output_filename
         self._backup_filename = backup_filename
 
@@ -319,18 +344,19 @@ class Simulation:
         output_filename = self.output_filename
         backup_filename = self._backup_filename
         if output_filename is None:
-            return  # do nothing
+            return results  # don't save
 
         if os.path.exists(output_filename):
             # keep a single backup, previous backups are overwritten.
             os.rename(output_filename, self._backup_filename)
 
-        hdf5_io.save(self.results, output_filename)
+        hdf5_io.save(results, output_filename)
 
         if os.path.exists(backup_filename):
             # successfully saved, so we can savely remove the old backup
             os.remove(backup_filename)
         self._last_save = time.time()
+        return results
 
     def prepare_results_for_save(self):
         """Bring the `results` into a state suitable for saving.
@@ -343,7 +369,16 @@ class Simulation:
         results : dict
             A copy of :attr:`results` containing everything to be saved.
         """
-        self.results['simulation_parameters'] = self.options.as_dict()
+        results = self.results.copy()
+        results['simulation_parameters'] = self.options.as_dict()
+        # try to convert measurements into sigle arrays
+        measurements = results['measurements'].copy()
+        results['measurements'] = measurements
+        for k, v in measurements.items():
+            v = np.array(v)
+            if v.dtype != np.dtype(object):
+                measurements[k] = v
+        return results
 
     def save_at_checkpoint(self, alg_engine):
         save_every = self.options.get('save_every_x_seconds', None)
@@ -358,27 +393,3 @@ class Simulation:
                               "Increase the latter to {0:.1f}".format(save_every))
                 self.options['save_every_x_seconds'] = save_every
         # done
-
-
-class MPSSimulation(Simulation):
-    def run_dmrg(self):
-        self.eng = eng = dmrg.TwoSiteDMRGEngine(self.psi, self.model, self.dmrg_params)
-        E, psi = eng.run()
-
-        self.results['E_dmrg'] = E
-        self.results['E_mpo'] = self.model.H_MPO.expectation_value(psi)
-        print("E_mpo =", self.results['E_mpo'])
-        print("N = ", psi.expectation_value('N'))
-
-        self.results['psi'] = psi
-        self.results['env_data'] = eng.env.get_initialization_data()
-        self.results['sweep_stats'] = eng.sweep_stats
-        self.results['update_stats'] = eng.update_stats
-
-    def prepare_results_for_save(self):
-        init_env_data = self.dmrg_params.get('init_env_data', {})
-        for k in ['init_LP', 'init_RP']:
-            if k in init_env_data:
-                if isinstance(init_env_data[k], npc.Array):
-                    init_env_data[k] = repr(init_env_data[k])
-        super().save_results()

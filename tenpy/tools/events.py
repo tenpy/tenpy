@@ -8,6 +8,9 @@ Examples are given in the class doc-string.
 
 from collections import namedtuple
 import warnings
+import functools
+
+from .hdf5_io import find_global
 
 __all__ = ['Listener', 'EventHandler']
 
@@ -156,6 +159,26 @@ class EventHandler:
         self._id_counter += 1
         self.listeners.append(Listener(listener_id, callback, priority))
         return callback
+
+    def connect_by_name(self, module_name, func_name, kwargs=None, priority=0):
+        """Connect to a function given by the name in a module, optionally inserting arguments.
+
+        Parameters
+        ----------
+        module_name : str
+            The name of the module containing the function to be used. Gets imported.
+        func_name : str
+            The (qualified) name of the function inside the module.
+        kwargs : dict
+            Optional extra keyword-arguments to be given to the function.
+        priority : int
+            Higher priority indicates that the callback function should be called before other
+            possibly registered callback functions.
+        """
+        func = find_global(module_name, func_name)
+        if kwargs is not None:
+            func = functools.partial(func, **kwargs)
+        self.connect(func, priority)
 
     def disconnect(self, listener_id):
         """De-register a listener.

@@ -7,5 +7,7 @@ from .simulation import *
 __all__ = simulation.__all__ + ['TimeEvolution']
 
 
-class TimeEvolution(MPSSimulation):
+class TimeEvolution(Simulation):
     default_algorithm = 'TEBDEngine'
+
+    # TODO when exactly to measure

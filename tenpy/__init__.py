@@ -35,3 +35,26 @@ def show_config():
     The information printed is :attr:`tenpy.version.version_summary`.
     """
     print(version.version_summary)
+
+
+def run_simulation(simulation_class_name='GroundStateSearch', **simulation_params):
+    """Run the simulation with a simulation class.
+
+    Parameters
+    ----------
+    simulation_class_name : str
+        The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
+        to be used for running the simulaiton.
+    **simulation_params :
+        Further keyword arguments as documented in the corresponding simulation class,
+        see :cfg:config`Simulation`.
+
+    Returns
+    -------
+    results : dict
+        The results from running the simulation.
+    """
+    SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
+    sim = SimClass(simulation_params)
+    results = sim.run()
+    return results
