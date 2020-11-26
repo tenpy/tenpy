@@ -143,6 +143,9 @@ class Lattice:
     _mps2lat_vals_idx_fix_u : tuple of ndarray of shape `Ls`
         similar as `_mps2lat_vals_idx`, but for a fixed `u` picking a site from the unit cell.
     """
+    Lu = None  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
+    dim = None  #: the dimension of the lattice
+
     def __init__(self,
                  Ls,
                  unit_cell,
@@ -1518,6 +1521,8 @@ class SimpleLattice(Lattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
+    Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
+
     def __init__(self, Ls, site, **kwargs):
         if 'positions' in kwargs:
             Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
@@ -1565,7 +1570,7 @@ class Chain(SimpleLattice):
         `pairs` are initialize with ``[next_]next_]nearest_neighbors``.
         `positions` can be specified as a single vector.
     """
-    dim = 1
+    dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, site, **kwargs):
         kwargs.setdefault('pairs', {})
@@ -1643,7 +1648,8 @@ class Ladder(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
     """
-    dim = 1
+    Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
+    dim = 1  #: the dimension of the lattice
 
     def __init__(self, L, sites, **kwargs):
         sites = _parse_sites(sites, 2)
@@ -1693,7 +1699,7 @@ class Square(SimpleLattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
-    dim = 2
+    dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
         NN = [(0, 0, np.array([1, 0])), (0, 0, np.array([0, 1]))]
@@ -1736,7 +1742,7 @@ class Triangular(SimpleLattice):
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
-    dim = 2
+    dim = 2  #: the dimension of the lattice
 
     def __init__(self, Lx, Ly, site, **kwargs):
         sqrt3_half = 0.5 * np.sqrt(3)  # = cos(pi/6)
@@ -1784,7 +1790,8 @@ class Honeycomb(Lattice):
         For the Honeycomb lattice ``'fourth_nearest_neighbors', 'fifth_nearest_neighbors'``
         are set in :attr:`pairs`.
     """
-    dim = 2
+    dim = 2  #: the dimension of the lattice
+    Lu = 2  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
@@ -1896,7 +1903,8 @@ class Kagome(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
     """
-    dim = 2
+    dim = 2  #: the dimension of the lattice
+    Lu = 3  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
 
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 3)

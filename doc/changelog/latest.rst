@@ -26,6 +26,7 @@ Added
 - :meth:`tenpy.tools.fit.entropy_profile_from_CFT` and :meth:`tenpy.tools.fit.central_charge_from_S_profile`
 - :meth:`tenpy.networks.site.Site.multiply_operators` as a variant of :meth:`~tenpy.networks.site.Site.multiply_op_names` accepting both string and npc arrays.
 - :meth:`tenpy.tools.events.EventHandler` to simplify call-backs e.g. for measurement codes during an algorithms.
+- :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 
 Changed
 ^^^^^^^
