@@ -824,8 +824,8 @@ class DMRGEngine(Sweep):
         p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
         if p_tol_to_trunc is not None:
             p_tol_min = max(1.e-30,
-                            self.lanczos_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
-                            self.lanczos_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
+                            self.trunc_params.get('svd_min', 0.)**2 * p_tol_to_trunc,
+                            self.trunc_params.get('trunc_cut', 0.)**2 * p_tol_to_trunc)
             p_tol_min = options.get('P_tol_min', p_tol_min)
             p_tol_max = options.get('P_tol_max', 1.e-4)
         e_tol_to_trunc = options.get('E_tol_to_trunc', None)
