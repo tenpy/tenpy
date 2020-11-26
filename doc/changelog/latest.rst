@@ -32,6 +32,7 @@ Added
 - :func:`tenpy.tools.misc.flatten` to turn a nested data structure into a flat one.
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
+- :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 
 Changed
 ^^^^^^^
