@@ -33,6 +33,7 @@ Added
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
 - :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
+- :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
 
 Changed
 ^^^^^^^

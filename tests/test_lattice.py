@@ -110,7 +110,7 @@ def test_IrregularLattice():
 
 
 def test_number_nn():
-    s = site.SpinHalfSite('Sz')
+    s = None
     chain = lattice.Chain(2, s)
     assert chain.count_neighbors() == 2
     assert chain.count_neighbors(key='next_nearest_neighbors') == 2
@@ -132,6 +132,44 @@ def test_number_nn():
     for u in [0, 1, 2]:
         assert kag.count_neighbors(u) == 4
         assert kag.count_neighbors(u, key='next_nearest_neighbors') == 4
+
+
+def pairs_with_reversed(coupling_pairs):
+    res = set([])
+    for u1, u2, dx in coupling_pairs:
+        res.add((u1, u2, tuple(dx)))
+        res.add((u2, u1, tuple(-dx)))
+    return res
+
+
+def test_pairs():
+    lattices = [
+        lattice.Chain(2, None),
+        lattice.Ladder(2, None),
+        lattice.Square(2, 2, None),
+        lattice.Triangular(2, 2, None),
+        lattice.Honeycomb(2, 2, None),
+        lattice.Kagome(2, 2, None)
+    ]
+    for lat in lattices:
+        print(lat.__class__.__name__)
+        found_dist_pairs = lat.find_coupling_pairs(5, 3.)
+        dists = sorted(found_dist_pairs.keys())
+        for i, name in enumerate([
+                'nearest_neighbors', 'next_nearest_neighbors', 'next_next_nearest_neighbors',
+                'fourth_nearest_neighbors', 'fifth_nearest_neighbors'
+        ]):
+            if name not in lat.pairs:
+                assert i > 2  # all of them should define up to next_next_nearest_neighbors
+                continue
+            print(name)
+            defined_pairs = lat.pairs[name]
+            found_pairs = found_dist_pairs[dists[i]]
+            assert len(defined_pairs) == len(found_pairs)
+            defined_pairs = pairs_with_reversed(defined_pairs)
+            found_pairs = pairs_with_reversed(found_pairs)
+            assert defined_pairs == found_pairs
+    # done
 
 
 def test_lattice_order():

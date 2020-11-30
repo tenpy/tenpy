@@ -19,7 +19,8 @@ import itertools
 import warnings
 
 from ..networks.site import Site
-from ..tools.misc import to_iterable, to_iterable_of_len, inverse_permutation, find_subclass
+from ..tools.misc import (to_iterable, to_iterable_of_len, inverse_permutation, get_close,
+                          find_subclass)
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
@@ -839,6 +840,89 @@ class Lattice:
         msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
         warnings.warn(msg, FutureWarning)
         return self.count_neighbors(u, 'next_nearest_neighbors')
+
+    def distance(self, u1, u2, dx):
+        """Get the distance for a given coupling between two sites in the lattice.
+
+        The `u1`, `u2`, `dx` parameters are defined in analogy with
+        :meth:`~tenpy.models.model.CouplingModel.add_coupling`, i.e., this function
+        calculates the distance between a pair of operators added with `add_coupling` (using the
+        :attr:`basis` and :attr:`unit_cell_positions` of the lattice).
+
+        .. warning ::
+            This function ignores "wrapping" arround the cylinder in the case of periodic boundary
+            conditions.
+
+        Parameters
+        ----------
+        u1, u2 : int
+            Indices within the unit cell; the `u1` and `u2` of
+            :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+        dx : array
+            Length :attr:`dim`. The translation in terms of basis vectors for the coupling.
+
+        Returns
+        -------
+        distance : float
+            The distance between site at lattice indices ``[x, y, u1]`` and
+            ``[x + dx[0], y + dx[1], u2]``, **ignoring** any boundary effects.
+        """
+        vec_dist = self.unit_cell_positions[u2] - self.unit_cell_positions[u1]
+        for ax in range(self.dim):
+            vec_dist = vec_dist + dx[..., ax, np.newaxis] * self.basis[ax]
+        return np.linalg.norm(vec_dist, axis=-1)
+
+    def find_coupling_pairs(self, max_dx=3, cutoff=None, eps=1.e-10):
+        """Automatically find coupling pairs grouped by distances.
+
+        Given the :attr:`unit_cell_positions` and :attr:`basis`, the coupling :attr:`pairs` of
+        `nearest_neighbors`, `next_nearest_neighbors` etc at a given distance are basically
+        fixed (although not uniquely, since we take out half of them to avoid double-counting
+        couplings in both directions ``A_i B_j + B_i A_i``).
+        This function iterates through all possible couplings up to a given `cutoff` distance and
+        then determines the possible :attr:`pairs` at fixed distances (up to round-off errors).
+
+        Parameters
+        ----------
+        max_dx : int
+            Maximal index for each index of `dx` to iterate over. You need large enough values
+            to include every possible coupling up to the desired distance, but choosing it too
+            large might make this function run for a long time.
+        cutoff : float
+            Maximal distance (in the units in which :attr:`basis` and :attr:`unit_cell_positions`
+            is given).
+        eps : float
+            Tolerance up to which to distances are considered the same.
+
+        Returns
+        -------
+        coupling_pairs : dict
+            Keys are distances of nearest-neighbors, next-nearest-neighbors etc.
+            Values are ``[(u1, u2, dx), ...]`` as in :attr:`pairs`.
+        """
+        if cutoff is None:
+            cutoff = max_dx - eps
+        assert cutoff < max_dx * min(np.linalg.norm(self.basis, axis=-1))
+        Lu = len(self.unit_cell)
+        dist_pairs = {}
+        for u1, u2 in itertools.product(range(Lu), repeat=2):
+            for dx in itertools.product(range(max_dx, -max_dx - 1, -1), repeat=self.dim):
+                dist = self.distance(u1, u2, np.array(dx))
+                if dist > cutoff or dist < eps:
+                    continue
+                d0 = get_close(dist_pairs.keys(), dist)
+                if d0 is None:
+                    dist_pairs[dist] = []
+                    d0 = dist
+                pairs = dist_pairs[d0]
+                if (u2, u1, tuple(-i for i in dx)) in pairs:
+                    continue  # avoid double-counting for existing pairs
+                pairs.append((u1, u2, dx))
+        # finally sort the keys of the dict by distances
+        result = {}
+        for key in sorted(dist_pairs.keys()):
+            result[key] = [(u1, u2, np.array(dx)) for u1, u2, dx in dist_pairs[key]]
+        return result
 
     def coupling_shape(self, dx):
         """Calculate correct shape of the `strengths` for a coupling.

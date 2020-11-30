@@ -15,8 +15,8 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'find_subclass', 'get_recursive', 'set_recursive', 'flatten', 'build_initial_state',
-    'setup_executable'
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'flatten',
+    'build_initial_state', 'setup_executable'
 ]
 
 
@@ -478,6 +478,31 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
         groups.append(tuple(subset[group]))
         subset = subset[np.logical_not(group)]
     return groups
+
+
+def get_close(values, target, default=None, eps=1.e-13):
+    """Iterate through `values` and return first entry closer than `eps`.
+
+    Parameters
+    ----------
+    values : interable of float
+        Values to compare to.
+    target : float
+        Value to find.
+    default :
+        Returned if no value close to `target` is found.
+    eps : float
+        Tolerance what counts as "close", namely everything with ``abs(val-target) < eps``.
+
+    Returns
+    -------
+    value : float
+        An entry of `values`, if one close to `target` is found, otherwise `default`.
+    """
+    for v in values:
+        if abs(v - target) < eps:
+            return v
+    return default
 
 
 def find_subclass(base_class, subclass_name):
