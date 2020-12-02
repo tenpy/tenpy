@@ -8,8 +8,19 @@ __all__ = simulation.__all__ + ['GroundStateSearch']
 
 
 class GroundStateSearch(Simulation):
-    # TODO document all the config options below!
-    # TODO document
+    """Simutions for variational ground state searches.
+
+    Parameters
+    ----------
+    options : dict-like
+        The simulation parameters. Ideally, these options should be enough to fully specify all
+        parameters of a simulation to ensure reproducibility.
+
+    Options
+    -------
+    .. cfg:config :: GroundStateSearch
+        :include: Simulation
+    """
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
 
@@ -25,6 +36,23 @@ class GroundStateSearch(Simulation):
         self.results['energy'] = E
 
     def prepare_results_for_save(self):
+        """Bring the `results` into a state suitable for saving.
+
+        For example, this can be used to convert lists to numpy arrays, to add more meta-data,
+        or to clean up unnecessarily large entries.
+
+        Options
+        -------
+        .. cfg:configoptions :: GroundStateSearch
+
+            keep_environment_data : bool
+                Whether to the environment data should be included into the output :attr:`results`.
+
+        Returns
+        -------
+        results : dict
+            A copy of :attr:`results` containing everything to be saved.
+        """
         results = super().prepare_results_for_save()
         if self.options.get("keep_environment_data", self.options['keep_psi']):
             results['init_env_data'] = self.engine.env.get_initialization_data()

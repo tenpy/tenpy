@@ -459,9 +459,6 @@ class MPOModel(Model):
     Thus, instances of this class are suitable for MPO-based algorithms like DMRG
     :mod:`~tenpy.algorithms.dmrg` and MPO time evolution.
 
-    .. todo ::
-        implement MPO for time evolution...
-
     Parameters
     ----------
     H_MPO : :class:`~tenpy.networks.mpo.MPO`

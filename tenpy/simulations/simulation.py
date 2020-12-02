@@ -6,7 +6,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 
 
 .. todo ::
-    provide examples and finish documentation
+    provide examples
 
 .. todo ::
     function to resume simulations
@@ -108,7 +108,7 @@ class Simulation:
     ]
 
     def __init__(self, options):
-        self.options = asConfig(options, 'Simulation')
+        self.options = asConfig(options, self.__class__.__name__)
         cwd = self.options.get("directory", None)
         if cwd is not None:
             print(f"going into directory {cwd!r}")
@@ -193,6 +193,15 @@ class Simulation:
             algorithm_params : dict
                 Dictionary with parameters for the algortihm; see the decoumentation of the
                 `algorithm_class`.
+            connect_algorithm_checkpoint : list of tuple
+                Functions to connect to the :attr:`~tenpy.algorithms.Algorith.checkpoing` event
+                of the algorithm.
+                Each tuple can be of length 2 to 4, with entries
+                ``(module, function, kwargs, priority)``, the last two optionally.
+                The mandatory `module` and `function` specify a callback measurement function.
+                `kwargs` can specify extra keyword-arguments for the function,
+                `priority` allows to tune the order in which the measurement functions get called.
+                See :meth:`~tenpy.tools.events.EventHandler.connect_by_name` for more details.
         """
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         if isinstance(alg_class_name, str):
@@ -203,7 +212,9 @@ class Simulation:
         # TODO load environment from file?
         self.engine = AlgorithmClass(self.psi, self.model, params)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
-        # TODO allow other functions to connect to the event.
+        con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
+        for entry in con_checkpoint:
+            self.engine.checkpoint.connect_by_name(*entry)
 
     def init_measurements(self):
         """Initialize and prepare measurements.
@@ -213,6 +224,7 @@ class Simulation:
         .. cfg:configoptions :: Simulation
 
             connect_measurements : list of tuple
+                Functions to connect to the :attr:`measurement_event`.
                 Each tuple can be of length 2 to 4, with entries
                 ``(module, function, kwargs, priority)``, the last two optionally.
                 The mandatory `module` and `function` specify a callback measurement function.
@@ -361,8 +373,8 @@ class Simulation:
     def prepare_results_for_save(self):
         """Bring the `results` into a state suitable for saving.
 
-        For example, this can be used to convert lists to arrays, to add more meta-data,
-        or to clean up unnecessaily large entries.
+        For example, this can be used to convert lists to numpy arrays, to add more meta-data,
+        or to clean up unnecessarily large entries.
 
         Returns
         -------
@@ -381,6 +393,24 @@ class Simulation:
         return results
 
     def save_at_checkpoint(self, alg_engine):
+        """Save the intermediate results at the checkpoint of an algorithm.
+
+        Parameters
+        ----------
+        alg_engine : :class:`~tenpy.algorithms.Algorithm`
+            The engine of the algorithm. Not used in this function, mostly there for compatibility
+            with the :attr:`tenpy.algorithms.Algorithm.checkpoint` event.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            save_every_x_seconds : float | None
+                Save the :attr:`results` obtained so far at each
+                :attr:`tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
+                seconds evolved since the last save (or since starting the algorithm).
+                By default (``None``), this feature is disabled.
+        """
         save_every = self.options.get('save_every_x_seconds', None)
         if save_every is not None and time.time() - self._last_save > save_every:
             time_to_save = time.time()
