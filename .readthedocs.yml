@@ -16,5 +16,15 @@ formats:
 submodules:
     include: all
 
-conda:
-    environment: doc/environment.yml
+# Optionally set the version of Python and requirements required to build your docs
+python:
+  version: 3.7
+  install:
+    - requirements: requirements.txt
+    - requirements: doc/requirements.txt
+    - method: pip
+      path: .
+
+# alternative: use conda -> takes very long to install, try to avoid
+# conda:
+#     environment: doc/environment.yml
