@@ -57,6 +57,7 @@ if __name__ == "__main__":
     data_tebd = imag_tebd()
     data_mpo = imag_apply_mpo()
 
+    import numpy as np
     from matplotlib.pyplot import plt
 
     plt.plot(data_mpo['beta'], np.sum(data_mpo['Sz'], axis=1), label='MPO')
