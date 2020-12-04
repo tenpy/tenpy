@@ -250,6 +250,15 @@ class Config(MutableMapping):
         self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
+    def silent_get(self, key, default):
+        """Find the value of `key`, but don't set as default value and don't print.
+
+        Same as ``dict.get``, i.e. just return `self[key]` if existent, else `default`, without
+        memorizing/printing the access.
+        Does not count as read-out for the :attr:`unused` parameters.
+        """
+        return self.options.get(key, default)
+
     def setdefault(self, key, default):
         """Set a default value without reading it out.
 
