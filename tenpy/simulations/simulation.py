@@ -81,7 +81,7 @@ class Simulation:
             Data of all the performed measurements.
         psi :
             The final tensor network state.
-            Only included if :cfg:option:`Simulation.keep_psi` is True (default).
+            Only included if :cfg:option:`Simulation.save_psi` is True (default).
     measurement_event : :class:`~tenpy.tools.events.EventHandler`
         An event that gets emitted each time when measurements should be performed.
         The callback functions should take :attr:`psi`, the simulation class itself,
@@ -166,7 +166,7 @@ class Simulation:
             initial_state_params : dict
                 Dictionary with parameters for building `psi`; see the decoumentation of the
                 `initial_state_builder_class`, e.g. :cfg:config:`InitStateBuilder`.
-            keep_psi : bool
+            save_psi : bool
                 Whether the final :attr:`psi` should be included into the output :attr:`results`.
         """
         builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
@@ -177,7 +177,7 @@ class Simulation:
         params = self.options.subconfig('initial_state_params')
         initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
         self.psi = initial_state_builder.run()
-        if self.options.get('keep_psi', True):
+        if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
 
     def init_algorithm(self):

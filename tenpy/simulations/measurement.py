@@ -11,7 +11,7 @@ the measurement results into the `results` dictionary taken as argument.
 
 __all__ = [
     'measurement_index', 'bond_energies', 'energy_MPO', 'entropy', 'onsite_expectation_value',
-    'correlation_length'
+    'correlation_length', 'evolved_time'
 ]
 
 
@@ -113,3 +113,16 @@ def correlation_length(results, psi, simulation, key='correlation_length', **kwa
     """
     corr = psi.correlation_length(**kwargs)
     results[key] = corr
+
+
+def evolved_time(results, psi, simulation, key='evolved_time'):
+    """Measure the time evolved by the engine, ``engine.evolved_time``.
+
+    See e.g. :attr:`tenpy.algorithms.tebd.TEBDEngine.evolved_time`.
+
+    Parameters
+    ----------
+    results, psi, simulation, key:
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    """
+    results[key] = simulation.engine.evolved_time

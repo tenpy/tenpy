@@ -20,15 +20,27 @@ class GroundStateSearch(Simulation):
     -------
     .. cfg:config :: GroundStateSearch
         :include: Simulation
+
     """
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
 
     def init_algorithm(self):
+        """Initialize the algortihm.
+
+        Options
+        -------
+        .. cfg:configoptions :: GroundStateSearch
+
+            save_stats : bool
+                Whether to include the
+        """
         super().init_algorithm()
-        if self.options.get("keep_stats", True):
-            self.results['sweep_stats'] = self.engine.sweep_stats
-            self.results['update_stats'] = self.engine.update_stats
+        if self.options.get("save_stats", True):
+            for name in ['sweep_stats', 'update_stats']:
+                stats = getattr(self.engine, name, None)
+                if stats is not None:
+                    self.results[name] = stats
 
     def run_algorithm(self):
         """Run the algorithm. Calls ``self.engine.run()``."""
@@ -45,7 +57,7 @@ class GroundStateSearch(Simulation):
         -------
         .. cfg:configoptions :: GroundStateSearch
 
-            keep_environment_data : bool
+            save_environment_data : bool
                 Whether to the environment data should be included into the output :attr:`results`.
 
         Returns
@@ -54,11 +66,11 @@ class GroundStateSearch(Simulation):
             A copy of :attr:`results` containing everything to be saved.
         """
         results = super().prepare_results_for_save()
-        if self.options.get("keep_environment_data", self.options['keep_psi']):
+        if self.options.get("save_environment_data", self.options['save_psi']):
             results['init_env_data'] = self.engine.env.get_initialization_data()
         # hack: remove initial environments from options to avoid blowing up the output size,
         # in particular if `keep_psi` is false, this can reduce the file size dramatically.
-        init_env_data = self.options['algorithm_params'].get('init_env_data', {})
+        init_env_data = self.options['algorithm_params'].silent_get('init_env_data', {})
         for k in ['init_LP', 'init_RP']:
             if k in init_env_data:
                 if isinstance(init_env_data[k], npc.Array):
