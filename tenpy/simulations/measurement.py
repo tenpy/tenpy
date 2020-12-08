@@ -10,8 +10,8 @@ the measurement results into the `results` dictionary taken as argument.
 # Copyright 2020 TeNPy Developers, GNU GPLv3
 
 __all__ = [
-    'measurement_index', 'bond_energies', 'energy_MPO', 'entropy', 'onsite_expectation_value',
-    'correlation_length', 'evolved_time'
+    'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
+    'onsite_expectation_value', 'correlation_length', 'evolved_time'
 ]
 
 
@@ -39,6 +39,17 @@ def measurement_index(results, psi, simulation, key='measurement_index'):
     """
     index = len(simulation.results.get('measurements', {}).get(key, []))
     results[key] = index
+
+
+def bond_dimension(results, psi, simulation, key='bond_dimension'):
+    """'Measure' the bond dimension of an MPS.
+
+    Parameters
+    ----------
+    results, psi, simulation, key :
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    """
+    results[key] = psi.chi
 
 
 def bond_energies(results, psi, simulation, key='bond_energies'):

@@ -103,6 +103,7 @@ class Simulation:
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
         ('tenpy.simulations.measurement', 'measurement_index', {}, 1),
+        ('tenpy.simulations.measurement', 'bond_dimension'),
         ('tenpy.simulations.measurement', 'energy_MPO'),
         ('tenpy.simulations.measurement', 'entropy'),
     ]
