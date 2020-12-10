@@ -1370,7 +1370,8 @@ class MPS:
             `n=1` (default) is the ususal von-Neumann entanglement entropy.
         bonds : ``None`` | (iterable of) int
             Selects the bonds at which the entropy should be calculated.
-            ``None`` defaults to ``range(0, L+1)[self.nontrivial_bonds]``.
+            ``None`` defaults to ``range(0, L+1)[self.nontrivial_bonds]``,
+            i.e., ``range(1, L)`` for 'finite' MPS and ``range(0, L)`` for 'infinite' MPS.
         for_matrix_S : bool
             Switch calculate the entanglement entropy even if the `_S` are matrices.
             Since :math:`O(\chi^3)` is expensive compared to the ususal :math:`O(\chi)`,
@@ -1380,8 +1381,16 @@ class MPS:
         -------
         entropies : 1D ndarray
             Entanglement entropies for half-cuts.
-            `entropies[j]` contains the entropy for a cut at bond ``bonds[j]``
-            (i.e. left to site ``bonds[j]``).
+            `entropies[j]` contains the entropy for a cut at bond ``bonds[j]``,
+            i.e. between sites ``bonds[j]-1`` and ``bonds[j]``.
+            For **infinite** systems with default ``bonds=None``,
+            this means that ``entropies[0]`` will be a cut left of site 0 and is the one you should
+            look at to e.g. study the scaling of the entanglement with `chi` or to extract
+            the topological entanglement entropy - don't take the average over bonds,
+            in particular if you have 2D cylinders or ladders.
+            On the contrary, for **finite** systems with ``bonds=None``, take the central value
+            of the returned array ``entropies[len(entropies)//2)] == entropies[(L-1)//2]``
+            (and **not** just ``entropies[L//2]``) to extract the half-chain entanglement entropy.
         """
         if bonds is None:
             nt = self.nontrivial_bonds
@@ -3071,7 +3080,7 @@ class MPS:
         W : ndarray
             1D array of the form ``S**2 exp(i K)``, where `S` are the Schmidt values
             on the left bond. You can use :func:`np.abs` and :func:`np.angle` to extract the
-            Schmidt values `S` and momenta `K` from `W`.
+            (squared) Schmidt values `S` and momenta `K` from `W`.
         q : :class:`~tenpy.linalg.charges.LegCharge`
             LegCharge corresponding to `W`.
         ov : complex
@@ -3131,8 +3140,8 @@ class MPS:
         # Strip S's from U
         inv_S = 1. / self.get_SL(0)
         U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)
-        # U should be unitary - scale it
-        U *= (np.sqrt(U.shape[0]) / npc.norm(U))
+        # U should be unitary - rescale it such that norm(U)**2 = tr(U^dagger U) = chi
+        U *= np.sqrt(U.shape[0]) / npc.norm(U)
         return U, W / np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err
 
     def __str__(self):
