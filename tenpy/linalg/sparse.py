@@ -641,13 +641,13 @@ class FlatLinearOperator(ScipyLinearOperator):
                 try:
                     vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
                 except ValueError as e:
-                    if not e.args[0].startswith(''):
+                    if not e.args[0].startswith('wrong sector'):
                         raise
                     multi_sectors.append(j)
             from_ndarray_args['raise_wrong_sector'] = False
             for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
                 # really, we would need to diagonalize the charges within the subspace of
-                # degenerace eigenvectors of the transfermatrix.
+                # degenerate eigenvectors of the transfermatrix.
                 # However, we (might) only know a subset of the degenerate eigenvectors,
                 # and diagonalizing the charges in that subspace might not yield real
                 # charge eigenvectors (which is obvious if we have only one of them).
@@ -665,7 +665,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                         for qi in range(self.leg.block_number)
                     ])
                     qtotal = self.leg.get_charge(qi)
-                    vecs[i] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
+                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
                 else:
                     used_blocks = {}
                     for j in degenerate:
@@ -679,13 +679,13 @@ class FlatLinearOperator(ScipyLinearOperator):
                                 continue
                             used_blocks.add(qi)
                             qtotal = self.leg.get_charge(qi)
-                            vecs[i] = npc.Array.from_ndarray(vec,
+                            vecs[j] = npc.Array.from_ndarray(vec,
                                                              qtotal=qtotal,
                                                              **from_ndarray_args)
-                            vecs[i] /= npc.norm(vecs[i])
+                            vecs[j] /= npc.norm(vecs[j])
                             break
                         else:
-                            # didn't break, so didn't set vecs[i]
+                            # didn't break, so didn't set vecs[j]
                             # -> can't guarantee orthogonality to previous eigenvectors
                             msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
                                    "charge block uniquely; would need to diagonalize again "
