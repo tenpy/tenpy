@@ -56,7 +56,8 @@ class Simulation:
             Whether an exisiting file may be overwritten.
             Otherwise, if the file already exists we try to replace
             ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
-
+        random_seed : int | None
+            If not ``None``, initialize the numpy random generator with the given seed.
 
     Attributes
     ----------
@@ -114,6 +115,9 @@ class Simulation:
         if cwd is not None:
             print(f"going into directory {cwd!r}")
             os.chdir(cwd)
+        random_seed = self.options.get('random_seed', None)
+        if random_seed is not None:
+            np.random.seed(random_seed)
         self.results = {
             'simulation_parameters': self.options.as_dict(),
             'version_info': self.get_version_info(),
