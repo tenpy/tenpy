@@ -739,6 +739,10 @@ class Hdf5Loader:
         The HDF5 group (or file) where to save the data.
     ignore_unknown : bool
         Whether to just warn (True) or raise an Error (False) if a class to be loaded is not found.
+    exclude : list of str
+        List of paths (possibly relative to `h5group`) for objects to be excluded from loading.
+        References to the corresponding object are replaced by an instance of :class:`Hdf5Ignored`.
+        Of course, **this might break other functions** expecting correctly loaded data.
 
     Attributes
     ----------
@@ -759,10 +763,19 @@ class Hdf5Loader:
         The dictionary key is a h5py group- or dataset ``id``;
         the value is the loaded object. See :meth:`memorize_load`.
     """
-    def __init__(self, h5group, ignore_unknown=True):
+    def __init__(self, h5group, ignore_unknown=True, exclude=None):
         self.h5group = h5group
         self.ignore_unknown = ignore_unknown
         self.memo_load = {}
+        if exclude:
+            for path in exclude:
+                try:
+                    data = self.h5group[path]
+                except KeyError:
+                    warnings.warn(
+                        "can't exclude {0!r} from loading: not existent in h5group".format(path))
+                    continue
+                self.memorize_load(data, Hdf5Ignored(path))
 
     def load(self, path=None):
         """Load a Python :class:`object` from the dataset.
@@ -1092,7 +1105,7 @@ def save_to_hdf5(h5group, obj, path='/'):
     return Hdf5Saver(h5group).save(obj, path)
 
 
-def load_from_hdf5(h5group, path=None, ignore_unknown=True):
+def load_from_hdf5(h5group, path=None, ignore_unknown=True, exclude=None):
     """Load an object from hdf5 file or group.
 
     Roughly equivalent to ``obj = h5group[path][...]``, but handle more complicated objects saved
@@ -1109,10 +1122,17 @@ def load_from_hdf5(h5group, path=None, ignore_unknown=True):
         Path within `h5group` to be used for loading. Defaults to the `h5group` itself specified.
     ignore_unknown : bool
         Whether to just warn (True) or raise an Error (False) if a class to be loaded is not found.
+    exclude : list of str
+        List of paths (possibly relative to `h5group`) for objects to be excluded from loading.
+        References to the corresponding object are replaced by an instance of :class:`Hdf5Ignored`.
+        For example, you could load a saved dictionary
+        ``{'big_data': [...], 'small_data': small_data}`` with ``exclude=['/big_data']`` to get
+        ``{'big_data': Hdf5Ignored('/big_data'), 'small_data': small_data}``.
+        Of course, **this might break other functions** expecting correctly loaded data.
 
     Returns
     -------
     obj : object
         The Python object loaded from `h5group` (specified by `path`).
     """
-    return Hdf5Loader(h5group, ignore_unknown).load(path)
+    return Hdf5Loader(h5group, ignore_unknown, exclude).load(path)
