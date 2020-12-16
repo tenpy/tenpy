@@ -166,7 +166,7 @@ class Simulation:
                 Used to initialize `psi` according to the `initial_state_params`.
             initial_state_params : dict
                 Dictionary with parameters for building `psi`; see the decoumentation of the
-                `initial_state_builder_class`, e.g. :cfg:config:`InitStateBuilder`.
+                `initial_state_builder_class`, e.g. :cfg:config:`InitialStateBuilder`.
             save_psi : bool
                 Whether the final :attr:`psi` should be included into the output :attr:`results`.
         """

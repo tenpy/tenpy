@@ -4169,6 +4169,10 @@ class TransferMatrix(sparse.NpcLinearOperator):
 class InitialStateBuilder:
     """Class to simplify providing common sets of intial states.
 
+    This class is used by the :class:`~tenpy.simulations.simulation.Simulation` to initialize MPS.
+    The idea is that you can fully specify the initial state by a few parameters and possibly
+    a custom function (by inheriting from this class), as demonstrated in the examples below.
+
     Parameters
     ----------
     lattice : :class:`~tenpy.models.lattice.Lattice`
@@ -4187,8 +4191,43 @@ class InitialStateBuilder:
             name of the method called by :meth:`build` to generate the state.
             The available other parameters depend on the chosen method.
 
-    .. todo ::
-        provide examples
+    Examples
+    --------
+    If you use the :class:`~tenpy.simulations.simulation.Simulation` setup, it will extract
+    the `lattice` and `model_dtype` from the :attr:`~tenpy.models.model.Model.lat` and MPO dtype.
+    Let's assume that we have a lattice `lat` with :class:`~tenpy.networks.site.SpinHalfSite`
+    on a square lattices. Then you could initialize a Neel state like this:
+
+    .. testsetup :: InitialStateBuilder
+
+        from tenpy.networks.mps import InitialStateBuilder
+        import tenpy
+        spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+        lat = tenpy.models.lattice.Square(2, 4, spin_half, bc_MPS='infinite')
+
+    .. doctest :: InitialStateBuilder
+
+        >>> options = {'method': 'lat_product_state',
+        ...            'product_state' : [[['up'], ['down']],
+        ...                               [['down'], ['up']]]}
+        >>> psi = InitialStateBuilder(lat, options).run()
+
+    Note that the `method` options is mandatory, it selects which other method :meth:`run` calls.
+    This allows to define custum initial states with the same interface by defining your own
+    subclass, e.g. to get a short-hand for the Neel state:
+
+    .. doctest :: InitialStateBuilder
+
+        >>> class MyInitialStateBuilderForSquare(InitialStateBuilder):
+        ...     def neel(self):
+        ...         # my_option = self.options.get('opt_name', default) # not necessary here
+        ...         product_state = [[['up'], ['down']], [['down'], ['up']]]
+        ...         return self.lat_product_state(product_state)
+        >>> options = {'method': 'neel'}
+        >>> psi = MyInitialStateBuilderForSquare(lat, options).run()
+
+    If you define such a custom class, you can activate it in simulations by explicitly setting
+    the :cfg:option:`Simulation.initial_state_builder_class` to the name of it.
     """
     def __init__(self, lattice, options, model_dtype=np.float64):
         self.lattice = lattice

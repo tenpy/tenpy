@@ -628,7 +628,7 @@ def flatten(mapping, separator='/'):
 
 def build_initial_state(size, states, filling, mode='random', seed=None):
     warnings.warn(
-        "Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
+        "Deprecated `build_initial_state`: Use `tenpy.networks.mps.InitialStateBuilder` instead.",
         category=FutureWarning,
         stacklevel=2)
     from tenpy.networks import mps
