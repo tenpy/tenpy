@@ -4188,7 +4188,8 @@ class InitialStateBuilder:
 
         method : str
             Selects the category of the initial state, and in particular the
-            name of the method called by :meth:`build` to generate the state.
+            name of the method called by :meth:`build` to generate the state, for example you can
+            set ``method='lat_product_state'`` to use :meth:`lat_product_state`.
             The available other parameters depend on the chosen method.
 
     Examples
@@ -4203,7 +4204,7 @@ class InitialStateBuilder:
         from tenpy.networks.mps import InitialStateBuilder
         import tenpy
         spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
-        lat = tenpy.models.lattice.Square(2, 4, spin_half, bc_MPS='infinite')
+        lat = tenpy.models.lattice.Square(4, 4, spin_half)
 
     .. doctest :: InitialStateBuilder
 
@@ -4248,7 +4249,28 @@ class InitialStateBuilder:
         method_name = self.options['method']
         method = getattr(self, method_name)
         psi = method()
+        self.check_total_charge(psi)
         return psi
+
+    def check_total_charge(self, psi):
+        """Assert that the given state has the expected charge.
+
+        Parameters
+        ----------
+        psi : :class:`MPS`
+            The final, generated state.
+
+        .. cfg:configoptions :: InitialStateBuilder
+
+            check_total_charge : tuple of int
+                Check that the :meth:`MPS.get_total_charge` returns these values.
+        """
+        check_charge = self.options.get('check_global_charge', None)
+        if check_charge is None:
+            return
+        check_charge = tuple(check_charge)
+        has_charge = tuple(psi.get_total_charge(psi.bc == 'finite'))
+        assert check_charge == has_charge
 
     def from_file(self):
         """Load the initial state from an exisiting file.
@@ -4321,9 +4343,6 @@ class InitialStateBuilder:
 
     def check_filling(self, p_state):
         """Ensure that the filling of the product state matches `check_filling` parameter.
-
-        .. todo ::
-            generalize this to the actual charges of the resulting MPS.
 
         Options
         -------
