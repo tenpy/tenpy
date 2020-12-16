@@ -96,7 +96,7 @@ def create_example_stubs():
             outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
             if os.path.exists(outfile):
                 continue
-            sentence = ("`on github <{base}/tree/main/{key!s}/{fn!s}>`_.")
+            sentence = ("`on github <{base}/blob/main/{key!s}/{fn!s}>`_.")
             sentence = sentence.format(key=key, fn=fn, base=GITHUBBASE)
             include = '.. literalinclude:: /../{key!s}/{fn!s}'.format(key=key, fn=fn)
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
@@ -159,7 +159,7 @@ nbsphinx_prolog = r"""
 
     <div class="admonition note">
       This page was generated from
-      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/tree/main/{{ docname|e }}">{{ docname|e }}</a>.
+      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>.
     </div>
 """
 
@@ -269,9 +269,9 @@ def linkcode_resolve(domain, info):
         return None
 
     if tenpy.version.released:
-        return "%s/tree/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
+        return "%s/blob/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
     else:
-        return "%s/tree/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
+        return "%s/blob/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
 
 
 # -- sphinx_cfg_options ---------------------------------------------------
@@ -281,6 +281,8 @@ cfg_options_parse_comma_sep_names = True
 cfg_options_always_include = ["Config"]
 
 # -- sphinxcontrib.bibtex -------------------------------------------------
+
+bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib']
 
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle

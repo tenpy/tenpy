@@ -19,7 +19,7 @@ For scipy version newer than '0.18.0', we make use of the new keyword 'lapack_dr
 otherwise we (try to) load `dgesvd` and `zgesvd` from shared LAPACK libraries.
 
 The tribute for the dgesvd wrapper code goes to 'jgarcke', originally posted at
-http://projects.scipy.org/numpy/ticket/990, which is now hosted
+``http://projects.scipy.org/numpy/ticket/990``, which is now hosted
 at https://github.com/numpy/numpy/issues/1588
 He explains a bit more in detail what fails.
 

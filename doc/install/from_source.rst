@@ -4,7 +4,7 @@ Installation from source
 Minimal Requirements
 ^^^^^^^^^^^^^^^^^^^^
 This code works with a minimal requirement of pure Python>=3.6
-and somewhat recent versions of `NumPy <http://www.numpy.org>`_ and `SciPy <http://www.scipy.org>`_.
+and somewhat recent versions of `NumPy <https://www.numpy.org>`_ and `SciPy <https://www.scipy.org>`_.
 
 Getting the source
 ^^^^^^^^^^^^^^^^^^
@@ -38,7 +38,7 @@ Minimal installation: Including tenpy into PYTHONPATH
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The python source is in the directory `tenpy/` of the repository.
 This folder `tenpy/` should be placed in (one of the folders of) the environment variable 
-`PYTHONPATH <http://docs.python.org/2/using/cmdline.html#envvar-PYTHONPATH>`_.
+`PYTHONPATH <https://docs.python.org/3/using/cmdline.html#envvar-PYTHONPATH>`_.
 On Linux, you can simply do this with the following line in the terminal::
 
     export PYTHONPATH=$HOME/TeNPy
@@ -71,12 +71,12 @@ Compilation of np_conserved
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 At the heart of the TeNPy library is the module :mod:`tenpy.linalg.np_conseved`, which provides an Array class to exploit the
 conservation of abelian charges. The data model of python is not ideal for the required book-keeping, thus
-we have implemented the same np_conserved module in `Cython <http://cython.org>`_.
+we have implemented the same np_conserved module in `Cython <https://cython.org>`_.
 This allows to compile (and thereby optimize) the corresponding python module, thereby speeding up the execution of the
 code. While this might give a significant speed-up for code with small matrix dimensions, don't expect the same speed-up in
 cases where most of the CPU-time is already spent in matrix multiplications (i.e. if the bond dimension of your MPS is huge).
 
-To compile the code, you first need to install `Cython <http://cython.org>`_ ::
+To compile the code, you first need to install `Cython <https://cython.org>`_ ::
 
     conda install cython                    # when using anaconda, or
     pip install --upgrade Cython            # when using pip
