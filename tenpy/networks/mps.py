@@ -3040,7 +3040,13 @@ class MPS:
             print("Total swaps in permute_sites:", num_swaps, repr(trunc_err))
         return trunc_err
 
-    def compute_K(self, perm, swap_op='auto', trunc_par=None, canonicalize=1.e-6, verbose=0):
+    def compute_K(self,
+                  perm,
+                  swap_op='auto',
+                  trunc_par=None,
+                  canonicalize=1.e-6,
+                  verbose=0,
+                  expected_mean_k=0.):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
         Works for an infinite MPS living on a cylinder, infinitely long in `x` direction and with
@@ -3072,6 +3078,10 @@ class MPS:
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
+        expected_mean_k : float
+            As explained in :cite:`cincio2013`, the returned `W` is extracted as eigenvector of a
+            mixed transfer matrix, and hence has an undefined phase. We fix the overall phase
+            such that ``sum(s[j]**2 exp(iK[j]) == np.sum(W) = np.exp(1.j*expected_mean_k)``.
 
         Returns
         -------
@@ -3129,6 +3139,9 @@ class MPS:
         # Because we are in B form and get the left eigenvector,
         # the resulting vector should be sUs up to a scaling.
         ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
+        if np.abs(ov[0]) < 0.9:
+            warnings.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
+                          "expected |o| = 1., got |o| = {0:.3e}".format(np.abs(ov[0])))
         if verbose > 0:
             print("compute_K: overlap ", ov[0], ", |o| = 1. -", 1. - np.abs(ov[0]))
             # (should be 1 if state is invariant under translations)
@@ -3136,10 +3149,15 @@ class MPS:
         sUs = sUs[0].split_legs(0)
         _, sUs_blocked = sUs.as_completely_blocked()
         W = npc.eigvals(sUs_blocked, sort='m>')
-        # W = s^2 exp(i K ) up to overall scaling
+        # W = s[j]^2 exp(i K[j]) up to overall scaling and phase
+        # (as an eigenvector, sUS has arbitrary/unknown prefactor!)
+        W = W / np.sum(np.abs(W))  # fix overal scaling by normalization np.sum(S[i]**2) == 1.
+        mean_exp_ik = np.sum(W)
+        if np.abs(mean_exp_ik) > 1.e-5:
+            W *= np.conj(mean_exp_ik) / np.abs(mean_exp_ik)
         # Strip S's from U
         inv_S = 1. / self.get_SL(0)
-        U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)
+        U = sUs.scale_axis(inv_S, 0).iscale_axis(inv_S, 1)  # note: U should commute with s
         # U should be unitary - rescale it such that norm(U)**2 = tr(U^dagger U) = chi
         U *= np.sqrt(U.shape[0]) / npc.norm(U)
         return U, W / np.sum(np.abs(W)), sUs_blocked.legs[0], ov[0], trunc_err

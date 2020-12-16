@@ -53,3 +53,4 @@ Fixed
 - Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
   other correlation functions (:issue:`116`).
 - :mod:`tenpy.tools.hdf5_io` did not work with h5py version >= (3,0) due to a change in string encoding (:issue:`117`).
+- The overall phase for the returned `W` from :meth:`~tenpy.networks.mps.MPS.compute_K` was undefined.
