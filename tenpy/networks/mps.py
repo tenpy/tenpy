@@ -4210,7 +4210,8 @@ class InitialStateBuilder:
 
         >>> options = {'method': 'lat_product_state',
         ...            'product_state' : [[['up'], ['down']],
-        ...                               [['down'], ['up']]]}
+        ...                               [['down'], ['up']]],
+        ...            'verbose': 0.}
         >>> psi = InitialStateBuilder(lat, options).run()
 
     Note that the `method` options is mandatory, it selects which other method :meth:`run` calls.
@@ -4224,7 +4225,7 @@ class InitialStateBuilder:
         ...         # my_option = self.options.get('opt_name', default) # not necessary here
         ...         product_state = [[['up'], ['down']], [['down'], ['up']]]
         ...         return self.lat_product_state(product_state)
-        >>> options = {'method': 'neel'}
+        >>> options = {'method': 'neel', 'verbose': 0.}
         >>> psi = MyInitialStateBuilderForSquare(lat, options).run()
 
     If you define such a custom class, you can activate it in simulations by explicitly setting
@@ -4313,7 +4314,7 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
-        if self.options.verbose >= 1.:
+        if self.options.verbose > 1.:
             print("initialize product state \n", p_state)
         dtype = self.options.get('dtype', self.model_dtype)
         psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype)
@@ -4334,7 +4335,7 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
-        if self.options.verbose >= 1.:
+        if self.options.verbose > 1.:
             print("initialize product state \n", p_state)
         dtype = self.options.get('dtype', self.model_dtype)
         lat = self.lattice
