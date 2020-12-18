@@ -97,6 +97,10 @@ class ToricCode(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. versionchanged :: 0.7.2-98
+        There was a bug that the terms for Jv and Jp were added with a positive instead of
+        a negative sign.
+
     Parameters
     ----------
     model_params : :class:`~tenpy.tools.params.Config`
@@ -111,7 +115,7 @@ class ToricCode(CouplingMPOModel):
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        Jc, Jp : float | array
+        Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str
             The order of the lattice sites in the lattice, see :class:`DualSquare`.
@@ -147,12 +151,12 @@ class ToricCode(CouplingMPOModel):
         return lat
 
     def init_terms(self, model_params):
-        Jv = model_params.get('Jv', 1.)
-        Jp = model_params.get('Jp', 1.)
+        Jv = np.asarray(model_params.get('Jv', 1.))
+        Jp = np.asarray(model_params.get('Jp', 1.))
         # vertex/star term
-        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
-                                     ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
+        self.add_multi_coupling(-Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
+                                      ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
         # plaquette term
-        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
-                                     ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
+        self.add_multi_coupling(-Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
+                                      ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
         # done
