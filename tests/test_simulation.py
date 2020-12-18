@@ -30,6 +30,10 @@ class DummyAlgorithm(Algorithm):
         return None, self.psi
 
 
+class DummySimulation(Simulation):
+    pass
+
+
 def dummy_measurement(results, psi, simulation):
     results['dummy_value'] = simulation.engine.dummy_value
 

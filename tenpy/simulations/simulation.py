@@ -153,6 +153,8 @@ class Simulation:
         model_class_name = self.options["model_class"]  # no default value!
         if isinstance(model_class_name, str):
             ModelClass = find_subclass(Model, model_class_name)
+            if ModelClass is None:
+                raise ValueError("can't find Model called " + repr(model_class_name))
         else:
             ModelClass = model_class_name
         params = self.options.subconfig('model_params')
@@ -177,6 +179,8 @@ class Simulation:
         builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
         if isinstance(builder_class, str):
             Builder = find_subclass(InitialStateBuilder, builder_class)
+            if Builder is None:
+                raise ValueError("can't find InitialStateBuilder called " + repr(builder_class))
         else:
             InitStateBuilder = builder_class
         params = self.options.subconfig('initial_state_params')
@@ -211,6 +215,8 @@ class Simulation:
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         if isinstance(alg_class_name, str):
             AlgorithmClass = find_subclass(Algorithm, alg_class_name)
+            if AlgorithmClass is None:
+                raise ValueError("can't find Algorithm called " + repr(alg_class_name))
         else:
             AlgorithmClass = alg_class_name
         params = self.options.subconfig('algorithm_params')
