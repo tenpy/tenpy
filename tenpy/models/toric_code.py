@@ -26,10 +26,12 @@ class DualSquare(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models.toric_code import DualSquare
+        from tenpy.models.lattice import Square
         plt.figure(figsize=(5, 5))
         ax = plt.gca()
         lat = DualSquare(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
+        sq = Square(4, 4, None, bc='periodic')
+        sq.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
