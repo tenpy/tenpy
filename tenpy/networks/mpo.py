@@ -640,7 +640,7 @@ class MPO:
         LP = npc.tensordot(LP, self._W[0], axes=[['wR', 'p0'], ['wL', 'p*']])
         LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
 
-        for i in range(1, max_range * L):
+        for i in range(1, max(max_range, 1) * L):
             i0 = i % L
             W = self._W[i0]
             if i >= L:
@@ -654,7 +654,7 @@ class MPO:
             LP = npc.tensordot(LP, W, axes=[['wR', 'p'], ['wL', 'p*']])
             LP = npc.tensordot(LP, B.conj(), axes=[['vR*', 'p'], ['vL*', 'p*']])
 
-            if i >= L:
+            if i >= L - 1:
                 RP = env.init_RP(i)
                 current_value = npc.inner(LP,
                                           RP,
