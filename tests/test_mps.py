@@ -178,6 +178,17 @@ def test_charge_fluctuations():
 
 def test_mps_swap():
     L = 6
+    # starting from ordered pairs with infinite bc (the latter shouldn't make a difference).
+    pairs = [(0, 1), (2, 3), (4, 5)]
+    perm = rand_permutation(L)
+    pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='infinite')
+    psi.permute_sites(perm, verbose=2)
+    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
+    print(psi.overlap(psi_perm), psi.norm_test())
+    assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
+
+    # now start from random pairs
     pairs = [(0, 3), (1, 5), (2, 4)]
     pairs_swap = [(0, 2), (1, 5), (3, 4)]
     print("singlet pairs: ", pairs)

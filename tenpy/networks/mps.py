@@ -2917,7 +2917,7 @@ class MPS:
         if not unitary:
             self.canonical_form(renormalize)
 
-    def swap_sites(self, i, swap_op='auto', trunc_par={}):
+    def swap_sites(self, i, swap_op='auto', trunc_par=None):
         """Swap the two neighboring sites `i` and `i+1` (inplace).
 
         Exchange two neighboring sites: form theta, 'swap' the physical legs and split
@@ -2943,9 +2943,10 @@ class MPS:
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
         """
-        trunc_par.setdefault('chi_max', max(self.chi))
+        if trunc_par is None:
+            trunc_par = {}
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
-        if swap_op == 'auto':
+        if isinstance(swap_op, str) and swap_op == 'auto':
             # get sign for Fermions.
             # If we write the wave function as
             # psi = sum_{ [n_i]} psi_[n_i] prod_i (c^dagger_i)^{n_i}  |vac>
@@ -2988,7 +2989,7 @@ class MPS:
         self.sites[self._to_valid_index(i + 1)] = siteL
         return err
 
-    def permute_sites(self, perm, swap_op='auto', trunc_par={}, verbose=0):
+    def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=0):
         """Applies the permutation perm to the state (inplace).
 
         Parameters
@@ -3001,7 +3002,6 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
-            Defaults to ``{'chi_max': max(self.chi)}``.
         verbose : float
             Level of verbosity, print status messages if verbose > 0.
 
@@ -3016,7 +3016,9 @@ class MPS:
         # => more or less an 'insertion' sort algorithm.
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
-        trunc_par.setdefault('chi_max', max(self.chi))
+        if trunc_par is None:
+            trunc_par = {}
+        trunc_par.setdefault('verbose', verbose)
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -3106,8 +3108,6 @@ class MPS:
             raise ValueError("Works only for infinite b.c.")
         if trunc_par is None:
             trunc_par = {}
-        trunc_par.setdefault('chi_max', max(self.chi))
-        trunc_par.setdefault('verbose', verbose)
 
         if isinstance(perm, Lattice):
             lat = perm
