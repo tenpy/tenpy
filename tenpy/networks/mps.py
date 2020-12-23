@@ -2918,22 +2918,23 @@ class MPS:
             self.canonical_form(renormalize)
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
-        """Swap the two neighboring sites `i` and `i+1` (inplace).
+        r"""Swap the two neighboring sites `i` and `i+1` (inplace).
 
         Exchange two neighboring sites: form theta, 'swap' the physical legs and split
         with an svd. While the 'swap' is just a transposition/relabeling for bosons, one needs to
-        be careful about the sign for fermions.
+        be careful about the signs from Jordan-Wigner strings for fermions.
 
         Parameters
         ----------
         i : int
             Swap the two sites at positions `i` and `i+1`.
-        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
+        swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
             The operator used to swap the phyiscal legs of the two-site wave function `theta`.
-            For ``None``, just transpose/relabel the legs, for ``'auto'`` also take care of
-            fermionic signs. Alternative give an npc :class:`~tenpy.linalg.np_conserved.Array`
+            For ``None``, just transpose/relabel the legs.
+            Alternative give an npc :class:`~tenpy.linalg.np_conserved.Array`
             which represents the full operator used for the swap.
             Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
+            For ``'auto'`` we try to be smart about fermionic signs, see note below.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
             Defaults to ``{'chi_max': max(self.chi)}``.
@@ -2942,26 +2943,101 @@ class MPS:
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swap.
+
+        Notes
+        -----
+        For fermions, it's crucial to use the correct `swap_op`.
+        The `swap_op` is a two-site operator exchanging 'p0' and 'p1' legs.
+        For bosons, this is really just a relabeling (done for ``swap_op=None``).
+        Alternatively, you can construct the operator explicitly like this::
+
+            siteL, siteR = psi.sites[i], psi.sites[i+1]
+            dL, dR = siteL.dim, siteR.dim
+            legL, legR = siteL.leg, siteR.leg
+            swap_op_dense = np.eye(dL*dR)
+            swap_op = npc.Array.from_ndarray(swap_op_dense.reshape([dL, dR, dL, dR]),
+                                             [legL, legR, legL.conj(), legR.conj()],
+                                             labels=['p1', 'p0', 'p0*', 'p1*'])
+
+        However, for fermions we need to be very
+        careful about the Jordan-Wigner strings. Let's derive how the operator should look like.
+
+        You can write a state as
+
+        .. math ::
+            |\psi> = \sum_{[n_j]} \psi_{[n_j]} \prod_j (c^\dagger_j)^{n_j}  |vac>
+
+        where ``[n_j]`` denontes a set of :math:`n_j \in [0, 1]` for
+        each physical site `j` and the product over `j` is taken in increasing order.
+        Let :math:`P` be the operator switching ``i <-> i+1``, with inverse :math:`P^\dagger`.
+        Then:
+
+        .. math ::
+            P |\psi> = \sum_{[n_j]} \psi_{[n_i]} P \prod_j (c^\dagger_i)^{n_j} |vac> \\
+                 = \sum_{[n_j]} \psi_{[n_i]} P \prod_j (c^\dagger_i)^{n_j}   |vac>
+
+        When :math:`P` acts on the product of :math:`c^\dagger_{i}` operators,
+        it commutes :math:`(c^\dagger_i)^{n_i}` with :math:`(c^\dagger_{i+1})^{n_{i+1}}`.
+        This gives a a sign :math:`(-1)^{n_i * n_{i+1}}`. We must hence include this sign in
+        the swap operator.
+        The `n_i` in the equations above is given by :attr:`~tenpy.networks.site.JW_exponent`.
+        This leads to the following swap operator used for fermions with ``swap_op='auto'``,
+        suitable to just permute sites::
+
+            siteL, siteR = psi.sites[i], psi.sites[i+1]
+            dL, dR = siteL.dim, siteR.dim
+            legL, legR = siteL.leg, siteR.leg
+            n_i_n_j = np.outer(siteL.JW_exponent, siteR.JW_exponent).reshape(dL*dR)
+            swap_op_dense = np.diag((-1)**n_i_n_j)
+            swap_op = npc.Array.from_ndarray(swap_op_dense.reshape([dL, dR, dL, dR]),
+                                             [legL, legR, legL.conj(), legR.conj()],
+                                             labels=['p1', 'p0', 'p0*', 'p1*'])
+
+
+        In some cases you might want to use a more complicate swap operator.
+        For example, to reproduced Fig 5 in the appendix of :cite:`shapourian2017`, you need
+        to use a reflection acting as
+
+        As outlined in :cite:`shapourian2017`, a typical hamiltonian of the form
+        :math:`H = -t \sum_i c_i^\dagger c_{i+1} + h.c.  + \text{density interaction}`
+        is invariant under a reflection :math:`R` acting as :math:`R c^e_x R^\dagger = i c^o_{-x}`
+        and :math:`R c^o_x R^\dagger = i c^e_{-x}` for even/odd fermion sites.
+        The following code includes the factor of :math:`i`,
+        or rather :math:`-i` since we have creation operators, into the swap operator and is used
+        with ``swap_op='autoInv'``::
+
+            siteL, siteR = psi.sites[i], psi.sites[i+1]
+            dL, dR = siteL.dim, siteR.dim
+            legL, legR = siteL.leg, siteR.leg
+            n_i = np.outer(siteL.JW_exponent, np.ones(dR)).reshape(dL*dR)
+            n_j = np.outer(np.ones(dL), siteR.JW_exponent).reshape(dL*dR)
+            swap_op_dense = np.diag((-1)**(n_i * n_j) * (-1.j)**n_i * (-1.j)**n_j)
+            swap_op = npc.Array.from_ndarray(swap_op_dense.reshape([dL, dR, dL, dR]),
+                                             [legL, legR, legL.conj(), legR.conj()],
+                                             labels=['p1', 'p0', 'p0*', 'p1*'])
+
         """
         if trunc_par is None:
             trunc_par = {}
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
-        if isinstance(swap_op, str) and swap_op == 'auto':
-            # get sign for Fermions.
-            # If we write the wave function as
-            # psi = sum_{ [n_i]} psi_[n_i] prod_i (c^dagger_i)^{n_i}  |vac>
-            # we see that switching i <-> i+1 the phase to be introduced is by commuting
-            # (c^dagger_i)^{n_i} with (c^dagger_{i+1})^{n_{i+1}}
-            # This gives a sign (-1)^{n_i * n_{i+1}}.
-            # site.JW_exponent is the `n_i` in the above equations, for each physical index.
-            sign = siteL.JW_exponent[:, np.newaxis] * siteR.JW_exponent[np.newaxis, :]
-            if np.any(sign):
-                dL, dR = siteL.dim, siteR.dim
-                sign = np.real_if_close(np.exp(1.j * np.pi * sign.reshape([dL * dR])))
-                swap_op = np.diag(sign).reshape([dL, dR, dL, dR])
+        if isinstance(swap_op, str):
+            dL, dR = siteL.dim, siteR.dim
+            # site.JW_exponent is just the `n_i` in the equations of the note above.
+            n_i = np.outer(siteL.JW_exponent, np.ones(dR)).reshape(dL * dR)
+            n_j = np.outer(np.ones(dL), siteR.JW_exponent).reshape(dL * dR)
+            if np.any(n_i * n_j):
+                legL, legR = siteL.leg, siteR.leg
+                if swap_op == 'auto':
+                    swap_op_diag = (-1.)**(n_i * n_j)
+                elif swap_op == 'autoInv':
+                    swap_op_diag = (-1.)**(n_i * n_j) * (-1.j)**n_i * (-1.j)**n_j
+                else:
+                    raise ValueError("don't understand swap_op = " + repr(swap_op))
                 legs = [siteL.leg, siteR.leg, siteL.leg.conj(), siteR.leg.conj()]
-                swap_op = npc.Array.from_ndarray(swap_op, legs, labels=['p1', 'p0', 'p0*', 'p1*'])
-            else:  # no sign necessary
+                swap_op = npc.Array.from_ndarray(np.diag(swap_op_diag).reshape([dL, dR, dL, dR]),
+                                                 legs,
+                                                 labels=['p1', 'p0', 'p0*', 'p1*'])
+            else:  # at least one site isn't Fermions -> commutes
                 swap_op = None  # continue with transposition as for Bosons
         theta = self.get_theta(i, n=2)
         C = self.get_theta(i, n=2, formL=0.)  # inversion free, see also TEBDEngine.update_bond()
@@ -2997,7 +3073,7 @@ class MPS:
         perm : ndarray[ndim=1, int]
             The applied permutation, such that ``psi.permute_sites(perm)[i] = psi[perm[i]]``
             (where ``[i]`` indicates the `i`-th site).
-        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
+        swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
@@ -3069,7 +3145,7 @@ class MPS:
             each site by one lattice-vector in y-direction (assuming periodic boundary conditions).
             (If you have a :class:`~tenpy.models.model.CouplingModel`,
             give its `lat` attribute for this argument)
-        swap_op : ``None`` | ``'auto'`` | :class:`~tenpy.linalg.np_conserved.Array`
+        swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
             The operator used to swap the phyiscal legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict

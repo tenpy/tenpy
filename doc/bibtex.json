@@ -160,6 +160,7 @@
             "schollwoeck2011"
         ],
         "reference/tenpy.networks.mps.MPS": [
+            "shapourian2017",
             "pollmann2012",
             "cincio2013"
         ],
@@ -169,6 +170,7 @@
             "schollwoeck2011"
         ],
         "reference/tenpy.networks.purification_mps.PurificationMPS": [
+            "shapourian2017",
             "pollmann2012",
             "cincio2013"
         ],
