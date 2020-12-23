@@ -1660,7 +1660,7 @@ class HelicalLattice(Lattice):
             positions=regular_lattice.unit_cell_positions,
             pairs=regular_lattice.pairs,
         )
-        self.order = self._ordering_tilted(regular_lattice.order)
+        self.order = self._ordering_helical(regular_lattice.order)
         # done
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -1691,9 +1691,9 @@ class HelicalLattice(Lattice):
             as specified by :attr:`remove` and :attr:`add`.
         """
         order_reg = self.regular_lattice.ordering(order)
-        return self._ordering_tilted(order_reg)
+        return self._ordering_helical(order_reg)
 
-    def _ordering_tilted(self, order):
+    def _ordering_helical(self, order):
         """extract relevant sites from the `order` of the full 2D lattice."""
         Lx, Ly, Lu = self.regular_lattice.shape
         N_sites = self._N_cells * Lu
