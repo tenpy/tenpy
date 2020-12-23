@@ -24,7 +24,7 @@ from ..tools.misc import (to_iterable, to_iterable_of_len, inverse_permutation, 
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'TrivialLattice', 'IrregularLattice', 'TiltedLattice', 'SimpleLattice', 'Chain',
+    'Lattice', 'TrivialLattice', 'IrregularLattice', 'HelicalLattice', 'SimpleLattice', 'Chain',
     'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order',
     'get_order_grouped'
 ]
@@ -194,7 +194,7 @@ class Lattice:
         """
         assert self.dim == len(self.Ls)
         assert self.shape == self.Ls + (len(self.unit_cell), )
-        if not isinstance(self, TiltedLattice):
+        if not isinstance(self, HelicalLattice):
             assert self.N_cells == np.prod(self.Ls)
         if self.bc.shape != (self.dim, ):
             raise ValueError("Wrong len of bc")
@@ -218,7 +218,7 @@ class Lattice:
         if self.bc[0] and self.bc_MPS == 'infinite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
-        if not isinstance(self, (IrregularLattice, TiltedLattice)):
+        if not isinstance(self, (IrregularLattice, HelicalLattice)):
             assert self.N_sites == np.prod(self.shape)
             # if one of the following assert fails,
             # the `ordering` function might have returned an invalid array
@@ -1531,7 +1531,7 @@ class IrregularLattice(Lattice):
 
     @Lattice.order.setter
     def order(self, order_):
-        # very similar to TiltedLattice.order setter
+        # very similar to HelicalLattice.order setter
         self._order = np.array(order_, dtype=np.intp)
 
         # this defines `self._perm`
@@ -1586,12 +1586,12 @@ class IrregularLattice(Lattice):
         self.N_sites_per_ring = None
 
 
-class TiltedLattice(Lattice):
+class HelicalLattice(Lattice):
     """Translation invariant version of a tilted, regular 2D lattice.
 
     A 2D lattice on an infinite cylinder becomes translation invariant by a single *lattice* unit
     cell if we tilt/shift the boundary conditions around the cylinder such that the unit cell
-    at ``(x, y=Ly-1)`` is neighbored by ``(x+1, y=0)``, and the MPS winds as a regular spiral
+    at ``(x, y=Ly-1)`` is neighbored by ``(x+1, y=0)``, and the MPS winds as a helix
     around the cylinder.
     Let's illustrate this for the Square lattice with a single-site unit cell - for a multi-site
     unit cell, imagine it being inserted at each of the sites of a Square lattice.
@@ -1633,7 +1633,7 @@ class TiltedLattice(Lattice):
     _REMOVED = IrregularLattice._REMOVED
 
     def __init__(self, regular_lattice, N_unit_cells):
-        assert not isinstance(regular_lattice, TiltedLattice)
+        assert not isinstance(regular_lattice, HelicalLattice)
         if isinstance(regular_lattice, IrregularLattice):
             raise ValueError("regular_lattice can't be irregular: we want translation invariance!")
         self.regular_lattice = regular_lattice
@@ -1771,7 +1771,7 @@ class TiltedLattice(Lattice):
 
     def plot_coupling(self, ax, coupling=None, wrap=True, **kwargs):
         if not wrap:
-            raise NotImplementedError("wrap=False not implemented for the TiltedLattice")
+            raise NotImplementedError("wrap=False not implemented for the HelicalLattice")
         super().plot_coupling(ax, coupling, wrap, **kwargs)
 
     def _set_Ls(self, Ls):

@@ -38,7 +38,7 @@ Added
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
 - :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 - :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
-- :class:`tenpy.models.lattice.TiltedLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
+- :class:`tenpy.models.lattice.HelicalLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
 
 Changed
 ^^^^^^^
