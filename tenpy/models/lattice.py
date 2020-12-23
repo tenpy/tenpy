@@ -10,7 +10,7 @@ Further, we have some predefined lattices, namely
 The :class:`IrregularLattice` provides a way to remove or add sites to an existing, regular
 lattice.
 
-See also the :doc:`/intro/model`.
+See also the :doc:`/intro/model` and :doc:`/intro/lattices`.
 """
 # Copyright 2018-2020 TeNPy Developers, GNU GPLv3
 
@@ -24,8 +24,9 @@ from ..tools.misc import (to_iterable, to_iterable_of_len, inverse_permutation, 
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'TrivialLattice', 'IrregularLattice', 'SimpleLattice', 'Chain', 'Ladder', 'Square',
-    'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
+    'Lattice', 'TrivialLattice', 'IrregularLattice', 'TiltedLattice', 'SimpleLattice', 'Chain',
+    'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order',
+    'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -193,7 +194,8 @@ class Lattice:
         """
         assert self.dim == len(self.Ls)
         assert self.shape == self.Ls + (len(self.unit_cell), )
-        assert self.N_cells == np.prod(self.Ls)
+        if not isinstance(self, TiltedLattice):
+            assert self.N_cells == np.prod(self.Ls)
         if self.bc.shape != (self.dim, ):
             raise ValueError("Wrong len of bc")
         assert self.bc.dtype == np.bool
@@ -216,7 +218,7 @@ class Lattice:
         if self.bc[0] and self.bc_MPS == 'infinite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
                              "for 'infinite' `bc_MPS`")
-        if not isinstance(self, IrregularLattice):
+        if not isinstance(self, (IrregularLattice, TiltedLattice)):
             assert self.N_sites == np.prod(self.shape)
             # if one of the following assert fails,
             # the `ordering` function might have returned an invalid array
@@ -432,7 +434,7 @@ class Lattice:
         if self.bc_shift is not None:
             for i, shift in enumerate(self.bc_shift):
                 assert bc[i + 1] == "periodic"
-                bc[i + 1] = shift
+                bc[i + 1] = int(shift)
         return bc
 
     @boundary_conditions.setter
@@ -967,8 +969,8 @@ class Lattice:
         mps1, mps2 : array
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
         lat_indices : 2D int array
-            Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
-            of the "lower left corner" of the box containing the coupling.
+            Rows of `lat_indices` correspond to entries of `mps1` and `mps2` and contain the
+            lattice indices of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
@@ -1168,7 +1170,10 @@ class Lattice:
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
         wrap : bool
-            If True, wrap
+            If ``True``, plot couplings going around the boundary by directly connecting the sites
+            it connects. This might be hard to see, as this puts lines from one end of the lattice
+            to the other.
+            If ``False``, plot the couplings as dangling lines.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
         """
@@ -1455,7 +1460,7 @@ class IrregularLattice(Lattice):
             bc_MPS=regular_lattice.bc_MPS,
             basis=regular_lattice.basis,
             positions=positions,
-            pairs=self.regular_lattice.pairs,
+            pairs=regular_lattice.pairs,
         )
         self.order = self._ordering_irreg(regular_lattice.order)
         # done
@@ -1526,6 +1531,7 @@ class IrregularLattice(Lattice):
 
     @Lattice.order.setter
     def order(self, order_):
+        # very similar to TiltedLattice.order setter
         self._order = np.array(order_, dtype=np.intp)
 
         # this defines `self._perm`
@@ -1547,7 +1553,7 @@ class IrregularLattice(Lattice):
         else:
             self.N_sites_per_ring = None
 
-    # mps2lat_idx and lat2mps_idx work thanks to they way _perm is defined,
+    # mps2lat_idx and lat2mps_idx work thanks to the way _perm is defined,
     # mps2lat_values, mps2lat_values_masked work as well
 
     def mps_idx_fix_u(self, u=None):
@@ -1578,6 +1584,202 @@ class IrregularLattice(Lattice):
         # N_sites, N_sites_per_ring set by order setter
         # self.N_sites = None
         self.N_sites_per_ring = None
+
+
+class TiltedLattice(Lattice):
+    """Translation invariant version of a tilted, regular 2D lattice.
+
+    A 2D lattice on an infinite cylinder becomes translation invariant by a single *lattice* unit
+    cell if we tilt/shift the boundary conditions around the cylinder such that the unit cell
+    at ``(x, y=Ly-1)`` is neighbored by ``(x+1, y=0)``, and the MPS winds as a regular spiral
+    around the cylinder.
+    Let's illustrate this for the Square lattice with a single-site unit cell - for a multi-site
+    unit cell, imagine it being inserted at each of the sites of a Square lattice.
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure(figsize=(7, 5))
+        ax = fig.gca(projection='3d')
+        Lx, Ly, r = 6, 6, 1.
+        x = np.arange(0., Lx - 0.001, 1./Ly)
+        theta = 2*np.pi* x - np.pi/6.
+        y = r * np.sin(theta)
+        z = r * np.cos(theta)
+        ax.plot(x, y, z, 'k-', label='neighbors')
+        ax.plot(x, y, z, 'bo', label='sites')
+        N = Lx*Ly //2
+        for j in range(Ly):
+            j2 = j + (Lx-1)*Ly
+            ax.plot([x[j], x[j2]], [y[j], y[j2]], [z[j], z[j2]], 'k-')
+        ax.plot(x[:N], y[:N], z[:N], 'r--', linewidth=3., label='MPS')
+        ax.legend()
+        ax.view_init(elev=30, azim=-77)  # adjust view-point
+
+    .. warning ::
+        Some assumptions of the regular lattice like "the number of the sites in the MPS unit
+        cell is ``product(lat.shape)``" no longer hold for this model!
+        Be very careful e.g. for getting the units of the
+        :meth:`~tenpy.networks.MPS.correlation_length` right.
+
+    Parameters
+    ----------
+    N_unit_cells : int
+        Number of *lattice* unit cells to include into the MPS unit cell.
+        The total number of sites will be ``N_unit_cells * len(regular_lattice.unit_cell)``.
+
+    """
+    _REMOVED = IrregularLattice._REMOVED
+
+    def __init__(self, regular_lattice, N_unit_cells):
+        assert not isinstance(regular_lattice, TiltedLattice)
+        if isinstance(regular_lattice, IrregularLattice):
+            raise ValueError("regular_lattice can't be irregular: we want translation invariance!")
+        self.regular_lattice = regular_lattice
+        if regular_lattice.dim != 2:
+            raise ValueError("Works only for 2D lattices")
+        if regular_lattice.bc_shift is None or tuple(regular_lattice.bc_shift) != (-1, ):
+            raise ValueError("To keep the coding simpler, we require that you initialize the "
+                             "regular lattice with the shifted `bc=['periodic', -1]`")
+        if regular_lattice.bc_MPS != 'infinite':
+            raise ValueError("Require `bc_MPS='infinite'` for the regular lattice. "
+                             "For finite systems, just take a regular lattice!")
+        assert regular_lattice.bc[1] == bc_choices['periodic']  # require cylinder
+        if N_unit_cells > regular_lattice.N_cells:
+            raise ValueError("N_unit_cells larger than regular lattice: increase Lx!")
+        self._N_cells = N_unit_cells
+        Lattice.__init__(
+            self,
+            regular_lattice.Ls,
+            regular_lattice.unit_cell,
+            order='Cstyle',  # temporary
+            bc=regular_lattice.boundary_conditions,
+            bc_MPS=regular_lattice.bc_MPS,
+            basis=regular_lattice.basis,
+            positions=regular_lattice.unit_cell_positions,
+            pairs=regular_lattice.pairs,
+        )
+        self.order = self._ordering_tilted(regular_lattice.order)
+        # done
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        super().save_hdf5(hdf5_saver, h5gr, subpath)
+        hdf5_saver.save(self.regular_lattice, subpath + "regular_lattice")
+        h5gr.attrs["N_unit_cells"] = self.N_sites
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        obj = super().from_hdf5(hdf5_loader, h5gr, subpath)
+        obj._N_cells = hdf5_loader.get_attr(h5gr, "N_unit_cells")
+        return obj
+
+    def ordering(self, order):
+        """Provide possible orderings of the lattice sites.
+
+        Parameters
+        ----------
+        order :
+            Argument for the :meth:`Lattice.ordering` of the :attr:`regular_lattice`, or
+            2D ndarray providing the order of the *regular lattice*.
+            Note that really the only freedom is the order of the sites in the :attr:`unit_cell`.
+
+        Returns
+        -------
+        order : array, shape (N, D+1)
+            The order to be used for :attr:`order`, i.e. `order` with added/removed sites
+            as specified by :attr:`remove` and :attr:`add`.
+        """
+        order_reg = self.regular_lattice.ordering(order)
+        return self._ordering_tilted(order_reg)
+
+    def _ordering_tilted(self, order):
+        """extract relevant sites from the `order` of the full 2D lattice."""
+        Lx, Ly, Lu = self.regular_lattice.shape
+        N_sites = self._N_cells * Lu
+        errmsg = ("order of regular lattice incompatible with tilting. "
+                  "Must be C-style up to an overall permutation inside the unit cell.")
+        assert np.all(order[:Lu, :-1] == 0), errmsg
+        order_within_unit_cell = order[:Lu, -1]
+        assert np.all(order[:, -1] == np.tile(order_within_unit_cell, [Lx * Ly])), errmsg
+        cstyle_xy = get_order([Lx, Ly], [False, False])
+        assert np.all(order[:, :-1] == np.repeat(cstyle_xy, Lu, axis=0))
+        return order[:N_sites, :]
+
+    @Lattice.order.setter
+    def order(self, order_):
+        # very similar to IrregularLattice.order setter
+        self._order = np.array(order_, dtype=np.intp)
+        assert len(order_) == len(self.unit_cell) * self._N_cells
+
+        # this defines `self._perm`
+        perm = np.full([np.prod(self.shape)], self._REMOVED)
+        perm[np.sum(self._order * self._strides, axis=1)] = np.arange(len(order_))
+        self._perm = perm
+
+        # and the other stuff which is cached
+        # versions for fixed u
+        self._mps_fix_u = []
+        for u in range(len(self.unit_cell)):
+            mps_fix_u = np.nonzero(order_[:, -1] == u)[0]
+            self._mps_fix_u.append(mps_fix_u)
+        self._mps_fix_u = tuple(self._mps_fix_u)
+        _, counts = np.unique(order_[:, 0], return_counts=True)
+
+    # the regular lattice has the same order for the MPS,
+    # only the division into unit cells is different
+    # hence we can just use the versions of the regular lattice.
+
+    def mps2lat_idx(self, i):
+        # doc: see Lattice
+        return self.regular_lattice.mps2lat_idx(i)
+
+    def lat2mps_idx(self, lat_idx):
+        # doc: see Lattice
+        return self.regular_lattice.lat2mps_idx(lat_idx)
+
+    def mps2lat_values(self, *args, **kwargs):
+        """Not implemented, use :meth:`mps2lat_values_masked` instead."""
+        raise NotImplementedError("Use mps2lat_values_masked instead")
+
+    def mps2lat_values_masked(self, *args, **kwargs):
+        # doc: see Lattice
+        return self.regular_lattice.mps2lat_values_masked(*args, **kwargs)
+
+    def enlarge_mps_unit_cell(self, factor=2):
+        # doc: see Lattice
+        if self._N_cells * factor > self.regular_lattice.N_cells:
+            self.regular_lattice.enlarge_mps_unit_cell(factor)
+        self._N_cells = factor * self._N_cells
+        super().enlarge_mps_unit_cell()
+
+    # strategy for possible_[multi_]couplings:
+    # since everything is translation invariant along the MPS, we can just extract it
+    # from the couplings of the larger lattice
+
+    def possible_couplings(self, u1, u2, dx):
+        mps_i, mps_j, lat_ind, coupl_sh = self.regular_lattice.possible_couplings(u1, u2, dx)
+        keep = np.min([mps_i, mps_j], axis=0) < self.N_sites
+        return mps_i[keep], mps_j[keep], lat_ind[keep], coupl_sh
+
+    def possible_multi_couplings(self, ops):
+        mps_ijkl, lat_indices, coupling_shape = self.regular_lattice.possible_multi_couplings(ops)
+        keep = np.min(mps_ijkl, axis=0) < self.N_sites
+        return mps_ijkl[keep, :], lat_indices[keep, :], coupling_shape
+
+    # most plot_* functions work, except:
+
+    def plot_coupling(self, ax, coupling=None, wrap=True, **kwargs):
+        if not wrap:
+            raise NotImplementedError("wrap=False not implemented for the TiltedLattice")
+        super().plot_coupling(ax, coupling, wrap, **kwargs)
+
+    def _set_Ls(self, Ls):
+        super()._set_Ls(Ls)
+        self.N_cells = self._N_cells
+        self.N_sites = len(self.unit_cell) * self._N_cells
+        self.N_sites_per_ring = None  # shouldn't be used
+        self.N_rings = None  # shouldn't be used - pointless for this case.
 
 
 class SimpleLattice(Lattice):
