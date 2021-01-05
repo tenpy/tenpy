@@ -6,6 +6,7 @@ import sys
 import os
 import inspect
 import sphinx_rtd_theme
+import io
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -20,7 +21,7 @@ if not sys.version_info >= (3, 5):
 # don't use compiled version to avoid problems with doc-strings of compiled functions
 os.environ["TENPY_NO_CYTHON"] = "true"
 try:
-    import tenpy.version
+    import tenpy
 except:
     print("ERROR: can't import tenpy.")
     sys.exit(1)
@@ -80,6 +81,8 @@ exclude_patterns = [
     'sphinx_build', 'Thumbs.db', '.DS_Store', 'notebooks/README.rst', 'notebooks/_template.ipynb'
 ]
 
+# -- example stubs  -=-----------------------------------------------------
+
 
 def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
@@ -106,6 +109,22 @@ def create_example_stubs():
 
 
 create_example_stubs()
+
+# -- include output of command line help ----------------------------------
+
+
+def include_command_line_help():
+    parser = tenpy._setup_arg_parser()
+    parser.prog = 'tenpy-run'
+    help_text = parser.format_help()
+    # help_text = '\n'.join(['    ' + l for l in help_text.splitlines()])
+    fn = 'commandline-help.txt'
+    with open(fn, 'w') as f:
+        f.write(help_text)
+    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' '.. literalinclude:: /' + fn
+
+
+include_command_line_help()
 
 # -- Options for HTML output ----------------------------------------------
 

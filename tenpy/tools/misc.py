@@ -640,6 +640,11 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 def setup_executable(mod, run_defaults, identifier_list=None):
     """Read command line arguments and turn into useable dicts.
 
+    .. warning ::
+
+        this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
+        interface in combination with :func:`~tenpy.
+
     Uses default values defined at:
     - model class for model_par
     - here for sim_par
@@ -652,20 +657,25 @@ def setup_executable(mod, run_defaults, identifier_list=None):
             - identifier, a static (class level) list or other iterable with the names of the parameters
               to be used in filename identifiers.
 
-    Args:
-        mod (model | dict): Model class (or instance) OR a dictionary containing model defaults
-        run_defaults (dict): default values for executable file parameters
-        identifier_list (ieterable, optional) | Used only if mod is a dict. Contains the identifier
-                                                                                    variables
+    Parameters
+    ----------
+    mod : model | dict
+        Model class (or instance) OR a dictionary containing model defaults
+    run_defaults : dict
+        default values for executable file parameters
+    identifier_list : ieterable
+        Used only if mod is a dict. Contains the identifier variables
 
-    Returns:
-        model_par, sim_par, run_par (dicts) : containing all parameters.
-        args | namespace with raw arguments for some backwards compatibility with executables.
+    Returns
+    -------
+    model_par, sim_par, run_par : dict
+        containing all parameters.
+    args :
+        namespace with raw arguments for some backwards compatibility with executables.
     """
-    warnings.warn(
-        "Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
-        category=FutureWarning,
-        stacklevel=2)
+    warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
+                  category=FutureWarning,
+                  stacklevel=2)
     parser = argparse.ArgumentParser()
 
     # These deal with backwards compatibility (supplying a model)
