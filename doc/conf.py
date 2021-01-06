@@ -114,7 +114,7 @@ create_example_stubs()
 
 
 def include_command_line_help():
-    parser = tenpy._setup_arg_parser()
+    parser = tenpy._setup_arg_parser(width=98)
     parser.prog = 'tenpy-run'
     help_text = parser.format_help()
     # help_text = '\n'.join(['    ' + l for l in help_text.splitlines()])

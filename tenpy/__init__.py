@@ -105,7 +105,7 @@ def console_main():
     run_simulation(args.sim_class, **options)
 
 
-def _setup_arg_parser():
+def _setup_arg_parser(width=None):
     import argparse
     import textwrap
 
@@ -130,9 +130,13 @@ def _setup_arg_parser():
     Note that string values for the options require double quotes on the command line.
     """)
 
-    parser = argparse.ArgumentParser(description=desc,
-                                     epilog=epilog,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    def formatter(prog):
+        return argparse.RawDescriptionHelpFormatter(prog,
+                                                    indent_increment=4,
+                                                    max_help_position=8,
+                                                    width=width)
+
+    parser = argparse.ArgumentParser(description=desc, epilog=epilog, formatter_class=formatter)
     parser.add_argument('--import-module',
                         '-i',
                         metavar='MODULE',

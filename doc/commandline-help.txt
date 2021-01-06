@@ -1,34 +1,31 @@
-usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS]
-                 [--option KEY VALUE] [--version]
+usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--option KEY VALUE]
+                 [--version]
                  [parameters_file]
 
 Command line interface to run a TeNPy simulation.
 
 positional arguments:
-  parameters_file       A yaml (*.yml) file with the simulation
-                        parameters/options.
+    parameters_file
+        A yaml (*.yml) file with the simulation parameters/options.
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --import-module MODULE, -i MODULE
-                        Import the given python MODULE before setting up the
-                        simulation. This is useful if the module contains
-                        user-defined subclasses. Use python-style names like
-                        `numpy` without the .py ending.
-  --sim-class SIM_CLASS, -c SIM_CLASS
-                        selects the Simulation (sub)class, e.g.
-                        'GroundStateSearch' (default) or 'RealTimeEvolution'.
-  --option KEY VALUE, -o KEY VALUE
-                        Allows overwriting some options from the yaml files.
-                        KEY can be recursive separated by ``/``, e.g.
-                        ``dmrg_params/trunc_params/chi``. VALUE is initialized
-                        by python's ``eval(VALUE)`` with `np`, `scipy` and
-                        `tenpy` defined. Thus ``'1.2'`` and
-                        ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'``
-                        will work if you include the quotes on the command
-                        line to ensure that the VALUE is passed as a single
-                        argument.
-  --version, -v         show program's version number and exit
+    -h, --help
+        show this help message and exit
+    --import-module MODULE, -i MODULE
+        Import the given python MODULE before setting up the simulation. This is useful if the
+        module contains user-defined subclasses. Use python-style names like `numpy` without the
+        .py ending.
+    --sim-class SIM_CLASS, -c SIM_CLASS
+        selects the Simulation (sub)class, e.g. 'GroundStateSearch' (default) or
+        'RealTimeEvolution'.
+    --option KEY VALUE, -o KEY VALUE
+        Allows overwriting some options from the yaml files. KEY can be recursive separated by
+        ``/``, e.g. ``dmrg_params/trunc_params/chi``. VALUE is initialized by python's
+        ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. Thus ``'1.2'`` and
+        ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'`` will work if you include the quotes
+        on the command line to ensure that the VALUE is passed as a single argument.
+    --version, -v
+        show program's version number and exit
 
 Examples
 --------
