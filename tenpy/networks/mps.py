@@ -448,7 +448,7 @@ class MPS:
 
         Examples
         --------
-        Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TIChain`:
+        Example to get a Neel state for a :class:`~tenpy.models.tf_ising.TFIChain`:
 
         .. doctest :: MPS.from_product_state
 
@@ -2994,11 +2994,8 @@ class MPS:
                                              labels=['p1', 'p0', 'p0*', 'p1*'])
 
 
-        In some cases you might want to use a more complicate swap operator.
-        For example, to reproduced Fig 5 in the appendix of :cite:`shapourian2017`, you need
-        to use a reflection acting as
-
-        As outlined in :cite:`shapourian2017`, a typical hamiltonian of the form
+        In some cases you might want to use a more complicated swap operator.
+        As outlined in (the appendix of) :cite:`shapourian2017`, a typical hamiltonian of the form
         :math:`H = -t \sum_i c_i^\dagger c_{i+1} + h.c.  + \text{density interaction}`
         is invariant under a reflection :math:`R` acting as :math:`R c^e_x R^\dagger = i c^o_{-x}`
         and :math:`R c^o_x R^\dagger = i c^e_{-x}` for even/odd fermion sites.

@@ -81,7 +81,7 @@ Alternatively, you can also use a shift and define :math:`q_i = S^z_i + \frac{1}
 
 As another example, consider BCS like terms :math:`\sum_k (c^\dagger_k c^\dagger_{-k} + H.c.)`.
 These terms break the total particle conservation,
-but they preserve the total parity, i.e., :math:`N % 2` is conserved. Thus, you would introduce a charge with :math:`m = 2` in this case.
+but they preserve the total parity, i.e., :math:`N \mod 2` is conserved. Thus, you would introduce a charge with :math:`m = 2` in this case.
 
 In the above examples, we had only a single charge conserved at a time, but you might be lucky and have multiple
 conserved quantities, e.g. if you have two chains coupled only by interactions. 
