@@ -1,9 +1,11 @@
-.. include:: ../README.rst
+.. raw :: latex
+
+    \part{User guide}
 
 .. toctree::
     :caption: User guide
-    :maxdepth: 2
 
+    readme
     INSTALL
     releases
     introductions
@@ -11,6 +13,10 @@
     literature
     papers_using_tenpy
     contributing
+
+.. raw :: latex
+
+    \part{Reference}
 
 .. toctree::
     :caption: Reference
@@ -32,12 +38,17 @@
     tools
     version
 
+.. raw :: latex
 
-Indices and tables
-------------------
+    \part{Appendix}
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`cfg-config-index`
-* :ref:`cfg-option-index`
-* :ref:`search`
+.. only :: html
+
+    Indices and Tables
+    ==================
+
+    * :ref:`genindex`
+    * :ref:`modindex`
+    * :ref:`cfg-config-index`
+    * :ref:`cfg-option-index`
+    * :ref:`search`
