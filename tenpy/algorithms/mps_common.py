@@ -25,6 +25,7 @@ import numpy as np
 import time
 import warnings
 import copy
+from random import randrange
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
@@ -256,6 +257,8 @@ class Sweep:
         self.sweeps = self.options.get('sweep_0', 0)
         self.shelve = False
         self.chi_list = self.options.get('chi_list', None)
+        self.qramp_list = self.options.get('qramp_list', None)
+        self.qramp_op = self.options.get('qramp_op', None)
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
@@ -276,13 +279,13 @@ class Sweep:
         if self.verbose >= 1:
             print("Updating environment")
         for k in range(N_sweeps):
-            self.sweep(optimize=False)
+            self.sweep(optimize=False, use_ramp=False)
             if self.verbose >= 1:
                 print('.', end='', flush=True)
         if self.verbose >= 1:
             print("", flush=True)  # end line
 
-    def sweep(self, optimize=True):
+    def sweep(self, optimize=True, use_ramp=True):
         """One 'sweep' of a sweeper algorithm.
 
         Iteratate over the bond which is optimized, to the right and
@@ -295,6 +298,9 @@ class Sweep:
         optimize : bool, optional
             Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
+        use_ramp : bool, optional
+            Whether we insert any ramp operators to potentially change quantum numbers
+            (If False, skip any operator insertions).
 
         Returns
         -------
@@ -304,7 +310,9 @@ class Sweep:
         self.E_trunc_list = []
         self.trunc_err_list = []
         schedule = self.get_sweep_schedule()
-
+        qramp_schedule = self.get_qramp_schedule(use_ramp)
+        next_qramp=next(qramp_schedule)[0]
+        #print ("next_qramp=",next_qramp)
         # the actual sweep
         for i0, move_right, update_LP_RP in schedule:
             self.i0 = i0
@@ -313,8 +321,16 @@ class Sweep:
             update_LP, update_RP = update_LP_RP
             if self.verbose >= 10:
                 print("in sweep: i0 =", i0)
+                #print("next_qramp[0]=",next_qramp[0]," next_qramp[1]=", next_qramp[1])
             # --------- the main work --------------
-            theta = self.prepare_update()
+            if (next_qramp[0]==self.i0) and (next_qramp[1]==self.move_right):
+                if (self.verbose >= 5):
+                    print("Inserting qramp operator at sweep ", self.sweeps, " with values: ",next_qramp)
+                theta = self.prepare_update_with_ramp(next_qramp[2])
+                next_qramp=next(qramp_schedule)[0]
+                #print ("next_qramp=",next_qramp)
+            else:
+                theta = self.prepare_update()
             update_data = self.update_local(theta, optimize=optimize)
             if update_LP:
                 self.update_LP(update_data['U'])  # (requires updated B)
@@ -368,9 +384,87 @@ class Sweep:
                            [[True, True]] * 2 + [[False, True]] * (L-2)
         return zip(i0s, move_right, update_LP_RP)
 
+    def _decode_i0_location(self, i0, move_right, op):
+        """Can generate a random site if i0 is 'r' or 'R', or else, take sites module MPS unit cell.
+        If i0 is outside the simulation cell, will translate into relevant location either forwards or backwards within cell."""
+        if (i0 =='r' or i0 =='R'):
+        	i0=randrange(2*self.psi.L)
+        change_direction=(i0 // self.psi.L) % 2
+        if (change_direction):
+            return (i0%self.psi.L, not move_right, op)
+        else:
+            return (i0%self.psi.L, move_right, op)
+
+    def _fill_event(self, event):
+        """Make sure event is a list with three entries [i0, move_right, ops]"""
+        l0=len(event)
+        if self.qramp_op is not None:
+        	if l0<1:
+        	    event.append(0)
+        	if l0<2:
+        	    event.append(True)
+        	if l0<3:
+        	    event.append(self.qramp_op)
+        else:
+            raise ValueError("Attention: option 'qramp_op' needs to be set if no operators given to qramp_list - no operator added at sweep ",self.sweeps)
+
+
+    def get_qramp_schedule(self, use_ramp=True):
+        """Define any required events for ramping the quantum number during the next sweep.
+		Returns
+		-------
+		schedule : iterator of (int, bool, (operator_name))
+			Schedule for ramp events. Each event is described by a set of
+			``(i0, move_right, (operator_name))``,
+			where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
+			:meth:`update_local`, `move_right` indicates whether the update should be made while moving to the right (`True`) or to the left (`False`),
+			and operator_name designates the operator to be applied to the local theta prior to optimization.
+			You can specify all operators known to the sites as a string. If several operators separated by a comma are listed,
+			these will be split into separate ramp events during the same sweep.
+
+		Parameters
+        ----------
+
+		use_ramp : bool
+		    (optional) flag indicating if operators should be inserted or not.
+		Input: defined my options.ramp_op and options.qramp
+        """
+        terms=[]
+        next_events=None
+        # possible extension: could make this suitable to generate multiple ramp events during a sweep
+        if use_ramp and self.qramp_list is not None:
+        	next_events = self.qramp_list.get(self.sweeps, None)
+        if next_events is not None:
+            # turn next_events into list of lists, if not already.
+            if len(next_events)>1:
+        	    if (type(next_events[0])!=type([])):
+        		    next_events=[next_events]
+            else:
+                next_events=[next_events]
+            for next_event in next_events:
+                if len(next_event)< 3: # allowing flexible syntax
+                	self._fill_event(next_event)
+                if type(next_event[2])==type(""):
+                    ops=next_event[2].split(',')
+                else:
+                    ops=[next_event[2]]
+                for op in ops:
+                    terms.append(self._decode_i0_location(next_event[0], next_event[1], op))
+            terms.sort(key=lambda x: (x[1]==True)* x[0]+(x[1]==False)*(2*self.psi.L-x[0])) # make sure terms appear sorted in MPS order
+        # add a dummy entry to the end of the list enabling to call next on iterator until last relevant element reached
+        terms.append([-1, True, 'None'])
+        if (self.verbose>=5):
+            print ("terms for sweep ", self.sweeps," are: ",terms)
+        return zip(terms)
+
     def prepare_update(self):
         """Prepare everything algorithm-specific to perform a local update."""
-        pass  # should usually be overridden by subclassed
+        pass  # should usually be overridden by subclasses
+        
+    def prepare_update_with_ramp(self, qramp_op):
+    	"""Prepare everything algorithm-specific to perform a local update and change the local wave function."""
+    	print ("prepare_update_with_ramp not defined - Ignoring Ramp called at i0=",self.i0, " move_right=",self.move_right," in sweep ",self.sweeps, " with operator ", qramp_op)
+    	return self.prepare_update()
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update."""

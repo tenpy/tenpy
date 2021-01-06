@@ -832,10 +832,10 @@ class CouplingModel(Model):
         r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
-        :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP0 * OP1`, where
-        ``OP0 := lat.unit_cell[u0].get_op(op0)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
-        and ``OP1 := lat.unit_cell[u1].get_op(op1)`` acts on the site
-        ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u1)``.
+        :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP1 * OP2`, where
+        ``OP1 := lat.unit_cell[u0].get_op(op1)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
+        and ``OP2 := lat.unit_cell[u1].get_op(op2)`` acts on the site
+        ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
         Possible combinations ``x_0, ..., x_{dim-1}`` are determined from the boundary conditions
         in :meth:`~tenpy.models.lattice.Lattice.possible_couplings`.
 

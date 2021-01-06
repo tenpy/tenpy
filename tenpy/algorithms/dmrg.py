@@ -690,6 +690,8 @@ class DMRGEngine(Sweep):
         DMRG).
     chi_list : dict | ``None``
         See :cfg:option:`DMRGEngine.chi_list`
+    qramp_list : dict | ``None``
+        See :cfg:option:`DMRGEngine.qramp_list`
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
@@ -1031,6 +1033,15 @@ class DMRGEngine(Sweep):
                 ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
                 afterwards. Overwrites `trunc_params['chi_list']``.
                 By default (``None``) this feature is disabled.
+            qramp_list : dict | None
+                A dictionary to specify a set timesteps at which operators are 
+                applied to the MPS in the course of a DMRG run to change some 
+                quantum numbers gradually.
+                Entries have the form: ``{ nbr_sweep: [i0, move_right, custom_op]}``
+                where all arguments are optional and have the following meaning:
+                i0 (default 0), move_right (default True) are defined as per Sweep.get_sweep_schedule
+                and custom_op allows placing different operators (default options['qramp_op'])
+                By default (``None``) this feature is disabled.            
             sweep_0 : int
                 The number of sweeps already performed. (Useful for re-start).
         """
@@ -1062,9 +1073,11 @@ class DMRGEngine(Sweep):
             self.trunc_params['chi_max'] = chi_max
             if self.verbose >= 1:
                 print("Setting chi_max =", chi_max)
+        self.qramp_list = self.options.get('qramp_list', None)
+        self.qramp_op = self.options.get('qramp_op', None)
         self.time0 = time.time()
 
-    def sweep(self, optimize=True, meas_E_trunc=False):
+    def sweep(self, optimize=True, meas_E_trunc=False, use_ramp=True):
         """One 'sweep' of a the algorithm.
 
         Iteratate over the bond which is optimized, to the right and
@@ -1088,7 +1101,7 @@ class DMRGEngine(Sweep):
         """
         # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
-        res = super().sweep(optimize)
+        res = super().sweep(optimize, use_ramp)
         if optimize:
             # update mixer
             if self.mixer is not None:
@@ -1111,6 +1124,11 @@ class DMRGEngine(Sweep):
         theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=cutoff)
         theta = self.eff_H.combine_theta(theta)
         return theta
+
+    def prepare_update_with_ramp(self, qramp_op):
+    	"""Prepare everything algorithm-specific to perform a local update and change the local wave function."""
+    	print ("prepare_update_with_ramp not defined in subclass of DMRGEngine - Ignoring Ramp called at i0=",self.i0, " move_right=",self.move_right," in sweep ",self.sweeps, " with operator ", qramp_op)
+    	return self.prepare_update()
 
     def update_local(self, theta, optimize=True):
         """Perform site-update on the site ``i0``.
@@ -1418,8 +1436,61 @@ class DMRGEngine(Sweep):
         if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
             mixer = self.mixer
             self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
+            self.sweep(optimize=False, use_ramp=False)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
+            
+    def _qramp_ops(self, ops, i0):
+        """parse the arguments of self.prepare_update_with_ramp() and prepare a 
+           corresponding list of operators to be applied to theta"""
+        ops = npc.to_iterable_arrays(ops)
+        #print ("ops=",ops," type",type(ops), "obs[0]=",ops[0])
+        terms=[]
+        L=self.n_optimize
+        l=len(ops)
+        if (l>L):
+        	print("Attention: given a longer sequence of ramp operators than there are sites in MPS unit cell!")        	
+        	print("The following operators will be ignored: ",ops[(L-l):])
+        	l=L
+        # tile segments of the operators in all available translations
+        # 1. start on first site:
+        next_op=self.psi.get_op([ops[0]],i0)
+        if self.verbose>=10:
+            print ("Decoding qramp ops ",ops, " to l=",l)
+            print("full op:",next_op.to_ndarray())
+            print ("Leg labels for next_op:", next_op.get_leg_labels())
+        next_op.ireplace_labels([0,1],['p0','p0*'])
+        for i in range(1,l):
+            to_add=self.psi.get_op([ops[i]],i0+i)
+            to_add.ireplace_labels([0,1],['p'+str(i),'p'+str(i)+'*'])
+            next_op=npc.tensordot(next_op, to_add, axes=0)
+        for j in range(l,L):
+            to_add=self.psi.get_op(['Id'],i0+j)
+            if self.verbose>=10:
+                print("full op ",j,":",to_add.to_ndarray())
+            to_add.ireplace_labels([0,1],['p'+str(j),'p'+str(j)+'*'])
+            next_op=npc.tensordot(next_op,to_add, axes=0)
+        terms.append(next_op.transpose([2*i for i in range(L)] + [2*i+1 for i in range(L)] ))
+        #print ("Leg labels for operator 0:", next_op.get_leg_labels())
+        # 2. start on a later site, then insert group of operators
+        next_op=self.psi.get_op(['Id'],i0)
+        next_op.ireplace_labels([0,1],['p0','p0*'])
+        for j in range(1,L-l+1):
+            for i in range(1,j):
+                to_add=self.psi.get_op(['Id'],i0+i)
+                to_add.ireplace_labels([0,1],['p'+str(i),'p'+str(i)+'*'])
+                next_op=npc.tensordot(next_op,to_add, axes=0)
+            for i in range(j,j+l):
+                to_add=self.psi.get_op([ops[i-j]],i0+i)
+                to_add.ireplace_labels([0,1],['p'+str(i),'p'+str(i)+'*'])
+                next_op=npc.tensordot(next_op,to_add, axes=0)
+            for i in range(j+1,L-l):
+                to_add=self.psi.get_op(['Id'],i0+i)
+                to_add.ireplace_labels([0,1],['p'+str(i),'p'+str(i)+'*'])
+                next_op=npc.tensordot(next_op,to_add, axes=0)
+            terms.append(next_op.transpose([2*i for i in range(L)] + [2*i+1 for i in range(L)]))
+            #print ("Leg labels for operator",j,":", next_op.get_leg_labels())
+        return terms
+
 
 
 class TwoSiteDMRGEngine(DMRGEngine):
@@ -1446,6 +1517,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
         uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
         `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
+    qramp_list : dict | ``None``
+        A dictionary allowing to insert local operators at given points of the DMRG run.
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
@@ -1557,6 +1630,58 @@ class TwoSiteDMRGEngine(DMRGEngine):
             return U, S, VH, err
         update_LP, update_RP = self.update_LP_RP
         return self.mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+
+    def prepare_update_with_ramp(self, qramp_op):
+        """Prepare everything algorithm-specific to perform a local update and change the local wave function:
+        1) Prepare `self` for calling :meth:`update_local` on sites ``i0 : i0+n_optimize``.
+        2) Apply the operator described by qramp_op to these sites
+
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        	Current best guess for the ground state, which is to be optimized.
+        	Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
+        	For single-site DMRG, the ``'p1'`` label is missing.
+        """
+        if self.verbose>=5:
+            print ("Performing update with ramp for operator", qramp_op)
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=cutoff)
+#         print ("Before: theta.norm()=",npc.norm(theta))
+#         print ("Leg labels for theta:", theta.get_leg_labels())
+        ops=self._qramp_ops(qramp_op, self.i0)
+#         print ("Leg labels for op0:", ops[0].get_leg_labels())
+#         print ("Charge sectors for op0.p0",ops[0].get_leg('p0').charge_sectors())
+#         print ("Charge sectors for op0.p1",ops[0].get_leg('p1').charge_sectors())
+        new_theta=npc.tensordot(theta, ops[0], axes=[['p0', 'p1'],['p0*', 'p1*']]).transpose(['vL', 'p0', 'p1', 'vR'])
+        if self.verbose>=10:
+            print ("new_theta.norm()=",npc.norm(new_theta))
+        for i in range(1,len(ops)):
+            op=ops[i]
+#             print ("Leg labels for op",i,":", op.get_leg_labels())
+#             print ("Charge sectors for op.p0",op.get_leg('p0').charge_sectors())
+#             print ("Charge sectors for op.p1",op.get_leg('p1').charge_sectors())
+            term = npc.tensordot(theta, op, axes=[['p0', 'p1'],['p0*', 'p1*']])
+#             print ("term.norm()=",npc.norm(term))
+#             print ("Leg labels for term:", term.get_leg_labels())
+#             print ("Charge sectors for term.p0",term.get_leg('p0').charge_sectors())
+#             print ("Charge sectors for term.p1",term.get_leg('p1').charge_sectors())
+            new_theta.iadd_prefactor_other(1.0, term.transpose(['vL', 'p0', 'p1', 'vR']))
+#             print ("new_theta.norm()=",npc.norm(new_theta))
+#             print ("Leg labels for new_theta:", new_theta.get_leg_labels())
+#         print ("Leg labels for new theta after loop:", new_theta.get_leg_labels())
+        new_norm=npc.norm(new_theta)
+        if (new_norm!=0.0):
+            theta = self.eff_H.combine_theta(new_theta)/new_norm
+        else:
+            raise RuntimeError("Error: could not add qramp operator at sweep ",self.sweeps, " - vanishing norm")
+        theta = self.eff_H.combine_theta(theta)
+#         print ("Leg labels for theta after combine:", new_theta.get_leg_labels())
+#         print ("theta.norm()=",npc.norm(theta))
+        return theta
+            
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1796,6 +1921,40 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = U.split_legs(['(vL.p)'])
                 S = VH_U.iscale_axis(S_U, 'vL').iscale_axis(S, 'vR')
             return U, S, VH, err
+
+    def prepare_update_with_ramp(self, qramp_op):
+        """Prepare everything algorithm-specific to perform a local update and change the local wave function:
+        1) Prepare `self` for calling :meth:`update_local` on sites ``i0 : i0+n_optimize``.
+        2) Apply the operator described by qramp_op to these sites
+        
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+        	Current best guess for the ground state, which is to be optimized.
+        	Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
+        	For single-site DMRG, the ``'p1'`` label is missing.
+        """
+        if self.verbose>=5:
+            print ("Performing update with ramp for operator", qramp_op)
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
+        # make theta
+        cutoff = 1.e-16 if self.mixer is None else 1.e-8
+        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=cutoff)
+        ops=self._qramp_ops(qramp_op, self.i0)
+        new_theta=npc.tensordot(theta, ops[0], axes=[['p0'],['p0*']]).transpose(['vL', 'p0', 'vR'])
+        if self.verbose>=10:
+            print ("new_theta.norm()=",npc.norm(new_theta))
+        for i in range(1,len(ops)):
+            op=ops[i]
+            term = npc.tensordot(theta, op, axes=[['p0'],['p0*']])
+            new_theta.iadd_prefactor_other(1.0, term.transpose(['vL', 'p0', 'vR']))
+        new_norm=npc.norm(new_theta)
+        if (new_norm!=0.0):
+            theta = self.eff_H.combine_theta(new_theta)/new_norm
+        else:
+            raise RuntimeError("Error: could not add qramp operator at sweep ",self.sweeps, " - vanishing norm")
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.

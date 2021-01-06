@@ -421,7 +421,51 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
         print("chi_list = ")
         pprint.pprint(chi_list)
     return chi_list
+    
+def qramp_list(nqramp, last_qramp, qramp_op, qramp_site, qramp_move_right):
+    """return a dictionary of sweep indices with entries corresponding to qramp_list 
+    in :class:`~tenpy.algorithms.dmrg.DMRGEngine`
+    Parameters
+    ----------
+    nqramp : int
+        Number of operators to be inserted in total
+    last_qrampp : int
+        The largest sweep index where an insertion occurs
+    qramp_op : str, npc.array
+        Description of the operator to insert, appropriate for the chosen DMRG algorithm
+    qramp_site : int
+    	Site of MPS where operators should be inserted
+    qramp_move_right : True | False
+    	Direction of movement during DMRG when operators should be inserted
 
+    Returns
+    -------
+    dictionary: {nsweep1: [i0, move_right, custom_op], nsweep2: [...]}
+    """
+    if (last_qramp<nqramp):
+    	raise ValueError("Error: multiple operator insertions per sweep not currently supported.")
+    if qramp_site is None:
+    	qramp_site = 0
+    if nqramp == 0:
+    	return {}
+    stride = int(last_qramp)//int(nqramp)
+    nlarger=last_qramp-stride*nqramp # number of steps with size (stride +1)
+    qramp_list = {}
+    for i in range (nqramp - nlarger):
+    	sweep = (i+1)*stride
+    	if (qramp_op is not None):
+    		qramp_list[sweep] = [qramp_site, qramp_move_right, qramp_op]
+    	else:
+            qramp_list[sweep] = [qramp_site, qramp_move_right]
+    offset = stride*(nqramp - nlarger)
+    for i in range (nlarger):
+    	sweep = offset + (i+1)*(stride+1)
+    	if (qramp_op is not None):
+    	    qramp_list[sweep] = [qramp_site, qramp_move_right, qramp_op]
+    	else:
+    		qramp_list[sweep] = [qramp_site, qramp_move_right]
+    print ("qramp_list=",qramp_list)
+    return qramp_list
 
 def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     """Find groups of indices for which (energy) values are degenerate.
@@ -504,7 +548,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     Args:
         mod (model | dict): Model class (or instance) OR a dictionary containing model defaults
         run_defaults (dict): default values for executable file parameters
-        identifier_list (ieterable, optional) | Used only if mod is a dict. Contains the identifier
+        identifier_list (iterable, optional) | Used only if mod is a dict. Contains the identifier
                                                                                     variables
 
     Returns:
@@ -563,6 +607,11 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     parser.add_argument('-chi', type=int, default=100)
     parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
     parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
+    parser.add_argument('-nqramp', type=int, default=0) # Number of insertions of qramp operator
+    parser.add_argument('-last_qramp', type=int, default=50) # Last sweep at which an operator is inserted
+    parser.add_argument('-qramp_op', type=str, default=None) # Operator to insert during ramp events
+    parser.add_argument('-qramp_site', type=str, default='0', help='The site index where ramp operators should be inserted, or "R" for random sites') # Site on which to insert the ramp operator
+    parser.add_argument('-qramp_move_left', action='store_true') # flag indicating the operators should be inserted while moving left
     parser.add_argument('-min_sweeps', type=int, default=30)
     parser.add_argument('-max_sweeps', type=int, default=1000)
     #parser.add_argument('-n_steps', type=int, default=10)
@@ -591,6 +640,8 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
         sim_par = {
             'active_sites': args.active_sites,
             'chi_list': dmrg.chi_list(args.chi, args.dchi, args.dsweeps),
+            'qramp_op': args.qramp_op,
+            'qramp_list': qramp_list(args.nqramp, args.last_qramp, args.qramp_op, args.qramp_site, not args.qramp_move_left),
             'N_sweeps_check': 10,
             'min_sweeps': args.min_sweeps,
             'max_sweeps': args.max_sweeps,

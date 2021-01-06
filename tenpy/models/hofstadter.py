@@ -97,6 +97,8 @@ def gauge_hopping(model_params):
         # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         if mx is None:
             mx = phi_q
+        else:
+            assert(mx, phi_q)
         hop_x = -Jx
         hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':

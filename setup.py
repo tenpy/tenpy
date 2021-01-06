@@ -117,7 +117,7 @@ def setup_cython_extension():
         return []
     # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
     TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
-    include_dirs = [numpy.get_include()]
+    include_dirs = [numpy.get_include(), os.getenv('INCLUDE')]
     libs = []
     lib_dirs = []
 
