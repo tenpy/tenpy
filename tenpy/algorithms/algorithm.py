@@ -58,3 +58,13 @@ class Algorithm:
         Needs to be implemented in subclasses.
         """
         raise NotImplementedError("Sublcasses should implement this.")
+
+    def resume_run(self):
+        """Resume a run that was interrupted.
+
+        In case we saved an intermediate result at a :class:`checkpoint`, this function
+        allows to resume the :meth:`run` of the algorithm.
+        Since most algorithms just have a while loop with break conditions,
+        the default behaviour implemented here is to just call :meth:`run`.
+        """
+        self.run()

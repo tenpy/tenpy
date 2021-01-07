@@ -1,15 +1,12 @@
 """This module contains base classes for simulations.
 
-The "simulation" class tries to put everything need for a simulation in a structured form and
-collects task like initializing the tensor network state, model and algorithm classes,
+The :class:`Simulation` class tries to put everything need for a simulation in a structured form
+and collects task like initializing the tensor network state, model and algorithm classes,
 running the actual algorithm, possibly performing measurements and saving the results.
 
 
 .. todo ::
     provide examples
-
-.. todo ::
-    function to resume simulations
 
 .. todo ::
     update figure displaying the "layers of TeNPy"
@@ -95,6 +92,8 @@ class Simulation:
         In that way, we still have a non-corrupt version if something fails during saving.
     _last_save : float
         Time of the last call to :meth:`save_results`, initialized to startup time.
+    loaded_from_checkpoint : bool
+        True when the simulation is loaded with :meth:`from_saved_checkpoint`.
 
     """
     #: name of the default algorithm `engine` class
@@ -110,6 +109,8 @@ class Simulation:
     ]
 
     def __init__(self, options):
+        if not hasattr(self, 'loaded_from_checkpoint'):
+            self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
         cwd = self.options.get("directory", None)
         if cwd is not None:
@@ -117,6 +118,10 @@ class Simulation:
             os.chdir(cwd)
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
+            if self.loaded_from_checkpoint:
+                warnings.warn("resetting `random_seed` for a simulation loaded from checkpoint."
+                              "Depending on where you use random numbers, "
+                              "this might not be what you want!")
             np.random.seed(random_seed)
         self.results = {
             'simulation_parameters': self.options.as_dict(),
@@ -128,11 +133,50 @@ class Simulation:
 
     def run(self):
         """Run the whole simulation."""
+        if self.loaded_from_checkpoint:
+            warnings.warn("called `run()` on a simulation loaded from checkpoint. "
+                          "You should probably call `resume_run()` instead!")
         self.init_model()
         self.init_state()
         self.init_algorithm()
         self.init_measurements()
         self.run_algorithm()
+        self.final_measurements()
+        results = self.save_results()
+        return results
+
+    @classmethod
+    def from_saved_checkpoint(cls, filename=None, checkpoint_results=None):
+        if filename is not None:
+            if checkpoint_results is not None:
+                raise ValueError("pass either filename or checkpoint_results")
+            checkpoint_results = hdf5_io.load(filename)
+        options = checkpoint_results['simulation_parameters']
+        # usually, we would say `sim = cls(options)`.
+        # the following 3 lines provide an additional hook setting :attr:`loaded_from_checkpoint`
+        # before calling the `__init__()`, such that other methods can be customized to this case.
+        sim = cls.__new__(cls)
+        sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
+        sim.__init__(options)
+        sim.results = checkpoint_results
+        sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
+        return sim
+
+    def resume_run(self):
+        if not self.loaded_from_checkpoint:
+            warnings.warn("called `resume_run()` on a simulation *not* loaded from checkpoint. "
+                          "You probably want `run()` instead!")
+        self.init_model()
+        # init_state() equivalent
+        if not hasattr(self, 'psi'):
+            if 'psi' not in self.results:
+                raise ValueError("psi not saved in the results: can't resume!")
+            self.psi = self.results['psi']
+        self.options.touch('initial_state_builder_class', 'initial_state_params', 'save_psi')
+        self.init_algorithm()
+        # the relevant part from init_measurements()
+        self._connect_measurements()
+        self.resume_run_algorithm()
         self.final_measurements()
         results = self.save_results()
         return results
@@ -203,7 +247,7 @@ class Simulation:
                 Dictionary with parameters for the algortihm; see the decoumentation of the
                 `algorithm_class`.
             connect_algorithm_checkpoint : list of tuple
-                Functions to connect to the :attr:`~tenpy.algorithms.Algorith.checkpoing` event
+                Functions to connect to the :attr:`~tenpy.algorithms.Algorith.checkpoint` event
                 of the algorithm.
                 Each tuple can be of length 2 to 4, with entries
                 ``(module, function, kwargs, priority)``, the last two optionally.
@@ -264,6 +308,11 @@ class Simulation:
     def run_algorithm(self):
         """Run the algorithm. Calls ``self.engine.run()``."""
         self.engine.run()
+
+    def resume_run_algorithm(self):
+        """Resume running the algorithm. Calls ``self.engine.resume_run()``."""
+        # usual algorithms have a loop with break conditions, which we can just resume
+        self.engine.resume_run()
 
     def make_measurements(self):
         """Perform measurements and merge the results into ``self.results['measurements']``."""
@@ -328,8 +377,13 @@ class Simulation:
             return
         path, filename = os.path.split(output_filename)
         backup_filename = os.path.join(path, "__old__" + filename)
+        self.output_filename = output_filename
+        self._backup_filename = backup_filename
         if os.path.exists(output_filename):
             if overwrite_output:
+                if self.loaded_from_checkpoint:
+                    # don't overwrite the old file until we have new data
+                    return
                 os.path.move(output_filename, backup_filename)
             else:
                 # adjust output filename to avoid overwriting stuff
@@ -343,15 +397,16 @@ class Simulation:
                 warnings.warn("changed output filename to {0!r}".format(output_filename))
                 path, filename = os.path.split(output_filename)
                 backup_filename = os.path.join(path, "__old__" + filename)
+                self.output_filename = output_filename
+                self._backup_filename = backup_filename
         # we made sure that `output_filename` doesn't exist yet,
         # so create it as empty file to indicated that we want to save something there,
         # and to ensure that we have write access
+        import socket
+        text = "simulation initialized on {host!r} at {time!s}\n"
+        text = text.format(host=socket.gethostname(), time=time.asctime())
         with open(output_filename, 'w') as f:
-            text = "simulation initialized on {host!r} at {time!s}\n"
-            import socket
-            f.write(text.format(host=socket.gethostname(), time=time.asctime()))
-        self.output_filename = output_filename
-        self._backup_filename = backup_filename
+            f.write(text)
 
     def save_results(self):
         """Save the :attr:`results` to an output file.

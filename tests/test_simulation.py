@@ -30,8 +30,13 @@ class DummyAlgorithm(Algorithm):
         return None, self.psi
 
 
-class DummySimulation(Simulation):
+class SimulationStop(Exception):
     pass
+
+
+def raise_SimulationStop(algorithm):
+    if algorithm.evolved_time > 0.:
+        raise SimulationStop("from raise_SimulationStop")
 
 
 def dummy_measurement(results, psi, simulation):
@@ -71,6 +76,20 @@ def test_Simulation():
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
+
+
+def test_Simulation_resume():
+    sim_params = copy.deepcopy(simulation_params)
+    sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop')]
+    sim = Simulation(sim_params)
+    try:
+        results = sim.run()
+        assert False, "expected to raise a SimulationStop in sim.run()"
+    except SimulationStop:
+        checkpoint_results = sim.prepare_results_for_save()
+    checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []
+    sim2 = Simulation.from_saved_checkpoint(checkpoint_results=checkpoint_results)
+    sim2.resume_run()
 
 
 groundstate_params = copy.deepcopy(simulation_params)
