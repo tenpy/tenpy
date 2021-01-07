@@ -293,6 +293,17 @@ class Config(MutableMapping):
         self.unused.discard(key)  # (does nothing if key not in set)
         return subconfig
 
+    def touch(self, *keys):
+        """Mark `keys` as read out to supress warnings about those keys being unused.
+
+        Parameters
+        ----------
+        *keys : str
+            Each key is marked as read out.
+        """
+        for key in keys:
+            self.unused.discard(key)  # (does nothing if key not in set)
+
     def print_if_verbose(self, option, action=None, use_default=False):
         """Print out `option` if verbosity and other conditions are met.
 
