@@ -25,7 +25,7 @@ from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.misc import find_subclass
+from ..tools.misc import find_subclass, set_recursive, get_recursive
 from .. import version
 
 __all__ = ['Simulation']
@@ -173,10 +173,14 @@ class Simulation:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
         self.options.touch('initial_state_builder_class', 'initial_state_params', 'save_psi')
+        if 'init_env_data' in self.results:
+            # use environment data from checkpoint
+            set_recursive(self.options, 'algorithm_params/init_env_data', results['init_env_data'])
         self.init_algorithm()
         # the relevant part from init_measurements()
         self._connect_measurements()
-        self.resume_run_algorithm()
+
+        self.resume_run_algorithm()  # continue with the actual algorithm
         self.final_measurements()
         results = self.save_results()
         return results
@@ -456,6 +460,17 @@ class Simulation:
             v = np.array(v)
             if v.dtype != np.dtype(object):
                 measurements[k] = v
+        if hasattr(self.engine, 'env'):
+            # handle environment data
+            if self.options.get('save_environment_data', self.options['save_psi']):
+                results['init_env_data'] = self.engine.env.get_initialization_data()
+            # HACK: remove initial environments from options to avoid blowing up the output size,
+            # in particular if `save_psi` is false, this can reduce the file size dramatically.
+            init_env_data = self.options['algorithm_params'].silent_get('init_env_data', {})
+            for k in ['init_LP', 'init_RP']:
+                if k in init_env_data:
+                    if isinstance(init_env_data[k], npc.Array):
+                        init_env_data[k] = repr(init_env_data[k])
         return results
 
     def save_at_checkpoint(self, alg_engine):
