@@ -21,3 +21,4 @@ tenpy/linalg/*.html
 tests/export_import_test/data/*
 tests/benchmark/*.txt
 tests/benchmark/*.png
+hdf5_io/
