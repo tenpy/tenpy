@@ -1764,7 +1764,7 @@ class HelicalLattice(Lattice):
 
     def possible_multi_couplings(self, ops):
         mps_ijkl, lat_indices, coupling_shape = self.regular_lattice.possible_multi_couplings(ops)
-        keep = np.min(mps_ijkl, axis=0) < self.N_sites
+        keep = np.min(mps_ijkl, axis=1) < self.N_sites
         return mps_ijkl[keep, :], lat_indices[keep, :], coupling_shape
 
     # most plot_* functions work, except:
