@@ -110,7 +110,7 @@ see :cite:`hauschild2018`.
     I think it should suffice to implement another `from_infiniteT`.
 
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

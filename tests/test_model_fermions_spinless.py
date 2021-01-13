@@ -1,4 +1,4 @@
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 import numpy as np
 from tenpy.models.fermions_spinless import FermionChain, FermionModel
 from test_model import check_general_model

@@ -2,7 +2,7 @@
 
 Sorry that this is not well documented! ED is meant to be used for debugging only ;)
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.xxz_chain import XXZChain

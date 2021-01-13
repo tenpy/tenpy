@@ -7,7 +7,7 @@ generate the files, you can call the ``test_*.py`` files in this folder manually
 test_pickle.py``. This will generate the files with pre-defined data (see :func:`gen_example_data`)
 and the tenpy version in the filename.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import os

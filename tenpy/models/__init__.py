@@ -29,7 +29,7 @@ All other modules in this folder contain model classes derived from these base c
     haldane
     toric_code
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn

@@ -10,7 +10,7 @@ form (see the grid below).
 We run the iDMRG algorithm to find the ground state and energy density of the
 system in the thermodynamic limit.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc

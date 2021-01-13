@@ -1,7 +1,7 @@
 """Algorithms for using Purification.
 """
 
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc

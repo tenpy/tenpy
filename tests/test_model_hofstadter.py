@@ -1,4 +1,4 @@
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 from tenpy.models.hofstadter import HofstadterBosons, HofstadterFermions
 from test_model import check_general_model
 import pytest

@@ -66,7 +66,7 @@ Names for the ``ATTR_TYPE`` attribute:
     For memory caching with big MPO environments,
     we need a Hdf5Cacher clearing the memo's every now and then (triggered by what?).
 """
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import pickle
 import gzip

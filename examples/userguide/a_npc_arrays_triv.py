@@ -1,5 +1,5 @@
 """Basic use of the `Array` class with trivial arrays."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 

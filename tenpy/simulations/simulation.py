@@ -11,7 +11,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 .. todo ::
     update figure displaying the "layers of TeNPy"
 """
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import os
 import time
