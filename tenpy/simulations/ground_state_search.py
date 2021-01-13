@@ -1,5 +1,5 @@
 """Simulations for ground state searches."""
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 from . import simulation
 from .simulation import *

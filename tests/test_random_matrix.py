@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.linalg.random_matrix`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt

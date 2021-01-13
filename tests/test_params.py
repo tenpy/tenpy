@@ -1,5 +1,5 @@
 """A test for tenpy.tools.params."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import warnings
 from tenpy.tools.params import Config, asConfig

@@ -2,7 +2,7 @@
 
 .. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply

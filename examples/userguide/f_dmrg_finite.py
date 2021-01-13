@@ -1,5 +1,5 @@
 """Call of (finite) DMRG."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.networks.mps import MPS
 from tenpy.models.tf_ising import TFIChain

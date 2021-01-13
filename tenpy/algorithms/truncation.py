@@ -41,7 +41,7 @@ is the discarded part (orthogonal to the kept part) and the
     There might be other sources of error as well, for example TEBD has also an discretisation
     error depending on the chosen time step.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc
