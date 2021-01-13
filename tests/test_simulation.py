@@ -15,10 +15,12 @@ import pytest
 
 
 class DummyAlgorithm(Algorithm):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
         self.dummy_value = None
         self.evolved_time = 0.
+        init_env_data = self.options.get("init_env_data", {})
+        self.env = DummyEnv(**init_env_data)
 
     def run(self):
         N_steps = self.options.get('N_steps', 5)
@@ -37,6 +39,15 @@ class SimulationStop(Exception):
 def raise_SimulationStop(algorithm):
     if algorithm.evolved_time > 0.:
         raise SimulationStop("from raise_SimulationStop")
+
+
+class DummyEnv:
+    def __init__(self, **kwargs):
+        if kwargs:
+            assert kwargs == self.get_initialization_data()
+
+    def get_initialization_data(self):
+        return {"Env data": "Could be big"}
 
 
 def dummy_measurement(results, psi, simulation):
@@ -106,6 +117,7 @@ def test_GroundStateSearch():
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
+    del sim
 
 
 timeevol_params = copy.deepcopy(simulation_params)

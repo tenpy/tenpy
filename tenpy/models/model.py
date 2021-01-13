@@ -962,7 +962,7 @@ class CouplingModel(Model):
         --------
         add_onsite : Add terms acting on one site only.
         add_multi_coupling_term : for terms on more than two sites.
-        add_coupling_term : Add a single term without summing over :math:`vec{x}`.
+        add_coupling_term : Add a single term without summing over :math:`\vec{x}`.
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):

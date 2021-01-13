@@ -175,7 +175,10 @@ class Simulation:
         self.options.touch('initial_state_builder_class', 'initial_state_params', 'save_psi')
         if 'init_env_data' in self.results:
             # use environment data from checkpoint
-            set_recursive(self.options, 'algorithm_params/init_env_data', results['init_env_data'])
+            set_recursive(self.options,
+                          'algorithm_params/init_env_data',
+                          self.results['init_env_data'],
+                          insert_dicts=True)
         self.init_algorithm()
         # the relevant part from init_measurements()
         self._connect_measurements()
