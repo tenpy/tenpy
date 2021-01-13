@@ -80,7 +80,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-hz, 0, 'Sz')
         self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-        # instead of plus_hc=True, we could explicitly add the h.c. term with:
+        # the `plus_hc=True` adds the h.c. term
+        # see also the examples tenpy.models.model.CouplingModel.add_coupling
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
