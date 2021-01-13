@@ -107,8 +107,9 @@ class ParallelDMRGSim(GroundStateSearch):
         self.engine = AlgorithmClass(self.psi, self.model, params, self.comm_plus_hc)
 
     def run(self):
-        super().run()
+        res = super().run()
         self.comm_plus_hc.bcast(ReplicaAction.DONE)
+        return res
 
     def run_replica_plus_hc(self):
         """Replacement for :meth:`run` used for replicas (as opposed to primary MPI process)."""

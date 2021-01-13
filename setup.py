@@ -166,7 +166,7 @@ def setup_package():
         'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
         'io': ['h5py', 'pyyaml'],
         'plot': ['matplotlib>=2.0'],
-        'test': ['pytest'],
+        'test': ['pytest', 'pytest-easyMPI'],
     }
     extras_require['all'] = [r for requ in extras_require.values() for r in requ]
 
