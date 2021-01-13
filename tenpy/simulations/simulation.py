@@ -267,13 +267,16 @@ class Simulation:
                 raise ValueError("can't find Algorithm called " + repr(alg_class_name))
         else:
             AlgorithmClass = alg_class_name
-        params = self.options.subconfig('algorithm_params')
-        # TODO load environment from file?
-        self.engine = AlgorithmClass(self.psi, self.model, params)
+        self._init_algorithm(AlgorithmClass)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
         con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
         for entry in con_checkpoint:
             self.engine.checkpoint.connect_by_name(*entry)
+
+    def _init_algorithm(self, AlgorithmClass):
+        params = self.options.subconfig('algorithm_params')
+        # TODO load environment from file?
+        self.engine = AlgorithmClass(self.psi, self.model, params)
 
     def init_measurements(self):
         """Initialize and prepare measurements.

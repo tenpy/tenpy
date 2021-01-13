@@ -56,7 +56,14 @@ The following links are not physics-related, but are good to know if you want to
 .. [HDF5]
     "Hierarchical Data Format 5 (R)", https://portal.hdfgroup.org/display/HDF5/HDF5
     A file format and library for saving data (including metadata).
-    We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`, see :doc:`/intro/input_output`.
+    We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`_ library, 
+    see :doc:`/intro/input_output`.
+
+.. [MPI]
+    "Message Passing Interface", https://mpi-forum.org/docs
+    A standard for parallel computing on super computers.
+    We use it throught the python interface of the `mpi4py <https://mpi4py.readthedocs.io/>`_ library,
+    see :mod:`tenpy.simulations.mpi_parallel`.
 
 .. [jupyter]
     Jupyter notebooks, https://jupyter.org/
