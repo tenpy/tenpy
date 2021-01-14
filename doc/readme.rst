@@ -1,4 +1,0 @@
-README
-======
-
-.. include:: ../README.rst

@@ -4,8 +4,9 @@
 
 .. toctree::
     :caption: User guide
+    :maxdepth: 2
 
-    readme
+    readme_wrap
     INSTALL
     releases
     introductions
@@ -40,7 +41,7 @@
 
 .. raw :: latex
 
-    \part{Appendix}
+    \appendix
 
 .. only :: html
 
