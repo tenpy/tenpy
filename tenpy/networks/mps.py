@@ -4321,7 +4321,10 @@ class InitialStateBuilder:
             The generated MPS.
         """
         method_name = self.options['method']
-        method = getattr(self, method_name)
+        method = getattr(self, method_name, None)
+        if method is None:
+            raise ValueError(f"initial state 'method'={method_name!r} not recognized in " +
+                             self.__class__.__name__)
         psi = method()
         self.check_total_charge(psi)
         return psi

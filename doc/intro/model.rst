@@ -301,10 +301,12 @@ Some random remarks on models
 - Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`
   or :class:`~tenpy.models.model.CouplingMPOModel`.
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
+- If you want to debug or double check that the you added the correct terms to a :class:`~tenpy.models.model.CouplingMPOModel`,
+  you can print the terms with ``print(M.all_coupling_terms().to_TermList())``. This will 
 - If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
 - We suggest writing the model to take a single parameter dictionary for the initialization,
   as the :class:`~tenpy.models.model.CouplingMPOModel` does.
-  The CouplingMPOModel converts the dictionary to a dict-like 
+  The :class:`~tenpy.models.model.CouplingMPOModel` converts the dictionary to a dict-like 
   :class:`~tenpy.tools.params.Config` with some additional features before passing it on to the `init_lattice`,
   `init_site`, ... methods.
   It is recommended to read out providing default values with ``model_params.get("key", default_value)``, 

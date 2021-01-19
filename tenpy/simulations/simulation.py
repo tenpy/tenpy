@@ -6,7 +6,9 @@ running the actual algorithm, possibly performing measurements and saving the re
 
 
 .. todo ::
-    provide examples
+    provide examples,
+    document options
+    give user guide
 
 .. todo ::
     update figure displaying the "layers of TeNPy"
@@ -28,7 +30,7 @@ from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, set_recursive, get_recursive
 from .. import version
 
-__all__ = ['Simulation']
+__all__ = ['Simulation', 'Skip']
 
 
 class Simulation:
@@ -48,7 +50,7 @@ class Simulation:
             If not None (default), switch to that directory at the beginning of the simulation.
         output_filename : string | None
             Filename for output. The file ending determines the output format.
-            None (defaul) disables any writing to files.
+            None (default) disables any writing to files.
         overwrite_output : bool
             Whether an exisiting file may be overwritten.
             Otherwise, if the file already exists we try to replace
@@ -112,9 +114,11 @@ class Simulation:
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
+        self.verbose = self.options.verbose
         cwd = self.options.get("directory", None)
         if cwd is not None:
-            print(f"going into directory {cwd!r}")
+            if self.verbose >= 1:
+                print(f"going into directory {cwd!r}")
             os.chdir(cwd)
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
@@ -128,7 +132,7 @@ class Simulation:
             'version_info': self.get_version_info(),
         }
         self._last_save = time.time()
-        self._fix_output_filenames()
+        self.fix_output_filenames()
         self.measurement_event = EventHandler("psi, simulation, results")
 
     def run(self):
@@ -375,9 +379,29 @@ class Simulation:
         }
         return version_info
 
-    def _fix_output_filenames(self):
+    def fix_output_filenames(self):
+        """Determine the output filenames.
+
+        This function determines the :attr:`output_filename` and writes a one-line text into
+        that file to indicate that we're running a simulation generating it.
+        Further, :attr:`_backup_filename` is determined.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            output_filename : string | None
+                Filename for output. The file ending determines the output format.
+                None (default) disables any writing to files.
+            overwrite_output : bool
+                Whether an exisiting file may be overwritten.
+                Otherwise, if the file already exists we try to replace
+                ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
+
+        """
         output_filename = self.options.get("output_filename", None)
         overwrite_output = self.options.get("overwrite_output", False)
+        skip_if_exists = self.options.get("skip_if_output_exists", False)
         if output_filename is None:
             self.output_filename = None
             self._backup_filename = None
@@ -387,6 +411,8 @@ class Simulation:
         self.output_filename = output_filename
         self._backup_filename = backup_filename
         if os.path.exists(output_filename):
+            if skip_if_exists:
+                raise Skip("simulation output filename already exists: " + repr(output_filename))
             if overwrite_output:
                 if self.loaded_from_checkpoint:
                     # don't overwrite the old file until we have new data
@@ -406,6 +432,8 @@ class Simulation:
                 backup_filename = os.path.join(path, "__old__" + filename)
                 self.output_filename = output_filename
                 self._backup_filename = backup_filename
+        if self.verbose >= 1:
+            print("output will be saved at {output_filename!r}")
         # we made sure that `output_filename` doesn't exist yet,
         # so create it as empty file to indicated that we want to save something there,
         # and to ensure that we have write access
@@ -507,3 +535,8 @@ class Simulation:
                               "Increase the latter to {0:.1f}".format(save_every))
                 self.options['save_every_x_seconds'] = save_every
         # done
+
+
+class Skip(ValueError):
+    """Error raised if simulation output already exists."""
+    pass

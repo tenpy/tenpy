@@ -191,7 +191,7 @@ def test_CouplingModel_explicit():
 def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
     M = model.CouplingModel(fermion_lat_cyl)
-    # create a wired fermionic model with 3-body interactions
+    # create a weird fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
@@ -200,7 +200,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
         M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
     # multi_coupling with a full unit cell inbetween the operators!
     M.add_multi_coupling(4., [('N', (0, 0), 0), ('N', (-2, -1), 0)])
-    # some wired mediated hopping along the diagonal
+    # some weird mediated hopping along the diagonal
     M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
     H_mpo = M.calc_H_MPO()
     W0_new = H_mpo.get_W(0)

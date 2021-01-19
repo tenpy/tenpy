@@ -518,11 +518,11 @@ class GroupedSite(Site):
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
-        self.labels = labels
         self.charges = charges
         assert n_sites > 0
         if labels is None:
             labels = [str(i) for i in range(n_sites)]
+        self.labels = labels
         if charges == 'same':
             pass  # nothing to do
         elif charges == 'drop':
