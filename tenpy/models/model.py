@@ -31,8 +31,9 @@ See also the introduction in :doc:`/intro/model`.
 
 import numpy as np
 import warnings
+import inspect
 
-from .lattice import get_lattice, Lattice, TrivialLattice
+from .lattice import get_lattice, Lattice, TrivialLattice, Chain
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -1662,7 +1663,16 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
+    default_lattice : :class:`~tenpy.models.lattice.Lattice`
+        Class attribute. The default class to be used in :meth:`init_lattice`.
+    force_default_lattice : bool
+        Class attribute. If True, :meth:`init_lattice` asserts that the initialized lattice is
+        (a subclass of) `default_lattice`.
     """
+
+    default_lattice = Chain
+    force_default_lattice = False
+
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
@@ -1716,9 +1726,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         -------
         .. cfg:configoptions :: CouplingMPOModel
 
-            lattice : str | Lattice
+            lattice : str | :class:`Lattice`
                 The name of a lattice pre-defined in TeNPy to be initialized.
-                Alternatively, a (possibly self-defined) Lattice instance.
+                Alternatively, directly a subclass of :class:`Lattice` instead of the name.
+                Alternatively, a (possibly self-defined) :class:`Lattice` instance.
                 In the latter case, no further parameters are read out.
             bc_MPS : str
                 Boundary conditions for the MPS.
@@ -1750,9 +1761,16 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 couplings between the first and last sites of the MPS!)
 
         """
-        lat = model_params.get('lattice', "Chain")
+        lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
+            lat = None
+        elif inspect.isclass(lat) and issubclass(lat, Lattice):
+            LatticeClass = lat
+            lat = None
+        elif not isinstance(lat, Lattice):
+            raise ValueError("invalid type for model_params['lattice'], got " + repr(lat))
+        if lat is None:  # only provided LatticeClass
             bc_MPS = model_params.get('bc_MPS', 'finite')
             order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
@@ -1774,9 +1792,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
-            # now, `lat` is an instance of the LatticeClass called `lattice_name`.
         # else: a lattice was already provided
+        # now, `lat` is an instance of the LatticeClass
         assert isinstance(lat, Lattice)
+        if self.force_default_lattice:
+            DefaultLattice = self.default_lattice
+            if isinstance(DefaultLattice, str):
+                DefaultLattice = get_lattice(DefaultLattice)
+            assert isinstance(lat, DefaultLattice)
         return lat
 
     def init_sites(self, model_params):

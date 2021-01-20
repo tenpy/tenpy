@@ -67,10 +67,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)

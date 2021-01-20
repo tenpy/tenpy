@@ -4,6 +4,7 @@
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
+from .lattice import Chain
 from ..tools.params import asConfig
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
@@ -146,7 +147,5 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True

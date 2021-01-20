@@ -17,6 +17,12 @@ Backwards incompatible changes
 - :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
   non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
 - Argument `v0` of :meth:`tenpy.networks.mps.MPS.TransferMatrix.eigenvectors` is renamed to `v0_npc`; `v0` now serves for non-np_conserved guess.
+- Default parameters for lattice initialization in the following classes changed.
+  In particular, the `bc_MPS` parameter now defaults to 'finite'.
+
+  - :class:`tenpy.models.hofstadter.HofstadterFermions`
+  - :class:`tenpy.models.hofstadter.HofstadterBosons`
+  - :class:`tenpy.models.toric_code.ToricCode`
 
 
 Added
@@ -50,6 +56,10 @@ Changed
 - Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
   `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
 - Allow ``swap_op='autoInv'`` for :meth:`tenpy.networks.mps.MPS.swap_sites` and explain the idea of the `swap_op`.
+- The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
+  :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
+  :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
+
 
 Fixed
 ^^^^^

@@ -9,6 +9,7 @@ import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
 from ..tools.params import asConfig
 from ..networks.site import FermionSite
+from .lattice import Chain
 
 __all__ = ['FermionModel', 'FermionChain']
 
@@ -74,7 +75,5 @@ class FermionChain(FermionModel, NearestNeighborModel):
 
     See the :class:`FermionModel` for the documentation of parameters.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True

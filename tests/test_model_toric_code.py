@@ -18,7 +18,7 @@ def test_ToricCode_general():
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    model_params = {'Lx': Lx, 'Ly': Ly}
+    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite'}
     M = ToricCode(model_params)
     psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite')
     dmrg_params = {
