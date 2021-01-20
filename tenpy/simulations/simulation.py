@@ -125,7 +125,7 @@ class Simulation:
             if self.loaded_from_checkpoint:
                 warnings.warn("resetting `random_seed` for a simulation loaded from checkpoint."
                               "Depending on where you use random numbers, "
-                              "this might not be what you want!")
+                              "this might or might not be what you want!")
             np.random.seed(random_seed)
         self.results = {
             'simulation_parameters': self.options.as_dict(),

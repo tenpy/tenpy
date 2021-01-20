@@ -78,10 +78,10 @@ The full Hilbert space is a tensor product of the local Hilbert space on each si
 
     The :class:`~tenpy.linalg.charges.LegCharge` of all involved sites need to have a common
     :class:`~tenpy.linalg.np_conserved.ChargeInfo` in order to allow the contraction of tensors acting on the various sites.
-    This can be ensured with the function :func:`~tenpy.networks.site.multi_sites_combine_charges`.
+    This can be ensured with the function :func:`~tenpy.networks.site.set_common_charges`.
 
 
-An example where :func:`~tenpy.networks.site.multi_sites_combine_charges` is needed would be a coupling of different
+An example where :func:`~tenpy.networks.site.set_common_charges` is needed would be a coupling of different
 types of sites, e.g., when a tight binding chain of fermions is coupled to some local spin degrees of freedom.
 Another use case of this function would be a model with a $U(1)$ symmetry involving only half the sites, say :math:`\sum_{i=0}^{L/2} n_{2i}`.
 

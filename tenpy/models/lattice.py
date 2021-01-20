@@ -206,7 +206,9 @@ class Lattice:
             if chinfo is None:
                 chinfo = site.leg.chinfo
             if site.leg.chinfo != chinfo:
-                raise ValueError("All sites must have the same ChargeInfo!")
+                raise ValueError("All sites in the lattice must have the same ChargeInfo!"
+                                 " Call tenpy.networks.site.set_common_charges() before "
+                                 "giving them to the lattice!")
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):

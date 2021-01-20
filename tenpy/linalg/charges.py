@@ -289,6 +289,8 @@ class ChargeInfo:
         """Compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
+        if self.qnumber != other.qnumber:
+            return False
         if not np.all(self.mod == other.mod):
             return False
         for l, r in zip(self.names, other.names):
