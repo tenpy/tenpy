@@ -1974,9 +1974,9 @@ class MPS:
             count_JW += 1
             for op_i in ops:
                 op_i.append('JW')
-        for i in range(len(ops)):
-            site = self.sites[self._to_valid_index(i + i_offset)]
-            ops[i] = site.multiply_operators(ops[i])
+        for j in range(len(ops)):
+            site = self.sites[self._to_valid_index(j + i_min + i_offset)]
+            ops[j] = site.multiply_operators(ops[j])
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def expectation_value_multi_sites(self, operators, i0):
