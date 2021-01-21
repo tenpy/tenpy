@@ -85,7 +85,13 @@ except ImportError:
 __all__ = [
     'save', 'load', 'find_global', 'valid_hdf5_path_component', 'Hdf5FormatError',
     'Hdf5ExportError', 'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver',
-    'Hdf5Loader', 'save_to_hdf5', 'load_from_hdf5'
+    'Hdf5Loader', 'save_to_hdf5', 'load_from_hdf5', 'REPR_IGNORED', 'REPR_HDF5EXPORTABLE',
+    'REPR_REDUCE', 'REPR_ARRAY', 'REPR_INT', 'REPR_FLOAT', 'REPR_STR', 'REPR_COMPLEX',
+    'REPR_INT64', 'REPR_FLOAT64', 'REPR_COMPLEX128', 'REPR_INT32', 'REPR_FLOAT32',
+    'REPR_COMPLEX64', 'REPR_BOOL', 'REPR_NONE', 'REPR_RANGE', 'REPR_LIST', 'REPR_TUPLE',
+    'REPR_SET', 'REPR_DICT_GENERAL', 'REPR_DICT_SIMPLE', 'REPR_DTYPE', 'REPR_FUNCTION',
+    'REPR_CLASS', 'REPR_GLOBAL', 'TYPES_FOR_HDF5_DATASETS', 'ATTR_TYPE', 'ATTR_CLASS',
+    'ATTR_MODULE', 'ATTR_LEN', 'ATTR_FORMAT'
 ]
 
 

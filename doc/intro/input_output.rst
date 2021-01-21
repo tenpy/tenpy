@@ -57,7 +57,7 @@ Moreover, pickle requires to load the whole file at once, which might be unneces
 or even lead to memory problems if you have more data on disk than fits into RAM.
 
 Hence, we support saving to `HDF5 <https://portal.hdfgroup.org/display/HDF5/HDF5>`_ files as an alternative.
-The `h5py <http://docs.h5py.org>`_ package provides a dictionary-like interface for the file/group objects with
+The `h5py <https://docs.h5py.org>`_ package provides a dictionary-like interface for the file/group objects with
 numpy-like data sets, and is quite easy to use. 
 If you don't know about HDF5, read the :ref:`quickstart <h5py:quick>` of the `h5py`_ documentation (and this guide).
 
