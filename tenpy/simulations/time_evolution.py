@@ -28,14 +28,14 @@ class RealTimeEvolution(Simulation):
             Note that we can go (slightly) beyond this time if it is not a multiple of
             the individual time steps.
     """
-    def __init__(self, options):
-        super().__init__(options)
-        self.final_time = self.options['final_time'] - 1.e-10  # suptract eps: roundoff errors
-
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
         ('tenpy.simulations.measurement', 'evolved_time'),
     ]
+
+    def __init__(self, options):
+        super().__init__(options)
+        self.final_time = self.options['final_time'] - 1.e-10  # subtract eps: roundoff errors
 
     def run_algorithm(self):
         """Run the algorithm. Calls ``self.engine.run()`` and :meth:`make_measurements`."""

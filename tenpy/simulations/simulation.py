@@ -406,19 +406,13 @@ class Simulation:
             self.output_filename = None
             self._backup_filename = None
             return
-        path, filename = os.path.split(output_filename)
-        backup_filename = os.path.join(path, "__old__" + filename)
         self.output_filename = output_filename
-        self._backup_filename = backup_filename
+        self._backup_filename = self.get_backup_filename(output_filename)
+
         if os.path.exists(output_filename):
             if skip_if_exists:
                 raise Skip("simulation output filename already exists: " + repr(output_filename))
-            if overwrite_output:
-                if self.loaded_from_checkpoint:
-                    # don't overwrite the old file until we have new data
-                    return
-                os.path.move(output_filename, backup_filename)
-            else:
+            if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
                 root, ext = os.path.splitext(output_filename)
                 for i in range(1, 100):
@@ -428,20 +422,22 @@ class Simulation:
                 else:
                     raise ValueError("Refuse to make another copy. CLEAN UP!")
                 warnings.warn("changed output filename to {0!r}".format(output_filename))
-                path, filename = os.path.split(output_filename)
-                backup_filename = os.path.join(path, "__old__" + filename)
                 self.output_filename = output_filename
-                self._backup_filename = backup_filename
+                self._backup_filename = self.get_backup_filename(output_filename)
+            # else: overwrite stuff in `save_results`
         if self.verbose >= 1:
-            print("output will be saved at {output_filename!r}")
-        # we made sure that `output_filename` doesn't exist yet,
-        # so create it as empty file to indicated that we want to save something there,
-        # and to ensure that we have write access
-        import socket
-        text = "simulation initialized on {host!r} at {time!s}\n"
-        text = text.format(host=socket.gethostname(), time=time.asctime())
-        with open(output_filename, 'w') as f:
-            f.write(text)
+            print(f"output will be saved at {output_filename!r}")
+        if not os.path.exists(self._backup_filename):
+            import socket
+            text = "simulation initialized on {host!r} at {time!s}\n"
+            text = text.format(host=socket.gethostname(), time=time.asctime())
+            with open(self._backup_filename, 'w') as f:
+                f.write(text)
+
+    def get_backup_filename(self, output_filename):
+        """Extract the name used for backups of `output_filename`."""
+        root, ext = os.path.splitext(output_filename)
+        return root + '.backup' + ext
 
     def save_results(self):
         """Save the :attr:`results` to an output file.
@@ -524,12 +520,12 @@ class Simulation:
                 By default (``None``), this feature is disabled.
         """
         save_every = self.options.get('save_every_x_seconds', None)
-        if save_every is not None and time.time() - self._last_save > save_every:
-            time_to_save = time.time()
+        now = time.time()
+        if save_every is not None and now - self._last_save > save_every:
             self.save_results()
-            time_to_save = self._last_save - time_to_save
+            time_to_save = time.time() - now
             assert time_to_save > 0.
-            if time_to_save > 0.1 * save_every:
+            if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save
                 warnings.warn("Saving took longer than 10% of `save_every_x_seconds`."
                               "Increase the latter to {0:.1f}".format(save_every))

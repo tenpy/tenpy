@@ -18,7 +18,7 @@ class DummyAlgorithm(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         self.dummy_value = None
-        self.evolved_time = 0.
+        self.evolved_time = self.options.get('start_time', 0.)
         init_env_data = self.options.get("init_env_data", {})
         self.env = DummyEnv(**init_env_data)
 
@@ -37,7 +37,7 @@ class SimulationStop(Exception):
 
 
 def raise_SimulationStop(algorithm):
-    if algorithm.evolved_time > 0.:
+    if algorithm.evolved_time == 1.:
         raise SimulationStop("from raise_SimulationStop")
 
 
@@ -64,21 +64,25 @@ simulation_params = {
     'algorithm_class':
     'DummyAlgorithm',
     'algorithm_params': {
-        'N_steps': 2,
-        'dt': 0.1,
+        'N_steps': 4,
+        'dt': 0.5,
     },
     'initial_state_params': {
         'method': 'lat_product_state',  # mandatory -> would complain if not passed on
         'product_state': [['up'], ['down']]
     },
+    'save_every_x_seconds':
+    0.,  # save at each checkpoint
     'connect_measurements': [('tenpy.simulations.measurement', 'onsite_expectation_value', {
         'opname': 'Sz'
     }), (__name__, 'dummy_measurement')],
 }
 
 
-def test_Simulation():
+def test_Simulation(tmpdir):
     sim_params = copy.deepcopy(simulation_params)
+    sim_params['directory'] = tmpdir
+    sim_params['output_filename'] = 'data.pkl'
     sim = Simulation(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
     assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
@@ -87,11 +91,15 @@ def test_Simulation():
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
+    assert (tmpdir / sim_params['output_filename']).exists()
 
 
-def test_Simulation_resume():
+def test_Simulation_resume(tmpdir):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop')]
+    sim_params['directory'] = tmpdir
+    sim_params['output_filename'] = 'data.pkl'
+    # this should raise an error *after* saving the checkpoint
+    sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop', {}, -1)]
     sim = Simulation(sim_params)
     try:
         results = sim.run()
@@ -100,7 +108,7 @@ def test_Simulation_resume():
         checkpoint_results = sim.prepare_results_for_save()
     checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []
     sim2 = Simulation.from_saved_checkpoint(checkpoint_results=checkpoint_results)
-    sim2.resume_run()
+    res = sim2.resume_run()
 
 
 groundstate_params = copy.deepcopy(simulation_params)
@@ -121,7 +129,7 @@ def test_GroundStateSearch():
 
 
 timeevol_params = copy.deepcopy(simulation_params)
-timeevol_params['final_time'] = 1.
+timeevol_params['final_time'] = 4.
 
 
 def test_RealTimeEvolution():
