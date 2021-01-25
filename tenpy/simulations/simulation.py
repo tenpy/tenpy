@@ -411,6 +411,7 @@ class Simulation:
 
         if os.path.exists(output_filename):
             if skip_if_exists:
+                self.options.touch(*self.options.unused)
                 raise Skip("simulation output filename already exists: " + repr(output_filename))
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
@@ -514,10 +515,13 @@ class Simulation:
         .. cfg:configoptions :: Simulation
 
             save_every_x_seconds : float | None
-                Save the :attr:`results` obtained so far at each
+                By default (``None``), this feature is disabled.
+                If given, save the :attr:`results` obtained so far at each
                 :attr:`tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
                 seconds evolved since the last save (or since starting the algorithm).
-                By default (``None``), this feature is disabled.
+                To avoid unnecessary, slow disk input/output, the value will be increased if
+                saving takes longer than 10% of `save_every_x_seconds`.
+                Use ``0.`` to force saving at each checkpoint.
         """
         save_every = self.options.get('save_every_x_seconds', None)
         now = time.time()
