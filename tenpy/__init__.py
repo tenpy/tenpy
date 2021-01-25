@@ -10,13 +10,13 @@ and yet powerful enough for day-to-day research.
 # This file marks this directory as a python package.
 
 # load and provide subpackages on first input
-from . import version
 from . import tools
 from . import linalg
 from . import algorithms
 from . import networks
 from . import models
 from . import simulations
+from . import version  # needs to be after linalg!
 
 #: hard-coded version string
 __version__ = version.version

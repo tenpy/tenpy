@@ -46,7 +46,7 @@ def _get_git_revision(cwd=None):
         Revision hash of the git HEAD, i.e, the last git commit to which git compares everything.
     """
     if cwd is None:
-        cwd = os.path.dirname(os.path.abspath(__file__)),
+        cwd = os.path.dirname(os.path.abspath(__file__))
     try:
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                       cwd=cwd,
