@@ -7,6 +7,8 @@ The default (stable) git branch was renamed from ``master`` to ``main``.
 
 Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation.
 
+Further, the cython parts can now link directly against MKL and have been optimized for the case of small blocks.
+
 
 Changelog
 ---------

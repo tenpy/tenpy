@@ -3415,7 +3415,7 @@ def inner(a, b, axes=None, do_conj=False):
         up to a possible transposition, which is then reverted.
     do_conj : bool
         If ``False`` (Default), ignore it.
-        if ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``
+        If ``True``, conjugate `a` before, i.e., return ``inner(a.conj(), b, axes)``.
 
     Returns
     -------
@@ -3719,9 +3719,9 @@ def eigh(a, UPLO='L', sort=None):
     -----
     Requires the legs to be contractible.
     If `a` is not blocked by charge, a blocked copy is made via a permutation ``P``,
-    :math:` a' =  P a P = V' W' (V')^{\dagger}`.
+    :math:`a' =  P a P^{-1} = V' W' (V')^{\dagger}`.
     The eigenvectors `V` are then obtained by the reverse permutation,
-    :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
+    :math:`V = P^{-1} V'` such that :math:`a = V W V^{\dagger}`.
     """
     w, v = _eig_worker(True, a, sort, UPLO)  # hermitian
     v.iset_leg_labels([a._labels[0], 'eig'])
@@ -3753,9 +3753,9 @@ def eig(a, sort=None):
     -----
     Requires the legs to be contractible.
     If `a` is not blocked by charge, a blocked copy is made via a permutation ``P``,
-    :math:` a' =  P a P = V' W' (V')^{\dagger}`.
+    :math:`a' =  P a P^{-1} = V' W' (V')^{\dagger}`.
     The eigenvectors `V` are then obtained by the reverse permutation,
-    :math:`V = P^{-1} V'` such that `A = V W V^{\dagger}`.
+    :math:`V = P^{-1} V'` such that :math:`a = V W V^{\dagger}`.
     """
     w, v = _eig_worker(False, a, sort)  # non-hermitian
     v.iset_leg_labels([a._labels[0], 'eig'])

@@ -6,6 +6,7 @@ dependencies:
   - numpy>=1.13
   - scipy>=0.18
   - mkl
+  - mkl-devel
   - cython>=0.29
   - bottleneck
   - pip

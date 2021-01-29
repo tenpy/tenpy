@@ -115,20 +115,40 @@ def setup_cython_extension():
         from Cython.Build import cythonize
     except:
         return []
-    # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
-    TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
     include_dirs = [numpy.get_include()]
     libs = []
     lib_dirs = []
+    macros = []
+
+    # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
+    TENPY_OPTIMIZE = int(os.getenv("TENPY_OPTIMIZE", 1))
+    HAVE_MKL = 0
+    MKL_DIR = os.getenv("MKL_DIR", os.getenv("MKLROOT", os.getenv("MKL_HOME", "")))
+    if MKL_DIR:
+        include_dirs.append(os.path.join(MKL_DIR, 'include'))
+        lib_dirs.append(os.path.join(MKL_DIR, 'lib', 'intel64'))
+        HAVE_MKL = 1
+    CONDA_PREFIX = os.getenv("CONDA_PREFIX")
+    if CONDA_PREFIX:
+        include_dirs.append(os.path.join(CONDA_PREFIX, 'include'))
+        lib_dirs.append(os.path.join(CONDA_PREFIX, 'lib'))
+        if not HAVE_MKL:
+            # check whether mkl-devel is installed
+            HAVE_MKL = int(os.path.exists(os.path.join(CONDA_PREFIX, 'include', 'mkl.h')))
+    HAVE_MKL = int(os.getenv("HAVE_MKL", HAVE_MKL))
+    print("compile with HAVE_MKL =", HAVE_MKL)
+    macros.append(('HAVE_MKL', str(HAVE_MKL)))
+    if HAVE_MKL:
+        libs.append('mkl_rt')
 
     extensions = [
         Extension("*", ["tenpy/linalg/*.pyx"],
                   include_dirs=include_dirs,
                   libraries=libs,
                   library_dirs=lib_dirs,
+                  define_macros=macros,
                   language='c++')
     ]
-
     comp_direct = {  # compiler_directives
         'language_level': 3,  # use python 3
         'embedsignature': True,  # write function signature in doc-strings
@@ -139,10 +159,11 @@ def setup_cython_extension():
     if TENPY_OPTIMIZE < 1:
         comp_direct['profile'] = True
         comp_direct['linetrace'] = True
-
     # compile time flags (#DEF ...)
-    comp_flags = {'TENPY_OPTIMIZE': TENPY_OPTIMIZE}
-
+    comp_flags = {
+        'TENPY_OPTIMIZE': TENPY_OPTIMIZE,
+        'HAVE_MKL': HAVE_MKL,
+    }
     ext_modules = cythonize(extensions,
                             compiler_directives=comp_direct,
                             compile_time_env=comp_flags)

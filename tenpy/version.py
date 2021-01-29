@@ -87,7 +87,7 @@ full_version = _get_full_version()
 
 
 def _get_version_summary():
-    from .tools.optimization import have_cython_functions
+    from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
     import warnings
@@ -97,13 +97,16 @@ def _get_version_summary():
         if _version.version != version:
             raise ValueError("Version changed since installation/compilation")
         if have_cython_functions:
-            if git_revision != "unknown":
-                if _version.git_revision != "unknown" and _version.git_revision != git_revision:
-                    warnings.warn("TeNPy is compiled from different git "
-                                  "version than the current HEAD")
-                cython_info = "compiled from git rev. " + _version.git_revision
+            cython_info = "compiled"
+            if compiled_with_MKL:
+                cython_info = cython_info + " with HAVE_MKL"
             else:
-                cython_info = "compiled"
+                cython_info = cython_info + " without HAVE_MKL"
+            if _version.git_revision != "unknown":
+                if git_revision != "unknown" and _version.git_revision != git_revision:
+                    warnings.warn("TeNPy is compiled from different git "
+                                  "version than the current HEAD. Recompile!")
+                    cython_info = cython_info + " from git rev. " + _version.git_revision
         else:
             cython_info = "not compiled"
     except ImportError:

@@ -34,6 +34,15 @@ knobs you can turn to tweak the most out of this library, explained in the follo
    while internally the faster, pre-compiled cython code from ``tenpy/linalg/_npc_helper.pyx``
    is used. This should also be a safe thing to do.
    The replacement of the optimized functions is done by the decorator :func:`use_cython`.
+
+   .. note ::
+
+       By default, the compilation will link against the BLAS functions provided by
+       :mod:`scipy.linalg.cython_blas`. Whether they use MKL depends on the scipy version you
+       installed.
+       However, you can explicitly link against a given MKL by providing the path during
+       compilation, as explained in :ref:`linkingMKL`.
+
 4) One of the great things about python is its dynamical nature - anything can be done at runtime.
    In that spirit, this module allows to set a global  "optimization level" which can be changed
    *dynamically* (i.e., during runtime) with :func:`set_level`. The library will then try some
@@ -65,6 +74,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 
 .. autodata:: bottleneck
 .. autodata:: have_cython_functions
+.. autodata:: compiled_with_MKL
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -74,7 +84,7 @@ import os
 
 __all__ = [
     'bottleneck', 'have_cython_functions', 'OptimizationFlag', 'temporary_level',
-    'to_OptimizationFlag', 'set_level', 'get_level', 'optimize', 'use_cython'
+    'to_OptimizationFlag', 'set_level', 'get_level', 'optimize', 'use_cython', 'compiled_with_MKL'
 ]
 
 try:
@@ -88,6 +98,13 @@ have_cython_functions = None
 
 The value is set in the first call of :func:`use_cython`.
 """
+
+compiled_with_MKL = False
+"""bool whether the cython file was compiled with `HAVE_MKL`.
+
+The value is set in the first call of :func:`use_cython`.
+"""
+
 
 
 class OptimizationFlag(IntEnum):
@@ -277,6 +294,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
         return _decorator
     global _npc_helper_module
     global have_cython_functions
+    global compiled_with_MKL
     if have_cython_functions is None:
         if os.getenv("TENPY_NO_CYTHON", "").lower() in ["true", "yes", "y", "1"]:
             have_cython_functions = False
@@ -285,6 +303,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
                 from ..linalg import _npc_helper
                 _npc_helper_module = _npc_helper
                 have_cython_functions = True
+                compiled_with_MKL = _npc_helper.compiled_with_MKL
             except ImportError:
                 warnings.warn("Couldn't load compiled cython code. Code will run a bit slower.")
                 have_cython_functions = False
