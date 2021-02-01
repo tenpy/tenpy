@@ -118,10 +118,21 @@ def setup_cython_extension():
     include_dirs = [numpy.get_include()]
     libs = []
     lib_dirs = []
-    macros = []
+    macros = []  # C/C++ mmacros, #DEF ... in C/C++ code.
+    cython_macros = {}  # Cython macros in .pyx files
+    comp_direct = {  # compiler_directives
+        'language_level': 3,  # use python 3
+        'embedsignature': True,  # write function signature in doc-strings
+    }
 
     # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
     TENPY_OPTIMIZE = int(os.getenv("TENPY_OPTIMIZE", 1))
+    if TENPY_OPTIMIZE > 1:
+        comp_direct['initializedcheck'] = False
+        comp_direct['boundscheck'] = False
+    if TENPY_OPTIMIZE < 1:
+        comp_direct['profile'] = True
+        comp_direct['linetrace'] = True
     HAVE_MKL = 0
     MKL_DIR = os.getenv("MKL_DIR", os.getenv("MKLROOT", os.getenv("MKL_HOME", "")))
     if MKL_DIR:
@@ -137,9 +148,19 @@ def setup_cython_extension():
             HAVE_MKL = int(os.path.exists(os.path.join(CONDA_PREFIX, 'include', 'mkl.h')))
     HAVE_MKL = int(os.getenv("HAVE_MKL", HAVE_MKL))
     print("compile with HAVE_MKL =", HAVE_MKL)
-    macros.append(('HAVE_MKL', str(HAVE_MKL)))
+    cython_macros['HAVE_MKL'] = HAVE_MKL
     if HAVE_MKL:
-        libs.append('mkl_rt')
+        libs.extend(['mkl_rt', 'pthread', 'iomp5'])
+        if int(os.getenv("MKL_INTERFACE_LAYER", "ILP64") == "ILP64"):
+            print("using MKL interface layer ILP64 with 64-bit indices")
+            macros.append(('MKL_ILP64', None))  # compile with 64-bit indices
+            cython_macros['MKL_INTERFACE_LAYER'] = 1
+            # the 1 is the value of `MKL_INTERFACE_ILP64` in "mkl_service.h"
+            # we make sure to call mkl_set_interface_layer(MKL_INTERFACE_LAYER) in cython.
+        else:
+            print("using default MKL interface layer")
+            cython_macros['MKL_INTERFACE_LAYER'] = 0
+        # macros.append(('MKL_DIRECT_CALL', None)) # ensure that we use MKL with 64-bit pointers
 
     extensions = [
         Extension("*", ["tenpy/linalg/*.pyx"],
@@ -149,24 +170,9 @@ def setup_cython_extension():
                   define_macros=macros,
                   language='c++')
     ]
-    comp_direct = {  # compiler_directives
-        'language_level': 3,  # use python 3
-        'embedsignature': True,  # write function signature in doc-strings
-    }
-    if TENPY_OPTIMIZE > 1:
-        comp_direct['initializedcheck'] = False
-        comp_direct['boundscheck'] = False
-    if TENPY_OPTIMIZE < 1:
-        comp_direct['profile'] = True
-        comp_direct['linetrace'] = True
-    # compile time flags (#DEF ...)
-    comp_flags = {
-        'TENPY_OPTIMIZE': TENPY_OPTIMIZE,
-        'HAVE_MKL': HAVE_MKL,
-    }
     ext_modules = cythonize(extensions,
                             compiler_directives=comp_direct,
-                            compile_time_env=comp_flags)
+                            compile_time_env=cython_macros)
     return ext_modules
 
 

@@ -11,7 +11,10 @@ If this module was not compiled and could not be imported, a warning is issued.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
-# DEF HAVE_MKL = 0  # this is defined in `setup.py`, but you can also overwrite it here explicitly.
+# the following are defined in `setup.py`, but you might wish to overwrite them here explicitly.
+# DEF HAVE_MKL = 0  # whether to import cblas from mkl
+# DEF MKL_INTERFACE_LAYER = 0  # MKL_LP64=0 for using MKL_LP64 with 32-bit indices,
+                               # MKL_ILP64=1 for using MKL_ILP64 with 64-bit indices
 
 
 # TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
@@ -40,12 +43,19 @@ from ..tools.optimization import optimize, OptimizationFlag
 
 
 IF HAVE_MKL:
-    from ._cblas_mkl cimport  CblasRowMajor, CBLAS_TRANSPOSE, CblasNoTrans, MKL_INT, \
+    from ._cblas_mkl cimport CblasRowMajor, CBLAS_TRANSPOSE, CblasNoTrans, MKL_INT, \
             cblas_dscal, cblas_zdscal, cblas_zscal, cblas_daxpy, cblas_zaxpy, \
             cblas_ddot, cblas_zdotu_sub, cblas_zdotc_sub, \
-            cblas_dgemm_batch, cblas_zgemm_batch
+            cblas_dgemm_batch, cblas_zgemm_batch, \
+            mkl_set_interface_layer
+    ctypedef MKL_INT BLAS_INT
+    IF MKL_INTERFACE_LAYER:
+        # if compiled with -DMKL_ILP64, it's important to set the interface to avoid undefined
+        # behaviour, so we do this right away at module initialization:
+        mkl_set_interface_layer(MKL_INTERFACE_LAYER)
+        # in that way, we don't rely on a `export MKL_INTERFACE_LAYER="ILP64"` by the user.
 ELSE:
-    ctypedef np.intp_t MKL_INT  # should be able to hold matrix dimensions
+    ctypedef np.intp_t BLAS_INT  # should be able to hold matrix dimensions
     cdef enum CBLAS_LAYOUT:
         CblasRowMajor=101
         CblasColMajor=102
@@ -65,9 +75,8 @@ cdef int QTYPE_num = np.NPY_LONG # == np.dtype(QTYPE).num
 ctypedef np.intp_t intp_t   # compile time type for np.intp
 cdef int intp_num = np.NPY_INTP
 
-
 ctypedef void * void_ptr
-ctypedef np.complex128_t complex128
+ctypedef np.complex128_t complex128_t
 
 ctypedef struct idx_tuple:
     intp_t first
@@ -139,43 +148,43 @@ cdef class CblasGemmBatch:
     #    C = dot(A, B) + beta C
     # where A = m x k, B = k x n matrices
     cdef:
-        vector[vector[MKL_INT]] ms
-        vector[vector[MKL_INT]] ks
-        vector[vector[MKL_INT]] ns
+        vector[vector[BLAS_INT]] ms
+        vector[vector[BLAS_INT]] ks
+        vector[vector[BLAS_INT]] ns
         vector[vector[void_ptr]] As
         vector[vector[void_ptr]] Bs
         vector[vector[void_ptr]] Cs
         vector[CBLAS_TRANSPOSE] trans
-        vector[MKL_INT] int_ones
+        vector[BLAS_INT] int_ones
         vector[double] double_ones
         vector[double] double_zeros
-        vector[complex128] complex_ones
-        vector[complex128] complex_zeros
+        vector[complex128_t] complex_ones
+        vector[complex128_t] complex_zeros
         bint is_real  # whether to use dgemm or zgemm
 
     def __cinit__(self, int calc_dtype_num):
         self.is_real = (calc_dtype_num == np.NPY_FLOAT64)
-        self.ms = vector[vector[MKL_INT]]()
-        self.ks = vector[vector[MKL_INT]]()
-        self.ns = vector[vector[MKL_INT]]()
+        self.ms = vector[vector[BLAS_INT]]()
+        self.ks = vector[vector[BLAS_INT]]()
+        self.ns = vector[vector[BLAS_INT]]()
         self.As = vector[vector[void_ptr]]()
         self.Bs = vector[vector[void_ptr]]()
         self.Cs = vector[vector[void_ptr]]()
         # reserve constants for 64 blocks: enough in most cases
         cdef int R = 64
         self.trans = vector[CBLAS_TRANSPOSE](R, CblasNoTrans)
-        self.int_ones = vector[MKL_INT](R, 1)
+        self.int_ones = vector[BLAS_INT](R, 1)
         self.double_ones = vector[double](R, 1.)
         self.double_zeros = vector[double](R, 0.)
-        self.complex_ones = vector[complex128](R, 1.)
-        self.complex_zeros = vector[complex128](R, 0.)
+        self.complex_ones = vector[complex128_t](R, 1.)
+        self.complex_zeros = vector[complex128_t](R, 0.)
 
     cdef append(self, unsigned int level, void * A, void * B, void * C, intp_t m, intp_t k, intp_t n):
         """Store matrix pointers and sizes for matrix multiplications."""
         while self.ms.size() <= level:
-            self.ms.push_back(vector[MKL_INT]())
-            self.ks.push_back(vector[MKL_INT]())
-            self.ns.push_back(vector[MKL_INT]())
+            self.ms.push_back(vector[BLAS_INT]())
+            self.ks.push_back(vector[BLAS_INT]())
+            self.ns.push_back(vector[BLAS_INT]())
             self.As.push_back(vector[void_ptr]())
             self.Bs.push_back(vector[void_ptr]())
             self.Cs.push_back(vector[void_ptr]())
@@ -193,9 +202,9 @@ cdef class CblasGemmBatch:
         cdef:
             int level = 0
             size_t batch_size = self.ms[0].size()
-            MKL_INT * m
-            MKL_INT * n
-            MKL_INT * k
+            BLAS_INT * m
+            BLAS_INT * n
+            BLAS_INT * k
             void ** A
             void ** B
             void ** C
@@ -211,7 +220,7 @@ cdef class CblasGemmBatch:
             self.int_ones.resize(batch_size, 1)
         cdef:
             CBLAS_TRANSPOSE * trans = & self.trans[0]
-            MKL_INT * int_ones = & self.int_ones[0]
+            BLAS_INT * int_ones = & self.int_ones[0]
             double * double_ones = & self.double_ones[0]
             double * double_zeros = & self.double_zeros[0]
             void * complex_ones = <void *> & self.complex_ones[0]
@@ -254,7 +263,7 @@ cdef class CblasGemmBatch:
                                 complex_ones, <const void **> A, k, <const void **> B, n,   # alpha, A, LDA, B, LDB
                                 complex_betas, C, n, batch_size, int_ones)  # beta, C, LDC, group_count, group_size
                     ELSE:
-                        zgemm_batch(m, n, k, <complex128 *> complex_ones, <complex128 **> A, <complex128 **> B, <complex128 *> complex_betas, <complex128 **> C, batch_size)
+                        zgemm_batch(m, n, k, <complex128_t *> complex_ones, <complex128_t **> A, <complex128_t **> B, <complex128_t *> complex_betas, <complex128_t **> C, batch_size)
             level += 1
         # run finished
 
@@ -262,7 +271,7 @@ cdef class CblasGemmBatch:
 IF HAVE_MKL:
     pass  # don't define dgemm_batch and zgemm_batch to avoid compiler warnings about unused functions
 ELSE:
-    cdef void dgemm_batch(MKL_INT * m, MKL_INT * n, MKL_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) nogil:
+    cdef void dgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) nogil:
         """Perform a batch of dgemm matrix multiplications.
 
         Assumes that all matrices are stored C-contiguous.
@@ -276,7 +285,7 @@ ELSE:
                 A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
 
 
-    cdef void zgemm_batch(MKL_INT * m, MKL_INT * n, MKL_INT * k, complex128* alpha, complex128 ** A, complex128 ** B, complex128 * beta, complex128 ** C, int batch_size) nogil:
+    cdef void zgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, complex128_t* alpha, complex128_t ** A, complex128_t ** B, complex128_t * beta, complex128_t ** C, int batch_size) nogil:
         """Perform a batch of zgemm matrix multiplications.
 
         Assumes that all matrices are stored C-contiguous.
@@ -291,7 +300,7 @@ ELSE:
 
 
 
-cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int dtype_num) nogil:
+cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A += prefactor * B``.
 
     Assumes (!) that A, B are contiguous C-style matrices of dimensions MxK, KxN , MxN.
@@ -312,7 +321,7 @@ cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int 
             zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
 
 
-cdef void _blas_inpl_scale(int N, void* A, double complex prefactor, int dtype_num) nogil:
+cdef void _blas_inpl_scale(int N, void* A, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A *= prefactor``.
 
     Assumes (!) that A is contiguous C-style matrices of dimensions N.
@@ -858,7 +867,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
         self._data = [d.astype(calc_dtype) for d in self._data]
     if other.dtype.num != calc_dtype_num:
         other = other.astype(calc_dtype)
-    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    cdef complex128_t cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
@@ -952,7 +961,7 @@ def Array_iscale_prefactor(self, prefactor):
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
         self._data = [d.astype(calc_dtype) for d in self._data]
-    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    cdef complex128_t cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
@@ -1696,6 +1705,8 @@ def _tensordot_worker(a, b, int axes):
                                                    inds_contr)
             if contr_count == 0:
                 continue  # no compatible blocks for given row_a, col_b
+            IF DEBUG_PRINT:
+                contr_count_batch += contr_count
 
             # we need to sum over inner indices
             # create output block
@@ -1736,7 +1747,7 @@ def _tensordot_worker(a, b, int axes):
     if DEBUG_PRINT:
         t1 = time.time()
         print("inner loop gemm", t1-t0)
-        print("had ", inds_contr.size(), "contractions into ", res_n_blocks, "new blocks")
+        print("had ", contr_count_batch, "contractions into ", res_n_blocks, "new blocks")
         t0 = time.time()
 
     if res_n_blocks != 0:

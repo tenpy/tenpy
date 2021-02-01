@@ -37,8 +37,8 @@ rm_dir "tests/.pytest_cache"
 rm_files tenpy/_version.py
 
 # clean-up generated documentation
-rm_dir "doc/examples"
-rm_dir "doc/toycodes"
+#rm_dir "doc/examples"
+#rm_dir "doc/toycodes"
 rm_dir "doc/reference"
 rm_dir "doc/sphinx_build"
 

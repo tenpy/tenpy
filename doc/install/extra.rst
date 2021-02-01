@@ -44,6 +44,11 @@ If you have a working conda package manager, you can install the numpy build aga
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
 
 
+As outlined in :doc:`/doc/install/conda`, on Linux/Mac you also need to the following, if you use the `conda-forge` channel::
+
+    conda install "libblas=*=*mkl"
+
+
 .. _linkingMKL:
 
 Compile linking agains MKL

@@ -1,12 +1,16 @@
 
-ctypedef int MKL_INT  # TODO: shouldn't this be 64 bit ?!? can we multiply arrays larger than 32 bit?
-
+IF MKL_INTERFACE_LAYER:
+    ctypedef long long int MKL_INT
+ELSE:
+    ctypedef int MKL_INT
 
 cdef extern from "mkl.h" nogil:
     # see $CONDA_PREFIX/include/mkl_cblas.h
 
     enum CBLAS_TRANSPOSE: CblasNoTrans, CblasTrans, CblasConjTrans
     enum CBLAS_LAYOUT: CblasRowMajor, CblasColMajor
+
+    int mkl_set_interface_layer(int required_interface)
 
     void cblas_dscal(const MKL_INT N, const double alpha, double *X, const MKL_INT incX);
     void cblas_zscal(const MKL_INT N, const void *alpha, void *X, const MKL_INT incX);

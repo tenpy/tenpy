@@ -5,6 +5,7 @@ We provide a package for the [conda]_ package manager in the `conda-forge` chann
 
     conda install --channel=conda-forge physics-tenpy
 
+
 Following the recommondation of `conda-forge <https://conda-forge.org/docs/user/introduction.html>`_, you can also make
 conda-forge the default channel as follows::
 
@@ -12,6 +13,14 @@ conda-forge the default channel as follows::
     conda config --set channel_priority strict
 
 If you have done this, you don't need to specify the ``--channel=conda-forge`` explicitly.
+
+.. note ::
+
+    The `numpy` package provided by `conda-forge` by default uses openblas on linux. 
+    As outlined in the `conda forge docs <https://conda-forge.org/docs/maintainer/knowledge_base.html#switching-blas-implementation>`_, 
+    you can switch to MKL using::
+
+        conda install "libblas=*=*mkl"
 
 
 Moreover, it is actually recommended to create a separate environment. 
