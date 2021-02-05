@@ -45,6 +45,7 @@ Added
 - :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 - :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
 - :class:`tenpy.models.lattice.HelicalLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
+- :meth:`tenpy.networks.purification_mps.PurificationMPS.from_infiniteT_canonical` for a canonical ensemble.
 
 Changed
 ^^^^^^^

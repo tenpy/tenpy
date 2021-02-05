@@ -4,6 +4,7 @@
 import warnings
 import numpy as np
 import numpy.testing as npt
+import scipy
 from tenpy.models.xxz_chain import XXZChain
 
 from tenpy.networks import purification_mps, site
@@ -14,6 +15,7 @@ import tenpy.linalg.np_conserved as npc
 import pytest
 
 spin_half = site.SpinHalfSite(conserve='Sz')
+ferm = site.FermionSite(conserve='N')
 
 
 def test_purification_mps():
@@ -42,6 +44,47 @@ def test_purification_mps():
             psi.group_split()
             C = psi.correlation_function('Sz', 'Sz')
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
+
+
+def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
+    site = spin_half
+    psi = purification_mps.PurificationMPS.from_infiniteT_canonical([site] * L, [charge_sector])
+    psi.test_sanity()
+    total_psi = psi.get_theta(0, L).take_slice(0, 'vL').take_slice(0, 'vR')
+    total_psi.itranspose(['p' + str(i) for i in range(L)] + ['q' + str(i) for i in range(L)])
+    # note: don't `combine_legs`: it will permute the p legs differently than q due to charges
+    total_psi_dense = total_psi.to_ndarray().reshape(2**L, 2**L)
+    # now it should be diagonal
+    diag = np.diag(total_psi_dense)
+    assert np.all(np.abs(total_psi_dense - np.diag(diag) < eps))  # is it diagonal?
+    # and the diagonal should be sqrt(L choose L//2) for states with fitting numbers
+    pref = 1. / scipy.special.comb(L, L // 2 + charge_sector)**0.5
+    Q_p = site.leg.to_qflat()[:, 0]
+    for i, entry in enumerate(diag):
+        Q_i = sum([Q_p[int(b)] for b in format(i, 'b').zfill(L)])
+        if Q_i == charge_sector:
+            assert abs(entry - pref) < eps
+        else:
+            assert abs(entry) < eps
+
+    # and one quick test of TEBD
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    M = XXZChain(xxz_pars)
+    TEBD_params = {
+        'trunc_params': {
+            'chi_max': 16,
+            'svd_min': 1.e-8
+        },
+        'disentangle': None,  # 'renyi' should work as well, 'backwards' not.
+        'dt': 0.1,
+        'verbose': 30,
+        'N_steps': 2
+    }
+    eng = PurificationTEBD(psi, M, TEBD_params)
+    eng.run_imaginary(0.2)
+    eng.run()
+    N = psi.expectation_value('Id')  # check normalization : <1> =?= 1
+    npt.assert_array_almost_equal_nulp(N, np.ones([L]), 100)
 
 
 @pytest.mark.slow
