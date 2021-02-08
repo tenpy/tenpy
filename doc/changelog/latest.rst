@@ -76,3 +76,4 @@ Fixed
 - The default `trunc_par` for :meth:`tenpy.networks.mps.MPS.swap_sites`, :meth:`~tenpy.networks.mps.MPS.permute_sites` and :meth:`~tenpy.networks.mps.MPS.compute_K` was leading to too small chi for intial MPS with small chi.
 - :issue:`120` Lattice with different sites in the unit cell.
 - Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
+- :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.

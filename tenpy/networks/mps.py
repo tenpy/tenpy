@@ -2779,7 +2779,8 @@ class MPS:
         num = max(target + 1, self._transfermatrix_keep)
         E, _ = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
-        if charge_sector is not None and charge_sector != 0:
+        if charge_sector is not None and charge_sector != 0 and \
+                any([c != 0 for c in charge_sector]):
             # need also dominant eigenvector: include 0 charge sector to results
             del T
             T = TransferMatrix(self, self, charge_sector=0, form='B')
