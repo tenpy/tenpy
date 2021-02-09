@@ -32,6 +32,7 @@ See also the introduction in :doc:`/intro/model`.
 import numpy as np
 import warnings
 import inspect
+from functools import wraps
 
 from .lattice import get_lattice, Lattice, TrivialLattice, Chain
 from ..linalg import np_conserved as npc
@@ -1616,6 +1617,19 @@ class MultiCouplingModel(CouplingModel):
         warnings.warn(msg, DeprecationWarning, 2)
 
 
+def _warn_post_init_add(f):
+    @wraps(f)
+    def add_term_function(self, *args, **kwargs):
+        res = f(self, *args, **kwargs)
+        if hasattr(self, 'H_MPO'):
+            warnings.warn(
+                "Adding terms to the CouplingMPOModel after initialization. "
+                "Make sure you call `init_H_from_terms` again!", UserWarning, 2)
+        return res
+
+    return add_term_function
+
+
 class CouplingMPOModel(CouplingModel, MPOModel):
     """Combination of the :class:`CouplingModel` and :class:`MPOModel`.
 
@@ -1691,16 +1705,28 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
-        # 7) initialize H_MPO
-        H_MPO = self.calc_H_MPO()
-        if model_params.get('sort_mpo_legs', False):
-            H_MPO.sort_legcharges()
-        MPOModel.__init__(self, lat, H_MPO)
-        if isinstance(self, NearestNeighborModel):
-            # 8) initialize H_bonds
-            NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
-        # checks for misspelled parameters
+        # 7-8) initialize H_MPO, and H_bonds, if necessary
+        self.init_H_from_terms()
+        # finally checks for misspelled parameter names
         model_params.warn_unused()
+
+    def init_H_from_terms(self):
+        """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.
+
+        This function is called automatically during `CouplingMPOModel.__init__`.
+
+        If you use one of the `add_*` methods of the `CouplingModel` *after* initialization,
+        you will need to call `init_H_from_terms` in the end by yourself,
+        in order to update the `H_MPO` (and possibly `H_bond`) representations.
+        (You should get a warning about this... The way to avoid it is to initialize all the terms
+        in `init_terms` by defining your own model, as outlined in :doc:`/intro/model`.
+        """
+        H_MPO = self.calc_H_MPO()
+        if self.options.get('sort_mpo_legs', False):
+            H_MPO.sort_legcharges()
+        MPOModel.__init__(self, self.lat, H_MPO)
+        if isinstance(self, NearestNeighborModel):
+            NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
@@ -1833,3 +1859,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
+
+    # decorate add_* methods to warn they get called after a finished initialization.
+    add_local_term = _warn_post_init_add(CouplingModel.add_local_term)
+    add_onsite = _warn_post_init_add(CouplingModel.add_onsite)
+    add_onsite_term = _warn_post_init_add(CouplingModel.add_onsite_term)
+    add_coupling = _warn_post_init_add(CouplingModel.add_coupling)
+    add_coupling_term = _warn_post_init_add(CouplingModel.add_coupling_term)
+    add_multi_coupling = _warn_post_init_add(CouplingModel.add_multi_coupling)
+    add_multi_coupling_term = _warn_post_init_add(CouplingModel.add_multi_coupling_term)
+    add_exponentially_decaying_coupling = _warn_post_init_add(
+        CouplingModel.add_exponentially_decaying_coupling)

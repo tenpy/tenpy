@@ -1,6 +1,7 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import warnings
 import itertools
 
 from tenpy.models import model, lattice
@@ -320,20 +321,32 @@ def test_model_plus_hc(L=6):
     params['explicit_plus_hc'] = True
     m3 = MyMod(params)
     nu = np.random.random(L)
-    m1.add_onsite(nu, 0, 'Sp')
-    m1.add_onsite(nu, 0, 'Sm')
-    m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
-    m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_onsite(nu, 0, 'Sp')
+        m1.add_onsite(nu, 0, 'Sm')
+        m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
+        m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
     t = np.random.random(L - 1)
-    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
-    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
+        m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+        m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
     t2 = np.random.random(L - 1)
-    m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
-    m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
-    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
+        m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
+        m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+        m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
 
     def compare(m1, m2, m3, use_bonds=True):
         for m in [m1, m2, m3]:
@@ -361,9 +374,13 @@ def test_model_plus_hc(L=6):
 
     compare(m1, m2, m3, use_bonds=True)
 
-    m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
-    m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
-    m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
-    m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
+        m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+        m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
 
     compare(m1, m2, m3, use_bonds=False)
