@@ -2338,14 +2338,15 @@ def get_order_grouped(shape, groups, priority=None):
         fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
         groups = [[(0, 1, 2)], [(0, 2, 1)],
                 [(0, 1), (2,)], [(0, 2), (1,)]]
+        priorities = [None, None, None, [1, 0, 2]]
         lat = lattice.Kagome(3, 3, None, bc='periodic')
-        for gr, ax in zip(groups, axes.flatten()):
-            order = lattice.get_order_grouped(lat.shape, gr)
+        for gr, prio, ax in zip(groups, priorities, axes.flatten()):
+            order = lattice.get_order_grouped(lat.shape, gr, prio)
             lat.order = order
             lat.plot_order(ax, linestyle=':')
             lat.plot_sites(ax)
             lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
-            ax.set_title('("grouped", ' + str(gr) + ')')
+            ax.set_title(', '.join(['("grouped"', str(gr), str(prio) + ')']))
             ax.set_aspect('equal')
             ax.set_xlim(-1)
             ax.set_ylim(-1)
@@ -2360,13 +2361,17 @@ def get_order_grouped(shape, groups, priority=None):
     shape : tuple of int
         The shape of the lattice, i.e., the length in each direction.
     groups : tuple of tuple of int
-        A partition and reordering of range(shape[-1])`` into smaller groups.
+        A partition and reordering of ``range(shape[-1])`` into smaller groups.
         The ordering goes first within a group, then along the last spatial dimensions, then
         changing between different groups and finally in Cstyle order along the remaining spatial
         dimensions.
     priority : None | tuple of ints
-        If `None`, use C-style order for everything except the unit cell, as shown above.
-        If a tuple, it should have length ``len(shape)``
+        By default (`None`), use C-style order for everything except the unit cell, as shown above.
+        If a tuple, it should have length ``len(shape)`` and specifies which order to go first,
+        similarly as in :func:`get_order`. To group sites in the unit cell, you should make the
+        last entry of `priority` the largest. However, you can also choose to group along another
+        direction - in that case `groups` should be a partitioning of
+        ``range(shape(argmax(priority)))``. Try and plot it, if you need it!
 
     Returns
     -------
