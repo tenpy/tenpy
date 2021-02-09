@@ -60,7 +60,7 @@ Changed
 - The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
   :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
   :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
-
+- Support additional `priority` argument for :func:`~tenpy.models.lattice.get_order_grouped`, :issue:`122`.
 
 Fixed
 ^^^^^

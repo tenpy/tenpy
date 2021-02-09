@@ -68,7 +68,7 @@ class Lattice:
     unit_cell : list of :class:`~tenpy.networks.site.Site`
         The sites making up a unit cell of the lattice.
         If you want to specify it only after initialization, use ``None`` entries in the list.
-    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
+    order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups, ...)``
         A string or tuple specifying the order, given to :meth:`ordering`.
     bc : (iterable of) {'open' | 'periodic' | int}
         Boundary conditions in each direction of the lattice.
@@ -376,7 +376,7 @@ class Lattice:
 
         Parameters
         ----------
-        order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups)``
+        order : str | ``('standard', snake_winding, priority)`` | ``('grouped', groups, ...)``
             Specifies the desired ordering using one of the strings of the above tables.
             Alternatively, an ordering is specified by a tuple with first entry specifying a
             function, ``'standard'`` for :func:`get_order` and ``'grouped'`` for
@@ -414,9 +414,9 @@ class Lattice:
         else:
             descr = order[0]
             if descr == 'standard':
-                snake_winding, priority = order[1], order[2]
+                snake_winding, priority = order[1:]
             elif descr == 'grouped':
-                return get_order_grouped(self.shape, order[1])
+                return get_order_grouped(self.shape, *order[1:])
             else:
                 raise ValueError("unknown ordering " + repr(order))
         return get_order(self.shape, snake_winding, priority)
@@ -2320,7 +2320,7 @@ def get_order(shape, snake_winding, priority=None):
     return order
 
 
-def get_order_grouped(shape, groups):
+def get_order_grouped(shape, groups, priority=None):
     """Variant of :func:`get_order`, grouping some sites of the unit cell.
 
     This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
@@ -2360,10 +2360,13 @@ def get_order_grouped(shape, groups):
     shape : tuple of int
         The shape of the lattice, i.e., the length in each direction.
     groups : tuple of tuple of int
-        A partition and reordering of range(shape[-1]) into smaller groups.
+        A partition and reordering of range(shape[-1])`` into smaller groups.
         The ordering goes first within a group, then along the last spatial dimensions, then
         changing between different groups and finally in Cstyle order along the remaining spatial
         dimensions.
+    priority : None | tuple of ints
+        If `None`, use C-style order for everything except the unit cell, as shown above.
+        If a tuple, it should have length ``len(shape)``
 
     Returns
     -------
@@ -2375,6 +2378,14 @@ def get_order_grouped(shape, groups):
     :meth:`Lattice.ordering` : method in :class:`Lattice` to obtain the order from parameters.
     :meth:`Lattice.plot_order` : visualizes the resulting order in a :class:`Lattice`.
     """
+    if priority is not None:
+        # reduce this case to C-style order and a few permutations
+        perm = np.argsort(priority)
+        inv_perm = inverse_permutation(perm)
+        transp_shape = np.array(shape)[perm]
+        order = get_order_grouped(transp_shape, groups, None)  # in plain C-style
+        order = order[:, inv_perm]
+        return order
     Ly = shape[-2]
     Lu = shape[-1]
     N_sites = np.prod(shape)
