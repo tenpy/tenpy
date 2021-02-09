@@ -11,6 +11,7 @@ If this module was not compiled and could not be imported, a warning is issued.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
+DEF USE_MKL_GEMM_BATCH = 1 # whether to use ?gemm_batch function of MKL
 # the following are defined in `setup.py`, but you might wish to overwrite them here explicitly.
 # DEF HAVE_MKL = 0  # whether to import cblas from mkl
 # DEF MKL_INTERFACE_LAYER = 0  # MKL_LP64=0 for using MKL_LP64 with 32-bit indices,
@@ -46,15 +47,22 @@ IF HAVE_MKL:
     from ._cblas_mkl cimport CblasRowMajor, CBLAS_TRANSPOSE, CblasNoTrans, MKL_INT, \
             cblas_dscal, cblas_zdscal, cblas_zscal, cblas_daxpy, cblas_zaxpy, \
             cblas_ddot, cblas_zdotu_sub, cblas_zdotc_sub, \
+            cblas_dgemm, cblas_zgemm, \
             cblas_dgemm_batch, cblas_zgemm_batch, \
             mkl_set_interface_layer
-    ctypedef MKL_INT BLAS_INT
     IF MKL_INTERFACE_LAYER:
         # if compiled with -DMKL_ILP64, it's important to set the interface to avoid undefined
         # behaviour, so we do this right away at module initialization:
         mkl_set_interface_layer(MKL_INTERFACE_LAYER)
         # in that way, we don't rely on a `export MKL_INTERFACE_LAYER="ILP64"` by the user.
+
+    ctypedef MKL_INT BLAS_INT
+    ctypedef np.complex_t complex_t
+    cdef extern from "mkl.h" nogil:
+        ctypedef complex_t MKL_Complex16
 ELSE:
+    from scipy.linalg.cython_blas cimport (dgemm, zgemm,
+            ddot, zdotc, zdotu, daxpy, zaxpy, dscal, zscal, zdscal)
     ctypedef np.intp_t BLAS_INT  # should be able to hold matrix dimensions
     cdef enum CBLAS_LAYOUT:
         CblasRowMajor=101
@@ -63,8 +71,8 @@ ELSE:
         CblasNoTrans=111
         CblasTrans=112
         CblasConjTrans=113
-    from scipy.linalg.cython_blas cimport (dgemm, zgemm,
-            ddot, zdotc, zdotu, daxpy, zaxpy, dscal, zscal, zdscal)
+    ctypedef np.complex_t MKL_Complex16
+
 
 compiled_with_MKL = HAVE_MKL
 
@@ -176,8 +184,8 @@ cdef class CblasGemmBatch:
         self.int_ones = vector[BLAS_INT](R, 1)
         self.double_ones = vector[double](R, 1.)
         self.double_zeros = vector[double](R, 0.)
-        self.complex_ones = vector[complex128_t](R, 1.)
-        self.complex_zeros = vector[complex128_t](R, 0.)
+        self.complex_ones = vector[complex128_t](R, 1. + 0.j)
+        self.complex_zeros = vector[complex128_t](R, 0. + 0.j)
 
     cdef append(self, unsigned int level, void * A, void * B, void * C, intp_t m, intp_t k, intp_t n):
         """Store matrix pointers and sizes for matrix multiplications."""
@@ -246,7 +254,7 @@ cdef class CblasGemmBatch:
                         betas = double_zeros
                     else:
                         betas = double_ones
-                    IF HAVE_MKL:
+                    IF HAVE_MKL and USE_MKL_GEMM_BATCH:
                         cblas_dgemm_batch(CblasRowMajor, trans, trans, m, n, k,
                                 double_ones, <const double **> A, k, <const double **> B, n,   # alpha, A, LDA, B, LDB
                                 betas, <double **> C, n, batch_size, int_ones)  # beta, C, LDC, group_count, group_size
@@ -258,7 +266,7 @@ cdef class CblasGemmBatch:
                         complex_betas = complex_zeros
                     else:
                         complex_betas = complex_ones
-                    IF HAVE_MKL:
+                    IF HAVE_MKL and USE_MKL_GEMM_BATCH:
                         cblas_zgemm_batch(CblasRowMajor, trans, trans, m, n, k,
                                 complex_ones, <const void **> A, k, <const void **> B, n,   # alpha, A, LDA, B, LDB
                                 complex_betas, C, n, batch_size, int_ones)  # beta, C, LDC, group_count, group_size
@@ -268,8 +276,9 @@ cdef class CblasGemmBatch:
         # run finished
 
 
-IF HAVE_MKL:
-    pass  # don't define dgemm_batch and zgemm_batch to avoid compiler warnings about unused functions
+
+IF HAVE_MKL and USE_MKL_GEMM_BATCH:
+    pass # don't define dgemm_batch and zgemm_batch to avoid compiler warnings about unused functions
 ELSE:
     cdef void dgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) nogil:
         """Perform a batch of dgemm matrix multiplications.
@@ -279,10 +288,13 @@ ELSE:
         cdef char *no_tr = 'n'
         cdef int b
         for b in range(batch_size):
-            # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
-            # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
-            dgemm(no_tr, no_tr, <int*> &n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*> &n[b],
-                A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
+            IF HAVE_MKL:
+                cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m[b], n[b], k[b], alpha[b], A[b], k[b], B[b], n[b], beta[b], C[b], n[b])
+            ELSE:
+                # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
+                # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
+                dgemm(no_tr, no_tr, <int*> &n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*> &n[b],
+                    A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
 
 
     cdef void zgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, complex128_t* alpha, complex128_t ** A, complex128_t ** B, complex128_t * beta, complex128_t ** C, int batch_size) nogil:
@@ -293,10 +305,13 @@ ELSE:
         cdef char *no_tr = 'n'
         cdef int b
         for b in range(batch_size):
-            # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
-            # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
-            zgemm(no_tr, no_tr, <int*>&n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*>&n[b],
-                A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
+            IF HAVE_MKL:
+                cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m[b], n[b], k[b], <MKL_Complex16*> &alpha[b], <MKL_Complex16*>A[b], k[b], <MKL_Complex16*>B[b], n[b], <MKL_Complex16*> &beta[b], <MKL_Complex16*>C[b], n[b])
+            ELSE:
+                # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
+                # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
+                zgemm(no_tr, no_tr, <int*>&n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*>&n[b],
+                    A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
 
 
 
@@ -309,6 +324,7 @@ cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dt
     """
     cdef double real_prefactor = prefactor.real
     cdef int one = 1
+    cdef void_ptr prefactor_ptr =  <void_ptr> & prefactor
     if dtype_num == np.NPY_FLOAT64:
         IF HAVE_MKL:
             cblas_daxpy(N, real_prefactor, <const double*> B, 1, <double*> A, 1)
@@ -316,7 +332,7 @@ cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dt
             daxpy(&N, &real_prefactor, <double*> B, &one, <double*> A, &one)
     else: # dtype_num == np.NPY_COMPLEX128
         IF HAVE_MKL:
-            cblas_zaxpy(N, &prefactor, <const void*> B, 1, A, 1)
+            cblas_zaxpy(N, <MKL_Complex16*> prefactor_ptr, <MKL_Complex16*> B, 1, <MKL_Complex16*> A, 1)
         ELSE:
             zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
 
@@ -1818,6 +1834,7 @@ def _inner_worker(a, b, bint do_conj):
     cdef void *a_ptr
     cdef void *b_ptr
     cdef double sum_real = 0.
+    cdef double dot_real = 0.
     cdef double complex sum_complex = 0.
     cdef double complex dot_product = 0.
     for match in range(count):
@@ -1831,7 +1848,8 @@ def _inner_worker(a, b, bint do_conj):
         b_ptr = np.PyArray_DATA(b_block)
         if calc_dtype_num == np.NPY_FLOAT64:
             IF HAVE_MKL:
-                sum_real += cblas_ddot(size, <const double*> a_ptr, 1, <const double*> b_ptr, 1)
+                dot_real = cblas_ddot(size, <const double*> a_ptr, one, <const double*> b_ptr, one)
+                sum_real += dot_real
             ELSE:
                 sum_real += ddot(&size, <double*> a_ptr, &one, <double*> b_ptr, &one)
             #  res += calc_real

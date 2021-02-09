@@ -151,7 +151,7 @@ def setup_cython_extension():
     cython_macros['HAVE_MKL'] = HAVE_MKL
     if HAVE_MKL:
         libs.extend(['mkl_rt', 'pthread', 'iomp5'])
-        if int(os.getenv("MKL_INTERFACE_LAYER", "ILP64") == "ILP64"):
+        if os.getenv("MKL_INTERFACE_LAYER", "ILP64").startswith("ILP64"):
             print("using MKL interface layer ILP64 with 64-bit indices")
             macros.append(('MKL_ILP64', None))  # compile with 64-bit indices
             cython_macros['MKL_INTERFACE_LAYER'] = 1
@@ -160,7 +160,7 @@ def setup_cython_extension():
         else:
             print("using default MKL interface layer")
             cython_macros['MKL_INTERFACE_LAYER'] = 0
-        # macros.append(('MKL_DIRECT_CALL', None)) # ensure that we use MKL with 64-bit pointers
+        # macros.append(('MKL_DIRECT_CALL', None))  # TODO: benchmark: helpfull?
 
     extensions = [
         Extension("*", ["tenpy/linalg/*.pyx"],
