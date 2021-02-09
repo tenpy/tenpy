@@ -77,3 +77,4 @@ Fixed
 - :issue:`120` Lattice with different sites in the unit cell.
 - Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
 - :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.
+- Some MPS methods (correlation function, expectation value, ...) raised an error for negative site indices even for infinite MPS.

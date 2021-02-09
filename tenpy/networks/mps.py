@@ -980,7 +980,7 @@ class MPS:
         op : npc.array
             One of the entries in `op_list`, not copied.
         """
-        if self.finite and i > self.L or i < 0:
+        if self.finite and (i > self.L or i < 0):
             raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
