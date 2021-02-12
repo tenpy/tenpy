@@ -34,7 +34,7 @@ import warnings
 import inspect
 from functools import wraps
 
-from .lattice import get_lattice, Lattice, TrivialLattice, Chain
+from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -1677,14 +1677,13 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         Optional parameters.
     verbose : int
         Level of verbosity (i.e. how much status information to print); higher=more output.
-    default_lattice : :class:`~tenpy.models.lattice.Lattice`
-        Class attribute. The default class to be used in :meth:`init_lattice`.
-    force_default_lattice : bool
-        Class attribute. If True, :meth:`init_lattice` asserts that the initialized lattice is
-        (a subclass of) `default_lattice`.
     """
 
-    default_lattice = Chain
+    #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
+    default_lattice = "Chain"
+
+    #: bool: If True, :meth:`init_lattice` asserts that the initialized lattice
+    #: is (a subclass of) `default_lattice`
     force_default_lattice = False
 
     def __init__(self, model_params):

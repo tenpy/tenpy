@@ -189,9 +189,9 @@ class PurificationMPS(MPS):
 
         Works only for finite boundary conditions, following the idea outlined in [barthel2016]_.
         However, we just put trivial charges on the ancilla legs,
-        instead of doubling the number of charges as suggested in that paper.
+        and do *not* double the number of charges as suggested in that paper - there's no need to.
 
-        Note that at least some of the disentanglers don't work with the canonical ensemble.
+        Note that the 'backwards' disentanglers doesn't work with the canonical ensemble.
 
         Parameters
         ----------
@@ -236,8 +236,9 @@ class PurificationMPS(MPS):
 
         Bs = []
         Ss = [np.ones(1, dtype=np.float64)]
-        # now we can define the tensors following [barthel2016]_
+        # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}
+        # the normalization will be ensured by a call to `canonical_form_finite()` in the end.
         right_Q = chinfo.make_valid([charge_sector_left])
         right_leg = npc.LegCharge.from_qflat(chinfo, right_Q, qconj=-1)
         for s in range(L):
@@ -267,7 +268,7 @@ class PurificationMPS(MPS):
             Bs.append(B)
             Ss.append(np.ones(B.shape[1], np.float64))
         res = cls(sites, Bs, Ss, 'finite', form)
-        res.canonical_form_finite()  # calculate S values
+        res.canonical_form_finite()  # calculate S values and normalize
         return res
 
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1, legs='p'):

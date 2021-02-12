@@ -1,3 +1,8 @@
+.. only :: html
+
+    Contents
+    ========
+
 .. raw :: latex
 
     \part{User guide}

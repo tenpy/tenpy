@@ -55,6 +55,11 @@ class Sweep(Algorithm):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional configuration parameters.
+    resume_data : None | dict
+        Can only be passed as keyword argument.
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
 
     Options
     -------
@@ -109,10 +114,10 @@ class Sweep(Algorithm):
         The latter are chosen such that the environment is growing for infinite systems, but
         we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
     """
-    def __init__(self, psi, model, options):
+    def __init__(self, psi, model, options, *, resume_data=None):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        super().__init__(psi, model, options)
+        super().__init__(psi, model, options, resume_data=resume_data)
         options = self.options
 
         self.combine = options.get('combine', False)
@@ -122,7 +127,7 @@ class Sweep(Algorithm):
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model)
+        self.init_env(model, resume_data=resume_data)
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
@@ -131,6 +136,11 @@ class Sweep(Algorithm):
     def engine_params(self):
         warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
+
+    def get_resume_data(self):
+        data = super().get_resume_data()
+        data['init_env_data'] = self.env.get_initialization_data()
+        return data
 
     @property
     def n_optimize(self):
@@ -143,7 +153,7 @@ class Sweep(Algorithm):
         """
         return self.EffectiveH.length
 
-    def init_env(self, model=None):
+    def init_env(self, model=None, resume_data=None):
         """(Re-)initialize the environment.
 
         This function is useful to (re-)start a Sweep with a slightly different
@@ -156,12 +166,18 @@ class Sweep(Algorithm):
         model : :class:`~tenpy.models.MPOModel`
             The model representing the Hamiltonian for which we want to find the ground state.
             If ``None``, keep the model used before.
+        resume_data : None | dict
+            Given when resuming a simulation, as returned by :meth:`get_resume_data`.
 
         Options
         -------
         .. deprecated :: 0.6.0
             Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
             `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
+
+        .. deprecated :: 0.8.0
+            Instead of passing the `init_env_data` as a option, it should be passed
+            as dict entry of `resume_data`.
 
         .. cfg:configoptions :: Sweep
 
@@ -187,8 +203,13 @@ class Sweep(Algorithm):
             those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
+        if resume_data is None:
+            resume_data = {}
+        if 'init_env_data' in self.options:
+            warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
+            resume_data.setdefault('init_env_data', self.options['init_env_data'])
         if self.env is None or self.psi.bc == 'finite':
-            init_env_data = self.options.get("init_env_data", {})
+            init_env_data = resume_data.get("init_env_data", {})
         else:  # re-initialize
             compatible = True
             if model is not None:
@@ -201,7 +222,7 @@ class Sweep(Algorithm):
             if compatible:
                 init_env_data = self.env.get_initialization_data()
             else:
-                init_env_data = self.options.get("init_env_data", {})
+                init_env_data = resume_data.get("init_env_data", {})
             if self.options.get('chi_list', None) is not None:
                 warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
@@ -815,6 +836,10 @@ class VariationalCompression(Sweep):
         The state to be compressed.
     options : dict
         See :cfg:config:`VariationalCompression`.
+    resume_data : None | dict
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
 
     Options
     -------
@@ -833,8 +858,8 @@ class VariationalCompression(Sweep):
     """
     EffectiveH = TwoSiteH
 
-    def __init__(self, psi, options):
-        super().__init__(psi, None, options)
+    def __init__(self, psi, options, resume_data=None):
+        super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
 
     def run(self):
@@ -857,12 +882,16 @@ class VariationalCompression(Sweep):
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
-    def init_env(self, _):
+    def init_env(self, _, resume_data=None):
         """Initialize the environment.
 
-        The argument is not used and only there for compatibility with the Sweep class.
+        The first argument is not used and only there for compatibility with the Sweep class.
+        The second argument is the `resume_data` passed during initialization, as returned by
+        :meth:`get_resume_data`.
         """
-        init_env_data = self.options.get("init_env_data", {})
+        if resume_data is None:
+            resume_data = {}
+        init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
         self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
         if (not self.psi.finite and 'init_LP' not in init_env_data
@@ -903,6 +932,7 @@ class VariationalCompression(Sweep):
         return self.update_new_psi(th)
 
     def update_new_psi(self, theta):
+        """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
         qtotal_i0 = new_psi.get_B(i0, form=None).qtotal
@@ -972,6 +1002,10 @@ class VariationalApplyMPO(VariationalCompression):
         MPO to be applied to the state.
     options : dict
         See :cfg:config:`VariationalCompression`.
+    resume_data : None | dict
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
 
     Options
     -------
@@ -984,19 +1018,24 @@ class VariationalApplyMPO(VariationalCompression):
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
     """
-    def __init__(self, psi, U_MPO, options):
-        Sweep.__init__(self, psi, U_MPO, options)
+    def __init__(self, psi, U_MPO, options, resume_data=None):
+        Sweep.__init__(self, psi, U_MPO, options, resume_data=resume_data)
         self.renormalize = [None] * (psi.L - int(psi.finite))
 
-    def init_env(self, U_MPO):
+    def init_env(self, U_MPO, resume_data=None):
         """Initialize the environment.
 
         Parameters
         ----------
         U_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO to be applied to the sate.
+        resume_data : dict
+            May contain in
+
         """
-        init_env_data = self.options.get("init_env_data", {})
+        if resume_data is None:
+            resume_data = {}
+        init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         if not self.psi.finite:

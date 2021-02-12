@@ -43,7 +43,7 @@ import numpy as np
 import time
 import warnings
 
-from .algorithm import Algorithm
+from .algorithm import TimeEvolutionAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..tools.params import asConfig
@@ -52,7 +52,7 @@ from ..linalg.random_matrix import CUE
 __all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
 
 
-class TEBDEngine(Algorithm):
+class TEBDEngine(TimeEvolutionAlgorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
     .. deprecated :: 0.6.0
@@ -73,21 +73,16 @@ class TEBDEngine(Algorithm):
     Options
     -------
     .. cfg:config :: TEBDEngine
-        :include: Algorithm
+        :include: TimeEvolutionAlgorithm
 
-        start_time : float
-            Initial value for :attr:`evolved_time`.
         start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             Initial truncation error for :attr:`trunc_err`.
+        order : int
+            Order of the algorithm. The total error for evolution up to a fixed time `t`
+            scales as ``O(t*dt^order)``.
 
     Attributes
     ----------
-    verbose : int
-        See :cfg:option:`TEBDEngine.verbose`.
-    options: :class:`~tenpy.tools.params.Config`
-        Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
         The error of the represented state which is introduced due to the truncation during
         the sequence of update steps.
@@ -108,9 +103,8 @@ class TEBDEngine(Algorithm):
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
-    def __init__(self, psi, model, options):
-        Algorithm.__init__(self, psi, model, options)
-        self.evolved_time = self.options.get('start_time', 0.)
+    def __init__(self, psi, model, options, **kwargs):
+        TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
         self.trunc_err = self.options.get('start_trunc_err', TruncationError())
         self._U = None
         self._U_param = {}
@@ -128,20 +122,7 @@ class TEBDEngine(Algorithm):
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     def run(self):
-        """(Real-)time evolution with TEBD (time evolving block decimation).
-
-        .. cfg:configoptions :: TEBDEngine
-
-            dt : float
-                Time step.
-            N_steps : int
-                Number of time steps `dt` to evolve.
-                The Trotter decompositions of order > 1 are slightly more efficient
-                if more than one step is performed at once.
-            order : int
-                Order of the algorithm. The total error scales as ``O(t*dt^order)``.
-
-        """
+        """Run TEBD real time evolution by `N_steps`*`dt`."""
         # initialize parameters
         delta_t = self.options.get('dt', 0.1)
         N_steps = self.options.get('N_steps', 10)

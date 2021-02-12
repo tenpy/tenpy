@@ -82,6 +82,10 @@ class Simulation:
         psi :
             The final tensor network state.
             Only included if :cfg:option:`Simulation.save_psi` is True (default).
+        resume_data :
+            The data fro resuming the algorithm run.
+            Only included if :cfg:option:`Simultion.save_resume_data` is True.
+
     measurement_event : :class:`~tenpy.tools.events.EventHandler`
         An event that gets emitted each time when measurements should be performed.
         The callback functions should take :attr:`psi`, the simulation class itself,
@@ -177,13 +181,11 @@ class Simulation:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
         self.options.touch('initial_state_builder_class', 'initial_state_params', 'save_psi')
-        if 'environment_data' in self.results:
-            # use environment data from checkpoint
-            set_recursive(self.options,
-                          'algorithm_params/init_env_data',
-                          self.results['environment_data'],
-                          insert_dicts=True)
-        self.init_algorithm()
+
+        kwargs = {}
+        if 'resume_data' in self.results:
+            kwargs['resume_data'] = self.results['resume_data']
+        self.init_algorithm(**kwargs)
         # the relevant part from init_measurements()
         self._connect_measurements()
 
@@ -244,8 +246,14 @@ class Simulation:
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
 
-    def init_algorithm(self):
+    def init_algorithm(self, **kwargs):
         """Initialize the algortihm.
+
+        Parameters
+        ----------
+        **kwargs :
+            Extra keyword arguments passed on to the algorithm __init__(),
+            for example the `resume_data` when calling `resume_run`.
 
         Options
         -------
@@ -275,8 +283,7 @@ class Simulation:
         else:
             AlgorithmClass = alg_class_name
         params = self.options.subconfig('algorithm_params')
-        # TODO load environment from file?
-        self.engine = AlgorithmClass(self.psi, self.model, params)
+        self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
         con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
         for entry in con_checkpoint:
@@ -474,6 +481,14 @@ class Simulation:
         For example, this can be used to convert lists to numpy arrays, to add more meta-data,
         or to clean up unnecessarily large entries.
 
+        Options
+        -------
+        :cfg:configoptions :: Simulation
+
+            save_resume_data : bool
+                If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
+                into the output as `resume_data`.
+
         Returns
         -------
         results : dict
@@ -488,17 +503,8 @@ class Simulation:
             v = np.array(v)
             if v.dtype != np.dtype(object):
                 measurements[k] = v
-        if hasattr(self.engine, 'env'):
-            # handle environment data
-            if self.options.get('save_environment_data', self.options['save_psi']):
-                results['environment_data'] = self.engine.env.get_initialization_data()
-            # HACK: remove initial environments from options to avoid blowing up the output size,
-            # in particular if `save_psi` is false, this can reduce the file size dramatically.
-            init_env_data = self.options['algorithm_params'].silent_get('init_env_data', {})
-            for k in ['init_LP', 'init_RP']:
-                if k in init_env_data:
-                    if isinstance(init_env_data[k], npc.Array):
-                        init_env_data[k] = repr(init_env_data[k])
+        if self.options.get('save_resume_data', self.options['save_psi']):
+            results['resume_data'] = self.engine.get_resume_data()
         return results
 
     def save_at_checkpoint(self, alg_engine):

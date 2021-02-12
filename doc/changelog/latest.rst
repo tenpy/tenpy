@@ -13,7 +13,7 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Drop official support for Python 3.5
+- Drop official support for Python 3.5.
 - :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
   non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
 - Argument `v0` of :meth:`tenpy.networks.mps.MPS.TransferMatrix.eigenvectors` is renamed to `v0_npc`; `v0` now serves for non-np_conserved guess.
@@ -23,6 +23,9 @@ Backwards incompatible changes
   - :class:`tenpy.models.hofstadter.HofstadterFermions`
   - :class:`tenpy.models.hofstadter.HofstadterBosons`
   - :class:`tenpy.models.toric_code.ToricCode`
+
+- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
+  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
 
 
 Added
@@ -42,6 +45,7 @@ Added
 - :func:`tenpy.tools.misc.flatten` to turn a nested data structure into a flat one.
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
+- Common base class :class:`tenpy.algorithms.TimeEvolutionAlgorithm` for time evolution algorithms.
 - :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 - :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
 - :class:`tenpy.models.lattice.HelicalLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
@@ -54,8 +58,6 @@ Changed
   merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc`.
 - Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
 - Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
-- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
-  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
 - Allow ``swap_op='autoInv'`` for :meth:`tenpy.networks.mps.MPS.swap_sites` and explain the idea of the `swap_op`.
 - The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
   :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
