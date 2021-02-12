@@ -102,6 +102,8 @@ def console_main():
             set_recursive(options, key, val, insert_dicts=True)
     if len(options) == 0:
         raise ValueError("No options supplied! Check your command line arguments!")
+    if 'output_filename' not in options:
+        raise ValueError("No output filename specified - refuse to run without saving anything!")
     run_simulation(args.sim_class, **options)
 
 
