@@ -77,12 +77,16 @@ class Simulation:
         version_info : dict
             Information of the used library/code versions and simulation class.
             See :meth:`get_version_info`.
+        finished_run : bool
+            Usefull to check whether the output file finished or was generated at a checkpoint.
+            This flag is set to `True` only right at the end of :meth:`run`
+            (or :meth:`resume_run`) before saving.
         measurements : dict
             Data of all the performed measurements.
         psi :
             The final tensor network state.
             Only included if :cfg:option:`Simulation.save_psi` is True (default).
-        resume_data :
+        resume_data : dict
             The data fro resuming the algorithm run.
             Only included if :cfg:option:`Simultion.save_resume_data` is True.
 
@@ -134,6 +138,7 @@ class Simulation:
         self.results = {
             'simulation_parameters': self.options.as_dict(),
             'version_info': self.get_version_info(),
+            'finished_run': False,
         }
         self._last_save = time.time()
         self.fix_output_filenames()
@@ -150,6 +155,7 @@ class Simulation:
         self.init_measurements()
         self.run_algorithm()
         self.final_measurements()
+        self.results['finished_run'] = True
         results = self.save_results()
         return results
 
@@ -191,6 +197,7 @@ class Simulation:
 
         self.resume_run_algorithm()  # continue with the actual algorithm
         self.final_measurements()
+        self.results['finished_run'] = True
         results = self.save_results()
         return results
 
@@ -461,13 +468,13 @@ class Simulation:
         output_filename = self.output_filename
         backup_filename = self._backup_filename
         if output_filename is None:
-            return results  # don't save
+            return results  # don't save to disk
 
         if os.path.exists(output_filename):
             # keep a single backup, previous backups are overwritten.
             os.rename(output_filename, self._backup_filename)
 
-        hdf5_io.save(results, output_filename)
+        hdf5_io.save(results, output_filename)  # save results to disk
 
         if os.path.exists(backup_filename):
             # successfully saved, so we can savely remove the old backup
@@ -500,7 +507,10 @@ class Simulation:
         measurements = results['measurements'].copy()
         results['measurements'] = measurements
         for k, v in measurements.items():
-            v = np.array(v)
+            try:
+                v = np.array(v)
+            except:
+                continue
             if v.dtype != np.dtype(object):
                 measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
