@@ -1,6 +1,8 @@
 """This module contains some base classes for algorithms."""
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
+import warnings
+
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 
@@ -45,8 +47,6 @@ class Algorithm:
         An event that the algorithm emits at regular intervalls when it is in a
         "well defined" step, where an intermediate status report, measurements and/or
         interrupting and saving to disk for later resume make sense.
-    verbose : float
-        Level of verboseness, higher=more output.
     """
     def __init__(self, psi, model, options, *, resume_data=None):
         self.options = asConfig(options, self.__class__.__name__)
@@ -55,7 +55,11 @@ class Algorithm:
         self.model = model
         self.resume_data = resume_data
         self.checkpoint = EventHandler("algorithm")
-        self.verbose = self.options.verbose
+
+    @property
+    def verbose(self):
+        warnings.warn("verbose is deprecated, we're using logging now!", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
 
     def run(self):
         """Actually run the algorithm.

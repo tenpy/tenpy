@@ -25,6 +25,8 @@ import numpy as np
 import time
 import warnings
 import copy
+import logging
+logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
@@ -247,8 +249,6 @@ class Sweep(Algorithm):
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            if self.verbose >= 1:
-                print("Initial sweeps...")
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
 
@@ -271,8 +271,7 @@ class Sweep(Algorithm):
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
-            if self.verbose >= 1:
-                print("Setting chi_max =", chi_max)
+            logger.info(f"Setting chi_max ={chi_max:d}")
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
@@ -285,14 +284,9 @@ class Sweep(Algorithm):
         """
         if N_sweeps <= 0:
             return
-        if self.verbose >= 1:
-            print("Updating environment")
+        logger.info("start environment_sweep")
         for k in range(N_sweeps):
             self.sweep(optimize=False)
-            if self.verbose >= 1:
-                print('.', end='', flush=True)
-        if self.verbose >= 1:
-            print("", flush=True)  # end line
 
     def sweep(self, optimize=True):
         """One 'sweep' of a sweeper algorithm.
@@ -323,8 +317,7 @@ class Sweep(Algorithm):
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
             update_LP, update_RP = update_LP_RP
-            if self.verbose >= 10:
-                print("in sweep: i0 =", i0)
+            logger.debug("in sweep: i0 =", i0)
             # --------- the main work --------------
             theta = self.prepare_update()
             update_data = self.update_local(theta, optimize=optimize)
@@ -344,8 +337,7 @@ class Sweep(Algorithm):
                 new_chi_max = self.chi_list.get(self.sweeps, None)
                 if new_chi_max is not None:
                     self.trunc_params['chi_max'] = new_chi_max
-                    if self.verbose >= 1:
-                        print("Setting chi_max =", new_chi_max)
+                    logger.info(f"Setting chi_max ={new_chi_max:d}")
         return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):

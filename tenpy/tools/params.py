@@ -9,6 +9,8 @@ import numpy as np
 from collections.abc import MutableMapping
 import pprint
 import os
+import logging
+logger = logging.getLogger(__name__)
 
 from .hdf5_io import ATTR_FORMAT
 
@@ -21,8 +23,7 @@ class Config(MutableMapping):
     This class behaves mostly like a dictionary of option keys/values (together making the whole
     "config") with some additional features:
 
-    - Printing of the options used, with the level of how much should be printed adjustable by
-      the option `verbose`.
+    - Logging of the options the first time they get used.
     - :meth:`get` acts more like :meth:`dict.setdefault` such that after the algorithm, all the
       used default values are known and can be saved for future reference.
     - Keeping track of unused options to detect typos in the keys.
@@ -33,14 +34,14 @@ class Config(MutableMapping):
 
         verbose : int | float = 1
             How much to print what's being done; higher means print more.
-            Sub-configs default to having the parent `verbose` divided by 10.
+            Sub-configs default to having the parent `verbose`.
 
     Parameters
     ----------
     config : dict
         Dictionary containing the actual option keys and values.
     name : str
-        Descriptive name of the config used for verbose printing.
+        Descriptive name of the config used for logging.
 
     Attributes
     ----------
@@ -180,18 +181,18 @@ class Config(MutableMapping):
 
     def __getitem__(self, key):
         val = self.options[key]
-        self.print_if_verbose(key, "Reading")
+        self.log(key, "reading")
         self.unused.discard(key)
         return val
 
     def __setitem__(self, key, value):
-        if key not in self.keys():
+        if key not in self.options.keys():
             self.unused.add(key)
-        self.print_if_verbose(key, "Setting")
         self.options[key] = value
+        self.log(key, "setting")
 
     def __delitem__(self, key):
-        self.print_if_verbose(key, "Deleting")
+        self.log(key, "deleting")
         self.unused.discard(key)
         del self.options[key]
 
@@ -244,9 +245,9 @@ class Config(MutableMapping):
         val :
             The value for `option` if it existed, `default` otherwise.
         """
-        use_default = key not in self.keys()
+        use_default = key not in self.options.keys()
         val = self.options.setdefault(key, default)  # get & set default if not existent
-        self.print_if_verbose(key, "Reading", use_default)
+        self.log(key, "reading", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         return val
 
@@ -254,7 +255,7 @@ class Config(MutableMapping):
         """Find the value of `key`, but don't set as default value and don't print.
 
         Same as ``dict.get``, i.e. just return `self[key]` if existent, else `default`, without
-        memorizing/printing the access.
+        memorizing/logging the access.
         Does not count as read-out for the :attr:`unused` parameters.
         """
         return self.options.get(key, default)
@@ -271,7 +272,7 @@ class Config(MutableMapping):
         """
         use_default = key not in self.keys()
         self.options.setdefault(key, default)
-        self.print_if_verbose(key, "Set default", not use_default)
+        self.log(key, "set default", not use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         # do no return the value: not added to self.unused!
 
@@ -286,10 +287,10 @@ class Config(MutableMapping):
         else:
             subconfig = self.options[key]
         if 'verbose' not in subconfig:
-            subconfig['verbose'] = self.verbose / 10.
+            subconfig['verbose'] = self.verbose
         subconfig = asConfig(subconfig, key)
         self.options[key] = subconfig
-        self.print_if_verbose(key, "Subconfig", use_default)
+        self.log(key, "subconfig", use_default)
         self.unused.discard(key)  # (does nothing if key not in set)
         return subconfig
 
@@ -304,7 +305,7 @@ class Config(MutableMapping):
         for key in keys:
             self.unused.discard(key)  # (does nothing if key not in set)
 
-    def print_if_verbose(self, option, action=None, use_default=False):
+    def log(self, option, action="Option", use_default=False):
         """Print out `option` if verbosity and other conditions are met.
 
         Parameters
@@ -312,18 +313,18 @@ class Config(MutableMapping):
         option : str
             Key/option name for the parameter being read out.
         action : str, optional
-            Use to adapt printout message to specific actions (e.g. "Deleting")
+            Use to adapt log message to specific actions (e.g. "Deleting")
         """
         name = self.name
         verbose = self.verbose
         new_key = option in self.unused or use_default
-        if verbose >= 100 or (new_key and verbose >= (2. if use_default else 1.)):
+        if new_key:
             val = self.options.get(option, "<not set>")
-            if action is None:
-                action = "Option"
             defaultstring = "(default) " if use_default else ""
-            print("{action} {option!r}={val!r} {defaultstring}for config {name!s}".format(
-                action=action, name=name, option=option, val=val, defaultstring=defaultstring))
+            if use_default:
+                logger.debug(f"{name}: {action} {option!r}={val!r} (default)")
+            else:
+                logger.info(f"{name}: {action} {option!r}={val!r}")
 
     def deprecated_alias(self, old_key, new_key, extra_msg=""):
         if old_key in self.options.keys():
@@ -336,7 +337,7 @@ class Config(MutableMapping):
             self.unused.discard(old_key)
             self.unused.add(new_key)
 
-    def any_nonzero(self, keys, verbose_msg=None):
+    def any_nonzero(self, keys, log_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
 
         Parameters
@@ -344,8 +345,9 @@ class Config(MutableMapping):
         keys : list of {key | tuple of keys}
             For a single key, check ``self[key]`` for non-zero entries.
             For a tuple of keys, all the ``self[key]`` have to be equal (as numpy arrays).
-        verbose_msg : None | str
-            If :attr:`verbose` >= 1, we print `verbose_msg` before checking,
+            It is assumed that the default values for the keys are 0!
+        log_msg : None | str
+            If :attr:`verbose` >= 1, we log `log_msg` with a hint why before checking,
             and a short notice with the `key`, if a non-zero entry is found.
 
         Returns
@@ -365,23 +367,17 @@ class Config(MutableMapping):
                 if not any(nonzero):
                     continue  # all zero, so equal
                 if not all(nonzero):
-                    print(verbose_msg)
-                    print("{k!r} are partially non-zero but would need to be equal".format(k=k))
+                    logger.debug(log_msg + f": {k!r} would need to be equal")
                     return True
                 val = self.options[k[0]]
                 for k1 in k[1:]:
                     other_val = self.options[k1]
                     if not np.array_equal(val, other_val):
-                        if verbose:
-                            print(verbose_msg)
-                            msg = "{k0!r} and {k1!r} have different entries."
-                            print(msg.format(k0=k[0], k1=k1))
+                        logger.debug(log_msg + f": {k0!r} and {k1!r} have different entries")
                         return True
             else:
                 if self.has_nonzero(k):
-                    if verbose:
-                        print(verbose_msg)
-                        print(str(k) + " has nonzero entries")
+                    logger.debug(log_msg + f": {k!r} as nonzero entries")
                     return True
         return False
 
@@ -398,8 +394,8 @@ class Config(MutableMapping):
         bool
             True if `self` has key `key` with a nontrivial value. False otherwise.
         """
-        return (key in self.keys() and np.any(np.array(self.options[key])) != 0
-                and self.options[key] is not None)
+        return (key in self.keys() and self.options[key] is not None
+                and np.any(np.array(self.options[key])) != 0)
 
 
 def asConfig(config, name):

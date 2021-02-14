@@ -7,6 +7,8 @@ The default (stable) git branch was renamed from ``master`` to ``main``.
 
 Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation.
 
+Big Change in verbosity: switch to Python's `logging`!
+
 
 Changelog
 ---------
@@ -26,6 +28,15 @@ Backwards incompatible changes
 
 - Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
   `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
+
+- When running, no longer print stuff by default. Instead, we use Python's `logging` mechanism.
+  To enable printing again, you need to configure the logging to print on "INFO" level (which is the default when
+  running from command line)
+
+  As part of this big change in the way verbosity is handled, there were many minor changes:
+  - rename `Config.print_if_verbose` to :meth:`~tenpy.tools.params.Config.log`
+  - change argument names of :meth:`~tenpy.tools.params.
+
 
 
 Added

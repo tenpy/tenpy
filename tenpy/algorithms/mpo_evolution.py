@@ -5,6 +5,8 @@
 import numpy as np
 import time
 from scipy.linalg import expm
+import logging
+logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm
 from ..linalg import np_conserved as npc
@@ -49,7 +51,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
 
     Attributes
     ----------
-    verbose : int
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters, see :meth:`run` for more details
     evolved_time : float
@@ -70,7 +71,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options):
         super().__init__(psi, model, options)
         options = self.options
-        self.verbose = options.verbose
         self.evolved_time = options.get('start_time', 0.)
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
@@ -110,8 +110,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         if self._U_param == U_param:
             return  # nothing to do: _U is cached
         self._U_param = U_param
-        if self.verbose >= 1:
-            print("Calculate U for ", U_param)
+        logger.info("Calculate U for " + str(U_param))
 
         H_MPO = self.model.H_MPO
         if order == 1:

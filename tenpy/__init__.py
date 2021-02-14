@@ -9,6 +9,11 @@ and yet powerful enough for day-to-day research.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
+import logging
+
+# main logger for tenpy
+logger = logging.getLogger(__name__)
+
 # load and provide subpackages on first input
 from . import tools
 from . import linalg
@@ -82,6 +87,8 @@ def console_main():
     parser = _setup_arg_parser()
 
     args = parser.parse_args()
+    # set log-level
+    logging.basicConfig(level=args.log_level, format='%(levelname)s %(name)s %(message)s')
     # import extra modules
     context = {'tenpy': globals(), 'np': np, 'scipy': scipy}
     if args.import_module:
@@ -139,6 +146,8 @@ def _setup_arg_parser(width=None):
                                                     width=width)
 
     parser = argparse.ArgumentParser(description=desc, epilog=epilog, formatter_class=formatter)
+    log_levels = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+    parser.add_argument('--log-level', '-l', default='INFO', choices=log_levels)
     parser.add_argument('--import-module',
                         '-i',
                         metavar='MODULE',
