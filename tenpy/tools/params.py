@@ -32,10 +32,6 @@ class Config(MutableMapping):
 
     .. cfg:config :: Config
 
-        verbose : int | float = 1
-            How much to print what's being done; higher means print more.
-            Sub-configs default to having the parent `verbose`.
-
     Parameters
     ----------
     config : dict
@@ -52,15 +48,18 @@ class Config(MutableMapping):
         Dictionary containing the actual option keys and values.
     unused : set
         Keeps track of any :attr:`options` not yet used.
-    verbose : float
-        Verbosity level for output statements.
     """
     def __init__(self, config, name):
         self.options = config
         self.unused = set(config.keys())
-        self.unused.discard('verbose')
-        self.verbose = config.get('verbose', 1)
         self.name = name
+
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
 
     def copy(self, share_unused=True):
         """Make a *shallow* copy, as for a dictionary.
@@ -147,7 +146,6 @@ class Config(MutableMapping):
         type_repr = hdf5_saver.save_dict_content(self.options, h5gr, subpath)
         h5gr.attrs[ATTR_FORMAT] = type_repr
         h5gr.attrs["name"] = self.name
-        h5gr.attrs["verbose"] = self.verbose
         h5gr.attrs["unused"] = [str(u) for u in self.unused]
 
     @classmethod
@@ -175,7 +173,6 @@ class Config(MutableMapping):
         hdf5_loader.memorize_load(h5gr, obj)
         obj.options = hdf5_loader.load_dict(h5gr, dict_format, subpath)
         obj.name = hdf5_loader.get_attr(h5gr, "name")
-        obj.verbose = hdf5_loader.get_attr(h5gr, "verbose")
         obj.unused = set(hdf5_loader.get_attr(h5gr, "unused"))
         return obj
 
@@ -286,8 +283,6 @@ class Config(MutableMapping):
                 subconfig = default.copy()
         else:
             subconfig = self.options[key]
-        if 'verbose' not in subconfig:
-            subconfig['verbose'] = self.verbose
         subconfig = asConfig(subconfig, key)
         self.options[key] = subconfig
         self.log(key, "subconfig", use_default)
@@ -316,15 +311,11 @@ class Config(MutableMapping):
             Use to adapt log message to specific actions (e.g. "Deleting")
         """
         name = self.name
-        verbose = self.verbose
         new_key = option in self.unused or use_default
         if new_key:
             val = self.options.get(option, "<not set>")
-            defaultstring = "(default) " if use_default else ""
-            if use_default:
-                logger.debug(f"{name}: {action} {option!r}={val!r} (default)")
-            else:
-                logger.info(f"{name}: {action} {option!r}={val!r}")
+            logger.debug("%s: %s %r=%r%s", name, action, option, val,
+                         " (default)" if use_default else "")
 
     def deprecated_alias(self, old_key, new_key, extra_msg=""):
         if old_key in self.options.keys():
@@ -347,8 +338,7 @@ class Config(MutableMapping):
             For a tuple of keys, all the ``self[key]`` have to be equal (as numpy arrays).
             It is assumed that the default values for the keys are 0!
         log_msg : None | str
-            If :attr:`verbose` >= 1, we log `log_msg` with a hint why before checking,
-            and a short notice with the `key`, if a non-zero entry is found.
+            If not None, `logger.debug` this message with the reason if `True` is returned.
 
         Returns
         -------
@@ -357,7 +347,6 @@ class Config(MutableMapping):
             True, if any of the ``self[key]`` for single `key` in `keys`,
             or if any of the entries for a tuple of `keys`
         """
-        verbose = (self.verbose > 1.)
         for k in keys:
             if isinstance(k, tuple):
                 if len(k) == 0:
@@ -367,17 +356,20 @@ class Config(MutableMapping):
                 if not any(nonzero):
                     continue  # all zero, so equal
                 if not all(nonzero):
-                    logger.debug(log_msg + f": {k!r} would need to be equal")
+                    if log_msg is not None:
+                        logger.debug("%s: %r would need to be equal", log_msg, k)
                     return True
                 val = self.options[k[0]]
                 for k1 in k[1:]:
                     other_val = self.options[k1]
                     if not np.array_equal(val, other_val):
-                        logger.debug(log_msg + f": {k0!r} and {k1!r} have different entries")
+                        if log_msg is not None:
+                            logger.debug("%s: %r and %r have different entries", log_msg, k, k1)
                         return True
             else:
                 if self.has_nonzero(k):
-                    logger.debug(log_msg + f": {k!r} as nonzero entries")
+                    if log_msg is not None:
+                        logger.debug("%s: %r as nonzero entries", log_msg, k)
                     return True
         return False
 
@@ -421,6 +413,9 @@ def asConfig(config, name):
 
 def get_parameter(params, key, default, descr, asarray=False):
     """Read out a parameter from the dictionary and/or provide default values.
+
+    .. deprecated :: 0.6.0
+        Use the :class:`Config` instead.
 
     This function provides a similar functionality as ``params.get(key, default)``.
     *Unlike* `dict.get` this function writes the default value into the dictionary
@@ -523,6 +518,9 @@ def unused_parameters(params, warn=None):
     """Returns a set of the parameters which have not been read out with `get_parameters`.
 
     This function might be useful to check for typos in the parameter keys.
+
+    .. deprecated :: 0.6.0
+        Use the :class:`Config` instead.
 
     Parameters
     ----------

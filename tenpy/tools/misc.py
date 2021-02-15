@@ -349,6 +349,10 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
 def any_nonzero(params, keys, verbose_msg=None):
     """Check for any non-zero or non-equal entries in some parameters.
 
+    .. deprecated :: 0.8.0
+        This method will be removed in version 1.0.0.
+        Use :meth:`tenpy.toosl.params.Config.any_nonzero` instead.
+
     Parameters
     ----------
     params : dict | Config

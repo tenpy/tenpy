@@ -110,7 +110,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         if self._U_param == U_param:
             return  # nothing to do: _U is cached
         self._U_param = U_param
-        logger.info("Calculate U for " + str(U_param))
+        logger.info("Calculate U for %s", U_param)
 
         H_MPO = self.model.H_MPO
         if order == 1:

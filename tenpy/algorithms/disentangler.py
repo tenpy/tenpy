@@ -149,7 +149,10 @@ class RenyiDisentangler(Disentangler):
             Sold, S = S, Sold
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
-        logger.debug(f"RenyiDisentangler: {j:d} iterations, Sold-S={S0-Sold:.3e}")
+        logger.debug("RenyiDisentangler: %(j)d iterations, Sold-S=%(dS).3e", {
+            'j': j,
+            'dS': S0 - Sold
+        })
         return theta, U
 
     def iter(self, theta, U):
@@ -265,7 +268,7 @@ class NormDisentangler(Disentangler):
                     break
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
-        logger.debug(f"NormDisentangler: {j:d} iterations, err={err!s}")
+        logger.debug("NormDisentangler: %(j)d iterations, err=%(err)s", {'j': j, 'err': err})
         return theta, U
 
     def iter(self, theta, U, trunc_params):
@@ -350,7 +353,10 @@ class GradientDescentDisentangler(Disentangler):
             Sold, S = S, Sold
         theta = npc.tensordot(U, theta, axes=[['q0*', 'q1*'], ['q0', 'q1']])
         self.parent._disent_iterations[i] += j  # save the number of iterations performed
-        logger.debug(f"GradientDescentDisentangler: {j:d} iterations, Sold-S={S0-Sold:.3e}")
+        logger.debug("GradientDescentDisentangler: %(j)d iterations, Sold-S=%(dS).3e", {
+            'j': j,
+            'dS': S0 - Sold
+        })
         return theta, U
 
     def iter(self, theta):

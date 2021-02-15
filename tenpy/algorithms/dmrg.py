@@ -174,8 +174,10 @@ class Mixer:
         """
         self.amplitude /= self.decay
         if sweeps >= self.disable_after or self.amplitude <= np.finfo('float').eps:
-            logger.info(f"disable mixer after {sweeps:d} sweeps, "
-                        f"final amplitude {self.amplitude:.2e}")
+            logger.info("disable mixer after %(sweeps)d sweeps, final amplitude %(amp).2e", {
+                'sweeps': sweeps,
+                'amp': self.amplitude
+            })
             return None  # disable mixer
         return self
 
@@ -842,13 +844,14 @@ class DMRGEngine(Sweep):
         if not self.finite:
             update_env = options.get('update_env', N_sweeps_check // 2)
             norm_tol_iter = options.get('norm_tol_iter', 5)
-        E_old, S_old = np.nan, np.nan  # initial dummy values
+        E_old, S_old = np.nan, np.mean(self.psi.entanglement_entropy())  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
         self.diag_method = options.get('diag_method', 'default')
 
         self.mixer_activate()
         # loop over sweeps
         while True:
+            loop_start_time = time.time()
             # check convergence criteria
             if self.sweeps >= max_sweeps:
                 break
@@ -860,7 +863,7 @@ class DMRGEngine(Sweep):
                     logger.info("Convergence criterium reached with enabled mixer. "
                                 "Disable mixer and continue")
                     self.mixer = None
-            if time.time() - start_time > max_seconds:
+            if loop_start_time - start_time > max_seconds:
                 self.shelve = True
                 logger.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
@@ -875,22 +878,25 @@ class DMRGEngine(Sweep):
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
                 P_tol = max(p_tol_min, min(p_tol_max, max_trunc_err * p_tol_to_trunc))
                 self.lanczos_params['P_tol'] = P_tol
-                logger.debug(f"set lanczos_params['P_tol'] = {P_tol:.2e}")
+                logger.debug("set lanczos_params['P_tol'] = %.2e", P_tol)
             if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
                 E_tol = max(e_tol_min, min(e_tol_max, max_E_trunc * e_tol_to_trunc))
                 self.lanczos_params['E_tol'] = E_tol
-                logger.debug(f"set lanczos_params['E_tol'] = {E_tol:.2e}")
+                logger.debug("set lanczos_params['E_tol'] = %.2e", E_tol)
             # update environment
             if not self.finite:
                 self.environment_sweeps(update_env)
 
             # update values for checking the convergence
             try:
-                S = np.average(self.psi.entanglement_entropy())
+                S = self.psi.entanglement_entropy()
+                max_S = max(S)
+                S = np.mean(S)
                 Delta_S = (S - S_old) / N_sweeps_check
             except ValueError:
                 # with a mixer, psi._S can be 2D arrays s.t. entanglement_entropy() fails
                 S = np.nan
+                max_S = np.nan
                 Delta_S = 0.
             S_old = S
             if not self.finite:  # iDMRG: need energy density
@@ -917,26 +923,37 @@ class DMRGEngine(Sweep):
             self.sweep_stats['norm_err'].append(norm_err)
 
             # status update
-            mem = memory_usage()
-            time_el = time.time() - start_time
-            logger.info('\n'.join([
-                f"checkpoint",
-                f"after sweep {self.sweeps:d}, age={self.update_stats['age'][-1]:d}",
-                f"Energy={E:.16f}, S={S:.16f}, norm_err={norm_err:.1e}",
-                f"Current memory usage {mem:.1f}MB, time elapsed: {time_el:.1f}s",
-                f"Delta E = {Delta_E:.4e}, Delta S = {Delta_S:.4e} (per sweep)",
-                f"max_trunc_err = {max_trunc_err:.4e}, max_E_trunc = {max_E_trunc:.4e}",
-                f"MPS bond dimensions: {self.psi.chi!s}",
-                "=" * 80,
-            ]))
+            logger.info(
+                "checkpoint after sweep %(sweeps)d\n"
+                "energy=%(E).16f, max S=%(S).16f, age=%(age)d, norm_err=%(norm_err).1e\n"
+                "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
+                "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
+                "max trunc_err = %(trunc_err).4e, max E_trunc = %(E_trunc).4e\n"
+                "MPS bond dimensions: %(chi)s\n"
+                "%(sep)s", {
+                    'sweeps': self.sweeps,
+                    'E': E,
+                    'S': max_S,
+                    'age': self.update_stats['age'][-1],
+                    'norm_err': norm_err,
+                    'mem': memory_usage(),
+                    'wall_time': time.time() - loop_start_time,
+                    'dE': Delta_E,
+                    'dS': Delta_S,
+                    'trunc_err': max_trunc_err,
+                    'E_trunc': max_E_trunc,
+                    'chi': self.psi.chi,
+                    'sep': "=" * 80,
+                })
             self.checkpoint.emit(self)
 
         # clean up from mixer
         self.mixer_cleanup()
         # update environment until norm_tol is reached
         if norm_tol is not None and norm_err > norm_tol:
-            logger.warn("final DMRG state not in canonical form up to "
-                        "norm_tol={norm_tol:.2e}: norm_err={norm_err:.2e}")
+            logger.warn(
+                "final DMRG state not in canonical form up to "
+                "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
             if self.finite:
                 self.psi.canonical_form()
             else:
@@ -946,11 +963,11 @@ class DMRGEngine(Sweep):
                     if norm_err <= norm_tol:
                         break
                 else:
-                    logger.warn(f"norm_err={norm_err:.2e} still too high after environment_sweeps"
-                                ", call psi.canonical_form()")
+                    logger.warn(
+                        "norm_err=%.2e still too high after environment_sweeps, "
+                        "call psi.canonical_form()", norm_err)
                     self.psi.canonical_form()
-        logger.info(f"DMRG finished after {self.sweeps:d} sweeps.\n"
-                    f"maximum chi={max(self.psi.chi):d}")
+        logger.info("DMRG finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
         return E, self.psi
 
     def reset_stats(self, resume_data=None):

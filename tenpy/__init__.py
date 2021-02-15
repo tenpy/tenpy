@@ -10,9 +10,7 @@ and yet powerful enough for day-to-day research.
 # This file marks this directory as a python package.
 
 import logging
-
-# main logger for tenpy
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # main logger for tenpy
 
 # load and provide subpackages on first input
 from . import tools

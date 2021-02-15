@@ -206,6 +206,9 @@ So we have yet another class helping to structure the initialization of models: 
 The general structure of this class is like this::
 
     class CouplingMPOModel(CouplingModel,MPOModel):
+        default_lattice = "Chain"
+        "
+
         def __init__(self, model_param):
             # ... follows the basic steps 1-8 using the methods
             lat = self.init_lattice(self, model_param)  # for step 4
@@ -214,12 +217,18 @@ The general structure of this class is like this::
             # ...
 
         def init_sites(self, model_param):
-            # You should overwrite this
+            # You should overwrite this in most cases to ensure
+            # getting the site(s) and charge conservation you want
+            site = SpinSite(...)  # or FermionSite, BosonSite, ...
+            return site  # (or tuple of sites)
 
         def init_lattice(self, model_param):
             sites = self.init_sites(self, model_param) # for steps 1-3
+            # and then read out the class attribute `default_lattice`,
             # initialize an arbitrary pre-defined lattice
             # using model_params['lattice']
+            # and enure it's the default lattice if the class attribute
+            # `force_default_lattice` is True.
 
         def init_terms(self, model_param):
             # does nothing.

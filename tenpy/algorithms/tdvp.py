@@ -47,7 +47,6 @@ class TDVPEngine(TimeEvolutionAlgorithm):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters as described in the following table.
-        Use ``verbose>0`` to print the used parameters during runtime.
     environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
 
@@ -63,15 +62,13 @@ class TDVPEngine(TimeEvolutionAlgorithm):
             If set to 2, :meth:`run_two_sites` is used.
         trunc_params : dict
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        Lanczos : dict
+        lanczos_options : dict
             Lanczos options as described in :cfg:config:`Lanczos`.
 
     Attributes
     ----------
     options: dict
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     psi : :class:`~tenpy.networks.mps.MPS`

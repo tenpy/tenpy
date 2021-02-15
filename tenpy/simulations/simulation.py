@@ -122,7 +122,6 @@ class Simulation:
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
-        self.verbose = self.options.verbose
         cwd = self.options.get("directory", None)
         if cwd is not None:
             if self.verbose >= 1:
@@ -440,8 +439,7 @@ class Simulation:
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
-        if self.verbose >= 1:
-            print(f"output will be saved at {output_filename!r}")
+        logger.info("output will be saved at %r", output_filename)
         if not os.path.exists(self._backup_filename):
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"

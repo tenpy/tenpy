@@ -285,7 +285,7 @@ class Sweep(Algorithm):
             if len(done) > 0:
                 chi_max = self.chi_list[max(done)]
                 self.trunc_params['chi_max'] = chi_max
-                logger.info(f"Setting chi_max ={chi_max:d}")
+                logger.info("Setting chi_max=%d", chi_max)
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
@@ -328,7 +328,7 @@ class Sweep(Algorithm):
         if optimize and self.chi_list is not None:
             new_chi_max = self.chi_list.get(self.sweeps, None)
             if new_chi_max is not None:
-                logger.info(f"Setting chi_max ={new_chi_max:d}")
+                logger.info("Setting chi_max=%d", new_chi_max)
                 self.trunc_params['chi_max'] = new_chi_max
 
         # the actual sweep
@@ -337,7 +337,7 @@ class Sweep(Algorithm):
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
             update_LP, update_RP = update_LP_RP
-            logger.debug("in sweep: i0 =", i0)
+            logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
             theta = self.prepare_update()
             update_data = self.update_local(theta, optimize=optimize)

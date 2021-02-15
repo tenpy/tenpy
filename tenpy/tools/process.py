@@ -84,7 +84,7 @@ def load_omp_library(libs=["libiomp5.so",
             except OSError:
                 pass
     if _omp_lib is None:
-        warnings.warn("OpenMP library not found: can get/set nthreads")
+        warnings.warn("OpenMP library not found: can't get/set nthreads")
     return _omp_lib
 
 

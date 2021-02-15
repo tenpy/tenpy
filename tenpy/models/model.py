@@ -33,6 +33,8 @@ import numpy as np
 import warnings
 import inspect
 from functools import wraps
+import logging
+logger = logging.getLogger(__name__)
 
 from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
@@ -71,6 +73,9 @@ class Model(Hdf5Exportable):
     dtype : :class:`~numpy.dtype`
         The data type of the Hamiltonian
     """
+    #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + ".Model")
+
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it gets called multiple times when a user implements e.g. a
@@ -201,7 +206,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20, 'verbose': 0})
+            >>> nnn_chain = SpinChainNNN2({'L': 20})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
@@ -909,7 +914,7 @@ class CouplingModel(Model):
 
         .. testsetup :: add_coupling
 
-            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, verbose=0, cons_Sz=None))
+            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, cons_Sz=None))
             # make it look like both a SpinChain and a FermionChain
             # Sz and Sx operator already exists
             site = self.lat.unit_cell[0]
@@ -1379,7 +1384,7 @@ class CouplingModel(Model):
 
         .. testsetup :: add_exponentially_decaying_coupling
 
-            self = tenpy.models.spins.SpinChain(dict(L=30, verbose=0))
+            self = tenpy.models.spins.SpinChain(dict(L=30))
 
         .. doctest :: add_exponentially_decaying_coupling
 
@@ -1566,7 +1571,7 @@ class CouplingModel(Model):
 
         .. testsetup :: coupling_strength_add_ext_flux
 
-            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3, verbose=0))
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3))
 
         .. doctest :: coupling_strength_add_ext_flux
 
@@ -1675,8 +1680,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
     """
 
     #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
@@ -1696,7 +1699,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
         self._called_CouplingMPOModel_init = True
-        self.verbose = model_params.get('verbose', 1)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
@@ -1708,6 +1710,13 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_H_from_terms()
         # finally checks for misspelled parameter names
         model_params.warn_unused()
+
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
 
     def init_H_from_terms(self):
         """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.
