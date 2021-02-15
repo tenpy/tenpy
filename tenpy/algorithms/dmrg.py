@@ -953,7 +953,7 @@ class DMRGEngine(Sweep):
                     f"maximum chi={max(self.psi.chi):d}")
         return E, self.psi
 
-    def reset_stats(self):
+    def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run.
 
         .. cfg:configoptions :: DMRGEngine
@@ -968,7 +968,7 @@ class DMRGEngine(Sweep):
             sweep_0 : int
                 The number of sweeps already performed. (Useful for re-start).
         """
-        self.sweeps = self.options.get('sweep_0', 0)
+        super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
             'age': [],
@@ -990,12 +990,6 @@ class DMRGEngine(Sweep):
             'max_chi': [],
             'norm_err': []
         }
-        self.chi_list = self.options.get('chi_list', None)
-        if self.chi_list is not None:
-            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-            self.trunc_params['chi_max'] = chi_max
-            logger.info(f"Setting chi_max={chi_max:d}")
-        self.time0 = time.time()
 
     def sweep(self, optimize=True, meas_E_trunc=False):
         """One 'sweep' of a the algorithm.
@@ -1373,11 +1367,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
     Attributes
     ----------
-    chi_list : dict | ``None``
-        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
-        defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
-        uses ``chi_max=50`` for the first 20 sweeps and ``chi_max=100`` afterwards. Overwrites
-        `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
@@ -1586,7 +1575,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
-        terminate with `shelve = True`.
+        terminate with ``shelve = True``.
     sweeps : int
         The number of sweeps already performed. (Useful for re-start).
     time0 : float

@@ -105,7 +105,7 @@ class Sweep(Algorithm):
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
         terminate with `shelve = True`.
     sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
+        The number of sweeps already performed.
     time0 : float
         Time marker for the start of the run.
     trunc_err_list : list
@@ -115,6 +115,9 @@ class Sweep(Algorithm):
         Whether it is necessary to update the `LP` and `RP`.
         The latter are chosen such that the environment is growing for infinite systems, but
         we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
+        See :cfg:option:`Sweep.chi_list`
     """
     def __init__(self, psi, model, options, *, resume_data=None):
         if not hasattr(self, "EffectiveH"):
@@ -142,6 +145,7 @@ class Sweep(Algorithm):
     def get_resume_data(self):
         data = super().get_resume_data()
         data['init_env_data'] = self.env.get_initialization_data()
+        data['sweeps'] = self.sweeps
         return data
 
     @property
@@ -245,14 +249,14 @@ class Sweep(Algorithm):
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
             self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
 
-        self.reset_stats()
+        self.reset_stats(resume_data)
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
 
-    def reset_stats(self):
+    def reset_stats(self, resume_data=None):
         """Reset the statistics. Useful if you want to start a new Sweep run.
 
         This method is expected to be overwritten by subclass, and should then define
@@ -263,15 +267,25 @@ class Sweep(Algorithm):
 
             sweep_0 : int
                 Number of sweeps that have already been performed.
-
+            chi_list : None | dict(int -> int)
+                By default (``None``) this feature is disabled.
+                A dict allows to gradually increase the `chi_max`.
+                An entry `at_sweep: chi` states that starting from sweep `at_sweep`,
+                the value `chi` is to be used for ``trunc_params['chi_max']``.
+                For example ``chi_list={0: 50, 20: 100}`` uses ``chi_max=50`` for the first
+                20 sweeps and ``chi_max=100`` afterwards.
         """
         self.sweeps = self.options.get('sweep_0', 0)
+        if resume_data is not None and 'sweeps' in resume_data:
+            self.sweeps = resume_data['sweeps']
         self.shelve = False
         self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
-            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-            self.trunc_params['chi_max'] = chi_max
-            logger.info(f"Setting chi_max ={chi_max:d}")
+            done = [k for k in self.chi_list.keys() if k < self.sweeps]
+            if len(done) > 0:
+                chi_max = self.chi_list[max(done)]
+                self.trunc_params['chi_max'] = chi_max
+                logger.info(f"Setting chi_max ={chi_max:d}")
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
@@ -311,6 +325,12 @@ class Sweep(Algorithm):
         self.trunc_err_list = []
         schedule = self.get_sweep_schedule()
 
+        if optimize and self.chi_list is not None:
+            new_chi_max = self.chi_list.get(self.sweeps, None)
+            if new_chi_max is not None:
+                logger.info(f"Setting chi_max ={new_chi_max:d}")
+                self.trunc_params['chi_max'] = new_chi_max
+
         # the actual sweep
         for i0, move_right, update_LP_RP in schedule:
             self.i0 = i0
@@ -333,11 +353,6 @@ class Sweep(Algorithm):
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
-            if self.chi_list is not None:
-                new_chi_max = self.chi_list.get(self.sweeps, None)
-                if new_chi_max is not None:
-                    self.trunc_params['chi_max'] = new_chi_max
-                    logger.info(f"Setting chi_max ={new_chi_max:d}")
         return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):
