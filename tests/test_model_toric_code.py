@@ -30,7 +30,6 @@ def test_ToricCode(Lx=1, Ly=2):
         'P_tol_to_trunc': None,  # avoid warning about unused "P_tol" lanczos
         'max_E_err': 1.e-10,
         'N_sweeps_check': 4,
-        'verbose': 1
     }
     result = dmrg.run(psi, M, dmrg_params)
     E = result['E']

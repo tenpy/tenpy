@@ -201,11 +201,11 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                 Sold = S
                 max_chi = max(self.psi.chi)
                 logger.info(
-                    "--> step=%(step)6d, time=%(t)3.3f, max(chi)=%(max_chi)d,"
-                    "DeltaE=%(dE).2e, E_bond=%(E).10f, Delta_S=$(dS).4e, "
-                    "max(S)=$(max_S).10f, time simulated: $(wall_time).1fs", {
+                    "--> step=%(step)6d, beta=%(beta)3.3f, max(chi)=%(max_chi)d,"
+                    "DeltaE=%(dE).2e, E_bond=%(E).10f, Delta_S=%(dS).4e, "
+                    "max(S)=%(max_S).10f, time simulated: %(wall_time).1fs", {
                         'step': step,
-                        't': -self.evolved_time.imag,
+                        'beta': -self.evolved_time.imag,
                         'max_chi': max(self.psi.chi),
                         'dE': DeltaE,
                         'E': E.real,
@@ -560,7 +560,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             during this update step.
         """
         i0, i1 = i - 1, i
-        logger.debug("Update sites (%d, %d)")
+        logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))

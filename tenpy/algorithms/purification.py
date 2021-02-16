@@ -141,7 +141,7 @@ class PurificationTEBD(tebd.TEBDEngine):
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update_imag(N_steps=int(beta / delta_t + 0.5))
         logger.info(
-            "--> beta=%(t).6f{:.6f}, E_bond=%(E).10f, max(S)=%(S).10f", {
+            "--> beta=%(beta).6f, E_bond=%(E).10f, max(S)=%(S).10f", {
                 'beta': -self.evolved_time.imag,
                 'E': np.average(self.model.bond_energies(self.psi)),
                 'S': np.max(self.psi.entanglement_entropy())

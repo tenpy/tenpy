@@ -73,7 +73,7 @@ class Model(Hdf5Exportable):
     dtype : :class:`~numpy.dtype`
         The data type of the Hamiltonian
     """
-    #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    #: logging.Logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Model")
 
     def __init__(self, lattice):

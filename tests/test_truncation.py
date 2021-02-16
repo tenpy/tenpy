@@ -26,7 +26,7 @@ def test_truncate():
     np.random.shuffle(S_shuffled)
 
     # default arguments
-    pars = dict(verbose=1, svd_min=None, trunc_cut=None)
+    pars = dict(svd_min=None, trunc_cut=None)
     mask, norm_new, TE = truncation.truncate(S_shuffled, pars.copy())
     is_expected_S(S, S_shuffled[mask])  # don't truncate by default
     pars['chi_max'] = 12

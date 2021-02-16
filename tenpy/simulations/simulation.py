@@ -20,6 +20,7 @@ import time
 import importlib
 import warnings
 import numpy as np
+import logging
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
@@ -118,14 +119,16 @@ class Simulation:
         ('tenpy.simulations.measurement', 'entropy'),
     ]
 
+    #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + ".Simulation")
+
     def __init__(self, options):
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
         cwd = self.options.get("directory", None)
         if cwd is not None:
-            if self.verbose >= 1:
-                print(f"going into directory {cwd!r}")
+            self.logger.info("going into directory {cwd!r}")
             os.chdir(cwd)
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
@@ -439,7 +442,7 @@ class Simulation:
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
-        logger.info("output will be saved at %r", output_filename)
+        self.logger.info("output will be saved at %r", output_filename)
         if not os.path.exists(self._backup_filename):
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"
@@ -472,7 +475,8 @@ class Simulation:
             # keep a single backup, previous backups are overwritten.
             os.rename(output_filename, self._backup_filename)
 
-        hdf5_io.save(results, output_filename)  # save results to disk
+        self.logger.info("saving results to disk")  # save results to disk
+        hdf5_io.save(results, output_filename)
 
         if os.path.exists(backup_filename):
             # successfully saved, so we can savely remove the old backup

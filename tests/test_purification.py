@@ -77,7 +77,6 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
         },
         'disentangle': None,  # 'renyi' should work as well, 'backwards' not.
         'dt': 0.1,
-        'verbose': 30,
         'N_steps': 2
     }
     eng = PurificationTEBD(psi, M, TEBD_params)
@@ -102,7 +101,6 @@ def test_purification_TEBD(L=3):
             },
             'disentangle': disent,
             'dt': 0.1,
-            'verbose': 30,
             'N_steps': 2
         }
         eng = PurificationTEBD(psi, M, TEBD_params)
@@ -132,7 +130,7 @@ def test_renyi_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
-    eng = PurificationTEBD(psi, M, {'verbose': 30, 'disentangle': 'renyi'})
+    eng = PurificationTEBD(psi, M, {'disentangle': 'renyi'})
     theta = eng.psi.get_theta(1, 2)
     print(theta[0, :, :, 0, :, :])
     # find random unitary: SVD of random matix
@@ -224,7 +222,7 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3))
     M = XXZChain(dict(L=L))
-    tebd_pars = dict(verbose=31, trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
+    tebd_pars = dict(trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
     for i in range(L):
         eng.disentangle_global()

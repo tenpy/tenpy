@@ -7,7 +7,7 @@ The default (stable) git branch was renamed from ``master`` to ``main``.
 
 Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation.
 
-Big Change in verbosity: switch to Python's `logging`!
+Big Change in verbosity: switch to using Python's default :mod:`logging` mechanism!
 
 
 Changelog
@@ -35,9 +35,9 @@ Backwards incompatible changes
 
   As part of this big change in the way verbosity is handled, there were many minor changes:
   - rename `Config.print_if_verbose` to :meth:`~tenpy.tools.params.Config.log`
-  - change argument names of :meth:`~tenpy.tools.params.
-
-
+  - deprecate the `verbose` class argument of the :class:`~tenpy.tools.params.Config`
+  - deprecate the `verbose` class attribute of all classes (if they had it).
+  - change argument names of :meth:`~tenpy.tools.params`.
 
 Added
 ^^^^^

@@ -46,12 +46,11 @@ params = [
 @pytest.mark.slow
 def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
     L = 2 if bc_MPS == 'infinite' else 8
-    model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
+    model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
     dmrg_pars = {
-        'verbose': 5,
         'combine': combine,
         'mixer': mixer,
         'chi_list': {
@@ -107,10 +106,10 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
 @pytest.mark.slow
 def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
-    model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None, verbose=0)
+    model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
     psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS)
-    dmrg_pars = {'verbose': 5, 'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine': True}
+    dmrg_pars = {'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine': True}
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_pars)
     E1, _ = eng.run()
     assert abs(E1 - -1.67192622) < 1.e-6
@@ -134,14 +133,13 @@ params = [('TwoSiteDMRGEngine', 'lanczos'), ('TwoSiteDMRGEngine', 'arpack'),
 @pytest.mark.parametrize("engine, diag_method", params)
 def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     bc_MPS = 'finite'
-    model_params = dict(L=6, S=0.5, bc_MPS=bc_MPS, conserve='Sz', verbose=0)
+    model_params = dict(L=6, S=0.5, bc_MPS=bc_MPS, conserve='Sz')
     M = SpinChain(model_params)
     # chose total Sz= 4, not 3=6/2, i.e. not the sector with lowest energy!
     # make sure below that we stay in that sector, if we're supposed to.
     init_Sz_4 = ['up', 'down', 'up', 'up', 'up', 'down']
     psi_Sz_4 = mps.MPS.from_product_state(M.lat.mps_sites(), init_Sz_4, bc=bc_MPS)
     dmrg_pars = {
-        'verbose': 1,
         'N_sweeps_check': 1,
         'combine': True,
         'max_sweeps': 5,
@@ -174,7 +172,7 @@ def test_dmrg_excited(eps=1.e-12):
     # (without truncation)
     L, g = 8, 1.3
     bc = 'finite'
-    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity', verbose=0)
+    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity')
     M = TFIChain(model_params)
     # compare to exact solution
     ED = ExactDiag(M)
@@ -190,7 +188,6 @@ def test_dmrg_excited(eps=1.e-12):
     # first DMRG run
     psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     dmrg_pars = {
-        'verbose': 0,
         'N_sweeps_check': 1,
         'lanczos_params': {
             'reortho': False
@@ -204,7 +201,6 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
-    dmrg_pars['verbose'] = 1.
     dmrg_pars['orthogonal_to'] = [psi0]
     psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
     eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars)
@@ -228,7 +224,7 @@ def test_dmrg_excited(eps=1.e-12):
 def test_enlarge_mps_unit_cell():
     g = 1.3  # deep in the paramagnetic phase
     bc_MPS = 'infinite'
-    model_params = dict(L=2, J=1., g=g, bc_MPS=bc_MPS, conserve=None, verbose=0)
+    model_params = dict(L=2, J=1., g=g, bc_MPS=bc_MPS, conserve=None)
     M_2 = TFIChain(model_params)
     M_4 = TFIChain(model_params)
     M_4.enlarge_mps_unit_cell(2)
@@ -236,7 +232,6 @@ def test_enlarge_mps_unit_cell():
     psi_4 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS)
     psi_4.enlarge_mps_unit_cell(2)
     dmrg_params = {
-        'verbose': 1,
         'combine': True,
         'max_sweeps': 30,
         'update_env': 0,

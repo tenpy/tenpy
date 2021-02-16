@@ -312,10 +312,12 @@ class Config(MutableMapping):
         """
         name = self.name
         new_key = option in self.unused or use_default
+        val = self.options.get(option, "<not set>")
         if new_key:
-            val = self.options.get(option, "<not set>")
-            logger.debug("%s: %s %r=%r%s", name, action, option, val,
-                         " (default)" if use_default else "")
+            if use_default:
+                logger.debug("%s: %s %r=%r (default)", name, action, option, val)
+            else:
+                logger.info("%s: %s %r=%r", name, action, option, val)
 
     def deprecated_alias(self, old_key, new_key, extra_msg=""):
         if old_key in self.options.keys():

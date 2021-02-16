@@ -929,7 +929,7 @@ class DMRGEngine(Sweep):
                 "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
                 "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
                 "max trunc_err = %(trunc_err).4e, max E_trunc = %(E_trunc).4e\n"
-                "MPS bond dimensions: %(chi)s\n"
+                "chi: %(chi)s\n"
                 "%(sep)s", {
                     'sweeps': self.sweeps,
                     'E': E,
@@ -942,7 +942,7 @@ class DMRGEngine(Sweep):
                     'dS': Delta_S,
                     'trunc_err': max_trunc_err,
                     'E_trunc': max_E_trunc,
-                    'chi': self.psi.chi,
+                    'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
                     'sep': "=" * 80,
                 })
             self.checkpoint.emit(self)

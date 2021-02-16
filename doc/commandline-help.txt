@@ -1,5 +1,5 @@
-usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--option KEY VALUE]
-                 [--version]
+usage: tenpy-run [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--import-module MODULE]
+                 [--sim-class SIM_CLASS] [--option KEY VALUE] [--version]
                  [parameters_file]
 
 Command line interface to run a TeNPy simulation.
@@ -11,6 +11,7 @@ positional arguments:
 optional arguments:
     -h, --help
         show this help message and exit
+    --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}, -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}
     --import-module MODULE, -i MODULE
         Import the given python MODULE before setting up the simulation. This is useful if the
         module contains user-defined subclasses. Use python-style names like `numpy` without the
