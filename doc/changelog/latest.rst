@@ -74,6 +74,7 @@ Changed
   :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
   :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
 - Support additional `priority` argument for :func:`~tenpy.models.lattice.get_order_grouped`, :issue:`122`.
+- Warn if one of the `add_*` methods of the CouplingMPOModel gets called after initialization.
 
 Fixed
 ^^^^^
@@ -91,3 +92,4 @@ Fixed
 - Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
 - :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.
 - Some MPS methods (correlation function, expectation value, ...) raised an error for negative site indices even for infinite MPS.
+- Warn about unsued tenpy functions

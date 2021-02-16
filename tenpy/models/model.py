@@ -919,6 +919,7 @@ class CouplingModel(Model):
             # Sz and Sx operator already exists
             site = self.lat.unit_cell[0]
             site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
+            self.manually_call_init_H = True
 
         .. doctest :: add_coupling
 
@@ -1385,6 +1386,7 @@ class CouplingModel(Model):
         .. testsetup :: add_exponentially_decaying_coupling
 
             self = tenpy.models.spins.SpinChain(dict(L=30))
+            self.manually_call_init_H = True
 
         .. doctest :: add_exponentially_decaying_coupling
 
@@ -1572,6 +1574,7 @@ class CouplingModel(Model):
         .. testsetup :: coupling_strength_add_ext_flux
 
             self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3))
+            self.manually_call_init_H = True
 
         .. doctest :: coupling_strength_add_ext_flux
 
@@ -1626,10 +1629,12 @@ def _warn_post_init_add(f):
     @wraps(f)
     def add_term_function(self, *args, **kwargs):
         res = f(self, *args, **kwargs)
-        if hasattr(self, 'H_MPO'):
+        if hasattr(self, 'H_MPO') and not getattr(self, 'manually_call_init_H', False):
             warnings.warn(
                 "Adding terms to the CouplingMPOModel after initialization. "
-                "Make sure you call `init_H_from_terms` again!", UserWarning, 2)
+                "Make sure you call `init_H_from_terms` again! "
+                "In that case, you can set `self.manually_call_init_H` to supress this warning.",
+                UserWarning, 2)
         return res
 
     return add_term_function
@@ -1680,6 +1685,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
+    manually_call_init_H : bool
+        Usually `False`. You can set this to true if you want to use one of the `add_*` methods
+        after initialization and made sure that you call `init_H_from_terms` after you have added
+        all the desired terms.
     """
 
     #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
@@ -1699,6 +1708,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
         self._called_CouplingMPOModel_init = True
+        self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
