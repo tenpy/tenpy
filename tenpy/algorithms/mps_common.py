@@ -819,8 +819,8 @@ class TwoSiteH(EffectiveH):
         adj.W0 = self.W0.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
         adj.W1 = self.W1.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
         if self.combine:
-            adj.LHeff = self.LHeff.conj().ireplace_labels('wR*', 'wR')
-            adj.RHeff = self.RHeff.conj().ireplace_labels('wL*', 'wL')
+            adj.LHeff = self.LHeff.conj().ireplace_label('wR*', 'wR')
+            adj.RHeff = self.RHeff.conj().ireplace_label('wL*', 'wL')
         for key in ['LP', 'RP', 'W0', 'W1']:
             getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         if self.combine:

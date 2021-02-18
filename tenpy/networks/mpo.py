@@ -667,6 +667,8 @@ class MPO:
         else:  # no break
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
+        if self.explicit_plus_hc:
+            current_value += np.conj(current_value)
         return np.real_if_close(current_value / L)
 
     def variance(self, psi, exp_val=None):
@@ -693,7 +695,9 @@ class MPO:
         if self.L != psi.L:
             raise ValueError("expect same L")
         if psi._p_label != ['p']:
-            raise ValueError("not adjusted for non-standard MPS.")
+            raise NotImplementedError("not adjusted for non-standard MPS.")
+        if self.explicit_plus_hc:
+            raise NotImplementedError("not implemented for explicit_plus_hc flag")
         assert self.L >= 1
         if exp_val is None:
             exp_val = self.expectation_value(psi)
