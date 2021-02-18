@@ -60,6 +60,9 @@ def dummy_measurement(results, psi, simulation):
 
 
 simulation_params = {
+    'logging_params': {
+        'skip_setup': True
+    },
     'model_class':
     'XXZChain',
     'model_params': {

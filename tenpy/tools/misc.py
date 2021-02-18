@@ -1,6 +1,7 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import logging
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
@@ -15,7 +16,7 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'flatten',
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'flatten', 'setup_logging',
     'build_initial_state', 'setup_executable'
 ]
 
@@ -630,6 +631,151 @@ def flatten(mapping, separator='/'):
         else:
             result[k1] = v1
     return result
+
+
+def setup_logging(options={}, output_filename=None):
+    """Configure the :mod:`logging` module.
+
+    The default logging setup is given by the following equivalent `dict_config`
+    (here in [yaml]_ format for better readability).
+
+    .. comment ::
+        if you change the code block below, please also change the corresponding block
+        in :doc:`/intro/logging/`.
+
+    .. code-block :: yaml
+
+        version: 1  # mandatory for logging config
+        disable_existing_loggers: False  # keep module-based loggers already defined!
+        formatters:
+            brief:
+                format: "%(levelname)-8s: %(message)s"
+            detailed:
+                format: "%(asctime)s %(levelname)-8s: %(message)s"
+        handlers:
+            to_stdout:
+                class: logging.StreamHandler
+                level: INFO         # logging_params['to_stdout']
+                formatter: brief
+                stream: ext://sys.stdout
+            to_file:
+                class: logging.FileHandler
+                level: INFO         # logging_params['to_file']
+                formatter: detailed
+                filename: output_filename.log   # logging_params['filename']
+                mode: w             # overwrites existing!
+        root:
+            handlers: [to_stdout, to_file]
+            level: DEBUG
+
+    .. note ::
+        We **remove** any previously configured logging handlers.
+        This is to handle the case when this function is called multiple times,
+        e.g., because you run multiple :class:`~tenpy.simulations.simulation.Simulation`
+        classes sequentially.
+
+    Parameters
+    ----------
+    options : dict
+        Parameters as described below.
+    output_filename : None | str
+        The filename where results are saved. The `filename` for the log-file defaults to
+        this, but replecing the extension with ``.log``.
+
+    Options
+    -------
+    .. cfg:config :: logging
+
+        skip_setup: bool
+            If True, don't change anything in the logging setup; just return.
+            This is usefull for testing purposes, where `pytest` handles the logging setup.
+            All other options are ignored in this case.
+        to_stdout : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
+            If not None, print log with (at least) the given level to stdout.
+        to_file : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
+            If not None, save log with (at least) the given level to a file.
+            The filename is given by `filename`.
+        filename : str
+            Filename for the logfile.
+            It defaults  to `output_filename` with the extension replaced to ".log".
+            If ``None``, no log-file will be created, even with `to_file` set.
+        logger_levels : dict(str, str)
+            Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
+            the parameter readouts logs.
+            The keys of this dictionary are logger names, which follow the module structure in
+            tenpy.
+            For example, setting the level for `tenpy.simulations` will change the level
+            for all loggers in any of those submodules, including the one provided as
+            ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
+            methods calling ``self.logger.info(...)`` will be affected by that.
+        dict_config : dict
+            Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
+            If used, all other options except `skip_setup` and `capture_warnings` are ignored.
+        capture_warnings : bool
+            Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
+    """
+    import logging.config
+    if output_filename is None:
+        default_log_fn = None
+    else:
+        root, ext = os.path.splitext(output_filename)
+        assert ext != 'log'
+        default_log_fn = root + '.log'
+    log_fn = options.get('filename', default_log_fn)
+    to_stdout = options.get('to_stdout', "INFO")
+    to_file = options.get('to_file', "INFO")
+    logger_levels = options.get('logger_levels', {})
+    conf = options.get('dict_config', None)
+    capture_warnings = options.get('capture_warnings', conf is not None
+                                   or bool(to_stdout or to_file))
+    if options.get('skip_setup', False):
+        return
+    if conf is None:
+        handlers = {}
+        if to_stdout:
+            handlers['to_stdout'] = {
+                'class': 'logging.StreamHandler',
+                'level': to_stdout,
+                'formatter': 'brief',
+                'stream': 'ext://sys.stdout',
+            }
+        if to_file and log_fn is not None:
+            handlers['to_file'] = {
+                'class': 'logging.FileHandler',
+                'level': to_file,
+                'formatter': 'detailed',
+                'filename': log_fn,
+                'mode': 'w',  # overwrites existing!
+            }
+        conf = {
+            'version': 1,  # mandatory
+            'disable_existing_loggers': False,
+            'formatters': {
+                'brief': {
+                    'format': "%(levelname)-8s: %(message)s"
+                },
+                'detailed': {
+                    'format': "%(asctime)s %(levelname)-8s: %(message)s"
+                },
+            },
+            'handlers': handlers,
+            'root': {
+                'handlers': list(handlers.keys()),
+                'level': 'DEBUG'
+            },
+            'loggers': {},
+        }
+        for name, level in logger_levels.items():
+            if name == 'root':
+                conf['root']['level'] = level
+            else:
+                conf['loggers'].setdefault(name, {})['level'] = level
+    else:
+        conf.setdefault('disable_existing_loggers', False)
+    # note: dictConfig cleans up previously existing handlers etc
+    logging.config.dictConfig(conf)
+    if capture_warnings:
+        logging.captureWarnings(True)
 
 
 def build_initial_state(size, states, filling, mode='random', seed=None):

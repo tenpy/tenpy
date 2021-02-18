@@ -5,7 +5,7 @@ Release Notes
 -------------
 The default (stable) git branch was renamed from ``master`` to ``main``.
 
-Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation.
+Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation. See :doc:`/intro/simulation` for details
 
 Big Change in verbosity: switch to using Python's default :mod:`logging` mechanism!
 

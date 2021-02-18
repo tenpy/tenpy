@@ -58,6 +58,12 @@ The following links are not physics-related, but are good to know if you want to
     A file format and library for saving data (including metadata).
     We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`, see :doc:`/intro/input_output`.
 
+.. [yaml]
+    "YAML Ain't Markup Language", https://yaml.org
+    A human-readable file format for configuration files.
+    TeNpy (optionally) uses it through `pyyaml <https://pyyaml.org/>`_ for reading in simulation parameters, and in some
+    places in the documentation to keep things more readable.
+
 .. [jupyter]
     Jupyter notebooks, https://jupyter.org/
     An amazing interface for (python) notebooks which can contain both source code, text and outputs in a single file.

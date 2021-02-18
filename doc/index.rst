@@ -16,6 +16,7 @@
     releases
     introductions
     examples
+    troubleshooting
     literature
     papers_using_tenpy
     contributing

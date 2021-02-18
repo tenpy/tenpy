@@ -134,16 +134,14 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
         self.update(N_steps)
 
-        max_chi = max(self.psi.chi)
         S = self.psi.entanglement_entropy()
-        dS = np.mean(S) - Sold
         logger.info(
             "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
             "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
                 't': self.evolved_time.real,
                 'chi': max(self.psi.chi),
                 'S': max(S),
-                'dS': Sold - np.mean(S),
+                'dS': np.mean(S) - Sold,
                 'wall_time': time.time() - start_time,
             })
 
@@ -197,9 +195,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                 S = self.psi.entanglement_entropy()
                 max_S = max(S)
                 S = np.mean(S)
-                DeltaS = np.abs(Sold - S)
+                DeltaS = S - Sold
                 Sold = S
-                max_chi = max(self.psi.chi)
                 logger.info(
                     "--> step=%(step)6d, beta=%(beta)3.3f, max(chi)=%(max_chi)d,"
                     "DeltaE=%(dE).2e, E_bond=%(E).10f, Delta_S=%(dS).4e, "
@@ -698,7 +695,7 @@ class RandomUnitaryEvolution(TEBDEngine):
                 't': self.evolved_time.real,
                 'chi': max(self.psi.chi),
                 'S': max(S),
-                'dS': Sold - np.mean(S),
+                'dS': np.mean(S) - Sold,
                 'wall_time': time.time() - start_time,
             })
 

@@ -29,6 +29,7 @@ from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, set_recursive, get_recursive
+from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 
 __all__ = ['Simulation', 'Skip']
@@ -42,6 +43,8 @@ class Simulation:
     options : dict-like
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
+    setup_logging : bool
+        Whether to call :meth:`setup_logging` at the beginning of initialization.
 
     Options
     -------
@@ -52,6 +55,8 @@ class Simulation:
         output_filename : string | None
             Filename for output. The file ending determines the output format.
             None (default) disables any writing to files.
+        logging_params : dict
+            Logging parameters; see :cfg:config:`logging`.
         overwrite_output : bool
             Whether an exisiting file may be overwritten.
             Otherwise, if the file already exists we try to replace
@@ -122,14 +127,23 @@ class Simulation:
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
 
-    def __init__(self, options):
+    def __init__(self, options, setup_logging=True):
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
         cwd = self.options.get("directory", None)
         if cwd is not None:
-            self.logger.info("going into directory {cwd!r}")
             os.chdir(cwd)
+        self.fix_output_filenames()
+        if setup_logging:
+            log_params = self.options.subconfig('logging_params')
+            setup_logging_(log_params, self.output_filename)  # needs self.output_filename
+        self.logger.info("simulation class %s", self.__class__.__name__)
+        # catch up with logging messages
+        if cwd is not None:
+            self.logger.info("change directory to %r", cwd)
+        self.logger.info("output filename: %r", self.output_filename)
+
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
             if self.loaded_from_checkpoint:
@@ -138,12 +152,11 @@ class Simulation:
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
         self.results = {
-            'simulation_parameters': self.options.as_dict(),
+            'simulation_parameters': self.options,
             'version_info': self.get_version_info(),
             'finished_run': False,
         }
         self._last_save = time.time()
-        self.fix_output_filenames()
         self.measurement_event = EventHandler("psi, simulation, results")
 
     def run(self):
@@ -413,8 +426,10 @@ class Simulation:
                 Whether an exisiting file may be overwritten.
                 Otherwise, if the file already exists we try to replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
-
+            skip_if_output_exists : bool
+                If True, raise :class:`Skip` if the output file already exists.
         """
+        # note: this function shouldn't use logging: it's called before setup_logging()
         output_filename = self.options.get("output_filename", None)
         overwrite_output = self.options.get("overwrite_output", False)
         skip_if_exists = self.options.get("skip_if_output_exists", False)
@@ -442,7 +457,6 @@ class Simulation:
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
-        self.logger.info("output will be saved at %r", output_filename)
         if not os.path.exists(self._backup_filename):
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"
@@ -452,6 +466,7 @@ class Simulation:
 
     def get_backup_filename(self, output_filename):
         """Extract the name used for backups of `output_filename`."""
+        # note: this function shouldn't use logging
         root, ext = os.path.splitext(output_filename)
         return root + '.backup' + ext
 

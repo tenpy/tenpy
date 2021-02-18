@@ -11,7 +11,10 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     intro/overview
     intro/npc
     intro/model
+    intro/simulations
     intro/lattices
-    intro/JordanWigner
+    intro/logging
+    intro/options
     intro/input_output
-    intro/protocol
+    intro/JordanWigner
+    intro/dmrg-protocol
