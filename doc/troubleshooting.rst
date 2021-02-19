@@ -4,7 +4,7 @@ Troubleshooting and FAQ
 Where did all the output go?
     Take a look at :doc:`/intro/logging`.
 
-What are possible parameters for X?
+What are possible parameters for ...?
     See :doc:`/intro/options`.
 
 How can I set the number of threads TeNPy is using?
@@ -25,7 +25,7 @@ Why is TeNPy not respecting MKL_NUM_THREADS?
 I get an error when ...
 -----------------------
 ... I try to measure ``Sx_i Sx_j`` correlations in a state with `Sz` conseration.
-    This is not possible. See the basic facts in :doc:`/intro/npc`.
+    Right now this is not possible. See the basic facts in :doc:`/intro/npc`.
 
 
 I get a warning about ...

@@ -159,6 +159,13 @@ class Simulation:
         self._last_save = time.time()
         self.measurement_event = EventHandler("psi, simulation, results")
 
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
+
     def run(self):
         """Run the whole simulation."""
         if self.loaded_from_checkpoint:
