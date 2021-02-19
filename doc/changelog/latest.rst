@@ -9,7 +9,7 @@ Big new feature: simulation classes and console script `tenpy-run` to allow runn
 
 Big Change in verbosity: switch to using Python's default :mod:`logging` mechanism! 
 This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`Simulation` setups.
-See :doc:`/intro/logging` on how to get the output back.
+See :doc:`/intro/logging` on how to get the output back, and what to change in your code.
 
 
 Changelog

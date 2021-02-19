@@ -747,6 +747,8 @@ def setup_logging(options={}, output_filename=None):
                 'filename': log_fn,
                 'mode': 'w',  # overwrites existing!
             }
+            if not to_stdout:
+                print(f"now logging to {log_fn!r}")
         conf = {
             'version': 1,  # mandatory
             'disable_existing_loggers': False,

@@ -1,6 +1,10 @@
 Troubleshooting and FAQ
 =======================
 
+I updated to a new version and now I get and error/warning.
+    Take a look at the section "Backwards incomptatible changes" in :doc:`/changelog` of the corresponding versions
+    since when you updated.
+
 Where did all the output go?
     Take a look at :doc:`/intro/logging`.
 

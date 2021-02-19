@@ -23,7 +23,7 @@ set the :mod:`logging` level to `logging.INFO` with the following, basic setup::
 We use this snippet in our examples to activate the printing of info messages to the standard output stream.
 For really detailed output, you can even set the level to `logging.DEBUG`.
 :func:`logging.basicConfig` also takes a `filename` argument, which allows to redirect the output to a file
-instead of stdout. 
+instead of stdout. Note that you should call `basicConfig` only once; subsequent calls have no effect.
 
 
 More detailed configurations can be made through :mod:`logging.config`.
@@ -67,15 +67,27 @@ Moreover, you can easily adjust the log levels with simple parameters, for examp
         to_stdout:     # nothing in yaml -> None in python => no logging to stdout
         to_file: INFO
         log_levels:
-            tenpy.tools.params : WARNING  # suppres INFO/DEBUG output for any logging of parameters 
+            tenpy.tools.params : WARNING  # suppres INFO/DEBUG output for any logging of parameters
+
+Of course, you can also explicilty call the :func:`~tenpy.tools.misc.setup_logging` yourself, if you don't use the `Simulation` classes::
+
+    tenpy.tools.misc.setup_logging({'to_stdout': None, 'to_file': 'INFO', 'filename': 'my_log.txt',
+                                    'log_levels': {'tenpy.tools.params': 'WARNING'}})
 
 
 How to write your own logging (and warning) code
 ------------------------------------------------
-You can read the `official logging tutorial <https://docs.python.org/3/howto/logging.html>`_, 
-but it's actually straight-forward, and just requires two steps.
+Of course, you can still use simple ``print(...)`` statements in your code, and they will just appear on your screen.
+In fact, this is one of the benefits of logging: you can make sure that you *only* get the print statements you have put
+yourself, and at the same time redirect the logging messages of tenpy to a file, if you want.
 
-1.  Import the necessary modules and create a logger at the top of your module::
+However, these ``print(...)`` statements are not re-directed to the log-files.
+Therefore, if you write your own sub-classes like Models, I would recommended that you also use the loggers instead of
+simple print statements.
+You can read the `official logging tutorial <https://docs.python.org/3/howto/logging.html>`_ for details, 
+but it's actually straight-forward, and just requires at most two steps.
+
+1.  If necessary, import the necessary modules and create a logger at the top of your module::
 
         import warnings
         import logging
@@ -83,8 +95,10 @@ but it's actually straight-forward, and just requires two steps.
 
     .. note ::
 
-        Some classes that you might want to subclass ,e.g., all models, provide a :class:`~logging.Logger` as 
-        ``self.logger`` class attribute. It's recommended to use that one instead from inside methods.
+        Most TeNPy classes that you might want to subclass, like models, algorithm engines or simulations,
+        provide a :class:`~logging.Logger` as ``self.logger`` class attribute. 
+        In that case you can even **skip** this step and just use ``self.logger`` instead of ``logger`` in the snippets
+        below.
 
 2.  Inside your funtions/methods/..., make calls like this::
 
@@ -103,3 +117,9 @@ but it's actually straight-forward, and just requires two steps.
 
     You can use `printf-formatting <https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting>`_
     for the arguments of ``logger.debug(...), logger.info(...), logger.warn(...)``, as illustrated in the last line.
+
+In summary, instead of just ``print("do X")`` statements, use ``self.logger.info("do X")`` inside TeNPy classes, or just
+``logger.info("do X")`` for the module-wide logger, which you can initialize right at the top of your file with the import
+statements. If you have non-string arguments, add a formatter string, e.g. replace ``print(max(psi.chi))`` with
+``logger.info("%d", max(psi.chi))``, or even better, ``logger.info("max(chi)=%d", max(psi.chi))``.
+For genereic types, use ``"%s"`` or ``"%r"``, which converts the other arguments to strings with ``str(...)`` or ``repr(...)``, respectively.
