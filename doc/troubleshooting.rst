@@ -4,6 +4,8 @@ Troubleshooting and FAQ
 Where did all the output go?
     Take a look at :doc:`/intro/logging`.
 
+What are possible parameters for X?
+    See :doc:`/intro/options`.
 
 How can I set the number of threads TeNPy is using?
     Most algorithms in TeNPy don't use any parallelization besides what the underlying BLAS provides,

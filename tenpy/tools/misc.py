@@ -639,8 +639,8 @@ def setup_logging(options={}, output_filename=None):
     The default logging setup is given by the following equivalent `dict_config`
     (here in [yaml]_ format for better readability).
 
-    .. comment ::
-        if you change the code block below, please also change the corresponding block
+    ..
+        If you change the code block below, please also change the corresponding block
         in :doc:`/intro/logging/`.
 
     .. code-block :: yaml
@@ -793,7 +793,8 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     .. warning ::
 
         this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
-        interface in combination with :func:`~tenpy.
+        interface in combination with :func:`~tenpy.console_main` instead.
+        You can invoce that from the command line as ``python -m tenpy ...``.
 
     Uses default values defined at:
     - model class for model_par

@@ -77,6 +77,12 @@ def console_main():
 
         tenpy-run --help
 
+    Equivalently, you can also invoke the tenpy module from your python interpreter like this::
+
+        python -m tenpy --help
+
+    ..
+        Sphinx includes the output of ``tenpy-run --help`` here.
     """
     import numpy as np
     import scipy
