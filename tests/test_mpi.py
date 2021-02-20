@@ -6,12 +6,8 @@ import tenpy
 mpi_parallel = pytest.importorskip('pytest_easyMPI').mpi_parallel
 
 
-def test_serial():
-    assert True
-
-
 @mpi_parallel(2)
-@pytest.mark('slow')
+@pytest.mark.slow
 def test_parallel_dmrg(eps=1.e-8):
     from mpi4py import MPI
     import tenpy.simulations.mpi_parallel
@@ -31,7 +27,7 @@ def test_parallel_dmrg(eps=1.e-8):
             'verbose': 10,
         },
     }
-    res = tenpy.run_simulation('ParallelDMRGSim', **sim_params)
+    res = tenpy.run_simulation('ParallelDMRGSim', {'setup_logging': False}, **sim_params)
     if MPI.COMM_WORLD.rank != 0:
         assert res is None
         return
