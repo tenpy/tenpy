@@ -57,9 +57,10 @@ class ParallelPlusHcLinOp(NpcLinearOperatorWrapper):
 
 
 class ParallelDMRGPlusHc:
-    def __init__(self, psi, model, options, comm):
+    def __init__(self, psi, model, options, comm, **kwargs):
         self.comm_plus_hc = comm
-        super().__init__(psi, model, options)  # TODO: how to handle for multiple parallel layers?
+        # TODO: how to handle for multiple parallel layers?
+        super().__init__(psi, model, options, **kwargs)
 
     def make_eff_H(self):
         assert self.env.H.explicit_plus_hc
@@ -104,7 +105,7 @@ class ParallelDMRGSim(GroundStateSearch):
 
     def _init_algorithm(self, AlgorithmClass):
         params = self.options.subconfig('algorithm_params')
-        self.engine = AlgorithmClass(self.psi, self.model, params, self.comm_plus_hc)
+        self.engine = AlgorithmClass(self.psi, self.model, params, comm=self.comm_plus_hc)
 
     def run(self):
         res = super().run()
@@ -131,3 +132,8 @@ class ParallelDMRGSim(GroundStateSearch):
             else:
                 raise ValueError("recieved invalid action: " + repr(action))
         # done
+
+    def resume_run(self):
+        res = super().resume_run()
+        self.comm_plus_hc.bcast(ReplicaAction.DONE)
+        return res
