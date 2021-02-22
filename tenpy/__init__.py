@@ -41,7 +41,9 @@ def show_config():
     print(version.version_summary)
 
 
-def run_simulation(simulation_class_name='GroundStateSearch', **simulation_params):
+def run_simulation(simulation_class_name='GroundStateSearch',
+                   simulation_class_kwargs=None,
+                   **simulation_params):
     """Run the simulation with a simulation class.
 
     Parameters
@@ -49,20 +51,32 @@ def run_simulation(simulation_class_name='GroundStateSearch', **simulation_param
     simulation_class_name : str
         The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
         to be used for running the simulaiton.
+    sim_class_kwargs : dict | None
+        A dictionary of keyword-arguments to be used for the initializing the simulation.
     **simulation_params :
         Further keyword arguments as documented in the corresponding simulation class,
         see :cfg:config`Simulation`.
 
     Returns
     -------
-    results : dict
-        The results from running the simulation.
+    results :
+        The results from running the simulation, i.e.,
+        what :meth:`tenpy.simulations.Simulation.run()` returned.
     """
     SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
     if SimClass is None:
         raise ValueError("can't find simulation class called " + repr(simulation_class_name))
-    sim = SimClass(simulation_params)
-    results = sim.run()
+    if sim_class_args is None:
+        sim_class_args = {}
+    try:
+        sim = SimClass(simulation_params, **sim_class_args)
+        results = sim.run()
+    except:
+        # include the traceback into the log
+        # this might cause a duplicated traceback if logging to std out is on,
+        # but that's probably better than having no error messages in the log.
+        logger.exception("simulation abort with the following exception")
+        raise  # raise the same error again
     return results
 
 

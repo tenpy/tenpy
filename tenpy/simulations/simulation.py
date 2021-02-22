@@ -127,7 +127,7 @@ class Simulation:
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
 
-    def __init__(self, options, setup_logging=True):
+    def __init__(self, options, *, setup_logging=True):
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
@@ -199,6 +199,7 @@ class Simulation:
         return sim
 
     def resume_run(self):
+        """Resume a simulation that was initialized from a checkpoint."""
         if not self.loaded_from_checkpoint:
             warnings.warn("called `resume_run()` on a simulation *not* loaded from checkpoint. "
                           "You probably want `run()` instead!")
