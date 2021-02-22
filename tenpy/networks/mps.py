@@ -79,6 +79,8 @@ import numpy as np
 import warnings
 import random
 from functools import reduce
+import logging
+logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
@@ -454,7 +456,7 @@ class MPS:
 
             >>> from tenpy.networks.mps import MPS
             >>> L = 10
-            >>> M = tenpy.models.tf_ising.TFIChain({'L': L, 'verbose': 0})
+            >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
             >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS)
 
@@ -980,7 +982,7 @@ class MPS:
         op : npc.array
             One of the entries in `op_list`, not copied.
         """
-        if self.finite and i > self.L or i < 0:
+        if self.finite and (i > self.L or i < 0):
             raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
@@ -1052,7 +1054,7 @@ class MPS:
     def increase_L(self, new_L=None):
         """Modify `self` inplace to enlarge the MPS unit cell; in place.
 
-        .. deprecated:: 0.5.1
+        .. deprecated :: 0.5.1
             This method will be removed in version 1.0.0.
             Use the equivalent ``psi.enlarge_mps_unit_cell(new_L//psi.L)`` instead of
             ``psi.increase_L(new_L)``.
@@ -1974,9 +1976,9 @@ class MPS:
             count_JW += 1
             for op_i in ops:
                 op_i.append('JW')
-        for i in range(len(ops)):
-            site = self.sites[self._to_valid_index(i + i_offset)]
-            ops[i] = site.multiply_operators(ops[i])
+        for j in range(len(ops)):
+            site = self.sites[self._to_valid_index(j + i_min + i_offset)]
+            ops[j] = site.multiply_operators(ops[j])
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def expectation_value_multi_sites(self, operators, i0):
@@ -2779,7 +2781,8 @@ class MPS:
         num = max(target + 1, self._transfermatrix_keep)
         E, _ = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
-        if charge_sector is not None and charge_sector != 0:
+        if charge_sector is not None and charge_sector != 0 and \
+                any([c != 0 for c in charge_sector]):
             # need also dominant eigenvector: include 0 charge sector to results
             del T
             T = TransferMatrix(self, self, charge_sector=0, form='B')
@@ -3062,8 +3065,11 @@ class MPS:
         self.sites[self._to_valid_index(i + 1)] = siteL
         return err
 
-    def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=0):
+    def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
         """Applies the permutation perm to the state (inplace).
+
+        .. deprecated :: 0.8.0
+            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
@@ -3075,14 +3081,14 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
-        verbose : float
-            Level of verbosity, print status messages if verbose > 0.
 
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
+        if verbose is not None:
+            warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
         perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
@@ -3091,17 +3097,12 @@ class MPS:
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
         if trunc_par is None:
             trunc_par = {}
-        trunc_par.setdefault('verbose', verbose)
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
         while i < self.L - 1:
             if perm[i] > perm[i + 1]:
-                if verbose > 1:
-                    print(i, ": chi = ", self._S[i + 1].shape[0], end='')
                 trunc = self.swap_sites(i, swap_op, trunc_par)
-                if verbose > 1:
-                    print("->", self._S[i + 1].shape[0], ". eps = ", trunc.eps)
                 num_swaps += 1
                 x, y = perm[i], perm[i + 1]
                 perm[i + 1], perm[i] = x, y
@@ -3111,8 +3112,6 @@ class MPS:
                 trunc_err += trunc
             else:
                 i += 1
-        if verbose > 0:
-            print("Total swaps in permute_sites:", num_swaps, repr(trunc_err))
         return trunc_err
 
     def compute_K(self,
@@ -3120,7 +3119,7 @@ class MPS:
                   swap_op='auto',
                   trunc_par=None,
                   canonicalize=1.e-6,
-                  verbose=0,
+                  verbose=None,
                   expected_mean_k=0.):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
@@ -3133,6 +3132,8 @@ class MPS:
         along the lines of :cite:`pollmann2012`, see also (the appendix and Fig. 11 in the arXiv
         version of) :cite:`cincio2013`.
 
+        .. deprecated :: 0.8.0
+            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
@@ -3151,8 +3152,6 @@ class MPS:
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
-        verbose : float
-            Level of verbosity, print status messages if verbose > 0.
         expected_mean_k : float
             As explained in :cite:`cincio2013`, the returned `W` is extracted as eigenvector of a
             mixed transfer matrix, and hence has an undefined phase. We fix the overall phase
@@ -3180,7 +3179,7 @@ class MPS:
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
         if trunc_par is None:
-            trunc_par = {}
+            trunc_par = asConfig({}, 'trunc_par')
 
         if isinstance(perm, Lattice):
             lat = perm
@@ -3189,8 +3188,6 @@ class MPS:
             shifted_lat_order = lat.order.copy()
             shifted_lat_order[:, 1] = np.mod(shifted_lat_order[:, 1] + 1, lat.Ls[1])
             perm = lat.lat2mps_idx(shifted_lat_order)
-            if verbose > 1:
-                print("permutation: ", perm)
         # preliminary: check canonical form
         self.convert_form('B')
         norm_err = np.linalg.norm(self.norm_test())
@@ -3201,11 +3198,11 @@ class MPS:
         psi_t = self.copy()
         # apply permutation
         perm = np.asarray(perm)
-        trunc_err = psi_t.permute_sites(perm, swap_op, trunc_par, verbose / 10.)
+        trunc_err = psi_t.permute_sites(perm, swap_op, trunc_par)
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            warnings.warn("psi_t.norm_test() = {0!s} ==> canonicalize".format(psi_t.norm_test()))
+            logger.warn("norm_error=%.10f after permutation: ==> canonicalize", norm_err)
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.
@@ -3214,11 +3211,10 @@ class MPS:
         ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
         if np.abs(ov[0]) < 0.9:
             warnings.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
-                          "expected |o| = 1., got |o| = {0:.3e}".format(np.abs(ov[0])))
-        if verbose > 0:
-            print("compute_K: overlap ", ov[0], ", |o| = 1. -", 1. - np.abs(ov[0]))
-            # (should be 1 if state is invariant under translations)
-            print("compute_K: truncation error ", trunc_err.eps)
+                          f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
+
+        logger.info("compute_K: overlap %.5f, |o| = 1. - %.e5., trunc_err.eps=%.3e", ov[0],
+                    1. - np.abs(ov[0]), trunc_err.eps)
         sUs = sUs[0].split_legs(0)
         _, sUs_blocked = sUs.as_completely_blocked()
         W = npc.eigvals(sUs_blocked, sort='m>')
@@ -4284,7 +4280,7 @@ class InitialStateBuilder:
         >>> options = {'method': 'lat_product_state',
         ...            'product_state' : [[['up'], ['down']],
         ...                               [['down'], ['up']]],
-        ...            'verbose': 0.}
+        ...            }
         >>> psi = InitialStateBuilder(lat, options).run()
 
     Note that the `method` options is mandatory, it selects which other method :meth:`run` calls.
@@ -4298,12 +4294,16 @@ class InitialStateBuilder:
         ...         # my_option = self.options.get('opt_name', default) # not necessary here
         ...         product_state = [[['up'], ['down']], [['down'], ['up']]]
         ...         return self.lat_product_state(product_state)
-        >>> options = {'method': 'neel', 'verbose': 0.}
+        >>> options = {'method': 'neel'}
         >>> psi = MyInitialStateBuilderForSquare(lat, options).run()
 
     If you define such a custom class, you can activate it in simulations by explicitly setting
     the :cfg:option:`Simulation.initial_state_builder_class` to the name of it.
     """
+
+    #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + '.InitialStateBuilder')
+
     def __init__(self, lattice, options, model_dtype=np.float64):
         self.lattice = lattice
         self.options = asConfig(options, 'init_state_params')
@@ -4321,7 +4321,11 @@ class InitialStateBuilder:
             The generated MPS.
         """
         method_name = self.options['method']
-        method = getattr(self, method_name)
+        method = getattr(self, method_name, None)
+        if method is None:
+            raise ValueError(f"initial state 'method'={method_name!r} not recognized in " +
+                             self.__class__.__name__)
+        self.logger.info("calling InitialStateBuilder.%s()", method_name)
         psi = method()
         self.check_total_charge(psi)
         return psi
@@ -4360,15 +4364,14 @@ class InitialStateBuilder:
                 Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
-        key = self.options.get('data_key', "psi")
-        if self.options.verbose >= 1.:
-            print("loading initial state from", repr(filename), "with subkey", subkey)
+        data_key = self.options.get('data_key', "psi")
+        self.logger.info("loading initial state from %r", filename)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):
             with hdf5_io.h5py.File(filename, 'r') as f:
-                psi = hdf5_io.load_from_hdf5(f, key)
+                psi = hdf5_io.load_from_hdf5(f, data_key)
         else:
             data = hdf5_io.load(filename)
-            psi = get_recursive(data, key)
+            psi = get_recursive(data, data_key)
         psi.test_sanity()
         return psi
 
@@ -4387,8 +4390,6 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
-        if self.options.verbose > 1.:
-            print("initialize product state \n", p_state)
         dtype = self.options.get('dtype', self.model_dtype)
         psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype)
         return psi
@@ -4408,8 +4409,6 @@ class InitialStateBuilder:
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
-        if self.options.verbose > 1.:
-            print("initialize product state \n", p_state)
         dtype = self.options.get('dtype', self.model_dtype)
         lat = self.lattice
         psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype)
@@ -4573,20 +4572,12 @@ class InitialStateBuilder:
                 Parameters given to the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
                 In particular, you might want to set the `N_steps` and `trunc_params['chi_max']`.
                 The default is {'N_steps': 10, 'trunc_params': {'chi_max': 100}}``.
-
-            randomize_steps : int
-                How many random two-site unitaries to apply to each MPS bond.
-                The maximal range of correlations induced is twice that many sites along the MPS.
-            randomize_max_chi : int
-                Maximum bond dimension to keep during the RandomUnitaryEvolution.
             randomize_canonicalize : bool
                 Whether to call :meth:`MPS.canonical_form` before returning the state.
         """
         method_name = self.options['randomized_from_method']
         method = getattr(self, method_name)
         psi = method()
-        steps = self.options.get('randomize_steps', 20)
-        max_chi = self.options.get('randomize_max_chi', 100)
         canonicalize = self.options.get('randomize_canonicalize', True)
         from ..algorithms.tebd import RandomUnitaryEvolution
         params = {'N_steps': 10, 'trunc_params': {'chi_max': 100}}

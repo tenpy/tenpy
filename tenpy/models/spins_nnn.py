@@ -67,10 +67,8 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         S = model_params.get('S', 0.5)
@@ -84,8 +82,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         spinsite = SpinSite(S, conserve)
         site = GroupedSite([spinsite, spinsite], charges='same')
         return site
@@ -175,8 +172,7 @@ class SpinChainNNN2(CouplingMPOModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = SpinSite(S, conserve)
         return site
 

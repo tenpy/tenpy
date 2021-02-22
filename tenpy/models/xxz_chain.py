@@ -100,10 +100,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     model_params : dict | :class:`~tenpy.tools.params.Config`
         See :cfg:config:`XXZChain`
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, "XXZChain2")
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = "Chain"
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         return SpinHalfSite(conserve='Sz')  # use predefined Site

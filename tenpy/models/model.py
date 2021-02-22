@@ -31,6 +31,10 @@ See also the introduction in :doc:`/intro/model`.
 
 import numpy as np
 import warnings
+import inspect
+from functools import wraps
+import logging
+logger = logging.getLogger(__name__)
 
 from .lattice import get_lattice, Lattice, TrivialLattice
 from ..linalg import np_conserved as npc
@@ -69,6 +73,9 @@ class Model(Hdf5Exportable):
     dtype : :class:`~numpy.dtype`
         The data type of the Hamiltonian
     """
+    #: logging.Logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + ".Model")
+
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it gets called multiple times when a user implements e.g. a
@@ -199,7 +206,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20, 'verbose': 0})
+            >>> nnn_chain = SpinChainNNN2({'L': 20})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
@@ -907,11 +914,12 @@ class CouplingModel(Model):
 
         .. testsetup :: add_coupling
 
-            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, verbose=0, cons_Sz=None))
+            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, cons_Sz=None))
             # make it look like both a SpinChain and a FermionChain
             # Sz and Sx operator already exists
             site = self.lat.unit_cell[0]
             site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
+            self.manually_call_init_H = True
 
         .. doctest :: add_coupling
 
@@ -1377,7 +1385,8 @@ class CouplingModel(Model):
 
         .. testsetup :: add_exponentially_decaying_coupling
 
-            self = tenpy.models.spins.SpinChain(dict(L=30, verbose=0))
+            self = tenpy.models.spins.SpinChain(dict(L=30))
+            self.manually_call_init_H = True
 
         .. doctest :: add_exponentially_decaying_coupling
 
@@ -1564,7 +1573,8 @@ class CouplingModel(Model):
 
         .. testsetup :: coupling_strength_add_ext_flux
 
-            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3, verbose=0))
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3))
+            self.manually_call_init_H = True
 
         .. doctest :: coupling_strength_add_ext_flux
 
@@ -1615,6 +1625,21 @@ class MultiCouplingModel(CouplingModel):
         warnings.warn(msg, DeprecationWarning, 2)
 
 
+def _warn_post_init_add(f):
+    @wraps(f)
+    def add_term_function(self, *args, **kwargs):
+        res = f(self, *args, **kwargs)
+        if hasattr(self, 'H_MPO') and not getattr(self, 'manually_call_init_H', False):
+            warnings.warn(
+                "Adding terms to the CouplingMPOModel after initialization. "
+                "Make sure you call `init_H_from_terms` again! "
+                "In that case, you can set `self.manually_call_init_H` to supress this warning.",
+                UserWarning, 2)
+        return res
+
+    return add_term_function
+
+
 class CouplingMPOModel(CouplingModel, MPOModel):
     """Combination of the :class:`CouplingModel` and :class:`MPOModel`.
 
@@ -1660,9 +1685,19 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
+    manually_call_init_H : bool
+        Usually `False`. You can set this to true if you want to use one of the `add_*` methods
+        after initialization and made sure that you call `init_H_from_terms` after you have added
+        all the desired terms.
     """
+
+    #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
+    default_lattice = "Chain"
+
+    #: bool: If True, :meth:`init_lattice` asserts that the initialized lattice
+    #: is (a subclass of) `default_lattice`
+    force_default_lattice = False
+
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
@@ -1673,7 +1708,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
         self._called_CouplingMPOModel_init = True
-        self.verbose = model_params.get('verbose', 1)
+        self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) iniitalize lattice
         lat = self.init_lattice(model_params)
@@ -1681,16 +1716,35 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
-        # 7) initialize H_MPO
-        H_MPO = self.calc_H_MPO()
-        if model_params.get('sort_mpo_legs', False):
-            H_MPO.sort_legcharges()
-        MPOModel.__init__(self, lat, H_MPO)
-        if isinstance(self, NearestNeighborModel):
-            # 8) initialize H_bonds
-            NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
-        # checks for misspelled parameters
+        # 7-8) initialize H_MPO, and H_bonds, if necessary
+        self.init_H_from_terms()
+        # finally checks for misspelled parameter names
         model_params.warn_unused()
+
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
+
+    def init_H_from_terms(self):
+        """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.
+
+        This function is called automatically during `CouplingMPOModel.__init__`.
+
+        If you use one of the `add_*` methods of the `CouplingModel` *after* initialization,
+        you will need to call `init_H_from_terms` in the end by yourself,
+        in order to update the `H_MPO` (and possibly `H_bond`) representations.
+        (You should get a warning about this... The way to avoid it is to initialize all the terms
+        in `init_terms` by defining your own model, as outlined in :doc:`/intro/model`.
+        """
+        H_MPO = self.calc_H_MPO()
+        if self.options.get('sort_mpo_legs', False):
+            H_MPO.sort_legcharges()
+        MPOModel.__init__(self, self.lat, H_MPO)
+        if isinstance(self, NearestNeighborModel):
+            NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
@@ -1716,9 +1770,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         -------
         .. cfg:configoptions :: CouplingMPOModel
 
-            lattice : str | Lattice
+            lattice : str | :class:`Lattice`
                 The name of a lattice pre-defined in TeNPy to be initialized.
-                Alternatively, a (possibly self-defined) Lattice instance.
+                Alternatively, directly a subclass of :class:`Lattice` instead of the name.
+                Alternatively, a (possibly self-defined) :class:`Lattice` instance.
                 In the latter case, no further parameters are read out.
             bc_MPS : str
                 Boundary conditions for the MPS.
@@ -1750,9 +1805,16 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 couplings between the first and last sites of the MPS!)
 
         """
-        lat = model_params.get('lattice', "Chain")
+        lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
+            lat = None
+        elif inspect.isclass(lat) and issubclass(lat, Lattice):
+            LatticeClass = lat
+            lat = None
+        elif not isinstance(lat, Lattice):
+            raise ValueError("invalid type for model_params['lattice'], got " + repr(lat))
+        if lat is None:  # only provided LatticeClass
             bc_MPS = model_params.get('bc_MPS', 'finite')
             order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
@@ -1774,9 +1836,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
-            # now, `lat` is an instance of the LatticeClass called `lattice_name`.
         # else: a lattice was already provided
+        # now, `lat` is an instance of the LatticeClass
         assert isinstance(lat, Lattice)
+        if self.force_default_lattice:
+            DefaultLattice = self.default_lattice
+            if isinstance(DefaultLattice, str):
+                DefaultLattice = get_lattice(DefaultLattice)
+            assert isinstance(lat, DefaultLattice)
         return lat
 
     def init_sites(self, model_params):
@@ -1810,3 +1877,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
+
+    # decorate add_* methods to warn they get called after a finished initialization.
+    add_local_term = _warn_post_init_add(CouplingModel.add_local_term)
+    add_onsite = _warn_post_init_add(CouplingModel.add_onsite)
+    add_onsite_term = _warn_post_init_add(CouplingModel.add_onsite_term)
+    add_coupling = _warn_post_init_add(CouplingModel.add_coupling)
+    add_coupling_term = _warn_post_init_add(CouplingModel.add_coupling_term)
+    add_multi_coupling = _warn_post_init_add(CouplingModel.add_multi_coupling)
+    add_multi_coupling_term = _warn_post_init_add(CouplingModel.add_multi_coupling_term)
+    add_exponentially_decaying_coupling = _warn_post_init_add(
+        CouplingModel.add_exponentially_decaying_coupling)

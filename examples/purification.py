@@ -23,7 +23,6 @@ def imag_tebd(L=30, beta_max=3., dt=0.05, order=2, bc="finite"):
     while beta < beta_max:
         beta += 2. * dt  # factor of 2:  |psi> ~= exp^{- dt H}, but rho = |psi><psi|
         betas.append(beta)
-        print("beta = {0:.2f}".format(beta))
         eng.run_imaginary(dt)  # cool down by dt
         Szs.append(psi.expectation_value("Sz"))  # and further measurements...
     return {'beta': betas, 'Sz': Szs}
@@ -45,7 +44,6 @@ def imag_apply_mpo(L=30, beta_max=3., dt=0.05, order=2, bc="finite", approx="II"
     while beta < beta_max:
         beta += 2. * dt  # factor of 2:  |psi> ~= exp^{- dt H}, but rho = |psi><psi|
         betas.append(beta)
-        print("beta = {0:.2f}".format(beta))
         for U in Us:
             eng.init_env(U)  # reset environment, initialize new copy of psi
             eng.run()  # apply U to psi
@@ -54,6 +52,8 @@ def imag_apply_mpo(L=30, beta_max=3., dt=0.05, order=2, bc="finite", approx="II"
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     data_tebd = imag_tebd()
     data_mpo = imag_apply_mpo()
 

@@ -50,6 +50,8 @@ class DualSquare(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
     """
+    dim = 2  #: the dimension of the lattice
+
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
@@ -133,24 +135,13 @@ class ToricCode(CouplingMPOModel):
             The MPS is still "open", so this will introduce long-range couplings between the
             first and last sites of the MPS, and require **squared** MPS bond-dimensions.
     """
+    default_lattice = DualSquare
+    force_default_lattice = True
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         site = SpinHalfSite(conserve)
         return site
-
-    def init_lattice(self, model_params):
-        site = self.init_sites(model_params)
-        Lx = model_params.get('Lx', 2)
-        Ly = model_params.get('Ly', 2)
-        order = model_params.get('order', 'default')
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_x = model_params.get('bc_x', bc_x)
-        bc_y = model_params.get('bc_y', 'periodic')
-        assert bc_y in ['open', 'periodic']
-        bc = [bc_x, bc_y]
-        lat = DualSquare(Lx, Ly, site, order=order, bc=bc, bc_MPS=bc_MPS)
-        return lat
 
     def init_terms(self, model_params):
         Jv = np.asarray(model_params.get('Jv', 1.))

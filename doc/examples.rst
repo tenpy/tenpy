@@ -15,8 +15,8 @@ the only requirements to run them are Python 3, Numpy, and Scipy.
 
     toycodes/*
 
-Basic scripts
--------------
+Python scripts
+--------------
 
 These example scripts illustrate the very basic interface for calling TeNPy.
 They are included in the [TeNPySource]_ repository in the folder ``examples/``, 
@@ -29,8 +29,8 @@ You need to install TeNPy to call them (see :doc:`/INSTALL`), but you can copy t
 
     examples/*
 
-Notebooks
----------
+Jupyter Notebooks
+-----------------
 
 This is a collection of [jupyter]_ notebooks from the [TeNPyNotebooks]_ repository.
 You need to install TeNPy to execute them (see :doc:`/INSTALL`), but you can copy them anywhere before execution.

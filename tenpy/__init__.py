@@ -9,14 +9,17 @@ and yet powerful enough for day-to-day research.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
+import logging
+logger = logging.getLogger(__name__)  # main logger for tenpy
+
 # load and provide subpackages on first input
-from . import version
 from . import tools
 from . import linalg
 from . import algorithms
 from . import networks
 from . import models
 from . import simulations
+from . import version  # needs to be after linalg!
 
 #: hard-coded version string
 __version__ = version.version
@@ -38,7 +41,9 @@ def show_config():
     print(version.version_summary)
 
 
-def run_simulation(simulation_class_name='GroundStateSearch', **simulation_params):
+def run_simulation(simulation_class_name='GroundStateSearch',
+                   simulation_class_kwargs=None,
+                   **simulation_params):
     """Run the simulation with a simulation class.
 
     Parameters
@@ -46,20 +51,32 @@ def run_simulation(simulation_class_name='GroundStateSearch', **simulation_param
     simulation_class_name : str
         The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
         to be used for running the simulaiton.
+    sim_class_kwargs : dict | None
+        A dictionary of keyword-arguments to be used for the initializing the simulation.
     **simulation_params :
         Further keyword arguments as documented in the corresponding simulation class,
         see :cfg:config`Simulation`.
 
     Returns
     -------
-    results : dict
-        The results from running the simulation.
+    results :
+        The results from running the simulation, i.e.,
+        what :meth:`tenpy.simulations.Simulation.run()` returned.
     """
     SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
     if SimClass is None:
         raise ValueError("can't find simulation class called " + repr(simulation_class_name))
-    sim = SimClass(simulation_params)
-    results = sim.run()
+    if sim_class_args is None:
+        sim_class_args = {}
+    try:
+        sim = SimClass(simulation_params, **sim_class_args)
+        results = sim.run()
+    except:
+        # include the traceback into the log
+        # this might cause a duplicated traceback if logging to std out is on,
+        # but that's probably better than having no error messages in the log.
+        logger.exception("simulation abort with the following exception")
+        raise  # raise the same error again
     return results
 
 
@@ -74,6 +91,12 @@ def console_main():
 
         tenpy-run --help
 
+    Equivalently, you can also invoke the tenpy module from your python interpreter like this::
+
+        python -m tenpy --help
+
+    ..
+        Sphinx includes the output of ``tenpy-run --help`` here.
     """
     import numpy as np
     import scipy
@@ -102,6 +125,8 @@ def console_main():
             set_recursive(options, key, val, insert_dicts=True)
     if len(options) == 0:
         raise ValueError("No options supplied! Check your command line arguments!")
+    if 'output_filename' not in options:
+        raise ValueError("No output filename specified - refuse to run without saving anything!")
     run_simulation(args.sim_class, **options)
 
 

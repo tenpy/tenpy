@@ -228,7 +228,7 @@ inheritance_graph_attrs = {
 # this makes  e.g. :class:`numpy.ndarray` work
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'matplotlib': ('https://matplotlib.org', None),
     'h5py': ('https://docs.h5py.org/en/stable/', None),

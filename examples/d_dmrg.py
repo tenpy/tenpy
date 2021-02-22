@@ -13,10 +13,10 @@ from tenpy.models.spins import SpinModel
 from tenpy.algorithms import dmrg
 
 
-def example_DMRG_tf_ising_finite(L, g, verbose=True):
+def example_DMRG_tf_ising_finite(L, g):
     print("finite DMRG, transverse field Ising model")
     print("L={L:d}, g={g:.2f}".format(L=L, g=g))
-    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=verbose)
+    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -27,7 +27,6 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
             'chi_max': 30,
             'svd_min': 1.e-10
         },
-        'verbose': verbose,
         'combine': True
     }
     info = dmrg.run(psi, M, dmrg_params)  # the main work...
@@ -46,10 +45,10 @@ def example_DMRG_tf_ising_finite(L, g, verbose=True):
     return E, psi, M
 
 
-def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
+def example_1site_DMRG_tf_ising_finite(L, g):
     print("single-site finite DMRG, transverse field Ising model")
     print("L={L:d}, g={g:.2f}".format(L=L, g=g))
-    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=verbose)
+    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -60,7 +59,6 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
             'chi_max': 30,
             'svd_min': 1.e-10
         },
-        'verbose': verbose,
         'combine': False,
         'active_sites': 1  # specifies single-site
     }
@@ -80,10 +78,10 @@ def example_1site_DMRG_tf_ising_finite(L, g, verbose=True):
     return E, psi, M
 
 
-def example_DMRG_tf_ising_infinite(g, verbose=True):
+def example_DMRG_tf_ising_infinite(g):
     print("infinite DMRG, transverse field Ising model")
     print("g={g:.2f}".format(g=g))
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=verbose)
+    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -94,7 +92,6 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
             'svd_min': 1.e-10
         },
         'max_E_err': 1.e-10,
-        'verbose': verbose,
     }
     # Sometimes, we want to call a 'DMRG engine' explicitly
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
@@ -114,10 +111,10 @@ def example_DMRG_tf_ising_infinite(g, verbose=True):
     return E, psi, M
 
 
-def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
+def example_1site_DMRG_tf_ising_infinite(g):
     print("single-site infinite DMRG, transverse field Ising model")
     print("g={g:.2f}".format(g=g))
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=verbose)
+    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -128,7 +125,6 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
             'svd_min': 1.e-10
         },
         'max_E_err': 1.e-10,
-        'verbose': verbose,
         'combine': True
     }
     eng = dmrg.SingleSiteDMRGEngine(psi, M, dmrg_params)
@@ -147,7 +143,7 @@ def example_1site_DMRG_tf_ising_infinite(g, verbose=True):
     print("relative error: ", abs((E - E_exact) / E_exact))
 
 
-def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
+def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best'):
     print("infinite DMRG, Heisenberg XXZ chain")
     print("Jz={Jz:.2f}, conserve={conserve!r}".format(Jz=Jz, conserve=conserve))
     model_params = dict(
@@ -157,8 +153,7 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
         Jy=1.,
         Jz=Jz,  # couplings
         bc_MPS='infinite',
-        conserve=conserve,
-        verbose=verbose)
+        conserve=conserve)
     M = SpinModel(model_params)
     product_state = ["up", "down"]  # initial Neel state
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -169,7 +164,6 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
             'svd_min': 1.e-10,
         },
         'max_E_err': 1.e-10,
-        'verbose': verbose,
     }
     info = dmrg.run(psi, M, dmrg_params)
     E = info['E']
@@ -189,12 +183,14 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best', verbose=True):
 
 
 if __name__ == "__main__":
-    example_DMRG_tf_ising_finite(L=10, g=1., verbose=True)
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    example_DMRG_tf_ising_finite(L=10, g=1.)
     print("-" * 100)
-    example_1site_DMRG_tf_ising_finite(L=10, g=1., verbose=True)
+    example_1site_DMRG_tf_ising_finite(L=10, g=1.)
     print("-" * 100)
-    example_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    example_DMRG_tf_ising_infinite(g=1.5)
     print("-" * 100)
-    example_1site_DMRG_tf_ising_infinite(g=1.5, verbose=True)
+    example_1site_DMRG_tf_ising_infinite(g=1.5)
     print("-" * 100)
     example_DMRG_heisenberg_xxz_infinite(Jz=1.5)

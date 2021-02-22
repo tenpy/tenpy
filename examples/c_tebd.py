@@ -12,10 +12,10 @@ from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
 
 
-def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
+def example_TEBD_gs_tf_ising_finite(L, g):
     print("finite TEBD, imaginary time evolution, transverse field Ising")
     print("L={L:d}, g={g:.2f}".format(L=L, g=g))
-    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None, verbose=verbose)
+    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -28,7 +28,6 @@ def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
             'chi_max': 30,
             'svd_min': 1.e-10
         },
-        'verbose': verbose,
     }
     eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
@@ -50,10 +49,10 @@ def example_TEBD_gs_tf_ising_finite(L, g, verbose=True):
     return E, psi, M
 
 
-def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
+def example_TEBD_gs_tf_ising_infinite(g):
     print("infinite TEBD, imaginary time evolution, transverse field Ising")
     print("g={g:.2f}".format(g=g))
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None, verbose=verbose)
+    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -66,7 +65,6 @@ def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
             'chi_max': 30,
             'svd_min': 1.e-10
         },
-        'verbose': verbose,
     }
     eng = tebd.TEBDEngine(psi, M, tebd_params)
     eng.run_GS()  # the main work...
@@ -87,14 +85,14 @@ def example_TEBD_gs_tf_ising_infinite(g, verbose=True):
     return E, psi, M
 
 
-def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
+def example_TEBD_tf_ising_lightcone(L, g, tmax, dt):
     print("finite TEBD, real time evolution")
     print("L={L:d}, g={g:.2f}, tmax={tmax:.2f}, dt={dt:.3f}".format(L=L, g=g, tmax=tmax, dt=dt))
     # find ground state with TEBD or DMRG
     #  E, psi, M = example_TEBD_gs_tf_ising_finite(L, g)
     from d_dmrg import example_DMRG_tf_ising_finite
     print("(run DMRG to get the groundstate)")
-    E, psi, M = example_DMRG_tf_ising_finite(L, g, verbose=False)
+    E, psi, M = example_DMRG_tf_ising_finite(L, g)
     print("(DMRG finished)")
     i0 = L // 2
     # apply sigmaz on site i0
@@ -111,7 +109,6 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
             'svd_min': 1.e-10,
             'trunc_cut': None
         },
-        'verbose': verbose,
     }
     eng = tebd.TEBDEngine(psi, M, tebd_params)
     S = [psi.entanglement_entropy()]
@@ -134,22 +131,23 @@ def example_TEBD_tf_ising_lightcone(L, g, tmax, dt, verbose=True):
     print("saved " + filename)
 
 
-def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp, verbose=True):
+def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
     from tenpy.models.spins_nnn import SpinChainNNN2
     from tenpy.models.model import NearestNeighborModel
     print("finite TEBD, imaginary time evolution, transverse field Ising next-nearest neighbor")
     print("L={L:d}, g={g:.2f}, Jp={Jp:.2f}".format(L=L, g=g, Jp=Jp))
-    model_params = dict(L=L,
-                        Jx=1.,
-                        Jy=0.,
-                        Jz=0.,
-                        Jxp=Jp,
-                        Jyp=0.,
-                        Jzp=0.,
-                        hz=g,
-                        bc_MPS='finite',
-                        conserve=None,
-                        verbose=verbose)
+    model_params = dict(
+        L=L,
+        Jx=1.,
+        Jy=0.,
+        Jz=0.,
+        Jxp=Jp,
+        Jyp=0.,
+        Jzp=0.,
+        hz=g,
+        bc_MPS='finite',
+        conserve=None,
+    )
     # we start with the non-grouped sites, but next-nearest neighbor interactions, building the MPO
     M = SpinChainNNN2(model_params)
     product_state = ["up"] * M.lat.N_sites
@@ -172,7 +170,6 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp, verbose=True):
             'chi_max': 30,
             'svd_min': 1.e-10
         },
-        'verbose': verbose,
     }
     eng = tebd.TEBDEngine(psi, M_nn, tebd_params)  # use M_nn and grouped psi
     eng.run_GS()  # the main work...
@@ -191,10 +188,12 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp, verbose=True):
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     example_TEBD_gs_tf_ising_finite(L=10, g=1.)
-    print("-" * 100)
+    print("=" * 100, '', '', "=" * 100, sep='\n')
     example_TEBD_gs_tf_ising_infinite(g=1.5)
-    print("-" * 100)
+    print("=" * 100, '', '', "=" * 100, sep='\n')
     example_TEBD_tf_ising_lightcone(L=20, g=1.5, tmax=3., dt=0.01)
-    print("-" * 100)
+    print("=" * 100, '', '', "=" * 100, sep='\n')
     example_TEBD_gs_tf_ising_next_nearest_neighbor(L=10, g=1.0, Jp=0.1)

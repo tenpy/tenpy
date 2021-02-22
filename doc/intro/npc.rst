@@ -13,8 +13,176 @@ We refer you to the corresponding chapter in our [TeNPyNotes]_ for a more genera
 the "charge rule" introduced below).
 :cite:`singh2010` explains why it works form a mathematical point of view, :cite:`singh2011` has the focus on a :math:`U(1)` symmetry and might be easier to read.
 
+
+What you really need to know about `np_conserved`
+-------------------------------------------------
+
+The good news is: It is not necessary to understand all the details explained in the following sections
+if you just want to use TeNPy for "standard" simulations like TEBD and DMRG.
+In praxis, **you will likely not have to define the charges by yourself**. 
+For most simulations using TeNPy, the charges are initially defined in the :class:`~tenpy.networks.site.Site`; 
+and there are many pre-defined sites like the :class::class:`~tenpy.networks.site.SpinHalfSite`, which you can just use.
+The sites in turn are initialized by the :class:`Model` class you are using (see also :doc:`/intro/model`).
+From there, all the necessary charge information is automatically propagated along with the tensors.
+
+
+However, you should definitely know a few basic facts about the usage of charge conservation in TeNPy:
+
+- Instead of using numpy arrays, tensors are represented by the :class:`~tenpy.linalg.np_conserved.Array` class.
+  This class is defined in :mod:`~tenpy.linalg.np_conserved` (the name standing for "numpy with charge conservation").
+  Internally, it stores only non-zero blocks of the tensor, which are "compatible" with the charges of the indices.
+  It has to have a well defined overall charge :class:`~tenpy.linalg.np_conserved.Array.qtotal`.
+  This expludes certain operators (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
+- There is a class :class:`~tenpy.linalg.charges.ChargeInfo` holding the general information what kind of charges we have,
+  and a :class:`~tenpy.linalg.charges.LegCharge` for the charge data on a given leg. The leg holds a flag `qconj` which
+  is +1 or -1, depending on whether the leg goes into the tensor (representing a vector space) 
+  or out of the tensor (representing the corresponding dual vector space).
+- Besides the array class methods, there are a bunch of functions like :func:`~tenpy.linalg.np_conserved.tensordot`,
+  :func:`~tenpy.linalg.np_conserved.svd` or :func:`~tenpy.linalg.np_conserved.eigh` to manipulate tensors.
+  These function have a very similar call structure as the corresponding numpy functions, but they act on our tensor
+  Array class, and preserve the block structure (and exploit it for speed, wherever possible).
+- The only allowed "reshaping" operations for those tensors are to combine legs and to split previously combined legs.
+  See the correspoding :ref:`section below <leg_pipes>`.
+- It is convenient to use string labels instead of numbers to refer to the various legs of a tensor.
+  The rules how these labels change during the various operations are also described a :ref:`section below <leg_labeling>`.
+
+
+.. _leg_pipes:
+
+Introduction to combine_legs, split_legs and LegPipes
+-----------------------------------------------------
+
+Often, it is necessary to "combine" multiple legs into one: for example to perfom a SVD, a tensor needs to be viewed as a matrix.
+For a flat array, this can be done with ``np.reshape``, e.g., if ``A`` has shape ``(10, 3, 7)`` then ``B = np.reshape(A, (30, 7))`` will
+result in a (view of the) array with one less dimension, but a "larger" first leg. By default (``order='C'``), this
+results in ::
+    
+    B[i*3 + j , k] == A[i, j, k] for i in range(10) for j in range(3) for k in range(7)
+
+While for a np.array, also a reshaping ``(10, 3, 7) -> (2, 21, 5)`` would be allowed, it does not make sense
+physically. The only sensible "reshape" operation on an :class:`~tenpy.linalg.np_conserved.Array` are
+
+1) to **combine** multiple legs into one **leg pipe** (:class:`~tenpy.linalg.charges.LegPipe`) with  :meth:`~tenpy.linalg.np_conserved.Array.combine_legs`, or
+2) to **split** a pipe of previously combined legs with :meth:`~tenpy.linalg.np_conserved.Array.split_legs`.
+
+Each leg has a Hilbert space, and a representation of the symmetry on that Hilbert space.
+Combining legs corresponds to the tensor product operation, and for abelian groups, 
+the corresponding "fusion" of the representation is the simple addition of charge.
+
+Fusion is not a lossless process, so if we ever want to split the combined leg,
+we need some additional data to tell us how to reverse the tensor product.
+This data is saved in the class :class:`~tenpy.linalg.charges.LegPipe`, derived from the :class:`~tenpy.linalg.charges.LegCharge` and used as new `leg`.
+Details of the information contained in a LegPipe are given in the class doc string.
+
+The rough usage idea is as follows:
+
+1) You can call :meth:`~tenpy.linalg.np_conserved.Array.combine_legs` without supplying any LegPipes, `combine_legs` will then make them for you.
+
+   Nevertheless, if you plan to perform the combination over and over again on sets of legs you know to be identical
+   [with same charges etc, up to an overall -1 in `qconj` on all incoming and outgoing Legs]
+   you might make a LegPipe anyway to save on the overhead of computing it each time.
+2) In any way, the resulting Array will have a :class:`~tenpy.linalg.charges.LegPipe` as a LegCharge on the combined leg.
+   Thus, it -- and all tensors inheriting the leg (e.g. the results of `svd`, `tensordot` etc.) -- will have the information
+   how to split the `LegPipe` back to the original legs.
+3) Once you performed the necessary operations, you can call :meth:`~tenpy.linalg.Array.split_legs`.
+   This uses the information saved in the `LegPipe` to split the legs, recovering the original legs.
+
+For a LegPipe, :meth:`~tenpy.linalg.charges.LegPipe.conj` changes ``qconj`` for the outgoing pipe *and* the incoming legs.
+If you need a `LegPipe` with the same incoming ``qconj``, use :meth:`~tenpy.linalg.charges.LegPipe.outer_conj`.
+
+
+.. _leg_labeling:
+
+Leg labeling
+------------
+
+It's convenient to name the legs of a tensor: for instance, we can name legs 0, 1, 2 to be ``'a', 'b', 'c'``: :math:`T_{i_a,i_b,i_c}`.
+That way we don't have to remember the ordering! Under tensordot, we can then call ::
+
+    U = npc.tensordot(S, T, axes = [ [...],  ['b'] ] )
+
+without having to remember where exactly ``'b'`` is.
+Obviously ``U`` should then inherit the name of its legs from the uncontracted legs of `S` and `T`.
+So here is how it works:
+
+- Labels can *only* be strings. The labels should not include the characters ``.`` or ``?``.
+  Internally, the labels are stored as dict ``a.labels = {label: leg_position, ...}``. Not all legs need a label.
+- To set the labels, call ::
+
+        A.set_labels(['a', 'b', None, 'c', ... ])
+
+  which will set up the labeling ``{'a': 0, 'b': 1, 'c': 3 ...}``.
+
+- (Where implemented) the specification of axes can use either the labels **or** the index positions.
+  For instance, the call ``tensordot(A, B, [['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
+  (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
+  and 2 as 'the 2nd leg'. That's why we require labels to be strings!
+- Labels will be intelligently inherited through the various operations of `np_conserved`.
+    - Under `transpose`, labels are permuted.
+    - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
+    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
+      Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
+      Then if ``b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'(a.b)': 0, '(c)': 1}``.
+      If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
+    - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
+    - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a.(b*.c))' -> '(a*.(b.c*))'``
+    - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
+    - Under `pinv`, the labels are transposed.
+
+
+.. _Array_element_access:
+
+Indexing of an Array
+--------------------
+
+Although it is usually not necessary to access single entries of an :class:`~tenpy.linalg.np_conserved.Array`, you can of course do that.
+In the simplest case, this is something like ``A[0, 2, 1]`` for a rank-3 Array ``A``.
+However, accessing single entries is quite slow and usually not recommended. For small Arrays, it may be convenient to convert them
+back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+
+On top of that very basic indexing, `Array` supports slicing and some kind of advanced indexing, which is however
+different from the one of numpy arrarys (described `here <http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html>`_).
+Unlike numpy arrays, our Array class does not broadcast existing index arrays -- this would be terribly slow.
+Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
+
+Instead, we allow just indexing of the legs independent of each other, of the form ``A[i0, i1, ...]``.
+If all indices ``i0, i1, ...`` are integers, the single corresponding entry (of type `dtype`) is returned.
+
+However, the individual 'indices' ``i0`` for the individual legs can also be one of what is described in the following list.
+In that case, a new :class:`~tenpy.linalg.np_conserved.Array` with less data (specified by the indices) is returned.
+
+The 'indices' can be:
+
+- an `int`: fix the index of that axis, return array with one less dimension. See also :meth:`~tenpy.linalg.np_conserved.Array.take_slice`.
+- a ``slice(None)`` or ``:``: keep the complete axis
+- an ``Ellipsis`` or ``...``: shorthand for ``slice(None)`` for missing axes to fix the len
+- an 1D bool `ndarray` ``mask``: apply a mask to that axis, see :meth:`~tenpy.linalg.np_conserved.Array.iproject`.
+- a ``slice(start, stop, step)`` or ``start:stop:step``: keep only the indices specified by the slice. This is also implemented with `iproject`.
+- an 1D int `ndarray` ``mask``: keep only the indices specified by the array. This is also implemented with `iproject`.
+
+For slices and 1D arrays, additional permuations may be perfomed with the help of :meth:`~tenpy.linalg.np_conserved.Array.permute`.
+
+If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, ``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
+
+Note that indexing always **copies** the data -- even if `int` contains just slices, in which case numpy would return a view.
+However, assigning with ``A[:, [3, 5], 3] = B`` should work as you would expect.
+
+.. warning ::
+
+    Due to numpy's advanced indexing, for 1D integer arrays ``a0`` and ``a1`` the following holds ::
+
+        A[a0, a1].to_ndarray() == A.to_ndarray()[np.ix_(a0, a1)] != A.to_ndarray()[a0, a1]
+
+    For a combination of slices and arrays, things get more complicated with numpys advanced indexing.
+    In that case, a simple ``np.ix_(...)`` doesn't help any more to emulate our version of indexing.
+
+
+
+Details of the `np_conserved` implementation
+--------------------------------------------
+
 Notations
----------
++++++++++
 Lets fix the notation of certain terms for this introduction and the doc-strings in :mod:`~tenpy.linalg.np_conserved`.
 This might be helpful if you know the basics from a different context.
 If you're new to the subject, keep reading even if you don't understand each detail,
@@ -62,7 +230,7 @@ is used to formally combine multiple legs into one leg. Again, more details foll
 
 
 Physical Example
-----------------
+++++++++++++++++
 For concreteness, you can think of the Hamiltonian :math:`H = -t \sum_{<i,j>} (c^\dagger_i c_j + H.c.) + U n_i n_j` 
 with :math:`n_i = c^\dagger_i c_i`.
 This Hamiltonian has the global :math:`U(1)` gauge symmetry :math:`c_i \rightarrow c_i e^{i\phi}`.
@@ -90,7 +258,7 @@ When giving examples, we will restrict to one charge, but everything generalizes
 
 
 The different formats for LegCharge
------------------------------------
++++++++++++++++++++++++++++++++++++
 As mentioned above, we assign charges to each index of each leg of a tensor.
 This can be done in three formats: **qflat**, as **qind** and as **qdict**.
 Let me explain them with examples, for simplicity considereing only a single charge (the most inner array has one entry
@@ -173,7 +341,7 @@ See also :ref:`below <blocking>` for further comments on that.
 .. _nonzero_entries:
 
 Which entries of the npc Array can be non-zero?
------------------------------------------------
++++++++++++++++++++++++++++++++++++++++++++++++
 The reason for the speedup with np_conserved lies in the fact that it saves only the blocks 'compatible' with the charges. 
 But how is this 'compatible' defined? 
 
@@ -207,7 +375,7 @@ an entry can only be non-zero if it is `compatible` with each of the defined cha
 
 
 The pesky qconj - contraction as an example
--------------------------------------------
++++++++++++++++++++++++++++++++++++++++++++
 Why did we introduce the ``qconj`` flag? Remember it's just a sign telling whether the charge points inward or outward.
 So whats the reasoning?
 
@@ -253,7 +421,7 @@ This leads to the following convention:
 
 
 Assigning charges to non-physical legs
---------------------------------------
+++++++++++++++++++++++++++++++++++++++
 From the above physical examples, it should be clear how you assign charges to physical legs.
 But what about other legs, e.g, the virtual bond of an MPS (or an MPO)? 
 
@@ -322,7 +490,10 @@ charge ``2`` for ``x=0``. The result is -2.
     :func:`~tenpy.linalg.np_conserved.detect_qtotal` (if you know all `LegCharges`, but not `qtotal`).
 
 Array creation
---------------
+++++++++++++++
+
+Direct creation
+^^^^^^^^^^^^^^^
 
 Making an new :class:`~tenpy.linalg.np_conserved.Array` requires both the tensor entries (data) and charge data.
 
@@ -340,22 +511,24 @@ and a :class:`~tenpy.linalg.charges.LegCharge` instance for each of the legs.
     Consequently, you *must* make copies of the charge data, if you manipulate it directly.
     (However, methods like :meth:`~tenpy.linalg.charges.LegCharge.sort` do that for you.)
 
-Of course, a new :class:`~tenpy.linalg.np_conserved.Array` can also created using the charge data from exisiting Arrays,
-for examples with :meth:`~tenpy.linalg.np_conserved.Array.zeros_like` or creating a (deep or shallow) :meth:`~tenpy.linalg.np_conserved.Array.copy`.
-Further, there are the higher level functions like :func:`~tenpy.linalg.np_conserved.tensordot` or :func:`~tenpy.linalg.np_conserved.svd`,
-which also return new Arrays.
 
-Further, new Arrays are created by the various functions like `tensordot` or `svd` in :mod:`~tenpy.linalg.np_conserved`.
+Indirect creation by manipulating existing arrays
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Of course, a new :class:`~tenpy.linalg.np_conserved.Array` can also created using the charge data from exisiting Arrays,
+for example with :meth:`~tenpy.linalg.np_conserved.Array.zeros_like` or creating a (deep or shallow) :meth:`~tenpy.linalg.np_conserved.Array.copy`.
+Further, there are many higher level functions like :func:`~tenpy.linalg.np_conserved.tensordot` or :func:`~tenpy.linalg.np_conserved.svd`,
+which also return new Arrays.
 
 
 .. _blocking:
 
 Complete blocking of Charges
-----------------------------
+++++++++++++++++++++++++++++
 
 While the code was designed in such a way that each charge sector has a different charge, the code
-should still run correctly if multiple charge sectors (for different qindex) correspond to the same charge. 
-In this sense :class:`~tenpy.linalg.np_conserved.Array` can act like a sparse array class to selectively store subblocks. 
+should still run correctly if multiple charge sectors (for different qindex) correspond to the same charge.
+In this sense :class:`~tenpy.linalg.np_conserved.Array` can act like a sparse array class to selectively store subblocks.
 Algorithms which need a full blocking should state that explicitly in their doc-strings.
 (Some functions (like `svd` and `eigh`) require complete blocking internally, but if necessary they just work on
 a temporary copy returned by :meth:`~tenpy.linalg.np_conserved.as_completely_blocked`).
@@ -381,7 +554,7 @@ permutations directly to (a copy of) `self`. Yet, you should keep in mind, that 
 .. _array_storage_schema:
 
 Internal Storage schema of npc Arrays
--------------------------------------
++++++++++++++++++++++++++++++++++++++
 
 The actual data of the tensor is stored in ``_data``. Rather than keeping a single np.array (which would have many zeros in it),
 we store only the non-zero sub blocks. So ``_data`` is a python list of `np.array`'s.
@@ -417,7 +590,7 @@ The third subblock has an ndarray ``t3``, and qindices ``[4 2 2]`` for the three
 - To find the position of ``t3`` in the actual tensor you can use :meth:`~tenpy.linalg.charges.LegCharge.get_slice`::
 
             T.legs[0].get_slice(4), T.legs[1].get_slice(2), T.legs[2].get_slice(2)
-  
+
   The function ``leg.get_charges(qi)`` simply returns ``slice(leg.slices[qi], leg.slices[qi+1])``
 
 - To find the charges of t3, we an use :meth:`~tenpy.linalg.charges.LegCharge.get_charge`::
@@ -447,133 +620,6 @@ If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexs
 If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it gaurantees it is still sorted).
 The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
 
-
-.. _Array_element_access:
-
-Indexing of an Array
---------------------
-
-Although it is usually not necessary to access single entries of an :class:`~tenpy.linalg.np_conserved.Array`, you can of course do that.
-In the simplest case, this is something like ``A[0, 2, 1]`` for a rank-3 Array ``A``.
-However, accessing single entries is quite slow and usually not recommended. For small Arrays, it may be convenient to convert them
-back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
-
-On top of that very basic indexing, `Array` supports slicing and some kind of advanced indexing, which is however
-different from the one of numpy arrarys (described `here <http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html>`_).
-Unlike numpy arrays, our Array class does not broadcast existing index arrays -- this would be terribly slow.
-Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
-
-Instead, we allow just indexing of the legs independent of each other, of the form ``A[i0, i1, ...]``.
-If all indices ``i0, i1, ...`` are integers, the single corresponding entry (of type `dtype`) is returned.
-
-However, the individual 'indices' ``i0`` for the individual legs can also be one of what is described in the following list.
-In that case, a new :class:`~tenpy.linalg.np_conserved.Array` with less data (specified by the indices) is returned.
-
-The 'indices' can be:
-
-- an `int`: fix the index of that axis, return array with one less dimension. See also :meth:`~tenpy.linalg.np_conserved.Array.take_slice`.
-- a ``slice(None)`` or ``:``: keep the complete axis
-- an ``Ellipsis`` or ``...``: shorthand for ``slice(None)`` for missing axes to fix the len
-- an 1D bool `ndarray` ``mask``: apply a mask to that axis, see :meth:`~tenpy.linalg.np_conserved.Array.iproject`.
-- a ``slice(start, stop, step)`` or ``start:stop:step``: keep only the indices specified by the slice. This is also implemented with `iproject`.
-- an 1D int `ndarray` ``mask``: keep only the indices specified by the array. This is also implemented with `iproject`.
-
-For slices and 1D arrays, additional permuations may be perfomed with the help of :meth:`~tenpy.linalg.np_conserved.Array.permute`.
-
-If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, ``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
-
-Note that indexing always **copies** the data -- even if `int` contains just slices, in which case numpy would return a view.
-However, assigning with ``A[:, [3, 5], 3] = B`` should work as you would expect.
-
-.. warning ::
-
-    Due to numpy's advanced indexing, for 1D integer arrays ``a0`` and ``a1`` the following holds ::
-
-        A[a0, a1].to_ndarray() == A.to_ndarray()[np.ix_(a0, a1)] != A.to_ndarray()[a0, a1]
-
-    For a combination of slices and arrays, things get more complicated with numpys advanced indexing.
-    In that case, a simple ``np.ix_(...)`` doesn't help any more to emulate our version of indexing.
-
-
-.. _leg_pipes:
-
-Introduction to combine_legs, split_legs and LegPipes
------------------------------------------------------
-
-Often, it is necessary to "combine" multiple legs into one: for example to perfom a SVD, a tensor needs to be viewed as a matrix.
-For a flat array, this can be done with ``np.reshape``, e.g., if ``A`` has shape ``(10, 3, 7)`` then ``B = np.reshape(A, (30, 7))`` will
-result in a (view of the) array with one less dimension, but a "larger" first leg. By default (``order='C'``), this
-results in ::
-    
-    B[i*3 + j , k] == A[i, j, k] for i in range(10) for j in range(3) for k in range(7)
-
-While for a np.array, also a reshaping ``(10, 3, 7) -> (2, 21, 5)`` would be allowed, it does not make sense
-physically. The only sensible "reshape" operation on an :class:`~tenpy.linalg.np_conserved.Array` are
-
-1) to **combine** multiple legs into one **leg pipe** (:class:`~tenpy.linalg.charges.LegPipe`) with  :meth:`~tenpy.linalg.np_conserved.Array.combine_legs`, or
-2) to **split** a pipe of previously combined legs with :meth:`~tenpy.linalg.np_conserved.Array.split_legs`.
-
-Each leg has a Hilbert space, and a representation of the symmetry on that Hilbert space.
-Combining legs corresponds to the tensor product operation, and for abelian groups, 
-the corresponding "fusion" of the representation is the simple addition of charge.
-
-Fusion is not a lossless process, so if we ever want to split the combined leg,
-we need some additional data to tell us how to reverse the tensor product.
-This data is saved in the class :class:`~tenpy.linalg.charges.LegPipe`, derived from the :class:`~tenpy.linalg.charges.LegCharge` and used as new `leg`.
-Details of the information contained in a LegPipe are given in the class doc string.
-
-The rough usage idea is as follows:
-
-1) You can call :meth:`~tenpy.linalg.np_conserved.Array.combine_legs` without supplying any LegPipes, `combine_legs` will then make them for you.
-
-   Nevertheless, if you plan to perform the combination over and over again on sets of legs you know to be identical
-   [with same charges etc, up to an overall -1 in `qconj` on all incoming and outgoing Legs]
-   you might make a LegPipe anyway to save on the overhead of computing it each time.
-2) In any way, the resulting Array will have a :class:`~tenpy.linalg.charges.LegPipe` as a LegCharge on the combined leg.
-   Thus, it -- and all tensors inheriting the leg (e.g. the results of `svd`, `tensordot` etc.) -- will have the information
-   how to split the `LegPipe` back to the original legs.
-3) Once you performed the necessary operations, you can call :meth:`~tenpy.linalg.Array.split_legs`.
-   This uses the information saved in the `LegPipe` to split the legs, recovering the original legs.
-
-For a LegPipe, :meth:`~tenpy.linalg.charges.LegPipe.conj` changes ``qconj`` for the outgoing pipe *and* the incoming legs.
-If you need a `LegPipe` with the same incoming ``qconj``, use :meth:`~tenpy.linalg.charges.LegPipe.outer_conj`.
-
-
-Leg labeling
-------------
-
-It's convenient to name the legs of a tensor: for instance, we can name legs 0, 1, 2 to be ``'a', 'b', 'c'``: :math:`T_{i_a,i_b,i_c}`.
-That way we don't have to remember the ordering! Under tensordot, we can then call ::
-
-    U = npc.tensordot(S, T, axes = [ [...],  ['b'] ] )
-
-without having to remember where exactly ``'b'`` is.
-Obviously ``U`` should then inherit the name of its legs from the uncontracted legs of `S` and `T`.
-So here is how it works:
-
-- Labels can *only* be strings. The labels should not include the characters ``.`` or ``?``.
-  Internally, the labels are stored as dict ``a.labels = {label: leg_position, ...}``. Not all legs need a label.
-- To set the labels, call ::
-
-        A.set_labels(['a', 'b', None, 'c', ... ])
-
-  which will set up the labeling ``{'a': 0, 'b': 1, 'c': 3 ...}``.
-
-- (Where implemented) the specification of axes can use either the labels **or** the index positions.
-  For instance, the call ``tensordot(A, B, [['a', 2, 'c'], [...]])`` will interpret ``'a'`` and  ``'c'`` as labels 
-  (calling :meth:`~tenpy.linalg.np_conserved.Array.get_leg_indices` to find their positions using the dict)
-  and 2 as 'the 2nd leg'. That's why we require labels to be strings!
-- Labels will be intelligently inherited through the various operations of `np_conserved`.
-    - Under `transpose`, labels are permuted.
-    - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
-    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
-      Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
-      Then if ``b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'(a.b)': 0, '(c)': 1}``.
-      If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
-    - Under `split_legs`, the labels are split using the delimiters (and the ``'?#'`` are dropped).
-    - Under `conj`, `iconj`: take  ``'a' -> 'a*'``, ``'a*' -> 'a'``, and ``'(a.(b*.c))' -> '(a*.(b.c*))'``
-    - Under `svd`, the outer labels are inherited, and inner labels can be optionally passed.
-    - Under `pinv`, the labels are transposed.
 
 
 See also

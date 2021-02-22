@@ -5,7 +5,11 @@ Release Notes
 -------------
 The default (stable) git branch was renamed from ``master`` to ``main``.
 
-Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation.
+Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation. See :doc:`/intro/simulation` for details.
+
+Big Change in verbosity: switch to using Python's default :mod:`logging` mechanism! 
+This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`Simulation` setups.
+See :doc:`/intro/logging` on how to get the output back, and what to change in your code.
 
 
 Changelog
@@ -13,11 +17,29 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Drop official support for Python 3.5
+- Drop official support for Python 3.5.
 - :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
   non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
 - Argument `v0` of :meth:`tenpy.networks.mps.MPS.TransferMatrix.eigenvectors` is renamed to `v0_npc`; `v0` now serves for non-np_conserved guess.
+- Default parameters for lattice initialization in the following classes changed.
+  In particular, the `bc_MPS` parameter now defaults to 'finite'.
 
+  - :class:`tenpy.models.hofstadter.HofstadterFermions`
+  - :class:`tenpy.models.hofstadter.HofstadterBosons`
+  - :class:`tenpy.models.toric_code.ToricCode`
+
+- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
+  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
+
+- When running, no longer print stuff by default. Instead, we use Python's `logging` mechanism.
+  To enable printing again, you need to configure the logging to print on "INFO" level (which is the default when
+  running from command line)
+
+  As part of this big change in the way verbosity is handled, there were many minor changes:
+  - rename `Config.print_if_verbose` to :meth:`~tenpy.tools.params.Config.log`
+  - deprecate the `verbose` class argument of the :class:`~tenpy.tools.params.Config`
+  - deprecate the `verbose` class attribute of all classes (if they had it).
+  - change argument names of :meth:`~tenpy.tools.params`.
 
 Added
 ^^^^^
@@ -36,9 +58,11 @@ Added
 - :func:`tenpy.tools.misc.flatten` to turn a nested data structure into a flat one.
 - :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
 - Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
+- Common base class :class:`tenpy.algorithms.TimeEvolutionAlgorithm` for time evolution algorithms.
 - :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
 - :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
 - :class:`tenpy.models.lattice.HelicalLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
+- :meth:`tenpy.networks.purification_mps.PurificationMPS.from_infiniteT_canonical` for a canonical ensemble.
 
 Changed
 ^^^^^^^
@@ -47,19 +71,27 @@ Changed
   merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc`.
 - Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
 - Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
-- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
-  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
 - Allow ``swap_op='autoInv'`` for :meth:`tenpy.networks.mps.MPS.swap_sites` and explain the idea of the `swap_op`.
+- The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
+  :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
+  :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
+- Support additional `priority` argument for :func:`~tenpy.models.lattice.get_order_grouped`, :issue:`122`.
+- Warn if one of the `add_*` methods of the CouplingMPOModel gets called after initialization.
 
 Fixed
 ^^^^^
 - Sign error for the couplings of the :class:`tenpy.models.toric_code.ToricCode`.
 - The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
   was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
-- The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was wired.
+- The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was weird.
 - Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
   other correlation functions (:issue:`116`).
 - :mod:`tenpy.tools.hdf5_io` did not work with h5py version >= (3,0) due to a change in string encoding (:issue:`117`).
 - The overall phase for the returned `W` from :meth:`~tenpy.networks.mps.MPS.compute_K` was undefined.
 - :meth:`tenpy.networks.mpo.MPO.expectation_value` didn't work with max_range=0
 - The default `trunc_par` for :meth:`tenpy.networks.mps.MPS.swap_sites`, :meth:`~tenpy.networks.mps.MPS.permute_sites` and :meth:`~tenpy.networks.mps.MPS.compute_K` was leading to too small chi for intial MPS with small chi.
+- :issue:`120` Lattice with different sites in the unit cell.
+- Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
+- :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.
+- Some MPS methods (correlation function, expectation value, ...) raised an error for negative site indices even for infinite MPS.
+- Warn about unsued tenpy functions

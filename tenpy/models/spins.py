@@ -8,6 +8,7 @@ import numpy as np
 
 from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
+from .lattice import Chain
 from ..tools.params import asConfig
 
 __all__ = ['SpinModel', 'SpinChain']
@@ -60,8 +61,7 @@ class SpinModel(CouplingMPOModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = SpinSite(S, conserve)
         return site
 
@@ -100,7 +100,5 @@ class SpinChain(SpinModel, NearestNeighborModel):
 
     See the :class:`SpinModel` for the documentation of parameters.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True

@@ -103,9 +103,10 @@ class ParallelDMRGSim(GroundStateSearch):
         self.comm_plus_hc.Free()
         super().__delete__()
 
-    def _init_algorithm(self, AlgorithmClass):
+    def _init_algorithm(self, AlgorithmClass, **kwargs):
         params = self.options.subconfig('algorithm_params')
-        self.engine = AlgorithmClass(self.psi, self.model, params, comm=self.comm_plus_hc)
+        kwargs['comm'] = self.comm_plus_hc
+        self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
 
     def run(self):
         res = super().run()
