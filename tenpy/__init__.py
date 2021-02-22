@@ -51,7 +51,7 @@ def run_simulation(simulation_class_name='GroundStateSearch',
     simulation_class_name : str
         The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
         to be used for running the simulaiton.
-    sim_class_kwargs : dict | None
+    simulation_class_kwargs : dict | None
         A dictionary of keyword-arguments to be used for the initializing the simulation.
     **simulation_params :
         Further keyword arguments as documented in the corresponding simulation class,
@@ -66,10 +66,10 @@ def run_simulation(simulation_class_name='GroundStateSearch',
     SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
     if SimClass is None:
         raise ValueError("can't find simulation class called " + repr(simulation_class_name))
-    if sim_class_args is None:
-        sim_class_args = {}
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
     try:
-        sim = SimClass(simulation_params, **sim_class_args)
+        sim = SimClass(simulation_params, **simulation_class_kwargs)
         results = sim.run()
     except:
         # include the traceback into the log
