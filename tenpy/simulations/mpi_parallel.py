@@ -93,8 +93,6 @@ class ParallelDMRGSim(GroundStateSearch):
             warnings.warn(f"unexpected size of MPI communicator: {self.comm_plus_hc.size:d}")
         if self.comm_plus_hc.rank == 0:
             super().__init__(options, **kwargs)
-            if not get_recursive(options, "model_params/explicit_plus_hc"):
-                raise ValueError("need explicit_plus_hc!")
         else:
             # HACK: monkey-patch `[resume_]run` by `run_replica_plus_hc`
             self.run = self.resume_run = self.run_replica_plus_hc
@@ -108,6 +106,11 @@ class ParallelDMRGSim(GroundStateSearch):
         params = self.options.subconfig('algorithm_params')
         kwargs['comm'] = self.comm_plus_hc
         self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
+
+    def init_model(self):
+        super().init_model()
+        if not self.model.H_MPO.explicit_plus_hc:
+            raise ValueError("This MPI version needs the `explicit_plus_hc` flag!")
 
     def run(self):
         res = super().run()
