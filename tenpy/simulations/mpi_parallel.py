@@ -57,7 +57,7 @@ class ParallelPlusHcLinOp(NpcLinearOperatorWrapper):
 
 
 class ParallelDMRGPlusHc:
-    def __init__(self, psi, model, options, comm, **kwargs):
+    def __init__(self, psi, model, options, *, comm, **kwargs):
         self.comm_plus_hc = comm
         # TODO: how to handle for multiple parallel layers?
         super().__init__(psi, model, options, **kwargs)
@@ -84,14 +84,15 @@ class ParallelDMRGSim(GroundStateSearch):
 
     default_algorithm = "ParallelTwoSiteDMRG"
 
-    def __init__(self, options, comm=None):
+    def __init__(self, options, *, comm=None, **kwargs):
         if comm is None:
             comm = MPI.COMM_WORLD
         self.comm_plus_hc = comm.Dup()
+        # TODO: for multiple parallel layers, split the communicator into groups.
         if self.comm_plus_hc.size != 2:
             warnings.warn(f"unexpected size of MPI communicator: {self.comm_plus_hc.size:d}")
         if self.comm_plus_hc.rank == 0:
-            super().__init__(options)  # TODO: how to handle for multiple parallel layers?
+            super().__init__(options, **kwargs)
             if not get_recursive(options, "model_params/explicit_plus_hc"):
                 raise ValueError("need explicit_plus_hc!")
         else:
