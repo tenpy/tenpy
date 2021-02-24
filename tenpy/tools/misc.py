@@ -7,7 +7,7 @@ from .optimization import bottleneck
 from .process import omp_set_nthreads
 from .params import Config
 import random
-import os
+import os.path
 import itertools
 import argparse
 import warnings
@@ -661,7 +661,7 @@ def setup_logging(options={}, output_filename=None):
             to_file:
                 class: logging.FileHandler
                 level: INFO         # logging_params['to_file']
-                formatter: detailed
+                formatter: brief
                 filename: output_filename.log   # logging_params['filename']
                 mode: w             # overwrites existing!
         root:
@@ -708,6 +708,8 @@ def setup_logging(options={}, output_filename=None):
             for all loggers in any of those submodules, including the one provided as
             ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
+        log_format : str
+            Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
         dict_config : dict
             Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
@@ -724,6 +726,7 @@ def setup_logging(options={}, output_filename=None):
     log_fn = options.get('filename', default_log_fn)
     to_stdout = options.get('to_stdout', "INFO")
     to_file = options.get('to_file', "INFO")
+    log_format = options.get('log_format', "%(levelname)-8s: %(message)s")
     logger_levels = options.get('logger_levels', {})
     conf = options.get('dict_config', None)
     capture_warnings = options.get('capture_warnings', conf is not None
@@ -736,29 +739,27 @@ def setup_logging(options={}, output_filename=None):
             handlers['to_stdout'] = {
                 'class': 'logging.StreamHandler',
                 'level': to_stdout,
-                'formatter': 'brief',
+                'formatter': 'custom',
                 'stream': 'ext://sys.stdout',
             }
         if to_file and log_fn is not None:
             handlers['to_file'] = {
                 'class': 'logging.FileHandler',
                 'level': to_file,
-                'formatter': 'detailed',
+                'formatter': 'custom',
                 'filename': log_fn,
                 'mode': 'w',  # overwrites existing!
             }
             if not to_stdout:
-                print(f"now logging to {log_fn!r}")
+                cwd = os.path.getcwd()
+                print(f"now logging to {cwd!r}/{log_fn!r}")
         conf = {
             'version': 1,  # mandatory
             'disable_existing_loggers': False,
             'formatters': {
-                'brief': {
-                    'format': "%(levelname)-8s: %(message)s"
-                },
-                'detailed': {
-                    'format': "%(asctime)s %(levelname)-8s: %(message)s"
-                },
+                'tenpy': {
+                    'format': log_format
+                }
             },
             'handlers': handlers,
             'root': {

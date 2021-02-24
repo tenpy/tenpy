@@ -33,11 +33,10 @@ For example, the following both prints log messages to stdout and saves them to`
     conf = {
         'version': 1
         'disable_existing_loggers': False,
-        'formatters': {'brief': {'format': '%(levelname)-8s: %(message)s'},
-                       'detailed': {'format': '%(asctime)s %(levelname)-8s: %(message)s'}},
+        'formatters': {'brief': {'format': '%(levelname)-8s: %(message)s'}},
         'handlers': {'to_file': {'class': 'logging.FileHandler',
                                  'filename': 'output_filename.log',
-                                 'formatter': 'detailed',
+                                 'formatter': 'brief',
                                  'level': 'INFO',
                                  'mode': 'w'},
                     'to_stdout': {'class': 'logging.StreamHandler',

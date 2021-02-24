@@ -461,7 +461,7 @@ class Simulation:
                         break
                 else:
                     raise ValueError("Refuse to make another copy. CLEAN UP!")
-                warnings.warn("changed output filename to {0!r}".format(output_filename))
+                warnings.warn(f"changed output filename to {output_filename!r}")
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
