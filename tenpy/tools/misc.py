@@ -648,10 +648,8 @@ def setup_logging(options={}, output_filename=None):
         version: 1  # mandatory for logging config
         disable_existing_loggers: False  # keep module-based loggers already defined!
         formatters:
-            brief:
-                format: "%(levelname)-8s: %(message)s"
-            detailed:
-                format: "%(asctime)s %(levelname)-8s: %(message)s"
+            custom:
+                format: "%(levelname)-8s: %(message)s"   # logging_params['format']
         handlers:
             to_stdout:
                 class: logging.StreamHandler
@@ -708,7 +706,7 @@ def setup_logging(options={}, output_filename=None):
             for all loggers in any of those submodules, including the one provided as
             ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
-        log_format : str
+        format : str
             Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
         dict_config : dict
             Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
@@ -726,7 +724,7 @@ def setup_logging(options={}, output_filename=None):
     log_fn = options.get('filename', default_log_fn)
     to_stdout = options.get('to_stdout', "INFO")
     to_file = options.get('to_file', "INFO")
-    log_format = options.get('log_format', "%(levelname)-8s: %(message)s")
+    log_format = options.get('format', "%(levelname)-8s: %(message)s")
     logger_levels = options.get('logger_levels', {})
     conf = options.get('dict_config', None)
     capture_warnings = options.get('capture_warnings', conf is not None
@@ -757,7 +755,7 @@ def setup_logging(options={}, output_filename=None):
             'version': 1,  # mandatory
             'disable_existing_loggers': False,
             'formatters': {
-                'tenpy': {
+                'custom': {
                     'format': log_format
                 }
             },
