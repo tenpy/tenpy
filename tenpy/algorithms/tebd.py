@@ -42,17 +42,18 @@ If one chooses imaginary :math:`dt`, the exponential projects
 import numpy as np
 import time
 import warnings
+import logging
+logger = logging.getLogger(__name__)
 
-from .algorithm import Algorithm
+from .algorithm import TimeEvolutionAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..tools.params import asConfig
 from ..linalg.random_matrix import CUE
 
 __all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
 
 
-class TEBDEngine(Algorithm):
+class TEBDEngine(TimeEvolutionAlgorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
     .. deprecated :: 0.6.0
@@ -66,28 +67,21 @@ class TEBDEngine(Algorithm):
     model : :class:`~tenpy.models.model.NearestNeighborModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
-        Further optional parameters as described in the tables in
-        :func:`run` and :func:`run_GS` for more details.
-        Use ``verbose=1`` to print the used parameters during runtime.
+        Further optional parameters as described below.
 
     Options
     -------
     .. cfg:config :: TEBDEngine
-        :include: Algorithm
+        :include: TimeEvolutionAlgorithm
 
-        start_time : float
-            Initial value for :attr:`evolved_time`.
         start_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             Initial truncation error for :attr:`trunc_err`.
+        order : int
+            Order of the algorithm. The total error for evolution up to a fixed time `t`
+            scales as ``O(t*dt^order)``.
 
     Attributes
     ----------
-    verbose : int
-        See :cfg:option:`TEBDEngine.verbose`.
-    options: :class:`~tenpy.tools.params.Config`
-        Optional parameters, see :meth:`run` and :meth:`run_GS` for more details.
-    evolved_time : float | complex
-        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
         The error of the represented state which is introduced due to the truncation during
         the sequence of update steps.
@@ -108,9 +102,8 @@ class TEBDEngine(Algorithm):
     _update_index : None | (int, int)
         The indices ``i_dt,i_bond`` of ``U_bond = self._U[i_dt][i_bond]`` during update_step.
     """
-    def __init__(self, psi, model, options):
-        Algorithm.__init__(self, psi, model, options)
-        self.evolved_time = self.options.get('start_time', 0.)
+    def __init__(self, psi, model, options, **kwargs):
+        TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
         self.trunc_err = self.options.get('start_trunc_err', TruncationError())
         self._U = None
         self._U_param = {}
@@ -128,20 +121,7 @@ class TEBDEngine(Algorithm):
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
     def run(self):
-        """(Real-)time evolution with TEBD (time evolving block decimation).
-
-        .. cfg:configoptions :: TEBDEngine
-
-            dt : float
-                Time step.
-            N_steps : int
-                Number of time steps `dt` to evolve.
-                The Trotter decompositions of order > 1 are slightly more efficient
-                if more than one step is performed at once.
-            order : int
-                Order of the algorithm. The total error scales as ``O(t*dt^order)``.
-
-        """
+        """Run TEBD real time evolution by `N_steps`*`dt`."""
         # initialize parameters
         delta_t = self.options.get('dt', 0.1)
         N_steps = self.options.get('N_steps', 10)
@@ -149,23 +129,21 @@ class TEBDEngine(Algorithm):
 
         self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
 
-        if self.verbose >= 1:
-            Sold = np.average(self.psi.entanglement_entropy())
-            start_time = time.time()
+        Sold = np.mean(self.psi.entanglement_entropy())
+        start_time = time.time()
+
         self.update(N_steps)
-        if self.verbose >= 1:
-            S = np.average(self.psi.entanglement_entropy())
-            DeltaS = np.abs(Sold - S)
-            msg = ("--> time={t:3.3f}, max_chi={chi:d}, "
-                   "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
-            msg = msg.format(
-                t=self.evolved_time,
-                chi=max(self.psi.chi),
-                dS=DeltaS,
-                S=S.real,
-                time=time.time() - start_time,
-            )
-            print(msg, flush=True)
+
+        S = self.psi.entanglement_entropy()
+        logger.info(
+            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
+            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
+                't': self.evolved_time.real,
+                'chi': max(self.psi.chi),
+                'S': max(S),
+                'dS': np.mean(S) - Sold,
+                'wall_time': time.time() - start_time,
+            })
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -196,17 +174,14 @@ class TEBDEngine(Algorithm):
         N_steps = self.options.get('N_steps', 10)
         TrotterOrder = self.options.get('order', 2)
 
-        Eold = np.average(self.model.bond_energies(self.psi))
-        if self.verbose >= 1:
-            Sold = np.average(self.psi.entanglement_entropy())
-            start_time = time.time()
+        Eold = np.mean(self.model.bond_energies(self.psi))
+        Sold = np.mean(self.psi.entanglement_entropy())
+        start_time = time.time()
 
         for delta_tau in delta_tau_list:
-            if self.verbose >= 1:
-                print("delta_tau = {dt:e}".format(dt=delta_tau))
+            logger.info("delta_tau=%e", delta_tau)
             self.calc_U(TrotterOrder, delta_tau, type_evo='imag')
             DeltaE = 2 * max_error_E
-            DeltaS = 2 * max_error_E
             step = 0
             while (DeltaE > max_error_E):
                 if self.psi.finite and TrotterOrder == 2:
@@ -214,27 +189,27 @@ class TEBDEngine(Algorithm):
                 else:
                     self.update(N_steps)
                 step += N_steps
-                E = np.average(self.model.bond_energies(self.psi))
-                DeltaE = np.abs(Eold - E)
+                E = np.mean(self.model.bond_energies(self.psi))
+                DeltaE = abs(Eold - E)
                 Eold = E
-                if self.verbose >= 1:
-                    S = np.average(self.psi.entanglement_entropy())
-                    DeltaS = np.abs(Sold - S)
-                    Sold = S
-                    msg = ("--> step={step:6d}, time={t:3.3f}, max chi={chi:d}, " +
-                           "Delta_E={dE:.2e}, E_bond={E:.10f}, Delta_S={dS:.4e}, " +
-                           "S={S:.10f}, time simulated: {time:.1f} s")
-                    msg = msg.format(
-                        step=step,
-                        t=self.evolved_time,
-                        chi=max(self.psi.chi),
-                        dE=DeltaE,
-                        dS=DeltaS,
-                        E=E.real,
-                        S=S.real,
-                        time=time.time() - start_time,
-                    )
-                    print(msg, flush=True)
+                S = self.psi.entanglement_entropy()
+                max_S = max(S)
+                S = np.mean(S)
+                DeltaS = S - Sold
+                Sold = S
+                logger.info(
+                    "--> step=%(step)6d, beta=%(beta)3.3f, max(chi)=%(max_chi)d,"
+                    "DeltaE=%(dE).2e, E_bond=%(E).10f, Delta_S=%(dS).4e, "
+                    "max(S)=%(max_S).10f, time simulated: %(wall_time).1fs", {
+                        'step': step,
+                        'beta': -self.evolved_time.imag,
+                        'max_chi': max(self.psi.chi),
+                        'dE': DeltaE,
+                        'E': E.real,
+                        'dS': DeltaS,
+                        'max_S': max_S,
+                        'wall_time': time.time() - start_time,
+                    })
         # done
 
     @staticmethod
@@ -269,7 +244,7 @@ class TEBDEngine(Algorithm):
             b2 = -0.12039526945509726545
             return [a1, b1, a2, b2, 0.5 - a1 - a2, 1. - 2 * (b1 + b2)]  # a1 b1 a2 b2 a3 b3
         # else
-        raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
+        raise ValueError("Unknown order %r for Suzuki Trotter decomposition" % order)
 
     @staticmethod
     def suzuki_trotter_decomposition(order, N_steps):
@@ -365,12 +340,10 @@ class TEBDEngine(Algorithm):
         else:
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
         if self._U_param == U_param:  # same keys and values as cached
-            if self.verbose >= 10:
-                print("Skip recalculation of U with same parameters as before: ", U_param)
+            logger.debug("Skip recalculation of U with same parameters as before")
             return  # nothing to do: U is cached
         self._U_param = U_param
-        if self.verbose >= 1:
-            print("Calculate U for ", U_param)
+        logger.info("Calculate U for %s", U_param)
 
         L = self.psi.L
         self._U = []
@@ -439,11 +412,7 @@ class TEBDEngine(Algorithm):
         trunc_err = TruncationError()
         for i_bond in np.arange(int(odd) % 2, self.psi.L, 2):
             if Us[i_bond] is None:
-                if self.verbose >= 10:
-                    print("Skip U_bond element:", i_bond)
                 continue  # handles finite vs. infinite boundary conditions
-            if self.verbose >= 10:
-                print("Apply U_bond element", i_bond)
             self._update_index = (U_idx_dt, i_bond)
             trunc_err += self.update_bond(i_bond, Us[i_bond])
         self._update_index = None
@@ -475,8 +444,7 @@ class TEBDEngine(Algorithm):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose >= 100:
-            print("Update sites ({0:d}, {1:d})".format(i0, i1))
+        logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
         C = self.psi.get_theta(i0, n=2, formL=0.)  # the two B without the S on the left
         C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
@@ -552,21 +520,13 @@ class TEBDEngine(Algorithm):
             # sweep right
             for i_bond in range(self.psi.L):
                 if Us[i_bond] is None:
-                    if self.verbose >= 10:
-                        print("Skip U_bond element:", i_bond)
                     continue  # handles finite vs. infinite boundary conditions
-                if self.verbose >= 10:
-                    print("Apply U_bond element", i_bond)
                 self._update_index = (U_idx_dt, i_bond)
                 trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
             # sweep left
             for i_bond in range(self.psi.L - 1, -1, -1):
                 if Us[i_bond] is None:
-                    if self.verbose >= 10:
-                        print("Skip U_bond element:", i_bond)
                     continue  # handles finite vs. infinite boundary conditions
-                if self.verbose >= 10:
-                    print("Apply U_bond element", i_bond)
                 self._update_index = (U_idx_dt, i_bond)
                 trunc_err += self.update_bond_imag(i_bond, Us[i_bond])
         self._update_index = None
@@ -597,8 +557,7 @@ class TEBDEngine(Algorithm):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose >= 100:
-            print("Update sites ({0:d}, {1:d})".format(i0, i1))
+        logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -669,8 +628,7 @@ class RandomUnitaryEvolution(TEBDEngine):
     psi : :class:`~tenpy.networs.mps.MPS`
         Initial state to be time evolved. Modified in place.
     options : dict
-        Use ``verbose=1`` to print the used parameters during runtime.
-        See :func:`run` and :func:`run_GS` for more details.
+        See below for details.
 
     Options
     -------
@@ -696,7 +654,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> psi = MPS.from_product_state([spin_half]*L, ["up", "down"]*(L//2), bc='finite')  # Neel
         >>> print(psi.chi)
         [1, 1, 1, 1, 1, 1, 1]
-        >>> options = dict(N_steps=2, trunc_params={'chi_max':10}, verbose=0)
+        >>> options = dict(N_steps=2, trunc_params={'chi_max':10})
         >>> eng = RandomUnitaryEvolution(psi, options)
         >>> eng.run()
         >>> print(psi.chi)
@@ -723,23 +681,23 @@ class RandomUnitaryEvolution(TEBDEngine):
     def run(self):
         """Time evolution with TEBD and random two-site unitaries."""
         N_steps = self.options.get('N_steps', 1)
-        if self.verbose >= 1:
-            Sold = np.average(self.psi.entanglement_entropy())
-            start_time = time.time()
+        Sold = np.mean(self.psi.entanglement_entropy())
+        start_time = time.time()
+
         self.update(N_steps)
-        if self.verbose >= 1:
-            S = np.average(self.psi.entanglement_entropy())
-            DeltaS = np.abs(Sold - S)
-            msg = ("--> time={t:3.3f}, max_chi={chi:d}, "
-                   "Delta_S={dS:.4e}, S={S:.10f}, since last update: {time:.1f} s")
-            print(
-                msg.format(
-                    t=self.evolved_time,
-                    chi=max(self.psi.chi),
-                    dS=DeltaS,
-                    S=S.real,
-                    time=time.time() - start_time,
-                ))
+
+        max_chi = max(self.psi.chi)
+        S = self.psi.entanglement_entropy()
+        dS = np.mean(S) - Sold
+        logger.info(
+            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
+            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
+                't': self.evolved_time.real,
+                'chi': max(self.psi.chi),
+                'S': max(S),
+                'dS': np.mean(S) - Sold,
+                'wall_time': time.time() - start_time,
+            })
 
     def calc_U(self):
         """Draw new random two-site unitaries replacing the usual `U` of TEBD."""

@@ -21,8 +21,9 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
 # Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import warnings
 
-from .algorithm import Algorithm
+from .algorithm import TimeEvolutionAlgorithm
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import asConfig
@@ -32,7 +33,7 @@ from tenpy.algorithms.truncation import svd_theta
 __all__ = ['TDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
-class TDVPEngine(Algorithm):
+class TDVPEngine(TimeEvolutionAlgorithm):
     """Time dependent variational principle algorithm for MPS.
 
     .. deprecated :: 0.6.0
@@ -46,7 +47,6 @@ class TDVPEngine(Algorithm):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters as described in the following table.
-        Use ``verbose>0`` to print the used parameters during runtime.
     environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
 
@@ -54,28 +54,21 @@ class TDVPEngine(Algorithm):
     -------
 
     .. cfg:config :: TDVP
+        :include: TimeEvolutionAlgorithm
 
         active_sites
             The number of active sites to be used for the time evolution.
             If set to 1, :meth:`run_one_site` is used. The bond dimension will not increase!
             If set to 2, :meth:`run_two_sites` is used.
-        start_time : float
-            Initial value for :attr:`evolved_time`
-        dt : float
-            Time step of the Trotter error
-        N_steps : int
-            Number of time steps `dt` to evolve.
         trunc_params : dict
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        Lanczos : dict
+        lanczos_options : dict
             Lanczos options as described in :cfg:config:`Lanczos`.
 
     Attributes
     ----------
     options: dict
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -86,7 +79,7 @@ class TDVPEngine(Algorithm):
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     def __init__(self, psi, model, options, environment=None):
-        Algorithm.__init__(self, psi, model, options)
+        TimeEvolutionAlgorithm.__init__(self, psi, model, options)
         options = self.options
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")

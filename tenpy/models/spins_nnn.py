@@ -82,8 +82,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         spinsite = SpinSite(S, conserve)
         site = GroupedSite([spinsite, spinsite], charges='same')
         return site
@@ -173,8 +172,7 @@ class SpinChainNNN2(CouplingMPOModel):
                 conserve = 'parity'
             else:
                 conserve = None
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = SpinSite(S, conserve)
         return site
 

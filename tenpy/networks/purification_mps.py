@@ -102,17 +102,11 @@ see :cite:`hauschild2018`.
     conservation with the above `qconj` convention.
     Moreover, we don't split the physical and auxiliar space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
-
-.. todo ::
-    One can also look at the canonical ensembles by defining the conserved quantities
-    differently, see [barthel2016]_ for details.
-    Idea: usual charges on `p`, trivial charges on `q`; fix total charge to desired value.
-    I think it should suffice to implement another `from_infiniteT`.
-
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import itertools
 
 from .mps import MPS
 from ..linalg import np_conserved as npc
@@ -154,18 +148,21 @@ class PurificationMPS(MPS):
         super().test_sanity()
 
     @classmethod
-    def from_infiniteT(cls, sites, bc='finite', form='B'):
-        """Initial state corresponding to infinite-Temperature ensemble.
+    def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64):
+        """Initial state corresponding to grand-canonical infinite-temperature ensemble.
 
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
+            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
         bc : {'finite', 'segment', 'infinite'}
             MPS boundary conditions as described in :class:`~tenpy.networks.mps.MPS`.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             The canonical form of the stored 'matrices', see table in :mod:`~tenpy.networks.mps`.
             A single choice holds for all of the entries.
+        dtype : type or string
+            The data type of the array entries.
 
         Returns
         -------
@@ -179,11 +176,99 @@ class PurificationMPS(MPS):
         Bs = [None] * L
         for i in range(L):
             p_leg = sites[i].leg
-            B = npc.diag(1., p_leg, np.float, ['p', 'q']) / sites[i].dim**0.5
+            B = npc.diag(1., p_leg, dtype, ['p', 'q']) / sites[i].dim**0.5
             # leg `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B
         res = cls(sites, Bs, S, bc, form)
+        return res
+
+    @classmethod
+    def from_infiniteT_canonical(cls, sites, charge_sector, form='B', dtype=np.float64):
+        """Initial state corresponding to *canonical* infinite-temperature ensemble.
+
+        Works only for finite boundary conditions, following the idea outlined in [barthel2016]_.
+        However, we just put trivial charges on the ancilla legs,
+        and do *not* double the number of charges as suggested in that paper - there's no need to.
+
+        Note that the 'backwards' disentanglers doesn't work with the canonical ensemble.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+            For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
+        charge_sector : tuple of int
+            The desired charge sector to be taken for the canonical ensemble.
+        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+            The canonical form of the stored 'matrices', see table in :mod:`~tenpy.networks.mps`.
+            A single choice holds for all of the entries.
+
+        Returns
+        -------
+        infiniteT_MPS : :class:`PurificationMPS`
+            Describes the infinite-temperature (grand canonical) ensemble,
+            i.e. expectation values give a trace over all basis states.
+        """
+        sites = list(sites)
+        L = len(sites)
+        assert L > 0
+        chinfo = sites[0].leg.chinfo
+        for s in sites:
+            assert s.leg.chinfo == chinfo
+        charge_sector_left = chinfo.make_valid(None)  # zero charges
+        charge_sector_right = chinfo.make_valid(charge_sector)
+        assert charge_sector_right.ndim == 1
+        # get bounds for the maximal and minimal charge values at each bond
+        qflats = [s.leg.to_qflat() for s in sites]
+        min_p_Q = [np.min(qflat, axis=0) for qflat in qflats]
+        max_p_Q = [np.max(qflat, axis=0) for qflat in qflats]
+        min_Q_left = charge_sector_left + np.cumsum(min_p_Q, axis=0)  # on bonds 1, 2, 3... L
+        max_Q_left = charge_sector_left + np.cumsum(max_p_Q, axis=0)
+        min_Q_right = charge_sector_right - np.cumsum(max_p_Q[::-1], axis=0)[::-1]  # 0, 1, ... L-1
+        max_Q_right = charge_sector_right - np.cumsum(min_p_Q[::-1], axis=0)[::-1]
+        min_Q = np.max([min_Q_left[:-1], min_Q_right[1:]], axis=0)  # on non-trivial bonds
+        max_Q = np.min([max_Q_left[:-1], max_Q_right[1:]], axis=0)  # on non-trivial bonds
+        min_Q = np.append(min_Q, [charge_sector_right], axis=0)  # bonds 1, 2, ... L
+        max_Q = np.append(max_Q, [charge_sector_right], axis=0)
+        assert np.all(max_Q >= min_Q)
+        chi = np.prod(max_Q - min_Q + 1, axis=1)  # assumes that charges can be incremented by 1
+
+        Bs = []
+        Ss = [np.ones(1, dtype=np.float64)]
+        # now we can define the tensors following section VI.C) of [barthel2016]_:
+        # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}
+        # the normalization will be ensured by a call to `canonical_form_finite()` in the end.
+        right_Q = chinfo.make_valid([charge_sector_left])
+        right_leg = npc.LegCharge.from_qflat(chinfo, right_Q, qconj=-1)
+        for s in range(L):
+            p_leg = sites[s].leg
+            p_Q = p_leg.to_qflat()
+            q_leg = p_leg.conj().copy()
+            q_leg.charges = np.zeros_like(q_leg.charges)
+            left_Q = right_Q
+            left_leg = right_leg.conj()
+            right_Q = np.array(
+                list(
+                    itertools.product(
+                        *[range(min_Q[s][c], max_Q[s][c] + 1) for c in range(chinfo.qnumber)])))
+            right_Q = right_Q[np.lexsort(right_Q.T), :]  # sort charges
+            right_leg = npc.LegCharge.from_qflat(chinfo, right_Q, qconj=-1)
+            B = npc.zeros([left_leg, right_leg, p_leg, q_leg],
+                          dtype=dtype,
+                          labels=['vL', 'vR', 'p', 'q'])
+            for p in range(p_leg.ind_len):
+                for vL in range(left_Q.shape[0]):
+                    Q_vR = left_Q[vL] + p_Q[p]
+                    vR = np.nonzero(np.all(Q_vR == right_Q, axis=1))[0]
+                    if len(vR) == 0:
+                        continue
+                    vR = vR.item()
+                    B[vL, vR, p, p] = 1.  # add an entry in the tensor
+            Bs.append(B)
+            Ss.append(np.ones(B.shape[1], np.float64))
+        res = cls(sites, Bs, Ss, 'finite', form)
+        res.canonical_form_finite()  # calculate S values and normalize
         return res
 
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1, legs='p'):

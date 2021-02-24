@@ -50,7 +50,7 @@ def run_out_of_equilibrium():
             'trunc_cut': None
         }
     }
-    tdvp_engine = tdvp.TEBDEngine(psi, heisenberg, tdvp_params)
+    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
     times = []
     S_mid = []
     for i in range(30):
@@ -75,4 +75,6 @@ def run_out_of_equilibrium():
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     run_out_of_equilibrium()

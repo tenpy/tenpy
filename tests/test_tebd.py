@@ -38,7 +38,6 @@ def test_tebd(bc_MPS, g=0.5):
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
     tebd_param = {
-        'verbose': 2,
         'dt': 0.01,
         'order': 2,
         'delta_tau_list': [0.1, 1.e-4, 1.e-8],

@@ -1,14 +1,17 @@
 """Lanczos algorithm for np_conserved arrays."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from . import np_conserved as npc
-from ..tools.params import asConfig
+import warnings
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
+import logging
+logger = logging.getLogger(__name__)
+
+from . import np_conserved as npc
+from ..tools.params import asConfig
 from ..tools.math import speigsh
-import warnings
 
 __all__ = [
     'LanczosGroundState', 'LanczosEvolution', 'lanczos', 'lanczos_arpack', 'gram_schmidt',
@@ -142,7 +145,6 @@ class LanczosGroundState:
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
-        self.verbose = options.verbose
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -172,15 +174,12 @@ class LanczosGroundState:
         """
         N = self._calc_T()
         E0 = self.Es[N - 1, 0]
-        if self.verbose >= 1:
-            if N > 1:
-                msg = "Lanczos N={0:d}, gap={1:.3e}, DeltaE0={2:.3e}, _result_krylov[-1]={3:.3e}"
-                print(
-                    msg.format(N, self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0,
-                               self._result_krylov[-1]))
-            else:
-                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
-                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N > 1:
+            logger.debug("Lanczos N=%d, gap=%.3e, DeltaE0=%.3e, _result_krylov[-1]=%.3e", N,
+                         self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0, self._result_krylov[-1])
+        else:
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
+                         self._T[0, 1])
         if self.E_shift is not None:
             E0 -= self.E_shift
         if N == 1:
@@ -247,13 +246,11 @@ class LanczosGroundState:
             psif.iadd_prefactor_other(vf[k + 1], w)
         psif_norm = npc.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
-            warnings.warn("Poorly conditioned Lanczos!")
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
-            if self.verbose > 1:
-                print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))
+            logger.warning("poorly conditioned Lanczos! |psi_0| = %f", psif_norm)
         psif.iscale_prefactor(1. / psif_norm)
         return psif
 
@@ -342,13 +339,11 @@ class LanczosEvolution(LanczosGroundState):
         """
         self.delta = delta
         N = self._calc_T()
-        if self.verbose >= 1:
-            if N > 1:
-                msg = "Lanczos N={0:d}, |result_krylov[-1]|={1:.3e}"
-                print(msg.format(N, abs(self._result_krylov[-1])))
-            else:
-                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
-                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N > 1:
+            logger.debug("Lanczos N=%d, |result_krylov[-1]|=%.3e", N, abs(self._result_krylov[-1]))
+        else:
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
+                         self._T[0, 1])
         if N == 1:
             result_full = self._result_krylov[0] * self.psi0
         else:
@@ -441,7 +436,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     return Es[0], psi0
 
 
-def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
+def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
 
     Parameters
@@ -452,8 +447,6 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         if a norm < rcond, the entry is set to `None`.
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
-    verbose : int
-        Print additional output if verbose >= 1.
 
     Returns
     -------
@@ -463,6 +456,8 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)``
         (where vecs[j] was orthogonalized to all ``vecs[k], k < i``).
     """
+    if verbose is not None:
+        warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
     k = len(vecs)
     ov = np.zeros((k, k), dtype=vecs[0].dtype)
     for j in range(k):
@@ -473,17 +468,8 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)
                 vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
         else:
-            if verbose >= 1:
-                print("GramSchmidt: Rank defficient", n)
             vecs[j] = None
     vecs = [q for q in vecs if q is not None]
-    if verbose >= 1:
-        k = len(vecs)
-        G = np.empty((k, k), dtype=vecs[0].dtype)
-        for i, v in enumerate(vecs):
-            for j, w in enumerate(vecs):
-                G[i, j] = npc.inner(v, w, 'range', do_conj=True)
-        print("GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k)))
     return vecs, ov
 
 

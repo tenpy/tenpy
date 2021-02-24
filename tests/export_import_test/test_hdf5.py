@@ -9,12 +9,9 @@ import tempfile
 from tenpy.tools import hdf5_io
 import numpy as np
 
-datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
+h5py = pytest.importorskip('h5py')
 
-try:
-    import h5py
-except ImportError:
-    h5py = None
+datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
 
 
 def export_to_datadir():
@@ -25,7 +22,6 @@ def export_to_datadir():
 
 
 @pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
-@pytest.mark.skipif(h5py is None, reason="h5py not available")
 def test_hdf5_export_import():
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
@@ -40,7 +36,6 @@ def test_hdf5_export_import():
     io_test.assert_event_handler_example_works(data_imported)
 
 
-@pytest.mark.skipif(h5py is None, reason="h5py not available")
 @pytest.mark.parametrize('fn', datadir_hdf5)
 def test_import_from_datadir(fn):
     print("import ", fn)

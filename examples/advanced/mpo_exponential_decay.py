@@ -110,7 +110,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
 
 def example_run_dmrg():
     """Use iDMRG to extract information about the ground state of the system."""
-    model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8, verbose=1)
+    model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8)
     model = ExponentiallyDecayingHeisenberg(model_params)
     psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite')
     dmrg_params = {
@@ -121,7 +121,6 @@ def example_run_dmrg():
         'trunc_params': {
             'svd_min': 1.e-10
         },
-        'verbose': 1
     }
     results = dmrg.run(psi, model, dmrg_params)
     print("Energy per site: ", results['E'])
@@ -129,4 +128,6 @@ def example_run_dmrg():
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     example_run_dmrg()

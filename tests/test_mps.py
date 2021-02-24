@@ -183,7 +183,7 @@ def test_mps_swap():
     perm = rand_permutation(L)
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='infinite')
-    psi.permute_sites(perm, verbose=2)
+    psi.permute_sites(perm)
     psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
     print(psi.overlap(psi_perm), psi.norm_test())
     assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
@@ -202,7 +202,7 @@ def test_mps_swap():
     perm = rand_permutation(L)
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
-    psi.permute_sites(perm, verbose=2)
+    psi.permute_sites(perm)
     print(psi.overlap(psi_perm), psi.norm_test())
     assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
 
@@ -244,7 +244,7 @@ def test_compute_K():
     psi = mps.MPS.from_singlets(spin_half, 6, pairs, bc='infinite')
     psi.test_sanity()
     lat = Square(3, 2, spin_half, order='default', bc_MPS='infinite', bc='periodic')
-    U, W, q, ov, te = psi.compute_K(lat, verbose=100)
+    U, W, q, ov, te = psi.compute_K(lat)
     assert (ov == -1.)
     npt.assert_array_equal(W, [1.])
 

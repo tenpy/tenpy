@@ -54,8 +54,7 @@ class FermionModel(CouplingMPOModel):
         conserve = model_params.get('conserve', 'N')
         if conserve == 'best':
             conserve = 'N'
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = FermionSite(conserve=conserve)
         return site
 

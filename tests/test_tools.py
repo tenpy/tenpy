@@ -1,12 +1,14 @@
 """A collection of tests for tenpy.tools submodules."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
 import tenpy.tools as tools
 import warnings
 import pytest
+import os.path
 import tenpy
 
 
@@ -226,3 +228,33 @@ def test_get_set_recursive():
     assert tools.misc.get_recursive(data, 'some/parts') == 987
     flat_data = tools.misc.flatten(data)
     assert flat_data == {'some/nested/data': 321, 'some/nested/other': 456, 'some/parts': 987}
+
+
+def test_logging_setup(tmpdir, capsys):
+    import logging.config
+    logger = logging.getLogger('tenpy.test_logging')
+    root = logging.getLogger()
+    output_filename = tmpdir / 'output.pkl'
+    logging_params = {
+        'to_stdout': 'INFO',
+        'to_file': 'WARNING',
+    }
+    tools.misc.setup_logging(logging_params, output_filename)
+
+    test_message = "test %s message 12345"
+    logger.info(test_message, 'info')
+    logger.warning(test_message, 'warning')
+
+    # clean up loggers -> close file handlers (?)
+    logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
+
+    assert os.path.exists(tmpdir / 'output.log')
+    with open(tmpdir / 'output.log', 'r') as f:
+        file_text = f.read()
+    assert test_message % 'warning' in file_text
+    assert test_message % 'info' not in file_text  # should have filtered that out
+
+    capture = capsys.readouterr()
+    stdout_text = capture.out
+    assert test_message % 'warning' in stdout_text
+    assert test_message % 'info' in stdout_text

@@ -1,3 +1,8 @@
+.. only :: html
+
+    Contents
+    ========
+
 .. raw :: latex
 
     \part{User guide}
@@ -11,6 +16,7 @@
     releases
     introductions
     examples
+    troubleshooting
     literature
     papers_using_tenpy
     contributing

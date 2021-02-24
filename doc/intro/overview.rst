@@ -130,13 +130,13 @@ the spin liquid nature of the ground state of this model is highly debated in th
 Algorithms
 ^^^^^^^^^^
 
-The highest level in TeNPy is given by algorithms like DMRG and TEBD.
+Another layer is given by algorithms like DMRG and TEBD.
 Using the previous concepts, setting up a simulation running those algorithms is a matter of just a few lines of code.
 The following example runs a DMRG simulation, see :mod:`~tenpy.algorithms.dmrg`, exemplary for the transverse field Ising model at the critical point.
 
 .. literalinclude:: /../examples/userguide/f_dmrg_finite.py
 
-The switch from DMRG to \gls{iDMRG} in TeNPy is simply accomplished by a change of the parameter
+The switch from DMRG to iDMRG in TeNPy is simply accomplished by a change of the parameter
 ``"bc_MPS"`` from ``"finite"`` to ``"infinite"``, both for the model and the state.
 The returned ``E`` is then the energy density per site. 
 Due to the translation invariance, one can also evaluate the correlation length, here slightly away from the critical point.
@@ -147,3 +147,14 @@ Running time evolution with TEBD requires an additional loop, during which the d
 The following code shows this directly for the infinite version of TEBD.
 
 .. literalinclude:: /../examples/userguide/h_tebd_infinite.py
+
+
+Simulations
+^^^^^^^^^^^
+The top-most layer is given by Simulations.
+A simulation wraps the whole setup of initializing the Model, MPS and Algorithm classes, running the algorithm, possibly
+performing measurements, and finally saving results to disk, if desired. It provides some extra functionality like the
+ability to resume an interrupted simulation, e.g. if your job got killed on the cluster due to runtime limitis.
+
+Ideally, the Simulation (sub) class represents the whole Simulation from start to end, giving re-producable results
+depending only on the parameters given to it.

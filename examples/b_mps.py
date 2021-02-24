@@ -99,7 +99,7 @@ assert (npc.norm(exp_H2_alternative - exp_H2) < 1.e-14)
 
 print("7) apply exp(H2) to even/odd bonds of the MPS and truncate with svd")
 # (this implements one time step of first order TEBD)
-trunc_par = {'svd_min': cutoff, 'trunc_cut': None, 'verbose': 0}
+trunc_par = {'svd_min': cutoff, 'trunc_cut': None}
 for even_odd in [0, 1]:
     for i in range(even_odd, L - 1, 2):
         theta = psi.get_theta(i, 2)  # handles canonical form (i.e. scaling with 'S')

@@ -53,8 +53,7 @@ class TFIModel(CouplingMPOModel):
         assert conserve != 'Sz'
         if conserve == 'best':
             conserve = 'parity'
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = SpinHalfSite(conserve=conserve)
         return site
 

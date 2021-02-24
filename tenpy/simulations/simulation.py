@@ -20,6 +20,7 @@ import time
 import importlib
 import warnings
 import numpy as np
+import logging
 
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
@@ -28,6 +29,7 @@ from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, set_recursive, get_recursive
+from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 
 __all__ = ['Simulation', 'Skip']
@@ -41,6 +43,8 @@ class Simulation:
     options : dict-like
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
+    setup_logging : bool
+        Whether to call :meth:`setup_logging` at the beginning of initialization.
 
     Options
     -------
@@ -51,6 +55,8 @@ class Simulation:
         output_filename : string | None
             Filename for output. The file ending determines the output format.
             None (default) disables any writing to files.
+        logging_params : dict
+            Logging parameters; see :cfg:config:`logging`.
         overwrite_output : bool
             Whether an exisiting file may be overwritten.
             Otherwise, if the file already exists we try to replace
@@ -77,11 +83,19 @@ class Simulation:
         version_info : dict
             Information of the used library/code versions and simulation class.
             See :meth:`get_version_info`.
+        finished_run : bool
+            Usefull to check whether the output file finished or was generated at a checkpoint.
+            This flag is set to `True` only right at the end of :meth:`run`
+            (or :meth:`resume_run`) before saving.
         measurements : dict
             Data of all the performed measurements.
         psi :
             The final tensor network state.
             Only included if :cfg:option:`Simulation.save_psi` is True (default).
+        resume_data : dict
+            The data fro resuming the algorithm run.
+            Only included if :cfg:option:`Simultion.save_resume_data` is True.
+
     measurement_event : :class:`~tenpy.tools.events.EventHandler`
         An event that gets emitted each time when measurements should be performed.
         The callback functions should take :attr:`psi`, the simulation class itself,
@@ -110,16 +124,26 @@ class Simulation:
         ('tenpy.simulations.measurement', 'entropy'),
     ]
 
-    def __init__(self, options):
+    #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + ".Simulation")
+
+    def __init__(self, options, *, setup_logging=True):
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = asConfig(options, self.__class__.__name__)
-        self.verbose = self.options.verbose
         cwd = self.options.get("directory", None)
         if cwd is not None:
-            if self.verbose >= 1:
-                print(f"going into directory {cwd!r}")
             os.chdir(cwd)
+        self.fix_output_filenames()
+        if setup_logging:
+            log_params = self.options.subconfig('logging_params')
+            setup_logging_(log_params, self.output_filename)  # needs self.output_filename
+        self.logger.info("simulation class %s", self.__class__.__name__)
+        # catch up with logging messages
+        if cwd is not None:
+            self.logger.info("change directory to %r", cwd)
+        self.logger.info("output filename: %r", self.output_filename)
+
         random_seed = self.options.get('random_seed', None)
         if random_seed is not None:
             if self.loaded_from_checkpoint:
@@ -128,12 +152,19 @@ class Simulation:
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
         self.results = {
-            'simulation_parameters': self.options.as_dict(),
+            'simulation_parameters': self.options,
             'version_info': self.get_version_info(),
+            'finished_run': False,
         }
         self._last_save = time.time()
-        self.fix_output_filenames()
         self.measurement_event = EventHandler("psi, simulation, results")
+
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
 
     def run(self):
         """Run the whole simulation."""
@@ -146,6 +177,7 @@ class Simulation:
         self.init_measurements()
         self.run_algorithm()
         self.final_measurements()
+        self.results['finished_run'] = True
         results = self.save_results()
         return results
 
@@ -167,6 +199,7 @@ class Simulation:
         return sim
 
     def resume_run(self):
+        """Resume a simulation that was initialized from a checkpoint."""
         if not self.loaded_from_checkpoint:
             warnings.warn("called `resume_run()` on a simulation *not* loaded from checkpoint. "
                           "You probably want `run()` instead!")
@@ -177,18 +210,17 @@ class Simulation:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
         self.options.touch('initial_state_builder_class', 'initial_state_params', 'save_psi')
-        if 'environment_data' in self.results:
-            # use environment data from checkpoint
-            set_recursive(self.options,
-                          'algorithm_params/init_env_data',
-                          self.results['environment_data'],
-                          insert_dicts=True)
-        self.init_algorithm()
+
+        kwargs = {}
+        if 'resume_data' in self.results:
+            kwargs['resume_data'] = self.results['resume_data']
+        self.init_algorithm(**kwargs)
         # the relevant part from init_measurements()
         self._connect_measurements()
 
         self.resume_run_algorithm()  # continue with the actual algorithm
         self.final_measurements()
+        self.results['finished_run'] = True
         results = self.save_results()
         return results
 
@@ -244,8 +276,14 @@ class Simulation:
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
 
-    def init_algorithm(self):
+    def init_algorithm(self, **kwargs):
         """Initialize the algortihm.
+
+        Parameters
+        ----------
+        **kwargs :
+            Extra keyword arguments passed on to the algorithm __init__(),
+            for example the `resume_data` when calling `resume_run`.
 
         Options
         -------
@@ -274,13 +312,15 @@ class Simulation:
                 raise ValueError("can't find Algorithm called " + repr(alg_class_name))
         else:
             AlgorithmClass = alg_class_name
-        params = self.options.subconfig('algorithm_params')
-        # TODO load environment from file?
-        self.engine = AlgorithmClass(self.psi, self.model, params)
+        self._init_algorithm(AlgorithmClass, **kwargs)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
         con_checkpoint = list(self.options.get('connect_algorithm_checkpoint', []))
         for entry in con_checkpoint:
             self.engine.checkpoint.connect_by_name(*entry)
+
+    def _init_algorithm(self, AlgorithmClass, **kwargs):
+        params = self.options.subconfig('algorithm_params')
+        self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
 
     def init_measurements(self):
         """Initialize and prepare measurements.
@@ -397,8 +437,10 @@ class Simulation:
                 Whether an exisiting file may be overwritten.
                 Otherwise, if the file already exists we try to replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
-
+            skip_if_output_exists : bool
+                If True, raise :class:`Skip` if the output file already exists.
         """
+        # note: this function shouldn't use logging: it's called before setup_logging()
         output_filename = self.options.get("output_filename", None)
         overwrite_output = self.options.get("overwrite_output", False)
         skip_if_exists = self.options.get("skip_if_output_exists", False)
@@ -426,8 +468,6 @@ class Simulation:
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
-        if self.verbose >= 1:
-            print(f"output will be saved at {output_filename!r}")
         if not os.path.exists(self._backup_filename):
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"
@@ -437,6 +477,7 @@ class Simulation:
 
     def get_backup_filename(self, output_filename):
         """Extract the name used for backups of `output_filename`."""
+        # note: this function shouldn't use logging
         root, ext = os.path.splitext(output_filename)
         return root + '.backup' + ext
 
@@ -454,12 +495,13 @@ class Simulation:
         output_filename = self.output_filename
         backup_filename = self._backup_filename
         if output_filename is None:
-            return results  # don't save
+            return results  # don't save to disk
 
         if os.path.exists(output_filename):
             # keep a single backup, previous backups are overwritten.
             os.rename(output_filename, self._backup_filename)
 
+        self.logger.info("saving results to disk")  # save results to disk
         hdf5_io.save(results, output_filename)
 
         if os.path.exists(backup_filename):
@@ -474,6 +516,14 @@ class Simulation:
         For example, this can be used to convert lists to numpy arrays, to add more meta-data,
         or to clean up unnecessarily large entries.
 
+        Options
+        -------
+        :cfg:configoptions :: Simulation
+
+            save_resume_data : bool
+                If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
+                into the output as `resume_data`.
+
         Returns
         -------
         results : dict
@@ -485,20 +535,14 @@ class Simulation:
         measurements = results['measurements'].copy()
         results['measurements'] = measurements
         for k, v in measurements.items():
-            v = np.array(v)
+            try:
+                v = np.array(v)
+            except:
+                continue
             if v.dtype != np.dtype(object):
                 measurements[k] = v
-        if hasattr(self.engine, 'env'):
-            # handle environment data
-            if self.options.get('save_environment_data', self.options['save_psi']):
-                results['environment_data'] = self.engine.env.get_initialization_data()
-            # HACK: remove initial environments from options to avoid blowing up the output size,
-            # in particular if `save_psi` is false, this can reduce the file size dramatically.
-            init_env_data = self.options['algorithm_params'].silent_get('init_env_data', {})
-            for k in ['init_LP', 'init_RP']:
-                if k in init_env_data:
-                    if isinstance(init_env_data[k], npc.Array):
-                        init_env_data[k] = repr(init_env_data[k])
+        if self.options.get('save_resume_data', self.options['save_psi']):
+            results['resume_data'] = self.engine.get_resume_data()
         return results
 
     def save_at_checkpoint(self, alg_engine):

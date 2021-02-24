@@ -15,11 +15,11 @@ import pytest
 
 
 class DummyAlgorithm(Algorithm):
-    def __init__(self, psi, model, options, **kwargs):
-        super().__init__(psi, model, options, **kwargs)
+    def __init__(self, psi, model, options, *, resume_data=None):
+        super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = None
         self.evolved_time = self.options.get('start_time', 0.)
-        init_env_data = self.options.get("init_env_data", {})
+        init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
 
     def run(self):
@@ -30,6 +30,11 @@ class DummyAlgorithm(Algorithm):
             self.evolved_time += dt
             self.checkpoint.emit(self)
         return None, self.psi
+
+    def get_resume_data(self):
+        data = super().get_resume_data()
+        data['init_env_data'] = self.env.get_initialization_data()
+        return data
 
 
 class SimulationStop(Exception):
@@ -55,6 +60,9 @@ def dummy_measurement(results, psi, simulation):
 
 
 simulation_params = {
+    'logging_params': {
+        'skip_setup': True
+    },
     'model_class':
     'XXZChain',
     'model_params': {
@@ -112,7 +120,6 @@ def test_Simulation_resume(tmpdir):
 
 
 groundstate_params = copy.deepcopy(simulation_params)
-groundstate_params['save_environment_data'] = False
 
 
 def test_GroundStateSearch():

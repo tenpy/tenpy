@@ -206,6 +206,9 @@ So we have yet another class helping to structure the initialization of models: 
 The general structure of this class is like this::
 
     class CouplingMPOModel(CouplingModel,MPOModel):
+        default_lattice = "Chain"
+        "
+
         def __init__(self, model_param):
             # ... follows the basic steps 1-8 using the methods
             lat = self.init_lattice(self, model_param)  # for step 4
@@ -214,12 +217,18 @@ The general structure of this class is like this::
             # ...
 
         def init_sites(self, model_param):
-            # You should overwrite this
+            # You should overwrite this in most cases to ensure
+            # getting the site(s) and charge conservation you want
+            site = SpinSite(...)  # or FermionSite, BosonSite, ...
+            return site  # (or tuple of sites)
 
         def init_lattice(self, model_param):
             sites = self.init_sites(self, model_param) # for steps 1-3
+            # and then read out the class attribute `default_lattice`,
             # initialize an arbitrary pre-defined lattice
             # using model_params['lattice']
+            # and enure it's the default lattice if the class attribute
+            # `force_default_lattice` is True.
 
         def init_terms(self, model_param):
             # does nothing.
@@ -292,6 +301,62 @@ If you wanted to save the trouble of the extra line of code (but still did not c
 Finally, if you wanted a reduction in MPO bond dimension, you would need to set `model_par['explicit_plus_hc'] = True`, and write::
 
     self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
+
+
+Non-uniform terms and couplings
+-------------------------------
+The CouplingModel-methods :meth:`~tenpy.models.model.CouplingModel.add_onsite`, :meth:`~tenpy.models.model.CouplingModel.add_coupling`, 
+and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` add a sum over a "couplig" term shifted by lattice
+vectors. However, some models are not that "uniform" over the whole lattice.
+
+First of all, you might have some local term that gets added only at one specific location in the lattice.
+You can add such a term for example with :meth:`~tenpy.models.model.CouplingModel.add_local_term`.
+
+Second, if you have irregular lattices, take a look at the corresponding section in :doc:`/intro/lattices`.
+
+Finally, note that the argument `strength` for the `add_onsite`, `add_coupling`, and `add_multi_coupling` methods 
+can not only be a numpy scalar, but also a (numpy) array.
+In general, the sum performed by the methods runs over the given term 
+shifted by lattice vectors *as far as possible to still fit the term into the lattice*. 
+
+For the :meth:`~tenpy.models.model.CouplingModel.add_onsite` case this criterion is simple: there is exactly one site in each lattice unit cell with the `u` specified as separate argument, so the correct shape for the `strength` array is simply given by :attr:`~tenpy.models.lattice.Lattice.Ls`.
+For example, if you want the defacto standard model studied for many-body localization, a Heisenberg chain with random , uniform onsite field :math:`h^z_i \in [-W, W]`,
+
+.. math ::
+
+    H = J \sum_{i=0}^{L-1} \vec{S}_i \cdot \vec{S}_{i+1} - \sum_{i=0}^{L} h^z_i S^z_i
+
+you can use the :class:`~tenpy.models.spins.SpinChain` with the following model parameters::
+
+    L = 30 # or whatever you like...
+    W = 5.  # MBL transition at W_c ~= 3.5 J
+    model_params = {
+        'L': L,
+        'Jx': 1., 'Jy': 1., 'Jz': 1.,
+        'hz': 2.*W*(np.random.random(L) - 0.5),  # random values in [-W, W], shape (L,)
+        'conserve': 'best',
+    }
+    M = tenpy.models.spins.SpinChain(model_params)
+
+For :meth:`~tenpy.models.model.CouplingModel.add_coupling` and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`,
+things become a little bit more complicated, and the correct shape of the `strength` array depends not only on the :attr:`~tenpy.models.lattice.Lattice.Ls`
+but also on the boundary conditions of the lattice. Given a term, you can call
+:meth:`~tenpy.models.lattice.Lattice.coupling_shape` and :meth:`~tenpy.models.lattice.Lattice.multi_coupling_shape` to find out the correct shape for `strength`.
+To avoid any ambiguity, the shape of the `strength` always has to fit, at least after a tiling performed by :func:`~tenpy.tools.misc.to_array`.
+
+For example, consider the Su-Schrieffer-Heeger model, a spin-less :class:`~tenpy.models.fermions.FermionChain` with hopping strength alternating between two values, say `t1` and `t2`.
+You can generete this model for example like this::
+    
+    L = 30 # or whatever you like...
+    t1, t2 = 0.5, 1.5
+    t_array = np.array([(t1 if i % 2 == 0 else t2) for i in range(L-1)])
+    model_params = {
+        'L': L,
+        't': t_array,
+        'V': 0., 'mu': 0.,  # just free fermions, but you can generalize...
+        'conserve': 'best'
+    }
+    M = tenpy.models.fermions.FermionChain(model_params)
 
 
 Some random remarks on models

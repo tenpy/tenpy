@@ -237,7 +237,7 @@ class ExactDiag:
         Returns
         -------
         psi : :class:`~tenpy.linalg.np_conserved.Array`
-            The MPO contracted along the virtual bonds.
+            The MPS contracted along the virtual bonds.
         """
         if mps.bc != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")

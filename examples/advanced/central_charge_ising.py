@@ -17,7 +17,7 @@ from tenpy.algorithms import dmrg
 
 
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best', verbose=0)
+    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -32,7 +32,6 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         'max_E_err': 1.e-9,
         'max_S_err': 1.e-6,
         'update_env': 0,
-        'verbose': 0
     }
 
     chi_list = np.arange(7, 31, 2)
@@ -111,5 +110,7 @@ def fit_plot_central_charge(s_list, xi_list, filename):
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     s_list, xi_list = example_DMRG_tf_ising_infinite_S_xi_scaling(g=1)
     fit_plot_central_charge(s_list, xi_list, "central_charge_ising.pdf")
