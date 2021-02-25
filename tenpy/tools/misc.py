@@ -749,7 +749,7 @@ def setup_logging(options={}, output_filename=None):
                 'mode': 'a',
             }
             if not to_stdout:
-                cwd = os.path.getcwd()
+                cwd = os.getcwd()
                 print(f"now logging to {cwd!r}/{log_fn!r}")
         conf = {
             'version': 1,  # mandatory
