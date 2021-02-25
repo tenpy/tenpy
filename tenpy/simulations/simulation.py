@@ -430,12 +430,14 @@ class Simulation:
             output_filename : string | None
                 Filename for output. The file ending determines the output format.
                 None (default) disables any writing to files.
-            overwrite_output : bool
-                Whether an exisiting file may be overwritten.
-                Otherwise, if the file already exists we try to replace
-                ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
             skip_if_output_exists : bool
                 If True, raise :class:`Skip` if the output file already exists.
+            overwrite_output : bool
+                Only makes a difference if `skip_if_output_exists` is False and the file exists.
+                In that case, with `overwrite_output`, just save everything under that name again,
+                or with `overwrite_output`=False, replace
+                ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers)
+                until we get a filename that doesn't exist yet.
         """
         # note: this function shouldn't use logging: it's called before setup_logging()
         output_filename = self.options.get("output_filename", None)
@@ -465,6 +467,11 @@ class Simulation:
                 self.output_filename = output_filename
                 self._backup_filename = self.get_backup_filename(output_filename)
             # else: overwrite stuff in `save_results`
+            if overwrite_output and not self.loaded_from_checkpoint:
+                # move logfile to *.backup.log
+                root, ext = os.path.splitext(output_filename)
+                if os.path.exists(root + '.log'):
+                    os.rename(root + '.log', root + '.backup.log')
         if not os.path.exists(self._backup_filename):
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"

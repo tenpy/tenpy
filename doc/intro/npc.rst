@@ -31,8 +31,8 @@ However, you should definitely know a few basic facts about the usage of charge 
 - Instead of using numpy arrays, tensors are represented by the :class:`~tenpy.linalg.np_conserved.Array` class.
   This class is defined in :mod:`~tenpy.linalg.np_conserved` (the name standing for "numpy with charge conservation").
   Internally, it stores only non-zero blocks of the tensor, which are "compatible" with the charges of the indices.
-  It has to have a well defined overall charge :class:`~tenpy.linalg.np_conserved.Array.qtotal`.
-  This expludes certain operators (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
+  It **has to have a well defined overall charge** :class:`~tenpy.linalg.np_conserved.Array.qtotal`.
+  This **expludes certain operators** (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
 - There is a class :class:`~tenpy.linalg.charges.ChargeInfo` holding the general information what kind of charges we have,
   and a :class:`~tenpy.linalg.charges.LegCharge` for the charge data on a given leg. The leg holds a flag `qconj` which
   is +1 or -1, depending on whether the leg goes into the tensor (representing a vector space) 

@@ -641,7 +641,7 @@ def setup_logging(options={}, output_filename=None):
 
     ..
         If you change the code block below, please also change the corresponding block
-        in :doc:`/intro/logging/`.
+        in :doc:`/intro/logging`.
 
     .. code-block :: yaml
 
@@ -649,19 +649,19 @@ def setup_logging(options={}, output_filename=None):
         disable_existing_loggers: False  # keep module-based loggers already defined!
         formatters:
             custom:
-                format: "%(levelname)-8s: %(message)s"   # logging_params['format']
+                format: "%(levelname)-8s: %(message)s"   # options['format']
         handlers:
             to_stdout:
                 class: logging.StreamHandler
-                level: INFO         # logging_params['to_stdout']
-                formatter: brief
+                level: INFO         # options['to_stdout']
+                formatter: custom
                 stream: ext://sys.stdout
             to_file:
                 class: logging.FileHandler
-                level: INFO         # logging_params['to_file']
-                formatter: brief
-                filename: output_filename.log   # logging_params['filename']
-                mode: w             # overwrites existing!
+                level: INFO         # options['to_file']
+                formatter: custom
+                filename: output_filename.log   # options['filename']
+                mode: a
         root:
             handlers: [to_stdout, to_file]
             level: DEBUG
@@ -746,7 +746,7 @@ def setup_logging(options={}, output_filename=None):
                 'level': to_file,
                 'formatter': 'custom',
                 'filename': log_fn,
-                'mode': 'w',  # overwrites existing!
+                'mode': 'a',
             }
             if not to_stdout:
                 cwd = os.path.getcwd()
