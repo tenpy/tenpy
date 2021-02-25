@@ -7,7 +7,7 @@ from .optimization import bottleneck
 from .process import omp_set_nthreads
 from .params import Config
 import random
-import os
+import os.path
 import itertools
 import argparse
 import warnings
@@ -641,29 +641,27 @@ def setup_logging(options={}, output_filename=None):
 
     ..
         If you change the code block below, please also change the corresponding block
-        in :doc:`/intro/logging/`.
+        in :doc:`/intro/logging`.
 
     .. code-block :: yaml
 
         version: 1  # mandatory for logging config
         disable_existing_loggers: False  # keep module-based loggers already defined!
         formatters:
-            brief:
-                format: "%(levelname)-8s: %(message)s"
-            detailed:
-                format: "%(asctime)s %(levelname)-8s: %(message)s"
+            custom:
+                format: "%(levelname)-8s: %(message)s"   # options['format']
         handlers:
             to_stdout:
                 class: logging.StreamHandler
-                level: INFO         # logging_params['to_stdout']
-                formatter: brief
+                level: INFO         # options['to_stdout']
+                formatter: custom
                 stream: ext://sys.stdout
             to_file:
                 class: logging.FileHandler
-                level: INFO         # logging_params['to_file']
-                formatter: detailed
-                filename: output_filename.log   # logging_params['filename']
-                mode: w             # overwrites existing!
+                level: INFO         # options['to_file']
+                formatter: custom
+                filename: output_filename.log   # options['filename']
+                mode: a
         root:
             handlers: [to_stdout, to_file]
             level: DEBUG
@@ -708,6 +706,8 @@ def setup_logging(options={}, output_filename=None):
             for all loggers in any of those submodules, including the one provided as
             ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
+        format : str
+            Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
         dict_config : dict
             Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
@@ -724,6 +724,7 @@ def setup_logging(options={}, output_filename=None):
     log_fn = options.get('filename', default_log_fn)
     to_stdout = options.get('to_stdout', "INFO")
     to_file = options.get('to_file', "INFO")
+    log_format = options.get('format', "%(levelname)-8s: %(message)s")
     logger_levels = options.get('logger_levels', {})
     conf = options.get('dict_config', None)
     capture_warnings = options.get('capture_warnings', conf is not None
@@ -736,29 +737,27 @@ def setup_logging(options={}, output_filename=None):
             handlers['to_stdout'] = {
                 'class': 'logging.StreamHandler',
                 'level': to_stdout,
-                'formatter': 'brief',
+                'formatter': 'custom',
                 'stream': 'ext://sys.stdout',
             }
         if to_file and log_fn is not None:
             handlers['to_file'] = {
                 'class': 'logging.FileHandler',
                 'level': to_file,
-                'formatter': 'detailed',
+                'formatter': 'custom',
                 'filename': log_fn,
-                'mode': 'w',  # overwrites existing!
+                'mode': 'a',
             }
             if not to_stdout:
-                print(f"now logging to {log_fn!r}")
+                cwd = os.getcwd()
+                print(f"now logging to {cwd!r}/{log_fn!r}")
         conf = {
             'version': 1,  # mandatory
             'disable_existing_loggers': False,
             'formatters': {
-                'brief': {
-                    'format': "%(levelname)-8s: %(message)s"
-                },
-                'detailed': {
-                    'format': "%(asctime)s %(levelname)-8s: %(message)s"
-                },
+                'custom': {
+                    'format': log_format
+                }
             },
             'handlers': handlers,
             'root': {
