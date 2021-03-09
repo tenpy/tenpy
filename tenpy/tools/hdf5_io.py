@@ -75,6 +75,7 @@ import numpy as np
 import importlib
 import warnings
 import sys
+from packaging import version
 
 try:
     import h5py
@@ -686,7 +687,12 @@ class Hdf5Saver:
         self.save(obj.descr, subpath + 'descr')
         return h5gr
 
-    dispatch_save[np.dtype] = (save_dtype, REPR_DTYPE)
+    if version.parse(np.__version__) < version.parse('1.20'):
+        dispatch_save[np.dtype] = (save_dtype, REPR_DTYPE)
+    else:
+        # numpy version 1.20 introduced separate subclasses of dtype for the standard types
+        for t in np.dtype.__subclasses__():
+            dispatch_save[t] = (save_dtype, REPR_DTYPE)
 
     def save_ignored(self, obj, path, type_repr):
         """Don't save the Hdf5Ignored object; just return None."""
