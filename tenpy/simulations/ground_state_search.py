@@ -25,8 +25,8 @@ class GroundStateSearch(Simulation):
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
 
-    def init_algorithm(self):
-        """Initialize the algortihm.
+    def init_algorithm(self, **kwargs):
+        """Initialize the algorithm.
 
         Options
         -------
@@ -35,7 +35,7 @@ class GroundStateSearch(Simulation):
             save_stats : bool
                 Whether to include the
         """
-        super().init_algorithm()
+        super().init_algorithm(**kwargs)
         if self.options.get("save_stats", True):
             for name in ['sweep_stats', 'update_stats']:
                 stats = getattr(self.engine, name, None)

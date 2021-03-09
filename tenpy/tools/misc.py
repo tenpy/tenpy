@@ -579,7 +579,7 @@ def set_recursive(nested_data, recursive_key, value, separator="/", insert_dicts
     subkeys = recursive_key.split(separator)
     for subkey in subkeys[:-1]:
         if insert_dicts and subkey not in nested_data:
-            nested_data[subkey]
+            nested_data[subkey] = {}
         nested_data = nested_data[subkey]
     nested_data[subkeys[-1]] = value
 

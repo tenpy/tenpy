@@ -718,7 +718,7 @@ class DMRGEngine(Sweep):
     EffectiveH = None
     DefaultMixer = None
 
-    def __init__(self, psi, model, options):
+    def __init__(self, psi, model, options, **kwargs):
         options = asConfig(options, self.__class__.__name__)
         self.mixer = None
         if isinstance(self, TwoSiteDMRGEngine):
@@ -726,7 +726,7 @@ class DMRGEngine(Sweep):
         else:
             self.DefaultMixer = SingleSiteMixer
 
-        super().__init__(psi, model, options)
+        super().__init__(psi, model, options, **kwargs)
 
     @property
     def DMRG_params(self):
