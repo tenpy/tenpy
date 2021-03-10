@@ -8,9 +8,6 @@ running the actual algorithm, possibly performing measurements and saving the re
 .. todo ::
     provide examples,
     give user guide
-
-.. todo ::
-    update figure displaying the "layers of TeNPy"
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 

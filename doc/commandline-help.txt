@@ -20,7 +20,7 @@ optional arguments:
         'RealTimeEvolution'.
     --option KEY VALUE, -o KEY VALUE
         Allows overwriting some options from the yaml files. KEY can be recursive separated by
-        ``/``, e.g. ``dmrg_params/trunc_params/chi``. VALUE is initialized by python's
+        ``/``, e.g. ``algorithm_params/trunc_params/chi``. VALUE is initialized by python's
         ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. Thus ``'1.2'`` and
         ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'`` will work if you include the quotes
         on the command line to ensure that the VALUE is passed as a single argument.
