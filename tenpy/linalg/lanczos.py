@@ -45,8 +45,8 @@ class LanczosGroundState:
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
-        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
-        as vectors.
+        Note that it does not have to be a 1D "vector"; we are fine with viewing
+        higher-rank tensors as vectors.
     options : dict
         Further optional parameters as described in :cfg:config:`Lanczos`.
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
@@ -113,6 +113,8 @@ class LanczosGroundState:
         ``Es[n, :]`` contains the energies of ``_T[:n+1, :n+1]`` in step `n`.
     _T : ndarray, shape (N_max + 1, N_max +1)
         The tridiagonal matrix representing `H` in the orthonormalized Krylov basis.
+    _psi0_norm : float
+        Initial norm of the `psi0` passed.
     _cutoff : float
         See parameter `cutoff`.
     _cache : list of psi0-like vectors
@@ -131,6 +133,7 @@ class LanczosGroundState:
     def __init__(self, H, psi0, options, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
+        self._psi0_norm = None
         self.options = options = asConfig(options, "Lanczos")
         self.N_min = options.get('N_min', 2)
         self.N_max = options.get('N_max', 20)
@@ -194,6 +197,9 @@ class LanczosGroundState:
         T = self._T
         w = self.psi0  # initialize
         beta = npc.norm(w)
+        if self._psi0_norm is None:
+            # this is only needed for normalization in LanczosEvolution
+            self._psi0_norm = beta
         for k in range(self.N_max):
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
@@ -288,7 +294,7 @@ class LanczosEvolution(LanczosGroundState):
 
     It turns out that the Lanczos algorithm is also good for calculating the matrix exponential
     applied to the starting vector. Instead of diagonalizing the tri-diagonal `T` and taking the
-    ground state, we now calculate ``exp(delta T) e_0 in the Krylov ONB, where
+    ground state, we now calculate ``exp(delta T) e_0`` in the Krylov ONB, where
     ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
 
     Parameters
@@ -318,8 +324,9 @@ class LanczosEvolution(LanczosGroundState):
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
         self._result_norm = 1.
+        self.delta = None  # set in run()
 
-    def run(self, delta):
+    def run(self, delta, normalize=None):
         """Calculate ``expm(delta H).dot(psi0)`` using Lanczos.
 
         Parameters
@@ -327,6 +334,9 @@ class LanczosEvolution(LanczosGroundState):
         delta : float/complex
             Time step by which we should evolve psi0: prefactor of H in the exponential.
             Note that the complex `i` is *not* included!
+        normalize : bool
+            Whether to normalize the resulting state.
+            Defaults to ``np.real(delta) == 0``.
 
         Returns
         -------
@@ -345,27 +355,39 @@ class LanczosEvolution(LanczosGroundState):
             logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
                          self._T[0, 1])
         if N == 1:
-            result_full = self._result_krylov[0] * self.psi0
+            result_full = self._result_krylov[0] * self.psi0  # _result_krylov[0] is only a phase
         else:
             result_full = self._calc_result_full(N)
-        if delta.real != 0.:
-            return result_full * self._result_norm, N
+        # result_full is normalized at this point
+        if normalize is None:
+            normalize = np.real(delta) == 0.
+        if normalize:
+            return result_full, N
         # else:
-        return result_full, N
+        return (self._psi0_norm * self._result_norm) * result_full, N
 
     def _calc_result_krylov(self, k):
-        """calculate expm(delta T) e0 for T= _T[:k+1, :k+1]"""
+        """calculate ``expm(delta T).dot(e0)`` for ``T = _T[:k+1, :k+1]``"""
+
+        # self._result_krylov should be a normalized vector.
         T = self._T
         delta = self.delta
         if k == 0:
             E = T[0, 0]
             exp_dE = np.exp(delta * E)
-            self._result_norm = np.sqrt(np.abs(exp_dE))
-            self._result_krylov = np.ones(1, np.float) * (exp_dE / self._result_norm)
+            self._result_norm = np.abs(exp_dE)  # np.linalg.norm for individual element
+            self._result_krylov = np.array([exp_dE / self._result_norm])
         else:
-            e0 = np.zeros(k + 1, dtype=np.float)
-            e0[0] = 1.
-            exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            #     e0 = np.zeros(k + 1, dtype=np.float)
+            #     e0[0] = 1.
+            #     exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            # scipy.linalg.expm is using sparse tools; instead fully diagonalize
+            # given that T is hermitian, this is easy:
+            # H V = V diag(E)  -> H  = V E V^D
+            # exp(H*delta) e_0 = V diag(exp(E*delta)) V^D e_0
+            E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
+            exp_dT_e0 = np.dot(v_T, np.exp(E_T * delta) * np.conj(v_T[0, :]))
+
             self._result_norm = np.linalg.norm(exp_dT_e0)
             self._result_krylov = exp_dT_e0 / self._result_norm
 

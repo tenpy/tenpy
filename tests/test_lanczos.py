@@ -108,13 +108,15 @@ def test_lanczos_evolve(n, N_cache, tol=5.e-14):
     H_Op = H  # use `matvec` of the array
     qtotal = leg.to_qflat()[0]
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
-    psi_init /= npc.norm(psi_init)
+    #psi_init /= npc.norm(psi_init) # not necessary
     psi_init_flat = psi_init.to_ndarray()
     lanc = lanczos.LanczosEvolution(H_Op, psi_init, {'N_cache': N_cache})
-    for delta in [-0.1j, 0.1j, 1.j]:  #, 0.1, 1.]:
+    for delta in [-0.1j, 0.1j, 1.j, 0.1, 1.]:
         psi_final_flat = expm(H_flat * delta).dot(psi_init_flat)
-        psi_final, N = lanc.run(delta)
-        ov = np.inner(psi_final.to_ndarray().conj(), psi_final_flat)
-        ov /= np.linalg.norm(psi_final_flat)
-        print("<psi1|psi1_flat>/norm=", ov)
-        assert (abs(1. - abs(ov)) < tol)
+        norm = np.linalg.norm(psi_final_flat)
+        psi_final, N = lanc.run(delta, normalize=False)
+        diff = np.linalg.norm(psi_final.to_ndarray() - psi_final_flat)
+        print("norm(|psi_final> - |psi_final_flat>)/norm = ", diff / norm)  # should be 1.
+        assert diff / norm < tol
+        psi_final2, N = lanc.run(delta, normalize=True)
+        assert npc.norm(psi_final / norm - psi_final2) < tol
