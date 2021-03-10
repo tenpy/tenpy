@@ -55,7 +55,7 @@ def setup_benchmark(mod_q=[1],
                     size=20,
                     legs=2,
                     select_frac=1.,
-                    dtype=np.float,
+                    dtype=np.float64,
                     **kwargs):
     """Returns ``a, b, axes`` for timing of ``npc.tensordot(a, b, axes)``
 

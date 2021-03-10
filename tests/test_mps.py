@@ -45,7 +45,7 @@ def test_mps():
     p_state = ["up", "down"] * (L // 2)  # repeats entries L/2 times
     bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.j * phi) * np.sin(theta / 2)])
     p_state[L // 2] = bloch_sphere_state  # replace one spin in center
-    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=np.complex)
+    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=complex)
     eval_z = psi.expectation_value("Sigmaz")
     eval_x = psi.expectation_value("Sigmax")
     assert (eval_z[L // 2] - np.cos(theta)) < 1.e-12

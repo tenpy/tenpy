@@ -192,11 +192,11 @@ class MPS:
             if isinstance(SVs[i], npc.Array):
                 self._S[i] = SVs[i].copy()
             else:
-                self._S[i] = np.array(SVs[i], dtype=np.float)
+                self._S[i] = np.array(SVs[i], dtype=np.float64)
         if self.bc == 'infinite':
             self._S[-1] = self._S[0]
         elif self.bc == 'finite':
-            self._S[0] = self._S[-1] = np.ones([1])
+            self._S[0] = self._S[-1] = np.ones([1], dtype=np.float64)
         self._transfermatrix_keep = 1
         self.test_sanity()
 
@@ -476,7 +476,7 @@ class MPS:
             >>> theta, phi = np.pi/4, np.pi/6
             >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
             >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
-            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=np.complex)
+            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=complex)
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
@@ -674,7 +674,7 @@ class MPS:
         B_list[0] = psi.replace_label(labels[1], 'p')
         B_form = ['A'] + ['B'] * (L - 1)
         if bc == 'finite':
-            S_list[0] = S_list[-1] = np.ones([1], dtype=np.float)
+            S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
         elif outer_S is not None:
             S_list[0], S_list[-1] = outer_S
         res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm)
@@ -2309,7 +2309,7 @@ class MPS:
         if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
             hermitian = False
-        C = np.empty((len(sites1), len(sites2)), dtype=np.complex)
+        C = np.empty((len(sites1), len(sites2)), dtype=complex)
         for x, i in enumerate(sites1):
             # j > i
             j_gtr = sites2[sites2 > i]
@@ -2519,7 +2519,7 @@ class MPS:
                 |   |    |          vs     |
                 |   .--theta*[i]--         .--s[i+1]--
         """
-        err = np.empty((self.L, 2), dtype=np.float)
+        err = np.empty((self.L, 2), dtype=float)
         lbl_R = (self._get_p_label('0') + ['vR'], self._get_p_label('0*') + ['vR*'])
         lbl_L = (['vL'] + self._get_p_label('0'), ['vL*'] + self._get_p_label('0*'))
         for i in range(self.L):
@@ -2682,7 +2682,7 @@ class MPS:
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')
-            self._S[i1] = np.ones(self.chi[i1], dtype=np.float)  # (is later used for guess of Gl)
+            self._S[i1] = np.ones(self.chi[i1], dtype=np.float64)  # (later used for guess of Gl)
         else:
             # was in canonical form before; bring back into canonical form
             # -> make sure we don't use multiple S on one bond in our definition of the MPS
@@ -3593,7 +3593,7 @@ class MPS:
         Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
         Gl /= npc.trace(Gl)
         # Gl is diag(S**2) up to numerical errors...
-        return Gl, np.ones(Yr.legs[0].ind_len, np.float)
+        return Gl, np.ones(Yr.legs[0].ind_len, np.float64)
 
     def _gauge_compatible_vL_vR(self, other):
         """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
@@ -4432,7 +4432,7 @@ class InitialStateBuilder:
         if check_filling is None:
             return
         full, empty = self.options.get("full_empty", ('full', 'empty'))
-        p_state = np.asarray(p_state, dtype=np.object)
+        p_state = np.asarray(p_state, dtype=object)
         N_filled = np.sum(p_state == full)
         N_total = p_state.size
         try:
@@ -4491,8 +4491,8 @@ class InitialStateBuilder:
             print(">>> available variables:")
             print(sorted(variables.keys()))
             raise  # re-throw the error, we just print usefull debugging info
-        p_state = np.where(fill_array, to_array([full], shape=shape, dtype=np.object),
-                           to_array([empty], shape=shape, dtype=np.object))
+        p_state = np.where(fill_array, to_array([full], shape=shape, dtype=object),
+                           to_array([empty], shape=shape, dtype=object))
         return self.lat_product_state(p_state)
 
     def fill_where__get_variables(self):

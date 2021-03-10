@@ -587,7 +587,7 @@ class DensityMatrixMixer(Mixer):
             If Id_L is ``None``, we can't include the identity into `mixed_xR`,
             so it has to be added directly in :meth:`mix_rho_L`.
         """
-        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=np.float)
+        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=float)
         separate_Id = Id_L is None
         if not separate_Id:
             x[Id_L] = 1.
@@ -617,7 +617,7 @@ class DensityMatrixMixer(Mixer):
             If Id_R is ``None``, we can't include the identity into `mixed_xL`,
             so it has to be added directly in :meth:`mix_rho_R`.
         """
-        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=np.float)
+        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=float)
         separate_Id = Id_R is None
         if not separate_Id:
             x[Id_R] = 1.

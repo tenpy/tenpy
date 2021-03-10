@@ -1588,7 +1588,7 @@ class CouplingModel(Model):
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strenght complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions

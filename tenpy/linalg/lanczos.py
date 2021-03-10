@@ -159,9 +159,9 @@ class LanczosGroundState:
             warnings.warn(msg, category=FutureWarning, stacklevel=2)
             self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
         self._cache = []
-        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float)
+        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float64)
         # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
-        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float)
+        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float64)
 
     def run(self):
         """Find the ground state of H.
@@ -272,7 +272,7 @@ class LanczosGroundState:
         T = self._T
         if k == 0:
             self.Es[0, 0] = T[0, 0]
-            self._result_krylov = np.ones(1, np.float)
+            self._result_krylov = np.ones(1, np.float64)
         else:
             # Diagonalize T
             E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
@@ -378,7 +378,7 @@ class LanczosEvolution(LanczosGroundState):
             self._result_norm = np.abs(exp_dE)  # np.linalg.norm for individual element
             self._result_krylov = np.array([exp_dE / self._result_norm])
         else:
-            #     e0 = np.zeros(k + 1, dtype=np.float)
+            #     e0 = np.zeros(k + 1, dtype=float)
             #     e0[0] = 1.
             #     exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
             # scipy.linalg.expm is using sparse tools; instead fully diagonalize

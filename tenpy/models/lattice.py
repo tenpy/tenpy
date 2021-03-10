@@ -198,7 +198,7 @@ class Lattice:
             assert self.N_cells == np.prod(self.Ls)
         if self.bc.shape != (self.dim, ):
             raise ValueError("Wrong len of bc")
-        assert self.bc.dtype == np.bool
+        assert self.bc.dtype == bool
         chinfo = None
         for site in self.unit_cell:
             if not isinstance(site, Site):

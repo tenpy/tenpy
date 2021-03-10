@@ -1172,7 +1172,7 @@ class SpinSite(Site):
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
-            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int))
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
@@ -1351,8 +1351,8 @@ class SpinHalfFermionSite(Site):
         d = 4
         states = ['empty', 'up', 'down', 'full']
         # 0) Build the operators.
-        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float)
-        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float)
+        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float64)
+        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float64)
         Nu = np.diag(Nu_diag)
         Nd = np.diag(Nd_diag)
         Ntot = np.diag(Nu_diag + Nd_diag)
@@ -1492,12 +1492,12 @@ class BosonSite(Site):
         states = [str(n) for n in range(0, dim)]
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
-        B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
+        B = np.zeros([dim, dim], dtype=np.float64)  # destruction/annihilation operator
         for n in range(1, dim):
             B[n - 1, n] = np.sqrt(n)
         Bd = np.transpose(B)  # .conj() wouldn't do anything
         # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
-        Ndiag = np.arange(dim, dtype=np.float)
+        Ndiag = np.arange(dim, dtype=np.float64)
         N = np.diag(Ndiag)
         NN = np.diag(Ndiag**2)
         dN = np.diag(Ndiag - filling)
