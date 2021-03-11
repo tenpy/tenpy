@@ -2940,7 +2940,6 @@ class MPS:
             For ``'auto'`` we try to be smart about fermionic signs, see note below.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
-            Defaults to ``{'chi_max': max(self.chi)}``.
 
         Returns
         -------
@@ -3096,7 +3095,7 @@ class MPS:
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
         if trunc_par is None:
-            trunc_par = {}
+            trunc_par = asConfig({}, 'trunc_params')
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -3148,7 +3147,6 @@ class MPS:
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
-            If not set, `chi_max` defaults to ``max(self.chi)``.
         canonicalize : float
             Check that `self` is in canonical form; call :meth:`canonical_form`
             if :meth:`norm_test` yields ``np.linalg.norm(self.norm_test()) > canonicalize``.
@@ -3178,8 +3176,6 @@ class MPS:
         from ..models.lattice import Lattice  # dynamical import to avoid import loops
         if self.finite:
             raise ValueError("Works only for infinite b.c.")
-        if trunc_par is None:
-            trunc_par = asConfig({}, 'trunc_par')
 
         if isinstance(perm, Lattice):
             lat = perm
