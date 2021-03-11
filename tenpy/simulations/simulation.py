@@ -630,7 +630,7 @@ def run_simulation(simulation_class_name='GroundStateSearch',
         The results from running the simulation, i.e.,
         what :meth:`tenpy.simulations.Simulation.run()` returned.
     """
-    SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
+    SimClass = find_subclass(Simulation, simulation_class_name)
     if SimClass is None:
         raise ValueError("can't find simulation class called " + repr(simulation_class_name))
     if simulation_class_kwargs is None:
@@ -642,7 +642,7 @@ def run_simulation(simulation_class_name='GroundStateSearch',
         # include the traceback into the log
         # this might cause a duplicated traceback if logging to std out is on,
         # but that's probably better than having no error messages in the log.
-        logger.exception("simulation abort with the following exception")
+        Simulation.logger.exception("simulation abort with the following exception")
         raise  # raise the same error again
     return results
 
@@ -703,6 +703,7 @@ def resume_from_checkpoint(*,
     options = checkpoint_results['simulation_parameters']
     if update_sim_params is not None:
         update_recursive(options, update_sim_params)
+
     try:
         sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
                                              **simulation_class_kwargs)
@@ -711,6 +712,6 @@ def resume_from_checkpoint(*,
         # include the traceback into the log
         # this might cause a duplicated traceback if logging to std out is on,
         # but that's probably better than having no error messages in the log.
-        logger.exception("simulation abort with the following exception")
+        Simulation.logger.exception("simulation abort with the following exception")
         raise  # raise the same error again
     return results
