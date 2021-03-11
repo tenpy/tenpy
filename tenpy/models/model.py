@@ -1017,22 +1017,21 @@ class CouplingModel(Model):
             # the following is roughly equivalent to
             # CouplingTerms.coupling_term_handle_JW, but also swaps i <-> j if necessary
             # and allows `str_on_first` being set explicitly
-            o1, o2 = op1, op2
-            site_i = site1
-            if j < i:  # ensure i <= j
-                # swap operators
-                i, j = j, i
-                if op_string == 'JW':
-                    current_strength = -current_strength  # swap sign
+            if i < j:
+                o1, o2 = op1, op2
+                if str_on_first and op_string != 'Id':
+                    o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
+            else:  # i > j
+                # swap operators to ensure i <= j
                 if raise_op2_left:
                     raise ValueError("Op2 is left")
+                i, j = j, i
                 o1, o2 = op2, op1
-                site_i = site2
+                if str_on_first and op_string != 'Id':
+                    o1 = site2.multiply_op_names([op_string, op2])  # op2 acts first!
             # now we have always i < j and 0 <= i < N_sites
             # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
             # o1 is the "left" operator; o2 is the "right" operator
-            if str_on_first and op_string != 'Id':
-                o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
 
         if plus_hc:
