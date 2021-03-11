@@ -3363,7 +3363,9 @@ class MPS:
             return B  # nothing to do
         if not isinstance(S, npc.Array):
             # the usual case: S is a 1D array with singular values
-            if form_diff != 1.:
+            if form_diff == -1.:
+                S = 1. / S
+            elif form_diff != 1.:
                 S = S**form_diff
             return B.scale_axis(S, axis_B)
         else:
