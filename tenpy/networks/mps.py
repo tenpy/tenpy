@@ -2920,6 +2920,51 @@ class MPS:
         if not unitary:
             self.canonical_form(renormalize)
 
+    def apply_product_op(self, ops, unitary=None, renormalize=False):
+        """Apply a (global) product of local onsite operators to `self`.
+
+        Note that this destroys the canonical form if any local operator is non-unitary.
+        Therefore, this function calls :meth:`canonical_form` if necessary.
+
+        The result is equivalent to the following loop, but more efficient by avoiding
+        intermediate calls to :meth:`canonical_form` inside the loop::
+
+            for i, op in enumerate(ops):
+                self.apply_local_op(i, op, unitary, renormalize, cutoff)
+
+        Parameters
+        ----------
+        ops : (list of) str | npc.Array
+            List of onsite operators to apply on each site, with legs ``'p', 'p*'``.
+            Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
+            :attr:`sites`.
+        unitary : None | bool
+            Whether `op` is unitary, i.e., whether the canonical form is preserved (``True``)
+            or whether we should call :meth:`canonical_form` (``False``).
+            ``None`` checks whether ``max(norm(op dagger(op) - identity) for op in ops) < 1.e-14``
+        renormalize : bool
+            Whether the final state should keep track of the norm (False, default) or be
+            renormalized to have norm 1 (True).
+        """
+        ops = to_iterable(ops)
+        if self.L % len(ops) != 0:
+            raise ValueError("len of ops incommensurate with self.L")
+        self.convert_form('B')
+        for i in range(self.L):
+            op = ops[i % len(ops)]
+            if isinstance(op, str):
+                if op == 'Id':
+                    continue  # nothing to do here...
+                op = self.sites[i].get_op(op)
+            if unitary is None:
+                op_op_dagger = npc.tensordot(op, op.conj(), axes=['p*', 'p'])
+                if npc.norm(op_op_dagger - npc.eye_like(op_op_dagger)) > 1.e-14:
+                    unitary = False
+            # actually apply the operator at site i
+            self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+        if not unitary:
+            self.canonical_form(renormalize)
+
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
         r"""Swap the two neighboring sites `i` and `i+1` (inplace).
 
