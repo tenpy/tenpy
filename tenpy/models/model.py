@@ -1006,7 +1006,7 @@ class CouplingModel(Model):
                 plus_hc = False  # ... so there's no need to do it at the bottom of this function
                 # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
             else:
-                strength_ij /= 2.  # ... so we should avoid double-counting
+                strength_vals /= 2.  # ... so we should avoid double-counting
         if category is None:
             category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
