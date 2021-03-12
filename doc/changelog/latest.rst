@@ -48,6 +48,7 @@ Added
 - Simulation class :class:`~tenpy.simulation.simulation.Simulation` and subclasses as a new extra layer for handling the general setup.
 - Command line script ``tenpy-run`` and :func:`~tenpy.run_simulation` for setting up a simulation.
 - :meth:`~tenpy.networks.mps.MPS.entanglement_entropy_segment2`
+- :meth:`~tenpy.networks.mps.MPS.apply_product_op`
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` and :meth:`~tenpy.linalg.sparse.FlatHermitianOperator.eigenvectors` to unify
   code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
 - :meth:`tenpy.tools.misc.group_by_degeneracy`

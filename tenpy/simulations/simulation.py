@@ -7,11 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 
 .. todo ::
     provide examples,
-    document options
     give user guide
-
-.. todo ::
-    update figure displaying the "layers of TeNPy"
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
@@ -28,11 +24,11 @@ from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.misc import find_subclass, set_recursive, get_recursive
+from ..tools.misc import find_subclass, update_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 
-__all__ = ['Simulation', 'Skip']
+__all__ = ['Simulation', 'Skip', 'run_simulation', 'resume_from_checkpoint']
 
 
 class Simulation:
@@ -41,8 +37,9 @@ class Simulation:
     Parameters
     ----------
     options : dict-like
-        The simulation parameters. Ideally, these options should be enough to fully specify all
-        parameters of a simulation to ensure reproducibility.
+        The simulation parameters as outlined below.
+        Ideally, these options should be enough to fully specify all parameters of a simulation
+        to ensure reproducibility.
     setup_logging : bool
         Whether to call :meth:`setup_logging` at the beginning of initialization.
 
@@ -50,7 +47,7 @@ class Simulation:
     -------
     .. cfg:config :: Simulation
 
-        directory : string
+        directory : str
             If not None (default), switch to that directory at the beginning of the simulation.
         output_filename : string | None
             Filename for output. The file ending determines the output format.
@@ -179,21 +176,41 @@ class Simulation:
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
+        self.logger.info('finished simulation run')
         return results
 
     @classmethod
-    def from_saved_checkpoint(cls, filename=None, checkpoint_results=None):
+    def from_saved_checkpoint(cls, filename=None, checkpoint_results=None, **kwargs):
+        """Re-initialize a given simulation class from checkpoint results.
+
+        You should probably call :meth:`resume_run` after sucessfull initialization.
+
+        Instead of calling this directly, consider using :func:`resume_from_checkpoint`.
+
+        Parameters
+        ----------
+        filename : None | str
+            The filename of the checkpoint to be loaded.
+            You can either specify the `filename` or the `checkpoint_results`.
+        checkpoint_results : None | dict
+            Alternatively to `filename` the results of the simulation so far, i.e. directly the
+            data dicitonary saved at a simulation checkpoint.
+        **kwargs :
+            Further keyword arguments given to the `Simulation.__init__`.
+        """
         if filename is not None:
             if checkpoint_results is not None:
                 raise ValueError("pass either filename or checkpoint_results")
             checkpoint_results = hdf5_io.load(filename)
+        if checkpoint_results is None:
+            raise ValueError("you need to pass `filename` or `checkpoint_results`")
         options = checkpoint_results['simulation_parameters']
         # usually, we would say `sim = cls(options)`.
         # the following 3 lines provide an additional hook setting :attr:`loaded_from_checkpoint`
         # before calling the `__init__()`, such that other methods can be customized to this case.
         sim = cls.__new__(cls)
         sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
-        sim.__init__(options)
+        sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
         sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
         return sim
@@ -222,6 +239,7 @@ class Simulation:
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
+        self.logger.info('finished simulation run')
         return results
 
     def init_model(self):
@@ -277,7 +295,7 @@ class Simulation:
             self.results['psi'] = self.psi
 
     def init_algorithm(self, **kwargs):
-        """Initialize the algortihm.
+        """Initialize the algorithm.
 
         Parameters
         ----------
@@ -591,3 +609,112 @@ class Simulation:
 class Skip(ValueError):
     """Error raised if simulation output already exists."""
     pass
+
+
+def run_simulation(simulation_class_name='GroundStateSearch',
+                   simulation_class_kwargs=None,
+                   **simulation_params):
+    """Run the simulation with a simulation class.
+
+    Parameters
+    ----------
+    simulation_class_name : str
+        The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
+        to be used for running the simulaiton.
+    simulation_class_kwargs : dict | None
+        A dictionary of keyword-arguments to be used for the initializing the simulation.
+    **simulation_params :
+        Further keyword arguments as documented in the corresponding simulation class,
+        see :cfg:config`Simulation`.
+
+    Returns
+    -------
+    results :
+        The results from running the simulation, i.e.,
+        what :meth:`tenpy.simulations.Simulation.run()` returned.
+    """
+    SimClass = find_subclass(Simulation, simulation_class_name)
+    if SimClass is None:
+        raise ValueError("can't find simulation class called " + repr(simulation_class_name))
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
+    try:
+        sim = SimClass(simulation_params, **simulation_class_kwargs)
+        results = sim.run()
+    except:
+        # include the traceback into the log
+        # this might cause a duplicated traceback if logging to std out is on,
+        # but that's probably better than having no error messages in the log.
+        Simulation.logger.exception("simulation abort with the following exception")
+        raise  # raise the same error again
+    return results
+
+
+def resume_from_checkpoint(*,
+                           filename=None,
+                           checkpoint_results=None,
+                           update_sim_params=None,
+                           simulation_class_kwargs=None):
+    """Resume a simulation run from a given checkpoint.
+
+    (All parameters have to be given as keyword arguments.)
+
+    Parameters
+    ----------
+    filename : None | str
+        The filename of the checkpoint to be loaded.
+        You can either specify the `filename` or the `checkpoint_results`.
+    checkpoint_results : None | dict
+        Alternatively to `filename` the results of the simulation so far, i.e. directly the data
+        dicitonary saved at a simulation checkpoint.
+    update_sim_params : None | dict
+        Allows to update specific :cfg:config:`Simulation` parameters, ignored if `None`.
+        Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
+        `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
+    simlation_class_kwargs : None | dict
+        Further keyword arguemnts given to the simulation class, ignored if `None`.
+
+    Returns
+    -------
+    results :
+        The results from running the simulation, i.e.,
+        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+
+    Notes
+    -----
+    The `checkpoint_filename` should be relative to the current working directory. If you use the
+    :cfg:option:`Simulation.directory`, the simulation class will attempt to change to that
+    directory during initialization. Hence, either resume the simulation from the same directory
+    where you originally started, or update the :cfg:option:`Simulation.directory`
+    (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
+
+    """
+    if filename is not None:
+        if checkpoint_results is not None:
+            raise ValueError("pass either filename or checkpoint_results")
+        checkpoint_results = hdf5_io.load(filename)
+    if checkpoint_results is None:
+        raise ValueError("you need to pass `filename` or `checkpoint_results`")
+    if checkpoint_results['finished_run']:
+        raise Skip("Simulation already finished")
+    sim_class_mod = checkpoint_results['version_info']['simulation_module']
+    sim_class_name = checkpoint_results['version_info']['simulation_class']
+    SimClass = hdf5_io.find_global(sim_class_mod, sim_class_name)
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
+
+    options = checkpoint_results['simulation_parameters']
+    if update_sim_params is not None:
+        update_recursive(options, update_sim_params)
+
+    try:
+        sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
+                                             **simulation_class_kwargs)
+        results = sim.resume_run()
+    except:
+        # include the traceback into the log
+        # this might cause a duplicated traceback if logging to std out is on,
+        # but that's probably better than having no error messages in the log.
+        Simulation.logger.exception("simulation abort with the following exception")
+        raise  # raise the same error again
+    return results

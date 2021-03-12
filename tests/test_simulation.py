@@ -6,7 +6,7 @@ import numpy as np
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
-from tenpy.simulations.simulation import Simulation
+from tenpy.simulations.simulation import Simulation, resume_from_checkpoint
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution
 from tenpy.tools.misc import find_subclass
@@ -38,6 +38,11 @@ class DummyAlgorithm(Algorithm):
 
 
 class SimulationStop(Exception):
+    pass
+
+
+class DummySimulation(Simulation):
+    # for `test_Simulation_resume`
     pass
 
 
@@ -108,15 +113,25 @@ def test_Simulation_resume(tmpdir):
     sim_params['output_filename'] = 'data.pkl'
     # this should raise an error *after* saving the checkpoint
     sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop', {}, -1)]
-    sim = Simulation(sim_params)
+    sim = DummySimulation(sim_params)
     try:
         results = sim.run()
         assert False, "expected to raise a SimulationStop in sim.run()"
     except SimulationStop:
         checkpoint_results = sim.prepare_results_for_save()
+    assert not checkpoint_results['finished_run']
+    # try resuming with `resume_from_checkpoint`
+    update_sim_params = {'connect_algorithm_checkpoint': []}
+    res = resume_from_checkpoint(filename=tmpdir / 'data.pkl', update_sim_params=update_sim_params)
+
+    # alternatively, resume from the checkpoint results we have
     checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []
-    sim2 = Simulation.from_saved_checkpoint(checkpoint_results=checkpoint_results)
-    res = sim2.resume_run()
+    # if we explicitly know the simulation class, it's easy
+    sim2 = DummySimulation.from_saved_checkpoint(checkpoint_results=checkpoint_results)
+    res2 = sim2.resume_run()
+    for r in [res, res2]:
+        assert r['finished_run']
+        assert np.all(r['measurements']['measurement_index'] == np.arange(2))
 
 
 groundstate_params = copy.deepcopy(simulation_params)

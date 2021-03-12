@@ -20,7 +20,8 @@ from . import algorithms
 from . import networks
 from . import models
 from . import simulations
-from . import version
+from . import version  # needs to be after linalg!
+from .simulations.simulation import run_simulation, resume_from_checkpoint
 
 #: hard-coded version string
 __version__ = version.version
@@ -30,7 +31,7 @@ __full_version__ = version.full_version
 
 __all__ = [
     "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config",
-    "run_simulation", "console_main"
+    "run_simulation", "resume_from_checkpoint", "console_main"
 ]
 
 
@@ -40,45 +41,6 @@ def show_config():
     The information printed is :attr:`tenpy.version.version_summary`.
     """
     print(version.version_summary)
-
-
-def run_simulation(simulation_class_name='GroundStateSearch',
-                   simulation_class_kwargs=None,
-                   **simulation_params):
-    """Run the simulation with a simulation class.
-
-    Parameters
-    ----------
-    simulation_class_name : str
-        The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
-        to be used for running the simulaiton.
-    simulation_class_kwargs : dict | None
-        A dictionary of keyword-arguments to be used for the initializing the simulation.
-    **simulation_params :
-        Further keyword arguments as documented in the corresponding simulation class,
-        see :cfg:config`Simulation`.
-
-    Returns
-    -------
-    results :
-        The results from running the simulation, i.e.,
-        what :meth:`tenpy.simulations.Simulation.run()` returned.
-    """
-    SimClass = tools.misc.find_subclass(simulations.simulation.Simulation, simulation_class_name)
-    if SimClass is None:
-        raise ValueError("can't find simulation class called " + repr(simulation_class_name))
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
-    try:
-        sim = SimClass(simulation_params, **simulation_class_kwargs)
-        results = sim.run()
-    except:
-        # include the traceback into the log
-        # this might cause a duplicated traceback if logging to std out is on,
-        # but that's probably better than having no error messages in the log.
-        logger.exception("simulation abort with the following exception")
-        raise  # raise the same error again
-    return results
 
 
 def console_main():
@@ -180,7 +142,7 @@ def _setup_arg_parser(width=None):
                         help="A yaml (*.yml) file with the simulation parameters/options.")
     opt_help = textwrap.dedent("""\
         Allows overwriting some options from the yaml files.
-        KEY can be recursive separated by ``/``, e.g. ``dmrg_params/trunc_params/chi``.
+        KEY can be recursive separated by ``/``, e.g. ``algorithm_params/trunc_params/chi``.
         VALUE is initialized by python's ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined.
         Thus ``'1.2'`` and ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'`` will work if you
         include the quotes on the command line to ensure that the VALUE is passed as a single

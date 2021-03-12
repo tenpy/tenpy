@@ -45,7 +45,7 @@ def test_mps():
     p_state = ["up", "down"] * (L // 2)  # repeats entries L/2 times
     bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.j * phi) * np.sin(theta / 2)])
     p_state[L // 2] = bloch_sphere_state  # replace one spin in center
-    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=np.complex)
+    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=complex)
     eval_z = psi.expectation_value("Sigmaz")
     eval_x = psi.expectation_value("Sigmax")
     assert (eval_z[L // 2] - np.cos(theta)) < 1.e-12
@@ -269,6 +269,26 @@ def test_canonical_form(bc):
     print("norm_test")
     print(psi.norm_test())
     assert np.max(psi.norm_test()) < 1.e-14
+
+
+@pytest.mark.parametrize("bc", ['finite', 'infinite'])
+def test_apply_op(bc, eps=1.e-13):
+    s = site.SpinHalfSite(None)
+    psi0 = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='up')
+    psi1 = psi0.copy()
+    psi1.apply_local_op(1, 'Sigmax')  #unitary
+    psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
+    psi1 = psi0.copy()
+    psi1.apply_local_op(1, 'Sm')  #non-unitary
+    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+
+    psi2 = psi0.copy()
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
+    s2 = 0.5**0.5
+    assert np.linalg.norm(th - [0., s2, 0., 0., -s2, 0., 0, 0.]) < eps
+    psi2.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
+    assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
 
 
 def test_enlarge_mps_unit_cell():

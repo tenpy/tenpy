@@ -854,7 +854,7 @@ class CouplingModel(Model):
 
         The coupling `strength` may vary spatially if the given `strength` is a numpy array.
         The correct shape of this array is the `coupling_shape` returned by
-        :meth:`tenpy.models.lattice.possible_couplings` and depends on the boundary
+        :meth:`tenpy.models.lattice.coupling_shape` and depends on the boundary
         conditions. The ``shift(...)`` depends on `dx`,
         and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
         is the prefactor for the first possible coupling
@@ -999,40 +999,37 @@ class CouplingModel(Model):
             raise ValueError("Jordan Wigner string without `str_on_first`")
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
-        mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
-        strength = to_array(strength, strength_shape)  # tile to correct shape
+        mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
         if self.explicit_plus_hc:
+            # we explicitly add the h.c. later ...
             if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+                plus_hc = False  # ... so there's no need to do it at the bottom of this function
+                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
             else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+                strength_vals /= 2.  # ... so we should avoid double-counting
         if category is None:
             category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         # loop to perform the sum over {x_0, x_1, ...}
-        for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
-            current_strength = strength[tuple(lat_idx)]
-            if current_strength == 0.:
-                continue
+        for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
             # the following is roughly equivalent to
             # CouplingTerms.coupling_term_handle_JW, but also swaps i <-> j if necessary
             # and allows `str_on_first` being set explicitly
-            o1, o2 = op1, op2
-            site_i = site1
-            if j < i:  # ensure i <= j
-                # swap operators
-                i, j = j, i
-                if op_string == 'JW':
-                    current_strength = -current_strength  # swap sign
+            if i < j:
+                o1, o2 = op1, op2
+                if str_on_first and op_string != 'Id':
+                    o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
+            else:  # i > j
+                # swap operators to ensure i <= j
                 if raise_op2_left:
                     raise ValueError("Op2 is left")
+                i, j = j, i
                 o1, o2 = op2, op1
-                site_i = site2
+                if str_on_first and op_string != 'Id':
+                    o1 = site2.multiply_op_names([op_string, op2])  # op2 acts first!
             # now we have always i < j and 0 <= i < N_sites
             # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
             # o1 is the "left" operator; o2 is the "right" operator
-            if str_on_first and op_string != 'Id':
-                o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
 
         if plus_hc:
@@ -1241,13 +1238,14 @@ class CouplingModel(Model):
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
-        mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
-        strength = to_array(strength, strength_shape)  # tile to correct shape
+        mps_ijkl, strength_vals = self.lat.possible_multi_couplings(ops, strength)
         if self.explicit_plus_hc:
+            # we explicitly add the h.c. later ...
             if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+                plus_hc = False  # ... so there's no need to do it at the bottom of this function
+                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
             else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+                strength_vals /= 2.  # ... so we should avoid double-counting
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
@@ -1260,10 +1258,7 @@ class CouplingModel(Model):
         N_sites = self.lat.N_sites
         sites = self.lat.mps_sites()
         # loop to perform the sum over {x_0, x_1, ...}
-        for ijkl, i_lat in zip(mps_ijkl, lat_indices):
-            current_strength = strength[tuple(i_lat)]
-            if current_strength == 0.:
-                continue
+        for ijkl, current_strength in zip(mps_ijkl, strength_vals):
             term = list(zip(all_ops, ijkl))
             term, sign = order_combine_term(term, sites)
             args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
@@ -1587,8 +1582,8 @@ class CouplingModel(Model):
         """
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
-        # make strenght complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        # make strength complex
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions

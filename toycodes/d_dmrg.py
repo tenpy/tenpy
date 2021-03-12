@@ -78,8 +78,8 @@ class SimpleDMRGEngine:
         # initialize left and right environment
         D = self.H_mpo[0].shape[0]
         chi = psi.Bs[0].shape[0]
-        LP = np.zeros([chi, D, chi], dtype=np.float)  # vL wL* vL*
-        RP = np.zeros([chi, D, chi], dtype=np.float)  # vR* wR* vR
+        LP = np.zeros([chi, D, chi], dtype=float)  # vL wL* vL*
+        RP = np.zeros([chi, D, chi], dtype=float)  # vR* wR* vR
         LP[:, 0, :] = np.eye(chi)
         RP[:, D - 1, :] = np.eye(chi)
         self.LPs[0] = LP

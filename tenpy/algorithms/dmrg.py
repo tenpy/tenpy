@@ -587,7 +587,7 @@ class DensityMatrixMixer(Mixer):
             If Id_L is ``None``, we can't include the identity into `mixed_xR`,
             so it has to be added directly in :meth:`mix_rho_L`.
         """
-        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=np.float)
+        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=float)
         separate_Id = Id_L is None
         if not separate_Id:
             x[Id_L] = 1.
@@ -617,7 +617,7 @@ class DensityMatrixMixer(Mixer):
             If Id_R is ``None``, we can't include the identity into `mixed_xL`,
             so it has to be added directly in :meth:`mix_rho_R`.
         """
-        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=np.float)
+        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=float)
         separate_Id = Id_R is None
         if not separate_Id:
             x[Id_R] = 1.
@@ -718,7 +718,7 @@ class DMRGEngine(Sweep):
     EffectiveH = None
     DefaultMixer = None
 
-    def __init__(self, psi, model, options):
+    def __init__(self, psi, model, options, **kwargs):
         options = asConfig(options, self.__class__.__name__)
         self.mixer = None
         if isinstance(self, TwoSiteDMRGEngine):
@@ -726,7 +726,7 @@ class DMRGEngine(Sweep):
         else:
             self.DefaultMixer = SingleSiteMixer
 
-        super().__init__(psi, model, options)
+        super().__init__(psi, model, options, **kwargs)
 
     @property
     def DMRG_params(self):

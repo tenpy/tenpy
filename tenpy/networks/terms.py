@@ -517,15 +517,15 @@ class CouplingTerms(Hdf5Exportable):
         d3[op_j] = d3.get(op_j, 0) + strength
 
     def coupling_term_handle_JW(self, strength, term, sites, op_string=None):
-        """Helping function to call before :meth:`add_multi_coupling_term`.
+        """Helping function to call before :meth:`add_coupling_term`.
 
         Parameters
         ----------
         strength : float
             The strength of the coupling term.
         term : [(str, int), (str, int)]
-            List of two tuples ``(op, i)`` where `i` is the MPS index of the site the operator
-            named `op` acts on.
+            List of two tuples ``[(op_i, i), (op_j, j)]`` where `i` is the MPS index of the site
+            the operator named `op_i` acts on; we require `i < j`.
         sites : list of :class:`~tenpy.networks.site.Site`
             Defines the local Hilbert space for each site.
             Used to check whether the operators need Jordan-Wigner strings.

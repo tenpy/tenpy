@@ -494,13 +494,13 @@ def ChargeInfo_make_valid(self, charges=None):
         return _np_zeros_1D(qnumber, QTYPE_num)
     cdef np.ndarray charges_ = np.array(charges, dtype=QTYPE, copy=True, order="C")
     if charges_.ndim == 1:
-        assert (charges_.shape[0] == qnumber)
+        assert (charges_.shape[0] == qnumber), "qnumber of `charges` doesn't match chinfo.qnumber"
         if qnumber == 0:
             return _np_zeros_1D(qnumber, QTYPE_num)
         _make_valid_charges_1D(self._mod, charges_)
         return charges_
     elif charges_.ndim == 2:
-        assert (charges_.shape[1] == qnumber)
+        assert (charges_.shape[1] == qnumber), "qnumber of `charges` doesn't match chinfo.qnumber"
         if qnumber == 0:
             return _np_zeros_2D(charges_.shape[0], qnumber, QTYPE_num)
         _make_valid_charges_2D(self._mod, charges_)

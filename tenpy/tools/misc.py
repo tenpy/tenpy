@@ -16,8 +16,8 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'flatten', 'setup_logging',
-    'build_initial_state', 'setup_executable'
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'flatten',
+    'setup_logging', 'build_initial_state', 'setup_executable'
 ]
 
 
@@ -579,9 +579,18 @@ def set_recursive(nested_data, recursive_key, value, separator="/", insert_dicts
     subkeys = recursive_key.split(separator)
     for subkey in subkeys[:-1]:
         if insert_dicts and subkey not in nested_data:
-            nested_data[subkey]
+            nested_data[subkey] = {}
         nested_data = nested_data[subkey]
     nested_data[subkeys[-1]] = value
+
+
+def update_recursive(nested_data, update_data, separator="/", insert_dicts=True):
+    """Wrapper around :func:`set_recursive` to allow updating multiple values at once.
+
+    It simply calls :func:`set_recursive` for each ``recursive_key, value in update_data.items()``.
+    """
+    for k, v in update_data.items():
+        set_recursive(nested_data, k, v, separator, insert_dicts)
 
 
 def flatten(mapping, separator='/'):

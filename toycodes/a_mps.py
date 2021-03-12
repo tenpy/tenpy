@@ -118,9 +118,9 @@ class SimpleMPS:
 
 def init_FM_MPS(L, d, bc='finite'):
     """Return a ferromagnetic MPS (= product state with all spins up)"""
-    B = np.zeros([1, d, 1], np.float)
+    B = np.zeros([1, d, 1], dtype=float)
     B[0, 0, 0] = 1.
-    S = np.ones([1], np.float)
+    S = np.ones([1], dtype=float)
     Bs = [B.copy() for i in range(L)]
     Ss = [S.copy() for i in range(L)]
     return SimpleMPS(Bs, Ss, bc)
