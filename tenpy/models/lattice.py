@@ -19,8 +19,8 @@ import itertools
 import warnings
 
 from ..networks.site import Site
-from ..tools.misc import (to_iterable, to_iterable_of_len, inverse_permutation, get_close,
-                          find_subclass)
+from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
+                          get_close, find_subclass)
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
@@ -950,7 +950,7 @@ class Lattice:
         shift_strength = [min(0, dxa) for dxa in dx]
         return tuple(shape), np.array(shift_strength)
 
-    def possible_couplings(self, u1, u2, dx):
+    def possible_couplings(self, u1, u2, dx, strength=None):
         """Find possible MPS indices for two-site couplings.
 
         For periodic boundary conditions (``bc[a] == False``)
@@ -965,15 +965,25 @@ class Lattice:
             :meth:`~tenpy.models.model.CouplingModel.add_coupling`
         dx : array
             Length :attr:`dim`. The translation in terms of basis vectors for the coupling.
+        strength : array_like | None
+            If given, instead of returning `lat_indices` and `coupling_shape`
+            directly return the correct `strength_12`.
 
         Returns
         -------
-        mps1, mps2 : array
+        mps1, mps2 : 1D array
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
+        strength_vals : 1D array
+            (Only returend if `strength` is not None.)
+            Such that ``for (i, j, s) in zip(mps1, mps2, strength_vals):`` iterates over all
+            possible couplings with `s` being the strength of that coupling.
+            Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
+            (Only returend if `strength` is None.)
             Rows of `lat_indices` correspond to entries of `mps1` and `mps2` and contain the
             lattice indices of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
+            (Only returend if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1001,10 +1011,17 @@ class Lattice:
             mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * self.N_sites // self.N_rings
             mps_j += mps_j_shift
             # finally, ensure 0 <= min(i, j) < N_sites.
+            # (so far, 0 <= mps_i < N_sites)
             mps_ij_shift = np.where(mps_j_shift < 0, -mps_j_shift, 0)
             mps_i += mps_ij_shift
             mps_j += mps_ij_shift
-        return mps_i, mps_j, lat_indices, coupling_shape
+        if strength is None:
+            return mps_i, mps_j, lat_indices, coupling_shape
+        else:
+            strength = to_array(strength, coupling_shape)  # tile to correct shape
+            strength_vals = strength[tuple(lat_indices.T)]
+            keep_nonzero = (strength_vals != 0.)  # filter out couplings with strength 0
+            return mps_i[keep_nonzero], mps_j[keep_nonzero], strength_vals[keep_nonzero]
 
     def _keep_possible_couplings(self, lat_j, lat_j_shifted, u2):
         """filter possible j sites of a coupling from :meth:`possible_couplings`"""
@@ -1045,7 +1062,7 @@ class Lattice:
             shift_strength[a] = min_dx  # note: can be positive!
         return tuple(shape), np.array(shift_strength)
 
-    def possible_multi_couplings(self, ops):
+    def possible_multi_couplings(self, ops, strength=None):
         """Generalization of :meth:`possible_couplings` to couplings with more than 2 sites.
 
         Parameters
@@ -1061,10 +1078,17 @@ class Lattice:
             The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary coundary
             conditions of `self` (how much the `box` for given `dx` can be shifted around without
             hitting a boundary - these are the different rows).
+        strength_vals : 1D array
+            (Only returend if `strength` is not None.)
+            Such that ``for  (ijkl, s) in zip(mps_ijkl, strength_vals):`` iterates over all
+            possible couplings with `s` being the strength of that coupling.
+            Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
+            (Only returend if `strength` is None.)
             Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
             of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
+            (Only returend if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1091,10 +1115,20 @@ class Lattice:
         u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1, ))
         mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
         if self.bc_MPS == 'infinite':
+            # shift by whole MPS unit cells for couplings along the infinite direction
             # N_sites_per_ring might not be set for IrregularLattice
             mps_ijkl += ((lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites //
                          self.N_rings)
-        return mps_ijkl, lat_indices, coupling_shape
+            # but ensure that  0 <= min(i,j,...) < N_sites
+            min_ijkl = np.min(mps_ijkl, axis=1)
+            mps_ijkl += (np.mod(min_ijkl, self.N_sites) - min_ijkl)[:, np.newaxis]
+        if strength is None:
+            return mps_ijkl, lat_indices, coupling_shape
+        else:
+            strength = to_array(strength, coupling_shape)  # tile to correct shape
+            strength_vals = strength[tuple(lat_indices.T)]  # extract correct entries
+            keep_nonzero = (strength_vals != 0.)  # filter out couplings with strength 0
+            return mps_ijkl[keep_nonzero], strength_vals[keep_nonzero]
 
     def _keep_possible_multi_couplings(self, lat_ijkl, lat_ijkl_shifted, u_ijkl):
         """Filter possible couplings from :meth:`possible_multi_couplings`"""
@@ -1649,7 +1683,11 @@ class HelicalLattice(Lattice):
                              "For finite systems, just take a regular lattice!")
         assert regular_lattice.bc[1] == bc_choices['periodic']  # require cylinder
         if N_unit_cells > regular_lattice.N_cells:
-            raise ValueError("N_unit_cells larger than regular lattice: increase Lx!")
+            raise ValueError("N_unit_cells larger than regular_lattice.N_cells: "
+                             "increase Lx of regular_lattice!")
+        if regular_lattice.N_cells % N_unit_cells != 0:
+            raise ValueError("N_unit_cells incommensurate with regular_lattice.N_cells: "
+                             "increase Lx of regular_lattice!")
         self._N_cells = N_unit_cells
         Lattice.__init__(
             self,
@@ -1750,7 +1788,8 @@ class HelicalLattice(Lattice):
 
     def enlarge_mps_unit_cell(self, factor=2):
         # doc: see Lattice
-        if self._N_cells * factor > self.regular_lattice.N_cells:
+        if (self._N_cells * factor > self.regular_lattice.N_cells
+                or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
             self.regular_lattice.enlarge_mps_unit_cell(factor)
         self._N_cells = factor * self._N_cells
         super().enlarge_mps_unit_cell()
@@ -1758,16 +1797,51 @@ class HelicalLattice(Lattice):
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it
     # from the couplings of the larger lattice
+    # by restricting to 0 <= min(i,j,...) < self.N_sites
+    # instead of the `0 <= min(i,j,...) < self.regular_lattice.N_sites`
+    # guaranteed by self.possible_[multi_]couplings
 
-    def possible_couplings(self, u1, u2, dx):
-        mps_i, mps_j, lat_ind, coupl_sh = self.regular_lattice.possible_couplings(u1, u2, dx)
-        keep = np.min([mps_i, mps_j], axis=0) < self.N_sites
-        return mps_i[keep], mps_j[keep], lat_ind[keep], coupl_sh
+    def possible_couplings(self, u1, u2, dx, strength=None):
+        reg = self.regular_lattice
+        if strength is None:
+            mps_i, mps_j, lat_ind, coupl_sh = reg.possible_couplings(u1, u2, dx)
+            keep = (np.min([mps_i, mps_j], axis=0) < self.N_sites)
+            return mps_i[keep], mps_j[keep], lat_ind[keep], coupl_sh
+        else:
+            mps_i, mps_j, strength_vals = reg.possible_couplings(u1, u2, dx, strength)
+            # we can actually check that everything is translation invariant!
+            self._check_translation_invariance(np.stack([mps_i, mps_j]).T, strength_vals)
+            keep = (np.min([mps_i, mps_j], axis=0) < self.N_sites)
+            return mps_i[keep], mps_j[keep], strength_vals[keep]
 
-    def possible_multi_couplings(self, ops):
-        mps_ijkl, lat_indices, coupling_shape = self.regular_lattice.possible_multi_couplings(ops)
-        keep = np.min(mps_ijkl, axis=1) < self.N_sites
-        return mps_ijkl[keep, :], lat_indices[keep, :], coupling_shape
+    def possible_multi_couplings(self, ops, strength=None):
+        reg = self.regular_lattice
+        if strength is None:
+            mps_ijkl, lat_inds, coupl_shape = reg.possible_multi_couplings(ops)
+            keep = np.min(mps_ijkl, axis=1) < self.N_sites
+            return mps_ijkl[keep, :], lat_inds[keep, :], coupl_shape
+        else:
+            mps_ijkl, strength_vals = reg.possible_multi_couplings(ops, strength)
+            # we can actually check that everything is translation invariant!
+            self._check_translation_invariance(mps_ijkl, strength_vals)
+            keep = (np.min(mps_ijkl, axis=1) < self.N_sites)
+            return mps_ijkl[keep, :], strength_vals[keep]
+
+    def _check_translation_invariance(self, mps_ijkl, strength_vals):
+        sort = np.lexsort(mps_ijkl.T)
+        mps_ijkl = mps_ijkl[sort]
+        strength_vals = strength_vals[sort]
+        min_ijkl = np.min(mps_ijkl, axis=1)
+        for cell_start in range(0, self.regular_lattice.N_sites, self.N_sites):
+            keep_cell = np.logical_and(cell_start <= min_ijkl,
+                                       min_ijkl < cell_start + self.N_sites)
+            if cell_start == 0:
+                ijkl_compare = mps_ijkl[keep_cell]
+                strength_compare = strength_vals[keep_cell]
+            else:
+                assert np.all(mps_ijkl[keep_cell] - cell_start == ijkl_compare)
+                if np.any(strength_vals[keep_cell] != strength_compare):
+                    raise ValueError("Not translation invariant: can't use HelicalLattice")
 
     # most plot_* functions work, except:
 

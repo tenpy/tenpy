@@ -109,6 +109,42 @@ def test_IrregularLattice():
         npt.assert_equal(m_ji[sort, 0], np.array(expect['j']))
 
 
+def test_HelicalLattice():
+    s = None
+    honey = lattice.Honeycomb(2, 3, s, bc=['periodic', -1], bc_MPS='infinite', order='Cstyle')
+    hel = lattice.HelicalLattice(honey, 2)
+    strength = np.array([[1.5, 2.5, 1.5], [2.5, 1.5, 2.5]])
+
+    def assert_same(i1, j1, s1, ij2, s2):
+        """check that coupling and multi_coupling agree up to sorting order"""
+        assert len(i1) == len(ij2)
+        sort1 = np.lexsort(np.stack([i1, j1]))
+        sort2 = np.lexsort(ij2.T)
+        for a, b in zip(sort1, sort2):
+            assert (i1[a], j1[a]) == tuple(ij2[b])
+            assert s1[a] == s2[b]
+
+    i, j, s = hel.possible_couplings(0, 1, [0, 0], strength)
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [0, 0], 1)], strength)
+    assert np.all(i == [0, 2]) and np.all(j == [1, 3])
+    assert np.all(s == [1.5, 2.5])
+    assert_same(i, j, s, ijm, sm)
+
+    i, j, s = hel.possible_couplings(0, 0, [1, 0], strength)
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [1, 0], 0)], strength)
+    assert np.all(i == [0, 2]) and np.all(j == [6, 8])
+    assert np.all(s == [1.5, 2.5])
+    assert_same(i, j, s, ijm, sm)
+
+    i, j, s = hel.possible_couplings(0, 0, [-1, 1], strength)
+    assert np.all(i == [4, 6]) and np.all(j == [0, 2])
+    assert np.all(s == [2.5, 1.5])  # swapped!
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [-1, 1], 0)], strength)
+    assert_same(i, j, s, ijm, sm)
+    ijm, sm = hel.possible_multi_couplings([('X', [1, 0], 0), ('X', [0, 1], 0)], strength)
+    assert_same(i, j, s, ijm, sm)
+
+
 def test_number_nn():
     s = None
     chain = lattice.Chain(2, s)
