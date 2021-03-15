@@ -989,7 +989,10 @@ class Lattice:
         """
         coupling_shape, shift_lat_indices = self.coupling_shape(dx)
         if any([s == 0 for s in coupling_shape]):
-            return [], [], np.zeros([0, self.dim]), coupling_shape
+            if strength is None:
+                return [], [], np.zeros([0, self.dim]), coupling_shape
+            else:
+                return [], [], []
         Ls = np.array(self.Ls)
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
@@ -1101,7 +1104,10 @@ class Lattice:
         u = np.array([op_u for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
         if any([s == 0 for s in coupling_shape]):
-            return [], [], coupling_shape
+            if strength is None:
+                return [], [], coupling_shape
+            else:
+                return [], []
         lat_indices = np.indices(coupling_shape).reshape([1, self.dim, -1]).transpose([2, 0, 1])
         lat_ijkl_shifted = lat_indices + (dx - shift_lat_indices)
         lat_ijkl = np.mod(lat_ijkl_shifted, Ls)
