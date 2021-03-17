@@ -6,7 +6,7 @@ import sys
 import os
 import subprocess
 
-if not sys.version_info >= (3, 5):
+if not sys.version_info >= (3, 6):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
 

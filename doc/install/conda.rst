@@ -16,7 +16,7 @@ If you have done this, you don't need to specify the ``--channel=conda-forge`` e
 
 .. note ::
 
-    The `numpy` package provided by `conda-forge` by default uses openblas on linux. 
+    The `numpy` package provided by the `conda-forge` channel by default uses openblas on linux. 
     As outlined in the `conda forge docs <https://conda-forge.org/docs/maintainer/knowledge_base.html#switching-blas-implementation>`_, 
     you can switch to MKL using::
 

@@ -33,7 +33,12 @@ state the python version and contain ``Anaconda`` or ``Intel Corporation``, resp
 
 If you have a working conda package manager, you can install the numpy build against MKL with::
 
-    conda install mkl numpy scipy
+    conda install mkl mkl-devel numpy scipy 
+
+The ``mkl-devel`` package is required for linking against MKL, i.e. for compiling the Cython code.
+As outlined in :doc:`/doc/install/conda`, on Linux/Mac you also need to the following, if you use the `conda-forge` channel::
+
+    conda install "libblas=*=*mkl"
 
 .. note ::
     
@@ -43,10 +48,6 @@ If you have a working conda package manager, you can install the numpy build aga
     cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
 
-
-As outlined in :doc:`/doc/install/conda`, on Linux/Mac you also need to the following, if you use the `conda-forge` channel::
-
-    conda install "libblas=*=*mkl"
 
 
 .. _linkingMKL:
@@ -59,7 +60,7 @@ function in the BLAS from MKL.
 To link against MKL, the MKL library *including the headers* must be available during the compilation of TeNPy's Cython
 files. If you have the MKL library installed, you can export the environemnt variable `MKLROOT` to point to the
 root folder.
-Alternatively, TeNPy will recognise if you are in an active conda environment and have the `mkl` and `mkl-devel` conda
+Alternatively, TeNPy will recognise if you are in an active conda environment and have the `mkl` *and* `mkl-devel` conda
 packages installed during compilation. In this case, it will link against the MKL provided as conda package.
 
 :func:`tenpy.show_config` indicates whether you linked successfully against MKL::
