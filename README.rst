@@ -39,7 +39,7 @@ How to read the documentation
 -----------------------------
 The **documentation is available online** at https://tenpy.readthedocs.io/.
 The documentation is roughly split in two parts: on one hand the full "reference" containing the documentation of all functions,
-classes, methods, etc., and on the other hand the "user guide" containing some introductions and additional explanations.
+classes, methods, etc., and on the other hand the "user guide" containing some `introductions <https://tenpy.readthedocs.io/en/latest/introductions.html>`_ with additional explanations and `examples <https://tenpy.readthedocs.io/en/latest/examples.html>`_.
 
 The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in the folder `doc/` of the repository.
 All documentation is formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
