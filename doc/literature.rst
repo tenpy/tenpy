@@ -59,12 +59,6 @@ The following links are not physics-related, but are good to know if you want to
     We use it through the python interface of the `h5py <https://docs.h5py.org/en/stable/>`_ library, 
     see :doc:`/intro/input_output`.
 
-.. [MPI]
-    "Message Passing Interface", https://mpi-forum.org/docs
-    A standard for parallel computing on super computers.
-    We use it throught the python interface of the `mpi4py <https://mpi4py.readthedocs.io/>`_ library,
-    see :mod:`tenpy.simulations.mpi_parallel`.
-
 .. [yaml]
     "YAML Ain't Markup Language", https://yaml.org
     A human-readable file format for configuration files.
