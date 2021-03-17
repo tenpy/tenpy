@@ -8,6 +8,9 @@ which needs to be installed when you want to use classes in this module.
     This module is not imported by default, since just importing mpi4py already initializes MPI.
     Hence, if you want to use it, you need to explicitly call
     ``import tenpy.simulation.mpi_parallel`` in your python script.
+
+.. warning ::
+    This module is still under active development.
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
