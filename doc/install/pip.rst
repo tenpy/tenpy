@@ -5,7 +5,8 @@ Preparation: install requirements
 ---------------------------------
 
 If you have the [conda]_ package manager from `anaconda <https://www.anaconda.com/distribution>`_, you can just download the 
-`environment.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment.yml>`_ file out of the repository
+`environment.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment.yml>`_ file (using the `conda-forge`
+channel, or the `environment_other.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment_other.yml>`_ for all other channels) out of the repository
 and create a new environment (called ``tenpy``, if you don't speficy another name) for TeNPy with all the required packages::
 
     conda env create -f environment.yml

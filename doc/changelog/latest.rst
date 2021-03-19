@@ -3,16 +3,20 @@
 
 Release Notes
 -------------
-The default (stable) git branch was renamed from ``master`` to ``main``.
+First of all: We have optimized the cython parts such that they can now link directly against MKL and have been optimized for the case of small blocks inside charge-conserved tensors.
+During compilation, TeNPy now checks whether MKL is available, and then directly links against it.
+This **changed the depencies**: in particular, when you created a conda environment for TeNPy, it is highly recommended
+to start off with a new one based on the ``environment.yml`` file.
+If you want to continue using the existing conda environment, you need to ``conda install mkl-devel`` before compilation. *Additionally*, when you use the ``conda-forge`` channel of conda, you should pin blas to use MKL by ``conda install libblas=*=*mkl``.
 
-Big new feature: simulation classes and console script `tenpy-run` to allow running a simulation. See :doc:`/intro/simulation` for details.
+Another great reason to update are **simulation classes** and a console script `tenpy-run` to allow running and even resuming a simulation when it aborted!
+See :doc:`/intro/simulation` for details.
 
-Big Change in verbosity: switch to using Python's default :mod:`logging` mechanism! 
-This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`Simulation` setups.
+Further, there is a big change in **verbosity**: we switched to using Python's default :mod:`logging` mechanism. 
+This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`simulation` setups.
 See :doc:`/intro/logging` on how to get the output back, and what to change in your code.
 
-Further, the cython parts can now link directly against MKL and have been optimized for the case of small blocks.
-
+Finally, note that the default (stable) git branch was renamed from ``master`` to ``main``.
 
 Changelog
 ---------
@@ -97,4 +101,4 @@ Fixed
 - Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
 - :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.
 - Some MPS methods (correlation function, expectation value, ...) raised an error for negative site indices even for infinite MPS.
-- Warn about unsued tenpy functions
+- Warn if we add terms to a couplingMPOMOdel after initialization
