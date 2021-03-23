@@ -492,6 +492,8 @@ class Simulation:
                 # move logfile to *.backup.log
                 root, ext = os.path.splitext(output_filename)
                 if os.path.exists(root + '.log'):
+                    if os.path.exists(root + '.backup.log'):
+                        os.remove(root + '.backup.log')
                     os.rename(root + '.log', root + '.backup.log')
         if not os.path.exists(self._backup_filename):
             import socket
@@ -524,6 +526,8 @@ class Simulation:
 
         if os.path.exists(output_filename):
             # keep a single backup, previous backups are overwritten.
+            if os.path.exists(self._backup_filename):
+                os.remove(self._backup_filename)
             os.rename(output_filename, self._backup_filename)
 
         self.logger.info("saving results to disk")  # save results to disk
@@ -597,7 +601,6 @@ class Simulation:
         if save_every is not None and now - self._last_save > save_every:
             self.save_results()
             time_to_save = time.time() - now
-            assert time_to_save > 0.
             if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save
                 warnings.warn("Saving took longer than 10% of `save_every_x_seconds`."
