@@ -12,6 +12,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import os
+from pathlib import Path
 import time
 import importlib
 import warnings
@@ -459,6 +460,9 @@ class Simulation:
                 or with `overwrite_output`=False, replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers)
                 until we get a filename that doesn't exist yet.
+            safe_write : bool
+                If True (default), perform a "safe" overwrite of `output_filename` as described
+                in :meth:`save_results`.
         """
         # note: this function shouldn't use logging: it's called before setup_logging()
         output_filename = self.options.get("output_filename", None)
@@ -468,45 +472,58 @@ class Simulation:
             self.output_filename = None
             self._backup_filename = None
             return
-        self.output_filename = output_filename
-        self._backup_filename = self.get_backup_filename(output_filename)
+        out_fn = Path(output_filename)  # convert to Path
+        self.output_filename = out_fn
+        self._backup_filename = self.get_backup_filename(out_fn)
 
-        if os.path.exists(output_filename):
+        if out_fn.exists():
             if skip_if_exists:
                 self.options.touch(*self.options.unused)
-                raise Skip("simulation output filename already exists: " + repr(output_filename))
+                raise Skip("simulation output filename already exists: " + str(fn))
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
-                root, ext = os.path.splitext(output_filename)
                 for i in range(1, 100):
-                    output_filename = '{0}_{1:02d}{2}'.format(root, i, ext)
-                    if not os.path.exists(output_filename):
+                    new_out_fn = out_fn.with_suffix('_' + str(i) + out_fn.suffix)
+                    if not new_out_fn.exists():
                         break
                 else:
                     raise ValueError("Refuse to make another copy. CLEAN UP!")
-                warnings.warn(f"changed output filename to {output_filename!r}")
-                self.output_filename = output_filename
-                self._backup_filename = self.get_backup_filename(output_filename)
+                warnings.warn(f"changed output filename to {new_out_fn!s}")
+                self.output_filename = out_fn = new_out_fn
+                self._backup_filename = self.get_backup_filename(out_fn)
             # else: overwrite stuff in `save_results`
             if overwrite_output and not self.loaded_from_checkpoint:
                 # move logfile to *.backup.log
-                root, ext = os.path.splitext(output_filename)
-                if os.path.exists(root + '.log'):
-                    if os.path.exists(root + '.backup.log'):
-                        os.remove(root + '.backup.log')
-                    os.rename(root + '.log', root + '.backup.log')
-        if not os.path.exists(self._backup_filename):
+                log_fn = out_fn.with_suffix('.log')
+                backup_log_fn = self.get_backup_filename(log_fn)
+                if log_fn.exists() and backup_log_fn is not None:
+                    backup_log_fn.unlink(True)  # remove if exists
+                    log_fn.rename(backup_log_fn)
+        if self._backup_filename is not None and not self._backup_filename.exists():
             import socket
             text = "simulation initialized on {host!r} at {time!s}\n"
             text = text.format(host=socket.gethostname(), time=time.asctime())
-            with open(self._backup_filename, 'w') as f:
+            with self._backup_filename.open('w') as f:
                 f.write(text)
 
     def get_backup_filename(self, output_filename):
-        """Extract the name used for backups of `output_filename`."""
+        """Extract the name used for backups of `output_filename`.
+
+        Parameters
+        ----------
+        output_filename : pathlib.Path
+            The filename where data is saved.
+
+        Returns
+        -------
+        backup_filename : pathlib.Path
+            The filename where to keep a backup while writing files to avoid.
+        """
         # note: this function shouldn't use logging
-        root, ext = os.path.splitext(output_filename)
-        return root + '.backup' + ext
+        if self.options.get("safe_write", True):
+            return output_filename.with_suffix('.backup' + output_filename.suffix)
+        else:
+            return None
 
     def save_results(self):
         """Save the :attr:`results` to an output file.
@@ -524,18 +541,21 @@ class Simulation:
         if output_filename is None:
             return results  # don't save to disk
 
-        if os.path.exists(output_filename):
+        if output_filename.exists():
             # keep a single backup, previous backups are overwritten.
-            if os.path.exists(self._backup_filename):
-                os.remove(self._backup_filename)
-            os.rename(output_filename, self._backup_filename)
+            if backup_filename is not None:
+                backup_filename.unlink(True)  # remove if exists
+                output_filename.rename(backup_filename)
+            else:
+                output_filename.unlink()  # remove
 
         self.logger.info("saving results to disk")  # save results to disk
         hdf5_io.save(results, output_filename)
 
-        if os.path.exists(backup_filename):
+        if backup_filename is not None:
             # successfully saved, so we can savely remove the old backup
-            os.remove(backup_filename)
+            backup_filename.unlink()
+
         self._last_save = time.time()
         return results
 
