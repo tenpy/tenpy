@@ -14,7 +14,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- nothing yet
+- :meth:`tenpy.networks.mps.MPS.term_list_correlation_function_right`.
 
 Changed
 ^^^^^^^

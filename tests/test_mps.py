@@ -387,6 +387,12 @@ def test_expectation_value_term():
 
 def test_correlation_function():
     s = spin_half
+    Pup = s.Id.copy()
+    Pup[s.state_labels['down'], s.state_labels['down']] = 0.
+    Pdown = s.Id.copy()
+    Pdown[s.state_labels['up'], s.state_labels['up']] = 0.
+    s.add_op('Pup', Pup, need_JW=False, hc='Pup')
+    s.add_op('Pdown', Pdown, need_JW=False, hc='Pdown')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
     corr1 = psi1.correlation_function('Sz', 'Sz')
     corr1_exact = 0.25 * np.array([[ 1.,  0.,  0.,  0.,  1.,  0.],
@@ -409,6 +415,19 @@ def test_correlation_function():
     npt.assert_almost_equal(corr1[::-1], corr1_exact[:-1, 5])
     corr1 = psi1.term_correlation_function_left([('Sz', 1)], [('Sz', 1)], range(0, 4), 4)
     npt.assert_almost_equal(corr1[::-1], corr1_exact[1:-1, 5])
+
+    Sz = TermList([[('Pup', 0)], [('Pdown', 0)]], [0.5, -0.5])  # complicated way to write Sz
+    corr1 = psi1.term_list_correlation_function_right(Sz, Sz)
+    # check term_list_correlation_function_right for terms with different qtotal
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    Sx = TermList([[('Sp', 0)], [('Sm', 0)]], [0.5, +0.5])  # complicated way to write Sx_0
+    Sy = TermList([[('Sp', 1)], [('Sm', 1)]], [-0.5j, +0.5j])  # complicated way to write Sy_1
+    corrxx = psi1.term_list_correlation_function_right(Sx, Sx)
+    npt.assert_almost_equal(corrxx, np.zeros((5, )))  # Sx_0 gives 0
+    corrxx = psi1.term_list_correlation_function_right(Sx, Sx, 1)
+    npt.assert_almost_equal(corrxx, 0.25 * np.array([0., -1., 0., 0.]))
+    corrxy = psi1.term_list_correlation_function_right(Sx, Sy, 1, range(1, 5))
+    npt.assert_almost_equal(corrxy, np.zeros((4, )))
 
     # check fermionic signs
     fs = site.SpinHalfFermionSite()
@@ -435,6 +454,9 @@ def test_correlation_function():
     corr3_long = psi3.correlation_function('Cdu', 'Cu', [0], range(4, 11 * 4, 4)).flatten()
     corr3_long2 = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)])
     npt.assert_array_almost_equal(corr3_long, corr3_long2)
+    term1 = TermList([[('Cdu', 0)]], [1.])
+    term2 = TermList([[('Cu', 0)], [('Ntot', -1)]], [1., 2.])  # N shouldn't contribute!
+    corr3_long3 = psi3.term_list_correlation_function_right(term1, term2)
 
 
 def test_expectation_value_multisite():

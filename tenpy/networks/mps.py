@@ -1945,9 +1945,10 @@ class MPS:
             If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
         i_offset : int
             Offset to be added to the site-indices in the `term`.
-        JW_from_right : bool
-            If set, a JW-string is coming in from the right.
-            The operators
+        JW_from_right : bool | None
+            If set to True, a JW-string is coming in from the right. Corresponding `JW` operators
+            are added to `ops`.
+            If `None`, use
 
         Returns
         -------
@@ -1958,6 +1959,7 @@ class MPS:
         has_extra_JW : bool
             True if there is an odd number of terms which require a Jordan-Wigner string,
             i.e., if there is a JW string coming out to the left.
+            If `JW_from_right` was initially `None`, it is the value chosen for `JW_from_right`.
         """
         assert not (JW_from_right and not autoJW)
         term = list(term)
@@ -1972,6 +1974,10 @@ class MPS:
                 count_JW += 1
                 for k in range(j):
                     ops[k].append('JW')
+        if JW_from_right is None:
+            JW_from_right = (count_JW % 2 == 1)
+            if JW_from_right:
+                count_JW -= 1  # still return True for `has_extra_JW`
         if JW_from_right:
             count_JW += 1
             for op_i in ops:
@@ -2379,6 +2385,7 @@ class MPS:
         See also
         --------
         correlation_function : varying both `i` and `j` at once.
+        term_list_correlation_function_right : generalization to sums of terms on the left/right.
         """
         assert opstr is None or not autoJW
         if j_R is None:
@@ -2399,7 +2406,7 @@ class MPS:
         CL = self._corr_ops_LP(ops_L, i_min)
         i = i_min + len(ops_L)  # CL is contraction strictly left of site `i`
         if i > j_R[0] + j_min:
-            raise ValueError("i_L/i_R not such that term_L is left of term_R")
+            raise ValueError("i_L/j_R not such that term_L is left of term_R")
         axes = [['vL*'] + self._get_p_label('*'), ['vR*'] + self._p_label]
         result = []
         for j in j_R:
@@ -2428,39 +2435,8 @@ class MPS:
                                        opstr=None):
         """Correlation function between (multi-site) terms, moving the left term, fix right term.
 
-        For ``term_L = [('A', 0), ('B', 1)]`` and ``term_R = [('C', 0), ('D', 1)]``,
-        calculate the correlation function :math:`A_{i+0} B_{i+1} C_{j+0} D_{j+1}`
-        for varying `i` and fixed `j` according to `i_L`/`j_R`.
-        The terms may not overlap.
-        For fermions, the order of the terms is following the usual mathematical convention,
-        where term_R acts first on a physical ket.
-
-        Parameters
-        ----------
-        term_L, term_R : list of (str, int)
-            Each a term representing a sum of operators on different sites, e.g.,
-            ``[('Sz', 0), ('Sz', 1)]`` or ``[('Cd', 0), ('C', 1)]``.
-        i_L : list of int | None
-            List of offsets to be added to the indices of `term_L`.
-            Is sorted descending before use, i.e., the order is ignored.
-            For **infinite** MPS, `None` defaults to ``range(-L, -11*L, -L)``, i.e.,
-            one term per MPS unit cell for a distance of up to 10 unit cells.
-        j_R : int
-            Offset added to the indices of `term_R`.
-        autoJW : bool
-            Whether to automatically take care of Jordan-Wigner strings.
-        opstr : str
-            Force an intermediate operator string to used inbetween the terms.
-            Can only be used in combination with ``autoJW=False``.
-
-        Returns
-        -------
-        corrs : 1D array
-            Values of the correlation function, one for each entry in the list `j_R`.
-
-        See also
-        --------
-        correlation_function : varying both `i` and `j` at once.
+        Same as :meth:`term_correlation_function_right`, but vary index `i` of the left term
+        instead of the `j` of the right term.
         """
         assert opstr is None or not autoJW
         if i_L is None:
@@ -2480,7 +2456,7 @@ class MPS:
         CR = self._corr_ops_RP(ops_R, j_min)
         j = j_min  # CR is contraction including site `j`
         if i_L[0] + i_min + len(ops_L) - 1 > j:
-            raise ValueError("i_L not such that term_L is left of term_R")
+            raise ValueError("i_L/j_R not such that term_L is left of term_R")
         axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
         result = []
         for i in i_L:
@@ -2497,6 +2473,122 @@ class MPS:
                 j = k
             CL = self._corr_ops_LP(ops_L, i + i_min)
             result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
+        return np.real_if_close(result)
+
+    def term_list_correlation_function_right(self,
+                                             term_list_L,
+                                             term_list_R,
+                                             i_L=0,
+                                             j_R=None,
+                                             autoJW=True,
+                                             opstr=None):
+        """Correlation function between sums of multi-site terms, moving the right sum of term.
+
+        Generalization of :meth:`term_correlation_function_right` to the case where
+        `term_list_L` and `term_R` are sums of terms.
+        This function calculates ``<psi|term_list_L[i_L] term_list_R[j]|psi> for j in j_R``.
+
+        **Assumes** that overall terms with an odd number of operators requiring a Jordan-Wigner
+        string don't contribute.
+        (In systems conserving the fermionic particle number (parity), this is true.)
+
+        Parameters
+        ----------
+        term_list_L, term_list_R : :class:`~tenpy.networks.terms.TermList`
+            Each a `TermList` representing the sum of terms to be applied.
+        i_L : int
+            Offset added to all the indices of `term_list_L`.
+        j_R : list of int | None
+            List of offsets to be added to the indices of `term_list_R`.
+            Is sorted before use, i.e. the order is ignored.
+            For **finite** MPS, `None` defaults to ``range(j0, L)``,
+            where `j0` is chosen such that `term_R` starts one site right of the `term_L`.
+            For **infinite** MPS, `None` defaults to ``range(L, 11*L, L)``, i.e.,
+            one term per MPS unit cell for a distance of up to 10 unit cells.
+        autoJW : bool
+            Whether to automatically take care of Jordan-Wigner strings.
+        opstr : str
+            Force an intermediate operator string to be used inbetween the terms.
+            (Even used within the `term_list_L/R` for terms with smaller-than maximal support.)
+            Can only be used in combination with ``autoJW=False``.
+
+        Returns
+        -------
+        corrs : 1D array
+            Values of the correlation function, one for each entry in the list `j_R`.
+
+        See also
+        --------
+        term_correlation_function_right : version for a single term in both `term_list_L/R`.
+        """
+        assert opstr is None or not autoJW
+        min_L, max_L = term_list_L.limits()
+        min_R, max_R = term_list_R.limits()  # note: min_R can be negative!
+        if j_R is None:
+            if self.finite:
+                j0 = i_L + max_L + 1 - min_L
+                j_R = range(j0, self.L - max(0, max_R))
+            else:
+                j_R = range(self.L, 11 * self.L, self.L)
+        else:
+            j_R = np.sort(j_R)
+        j0 = j_R[0]
+        if i_L + max_L >= j0 + min_R:
+            raise ValueError("i_L/i_R not such that term_list_L is left of term_list_R")
+        if autoJW:
+            opstr_fill = {True: 'JW', False: 'Id'}  # key: whether JW is needed
+        else:
+            opstr_fill = {False: 'Id' if opstr is None else opstr}
+            # True key not needed: we don't check for JW!
+        all_ops_R = []
+        need_JW_R = []
+        for term_R in term_list_R.terms:
+            ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j0)
+            need_JW_R.append(need_JW)
+            if j_min > j0 + min_R:
+                # fill ops_R such that the left-most op acts at site `j0 + min_R`
+                ops_R = [opstr_fill[need_JW]] * (j_min - (j0 + min_R)) + ops_R
+            all_ops_R.append(ops_R)
+        i = i_L + max_L + 1  # CL is contraction strictly left of site i
+        CLs = {}  # (need_JW, qtotal...) -> sum_CL
+        # where sum_CL = sum(CL(term_L) * strength) for term, strength in term_list_L
+        # with given `qtotal`
+        for term_L, strength in term_list_L:
+            ops_L, i_min, need_JW = self._term_to_ops_list(term_L, autoJW, i_L, None)
+            if i_min + len(ops_L) < i:
+                ops_L = ops_L + [opstr_fill[need_JW]] * (i - (i_min + len(ops_L)))
+            CL = self._corr_ops_LP(ops_L, i_min)
+            key = (need_JW, ) + tuple(CL.qtotal)
+            if key not in CLs:
+                CLs[key] = strength * CL
+            else:
+                CLs[key] = CLs[key] + strength * CL
+        axes = [['vL*'] + self._get_p_label('*'), ['vR*'] + self._p_label]
+        result = []
+        for j in j_R:
+            j = j + min_R  # start ops_R on site `j`
+            assert i <= j
+            for k in range(i, j):
+                assert i == k
+                # contract CL with tensors on site `k`
+                B = self.get_B(k, form='B')
+                for key, CL in CLs.items():
+                    need_JW = key[0]
+                    CL = npc.tensordot(CL, B, axes=['vR', 'vL'])
+                    if opstr_fill[need_JW] != 'Id':
+                        opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr_fill[need_JW])
+                        CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
+                    CLs[key] = npc.tensordot(B.conj(), CL, axes=axes)
+                i = k + 1
+            res = 0.
+            for ops_R, need_JW, strength in zip(all_ops_R, need_JW_R, term_list_R.strength):
+                CR = self._corr_ops_RP(ops_R, j)
+                key = (need_JW, ) + tuple(-CR.qtotal)
+                CL = CLs.get(key, None)
+                if CL is None:
+                    continue  # nothing to pair up with
+                res = res + strength * npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']])
+            result.append(res)
         return np.real_if_close(result)
 
     def norm_test(self):
