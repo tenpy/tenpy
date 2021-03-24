@@ -25,7 +25,7 @@ __all__ = [
 version = '0.8.1'
 
 #: whether this is a released version or modified
-released = True
+released = False
 
 #: same as version, but with 'v' in front
 short_version = 'v' + version
