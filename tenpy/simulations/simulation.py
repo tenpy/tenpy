@@ -497,7 +497,8 @@ class Simulation:
                 log_fn = out_fn.with_suffix('.log')
                 backup_log_fn = self.get_backup_filename(log_fn)
                 if log_fn.exists() and backup_log_fn is not None:
-                    backup_log_fn.unlink(True)  # remove if exists
+                    if backup_log_fn.exists():
+                        backup_log_fn.unlink()
                     log_fn.rename(backup_log_fn)
         if self._backup_filename is not None and not self._backup_filename.exists():
             import socket
@@ -544,7 +545,8 @@ class Simulation:
         if output_filename.exists():
             # keep a single backup, previous backups are overwritten.
             if backup_filename is not None:
-                backup_filename.unlink(True)  # remove if exists
+                if backup_filename.exists():
+                    backup_filename.unlink()  # remove if exists
                 output_filename.rename(backup_filename)
             else:
                 output_filename.unlink()  # remove
@@ -552,8 +554,8 @@ class Simulation:
         self.logger.info("saving results to disk")  # save results to disk
         hdf5_io.save(results, output_filename)
 
-        if backup_filename is not None:
-            # successfully saved, so we can savely remove the old backup
+        if backup_filename is not None and backup_filename.exists():
+            # successfully saved, so we can safely remove the old backup
             backup_filename.unlink()
 
         self._last_save = time.time()
