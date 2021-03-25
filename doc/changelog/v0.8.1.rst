@@ -1,4 +1,4 @@
-[v0.8.1] - 2021-02-23
+[v0.8.1] - 2021-03-23
 =====================
 
 This is only a very minor fix-up of :doc:`/doc/changelog/v0.8.0`.
