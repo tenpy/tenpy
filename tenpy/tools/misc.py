@@ -642,6 +642,10 @@ def flatten(mapping, separator='/'):
     return result
 
 
+#: default value for :cfg:option:`logging.skip_setup`
+skip_logging_setup = False
+
+
 def setup_logging(options={}, output_filename=None):
     """Configure the :mod:`logging` module.
 
@@ -738,7 +742,7 @@ def setup_logging(options={}, output_filename=None):
     conf = options.get('dict_config', None)
     capture_warnings = options.get('capture_warnings', conf is not None
                                    or bool(to_stdout or to_file))
-    if options.get('skip_setup', False):
+    if options.get('skip_setup', skip_logging_setup):
         return
     if conf is None:
         handlers = {}

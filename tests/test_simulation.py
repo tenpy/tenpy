@@ -13,6 +13,8 @@ from tenpy.tools.misc import find_subclass
 
 import pytest
 
+tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
+
 
 class DummyAlgorithm(Algorithm):
     def __init__(self, psi, model, options, *, resume_data=None):
@@ -65,9 +67,6 @@ def dummy_measurement(results, psi, simulation):
 
 
 simulation_params = {
-    'logging_params': {
-        'skip_setup': True
-    },
     'model_class':
     'XXZChain',
     'model_params': {

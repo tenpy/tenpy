@@ -10,6 +10,7 @@ import warnings
 import pytest
 import os.path
 import tenpy
+import sys
 
 
 def test_inverse_permutation(N=10):
@@ -230,6 +231,10 @@ def test_get_set_recursive():
     assert flat_data == {'some/nested/data': 321, 'some/nested/other': 456, 'some/parts': 987}
 
 
+pytest.mark.skipif(sys.platform.startswith('win'),
+                   reason="resetting log file doesn't work on windows")
+
+
 def test_logging_setup(tmpdir, capsys):
     import logging.config
     logger = logging.getLogger('tenpy.test_logging')
@@ -238,6 +243,7 @@ def test_logging_setup(tmpdir, capsys):
     logging_params = {
         'to_stdout': 'INFO',
         'to_file': 'WARNING',
+        'skip_setup': False,
     }
     tools.misc.setup_logging(logging_params, output_filename)
 

@@ -10,6 +10,7 @@ import time
 
 import tenpy
 
+tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 datadir_pkl = [f for f in io_test.datadir_files if f.endswith('.pkl')]
 
 
@@ -68,7 +69,7 @@ def test_simulation_export_import():
     """Try subsequent export and import to pickle."""
     sim_params = {
         'logging_params': {
-            'skip_setup': True
+            'skip_setup': True,
         },
         'model_class':
         'XXZChain',
