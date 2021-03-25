@@ -91,9 +91,9 @@ simulation_params = {
 }
 
 
-def test_Simulation(tmpdir):
+def test_Simulation(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmpdir
+    sim_params['directory'] = tmp_path
     sim_params['output_filename'] = 'data.pkl'
     sim = Simulation(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
@@ -103,12 +103,12 @@ def test_Simulation(tmpdir):
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
-    assert (tmpdir / sim_params['output_filename']).exists()
+    assert (tmp_path / sim_params['output_filename']).exists()
 
 
-def test_Simulation_resume(tmpdir):
+def test_Simulation_resume(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmpdir
+    sim_params['directory'] = tmp_path
     sim_params['output_filename'] = 'data.pkl'
     # this should raise an error *after* saving the checkpoint
     sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop', {}, -1)]
@@ -121,7 +121,8 @@ def test_Simulation_resume(tmpdir):
     assert not checkpoint_results['finished_run']
     # try resuming with `resume_from_checkpoint`
     update_sim_params = {'connect_algorithm_checkpoint': []}
-    res = resume_from_checkpoint(filename=tmpdir / 'data.pkl', update_sim_params=update_sim_params)
+    res = resume_from_checkpoint(filename=tmp_path / 'data.pkl',
+                                 update_sim_params=update_sim_params)
 
     # alternatively, resume from the checkpoint results we have
     checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []

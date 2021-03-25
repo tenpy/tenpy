@@ -235,11 +235,11 @@ pytest.mark.skipif(sys.platform.startswith('win'),
                    reason="resetting log file doesn't work on windows")
 
 
-def test_logging_setup(tmpdir, capsys):
+def test_logging_setup(tmp_path, capsys):
     import logging.config
     logger = logging.getLogger('tenpy.test_logging')
     root = logging.getLogger()
-    output_filename = tmpdir / 'output.pkl'
+    output_filename = tmp_path / 'output.pkl'
     logging_params = {
         'to_stdout': 'INFO',
         'to_file': 'WARNING',
@@ -254,8 +254,8 @@ def test_logging_setup(tmpdir, capsys):
     # clean up loggers -> close file handlers (?)
     logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
 
-    assert os.path.exists(tmpdir / 'output.log')
-    with open(tmpdir / 'output.log', 'r') as f:
+    assert os.path.exists(tmp_path / 'output.log')
+    with open(tmp_path / 'output.log', 'r') as f:
         file_text = f.read()
     assert test_message % 'warning' in file_text
     assert test_message % 'info' not in file_text  # should have filtered that out
