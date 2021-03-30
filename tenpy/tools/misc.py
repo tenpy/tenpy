@@ -526,17 +526,25 @@ def find_subclass(base_class, subclass_name):
         Class with name `subclass_name` which is a subclass of the `base_class`.
         None, if no subclass of the given name is found.
     """
-    if base_class.__name__ == subclass_name:
-        return base_class
-    subclasses = base_class.__subclasses__()
-    for subcls in subclasses:
-        if subcls.__name__ == subclass_name:
-            return subcls
-    for subcls in subclasses:
-        found = find_subclass(subcls, subclass_name)  # recursion
-        if found is not None:
-            return found
-    return None
+    found = set()
+    _find_subclass_recursion(base_class, subclass_name, found, set())
+    if len(found) == 0:
+        return None
+    elif len(found) == 1:
+        return found.pop()
+    else:
+        msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
+        raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
+
+
+def _find_subclass_recursion(base_class, name_to_find, found, checked):
+    if base_class.__name__ == name_to_find:
+        found.add(base_class)
+    for subcls in base_class.__subclasses__():
+        if subcls in checked:
+            continue
+        _find_subclass_recursion(subcls, name_to_find, found, checked)
+        checked.add(subcls)
 
 
 def get_recursive(nested_data, recursive_key, separator="/"):
@@ -744,6 +752,7 @@ def setup_logging(options={}, output_filename=None):
                                    or bool(to_stdout or to_file))
     if options.get('skip_setup', skip_logging_setup):
         return
+    assert False, "Shouldn't be called during logging"
     if conf is None:
         handlers = {}
         if to_stdout:
