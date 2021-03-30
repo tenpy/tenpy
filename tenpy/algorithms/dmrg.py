@@ -43,6 +43,7 @@ from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
+from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
 
@@ -1325,7 +1326,7 @@ class DMRGEngine(Sweep):
     def mixer_activate(self):
         """Set `self.mixer` to the class specified by `options['mixer']`.
 
-        .. cfg:configoptions :: TwoSiteDMRGEngine
+        .. cfg:configoptions :: DMRGEngine
 
             mixer : str | class | bool
                 Chooses the :class:`Mixer` to be used.
@@ -1338,7 +1339,8 @@ class DMRGEngine(Sweep):
                 Mixer parameters as described in :cfg:config:`Mixer`.
 
         """
-        Mixer_class = self.options.get('mixer', None)
+        default = True if isinstance(self, SingleSiteDMRGEngine) else None
+        Mixer_class = self.options.get('mixer', default)
         if Mixer_class:
             if Mixer_class is True:
                 Mixer_class = self.DefaultMixer
@@ -1348,7 +1350,7 @@ class DMRGEngine(Sweep):
                     warnings.warn(msg, FutureWarning)
                     Mixer_class = self.DefaultMixer
                 else:
-                    Mixer_class = globals()[Mixer_class]
+                    Mixer_class = find_subclass(Mixer, Mixer_class)
             mixer_params = self.options.subconfig('mixer_params')
             self.mixer = Mixer_class(mixer_params)
 
