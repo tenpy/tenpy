@@ -1,0 +1,8 @@
+[v0.8.4] - 2021-03-29
+=====================
+
+We're getting there, conda packages work again...
+However, I forgot to delete an ``assert`` statemente introduced for debugging  ¯\_(ツ)_/¯
+
+Note that there is also a change of a default parameter: SingleSiteDMRG now uses a mixer by default.
+

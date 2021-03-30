@@ -46,6 +46,8 @@ Backwards incompatible changes
   - deprecate the `verbose` class argument of the :class:`~tenpy.tools.params.Config`
   - deprecate the `verbose` class attribute of all classes (if they had it).
   - change argument names of :meth:`~tenpy.tools.params`.
+- Changed default parameter (actually in :doc:`/changelog/v0.8.4`), namely to 
+  use the :cfg:option:`DMRGEngine.mixer` for :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG` by default.
 
 Added
 ^^^^^
