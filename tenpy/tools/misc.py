@@ -752,7 +752,6 @@ def setup_logging(options={}, output_filename=None):
                                    or bool(to_stdout or to_file))
     if options.get('skip_setup', skip_logging_setup):
         return
-    assert False, "Shouldn't be called during logging"
     if conf is None:
         handlers = {}
         if to_stdout:
