@@ -1,4 +1,4 @@
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
 import numpy
@@ -12,8 +12,8 @@ if not sys.version_info >= (3, 6):
 
 # hardcode version for people without git
 
-MAJOR, MINOR, MICRO = 0, 8, 2
-RELEASED = False
+MAJOR, MINOR, MICRO = 0, 8, 3
+RELEASED = True
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
@@ -77,7 +77,7 @@ def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
     content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}
