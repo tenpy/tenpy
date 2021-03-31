@@ -67,6 +67,8 @@ from ..networks.terms import TermList
 from ..tools.misc import to_array, inverse_permutation, to_iterable
 from ..linalg import np_conserved as npc
 
+__all__ = ["MixedXKLattice", "MixedXKModel", "SpinlessMixedXKSquare", "HubbardMixedXKSquare"]
+
 
 class MixedXKLattice(Lattice):
     r"""Lattice for fermions with mixed real and momentum space on a cylinder.
