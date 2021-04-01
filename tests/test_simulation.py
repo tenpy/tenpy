@@ -6,7 +6,7 @@ import numpy as np
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
-from tenpy.simulations.simulation import Simulation, resume_from_checkpoint
+from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution
 from tenpy.tools.misc import find_subclass
@@ -169,3 +169,22 @@ def test_RealTimeEvolution():
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
     assert meas['dummy_value'] == [None] + [sim_params['algorithm_params']['N_steps']**2] * (N - 1)
+
+
+def test_output_filename_form_dict():
+    options = copy.deepcopy(simulation_params)
+    assert output_filename_from_dict(options) == 'result.h5', "hard-coded default values changed"
+    assert output_filename_from_dict(options, suffix='.pkl') == 'result.pkl'
+    fn = output_filename_from_dict(options, {'algorithm_params/dt': 'dt_{0:.2f}'})
+    assert fn == 'result_dt_0.50.h5'
+    fn = output_filename_from_dict(options, {
+        'algorithm_params/dt': 'dt_{0:.2f}',
+        'model_params/L': 'L_{0:d}'
+    })
+    assert fn == 'result_dt_0.50_L_4.h5'
+    # re-ordered parts
+    fn = output_filename_from_dict(options, {
+        'model_params/L': 'L_{0:d}',
+        'algorithm_params/dt': 'dt_{0:.2f}'
+    })
+    assert fn == 'result_L_4_dt_0.50.h5'

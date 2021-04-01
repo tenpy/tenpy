@@ -25,11 +25,13 @@ from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.misc import find_subclass, update_recursive
+from ..tools.misc import find_subclass, update_recursive, get_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 
-__all__ = ['Simulation', 'Skip', 'run_simulation', 'resume_from_checkpoint']
+__all__ = [
+    'Simulation', 'Skip', 'run_simulation', 'resume_from_checkpoint', 'output_filename_from_dict'
+]
 
 
 class Simulation:
@@ -438,6 +440,38 @@ class Simulation:
         }
         return version_info
 
+    def get_output_filename(self):
+        """Read out the `output_filename` from the options.
+
+        You can easily overwrite this method in subclasses to customize the outputfilename
+        depending on the options passed to the simulations.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            output_filename : str | None | dict
+                If ``None`` (default), no output is written to files.
+                If a string, this filename is used for output (up to modifications by
+                :meth:`fix_output_filenames` to avoid overwriting previous results).
+                If a dictionary is given, we use the entries as keyword-arguments to
+                :func:`output_filename_from_dict` with the simulation parameters (:attr:`options`)
+                as `options`.
+
+        Returns
+        -------
+        output_filename : str | None
+            Filename for output; None disables any writing to files.
+            Relative to :cfg:option:`Simulation.directory`, if specified.
+            The file ending determines the output format.
+        """
+        # note: this function shouldn't use logging: it's called before setup_logging()
+        output_filename = self.options.get('output_filename', None)
+        if output_filename is None or isinstance(output_filename, str):
+            return output_filename
+        # else: output_filename is dict
+        return output_filename_from_dict(self.options, **output_filename)
+
     def fix_output_filenames(self):
         """Determine the output filenames.
 
@@ -449,9 +483,6 @@ class Simulation:
         -------
         .. cfg:configoptions :: Simulation
 
-            output_filename : string | None
-                Filename for output. The file ending determines the output format.
-                None (default) disables any writing to files.
             skip_if_output_exists : bool
                 If True, raise :class:`Skip` if the output file already exists.
             overwrite_output : bool
@@ -465,7 +496,7 @@ class Simulation:
                 in :meth:`save_results`.
         """
         # note: this function shouldn't use logging: it's called before setup_logging()
-        output_filename = self.options.get("output_filename", None)
+        output_filename = self.get_output_filename()
         overwrite_output = self.options.get("overwrite_output", False)
         skip_if_exists = self.options.get("skip_if_output_exists", False)
         if output_filename is None:
@@ -693,7 +724,7 @@ def resume_from_checkpoint(*,
         Alternatively to `filename` the results of the simulation so far, i.e. directly the data
         dicitonary saved at a simulation checkpoint.
     update_sim_params : None | dict
-        Allows to update specific :cfg:config:`Simulation` parameters, ignored if `None`.
+        Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
         Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
         `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
     simlation_class_kwargs : None | dict
@@ -743,3 +774,63 @@ def resume_from_checkpoint(*,
         Simulation.logger.exception("simulation abort with the following exception")
         raise  # raise the same error again
     return results
+
+
+def output_filename_from_dict(options, parts={}, prefix='result', suffix='.h5', joint='_'):
+    """Format a `output_filename` from parts with values from nested `options`.
+
+    The results of a simulation are ideally fixed by the simulation class and the `options`.
+    Unique filenames could be obtained by including *all* options into the filename, but this
+    would be a huge overkill: it suffices if we include the options that we actually change.
+    This function helps to keep the length of the output filename at a sane level
+    while ensuring (hopefully) sufficient uniqueness.
+
+
+    Parameters
+    ----------
+    options : (nested) dict
+        Typically the simulation parameters, i.e., options passed to :class:`Simulation`.
+    parts :: dict
+        Entries map a `recursive_key` for `options` to a `format_str` used
+        to format the value, i.e. we extend the filename with
+        ``format_str.format(get_recursive(options, recursive_key))``.
+        The order of the entries specifies the order in the resulting `output_filename`.
+    prefix, suffix : str
+        First and last part of the filename.
+    joint : str
+        Individual filename parts (except the suffix) are joined by this string.
+
+    Returns
+    -------
+    output_filename : str
+        (Hopefully) sufficiently unique filename.
+
+    Examples
+    --------
+    >>> from tenpy.simulations.simulation import output_filename_from_dict
+    >>> options = {  # some simulation parameters
+    ...    'algorithm_params': {
+    ...         'dt': 0.01,  # ...
+    ...    },
+    ...    'model_params':  {
+    ...         'Lx': 3,
+    ...         'Ly': 4, # ...
+    ...    }, # ... and many more options ...
+    ... }
+    >>> output_filename_from_dict(options)
+    'result.h5'
+    >>> output_filename_from_dict(options, suffix='.pkl')
+    'result.pkl'
+    >>> output_filename_from_dict(options, parts={'model_params/Ly': 'Ly_{0:d}'}, prefix='check')
+    'check_Ly_4.h5'
+    >>> output_filename_from_dict(options, parts={
+    ...         'algorithm_params/dt': 'dt_{0:.3f}',
+    ...         'model_params/Ly': 'Ly_{0:d}'})
+    'result_dt_0.010_Ly_4.h5'
+    """
+    formatted_parts = [prefix]
+    for deep_key, format_str in parts.items():
+        val = get_recursive(options, deep_key)
+        part = format_str.format(val)
+        formatted_parts.append(part)
+    return joint.join(formatted_parts) + suffix
