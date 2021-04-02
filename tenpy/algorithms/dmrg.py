@@ -847,7 +847,7 @@ class DMRGEngine(Sweep):
             P_tol_min : float
                 See `P_tol_to_trunc`
             update_env : int
-                Number of sweeps without bond optimizaiton to update the
+                Number of sweeps without bond optimization to update the
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
 

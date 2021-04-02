@@ -603,7 +603,8 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     parser.add_argument('-seed', default=None)  # For anything random
 
     # The sim_par bit (for DMRG-related parameters). These don't vary, so we'll just define here.
-    parser.add_argument('-active_sites', type=int, default=2)
+    if not 'active_sites' in run_defaults:
+        parser.add_argument('-active_sites', type=int, default=2)
     parser.add_argument('-chi', type=int, default=100)
     parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
     parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
@@ -612,16 +613,36 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     parser.add_argument('-qramp_op', type=str, default=None) # Operator to insert during ramp events
     parser.add_argument('-qramp_site', type=str, default='0', help='The site index where ramp operators should be inserted, or "R" for random sites') # Site on which to insert the ramp operator
     parser.add_argument('-qramp_move_left', action='store_true') # flag indicating the operators should be inserted while moving left
-    parser.add_argument('-min_sweeps', type=int, default=30)
-    parser.add_argument('-max_sweeps', type=int, default=1000)
-    #parser.add_argument('-n_steps', type=int, default=10)
-    #parser.add_argument('-max_steps', type=int, default=2400)
+    if run_defaults.get('min_sweeps') is None:
+        parser.add_argument('-min_sweeps', type=int, default=30)
+    if run_defaults.get('max_sweeps') is None:
+        parser.add_argument('-max_sweeps', type=int, default=1000)
+    if run_defaults.get('N_sweeps_check') is None:
+        parser.add_argument('-N_sweeps_check', type=int, default=10)
+    
+    # inputs for mixer parameters, as per https://tenpy.readthedocs.io/en/latest/reference/tenpy.algorithms.dmrg.Mixer.html#cfg-config-Mixer
     parser.add_argument('-mixer', action='store_true')  # To activate mixer
     parser.add_argument('-mix_str', type=float, default=1.e-3)
     parser.add_argument('-mix_dec', type=float, default=1.5)
     parser.add_argument('-mix_len', type=int, default=80)
-    parser.add_argument('-start_env', type=int, default=0)
-    parser.add_argument('-update_env', type=int)
+            
+    # control of tolerances:
+    if run_defaults.get('max_E_err') is None:
+        parser.add_argument('-max_E_err', type=float, default=1e-8) # DMRG Error tolerance
+    if run_defaults.get('max_S_err') is None:
+        parser.add_argument('-max_S_err', type=float, default=1e-5) # DMRG Entanglement tolerance
+
+    # DMRG norm tolerance: https://tenpy.readthedocs.io/en/latest/reference/tenpy.algorithms.dmrg.DMRGEngine.html#cfg-option-DMRGEngine.norm_tol
+    if not 'norm_tol' in run_defaults:        parser.add_argument('-norm_tol', type=float, default=1e-5) # After the DMRG run, update the environment with at most `norm_tol_iter` sweeps until ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+    if not 'norm_tol_iter' in run_defaults:
+        parser.add_argument('-norm_tol_iter', type=float, default=5.0)
+	#Perform at most `norm_tol_iter`*`update_env` sweeps to converge the norm error below `norm_tol`
+    
+    # parameters controlling sweeps to reconstruct the environment
+    if run_defaults.get('start_env') is None:
+        parser.add_argument('-start_env', type=int, default=0)
+    if run_defaults.get('update_env') is None:
+        parser.add_argument('-update_env', type=int)
 
     # Now parse and turn into manageable dicts.
     args = parser.parse_args()
@@ -642,16 +663,26 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
             'chi_list': dmrg.chi_list(args.chi, args.dchi, args.dsweeps),
             'qramp_op': args.qramp_op,
             'qramp_list': qramp_list(args.nqramp, args.last_qramp, args.qramp_op, args.qramp_site, not args.qramp_move_left),
-            'N_sweeps_check': 10,
             'min_sweeps': args.min_sweeps,
             'max_sweeps': args.max_sweeps,
+            'N_sweeps_check' : args.N_sweeps_check,
+            'start_env': args.start_env,
+            'max_E_err' : args.max_E_err,
+            'max_S_err' : args.max_S_err,
+            'norm_tol' : args.norm_tol,
+            'norm_tol_iter' : args.norm_tol_iter,
             'verbose': args.verbose,  # Take this from the model
             'lanczos_params': {
                 'N_min': 2,
                 'N_max': 40,
                 'E_tol': 10**(-12)
             }
-        }
+         }
+        if (args.update_env is None):
+            sim_par['update_env'] = args.N_sweeps_check // 2
+        else:
+            sim_par['update_env'] = args.update_env
+			
     except AttributeError as err:
         print(
             'sim_par parsing has failed, most likely because model does not define verbose parameter.'
